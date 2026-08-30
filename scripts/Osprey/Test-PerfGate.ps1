@@ -131,6 +131,23 @@ param(
 
     [switch]$SkipBuild,
 
+    # Time the .spectra.bin build as its own segment instead of letting it hide inside
+    # stage1to4. Runs --task SpectraCache into the run's --work-dir first, then the full
+    # pipeline against that warm cache, so PerFileScoring skips conversion and its wall
+    # becomes a true stage2to4. Needs no product change and leaves every [STAGE-WALL]
+    # label alone, so Measure-Pipeline.ps1's C#-vs-Rust matched-line pairing still works.
+    [switch]$SplitSpectraCache,
+
+    # Take the reader out of the measurement completely. Builds the .spectra.bin ONCE per
+    # dataset, outside every timed region, then points both variants at it with --cache-dir
+    # so each measured run is pipeline-only against IDENTICAL cache bytes. Both trees write
+    # SpectraCache VERSION 4, so one cache serves both and no mzML is read at all - proven
+    # by renaming the mzML away and watching a full run still complete.
+    # Note the caches persist across repeats, so repeat 1 reads them cold and later repeats
+    # read them warm from the OS page cache; that spread is itself the signal for whether a
+    # cold read is what separates the two runtimes.
+    [switch]$CacheOnly,
+
     [int]$Threads = 16,
 
     [int]$MaxParallelFiles = -1,
@@ -184,8 +201,14 @@ $perfScratchRoot = Join-Path $scratchBase '_perfgate'
 
 # Stages emitted by both impls, in pipeline order. The heavy stages are the ones
 # a scoring/per-file refactor can plausibly move; they get the per-stage gate.
-$expectedStages = @('stage1to4','stage5','stage6','stage7','blib')
-$heavyStages    = @('stage1to4','stage6')
+$expectedStages = if ($CacheOnly)         { @('stage2to4','stage5','stage6','stage7','blib') }
+                  elseif ($SplitSpectraCache) { @('stage1','stage2to4','stage5','stage6','stage7','blib') }
+                  else                    { @('stage1to4','stage5','stage6','stage7','blib') }
+# stage1 joins the heavy set when split: it is the spectrum read, the single largest
+# thing a reader change moves, and per-stage walls there are too I/O-noisy to gate on.
+$heavyStages    = if ($CacheOnly)         { @('stage2to4','stage6') }
+                  elseif ($SplitSpectraCache) { @('stage1','stage2to4','stage6') }
+                  else                    { @('stage1to4','stage6') }
 
 # The two variants under test: a pinned baseline and the branch.
 $variants = [ordered]@{
@@ -311,6 +334,43 @@ $variants['warmup'] = @{ SupportsPerfStats = $variants['baseline'].SupportsPerfS
 # Slim C#-only sibling of Measure-Pipeline.ps1's Invoke-PipelineRun: no Rust, no
 # cross-impl stage5/6 alignment (both variants share C# labeling, so raw walls
 # compare apples-to-apples), no HTML.
+function Get-SharedCacheDir {
+    param([string]$DatasetName)
+    return Join-Path $perfScratchRoot ("cache-" + $DatasetName.ToLower())
+}
+
+# Build the shared .spectra.bin once, before any timed run. Uses the BASELINE binary
+# because the caches are byte-identical between the two trees (same VERSION, and the
+# port's own parity check compared them byte for byte) - so which side writes them
+# cannot bias the A/B, and naming one keeps the choice explicit rather than incidental.
+function Initialize-SharedCache {
+    param([string]$DatasetName)
+    $cacheDir = Get-SharedCacheDir $DatasetName
+    if (Test-Path $cacheDir) { Remove-Item $cacheDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+
+    $ds = Get-DatasetConfig $DatasetName -TestBaseDir $TestBaseDir
+    $cacheArgs = @()
+    foreach ($f in @($ds.AllFiles)) { $cacheArgs += @('-i', (Join-Path $ds.TestDir $f)) }
+    $cacheArgs += @('-l', (Join-Path $ds.TestDir $ds.Library), '-o', 'output.blib',
+                    '--resolution', $ds.Resolution,
+                    '--threads', $Threads.ToString(),
+                    '--work-dir', $cacheDir, '--task', 'SpectraCache')
+
+    $log = Join-Path $OutputDir ("shared-cache-{0}.log" -f $DatasetName)
+    Write-Host ("  building shared spectra cache for {0} (untimed)" -f $DatasetName) -ForegroundColor DarkGray
+    Push-Location $cacheDir
+    try {
+        & $variants['baseline'].Bin @cacheArgs *>&1 | Tee-Object -FilePath $log | Out-Null
+        $exit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($exit -ne 0) { throw "Shared cache build failed for ${DatasetName} (exit $exit); see $log" }
+    $n = @(Get-ChildItem $cacheDir -Filter *.spectra.bin).Count
+    Write-Host ("  shared cache ready: {0} .spectra.bin in {1}" -f $n, $cacheDir) -ForegroundColor DarkGray
+}
+
 function Invoke-PerfRun {
     param(
         [string]$BinPath,
@@ -339,6 +399,11 @@ function Invoke-PerfRun {
                   '--resolution', $ds.Resolution, '--protein-fdr', '0.01',
                   '--threads', $Threads.ToString(),
                   '--work-dir', $workdir)
+    # --cache-dir overrides only the .spectra.bin location, so derived artifacts still land
+    # in the per-run workdir while both variants read one identical set of cache bytes.
+    if ($CacheOnly) {
+        $cliArgs += @('--cache-dir', (Get-SharedCacheDir $DatasetName))
+    }
     # --perf-stats emits the [STAGE-WALL]/[TIMING] lines this gate parses, but it
     # only exists on post-#4326 binaries; pre-#4326 baselines emit those lines
     # unconditionally and reject the unknown flag. Add it only where supported
@@ -370,6 +435,28 @@ function Invoke-PerfRun {
     }
 
     $logPath = Join-Path $OutputDir ("{0}-{1}-run{2}.log" -f $VariantKey, $DatasetName, $RunIdx)
+
+    # Split mode: build the caches first, timed on their own, into the SAME workdir the
+    # pipeline run then reads. The workdir is deliberately not cleared between the two -
+    # the warm cache is what turns the second run's stage1to4 into stage2to4.
+    $cacheSecs = 0.0
+    if ($SplitSpectraCache) {
+        $cacheLog = Join-Path $OutputDir ("{0}-{1}-run{2}-cache.log" -f $VariantKey, $DatasetName, $RunIdx)
+        Push-Location $workdir
+        $swCache = [Diagnostics.Stopwatch]::StartNew()
+        try {
+            & $BinPath @cliArgs --task SpectraCache *>&1 | Tee-Object -FilePath $cacheLog | Out-Null
+            $cacheExit = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
+        $swCache.Stop()
+        if ($cacheExit -ne 0) {
+            throw "${VariantKey}/${DatasetName}/run${RunIdx}: --task SpectraCache exited $cacheExit (see $cacheLog)"
+        }
+        $cacheSecs = [math]::Round($swCache.Elapsed.TotalSeconds, 1)
+    }
+
     Push-Location $workdir
     $sw = [Diagnostics.Stopwatch]::StartNew()
     try {
@@ -385,6 +472,21 @@ function Invoke-PerfRun {
         if ($line -match '\[STAGE-WALL\]\s+(\S+):\s+([0-9.]+)s') {
             $stages[$Matches[1]] = [double]$Matches[2]
         }
+    }
+    # Cache-only mode: same relabel as split mode, minus a stage1 - the cache was built
+    # once before any timing started, so no measured run contains a conversion at all.
+    if ($CacheOnly -and $stages.ContainsKey('stage1to4')) {
+        $stages['stage2to4'] = $stages['stage1to4']
+        $stages.Remove('stage1to4') | Out-Null
+    }
+    # Split mode: the cache was already built, so PerFileScoring's wall no longer contains
+    # the read. Relabel it for what it now measures and add the separately timed stage1.
+    if ($SplitSpectraCache) {
+        if ($stages.ContainsKey('stage1to4')) {
+            $stages['stage2to4'] = $stages['stage1to4']
+            $stages.Remove('stage1to4') | Out-Null
+        }
+        $stages['stage1'] = $cacheSecs
     }
     # Fold C#'s separate second-pass-fdr marker into stage7 (matches the regression
     # harness's stage7 = 2nd-pass FDR + protein accounting).
@@ -404,14 +506,18 @@ function Invoke-PerfRun {
     $stageStr = ($expectedStages | ForEach-Object {
         if ($stages.ContainsKey($_)) { "{0}={1:F1}s" -f $_, $stages[$_] } else { "{0}=MISS" -f $_ }
     }) -join '  '
-    Write-Host ("    [{0}/{1}/run{2}] {3}  total={4:F1}s" -f $VariantKey, $DatasetName, $RunIdx, $stageStr, $sw.Elapsed.TotalSeconds) -ForegroundColor DarkGray
+    # Total INCLUDES the cache pass in split mode. Splitting is a reporting change, not a
+    # cheaper run: leaving it out would silently drop the reader from the one number the
+    # gate hard-fails on, and make a split run look faster than the same work unsplit.
+    $totalSecs = $sw.Elapsed.TotalSeconds + $cacheSecs
+    Write-Host ("    [{0}/{1}/run{2}] {3}  total={4:F1}s" -f $VariantKey, $DatasetName, $RunIdx, $stageStr, $totalSecs) -ForegroundColor DarkGray
 
     return [pscustomobject]@{
         Variant = $VariantKey
         Dataset = $DatasetName
         RunIdx  = $RunIdx
         Stages  = $stages
-        Total   = $sw.Elapsed.TotalSeconds
+        Total   = $totalSecs
     }
 }
 
@@ -445,6 +551,7 @@ function Get-StageMedian {
 $allRuns = New-Object System.Collections.Generic.List[object]
 foreach ($dsName in $datasetsToRun) {
     Write-Host ("Dataset {0}: {1} discarded warmup(s) + {2} interleaved A/B repeats" -f $dsName, $WarmupRuns, $Repeats) -ForegroundColor Cyan
+    if ($CacheOnly) { Initialize-SharedCache -DatasetName $dsName }
     # Discarded warmup(s): warm the OS page cache for this dataset's mzML AND
     # absorb the post-reboot "fast first runs, then settle" transient, so no
     # MEASURED run pays a cold-disk or not-yet-settled penalty. Bump -WarmupRuns
