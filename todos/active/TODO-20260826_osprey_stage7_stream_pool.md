@@ -5180,3 +5180,74 @@ and the unreadable-sidecar refusal. Release-notes entry added to `RELEASE_NOTES_
   child inherits the harness job object. The first `-Dataset All` was killed at ~18 minutes,
   mid-Percolator iteration 7, with an empty stderr and no crash event. Relaunched via
   `Invoke-CimMethod Win32_Process Create` with a launcher that writes its own log.
+
+### Phase 1 SHIPPED, and the golden move is verified (2026-08-29 evening)
+
+Commit `2d07cf48fd`, pushed to `Skyline/work/20260826_osprey_stage7_stream_pool` (PR #4621).
+`pwiz-ai` at `f51b5c0`; `maccoss/osprey` branch `fix/experiment-q-per-entry-not-per-file`
+pushed (no PR yet). TeamCity Perf/Regression build 4157715 triggered on `pull/4621`.
+
+The golden diff is ONE line: `astral/diagnostics.tsv`,
+`pass2.coAssign.experiment.target.nBetter 13270 -> 13279`.
+
+`blib_summary.tsv` also moved on capture - 14 rows, ALL sums, every `<rows>`/min/max identical,
+worst delta 1.2e-7 absolute. That is SQLite scan-order noise: `BlibGolden.ps1`'s
+`Compare-Summary` compares at **relative 1e-6** (not the 1e-9 used for the per-row subset) for
+exactly this reason, and its own comment says so. It was REVERTED rather than committed, and the
+revert was PROVEN twice: `Compare-Summary` against the run's real blib gave worst relative delta
+**5.05e-13** (1.98 M x headroom, control: the captured version also passes), and then a full
+`regression.ps1 -Dataset Astral` on a fresh run - fresh scan-order noise - came back
+**15/15 PASS, EXITCODE=0**, with modes 1b/5/7 going FAIL -> PASS against the new golden.
+
+`protein_fdr.tsv` appeared in `git status` with zero content change - LF-only write from the
+capture. `fix-crlf.ps1` normalised it out.
+
+**Cross-impl parity is RESTORED** (this closes the "breaks structurally" item): all three legs
+PASS on Stellar and Astral. The fused leg compared 1,448,698 + 996,830 records on Stellar and
+**6,226,744 + 3,470,075** on Astral.
+
+**A real defect was found and fixed while gating**: `regression.ps1` byte-compared the experiment
+sidecars with `Compare-Object`, which boxes every byte into a PSObject. On Astral's 85.8 MB /
+2,498,773-record sidecar that meant a **53 GB working set and ~19 minutes per pass**, which read
+as a hung gate. Replaced with `OspreyFdrSidecarComparer.CompareBytes` (span equality): **96 ms**,
+and it reports the first differing offset. Verified with negative controls - injected byte flips
+and truncation - because an equality check fed only equal inputs proves nothing.
+
+## PHASE 2 PRECONDITION: MEASURED, and it holds (2026-08-29 evening)
+
+The handoff's "measure this FIRST" item. `CompeteOneFile` filters its `fileRunQ` on the GLOBAL
+survivor set (`Pass2FdrSidecar:1202`, the union over all files); a per-file worker can only
+supply its own. The XML doc asserts a file can win for an entry_id that is a survivor only
+elsewhere; earlier TODO entries claimed it both ways.
+
+Temporary diagnostic at the one point holding all three sets (the file's whole pass-1
+population, its own survivors, the global union), straight-through, both datasets:
+
+| dataset | file | population | inGlobal | inOwn | **globalOnly** | ownOnly |
+|---|---|---|---|---|---|---|
+| Stellar | _20 | 482,891 | 332,138 | 332,138 | **0** | 0 |
+| Stellar | _21 | 482,910 | 332,143 | 332,143 | **0** | 0 |
+| Stellar | _22 | 482,897 | 332,158 | 332,158 | **0** | 0 |
+| Astral | _49 | 2,096,935 | 1,164,226 | 1,164,226 | **0** | 0 |
+| Astral | _55 | 2,102,639 | 1,167,128 | 1,167,128 | **0** | 0 |
+| Astral | _60 | 2,027,170 | 1,129,929 | 1,129,929 | **0** | 0 |
+
+`inGlobal == inOwn` exactly on every file over 8.2 M observations, and `ownOnly = 0` proves
+own is a subset of global rather than the two matching by accident. So restricted to a file's
+own pass-1 population the two filters are the same set, which is what the structural argument
+predicts: `RescoreCompaction` retains by `base_id` against a global set, so a base_id surviving
+anywhere survives everywhere it holds a row.
+
+Where it WOULD have mattered: `CompeteOneFile` -> `FoldFileContribution` -> `minRunQ`, the
+cross-file best-of-runs floor on experiment q. The per-file stamping path is unaffected either
+way, because the caller re-filters to the survivors it holds.
+
+**Caveat, stated because it is not closed**: both datasets are 3 files, and the doc's concern is
+about precursors seen in MANY runs. Brendan's ruling: the guard is sufficient, and the night
+session does equivalence testing at scale (possibly a 257-file CHS run to capture post-phase-2
+state) with the option to roll back to `2d07cf48fd`. So the worker must carry a STRUCTURAL
+GUARD - if the local set ever diverges from what the competition needs, fail the run loudly
+rather than silently lowering experiment q. Phase 1's lesson applied: absence must be a stop,
+never a plausible default.
+
+The instrumentation was reverted after the measurement; the numbers above are the record.
