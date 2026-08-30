@@ -1073,3 +1073,41 @@ wrapper calls `TestRunner.exe stage=1`, which that commit's runner does not supp
 **Tooling bug found on the way**: `Build-Skyline.ps1 -Framework Net8` sets `$isNet8` but never
 sets `$script:SdkTfm`, so it builds with an empty `-f` and swallows the next argument
 (`TargetFramework=-nologo`). Only `-Framework Auto` works. Worth fixing in ai/scripts.
+
+### ROOT CAUSE of the pass-1 managed leak: an undisposed NHibernate SessionFactory
+
+Bisected from a MEASURED known-good point (`C:\proj\daily`, master `99609d5bc0`, net472) by moving
+one variable at a time. `TestFilesTreeForm`, pass 1, managed leak:
+
+| Runtime | NHibernate | Factory lifecycle | Managed leak |
+|---|---|---|---|
+| net472 | 5.1.3 | `using` (disposed after Load) | **2.8 KB**, converged at 15 iterations |
+| net472 | 5.1.3 | ownership transferred, never disposed | **1,720.7 KB** |
+| net472 | 5.5.2 | ownership transferred | 2,127.4 KB |
+| net8 | 5.5.2 | ownership transferred | 2,133.9 KB |
+| net10 | 5.5.2 | ownership transferred | 2,072.8 KB |
+
+**The change-point is the lifecycle change alone.** It leaks on the ORIGINAL NHibernate 5.1.3,
+on net472, on master. The runtime accounts for nothing; the ORM upgrade accounts for ~400 KB of
+~2 MB (larger factories), not for the leak's existence.
+
+**Mechanism, verified by reflection on both assemblies.** `NHibernate.Impl.SessionFactoryObjectFactory`
+holds `static IDictionary<string, ISessionFactory> Instances` / `NamedInstances` - STRONG
+references - and only `Dispose()` calls `RemoveInstance`. An undisposed factory is therefore
+rooted for the life of the process together with its persisters, dialect, HQL registry and
+emitted proxy bytecode. That is why every NHibernate type in the dotMemory diff showed **0 dead**.
+The registry is identical in 5.1.3, which is why the defect is transferrable.
+
+**Why the port opened the gap.** NHibernate 5.5 throws `ObjectDisposedException` when
+`OpenSession` is called on a disposed factory, where 5.1.3 tolerated it - confirmed by swapping
+5.5.2 into master, which hangs at `EditIonMobilityLibraryDlg`. The port therefore had to drop the
+`using` and transfer ownership to `IonMobilityDb`/`OptimizationDb`. But `OptimizationDb` is not
+even `IDisposable`, and `IonMobilityLibrary.cs:148` never disposes the `IonMobilityDb` it retains,
+so nothing ever released a factory again. `IrtDb` kept `using` at all ten sites and does NOT leak -
+the existence proof that the pattern is fine under 5.5.2.
+
+**Fix being measured**: neither class retains a factory. Each session owns the factory it was
+opened from (`SessionWithLock` gained an optional owned factory it disposes with itself), so no
+factory can outlive a `using`. Closed by construction rather than by a disposal call someone must
+remember. Note the trade Brendan flagged: this exposes any read that is not fully materialised by
+a BackgroundLoader, since such a read now builds a factory per call.
