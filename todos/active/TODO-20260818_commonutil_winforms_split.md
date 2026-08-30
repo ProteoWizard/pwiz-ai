@@ -1156,7 +1156,7 @@ which matters because these are `Immutable` types with no lifetime to hang a `Di
 |---|---|---|
 | branch, net10 + 5.5.2 | 2,072.8 KB (exhausted 25 iterations) | **0 KB** (`managed = -1.1 KB`, 24 iterations, passed) |
 | master, net472 + 5.5.2 | hung at `EditIonMobilityLibraryDlg` | **2.8 KB**, converged at 15 - identical to pristine master |
-| master, net472 + 5.1.3 | 2.8 KB | 2.8 KB (fix is neutral on the old ORM) |
+| master, net472 + 5.1.3 | 2.8 KB | NOT MEASURED - only pass 2 was run on this combination (3/3 functional). Do not cite an after-fix leak number for 5.1.3. |
 
 Functionally clean: 3/3 pass-2 iterations on master with BOTH 5.1.3 and 5.5.2, 24 pass-1
 iterations on the branch, CodeInspection green. The one `TestDragSimulation` failure seen earlier
