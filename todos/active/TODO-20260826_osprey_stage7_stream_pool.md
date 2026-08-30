@@ -5980,3 +5980,61 @@ against the baseline run dir, then mode1b / mode5 / mode7 green. The
 
 **Do NOT reason from the metric.** `nBetter` and `enrichment` moved in opposite directions on the
 two Stellar arms and that told us nothing; the artifacts told us everything.
+
+### THE FRAMING THAT MATTERS: an existing contract was not adopted, and nothing verified it
+
+Brendan's reading, confirmed in the code: the "a per-file node reconstructs the join's set from a
+Stage 5 artifact" problem was ALREADY solved, hash-validated and version-guarded - for the
+parquet. The new PerFileRescoring 2nd-pass sidecar did not abide by it.
+
+`FirstPassFdrTask.WriteReconciliationFiles` writes `.reconciliation.json` from the JOIN node,
+which has traversed the whole population. It carries `file_stems`, the join-wide
+`first_pass_base_ids` (156,832), this file's `gap_fill_targets`, the reconcile actions and the
+refined calibration - explicitly so *"a worker rescoring its single parquet can compute the
+join-wide reconciliation hash that --task SecondPassFDR will validate against"*.
+
+`ReconciledParquetWriter.BuildReconciliationMetadata` then stamps the parquet with:
+
+* `osprey.reconciliation_hash` - the JOIN-wide hash from those stems, *"not the worker's
+  single-file InputFiles hash; without that, a worker rescoring a single parquet stamps a
+  single-file hash that the downstream --task SecondPassFDR node rejects on mismatch"*;
+* `osprey.reconciled = "survivors"` - *"this parquet holds only the Stage 5 survivor rows ... an
+  older Osprey compares this value against "true" exactly and REFUSES, instead of reading a
+  subset as though it were the whole file and reporting a confidently wrong answer"* - citing
+  issue #4486, THIS sprint.
+
+The parquet's population is therefore DEFINED as survivors + gap-fills, which is exactly what is
+measured: 311,070 + 208 = 311,278 (and 311,099 + 185, 311,150 + 201), identical in ids AND order
+to the baseline per-run 2nd-pass sidecar.
+
+**The per-file worker reached back PAST the Stage 5 -> 6 boundary** to the pre-compaction
+1st-pass sidecar (958,241 ids) for its universe, which by construction cannot contain a gap-fill.
+
+#### The verifier gap - the reason this got as far as it did
+
+The parquet has a verifier: SecondPassFDR rejects a mismatched reconciliation hash. **Nothing
+asserts that the per-run 2nd-pass sidecar describes the same rows as the parquet it was computed
+from.** That is why a 594-row omission passed mode 1 (blib), mode 1c, mode 2, mode 3, mode 4 and
+mode 6, and surfaced only as two moved numbers in a diagnostics panel - the weakest possible place
+to learn it, and the reason the previous session spent its budget on `nBetter` and `enrichment`
+instead of on the artifact.
+
+CRITICAL-RULES: *"When a rule's verifier is weak, the rule will drift; strengthen the verifier
+rather than the wording."*
+
+#### Fix, in two parts
+
+1. **Adopt the existing contract.** Take the worker's observation universe from the reconciled
+   parquet (`effectiveParquetPath`, already a parameter of `ReadOneFilePass2Inputs`) instead of
+   `pass1SidecarPath`. Restores the 594 gap-fills and removes the 397 carried decoys together,
+   byte-identical to the baseline, in order, reading FEWER rows than today (311K vs 958K).
+2. **Add the missing verifier.** Assert the per-run 2nd-pass sidecar's entry_id sequence equals
+   the reconciled parquet's entry_id sequence. Streaming, O(1) memory, holds on every route -
+   and on HPC it is precisely the property that must hold for a separate experiment node to be
+   correct.
+
+#### Gate
+
+Byte-identity of all three `.2nd-pass.fdr_scores.bin` plus
+`output.2nd-pass.fdr_experiment.bin` against the baseline run dir, then modes 1b / 2 / 3 / 5 / 7.
+Mode 3 is the one that exercises the cross-process case the new verifier is really for.
