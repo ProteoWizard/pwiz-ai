@@ -5674,3 +5674,136 @@ diagnostics comparison reports a delta belonging to that fix rather than to the 
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
+
+## ROOT CAUSE of the diagnostics panel movement: the relocation DROPS experiment-scope values (2026-08-30)
+
+Measured, not inferred. The verdict is that **the branch's values are wrong and the baseline's
+are right**, so this is not a golden-rebaseline case - it is a defect to fix.
+
+### Method: control first, then the first divergence, then the rows
+
+Brendan's framing set the bar: the phase is a pure code relocation, so nothing may change
+without a concrete argument that the new value is MORE correct.
+
+1. **A/B on identical inputs.** `pwiz-work2` at `570ca41466` + the same diagnostic patch as
+   `pwiz-work1`; `regression.ps1 -Dataset StellarLibDecoy -KeepOutput -SkipResume -SkipWarmRerun
+   -SkipRehydrate -SkipHpcChain` (~5 min/side). Baseline all-green, branch red on mode1b/mode7.
+2. **A CONTROL run first.** Two runs of the SAME branch binary in different run dirs. This is
+   what stops a false root cause: `output.blib`, `output_cold.blib`,
+   `output.model-diagnostics.html`, every `.calibration.json`, every `.scores-reconciled.parquet`
+   and `_20.scores.parquet` (including a 1-BYTE size change) all differ **run to run on one
+   binary**. Any of them would have read as a Stage-3 / Stage-6 regression.
+3. **Signal = DIFF branch-vs-baseline AND SAME in the control.** Exactly four artifacts:
+   the three `.2nd-pass.fdr_scores.bin` and `output.2nd-pass.fdr_experiment.bin`. Every
+   upstream artifact - 1st-pass sidecars, the 1st-pass experiment sidecar, protein groups,
+   `cs_stage7_protein_fdr.tsv` - is byte-identical. The first divergence is exactly at the
+   relocation boundary.
+
+### What actually moved, at record level
+
+| set | count | composition |
+|---|---|---|
+| experiment sidecar, branch-only | 140 | **all decoys**, q=1.0, real aggregate |
+| experiment sidecar, baseline-only | 0 | - |
+| experiment sidecar, shared ids with a moved value | **0** | - |
+| per-file sidecars, branch-only observations | 397 | **all decoys** (135/131/131) |
+| per-file sidecars, baseline-only observations | **594** | **all TARGETS** (208/185/201) |
+| per-file sidecars, shared ids with a moved value | **0** | - |
+
+No target is lost globally - every dropped target observation is still present in another
+file, and the union over files is a strict superset on the branch (+140 decoys, 0 missing).
+The competition is untouched, which is why `AssertContributionsMatch` never fires.
+
+`q == 1.0` is NOT the rule: the branch keeps 170,156 target q=1.0 observations and drops 594,
+i.e. 0.35% of that class. "Has a real q in another file" does not separate them either
+(416 vs 178). The set is named by the code, not by the data.
+
+### The defect
+
+`Pass2PerFileWorker.BuildRecords` emits a record only for entries that SURVIVED in that file,
+plus stratum decoys, and drops non-survivor targets on purpose:
+
+    // Not a survivor. Carried forward only when it is a decoy; a non-survivor TARGET
+    // is genuinely absent from this artifact, and the experiment-fold scope guard is
+    // what says the join never needs one ...
+    if (survivorIds.Contains(eid)) continue;
+    if (!isDecoy) continue;
+
+That argument is scoped to **what the join needs**. It is not true of the other consumer.
+`Pass2FdrSidecar.ApplyRecord` (Pass2FdrSidecar.cs:1107) stamps the pool's experiment-scope
+values while iterating PER-FILE SIDECAR RECORDS, looking the entry up by `rec.EntryId`:
+
+    private void ApplyRecord(FdrEntry entry, FdrScoreRecord rec)
+    {
+        entry.Score = rec.Score;
+        entry.Pep = rec.Pep;
+        if (_experimentRecords != null && _experimentRecords.TryGetValue(rec.EntryId, out var exp))
+            entry.ExperimentAggregateScore = exp.ExperimentAggregateScore;
+    }
+
+An entry with no per-file record is therefore never visited, so it keeps `ResetScores`'
+defaults. Its own doc comment states the rule it breaks: *"the experiment aggregate is a
+property of the entry for the whole analysis"*.
+
+### The consequence, measured in the panel's own input
+
+New gate `OSPREY_DUMP_COASSIGN_ROWS=<dir>` dumps `BuildCoAssignment`'s per-observation input
+plus the sealed boundaries. Branch vs baseline:
+
+* **Pool membership identical** - 933,913 rows both sides, 0 on either side only. The dropped
+  sidecar records do NOT remove entries from the pool.
+* **Every cutoff bit-identical** - run (x3), experiment, in/off-stratum, accepted counts.
+  The panel did not move because a boundary moved.
+* **Exactly 594 rows changed value, and they are the SAME 594 dropped observations** (set
+  identity asserted, not just equal counts). `exp_agg_score` moved on all 594, `exp_q` on 351,
+  and `included` flipped on **139 - all `true -> false`, all Target**.
+
+That is the whole of `pass2.coAssign.experiment.target.nBetter 988 -> 977`.
+
+### Why the new values are NOT more correct
+
+The branch's OWN experiment sidecar still holds real values for all 594 entry_ids, and the two
+sides' experiment sidecars **agree bit-for-bit on every one of them**. Example, entry 103759:
+
+    exp sidecar (both sides): precQ=6.588917440864466e-05  agg=6.256937598046329
+    pool BASELINE           : expQ=6.588917440864466e-05   expAgg=6.256937598046329  included=true
+    pool BRANCH             : expQ=1                       expAgg=0                  included=false
+
+Of the 594, the pool's aggregate equals the experiment sidecar's aggregate on
+**baseline 594/594, branch 0/594**. A strongly-detected target (experiment q = 6.6e-05) is being
+reported in the pool as q = 1.0, undetected. This is the SAME participation-vs-value error class
+already root-caused and resolved for master in "RESOLVED: 'experiment-wide' must be per-entry",
+re-entering through the per-file artifact.
+
+### Fix options - needs a ruling before code
+
+1. **Widen the seeder (preferred).** Apply experiment-scope values to every pool entry by
+   entry_id from the experiment sidecar, independent of whether a per-file record exists. Matches
+   the stated rule, keeps the per-file artifact lean, and the experiment sidecar already has the
+   data. Needs care that the entry set being seeded is enumerated from the pool, not the records.
+2. **Restore the dropped target records** to the per-file sidecar. Reproduces the baseline
+   byte-for-byte but re-adds 594 records / 3 files of duplication the split exists to remove, and
+   leaves the seeder's coverage rule still keyed to the wrong thing.
+
+Whichever is chosen, the carried-forward DECOYS are a separate question and remain per Brendan's
+earlier ruling; note that they cause **no** diagnostics movement here - 0 shared values moved and
+the panel's decoy admission is unchanged.
+
+### SECOND DEFECT found by mode 7, unrelated to the above
+
+`--task ModelDiagnostics` now REWRITES all three `.2nd-pass.fdr_scores.bin`, breaking the task's
+"touch nothing but the report" contract (3 of mode 7's 5 issues). `TryCreatePass2Worker`'s
+`WriteSidecar` has the guard - `if (config.DiagnosticsOnly) return;` - so the write is coming
+from somewhere else on that path. NOT the cause of the panel movement: the straight-through and
+regenerated dumps are byte-identical (asserted), and mode1b fails before mode 7 runs.
+
+### Artifacts
+
+* Session dir: `ai/.tmp/sessions/20260830-coassign-ab/` - `diff_sidecars.py`, `survey.py`,
+  `rule.py`, `trace_entries.py`, `verify_loss.py`, `diff_rows.py`, `cmp_artifacts.ps1`,
+  both run logs, and the `coassign-dump.patch` applied to both trees.
+* Run dirs kept: branch `pwiz-work1/pwiz_tools/Osprey/TestResults/regression-20260830_135109`,
+  baseline `pwiz-work2/.../regression-20260830_135620`.
+* `pwiz-work2` is at `570ca41466` + the dump patch - **restore it to `5acc2dd24c`** when done.
+* The `OSPREY_DUMP_COASSIGN_ROWS` gate is uncommitted in `pwiz-work1`; it is the permanent
+  verifier for this class and should land with the fix.
