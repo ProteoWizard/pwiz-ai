@@ -926,3 +926,36 @@ pre-review commits are kept on local branch `review-backup/20260830_invoke_filte
 straight to `Program.ReportException`, which applies neither benign filter, so a `LongWaitDlg` on
 its own STA thread can still fail tests this way. Real and pre-existing (the splitter filter has
 the same gap); the one-line fix is to call `Program.InitUiThreadExceptionHandling()` there.
+
+### The pass-1 managed leak: IrtDb builds a SessionFactory per operation
+
+Measured, not inferred. A temporary counter at `SessionFactoryFactory.CreateSessionFactory` (the
+single choke point every Skyline NHibernate factory goes through; diagnostic since reverted) over
+**3 iterations** of `TestFilesTreeForm`:
+
+| Type | Factories built | Per iteration | File |
+|---|---|---|---|
+| `IrtDb` | **99** | **33** | always the same `Rat_Prosit.blib` |
+| `IonMobilityDb` | 18 | 6 | `Rat_settings.imsdb` |
+| `OptimizationDb` | 12 | 4 | `Rat_settings.optdb` |
+| `ProteomeDb` | **1** | - | `Rat_mini.protdb` |
+
+**ProteomeDb builds one factory for the entire run; IrtDb builds 33 per iteration for the same
+file.** The difference is `DatabaseResource` (`Shared/ProteomeDb/Util/DatabaseResource.cs`), a
+static refcounted cache added for exactly this reason - its comment reads "these are large,
+expensive-to-construct objects that leak a great deal of string space, so we'll hang onto them".
+`IrtDb` has no equivalent: ten methods each do `using var sessionFactory = GetSessionFactory(_path)`,
+building the full mappings, persisters, dialect, HQL registry and proxy bytecode every time.
+
+The factories ARE disposed, so this is not "never released". What is not released is the
+bytecode: the dotMemory diff shows `DynamicILGenerator`, `DynamicMethod`, `ScopeTree` (2,960 new
+each) and `SignatureHelper` (6,960 new) with **0 dead**. Disposing a SessionFactory does not
+reclaim the dynamic methods NHibernate emitted for it.
+
+This is a throughput problem as much as a memory one - 33 full NHibernate configurations per test.
+
+**Not fixed here.** The fix is to give `IrtDb` (and `IonMobilityDb`, `OptimizationDb`) the
+caching `ProteomeDb` already has, which is a real change to shared data-access code and does not
+belong on a port branch heading for merge. It is also almost certainly **pre-existing, not a net10
+regression** - nothing about this depends on the runtime - so the master/net472 baseline should
+confirm that before anyone treats it as port fallout.
