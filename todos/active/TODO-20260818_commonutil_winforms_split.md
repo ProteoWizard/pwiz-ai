@@ -1282,3 +1282,20 @@ abort trigger and the actual rule remains unidentified.
 
 Bearing on the overnight cycle: those runs are pass 2, so this cannot fail the leg. It only
 matters as accumulating memory over 9 hours, and ~1.1 MB per 25 iterations is a slow drip.
+
+### Session end 2026-08-30 - state at handoff
+
+**Committed on the branch, unpushed** (3 ahead of origin):
+* `412dff25b6` - the WinForms marshaled-call exception filter and its test
+* `4f14b7cee6` - narrowed that filter so doubtful cases stay reported
+* `b867cf2664` - the NHibernate SessionFactory disposal fix
+
+Working tree clean. CodeInspection green. Nothing pushed anywhere.
+
+**In flight at handoff**: Brendan restarted the long parallel pass-2 cycle. At 1h45m it had
+**2 failures**, one of them **`TestAuditLogTutorial`** - which this effort had already fixed once
+via an audit-log ordering fix, so this is a RECURRENCE and the first thing to look at. Details
+will be in `pwiz_tools/Skyline/SkylineTester/SkylineTester.log` in `C:\proj\pwiz-work1`.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260818_commonutil_winforms_split_leak.md` before starting work.
