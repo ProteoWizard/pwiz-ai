@@ -861,3 +861,16 @@ been run on this branch under .NET 10. Three full pass-0/1 runs, ~7,100 instance
 
 No ObjectDisposedException in any of the three runs. Details in
 `ai/.tmp/handoff-20260830_net10_invoke_disposed_fixed.md`.
+
+**Pass 1 reports 11 reproducible leaks on net10 - needs a master baseline, NOT a fix.** The leak
+detector prints `!!! <Test> LEAKED <n> <kind>`, not `FAILED`, so failure greps miss it. Across
+three pass-0/1 runs the same eleven tests leaked with byte counts reproducible to a fraction of a
+percent - `TestFilesTreeForm` 2.12 MB managed all three times, `TestCrosslinkIms` ~1.2 MB,
+`TestMeasuredDriftValues` ~0.59 MB. Deterministic, not noise.
+
+**Whether these are port regressions is UNKNOWN** - there is no pass-1 baseline for master/net472.
+The next step is to run the same `-Pass "0,1"` configuration on master and diff the leak lists;
+only tests leaking on net10 and not master are regressions. `TestFilesTreeForm` and
+`TestTreeRestoration` are tree/docking UI, the same family as the net8 WinForms holds this branch
+already works around, so check for a shared cause first. Full table in
+`ai/.tmp/handoff-20260830_net10_invoke_disposed_fixed.md`.
