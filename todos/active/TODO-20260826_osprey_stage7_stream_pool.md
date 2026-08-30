@@ -5807,3 +5807,56 @@ regenerated dumps are byte-identical (asserted), and mode1b fails before mode 7 
 * `pwiz-work2` is at `570ca41466` + the dump patch - **restore it to `5acc2dd24c`** when done.
 * The `OSPREY_DUMP_COASSIGN_ROWS` gate is uncommitted in `pwiz-work1`; it is the permanent
   verifier for this class and should land with the fix.
+
+### CORRECTION and the clean statement (2026-08-30, after Brendan pushed back)
+
+Two things in the section above are wrong or unearned, and the corrected version is
+simpler than either.
+
+**1. `ApplyRecord` is the WRONG site.** It is the 1st-pass seeder (restores Score/Pep from
+1st-pass sidecars). The 2nd-pass experiment values are stamped in `AssignPerRunQ`
+(Pass2FdrSidecar.cs:2702), whose null-record defaults are exactly the observed values:
+
+    double expPrecQ = firstPassExperiment?.ExperimentPrecursorQvalue ?? 1.0;
+    double expAgg   = firstPassExperiment?.ExperimentAggregateScore  ?? 0.0;
+    // An entry with no record never competed: q = 1.0, aggregate = 0.0.
+
+**2. "Are the per-run sidecars identical?" - NO.** Only the EXPERIMENT sidecar is a clean
+superset. The per-run files differ in BOTH directions.
+
+**THE INVARIANT THAT BROKE.** Measured pool-vs-sidecar population, per file:
+
+| file | pool obs | baseline sidecar | branch sidecar | pool obs w/o branch record | branch records not in pool |
+|---|---|---|---|---|---|
+| _20 | 311,278 | 311,278 | 311,205 | 208 | 135 |
+| _21 | 311,284 | 311,284 | 311,230 | 185 | 131 |
+| _22 | 311,351 | 311,351 | 311,281 | 201 | 131 |
+
+**On the baseline the per-run 2nd-pass sidecar IS the pool for that file - a bijection, zero
+in one and not the other, on all three files.** On the branch it is the worker's own set
+(per-file survivors + carried stratum decoys), which is neither a subset nor a superset.
+
+**Disk-vs-memory is NOT the variable.** Every pool observation whose record still exists gets
+bit-identical values (0 shared-id value moves; 933,319 of 933,913 pool rows unchanged). The 594
+rows that lost their values are EXACTLY the 594 that lost their record (set identity asserted).
+Reading from disk only became capable of losing information once the file stopped being a
+complete image of the pool; in the baseline the choice was immaterial because the two held the
+same population.
+
+**Where the populations diverge.** The pool carries every observation of any entry that survived
+ANYWHERE in the analysis - entry 3602 is in the pool for files 20/21/22 and survives only in 21.
+`Pass2PerFileWorker.BuildRecords` filters on a PER-FILE survivor set, so an entry's observations
+in the files where it did not win are dropped. That is the substantive change, and it is not a
+relocation.
+
+**Fix.** Supersedes the two-option menu above. `BuildRecords` must restore the invariant: one
+record per POOL OBSERVATION in its file, not one per per-file survivor. This is
+O(observations in this file), so it does not reintroduce any O(files x entries) structure and
+does not conflict with #4486 - it is ~200 records per file on Stellar. The carried decoys are
+additive (not pool members) and remain the separate question Brendan already ruled on.
+
+**Still to verify before coding:** whether the 594 reach `AssignPerRunQ` with a null
+`firstPassExperiment` or are never visited at all. `score` and `pep` are IDENTICAL on both sides
+for all 594, so whatever covers the run-scope values does reach them; only the experiment-scope
+assignment misses. That distinction decides whether the worker's iterated population or the
+lookup is what needs widening.
