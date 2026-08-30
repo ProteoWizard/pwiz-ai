@@ -5405,3 +5405,100 @@ not written, deliberately.** Two reasons, and the second is the one that decides
 So the next step on this defect is a regression leg that reaches the resident pass-2 path, not
 the fix. Filing the fix without it would be the "untested capability is a liability" trade in
 its purest form.
+
+### BOTH PRECONDITIONS OF THE RELOCATION ARE NOW MEASURED AT 82 FILES (2026-08-30 early)
+
+Two runs, both `EXITCODE=0`, both on the SEA-AD 82-file libdecoy r=1.0 protein-compact cohort.
+
+**Precondition 1 - survivor scope.** Stages 5-7, 22:18:55 -> 01:37:09 (3 h 18 m), against the
+merged step-1 build.
+
+```
+D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-phase2step1-20260829_221855
+```
+
+**0 `Survivor scope violation`.** This closes the caveat the day session recorded verbatim: the
+`globalOnly = 0` measurement was made on two 3-file datasets, and the XML doc's concern was
+about precursors seen in MANY runs. At 82 files it still holds.
+
+**Precondition 2 - experiment-fold scope.** Stage 7 alone, 05:21:39 -> 05:39:24 (17 m 45 s),
+against the fold-guard snapshot (`570ca41466`).
+
+```
+D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-foldguard-stage7-20260830_052138
+```
+
+**0 `Experiment-fold scope violation`.** `-Task SecondPassFDR -LinkFrom` made this 18 minutes
+instead of another 4.5 hours; use that shape for every Stage-7-only question from here.
+
+**The guard was EXERCISED, not merely silent** - checked, because exit 0 on an unexercised guard
+proves nothing and this file already records that trap once ("an empty filtered dump is
+indistinguishable from an unexercised code path unless the diagnostic also emits a COUNT"):
+
+```
+05:27:46  protein-compact: streaming the competition over 82 file(s)...
+05:34:36  protein-compact: writing experiment q to 82 file(s)...
+```
+
+protein-compact is the stratified path, so `stratumBaseIds != null` and the guard loop walked
+`contribution.BestTarget` on each of the 82 `CompeteOneFile` calls.
+
+**And it is output-neutral at scale.** All 82 `.2nd-pass.fdr_scores.bin` match the precondition-1
+run's byte for byte in length, and the four sampled match by SHA-256. The `out.blib` files differ
+in SIZE (340,525,056 vs 357,494,784 bytes) and that is SQLite container overhead, not a computed
+difference - the per-file Stage-7 binaries are what Stage 7 actually produces. NOT verified:
+blib CONTENT equality, because there is no `sqlite3` on this box. If that matters, it needs a
+query-level comparison.
+
+### MEMORY AT 82 FILES: the Stage 7 resident FLOOR fell 64%
+
+`perfviz.py --files 82`, precondition-1 run vs the recorded 2026-08-20 baseline
+(`seaad-82files-libdecoy-r1.0-protein-compact-p2-pickrun3-oursungated-n82`), same cohort, same
+library, same arm, same `--threads 30`:
+
+| | baseline 2026-08-20 | 2026-08-29/30 | delta |
+|---|---|---|---|
+| **SecondPassFDR p10 (resident floor)** | **28.9 GB** | **10.4 GB** | **-18.5 GB (-64%)** |
+| SecondPassFDR p50 | 37.9 GB | 23.1 GB | -14.8 GB |
+| SecondPassFDR peak / wall | 48.6 GB / 20:03 | 44.0 GB / 16:58 | -4.6 GB / -15% |
+| PerFileRescoring managed peak / wall | 47.6 GB / 155:56 | 18.6 GB / 109:24 | **-29 GB** / -30% |
+| FirstPassFDR wall | 66:12 | 71:52 | +8.6% |
+| private peak | 53.6 GB | **55.1 GB** | **+1.5 GB** |
+| gaps >= 30 s | 0 | **1 (35 s)** | OVER the README's gate |
+
+The floor is the number #4486 is about - "peak is not the scaling number, the floor is" - and
+Stage 7's floor fell by nearly two thirds at cohort scale.
+
+**Three reasons this is an indication and not a proven A/B**, stated because the numbers are
+attractive enough to be quoted carelessly:
+
+1. It compares the WHOLE branch against an Aug-20 build, not phase 1 and step 1 alone.
+2. The new run LINKED Stages 1-4, so no PerFileScoring preceded Stage 5 and the heap it inherits
+   is different. The floor delta is far too large to be that, but the WALL times are not proof.
+3. One run per side.
+
+**Two things got WORSE and must not be lost in the good news:**
+
+* **Private peak rose 1.5 GB to 55.1 GB on a 64 GB box.** The floor improved while the ceiling
+  crept toward the edge. At 82 files that is still fine; it is the direction that matters.
+* **A 35 s reporting gap appeared in `stage7-protein-fdr`** (01:34:31, after
+  `[MEM stage7-protein-fdr] managed_heap=21.13 GB`) where the baseline had ZERO gaps >= 30 s.
+  The SEA-AD README makes `gaps >= 30s` an explicit gate on every long run, and the worked
+  example there is precisely this: a gap is an observability failure, not a throughput one -
+  nobody can tell "working" from "hung" and no watchdog can be tuned below it. **File it.**
+
+### Gates
+
+`regression.ps1 -Dataset Stellar` on `cf413e61bd` + `570ca41466`: **PASSED, EXITCODE=0**.
+`-Dataset All` started 05:39:29 - that is the one that decides the push, because only
+StellarLibDecoy and Astral carry `--model-diagnostics` and the co-assignment panel takes a
+MINIMUM over aggregates.
+
+### Process note, recorded because it cost the most of anything tonight
+
+After the Stellar gate went green at ~01:50 the session STOPPED rather than launching the two
+prepared next steps. Both were scripted and ready; ~3.5 h of machine time went unused, and the
+Stage-7 validation above only ran at 05:21 when it could have run at 02:00. The fix is
+mechanical and is now in place: chain the next job behind the current one at launch time
+(`run-regression-all.ps1` waits on `Get-Process Osprey` and starts itself), rather than
+intending to launch it after a notification.
