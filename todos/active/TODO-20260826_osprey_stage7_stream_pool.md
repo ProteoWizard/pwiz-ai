@@ -5860,3 +5860,73 @@ additive (not pool members) and remain the separate question Brendan already rul
 for all 594, so whatever covers the run-scope values does reach them; only the experiment-scope
 assignment misses. That distinction decides whether the worker's iterated population or the
 lookup is what needs widening.
+
+### THE ORACLE: do the per-run sidecars match the baseline? (Brendan, 2026-08-30)
+
+The per-run 2nd-pass sidecar must not change because its author formed a new view of what the
+file should hold when written by PerFileRescoring rather than SecondPassFDR. The phase's goal is
+that per-run FDR can be computed on any number of HPC nodes and experiment-wide FDR computed on a
+SEPARATE computer from what those nodes wrote. **The only admissible justification for adding or
+changing a row is proof that the old code held rows in memory that its experiment-wide
+calculation needed and never wrote.** Measured against that standard, neither delta qualifies.
+
+#### The ADDED rows (397 decoy observations, 140 entry_ids) - justification FAILS
+
+| test | baseline | branch |
+|---|---|---|
+| per-run union, distinct entry_ids | 313,537 | 313,677 |
+| experiment sidecar records | 313,537 | 313,677 |
+| experiment ids NOT in any per-run sidecar | **0** | **0** |
+| per-run ids NOT in the experiment sidecar | **0** | **0** |
+
+The baseline's experiment sidecar is EXACTLY the union of what the per-run sidecars contained -
+zero in either direction. No in-memory row was needed and unwritten. Adding the 140 moved
+**0 of 313,537** shared experiment-wide values, so they are inert.
+
+The premise behind the carry-forward is also factually wrong: the baseline per-run sidecars
+already carry **466,055 decoy observations**, 294,540 of them at q=1.0. Non-survivor decoys were
+being written all along; the 397 are new participants, not a recovered omission.
+
+**Open, and the decisive test**: the code's `bestDecoy` argument is about the JOIN rebuilding the
+null without reopening a pass-1 file - the separate-computer case. The measurement above is on the
+straight-through route; **mode 3 was skipped in this A/B**. Run mode 3 on the BASELINE: if the
+cross-process sidecar-only rehydrate is green without carried decoys, the justification is dead.
+
+#### The DROPPED rows (594 gap-fill observations) - a straight regression
+
+No justification is available: the old code DID write them. They are gap-fill observations -
+precursors reconciliation placed into a file where pass 1 never detected them (measured: 0 of 594
+appear in that file's 1st-pass sidecar; baseline record is (score, 1.0, 1.0, 1.0) for all 594, and
+the score is NOT the 1st-pass score).
+
+**Why the new code cannot see them**, verified: `ReadOneFilePass2Inputs`
+(Pass2FdrSidecar.cs:2327) builds the worker's entire observation universe from the file's
+**1st-pass sidecar**:
+
+    FdrScoresSidecar.ReadScalars(pass1SidecarPath, FdrScoresSidecar.Pass.FirstPass,
+        out entryIds, out scores, survivorIds.Contains, pass1Records);
+
+`BuildRecords` iterates `entryIds`, so a gap-filled peak is unreachable regardless of survivor
+status. The baseline's Stage 7 iterated the POOL, which contains gap-fills, and wrote them via
+`AssignPerRunQ`'s explicit GAP-FILL branch. The blind spot is visible in the code's own comment,
+which reasons that *"decoys are never gap-filled, so they never become survivors"* and carries
+decoys forward - without asking what happens to gap-filled TARGETS.
+
+This runs AGAINST the phase's goal: an experiment node reading only what the run nodes wrote now
+receives less than before.
+
+#### Both deltas are inert for experiment-wide VALUES
+
+The branch produced identical experiment-wide values for all 313,537 shared entries while its
+per-run sidecars were missing 594 rows and carrying 397 extra. The drop's damage is downstream, in
+pool seeding: those 594 pool entries never receive experiment-scope values, keep `ResetScores`
+defaults (expQ=1.0, expAgg=0.0), and 139 of them fall out of the panel's experiment-scope detected
+set - the whole of `nBetter 988 -> 977`.
+
+#### Disposition
+
+Restore the per-run sidecars to the baseline in BOTH directions. Order is already compatible:
+restricted to shared ids, branch and baseline record order are identical on all three files, so
+byte-identity needs the gap-fill records reinserted at their baseline positions and the carried
+decoys removed. Keeping the carried decoys requires first naming an experiment-wide quantity the
+baseline per-run sidecars cannot supply - and the mode 3 test above is what would show one.
