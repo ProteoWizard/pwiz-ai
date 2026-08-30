@@ -887,3 +887,42 @@ the eleven-leak table and still needs the master/net472 baseline to classify. Se
 "it is the container, not Skyline" wording for the USER-quota finding overstates the evidence -
 what was measured is an asymmetry (containers reach the 10,000 USER quota, host worker never
 passed 581), not an identified cause.
+
+### Code review of the filter found a real hole - reworked and re-verified
+
+`/code-review max` was run on the two-file diff alone (soft-reset onto the working tree rather
+than branching, since branching at `59e78e9181` leaves the same 43-commit merge-base and
+branching from master fails outright: `IsBenignSplitterRepaintFailure` does not exist there and
+master is net472, where this bug cannot occur). Findings worked, then re-verified.
+
+**The critical one, reproduced independently before acting.** The first filter walked the ENTIRE
+stack, including the WndProc dispatch chain BELOW `Control.InvokeMarshaledCallbacks`. Adding a
+`WndProc` override to the target - the only change between two otherwise identical probe runs on
+.NET 10.0.11 - flipped the verdict from True to False. Skyline has seven such controls
+(`SequenceTree`, `AllChromatogramsGraph`, `CustomTip`, `WizardPages`, `UndoRedoList`,
+`ClickThroughToolStrip`, `CustomTextProgressBar`), so the nightly failures would have returned
+for any of them. The filter now stops at `InvokeMarshaledCallbacks`; frames below it are the
+message pump and are legitimately ours.
+
+Also fixed: a callback whose delegate target is a framework method group produced an
+all-framework stack and was swallowed (now rejected via the `InvokeMarshaledCallback*` /
+`ExecutionContext` dispatch frames), and an empty frame array made the walk vacuous and return
+true (now fails closed).
+
+**The review's own suggested fix was wrong and was not taken**: requiring
+`ThreadMethodEntry.Complete` directly under `InvokeMarshaledCallbacks` breaks on the real
+nightly stack, where the JIT inlines `Complete`, `EventWaitHandle.Set` and `DangerousAddRef`
+away. Bounding the window works on both the inlined and non-inlined stacks.
+
+The test now asserts positively (hooks `Messages.WriteDebugMessage` rather than asserting an
+absence), strands on `SequenceTree` as well as `SkylineWindow`, provokes the reporting half from
+a framework method group, removes only its own exception under the lock the writer takes, and
+uses `WAIT_TIME` instead of a raw 10s. **Verified as a gate**: it fails against the old
+whole-stack predicate (394 s, the exact ObjectDisposedException) and passes against the new one
+in all five languages over three loops. CodeInspection green. Commit `412dff25b6`; the
+pre-review commits are kept on local branch `review-backup/20260830_invoke_filter`.
+
+**Left for Brendan, not done**: `BackgroundEventThreads.cs:64` wires `Application.ThreadException`
+straight to `Program.ReportException`, which applies neither benign filter, so a `LongWaitDlg` on
+its own STA thread can still fail tests this way. Real and pre-existing (the splitter filter has
+the same gap); the one-line fix is to call `Program.InitUiThreadExceptionHandling()` there.
