@@ -1314,3 +1314,99 @@ pays the same vendor read AND writes the mzML, so direct raw remains the shorter
 it does change is the framing - "vendor reading is slower than mzML" is a real, general
 property worth knowing when choosing an input format, not something peculiar to one
 instrument.
+
+## Perf on .NET 10, measured 2026-08-29 (supersedes the n=6 net8 tables above)
+
+All numbers below are **master:HEAD (`99609d5bc0`) vs this branch**, one machine
+(BRENDANX-UW8), one session, one harness. The branch contains **all** of master:HEAD
+(0 commits missing), so #4593, #4600, #4615 and #4616 are held constant on both sides -
+which is what the earlier comparisons against the `pwiz-perfbase` pin (`656bd2b288`,
+2026-08-17) did NOT do. Every number measured against that pin carried those four commits
+as noise and should be ignored; master:HEAD is itself ~2.6% slower than the pin.
+
+### Osprey never turned on the parallel mzML decode it already shipped
+
+`a8bf6e85d9` (#4590, cherry-pick of `1d26ed967b`) has been in this branch since the port
+merge, but `ReaderConfig.MzmlDecodeThreads` defaults to 1, `MsDataFileImpl` passed that
+default through, and `SpectrumFileReader`'s single call site never named the argument. Every
+read decoded base64/zlib inline on the read thread. Now set from
+`OspreyEnvironment.MzmlDecodeThreads` (default 8, `OSPREY_MZML_DECODE_THREADS` overrides).
+
+Not scaled off core count or `--threads`: measured 8 -> 62.4s and 16 -> 62.3s, confirming
+the library's documented knee. The floor is the serial XML parse.
+
+### Conversion, mzML -> .spectra.bin (Measure-SpectraCache.ps1, n=6, Release)
+
+| Build | Stellar 1.38 GB | vs master | Astral 5.99 GB | vs master |
+|---|---:|---:|---:|---:|
+| master `MzmlReader` (parallel decode, net8) | 5.8s | - | 52.1s | - |
+| branch pwiz-sharp, serial decode (net10) | 10.6s | +83% | 75.1s | +44% |
+| **branch pwiz-sharp, parallel decode (net10)** | **8.6s** | **+48%** | **62.4s** | **+20%** |
+
+The +44% serial figure agrees closely with the net8 table's +41% on a different file, which
+is good evidence both measurements are sound. Turning the decode threads on roughly halves
+the regression. Astral at +20% is the number that matters; Stellar's +48% is +2.8s absolute.
+
+### Pipeline with the reader removed entirely (Test-PerfGate.ps1 -CacheOnly, Stellar, 3 reps)
+
+Caches built ONCE outside every timed region and read by both variants via `--cache-dir`,
+so each measured run is pipeline-only over identical cache bytes and no mzML is read.
+
+| Stage | baseline | branch | delta | per-rep % | % of total | Gate |
+|---|---:|---:|---:|---|---:|:--:|
+| stage2to4 | 43.9s | 46.0s | +2.1s | +5.0, +4.8, +4.6 | +1.8% | ok |
+| stage5 | 61.0s | 62.0s | +0.6s | 0.0, +2.1, +1.0 | +0.5% | info |
+| **stage6** | **8.5s** | **10.4s** | **+1.9s** | +18.0, +22.4, +20.0 | **+1.6%** | warn |
+| stage7 | 2.1s | 2.1s | 0.0s | +5.3, 0.0, 0.0 | 0% | info |
+| blib | 2.2s | 2.2s | 0.0s | -20.0, +21.1, 0.0 | 0% | noise |
+| **total** | **1:59** | **2:04** | **+4.3s** | +2.6, +4.6, +3.5 | **+3.5%** | **PASS** |
+
+**With the reader gone the gate passes.** The whole port-plus-runtime cost on Stellar,
+excluding conversion, is 4.3 seconds - split roughly evenly between stage2to4 and stage6.
+
+Express deltas as a percent of TOTAL, not of the stage: `blib` at "+12.5%" in an earlier
+run was 0.1s, and its per-rep spread straddled zero. A large percentage of a small stage
+pulls attention it has not earned.
+
+### stage6 is the one real, unexplained regression
+
++1.9s / ~+20%, reproduced FOUR ways - unsplit +21.4%, split +18.8%, cache-only +20.0%, and
+consistent across every repeat in each. It is 1.6% of total run time.
+
+stage6 (`PerFileRescoring`) is the stage that **materialises every spectrum resident** from
+the cache (`PerFileRescoreTask.LoadSpectraForRescore`; stages 1-4 stream windows from the
+index instead). So its cost is bound up with cache indexing and deserialization and is NOT
+a pure .NET 10 signal - an earlier claim in this session that "stage6 does no spectrum
+reading" was wrong. Astral cache-only will say whether it scales with cache size
+(deserialization) or stays proportionally flat (runtime).
+
+**A cold cache read is NOT the mechanism.** In `-CacheOnly` the caches persist across
+repeats, so repeat 1 reads cold and 2-3 warm. The deltas are flat across all three and
+repeat 1 is the SMALLEST for stage6.
+
+### Harness work this required (all in pwiz-ai)
+
+* `Measure-SpectraCache.ps1` - new; times the conversion alone across datasets and build
+  configurations, into fresh `--work-dir` scratch per repeat
+* `Test-PerfGate.ps1` - reads each worktree's TFM off disk (it hardcoded net8.0 and could
+  not see the port at all); `-SplitSpectraCache` and `-CacheOnly`
+* `Build-Osprey.ps1` - the TFM fallback wrote the detected value back into a
+  `[ValidateSet]` parameter, so it printed "using net10.0" and then threw on that line
+
+### Measurement traps hit along the way, recorded so they are not re-hit
+
+1. **`pwiz-perfbase` is a per-machine pin, not a shared baseline.** UW8's sits at
+   `656bd2b288`; the stage7 TODO records UW25's being moved to `bd94e8a375`. They are
+   different machines and do not track each other.
+2. **Do not build the split from inside the timed run.** `-SplitSpectraCache` charged the
+   branch +11.5s and the baseline +1.5s for splitting, which two plausible-sounding
+   mechanisms failed to explain (lost cross-file overlap; an extra cache read-back - both
+   wrong, `EnsureSpectraCache` streams from the index on hit AND miss). `-CacheOnly` makes
+   the anomaly disappear: +4.3s, consistent with the unsplit +6.0s. Build caches outside
+   the measurement.
+3. **`stage1to4` reports real work even with no conversion in it.** A cache-only run of one
+   Stellar file still shows `stage1to4 = 23.9s` - that is calibration and scoring streaming
+   from the index, not conversion.
+4. **Once the cache exists Osprey needs no source file.** Verified by renaming the mzML away
+   and watching a full pipeline complete, exit 0, 482,891 scored entries (#4616's promise,
+   end to end).
