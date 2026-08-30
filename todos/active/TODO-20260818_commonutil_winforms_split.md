@@ -826,3 +826,15 @@ restores .NET 8 behavior exactly rather than hiding a new failure.
 
 **Follow-up, not done here**: `ai/scripts/Skyline/Run-Tests.ps1 -Loop 0` documents "run forever"
 but maps to `loop=1`; use an explicit count until that is fixed.
+
+**Hardened after a measurement, same night.** The first filter matched on
+`ObjectName == SafeWaitHandle` plus `StackTrace.Contains("InvokeMarshaledCallbacks")`, and a
+side-by-side experiment showed that an `ObjectDisposedException` thrown by OUR OWN code inside a
+marshaled callback matches all of that too - same ObjectName, same method on the stack. The
+filter now requires every frame's declaring assembly to be WinForms or CoreLib, which is what
+actually separates the framework's completion signal from a callback failure.
+`TestUiThreadExceptionFilter` asserts both directions. Commits `f2fba23503`, `a64f2f4b2a`.
+
+**Draft comment for dotnet/winforms#14996** (the repro of the framework-owned path they say they
+could not reproduce) is in `ai/.tmp/draft-comment-winforms-14996.md`. **Not posted - needs
+Brendan's okay**, it is outward-facing.
