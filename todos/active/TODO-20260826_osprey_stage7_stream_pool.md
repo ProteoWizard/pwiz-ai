@@ -5251,3 +5251,157 @@ rather than silently lowering experiment q. Phase 1's lesson applied: absence mu
 never a plausible default.
 
 The instrumentation was reverted after the measurement; the numbers above are the record.
+
+## NIGHT SESSION 2026-08-29/30 - step 1 at scale, and a second precondition nobody had named
+
+Session opened 22:07 with 90% context. Phase-2 step 1's acceptance run had come back green
+before the session started (`-Dataset All` 55 PASS / 0 FAIL, EXITCODE=0), so step 1 stands
+committed at `3593cd2ff6`.
+
+### Landed and pushed
+
+`origin/Skyline/work/20260826_osprey_stage7_stream_pool` moved `2d07cf48fd` -> `b327152c9d`
+(PR #4621). That is master merged into the branch plus step 1. All five master commits are
+Skyline-side and touch **zero** Osprey files; the only shared file that moved is
+`pwiz_tools/Shared/PortableUtil/SystemUtil/CommandStatusWriter.cs`, a null-guard on a disposed
+writer that changes no output format. Gate before pushing: build clean, 597/597, ReSharper 0/0.
+
+TeamCity 4157715 was still running on `2d07cf48fd` at the time and is unaffected - it is pinned
+to the commit, not the branch tip.
+
+### THE D:\test MIGRATION SILENTLY BROKE `-LinkFrom` FOR EVERY RECORDED RUN
+
+Cost ~7 minutes to find and is worth more than that to anyone who reuses a completed run.
+
+`Run-SeaAd.ps1 -LinkFrom` reported
+
+```
+LinkFrom: pinned OSPREY_VERSION_OVERRIDE=26.1.1.232 from the source run(s)
+LinkFrom: hard-linked 328 file(s) for stages before FirstPassFDR, 0 missing, from 1 source(s)
+```
+
+and then **re-scored file 1 from scratch anyway** - "Running RT calibration... Scoring
+calibration windows" at 22:14 on a run that was supposed to resume at Stage 5.
+
+Root cause: `OspreyTask.ValidityKey` (`Osprey.Tasks/OspreyTask.cs:179`) is
+`search={SearchParameterHash};library={LibraryIdentityHash}{pick suffix}`, and
+`SearchIdentity.SearchParameterHash` (`Osprey.Core/SearchIdentity.cs:60`) folds
+`decoy_pairing_manifest` in as an **absolute path**. The migration moved the mzML and the
+libraries out of `D:\test\Pilot-MTG-Tissue-May2026\...` and
+`D:\test\AstralTest-TargetDecoyLibraries\...`, so every run recorded before it now computes a
+different `search=` hash than its own artifacts carry.
+
+**The link tally cannot see this.** It matches by FILE NAME and reports "0 missing"; Osprey then
+rejects each linked artifact on its validity key, one file at a time, silently. So the banner
+says the link worked and the run says nothing - the only symptom is that Stage 1-4 runs.
+
+Repaired with junctions restoring the recorded paths, and the relaunch went straight to
+`PerFileScoring:skipping (outputs valid)` -> `FirstPassFDR:starting`:
+
+```
+D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\mzml
+    -> D:\test\osprey-runs\sea-ad\mzml
+D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment-20260817-ungated
+    -> D:\test\osprey-runs\sea-ad\lib\target+decoy+entrapment-20260817-ungated
+```
+
+Every SEA-AD run under `runs\` is dated 2026-08-14 to 2026-08-21, i.e. all pre-migration, so the
+junctions are what makes any of them linkable. Two follow-ons worth filing separately: the
+runner should VERIFY adoption rather than report a filename tally (watch for
+`PerFileScoring:skipping (outputs valid)` and fail loudly otherwise), and a path-dependent
+validity key defeats relocating a dataset at all - a content hash of the manifest would not.
+
+### The 82-file scale test
+
+Launched 22:18:55 against `D:\test\osprey-runs\_bin\20260829-phase2-step1-merged\Osprey.exe`
+(the merged branch build, version 26.1.1.241, pinned to 26.1.1.232 by the LinkFrom auto-pin).
+Stages 1-4 linked from
+`seaad-82files-libdecoy-r1.0-protein-compact-p2-pickrun3-oursungated-n82`; Stage 5+ regenerates
+because that run carries `fdrsidecar=4` and today's build emits `fdrsidecar=5` - the invalidation
+is correct and is the intended shape.
+
+Run dir: `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-phase2step1-20260829_221855`
+
+What it tests is precondition ONE only - the survivor-scope guard step 1 added. It carries no
+guard for the second precondition below, because that guard was written after it launched.
+
+### A SECOND PRECONDITION OF THE RELOCATION, previously unnamed - now guarded (`570ca41466`)
+
+Reading `CompeteOneFile` for the relocation surfaced a second thing the sidecar fold depends on,
+of exactly the same shape as the survivor-scope one and with the same silent failure mode.
+
+`CompeteOneFile` reduces to per-base_id bests over the file's whole **stratum population**
+(`StreamingFdr.cs`, the `bestTarget`/`bestDecoy` loop). After the relocation, SecondPassFDR folds
+those bests out of the per-run `.2nd-pass.fdr_scores.bin`, which carries only that file's
+**survivors**. The two agree exactly when the winning TARGET observation is itself a survivor:
+the survivor-restricted scan is a subsequence of the population scan and both take the first
+observation at the maximum, so if the population winner is in the subset it is also the subset's
+winner. If it is not, the folded experiment-wide maximum silently falls to a lower-scoring
+observation - no exception, no failing gate.
+
+The check is therefore one line - `bestTarget[bid].entryId` must be in this file's own survivor
+set - and it now throws in `ComputeFullPopulationPrecursorFdrStreaming`, beside the step-1 guard.
+
+Three things deliberately scoped:
+
+* **Stratified only.** Unstratified transfer-compete reduces over the file's ENTIRE population,
+  which includes base_ids that survive nowhere; their bests are non-survivors by definition, so
+  the same assertion there would fire on the first file and say nothing about the fold.
+  **transfer-compete's fold equivalence is a separate open question** and needs its own
+  measurement before that mode's per-file half moves. Asserting the stratified invariant over it
+  would disguise the gap as coverage.
+* **Decoys are not checked**, because every non-survivor decoy observation is carried forward
+  into the per-run sidecar by design. That is what makes the carry-forward NON-OPTIONAL: drop it
+  and `bestDecoy` needs the same check, and it fails - the measured
+  `decoy: population-only=305` on Stellar is exactly that failure.
+* **Measured on Stellar 3-file only** (`target: differs=0 population-only=0`). Same caveat the
+  survivor-scope precondition carried, and the same answer: guard it, then measure at scale.
+
+**How to validate it at 82 files in ~25 minutes, not 8.5 hours.** Once the run above finishes,
+its Stage 5 sidecars are format v5 and its Stage 6 reconciled parquets are on disk, so
+`Run-SeaAd.ps1 -Task SecondPassFDR -LinkFrom <that run> -Fresh` re-runs Stage 7 alone against a
+freshly snapshotted guarded binary. That is the cheap way to test the second precondition at
+cohort scale, and it needs a NEW exe snapshot - the one the run above holds predates the guard.
+
+### `LoadExperimentRecords` tightened (`cf413e61bd`)
+
+The handoff's open item. It coalesced every `FdrExperimentSidecar.ReadMap` failure to an empty
+map, so a truncated, wrong-version or wrong-pass sidecar was indistinguishable from an analysis
+that never wrote one. Consumers apply these values through a `TryGetValue`, so both read as "no
+matching entry" and every entry keeps its `ResetScores` defaults - an `ExperimentAggregateScore`
+of 0.0 that `BuildCoAssignment` then takes a MINIMUM over. That is the phase-1 defect that
+admitted 483,220 decoys against an expected 272, arriving by a second route.
+
+Absence stays tolerated and is now tested separately from unreadability; only a file that EXISTS
+and cannot be read throws. `LoadExperimentRecordsFrom(path, pass)` was split out so the
+distinction is testable without standing up an `OspreyConfig`, and the new assertions were proven
+RED against the old behavior before being kept - a throws-on-corrupt test fed only corrupt input
+proves nothing about the case it must let through, so the valid-file control is asserted first.
+
+There is no pre-v5 experiment sidecar in the wild to be broken by this: the analysis-wide file is
+new in v5, and the two sidecar types carry different magic, so a per-file file cannot be
+mistaken for one.
+
+### The OTHER open phase-1 defect is BLOCKED ON A GATE, not on the fix
+
+`ComputePass2Resident` never publishes `Pass2ExperimentScope`, so `WritePass2ExperimentSidecar`
+takes its early return and a resident pass-2 run writes **no 2nd-pass experiment sidecar at
+all**. Confirmed by reading: the `ctx.Publish(new Pass2ExperimentScope(...))` at
+`Pass2FdrSidecar.cs:1945` is inside `ComputePass2Projection` (1826+), not inside
+`ComputePass2Resident` (1652-1825), which ends at `FirstPassFdrTask.RunPercolatorFdr` and
+publishes nothing.
+
+The fix looks small - accumulate over the same entries the per-file sidecar write loop already
+walks, so the analysis-wide file and the per-file files cannot disagree, then publish. **It was
+not written, deliberately.** Two reasons, and the second is the one that decides it:
+
+1. `FdrExperimentAccumulator.Add` throws when two observations of an entry_id disagree. Whether
+   the resident path's experiment values are per-entry consistent is UNKNOWN - it is the same
+   question phase 1 answered for the frozen path, and answering it needs a run, not a reading.
+2. **`regression.ps1` never sets `OSPREY_PASS2_QVALUE=transfer`.** Every leg of every dataset
+   runs the frozen `protein-compact` default, so `ComputePass2Resident` is not exercised by the
+   local gate at all. A fix landed there would be ungated code on an ungated path.
+
+So the next step on this defect is a regression leg that reaches the resident pass-2 path, not
+the fix. Filing the fix without it would be the "untested capability is a liability" trade in
+its purest form.
