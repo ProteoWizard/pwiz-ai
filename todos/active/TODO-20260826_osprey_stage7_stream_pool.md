@@ -6038,3 +6038,104 @@ rather than the wording."*
 Byte-identity of all three `.2nd-pass.fdr_scores.bin` plus
 `output.2nd-pass.fdr_experiment.bin` against the baseline run dir, then modes 1b / 2 / 3 / 5 / 7.
 Mode 3 is the one that exercises the cross-process case the new verifier is really for.
+
+### THE DECISION: the worker must WRITE its competition (2026-08-30)
+
+Two in-memory dependencies are now PROVEN, both by running the fix and reading the baseline.
+Neither justifies changing the per-run sidecar's population; both are satisfied by writing down
+an answer the authorized node already computes.
+
+#### Dependency 1: which rows COMPETED (gap-fills)
+
+`BuildRecords` restored to one record per pool entry -> the per-run sidecars became
+byte-identical to the baseline on `entry_id`, `score`, `run_precursor_q`, `run_peptide_q` and
+on record COUNT (11,206,040 / 11,206,256 / 11,208,668, exact). The ONLY differing column was
+`pep`, on 52,640 ids, because the aborted run never reached `PatchPep`. **The files were right.**
+
+The Stage 7 assert then fired: `FileCompetitionFromRecords` folds the pool image, which contains
+gap-fill rows that never competed (`CompeteOneFile` draws its population from the file's 1st-pass
+sidecar, where a gap-fill has no record). Excluding them via the envelope's `gap_fill_targets`
+fixed the target side: 153,868 -> matching.
+
+#### Dependency 2: the decoy BESTS - the decisive one
+
+The next assert: *"best decoy for base_id 16536 is score -5.82647366877369 on entry_id
+2147500184 as recomputed, but absent in the worker's answer."* That entry is the FIRST of the 140
+carried decoys measured at the start of this investigation. The carry-forward was load-bearing
+for `FileCompetitionFromRecords`, exactly as its comment claimed.
+
+**Read from the baseline code, this is confirmed and it is NOT aggregate knowledge.** Baseline
+Stage 7's `ReadFile(fileKey)` calls
+`ReadOneFilePass2Inputs(sidecarByKey[fileKey], effectiveParquetPath, ...)` - it opens EACH FILE'S
+OWN 1st-pass sidecar (958,241 observations for file 20) and competes over that, while writing a
+2nd-pass sidecar holding only the pool (311,278). The ~647K extra observations, including the
+non-survivor decoys that supply `bestDecoy`, were never written anywhere. They were read from a
+SECOND PER-FILE artifact the join happened to have because everything ran on one machine.
+
+#### Why the answer is to persist the worker's competition
+
+* **PerFileRescoring already reads its own 1st-pass sidecar** and is entitled to:
+  `CompeteStampAndWrite(fileName, FdrScoresSidecar.Pass1Path(inputFile), ...)` - single file,
+  own node. Its competition is therefore ALREADY CORRECT, `bestDecoy` included.
+* **The JOIN must not read them** - 52.3 GB of 1st-pass sidecars at 257 files is what #4486
+  exists to stop reading.
+* So the gap is TRANSMISSION, not knowledge: the worker computes the right answer from a source
+  it is allowed to read, and does not write it; the join reconstructs it from the pool image,
+  which structurally cannot carry it.
+
+**This is not an addition to the HPC contract.** It persists an answer the authorized node
+already produces, which is the natural completion of the relocation rather than an extension of
+it. It retires `FileCompetitionFromRecords`, the gap-fill discriminator, and the carried-decoy
+carry-forward in one move, and it restores the per-run sidecar to a faithful pool image.
+
+Shape: per file, per stratum base_id -> (bestTargetScore, bestTargetEntryId, bestDecoyScore,
+bestDecoyEntryId). O(distinct base_ids), a few MB against the 11 MB sidecar. Run q stays in the
+per-run sidecar where it already lives (per observation).
+
+#### What the previous implementation got right and wrong
+
+Right: the diagnosis that the join could not recover `bestDecoy` from what was written.
+Wrong: the remedy - encoding competition membership by MUTATING the pool image (dropping
+non-competing targets, injecting non-pool decoys), which made one file answer two questions and
+silently corrupted the one that has to match the baseline. The measured cost was 594 lost
+gap-fill observations, 139 panel rows falling out of the experiment-scope detected set, and
+`nBetter 988 -> 977`.
+
+#### THE MEASUREMENT (assert bypassed as a diagnostic, since removed)
+
+With the pool image restored, the carried decoys gone and the assert temporarily bypassed:
+
+| leg | result |
+|---|---|
+| mode1 golden blib | PASS |
+| **mode1b diagnostics vs golden** | **PASS** - the panel movement is FIXED |
+| mode1c 2nd-pass protein q | PASS - and now over **313,537** shared records, the BASELINE count |
+| mode6 fragment release | PASS |
+| mode7 regeneration | FAIL 3 (was 5) - only the separate "touched an artifact" defect remains |
+
+Per-run sidecars and the experiment sidecar are now the EXACT baseline sizes, and their
+entry_id populations are identical (0 either way, all four files). What still differs:
+
+* per-run: `pep` on 50,675 ids (file 20) - close, not equal (0.0040209 vs 0.0040310)
+* experiment: `exp_precursor_q` / `exp_peptide_q` on **113,552** ids; `exp_aggregate` identical
+
+**So the reconstruction's loss DOES reach outputs.** It is the null moving: the lost non-survivor
+decoy observations are part of the target/decoy competition, so every q computed against that
+null shifts slightly.
+
+**But it does not move the discovery set:**
+
+```
+moved q values      : 113,552
+CROSS the 1% cutoff : 0
+max abs delta       : 0.00107      median abs delta : 0.00045
+passing at 1%       : new 31,538   base 31,538   (identical)
+```
+
+That is why mode1 / mode1b / mode1c stay green: the reported set is unchanged and every shift
+sits above the reporting threshold, in the tail. It is also a GATE COVERAGE finding - an output
+moved on 113,552 entries with every correctness leg green.
+
+**Verdict: D is required, not optional.** Under the stated oracle (do the files match the
+baseline?) they do not, and a q-value is a reported quantity even at 0.08 - computed here from a
+null that is missing real decoy observations. The worker must write its competition down.
