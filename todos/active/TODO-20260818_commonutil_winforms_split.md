@@ -1299,3 +1299,130 @@ will be in `pwiz_tools/Skyline/SkylineTester/SkylineTester.log` in `C:\proj\pwiz
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260818_commonutil_winforms_split_leak.md` before starting work.
+
+### 2026-08-30 (evening) - Both failures from the parallel run diagnosed and addressed
+
+Brendan's long parallel pass-2 cycle (13:44-16:19, Release/net10, 8 workers, all five languages)
+reached **14,660 instances with 2 failures**, then he stopped it. Log rolled to
+`D:\tests\nightly-logs\SkylineTester-20260830_134418-parallel-pass2.log`.
+
+Both are rare intermittents at roughly **one occurrence per 25 executions** of the affected test
+(`TestAuditLogTutorial` ran 22 times, `WatersImsMseLibraryDriftTimesChromatogramTestAsSmallMolecules`
+27). Neither has any nightly failure history on master.
+
+#### 1. `TestAuditLogTutorial` - NOT a recurrence; a different defect
+
+The handoff called this a recurrence of the audit-log ordering fix. It is not. That fix
+(`3af899a9a6`, peak-bounds ordering) is already in this branch's copy of the file, at a different
+place in the test. This failure is a `NullReferenceException` at `AuditLogTutorialTest.cs:269`,
+in French, on parallel client 1.
+
+Root cause: `FindOpenForm<DocumentGridForm>()` on line 266 returned null and line 269
+dereferenced it. `FindOpenForms` only yields a form once `form.Created` is true, so a dockable
+form shown by `SkylineWindow.ShowDocumentGrid(true)` in the `RunUI` immediately above is not
+guaranteed to be visible to it by the time that call returns. The stack pins the null to the
+test's own lambda frame - `DataboundGridControl.ChooseView` is far too large for the JIT to
+inline, so an NRE raised inside it would have left a frame of its own.
+
+Fixed by waiting instead of demanding: `WaitForOpenForm<DocumentGridForm>()`. The same file
+already uses `WaitForOpenForm` for `CalibrationForm` (line 479) and `AuditLogForm` (line 608),
+and four other tests already use `WaitForOpenForm<DocumentGridForm>`. Line 385's
+`FindOpenForm<CalibrationForm>()` had the identical exposure and got the same treatment.
+
+The change is also self-diagnosing: if the null were ever something other than the form,
+`WaitForOpenForm` times out naming every open form instead of raising a bare NRE.
+
+#### 2. `WatersImsMseLibraryDriftTimesChromatogramTestAsSmallMolecules` - a PORT regression
+
+`ResultsTestDocumentContainer.AssertComplete()` failed with the bare string `Loader cancelled`
+at `WatersImsMseTest.cs:200`, in Japanese, on parallel client 3.
+
+**Not reproducible serially**: 40 consecutive runs in Japanese on an idle machine, zero
+failures. It needs the parallel load, matching the "reproduce nightlies in parallel mode"
+lesson. In an 8-worker two-test run it reproduced **twice in the first 11 executions**.
+
+`Loader cancelled` names neither the loader, the document, nor what was left unloaded. Per the
+rule that a mute assertion is the first bug to fix, `AssertComplete` now reports the progress
+state, message and warning and whether the document is loaded. That paid off on the first
+reproduction, and **refuted the leading hypothesis**:
+
+```
+Loader cancelled
+Progress: begin at 0%
+Message: Performing replicate retention time alignments
+Document is NOT loaded:
+  ResultFileAlignments
+```
+
+Not a stale status at all - a load genuinely had not finished.
+
+**Root cause.** `RetentionTimeManager.IsCanceled` (`RetentionTimeManager.cs:62`) is nothing but
+a reference comparison against the container's current document, so "cancelled" there means
+SUPERSEDED, never that anyone stopped anything. Under parallel load the chromatogram loader's
+`FinishLoad` commits its new document exactly as a replicate retention time alignment begins;
+the alignment sees a different document, cancels at 0%, and posts a cancelled status.
+`MemoryDocumentContainer.IsFinal` counts any cancellation as terminal, so `WaitForComplete`
+returns on a document still missing `ResultFileAlignments` - even though
+`BackgroundLoader.OnLoadBackground` re-notifies on the way out precisely so the loader restarts
+on the new document. The wait quit on a hand-off that was about to complete itself.
+
+**This is a port regression, NOT a master defect** (an earlier note in this session said
+otherwise; it was wrong). Master's `IsFinal` is:
+
+```csharp
+return doc.IsLoaded || (LastProgress != null && LastProgress.IsFinal && LastProgress.IsError);
+```
+
+A cancellation is never terminal there. The cancel-terminal behaviour came from the net8 port
+loosening `IsFinal` "to return true on any final loader progress state (previously it also
+required IsError)" so a Waters load that finished chromatograms but left `doc.IsLoaded == false`
+would fail fast instead of hanging - preserved explicitly in Matt's `3d526a3470` (2026-07-22,
+"Don't treat a multi-file load checkpoint as final in MemoryDocumentContainer"), which is on the
+port branches and not on master.
+
+**Fix**: wait the restart out, bounded at 30 one-second loops, and only for containers that opt
+in. `CommandLine.cs:2017` waits on this same container, and test stability is not worth up to 30
+seconds added to a shipping import's failure path, so `WaitForCancelRestart` is false in
+`MemoryDocumentContainer` and true in `ResultsTestDocumentContainer`. Committed as `94c2121e39`.
+
+**For Matt, and not fixed here.** This works AROUND the port's `IsFinal` rather than reconciling
+it. Simply dropping `IsCanceled` from the terminal test would NOT have fixed it: the fall-through
+below it declares the document final when every data file is already cached, which was true here
+- the chromatograms were all cached and what was missing was a NON-chromatogram loader. That
+fall-through was written for the Waters chromatogram case and does not account for the other
+loaders a document waits on.
+
+**Sibling left alone**: `TestUtil/TestDocumentContainer.cs:32` has a second copy of the same bare
+"Loader cancelled" assert and no opt-in. It registers no loaders of its own, so it was not
+touched rather than change behaviour never reproduced.
+
+#### What goes to master, and what does not
+
+Brendan's call, 2026-08-30: PR the master-applicable parts against master and pull them through.
+
+| Change | Master? | Why |
+|---|---|---|
+| `AuditLogTutorialTest.cs` lines 266 and 385 | **Yes** | `origin/master` has both `FindOpenForm` calls verbatim, at the same line numbers |
+| `AssertComplete` load-state message | **Yes** | master's copy is the same bare string at `ResultsUtil.cs:287`; worth having regardless |
+| `MemoryDocumentContainer` cancel-restart wait + `WaitForCancelRestart` | **No** | master's `IsFinal` never treats a cancel as terminal, so master cannot exhibit this |
+
+The branch is based on `chambem2/pwiz-sharp`, not master, so the master PR wants authoring fresh
+from master rather than a cherry-pick.
+
+#### Verification
+
+| Test | Before | After |
+|---|---|---|
+| `TestAuditLogTutorial` | 1 failure in 22 (nightly-shaped run) | **0 in 136** at 8 workers, five languages |
+| `WatersImsMse...AsSmallMolecules` | 2 in 291 (0.69%), 2 in the first 11 under startup load | soak running at handoff |
+
+Commits: `a43bb777d6` (audit log test), `94c2121e39` (loader wait). Solution builds clean in
+Release/net10 (95.5s) and CodeInspection reports 0 failures, confirmed in its own log rather
+than the script summary.
+
+#### A note on "zero failures in 9 hours"
+
+The 2.5-hour sample produced two DISTINCT rare flakes at ~1 in 25 executions of their own tests.
+Extrapolating the instance rate (14,660 in 2.5 h) a 9-hour run is roughly 50,000 instances, so
+tests that never came up twice tonight can still fail once. Fixing these two does not by itself
+make zero failures likely - it removes the two that are known.
