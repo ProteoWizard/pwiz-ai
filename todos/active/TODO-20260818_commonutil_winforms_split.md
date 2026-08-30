@@ -1013,3 +1013,32 @@ iteration) kept churning. The experiment cut construction from ~43 to ~10 per it
 reduction - and the leak did not shrink (2,072 KB baseline vs 2,298 KB cached). That is still
 strong evidence the leak is not proportional to factory construction, but it is not the clean
 control the earlier wording implied.
+
+### Abandoned the cache-based control, and a blind spot it exposed
+
+The plan to cache `IrtDb`/`IonMobilityDb`/`OptimizationDb` factories and clear them at test
+teardown was **dropped on Brendan's objection, which is right**: a static path-keyed cache grows
+with every distinct file a user opens and is freed only at window close, so clearing it per test
+does not remove the growth - it removes our ability to SEE the growth. Bounding a leak to a test
+iteration is not fixing it.
+
+Measured before dropping it, and worth keeping:
+
+* With caches in place, factory construction fell from **130 to 11 across 3 iterations**.
+* The named database paths repeat every iteration, but the **temp files do not** -
+  `~SK333A.tmp`, `~SK352F.tmp`, `~SK3A12.tmp`, a fresh name per iteration. So a path-keyed cache
+  retains roughly one extra factory per iteration forever. That is very likely why the earlier
+  IrtDb-only cache measured slightly WORSE (2,298 KB) than the uncached baseline (2,072 KB): it
+  manufactured a leak of the same order as the one being measured.
+
+**Pre-existing blind spot, not introduced here.** `ProteomeDb`'s `DatabaseResource` is exactly
+this shape - a static path-keyed cache that deliberately retains ("we'll hang onto them"),
+released only at `Skyline.OnClosed()`. And `AbstractUnitTest.cs:494` calls
+`DatabaseResources.ReleaseAll()` at **every test teardown**, so pass-1 leak detection
+structurally cannot observe unbounded growth in that cache. Worth deciding separately whether
+that teardown call should stay.
+
+**Where the leak hunt stands**: factory construction is not the driver (a 4.3x cut in
+construction produced no reduction), the ORM version cannot be reverted, and the next step is the
+retention path for the surviving NHibernate objects - which does not require changing product
+behavior. All experimental changes reverted; tree clean at `4f14b7cee6`.
