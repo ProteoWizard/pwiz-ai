@@ -1111,3 +1111,34 @@ opened from (`SessionWithLock` gained an optional owned factory it disposes with
 factory can outlive a `using`. Closed by construction rather than by a disposal call someone must
 remember. Note the trade Brendan flagged: this exposes any read that is not fully materialised by
 a BackgroundLoader, since such a read now builds a factory per call.
+
+### Candidate fix (UNCOMMITTED, NOT yet validated)
+
+Working tree of `pwiz-work1` carries an unvalidated candidate:
+
+* `Shared/Common/Database/NHibernate/SessionWithLock.cs` - optional `ownedSessionFactory` that
+  the session disposes with itself.
+* `Model/IonMobility/IonMobilityDb.cs`, `Model/Optimization/OptimizationDb.cs` - neither retains
+  a factory. Each session creates and owns one; `GetXxxDb` no longer builds or locks a factory.
+  Both classes already stored `_path`, and there was only ONE construction site each.
+
+Closed by construction rather than by a disposal call someone must remember - which matters
+because these are `Immutable` objects with no lifetime to hang `Dispose` on. (There is a
+mechanism for closing references held by `SrmDocument` via the `ConnectionPool`, but
+open-read-close is far simpler and is what `IrtDb` already does.)
+
+**Status: builds, but NOT validated.**
+* `TestFilesTreeForm` failed 1 of 3 pass-2 iterations at `FilesTreeFormTest.cs:1666`
+  `Assert.IsTrue(simulator.IsDragging)` - a bare, message-less assertion in a drag simulation.
+* Intermittent, not deterministic. But the pre-fix baseline ran **25 iterations clean**, and
+  post-fix it is ~2 failures in 4, so the rate looks raised rather than incidental.
+* **The leak number was never obtained** - both pass-1 attempts aborted on this failure before
+  completing the 25-iteration measurement. So there is no evidence yet that the fix removes the
+  2,072.8 KB. Do not treat it as fixed.
+
+**Plausible mechanism, unproven**: with no `BackgroundLoader`, this database is materialized on
+the FOREGROUND thread during file open, without progress UI or the usual protections (Brendan's
+observation; a pre-existing short-cut, out of scope here). Rebuilding a SessionFactory per read
+makes that foreground load slower, which would stall the UI thread during the simulated mouse
+move so the drag never initiates. If that is right, the fix is sound but exposes the missing
+background loader as a functional failure rather than only a cost.
