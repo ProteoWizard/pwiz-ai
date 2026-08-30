@@ -1042,3 +1042,34 @@ that teardown call should stay.
 construction produced no reduction), the ORM version cannot be reverted, and the next step is the
 retention path for the surviving NHibernate objects - which does not require changing product
 behavior. All experimental changes reverted; tree clean at `4f14b7cee6`.
+
+### The leak is NOT from the .NET 10 retarget - it is already there on .NET 8
+
+Built commit `14e8820ac5` (the parent of `b882847f21` "Retargeted the Skyline and pwiz-sharp
+trees from .NET 8 to .NET 10") in a throwaway worktree and ran the same pass-1 check:
+
+| Configuration | Managed leak, TestFilesTreeForm |
+|---|---|
+| net10.0-windows + NHibernate 5.5.2 (current branch) | 2,072.8 KB |
+| **net8.0-windows + NHibernate 5.5.2 (`14e8820ac5`)** | **2,133.9 KB** |
+
+Within 3%. **The net10 retarget did not introduce this leak; it inherited it.** The working
+premise that "something changed with the move to .NET 10" is wrong, which is also why bisecting
+NHibernate versions on net10 was leading nowhere - wrong axis.
+
+So the fault is somewhere in the net8 port, which is also where NHibernate went 5.1.3 -> 5.5.2.
+
+**Next cut, and it is nearly free**: `14e8820ac5` multi-targets `net472;net8.0-windows`, and its
+net472 leg binds the VENDORED NHibernate 5.1.3 while the net8 leg binds package 5.5.2. Running
+the net472 leg at that same commit compares the two ORM versions with the source tree held
+constant, isolating the upgrade from every other port change.
+
+Worktree: `C:\proj\pwiz-net8` (detached at `14e8820ac5`; remove with `git worktree remove`).
+Needs the era-matched wrappers - `ai` commit `2d92f01`, extracted to
+`ai/.tmp/Build-Skyline-net8era.ps1` and `ai/.tmp/Run-Tests-net8era.ps1` - because the current
+wrapper calls `TestRunner.exe stage=1`, which that commit's runner does not support. Its
+`Stage-Net8Tests.ps1` also had to be pointed at `bin\x64\...` since the build lands there.
+
+**Tooling bug found on the way**: `Build-Skyline.ps1 -Framework Net8` sets `$isNet8` but never
+sets `$script:SdkTfm`, so it builds with an empty `-f` and swallows the next argument
+(`TargetFramework=-nologo`). Only `-Framework Auto` works. Worth fixing in ai/scripts.
