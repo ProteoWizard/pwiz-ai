@@ -770,3 +770,59 @@ managed DLL loads fine in an x64 process, so neither blocks a comparison run.
 
 **Next**: re-stage and start the net10 nightly for comparison against the net472 baseline above.
 The Debug/Release concern that was holding it back is measured away.
+
+### 2026-08-30 (night session) - The eight net10 nightly failures are one WinForms .NET 9 regression
+
+**Eight failures in the 42-minute net10 nightly were a single defect, and it is in WinForms,
+not in Skyline.** Every one carried the same `ObjectDisposedException` on a
+`SafeWaitHandle` from `Control.InvokeMarshaledCallbacks`.
+
+**Root cause.** `Control.MarshaledInvoke` disposes the marshaled call's completion event as
+soon as it stops waiting:
+
+```csharp
+if (!tme.IsCompleted)
+{
+    using WaitHandle waitHandle = tme.AsyncWaitHandle;   // added by dotnet/winforms#10460
+    WaitForWaitHandle(waitHandle);
+}
+```
+
+`WaitForWaitHandle` has paths that return while the entry is still queued, and
+`ThreadMethodEntry.Complete()` then calls `_resetEvent?.Set()` on the disposed handle from the
+UI thread's message pump. Comparison across release branches:
+
+| Runtime | `MarshaledInvoke` | `ThreadMethodEntry` |
+|---|---|---|
+| net472 / .NET 6 / .NET 8 | `WaitForWaitHandle(tme.AsyncWaitHandle);` | `~ThreadMethodEntry() { _resetEvent?.Close(); }` |
+| .NET 9 / .NET 10 | `using WaitHandle waitHandle = ...` | finalizer removed |
+
+.NET 8 closed the handle only from a finalizer, i.e. only once nothing could signal it. That is
+why the net472 baseline was clean and one runtime change broke eight tests.
+
+Already reported upstream as **dotnet/winforms#14996** (milestone 11.0-rc2, assigned, **no
+backport**), which names #10460 as the cause. Not the same defect as `40fd787ff5`.
+
+**The exception is noise, not a symptom.** A deterministic standalone repro on 10.0.11
+reproduces the nightly's stack exactly and reports `callbackRan=True`, `IsCompleted=True`: the
+marshaled work runs and the entry completes; only the completion signal throws, and by then no
+thread is waiting on it.
+
+**Eliminated by measurement, not argument**: `Application.ThreadContext.FromId` is never null
+on a live thread (probed at nine points across a message-loop lifecycle), so
+`WaitForWaitHandle`'s silent `ctx is null` early return cannot be the abandonment path here.
+
+**Fix**: `IsBenignInvokeCompletionFailure` in `Program.ThreadExceptionEventHandler`, following
+the `IsBenignSplitterRepaintFailure` precedent - matched narrowly on the WinForms method name
+and `typeof(SafeWaitHandle).FullName`, with a comment saying what to remove it for. Ignoring it
+restores .NET 8 behavior exactly rather than hiding a new failure.
+
+**Verified**:
+- New `TestUiThreadExceptionFilter` FAILS without the fix (1.3 s, deterministic, the exact
+  nightly exception) and PASSES with it in all five languages.
+- BEFORE: 4 failures / 336 test instances (1.2%) in 6.3 min - the eight failing tests, five
+  languages, `parallelmode=server workercount=8`.
+- AFTER: same configuration, running.
+
+**Follow-up, not done here**: `ai/scripts/Skyline/Run-Tests.ps1 -Loop 0` documents "run forever"
+but maps to `loop=1`; use an explicit count until that is fixed.
