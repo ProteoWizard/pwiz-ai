@@ -979,3 +979,37 @@ range, which fits the snapshot's `DynamicMethod` / `DynamicILGenerator` / `Signa
 `ScopeTree` all showing **0 dead**. Not yet confirmed - and note the two variables can be
 separated, since the NHibernate version is a package reference that can be moved independently
 of the runtime.
+
+### NHibernate bisect: 5.1.3 cannot run on .NET 10, so the two variables are not separable
+
+Swapped all six `PackageReference NHibernate 5.5.2` back to master's exact declaration -
+`<Reference>` with `HintPath` into the still-vendored `Shared/Lib/NHibernate/`, which holds
+precisely master's versions (NHibernate **5.1.3.0**, Antlr3.Runtime 3.5.1, Iesi.Collections
+4.0.4, Remotion.Linq 2.1.2). It **compiles** on net10 and the output binds 5.1.3.0. It does not
+run:
+
+```
+NHibernate.InvalidProxyTypeException: The following types may not be used as proxies:
+  pwiz.ProteomeDatabase.DataModel.DbVersionInfo: method MemberwiseClone should be
+    'public/protected virtual' or 'protected internal virtual'
+  ... DbProtein, DbProteinName, DbProteinAnnotation, DbSubsequence
+   at NHibernate.Cfg.Configuration.ValidateEntities()
+   at NHibernate.Cfg.Configuration.BuildSessionFactory()
+```
+
+5.1.3's proxy validator walks inherited methods, now sees `Object.MemberwiseClone` (not
+virtual), and rejects **every** mapped entity, so no SessionFactory can be built at all. This is
+almost certainly why the port moved to 5.5.2.
+
+**Consequence: the runtime and the ORM version cannot be separated.** .NET 10 forces a newer
+NHibernate, so the leak has to be fixed within 5.5.x or in how Skyline uses it - a version
+revert is not on the table. csproj changes reverted.
+
+### Correction to the IrtDb cache experiment
+
+Stated earlier that the cache held "factory count constant across iterations". That is wrong:
+only IrtDb was cached, while `IonMobilityDb` (6 per iteration) and `OptimizationDb` (4 per
+iteration) kept churning. The experiment cut construction from ~43 to ~10 per iteration - a 4.3x
+reduction - and the leak did not shrink (2,072 KB baseline vs 2,298 KB cached). That is still
+strong evidence the leak is not proportional to factory construction, but it is not the clean
+control the earlier wording implied.
