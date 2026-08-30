@@ -5502,3 +5502,175 @@ Stage-7 validation above only ran at 05:21 when it could have run at 02:00. The 
 mechanical and is now in place: chain the next job behind the current one at launch time
 (`run-regression-all.ps1` waits on `Get-Process Osprey` and starts itself), rather than
 intending to launch it after a notification.
+
+## PHASE 2 RELOCATION WRITTEN: 46 PASS, failures confined to the diagnostics panel (2026-08-30)
+
+The per-file half of the second pass now runs in `PerFileRescoreTask`. Two local commits on
+`Skyline/work/20260827_osprey_stage7_stream_increment` in `C:\proj\pwiz-work1`, **neither
+pushed** - the pushed tip is still `570ca41466`:
+
+| commit | what |
+|---|---|
+| `1e63f5c22f` | the move: worker competes, stamps run q, writes the per-run sidecar; SecondPassFDR folds it and recomputes only to assert against it |
+| `a5e1d9a372` | ownership decided from disk + the HPC-chain relay + the stratum filter on carried decoys |
+
+Local gate: build clean, **598/598**, ReSharper 0/0.
+
+### `-Dataset All`: 46 PASS, and the failures are ONE thing
+
+```
+FAIL: StellarLibDecoy  mode1b, mode5, mode7
+      StellarGenDecoyEntrap  mode1b, mode5, mode7
+      Astral  mode1b, mode5, mode7
+```
+
+Exactly the three diagnostics comparisons on exactly the three `--model-diagnostics` datasets.
+Stellar, which carries none, passes completely. **Everything structural passes on every dataset**:
+golden blib (mode1), 2nd-pass protein-q liveness (mode1c), route-independence (mode3, Astral
+included), resume (mode2), warm re-run (mode4), rehydrate (mode5's non-diagnostics assertions),
+library-fragment release (mode6).
+
+So the relocation is output-neutral everywhere except the co-assignment panel.
+
+```
+StellarLibDecoy        pass2.coAssign.experiment.target.nBetter  988 -> 977
+                       enrichment  2.9494 -> 2.9826   (UP)
+StellarGenDecoyEntrap  nBetter 858 -> 846, entrapment.nBetter 10 -> 9
+                       enrichment  2.3632 -> 2.1570   (DOWN)
+Astral                 mode1b 2 issues
+```
+
+`AssertContributionsMatch` NEVER fired, on any file of any dataset - the worker's per-file
+competition is bitwise identical to Stage 7's recomputation, `bestDecoy` included. The
+competition is not what moved; only which entries end up carrying experiment-scope values did.
+
+### Brendan's ruling on the carried-forward decoys - do not undo them
+
+The carry-forward is **expected, intended and on-plan**: the original implementation required
+Pass-1 files to satisfy SecondPassFDR and blib writing, and that requirement is what it removes.
+It is **expected to have no functional impact on results other than the contents of the sidecar
+itself**, so the diagnostics movement means one of exactly two things:
+
+1. we have not got it quite right, or
+2. the old code was doing something it should not - the same shape as the Pass-1 gap-fill issue,
+   where the golden move WAS the fix becoming visible (`nBetter 13270 -> 13279`).
+
+Telling them apart may need digging. **Do not "fix" the carried decoys away** - that was the
+first instinct here and it is wrong.
+
+Evidence that argues for digging rather than reverting: `enrichment` moved in OPPOSITE directions
+on the two Stellar arms, which differ precisely in decoy source (library-supplied vs generated).
+A "my extra rows inflate the null" story predicts one direction.
+
+### MEASURED: carried records do reach the experiment sidecar - and why that is not yet a verdict
+
+Probe on real bytes (Astral straight, branch build):
+
+```
+experiment sidecar : 1,419,388 entry_ids, 670,655 decoys (47.2%)
+per-file _49       : 1,204,306 records, 549,357 decoys, 323,272 carried-signature
+                     -> 323,272 of those IN the experiment sidecar (100%)
+```
+
+Step 4 of `ComputePass2TransferCompeteFull` reads EVERY record of each per-file sidecar and feeds
+it into `FdrExperimentAccumulator`, so the mechanism is real. **But the "carried signature"
+(`runQ==1.0 && runPeptideQ==1.0 && pep==1.0`) is NOT unique to carried decoys** - a surviving
+decoy that won nothing carries the same three values - so 323,272 is an upper bound, and 47.2%
+decoys is about what a 1:1 target-decoy library yields anyway. Decoys were plausibly always there.
+
+**The decisive measurement, not yet run**: does the experiment sidecar's entry_id SET differ from
+baseline, and by which ids? Baseline binary exists at
+`D:\test\osprey-runs\_bin\20260830-foldguard\Osprey.exe` (`570ca41466`). `regression.ps1` has NO
+`-Exe`, so the baseline side needs `pwiz-work2` at `570ca41466` (it is at `5acc2dd24c`; RESTORE
+it). Use `-Dataset StellarLibDecoy -KeepOutput -KeepRunDirs 5` (~10 min, the cheapest failing
+reproducer - NOT `-Dataset All`), copy artifacts out immediately, set-difference the two
+`output.2nd-pass.fdr_experiment.bin` entry_id sets, then trace the new ids through the per-file
+sidecars on both sides and read their siblings - the entry-11989 technique from phase 1.
+
+### Seven defects fixed getting here, none visible in review
+
+1. **Stage 7 skipped the join entirely** (`SecondPassFDR:done (2.7s)`) - the worker's sidecar
+   satisfied the `missingPass2` recompute gate. A worker-written sidecar means the PER-FILE HALF
+   is done, not pass 2.
+2. **Task-level version of the same skip** - Stage 7 DECLARED those sidecars as outputs, so
+   `IsTaskAlreadyDone` could short-circuit the whole task.
+3. **Task declarations corrected in all three tasks.** The per-file sidecar is PerFileRescoring's
+   output and SecondPassFDR's input; the analysis-wide experiment sidecars are now declared by
+   the tasks that write them, which NOTHING did before - including Stage 5's, which it writes and
+   counts a failed write against, a pre-existing phase-1 gap. Verified: the straight route now
+   shows `PerFileRescoring=3, SecondPassFDR=0` stamps - single ownership.
+4. **An in-process byproduct cannot cross a process boundary.** `Pass2WorkerFiles` was published
+   in Stage 6 and read in Stage 7 - correct in process, absent in an HPC chain. Replaced by
+   testing for the PRESENCE of the producer's validity stamp, since `<output>.<taskName>.osprey.task`
+   already records the owner. Recomputing the producer's KEY from the consumer's leg would not
+   have worked either: `PerFileRescoreTask.ValidityKey` folds in
+   `LibraryFragmentRelease.ValidityKeySuffix`, which reads the per-leg `ExpectReconciledInput`.
+5. **Carried decoys were unfiltered** - every non-survivor decoy (75,486 per Stellar file) instead
+   of the stratum-restricted set the fold reduces over (~305 base_ids).
+6. **The HPC chain never received the new input** - THE mode 3 blocker. `regression.ps1` relays
+   each phase's outputs into the next phase's directory and copied four files per stem;
+   `.2nd-pass.fdr_scores.bin` was not among them because it used to be Stage 7's OUTPUT. Phase 4
+   never saw the worker's sidecars, recomputed, and wrote its own - giving disjoint carried-decoy
+   sets (104 straight vs 131 chain). Fixed by relaying the binary AND its stamp; copying the
+   binary alone would be worse than copying neither, since phase 4 would fold a file it believed
+   it had produced.
+7. **Latent harness format bug** at `regression.ps1`'s experiment-sidecar mismatch report: single
+   parens round a `-f` operand list bound only the first operand, so the comparison result was
+   replaced by an exception naming neither file. Latent since written - the branch runs only when
+   the sidecars differ between routes, which had never happened. Fixed with the double-paren
+   idiom already used at `Regression/FdrSidecars.ps1` 873/991.
+
+### Three claims made and retracted - do not re-derive them
+
+* The `ValidityKey`/`ExpectReconciledInput` cross-leg mismatch is a real hazard but was NOT the
+  cause of the route divergence. The harness relay was.
+* "chain: PerFileRescoring=0" was a counting error - the stamps live in `phase3_rescore_*`
+  subdirectories, not the chain root. The worker was stamping correctly all along.
+* Treating the carried decoys as pollution to remove. They are the design.
+
+All three came from reading rather than measuring; each was settled by one command. The
+`/debugging` skill's rule applies to this phase as it did to phase 1: prove it from inside.
+
+### NEW GATE: cross-impl comparison BEFORE SEA-AD (Brendan)
+
+Squeeze the limited regression data before spending 3 h 18 on the cohort.
+
+```powershell
+$env:PWIZ_ROOT = 'C:\proj\pwiz-work1'    # REQUIRED - Get-PwizRoot defaults to master
+pwsh -File C:/proj/ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files All
+pwsh -File C:/proj/ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral  -Files All
+```
+
+The comparator already has special handling for the C#/Rust sidecar difference, because the
+per-run vs experiment-wide split was deliberately NOT implemented on the Rust side, and an
+`entry_id` present on one side only is COUNTED (`MissingExperiment`), never skipped. So "carried
+decoys will break parity" is a QUESTION for the run, not a prediction.
+
+**Rust side**: `C:\proj\osprey` is on `fix/experiment-q-per-entry-not-per-file` (`90c8968`). A
+SECOND branch matters - `fix/exclude-decoys-from-reconciliation-gap-fill` (`a42351d` +
+`bb3d2df` + `e193fbc`, touching `crates/osprey/src/pipeline.rs` and
+`docs/12-intermediate-files.md`) - the limited Rust change matching the C# gap-fill fix, which
+per Brendan **also required a one-line update to the golden masters for `regression.ps1`**.
+Decide which Rust branch (or merge) the comparison runs, and check whether that golden line is
+present in this pwiz branch: if a golden line is owed to the gap-fill fix and is missing, a
+diagnostics comparison reports a delta belonging to that fix rather than to the relocation.
+
+### Still open
+
+* **`ComputePass2Resident` never publishes `Pass2ExperimentScope`**, so no 2nd-pass experiment
+  sidecar is written on resident/retrain paths. This is why the experiment-sidecar OUTPUT
+  declaration had to be gated by mode rather than declared unconditionally. Still ungated:
+  `regression.ps1` never sets `OSPREY_PASS2_QVALUE=transfer`, so the fix needs a gate before it
+  needs code.
+* **The fold-scope guard goes VACUOUS** when the Stage 7 recompute is deleted - a sidecar-derived
+  contribution holds only survivors by construction. It must move into `CompeteOneFile`, which
+  after the move runs in the worker. Noted at the guard site in `StreamingFdr`.
+* **SEA-AD rungs not started**: 82-file Stages 5-7 (3 h 18 measured), then `transfer` and
+  `mean-best-N=6`. `transfer` does NOT exercise the move (`TryCreatePass2Worker` returns null)
+  but is the only arm reaching `ComputePass2Resident`; `transfer-compete` is the in-scope arm
+  with genuinely unmeasured fold equivalence.
+* **`1e63f5c22f`'s title says "WIP: mode 3 red"**, which `a5e1d9a372` fixed. Squash or reword when
+  preparing the branch for review.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
