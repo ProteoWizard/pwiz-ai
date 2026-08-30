@@ -1142,3 +1142,46 @@ observation; a pre-existing short-cut, out of scope here). Rebuilding a SessionF
 makes that foreground load slower, which would stall the UI thread during the simulated mouse
 move so the drag never initiates. If that is right, the fix is sound but exposes the missing
 background loader as a functional failure rather than only a cost.
+
+### FIXED and verified on both ends - commit `b867cf2664`
+
+Neither `IonMobilityDb` nor `OptimizationDb` retains a SessionFactory now. Each session owns the
+factory it was opened from (`SessionWithLock` gained an optional owned factory it disposes with
+itself), so no factory can outlive the `using` that opened its session. Closed by construction,
+which matters because these are `Immutable` types with no lifetime to hang a `Dispose` on.
+
+`TestFilesTreeForm`, pass 1, managed leak:
+
+| Configuration | Before | After |
+|---|---|---|
+| branch, net10 + 5.5.2 | 2,072.8 KB (exhausted 25 iterations) | **0 KB** (`managed = -1.1 KB`, 24 iterations, passed) |
+| master, net472 + 5.5.2 | hung at `EditIonMobilityLibraryDlg` | **2.8 KB**, converged at 15 - identical to pristine master |
+| master, net472 + 5.1.3 | 2.8 KB | 2.8 KB (fix is neutral on the old ORM) |
+
+Functionally clean: 3/3 pass-2 iterations on master with BOTH 5.1.3 and 5.5.2, 24 pass-1
+iterations on the branch, CodeInspection green. The one `TestDragSimulation` failure seen earlier
+was an intermittent flake - it did not recur across those runs.
+
+**The old code was never coherent**, which is the real story: master passes a SessionFactory into
+the class *inside* a `using` that disposes it before the function returns, and the class keeps it
+as a member. On 5.1.3 that was a tolerated use-after-dispose; 5.5 made it fatal. The port then
+traded the latent use-after-dispose for a definite leak by removing the `using`. Removing the
+member is the fix that was always correct - which is why it is neutral on 5.1.3 and required on
+5.5.2. **This is a correctness fix for master in its own right, not only an upgrade enabler.**
+
+### What it takes to adopt NHibernate 5.5.2 on master
+
+Surveyed every session-factory site. The recipe is small:
+
+1. Swap three vendored DLLs in `Shared/Lib/NHibernate/` - NHibernate 5.5.2 (`lib/net461`),
+   Remotion.Linq 2.2.0, Remotion.Linq.EagerFetching 2.2.0 (5.5.2 needs >= 2.2.0; master vendors
+   2.1.2). Antlr3.Runtime 3.5.1 and Iesi.Collections 4.0.4 already match. **No csproj changes** -
+   master references by `HintPath`. Verified: builds and binds 5.5.2.
+2. Apply this same fix to `IonMobilityDb` and `OptimizationDb`.
+
+Already compatible, no change needed: `IrtDb` (`using var` per operation), `MidasLibrary`
+(factory and session disposed in one scope), `BlibDb` (`IDisposable`, disposes its factory),
+`ProteomeDb`/`DatabaseResource` (refcounted, released via `ReleaseAll`).
+
+Not adopted here - `daily` still carries the swap and fix as UNCOMMITTED working changes for
+inspection; revert with `git checkout` if not wanted.
