@@ -1244,8 +1244,15 @@ Brendan's reading: this likely fingers .NET 8+ support for WIFF2/SCIEX, where th
 .NET 8+ vendor binary and the net472 one has been adapted. Not investigated further here.
 
 **Still untested**: `TestGroupedStudies1Tutorial` (886 KB HEAP, the one that aborted a pass-1 run
-outright). A run was started and killed for machine time; nothing in this fix targets heap, so it
-remains the most likely blocker for a clean long run.
+outright). Nothing in this fix targets heap.
+
+**Correction on what that threatens.** An earlier note called it the likely blocker for the
+overnight 9-hour run. Wrong: those runs are **pass 2 only, parallel, no leak checking**, so leak
+detection never executes and cannot abort them - which is also why there was no net8 leak data
+before this session. The relevant evidence for that configuration is the pass-2 nightly run from
+the night session: **12,056 instances, 0 failures** at `workercount=8` across the full 657-test
+list (measured PRE-fix). The tutorial heap leak still matters for a long parallel run because
+memory accumulates whether or not anything is checking, but it will not fail the leg.
 
 `C:\proj\daily` changes are on the stash (`nh552-swap-and-fix`), tree pristine; `git stash pop`
 to restore. Throwaway worktree `C:\proj\pwiz-net8` still on disk.
