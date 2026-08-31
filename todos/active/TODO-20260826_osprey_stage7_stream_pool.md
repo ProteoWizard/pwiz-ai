@@ -6486,3 +6486,57 @@ the working tree is deliberately ahead of it.
 **Cost to note before it reaches 257 files**: one extra open + entry_id column read per file
 (~4.7 MB on the largest Astral file). Small against the parquet write it follows, but it is a
 per-file cost that did not exist before.
+
+## SEA-AD 82 FILES: exit 0, and field-exact against the pre-relocation baseline (2026-08-31 04:37)
+
+Run `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-phase2decoys-20260831_013821`,
+Stages 5-7, 01:38:21 -> 04:37:25 = **2 h 59 m** (the precondition-1 run was 3 h 18).
+Exe: snapshot of `fa366f0824`. `-LinkFrom` the pickrun3-oursungated run, 328 files, 0 missing.
+
+| check | result |
+|---|---|
+| exit code | **0** |
+| `.2nd-pass.fdr_decoys.bin` written | **82 / 82** |
+| `.2nd-pass.fdr_scores.bin` | 82 / 82 |
+| `Survivor scope violation` / `Experiment-fold scope violation` | **0** |
+| `Second-pass per-file competition disagreement` (`AssertBestsMatch`) | **0** |
+| guard exercised, not silent | `streaming the competition over 82 file(s)` at 04:26:52 |
+
+### The byte-identity check needed a correction - the baseline is a DIFFERENT FORMAT
+
+A raw sha256 comparison against the precondition-1 run
+(`...-phase2step1-20260829_221855`) reported **82 of 82 DIFFER**. That is a baseline mismatch,
+not a defect - the classic shape in `reference_osprey_regression_red_triage`.
+
+    baseline  magic=OSPRYFDR ver=5 count=1071352 reclen=36
+    new       magic=OSPRYFDR ver=6 count=1071352 reclen=28
+
+The 82-file baseline predates **Phase 1a**, which removed `pep` from `FdrScoreRecord`
+(36 -> 28 bytes). Byte-identity of the FILES is therefore structurally impossible and its absence
+says nothing. Record COUNTS were already identical on every file.
+
+**The honest comparison is still byte-exact**, because a v6 record IS the first 28 bytes of a v5
+record at the same position - so the shared columns can be compared as bytes, positionally, with
+no float parsing and no tolerance. `ai/.tmp/sessions/20260830-night-phase2/cmp_v5_v6.py`:
+
+    field-exact identical : 82 file(s), 87,564,800 records
+    differing             : 0
+    missing               : 0
+
+Same treatment for the analysis-wide experiment sidecar (`out.2nd-pass.fdr_experiment.bin`,
+v1/36B vs v2/44B - Phase 1a added `Pep`), comparing the four shared columns:
+
+    experiment records compared: 1,388,622
+    differing on exp precursor q / peptide q / protein q / aggregate: 0
+
+**That second number is the strong one.** Every experiment-scope value for all 1.39 M distinct
+entry_ids is identical to what pre-relocation Stage 7 produced, at 82 files, on the acquisition
+where the pool image loses 7.3% of the null's winning decoys. The relocation is output-neutral
+at scale.
+
+### Method note worth keeping
+
+A red byte-comparison across a FORMAT boundary is uninformative in both directions, and it will
+recur every time this sprint's baselines age past a record-layout change. Check the header
+version and record length BEFORE reading anything into a diff, and compare the shared prefix
+when the layout is a strict extension - which it has been for both of these files.
