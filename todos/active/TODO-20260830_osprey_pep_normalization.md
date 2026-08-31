@@ -174,3 +174,46 @@ When a value fails the cross-key equality test, before concluding it is per-obse
 the very check that originally rejected it - `Pep` was added to the accumulator's bitwise
 equality set. Unit tests are green; the real proof is a regression run, where the accumulator
 sees one `Add` per observation across three files. NOT yet run - do not claim it until it is.
+
+## WHY NO EXPERIMENT-SCOPE VALUE CARRIES ITS ORIGINATING RUN (Brendan, 2026-08-30)
+
+The decisive argument against the intermediate `PepWinnerFileIndex` design, and the one to put
+in the PR description. PEP may eventually be reported in the BLIB, so this is not a
+diagnostics-only question.
+
+**1. It does not generalize across levels.** If "originating run" were the pattern, every
+experiment-wide column would need its own specifier, and they would not agree. Precursor q
+originates from one run; PROTEIN q originates from the best-scoring run of the best-scoring
+PEPTIDE - a different coordinate entirely. One file column on an entry_id-keyed record cannot
+serve both, even under plain `max`.
+
+**2. Under `mean-best-N` it has no referent at all.** The aggregate is
+`mean(N best per-run scores)`, not `max(scores)`, so the composite score - and every q derived
+from it - originates in N runs, not one. There is nothing to write.
+
+**And that mode is live on the pass that matters.** `StreamingFdr` sets
+`winnerLoc[bid] = (win.fileIdx, win.entryId, win.score)` from a max-across-files fold, which
+looks like a usable origin - but the comment beside it records that this is the 2nd-pass path
+and *"the experiment aggregation is 1st-pass only ... so effScores == scores here"*. On the
+1st pass, where `mean-best-N` IS applied, a `PepWinnerFileIndex` would have been
+**unpopulatable**. The design was not merely redundant; it had no correct value to write.
+
+### The rule
+
+> An experiment-scope value is a property of its KEY. WHERE it came from is a property of the
+> COMPUTATION, not of the value, and it is not generally expressible - under `mean-best-N` there
+> is no single origin, and across levels the origins do not share a coordinate system.
+
+### Why this retro-explains the Phase 1 dead end
+
+The session met a value whose per-observation view varied (real on one row, 1.0 on the rest) and
+reached for provenance to preserve that view. Provenance is exactly what an experiment-scope
+value cannot carry - so the only way to keep the varying view was to write it back into the
+per-run files. `PatchPep`, and the broken immutability contract, follow from trying to store
+something that does not belong to the record at all. The dead end was UPSTREAM of the choice
+that was made: the question "which file did this come from?" has no general answer, so a design
+that needs one is already wrong.
+
+The correct reading of the varying view was that the variation was an ABSENCE MARKER, and the
+join that produces it belongs at read time - which needs no provenance, because a consumer
+asking "is this precursor's PEP real here?" already knows which file it is reading.
