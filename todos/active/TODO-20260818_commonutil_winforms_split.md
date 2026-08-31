@@ -1450,3 +1450,48 @@ The 2.5-hour sample produced two DISTINCT rare flakes at ~1 in 25 executions of 
 Extrapolating the instance rate (14,660 in 2.5 h) a 9-hour run is roughly 50,000 instances, so
 tests that never came up twice tonight can still fail once. Fixing these two does not by itself
 make zero failures likely - it removes the two that are known.
+
+### 2026-08-30 (night run) - `TestRInstaller` x5: a live network call no stub intercepts
+
+Tonight's 9-hour run reported its first failures at **22:26**: `TestRInstaller` in all five
+languages within the same minute, at 5,942 instances. **Unrelated to anything fixed today.**
+
+```
+Attendu : <The operation was canceled by the user.>
+Réel : <Error: Failed to connect to the website www.r-project.org ...>
+```
+
+**It is a transient outage, not a defect in the run.** The same five languages PASSED at 21:50,
+35 minutes earlier; the site answered `HTTP 200` when checked at 22:28; and the test was clean in
+both of today's earlier runs - 20 executions in the morning pass-2 cycle and 35 in the 23,250
+instance post-fix run, zero failures in either. No nightly failure history on master either.
+
+**But the test should never have been able to fail this way.** `RInstaller.InstallPackages()`
+opens with a LIVE connectivity check:
+
+```csharp
+if (!RUtil.CheckForInternetConnection(out var errorMessage))   // RInstaller.cs:242
+```
+
+which issues a real HEAD to `www.r-project.org` through `HttpClientWithProgress`. Nothing in
+`FormatPackageInstaller` stubs it. Its `connectionSuccess` parameter is a red herring - it feeds
+`TestSkylineProcessRunner.ConnectSuccess`, the elevated-process stub, not this check. So every
+`RInstallerTest` path reaching `InstallPackages` - `TestNoAdminPrivledges`,
+`TestPackageInstallFailure`, `TestExitBoxBeforeCompletion`, `TestPackageInstallSuccess` - passes
+only while the machine can reach r-project.org, and reports a connectivity string where the test
+expected its mocked outcome.
+
+**The seam already exists and this file already uses it.** `TestInternetConnectionFailure` forces
+the failure path with `HttpClientTestHelper.SimulateNoNetworkInterface()`, and `TestStartToFinish`
+wraps itself in `HttpClientTestHelper.SimulateSuccessfulDownload(...)`. The helper intercepts
+`HttpClientWithProgress`, so a success-mode stub makes `CheckForInternetConnection` deterministic
+without touching the network. The other tests were simply missed.
+
+**Fix**: wrap the remaining `InstallPackages` paths in a success-mode `HttpClientTestHelper`, the
+way `TestStartToFinish` already does. NOT done tonight - it needs a build and a re-stage, and the
+9-hour run owns the machine. Left for the morning.
+
+**Master-applicable: YES, and checked, not assumed.** `git diff origin/master HEAD` over both
+`TestFunctional/RInstallerTest.cs` and `ToolsUI/RInstaller.cs` is EMPTY - the branch's copies are
+identical to master, so the defect and its fix belong in the master PR alongside the audit-log and
+`AssertComplete` changes.
