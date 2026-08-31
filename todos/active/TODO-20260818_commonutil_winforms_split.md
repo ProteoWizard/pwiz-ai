@@ -1587,3 +1587,21 @@ the day's earlier, shorter runs (20 and 35 executions). No nightly history on ma
 for a port-only defect.
 
 **Master-applicable: NO.** Port-only, like the loader-wait fix. Belongs on this branch.
+
+**Confirmed quantitatively (03:33).** A third failure (pass 11, `fr`) allowed checking the theory
+against the clock. Duration of this test, per pass, in seconds:
+
+| Pass | 2-4 | 5-9 | 10 | 11 |
+|---|---|---|---|---|
+| Durations | mostly 2s | 3s | **5s, 6s**, 3s, 3s, 3s | 3s, 3s, 3s, **11s**, 3s |
+
+**Every failure is exactly a run that took longer than three seconds**, and the baseline crept
+from 2s to 3s as the workers aged - sitting right on the mock's `expires_in: 3`. Nothing else
+distinguishes the failing runs from the passing ones. Expect the rate to RISE as a run lengthens,
+which is why a 2.5-hour or 4-hour run never sees it and a 9-hour one does.
+
+**The test is not at fault.** The three-second expiry is deliberate: it exists to force the token
+to expire so the "expired session re-authenticates" path gets exercised, and it supplies no
+refresh token precisely so the password grant is the path taken. That is the behaviour the port
+broke. This is a good test catching a real regression, not a flaky test needing a longer timeout -
+so raising `expires_in` would HIDE the defect rather than fix it.
