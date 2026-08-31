@@ -6543,3 +6543,80 @@ A red byte-comparison across a FORMAT boundary is uninformative in both directio
 recur every time this sprint's baselines age past a record-layout change. Check the header
 version and record length BEFORE reading anything into a diff, and compare the shared prefix
 when the layout is a strict extension - which it has been for both of these files.
+
+## PHASE 2 GOAL ACHIEVED: the join needs no per-file first-pass input (2026-08-31)
+
+Commit `3eb7d02057`. Stellar 11/11, all four pass-2 artifacts still byte-identical to the
+pre-relocation baseline, and `mode3 (HPC chain==straight)` PASS with **no per-file 1st-pass
+sidecar staged into phase 4 at all**.
+
+### What was actually wrong, and why no gate saw it
+
+Gating the Stage 7 recompute behind `OSPREY_PASS2_VERIFY_WORKER` measured as FREE - 82-file
+Stage 7 was 901.5 s with it off against 871.9 s with it on. That was not noise and not a cache
+artefact: **the gate was inert.** `readFile(fileKey)` sat at the top of the streaming loop,
+outside the branch, and it is the expensive part. Gating the competition removed the cheap
+reduction and kept the 1st-pass read, the reconciled-parquet PIN-feature reload and a
+`scorer.Score()` per survivor.
+
+Removing the call outright then failed immediately, which exposed the real coupling:
+`readFile` was doing THREE jobs at once.
+
+| job | needed on the shipped path? |
+|---|---|
+| stage `currentEntries` (what ApplyFileRunQ stamps and the sidecar write serializes) | YES |
+| read the whole 1st-pass population + frozen rescore, writing `e.Score` on every survivor | was yes - and this is the one that had no other source |
+| supply `entryIds`/`scores` for `CompeteOneFile` | verification only |
+
+So the recompute was not being kept out of caution. **Stage 7 had no other source for the
+survivors' 2nd-pass scores**, and that is the whole reason the phase looked like it bought
+nothing.
+
+### The fix, and where the data already was
+
+* `entry.Score` <- the worker's own per-run 2nd-pass records. `TryReadWorkerContribution` was
+  ALREADY reading them and discarding everything but the competition. The join was re-deriving,
+  by parquet feature reload + frozen rescore, a value the worker had computed and written down.
+* `Pep` / `ExperimentAggregateScore` <- the ANALYSIS-WIDE 1st-pass experiment sidecar. Phase 1a's
+  scope split had already moved them there; the per-file record was only the loop key. Iterating
+  the ENTRIES instead (`Pass1ScalarSeeder.SeedExperimentScalars`) removed the last reason to open
+  the file. **A dividend of the scope split that nobody had collected.**
+* `entryIds`/`scores` -> behind the verifier, with the survivor-scope precondition, which cannot
+  move into the worker because it compares against the GLOBAL survivor set.
+
+### The dependency was hiding in THREE places
+
+A passing run saw none of them, because the straight leg has those files in its own directory:
+
+1. the loop read (`readFile`)
+2. an upfront precheck in `ComputePass2FrozenCompetition` that located and header-validated every
+   per-file 1st-pass sidecar and returned false if one was missing
+3. `SecondPassFdrTask.Inputs`, which declared them NEVER while reading them every run - an
+   undeclared dependency, worse than a wrong one
+
+### The gate that found them: WITHHOLD, do not assert
+
+`regression.ps1` no longer stages the 1st-pass sidecars into phase 4. Absence IS the
+enforcement - Stage 7 dies on a missing file instead of passing quietly, and no log line or
+count has to be trusted. It costs nothing: it deletes a `Copy-Item` rather than adding a leg.
+
+Pass 1 sidecars are compared from `phase3_outputs`, where the chain actually produces them.
+
+### Four self-inflicted bugs in one session, all the same shape
+
+Recorded because the shape is the lesson: **gating a loop is not gating what the loop reads**, and
+**a flag read in the wrong scope is not the flag the run used.**
+
+* gated the competition, not the read -> the gate was inert
+* removed the read, taking the staging with it -> "applied run q while '(none)' was in hand"
+* gated the precheck LOOP, which also built `fileKeys` -> Stage 7 streamed zero files and wrote a
+  32-byte experiment sidecar and a wrong blib, with no error
+* keyed the sidecar comparison off the AMBIENT verifier flag, which regression.ps1 sets to 1,
+  while the chain runs its phases with it cleared
+
+### Corrected claims
+
+* The 17:45 -> 15:02 Stage-7 "before/after" is WITHDRAWN. Its after arm still read every 1st-pass
+  sidecar, so it did not measure this phase.
+* "The join re-reads 9.2 GB to check the code that produces the answer" was wrong. Most of that
+  read was Stage 7 obtaining values it genuinely needed; only now is it verification-only.
