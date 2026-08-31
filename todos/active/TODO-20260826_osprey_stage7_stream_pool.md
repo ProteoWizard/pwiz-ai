@@ -6648,3 +6648,71 @@ tension, they only look that way because both live in one file. Deliberately NOT
 issue #4486; recorded so the size is not rediscovered. Note this also makes SecondPassFDR's
 staging list read as "needs per-file first-pass input" when what it needs is one analysis-wide
 stratum.
+
+## FINAL STATE for the merge (2026-08-31, end of session)
+
+Branch `Skyline/work/20260827_osprey_stage7_stream_increment` in `C:\proj\pwiz-work1`, pushed to
+PR #4621's head `Skyline/work/20260826_osprey_stage7_stream_pool` at **`5a5c79f5c3`**.
+
+### What Phase 2 achieved
+
+**SecondPassFDR performs its stated job from second-pass artifacts alone.** Proven by ABSENCE:
+`regression.ps1`'s HPC chain no longer stages the per-file 1st-pass sidecars into phase 4, so the
+node holds only what an orchestrator would send it, and mode 3 compares its blib against the
+straight leg's. The dependency had been hiding in THREE places at once - the loop read, an
+upfront precheck, and a missing input declaration - and no passing run could see any of them,
+because the straight leg has those files in its own directory.
+
+Stage 7 at 82 files: **17:40 -> 10:56** (-38%), private peak 54.9 -> 52.2 GB, and the per-file GC
+sawtooth largely gone. What drops out is the 1st-pass sidecar read, the reconciled-parquet
+PIN-feature reload, and a `scorer.Score()` per survivor.
+
+**Per-file drift did NOT move** (215 -> 216 MB/file private, 38 -> 39 managed). This phase removed
+TRANSIENT allocation; the resident pool is untouched and is what the lean row must shrink.
+
+### Gate status at the head
+
+| gate | state |
+|---|---|
+| Perf/Regression 4158790 (`2e51a5acdd`) | SUCCESS |
+| Unit build #553 (`2e51a5acdd`) | FAILURE - **infrastructure**: `dotcover not on PATH` on agent `pwiz-windows-i-0b0f0c836ac33915e`, not MacCoss Agent 1. Died before running tests; "0 tests, 601 less" is the consequence. Re-trigger PINNED. |
+| local `-Dataset All` | 63 PASS / 0 FAIL |
+| local Stellar at head | 12 PASS / 0 FAIL |
+| byte-identity vs pre-relocation baseline | 16/16 artifacts, all four datasets |
+| `transfer`, `transfer`+`mean-best-2` | verified; every applicable mode passes |
+| Copilot threads | both resolved (stale, code deleted) |
+
+**Perf/Regression passed on `2e51a5acdd`, NOT on the head `5a5c79f5c3`.** That commit adds the
+transfer experiment-scope fixes (transfer path only, which the four-dataset gate does not
+exercise) plus two harness assertions that SKIP for modes with no per-file half.
+
+### `mode1 vs golden` ALWAYS fails on the transfer arms
+
+The golden is recorded under `protein-compact`, so a different pass-2 mode must produce a
+different blib. Not a defect, not fixable by re-recording, and the reason `transfer` cannot simply
+be added as a fifth dataset. The meaningful assertion set for those arms is everything except
+mode 1, and that set is green.
+
+### Two defects found by verifying the transfer arm, both the same shape
+
+Building an experiment-scope record from LIVE ENTRIES meets columns that are not settled yet:
+
+* **`protein_q`** - protein FDR is Stage 8. Some entries carry a value, most hold the 1.0 reset
+  default. Fixed by passing the default and letting `SetProteinQvalue` supply the real one later.
+* **`PEP`** - a WINNER FACT; non-winners carry a 1.0 SENTINEL, not a probability. Fixed by
+  reducing to the winner (min) before the collapse.
+
+The accumulator's collapse assert caught both, naming the entry_id and the single disagreeing
+column with every other value identical to the last digit. The competition path never hit either
+because it builds from WRITTEN RECORDS, after both columns are real.
+
+### Owed, deliberately not done here
+
+* **Phase 3 / lean row** - its own PR. Measure it on DRIFT PER FILE, not peak or wall time.
+* `TODO-task_file_contract_from_declarations.md` - `--help-files` printing the task contract from
+  `Inputs()`/`Outputs()`, and both harnesses staging only the declared inputs.
+* Phase 4 still stages nothing fake now (the 0-byte mzML stubs are gone), but
+  `<stem>.1st-pass.model.json` remains per-file in NAME and analysis-wide in CONTENT: all 82
+  copies byte-identical, 8.9 MB each, 730 MB duplicated at 82 files, of which 6.3 MB is
+  `StratumBaseIds` against a ~2 KB model.
+* CHS 446-file baseline - see `ai/.tmp/handoff-20260831_chs_446file_test_plan.md`. NOT started.
