@@ -242,3 +242,60 @@ normalization meets it more clearly than the old form did:
 **Follow-on work (NOT this branch)**: BLIB plumbing for PEP and protein q so Skyline can present
 them. Noted here because this change is what makes that a column read rather than a cross-file
 search.
+
+### 2026-08-30 evening - first-pass gap found and closed, Stellar green
+
+**Stellar regression PASSED, every leg** (`run-pep2.log`): mode1 golden blib, mode1c
+(23,618 of 333,404 shared records moved), mode3 per-file sidecars (**3,445,490 records**),
+mode3 HPC chain, mode2 resume, mode4 warm re-run, mode5 rehydrate, mode6 fragment release.
+
+* The 3.4M-record sidecar comparison is the collapse invariant proven at scale - the accumulator
+  sees one `Add` per observation per file and `Pep` is now in its bitwise-equality set. Brendan's
+  original test now holds for PEP, for the right reason.
+* The new mode-3 file-modification assertion passed across all four phases on its first two
+  exercises: no task modified a file it was given.
+* modes 2/4/5 confirm the write-once guard does NOT fire on resume or rehydrate - new processes
+  legitimately rewriting artifacts, which is the distinction it is built to allow.
+* No golden update was needed. Stellar carries no `--model-diagnostics`, so the dump columns are
+  still unexercised; that exposure is on the three diagnostics datasets in `-Dataset All`.
+
+**A REAL GAP, found by the check rather than by a gate** (`1c59eef7b0`). The first-pass producer
+keyed PEP by winning ROW, so:
+
+* the 1st-pass experiment sidecar carried the 1.0 DEFAULT for every entry, and
+* a REHYDRATED entry read 1.0 while a FRESH run got the real value from `PercolatorEngine`.
+
+Fresh and resumed runs would have disagreed - the same class this branch exists to remove, and it
+would have reached `RefSpectra`. `ComputePepWinnerMap` and `StreamingFirstPassQ.BuildPepWinnerMap`
+now key by the winner's entry_id (as `expQByWinnerId` beside them already did), all THREE
+expansion sites report the entry's value on every observation of it, and the 1st-pass experiment
+records carry PEP. This is what actually completes "both passes normalize the same way" - the
+earlier commit had only done the second.
+
+### The BLIB shape, which is the forward justification (Brendan)
+
+BiblioSpecLite already normalizes exactly this way, so the sidecar split now mirrors the
+destination schema:
+
+| scope | sidecar | BLIB table |
+|---|---|---|
+| per precursor | experiment (`entry_id`) | `RefSpectra` - experiment q, protein q, **PEP** |
+| per observation | per-file | `RetentionTimes` - run q, RT bounds |
+
+The eventual plumbing is a column mapping rather than a join. And it states the flaw exactly:
+**`PatchPep` was pushing a `RefSpectra`-shaped fact into a `RetentionTimes`-shaped file.**
+
+### OPEN: the cross-impl parity gate needs a ruling
+
+`FusedFields` now maps `pep` to the experiment record (`CsOffset = 36, FromExperiment = true`),
+mapped STRAIGHT THROUGH so the run reports the divergence at full size rather than hiding it.
+
+Rust still writes PEP per OBSERVATION - real on the base_id winner's row, 1.0 on every other row
+of that entry. C# now reports the entry's value on every observation. **They agree on the
+winner's row and differ everywhere else BY DESIGN**, and C# cannot reproduce Rust's view: it
+needs the winning RUN, which was removed and which `mean-best-N` cannot express at all.
+
+The defensible narrowing is to compare only where Rust has a non-1.0 value - those are the only
+rows carrying information on its side, and every real PEP Rust computes still gets checked. That
+is a SEMANTIC change to a parity gate, so it needs explicit sign-off and must not be a quiet edit
+to the field table.
