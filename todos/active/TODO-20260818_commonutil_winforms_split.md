@@ -1646,3 +1646,42 @@ Split verdict:
 * **`TestWatersConnectExportMethodDlg` - no, Brendan's own suspicion was right.** It is fully
   mocked with `MockHttpMessageHandler` and recorded JSON under `MockHttpData\`, and makes no real
   connection at all. It is correctly placed, and its failure was never a connectivity problem.
+
+### 2026-08-31 - PR #4587 merged; work moved to a new branch
+
+**PR #4587 merged** into `Skyline/work/20260612_net8_port` (the net8/net10 port branch, NOT
+`chambem2/pwiz-sharp` which the TODO's Branch Information still names as the target - the merge
+went to the port branch, and `origin/Skyline/work/20260818_commonutil_winforms_split` has been
+deleted). Verified by `59e78e9181`, our last PUSHED commit, being an ancestor of
+`origin/Skyline/work/20260612_net8_port` and not of `origin/chambem2/pwiz-sharp`.
+
+**None of the seven commits from the 2026-08-30/31 session were ever pushed**, so none are in that
+merge. They have been moved to a new branch:
+
+* **New branch**: `Skyline/work/20260831_net10_nightly_fixes`, from
+  `origin/Skyline/work/20260612_net8_port` @ `fc02f6d68e`
+* **Old tip preserved** as `backup/20260818_commonutil_pre_rebase` @ `ec87d6f705` until the new
+  PR is up
+* Cherry-picked cleanly - the twelve commits that landed on the port branch since our last push
+  touch **no file** our seven touch, so there was nothing to conflict
+* **Verified equivalent**: the diff against the new base is identical to the diff against the old
+  one, 11 files / 608 insertions / 32 deletions either way
+* Rebuilt on the new base: solution clean, CodeInspection 0 failures, and `TestExplicitRT`,
+  `TestAuditLogTutorial`, `WatersImsMse...AsSmallMolecules` and `TestUiThreadExceptionFilter` all
+  pass over two passes
+
+**Contents of the new branch** (7 commits):
+
+| Commit | What |
+|---|---|
+| `4b4b175693` | WinForms marshaled-call exception filter (eight net10 nightly failures) |
+| `aad6605077` | Narrowed that filter so doubtful cases stay reported |
+| `f709fe01aa` | NHibernate SessionFactory disposal - the pass-1 managed leak |
+| `139b7f8f60` | `TestAuditLogTutorial` waits for the document grid |
+| `cedd916516` | Superseded loader's cancellation no longer ends a results test's wait |
+| `49c8c86d2e` | That fix announces when it rides out the race |
+| `1fce78184e` | Loader lifecycle trace for the `TestExplicitRT` failure |
+
+**Still to do**: this TODO covers the merged PR and should be completed/archived (`/pw-complete`),
+with a new TODO opened for the new branch. Not done here - it is Brendan's call whether to split
+the history or carry this file forward.
