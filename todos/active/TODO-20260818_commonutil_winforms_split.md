@@ -1535,3 +1535,55 @@ so none of tonight's three commits execute in it.
 - 25 executions this morning and 35 in the 23,250-instance run - so 1 in 76 across the day. No
 nightly failure history on master. Worth watching rather than acting on: one occurrence is not
 enough to bisect against, and the next one will land in the same log with the same thread dump.
+
+### 2026-08-31 (night run) - `TestWatersConnectExportMethodDlg`: a PORT REGRESSION in real product code
+
+Third failure of the night, 02:52, at 29,331 instances. Unlike the other two this one is a
+**genuine defect in shipping code**, introduced by the port, and worth fixing on this branch.
+
+```
+System.ArgumentException: Parameter is required (Parameter 'refresh_token')
+   at IdentityModel.Client.Parameters.AddRequired(...)
+   at IdentityModel.Client.HttpClientTokenRequestExtensions.RequestRefreshTokenAsync(...)
+```
+
+**Not a network failure** - the test is fully mocked with `MockHttpMessageHandler`. Its mock token
+response is the whole story:
+
+```json
+{"access_token":"qqq","expires_in":3,"token_type":"Bearer","scope":"webapi"}
+```
+
+**Three seconds, and no refresh token.** So in `WatersConnectAccount.Authenticate()`:
+
+1. the token is cached with `ExpirationDateTime = UtcNow + 3s`;
+2. any authentication more than three seconds later finds it expired;
+3. that enters the refresh branch with `RefreshToken` null, since the mock never supplied one;
+4. IdentityModel 7's `RefreshTokenRequest` validates required parameters CLIENT-SIDE and THROWS;
+5. so `if (!refreshedToken.IsError)` - the fallback to `RequestPasswordTokenAsync` - is never
+   reached, and the exception escapes `Task.Run(...).Result` and fails the test.
+
+**Why master is immune.** Master calls the old API, `tokenClient.RequestRefreshTokenAsync(refreshToken)`
+(`WatersConnectAccount.cs:237` on master), which returns an error RESULT rather than throwing, so
+`IsError` is true and the password grant runs - which the mock answers happily. The migration to
+IdentityModel 7 (`RefreshTokenRequest` + `Parameters.AddRequired`) arrived with Matt's
+`58ee602f7e` "Skyline net8 port - Shared wrappers on pwiz-sharp + net8 fixes" (2026-07-02),
+**not on master**. The error handling around it was written for an API that reported failure by
+return value and was never adapted to one that reports it by exception.
+
+**This is not only a test problem.** Against a real waters_connect server that returns no refresh
+token, an expired session would throw instead of quietly re-authenticating with username and
+password. The fallback exists; the port made it unreachable.
+
+**Fix**: only attempt the refresh when the cached response actually carries a refresh token, and
+treat a throwing refresh the same as a failing one - fall through to the password grant. Not done
+tonight; the 9-hour run owns the machine.
+
+**Why it took 5.5 hours to appear**: the three-second lifetime makes it a race against how long
+the test takes between authentications. It needs a machine slow enough to cross that boundary, so
+it is load-dependent - 45 executions tonight over 9 passes, all clean until two of five languages
+(en, zh) crossed it in the same minute at 02:52, with fr/ja/tr passing alongside. Clean in both of
+the day's earlier, shorter runs (20 and 35 executions). No nightly history on master, as expected
+for a port-only defect.
+
+**Master-applicable: NO.** Port-only, like the loader-wait fix. Belongs on this branch.
