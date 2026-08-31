@@ -6267,3 +6267,35 @@ needs review rather than absorption.
 **FIRST MEASUREMENT, before any format code**: confirm that `CompeteOneFile`'s `BestDecoy` folded
 across files reproduces the baseline's `bestDecoy` exactly. It should - it is the same map the
 baseline folds - but "should" was wrong twice today.
+
+#### GETTING THE CONTENT RIGHT - the highest-risk part (Brendan)
+
+*"We just need to be very careful it gets written correctly, because your assumption about what it
+would contain in Pass 2 was wrong."* Correct, and the specific error is instructive.
+
+**What was wrong**: I took #4436's description - the pass-2 competition runs over the FULL
+pre-compaction population - as current behaviour. That is true of `transfer-compete`. The SHIPPED
+default is `protein-compact`, which is STRATUM-RESTRICTED. So the content estimate (323,878
+non-pool decoys per file) described a different arm. **The content was inferred from a document
+about another mode.**
+
+**The failure this produces**: an implementation that captures the decoy set at the wrong POINT -
+before the stratum filter, from the 1st-pass population, or from any INPUT to the competition
+rather than its OUTPUT. The file looks plausible, holds the wrong population, and **no gate can
+see it**: the golden cannot see calibration and the entrapment oracle is blind to stratum
+selection (#4581).
+
+**Structural protection, not diligence**: `CompeteOneFile` RETURNS a `FileCompetition` whose
+`BestDecoy` is already reduced to exactly what that competition used, under whatever mode is
+active. **Serialize that object.** Never rebuild the set from `entryIds`, the stratum,
+the 1st-pass sidecar, or any description of what the population "should" be - every re-derivation
+is where this error reappears.
+
+**The verifier already exists, and it dictates the ORDER OF WORK.** `AssertBestsMatch` compares
+the worker's per-file bests against Stage 7's recomputation base_id by base_id, decoys included -
+it is what produced *"best decoy for base_id 16536 ... absent in the worker's answer"*. So while
+the Stage 7 recompute stands, every file of every dataset validates the artifact automatically.
+
+> **DO NOT delete the Stage 7 recompute until the artifact has run green through `-Dataset All`
+> with the assert active.** The recompute is the transition's oracle; removing it early is the one
+> sequencing error that leaves this unverifiable.
