@@ -133,8 +133,7 @@ failure does NOT read as a build failure:
 
 ```
 WARN: failed to prune <TestResults dir>: The process cannot access the file
-      '...\Ospreyind\Release
-et8.0\SQLite.Interop.dll' because it is being used by
+      '...\Osprey\bin\x64\Release\net8.0\SQLite.Interop.dll' because it is being used by
       another process.
 ```
 
@@ -147,10 +146,9 @@ in seventeen minutes on a step that takes seconds.
 a definitive check and costs nothing:
 
 ```powershell
-Rename-Item '<bin>\Release
-et8.0\SQLite.Interop.dll' 'SQLite.Interop.dll.locktest'
-Rename-Item '<bin>\Release
-et8.0\SQLite.Interop.dll.locktest' 'SQLite.Interop.dll'
+$dll = '<bin>\Release\net8.0\SQLite.Interop.dll'
+Rename-Item $dll "$dll.locktest"
+Rename-Item "$dll.locktest" $dll
 ```
 
 Scanning loaded modules is NOT sufficient - a dying process can hold the file with nothing
