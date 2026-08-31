@@ -341,6 +341,48 @@ TestRunner.exe test=TheOneTest loop=0 parallelmode=server workercount=5 \
 That produces ~500 executions in a few minutes. A 6%-per-execution flake then fails within the
 first minute or two, repeatedly, with the diagnostic from rule 1 attached.
 
+**3. Measure TIME-TO-FAILURE, not failures per hour.**
+
+Once a soak reproduces the failure, the useful statistic is how long a FRESH soak takes to hit
+it - not how many times an hour of soaking fails. Failures in a parallel rig cluster at the
+start, when eight workers spin up and contend for disk at once, and a rate averaged over an hour
+buries that burst in a long quiet tail. Two soaks, two different tests, same shape:
+
+| Soak | First failure | After that |
+|---|---|---|
+| `WatersImsMse...AsSmallMolecules` (pre-fix) | executions #11 and #13 | 296 consecutive clean |
+| `TestExplicitRT` | 6m24s in | 7,337 executions clean over 72 min |
+
+Quoting the second as "1 in 7,337" is a category error. It averages a burst with a tail and is
+wrong in both directions - it understates the risk early and overstates it late. **The soak
+failed in six minutes; that is the number that matters.**
+
+**So run cycles, not marathons.** Start the soak, and the moment it fails, record the elapsed
+time, kill it, and start a fresh one. Several time-to-failure samples beat one long rate:
+
+* they measure the thing that decides how long a clean run must be before it means anything;
+* they cost minutes each rather than hours;
+* every cycle is another failure to collect diagnostics from.
+
+**What this buys you is a verifier with a known price.** If a fresh soak reliably fails inside
+ten minutes, then a clean hour is strong evidence of a fix, and you never need a multi-hour run
+to gain confidence. If instead time-to-failure is hours and highly variable, say so out loud:
+that is a much harder problem, because a fix can only be confirmed by a run long enough to have
+been convincing, and you should weigh that cost before starting rather than discover it later.
+
+**4. Spend every cycle on diagnostics, not just on the count.** Once reproduction is
+established, further cycles run purely to raise the failure rate of your UNDERSTANDING. Each one
+should carry more instrumentation than the last, aimed at whatever the previous occurrence left
+unexplained. Collecting a fifth occurrence that says exactly what the first four said is wasted
+machine time.
+
+**A fix attempt is allowed mid-cycle, but only if it still reports.** Landing a candidate fix
+during the measurement is fine - it does not disturb the metric - PROVIDED it emits diagnostic
+output saying the failure would have occurred without it. A fix that merely makes the failure
+stop is indistinguishable from a fix that made the test blind, or from luck, and neither is
+detectable later. See "The Permanent Verifier Pattern"; the same logic applies to a fix under
+measurement, where the fix's own output is the verifier.
+
 **Run a control before blaming your own change.** If failures appear after your change, stash it,
 run the suite the same number of times, and compare counts. Suites have a baseline flake rate
 that small samples hide, and "no plausible mechanism" is not evidence. A control has twice
