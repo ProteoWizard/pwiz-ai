@@ -45,14 +45,19 @@ cases.**
 Semantics are PRESERVED exactly - normalizing is a storage change, not a meaning change.
 
 * **Store once**, in the experiment record (already keyed by entry_id, and the winner entry_id
-  determines its base_id, so this needs no new table):
-  * `Pep` (double) - real on the winning entry_id
-  * `PepWinnerFileIndex` (u32, `uint.MaxValue` = not a winner) - index into the canonical sorted
-    `file_stems` that `reconciliation.json` already distributes join-wide, so it is stable
-    across nodes and resumes rather than depending on run-time file ordering
-  * record 36 -> 48 bytes, experiment-sidecar format bump
-* **Join at read time**: `pep(f, e) = (rec.WinnerFileIndex names f && rec.EntryId == e) ? rec.Pep : 1.0`
-  - reproduces the current per-observation view bit-for-bit for any consumer that wants it.
+  determines its base_id, so this needs no new table): a single `Pep` double, real on the
+  WINNING entry_id and 1.0 on the losing label. Record 36 -> 44 bytes, format v2.
+
+**NO file dimension** - and an intermediate design that had one was wrong. I first added a
+`PepWinnerFileIndex` so the per-observation view (real in the winning run, 1.0 elsewhere) could
+be reproduced exactly. Brendan: *"I don't yet understand why PEP needs the file it was based on
+while q values and even experiment-wide composite scores don't. Do you?"* - and the answer is
+that it does not. PEP is `PosteriorError(winner.score)`, a property of the PRECURSOR exactly
+like the q-values beside it; the winning run is where the maximum happened to occur, not part of
+the value. Reproducing the per-observation view means preserving the materialized join while
+claiming to normalize it, and the 1.0 it preserves is the sentinel, not information. The
+distinction that IS real - winning label vs losing label - is entry_id-scoped and survives for
+free. Removing the index also deleted the canonical-sorted-stems machinery written to support it.
 * **Per-file sidecar drops `pep`**, 36 -> 28 bytes, **identically on both passes**. Brendan:
   *"The two passes should use the same normalization."* Pass 1 wrote it once as final, pass 2
   wrote a placeholder and patched it - one column, two lifecycles, which is the trap.
@@ -93,17 +98,23 @@ Semantics are PRESERVED exactly - normalizing is a storage change, not a meaning
 
 ## Tasks
 
-- [ ] Extend `FdrExperimentRecord` + `FdrExperimentSidecar` (Pep, PepWinnerFileIndex, format bump)
-- [ ] Populate them where `_winnerLoc` / the PEP estimator are in hand
-- [ ] Drop `Pep` from `FdrScoreRecord` / `FdrScoresSidecar`, both passes (format bump)
-- [ ] Delete `PatchPep` and its call site
-- [ ] Runtime join for the diagnostics dumps
+- [x] Extend `FdrExperimentRecord` + `FdrExperimentSidecar` (Pep only, 36 -> 44, format v2)
+- [x] Populate them where `_winnerLoc` / the PEP estimator are in hand (`PepWinner`)
+- [x] Drop `Pep` from `FdrScoreRecord` / `FdrScoresSidecar`, both passes (36 -> 28, format v6)
+- [x] Delete `PatchPep` and its call site; the finish loop is now read-only
+- [x] `entry.Pep` sourced from the experiment record on every path (no runtime file join needed)
 - [ ] Write-once guard on per-file sidecar writes
 - [ ] mode 3 per-phase file-modification assertion
 - [ ] `regression.ps1 -Dataset All` green; golden updates reviewed, not absorbed
 - [ ] Merge into the Phase 2 branch and re-run its gates
 
 ## Progress Log
+
+### 2026-08-30 - LANDED `e72ba273ed`, gate green
+Build clean, **597/597**, ReSharper 0/0, net -60 lines. `Pep` is now subject to the SAME
+cross-key bitwise-equality check that originally rejected it, and satisfies it. The unit tests
+are green; the real proof is a regression run where the accumulator sees one `Add` per
+observation across three files - NOT yet run.
 
 ### 2026-08-30 - branch created, design agreed
 Root-caused during the Phase 2 investigation (see
