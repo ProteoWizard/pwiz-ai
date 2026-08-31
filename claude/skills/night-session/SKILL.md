@@ -166,6 +166,22 @@ Specific anti-patterns to avoid:
   (see "First step: measure your starting position" above) and act
   on the answer, don't act on a single percentage in isolation.
 
+## Launching the long runs
+
+A night session is mostly long runs, and they are the ones the harness kills.
+Before launching anything past a few minutes, read
+**ai/docs/long-running-jobs-guide.md**: how to detach it, how to keep its log
+readable, how to chain the next job behind it, and why not to wrap it in
+`cmd.exe /c` (that wrapper puts a blank console window on the developer's
+desktop for the life of every job - they are asleep, but they will see them in
+the morning, and on a night of 15-90 minute runs it is a screenful).
+
+Two chaining rules from that guide are worth repeating because a night session
+is where they bite: do not wait on "no <exe> is running" (a multi-phase driver
+has gaps between phases and the waiter fires early), and assert the expected
+result COUNT rather than merely "no failures" (an aborted run reports zero
+failures too).
+
 ## When to use sub-agents
 
 Use sub-agents to **conserve your own context budget** when:

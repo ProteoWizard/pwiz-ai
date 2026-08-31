@@ -1,5 +1,9 @@
 # Large Osprey test datasets - candidate catalog
 
+> **Every run in this catalog is long enough to be reaped.** Before launching one,
+> read [long-running-jobs-guide.md](long-running-jobs-guide.md): how to detach it so
+> it survives, how to keep its log readable, and why not to wrap it in `cmd.exe /c`.
+
 Datasets bigger than the 82-file SEA-AD Pilot set, for scaling and cross-sample validation
 work. SEA-AD is the current standard >3-file set (see
 `ai/scripts/Osprey/SEA-AD/README.md`); this is the shortlist for what comes after it.

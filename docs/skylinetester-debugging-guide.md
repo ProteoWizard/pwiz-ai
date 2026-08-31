@@ -1,5 +1,10 @@
 # SkylineTester Debugging Guide
 
+> **Hour-long SkylineTester loops must be launched detached.** See
+> [long-running-jobs-guide.md](long-running-jobs-guide.md). It also covers the
+> blank-PowerShell-window problem these loops produce when output is captured with a
+> `cmd.exe` wrapper instead of by the launched script itself.
+
 Guide for LLM-assisted debugging using SkylineTester with automated dev-build-test cycles.
 
 > **See also:** [skylinetester-guide.md](skylinetester-guide.md) for comprehensive SkylineTester reference (tabs, file paths, common workflows).

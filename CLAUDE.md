@@ -88,6 +88,16 @@ pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName SomeTest
 3. Forward slashes (`/`) work in PowerShell and don't get mangled by Git Bash
 4. Using `-File` instead of `-Command "& ..."` avoids `&` which breaks permissions matching
 
+## Long-Running Jobs (builds, test loops, Osprey runs)
+
+Anything past a few minutes must be launched **detached**, or the harness can kill it
+mid-run - sometimes leaving the child alive but its output capture dead, which looks
+exactly like a quiet job. And never capture its output with a `cmd.exe /c "... > log"`
+wrapper: that wrapper is a blank console window on the developer's desktop for the life
+of the job.
+
+Read **ai/docs/long-running-jobs-guide.md** before launching one.
+
 ## Common Build and Test Commands
 
 ```bash

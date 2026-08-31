@@ -1,0 +1,135 @@
+# Long-Running Jobs: Detachment, Windows, and Monitoring
+
+Anything that runs longer than a few minutes — an Osprey cohort run, `regression.ps1`,
+a SkylineTester loop, a perf A/B sweep — needs to be launched so that it **survives the
+harness**, produces a **readable log**, and does **not** put a window on the developer's
+desktop. Getting one of those three right and another wrong has cost multiple sessions
+across multiple machines.
+
+This is the canonical reference. `osprey-development-guide.md`,
+`osprey-large-datasets.md`, `build-and-test-guide.md` and
+`skylinetester-debugging-guide.md` point here rather than repeating it, because a
+duplicated copy of this advice drifts and the stale copy is the one that gets followed.
+
+## The problem: reaping
+
+An AI session's tool calls run inside a job object. Long children of that job get
+**killed** — "reaped" — while the work is still in flight. Observed repeatedly:
+
+| when | what was launched | killed at |
+|---|---|---|
+| 2026-08-09 | 82-file `--task SecondPassFDR`, background bash | ~15 min, at 31% of the pass-2 competition |
+| 2026-07-19 | 82f x 3 FirstPassFDR sweep, background bash | ~30 min (an earlier attempt ~93 min) |
+| 2026-07-28 | `regression.ps1 -Dataset All`, background bash | ~35 min |
+| 2026-08-29 | `Start-Process` **with** redirect flags | ~18 min, mid-Percolator |
+
+**Reaping is not always fatal to the child, and that is worse than if it were.** In the
+2026-07-28 case the pwsh child kept running but its **stdout stopped being captured**, so
+a run that completed 3 of 4 datasets cleanly produced no readable summary and none of it
+could be claimed. Silence is not success; a dead wrapper looks exactly like a quiet job.
+
+There is no "short enough to just run it" threshold. Assume anything past a few minutes
+needs detaching.
+
+## How to launch, in order of preference
+
+### 1. `run_in_background: true` on the Bash tool
+
+The harness-native mechanism. It keeps running across turns, re-invokes the session when
+it exits, and **creates no window**. Prefer it: it is the only option the harness itself
+tracks, so completion is a notification rather than a poll.
+
+The table above records cases where this was reaped. Those are from July/August 2026 and
+sessions since have used it without trouble, so treat it as the default and escalate only
+if something is actually killed — do not pre-emptively reach for the heavier options.
+
+### 2. `Start-Process` with NO redirect flags
+
+```powershell
+Start-Process pwsh -WindowStyle Hidden -PassThru `
+    -ArgumentList '-NoProfile','-File','<launcher.ps1>'
+```
+
+**Never add `-RedirectStandardOutput` / `-RedirectStandardError`.** They force
+`UseShellExecute=false`, so `Start-Process` calls `CreateProcess` directly and the child
+**inherits the harness job object** — which defeats the whole point. Without them it goes
+through `ShellExecute` and breaks away.
+
+Let `<launcher.ps1>` write its own log (`*>&1 | Tee-Object -FilePath <log>`). That is not
+a workaround for the missing redirect flags; it is the reason they are not needed.
+
+### 3. CIM / WMI — the heaviest hammer
+
+```powershell
+$startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly `
+    -Property @{ ShowWindow = [uint16]0 }        # SW_HIDE
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine               = 'pwsh -NoProfile -WindowStyle Hidden -File "<launcher.ps1>"'
+    CurrentDirectory          = '<dir>'
+    ProcessStartupInformation = $startup
+}
+```
+
+The child is parented to **WmiPrvSE**, not to the caller, so it is outside the job object
+entirely. Reliable regardless of flags. Use it only when 1 and 2 have actually failed.
+
+## THE WINDOW TRAP — read this before adding redirection
+
+> **Never wrap the command in `cmd.exe /c "... > log 2>&1"`.**
+
+That wrapper **is** a blank `C:\Windows\system32\cmd.exe` window, one per job, visible for
+the entire life of the job. On a night of 15–90 minute runs it is a screenful of them, on
+the machine the developer is also trying to work on. Reported 2026-08-31 across two
+machines, from both an Osprey session and a Skyline test-debugging session.
+
+It is also unnecessary. The reason it gets added is to capture output — which the
+launcher script should do itself:
+
+```powershell
+# inside <launcher.ps1>
+<command> *>&1 | Tee-Object -FilePath '<log>'
+```
+
+`*>&1` rather than `>` so **stderr is captured too**; a bare stdout redirect loses exactly
+the output you need when the job fails.
+
+### Verifying there is no window
+
+`(Get-Process -Id <pid>).MainWindowHandle` is **0 for both the hidden and the visible
+form** — a console window belongs to `conhost.exe`, not to `cmd.exe` — so it cannot be
+used to check this. Count the processes instead:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" |
+    Where-Object { $_.ParentProcessId -eq <WmiPrvSE pid> }
+```
+
+Zero new `cmd.exe` children after a launch means no console was created.
+
+## Monitoring, waiting, and chaining
+
+**Watch with the Monitor tool, not a background-bash waiter** — the waiter is subject to
+the same reaping as anything else.
+
+**Cover the failure case in the filter.** A monitor that greps only for the success marker
+stays silent through a crash, a hang, or an early abort, and silence reads as "still
+running". Include the failure signatures you would act on.
+
+**Do not wait on "no `<exe>` is running".** A multi-phase driver like `regression.ps1`
+launches its executable once per phase, so between phases there is no such process and the
+harness looks idle. A chained job keyed on that fired **three minutes into a thirteen-minute
+gate** (2026-08-31). Wait for the driver process to be gone **and** for the log to carry
+its terminal line — absence of a process is not presence of a result.
+
+**Assert the expected result COUNT, not merely "no failures".** The same chain then
+accepted a run reporting `2 PASS, 0 FAIL` when a clean Stellar gate is 11 PASS. An aborted
+run and a clean one are indistinguishable under a no-failures test.
+
+## Related
+
+- `osprey-development-guide.md` — Osprey build/run wrappers and gates
+- `osprey-large-datasets.md` — cohort runs, which are always long enough to need this
+- `build-and-test-guide.md` — Skyline build and test entry points
+- `skylinetester-debugging-guide.md` — hour-long SkylineTester loops
+- `debugging-principles.md` — cycle-time strategy, of which "can I even keep the run alive"
+  is the precondition

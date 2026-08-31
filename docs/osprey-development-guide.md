@@ -1,5 +1,11 @@
 # Osprey Development Guide
 
+> **Launching anything that runs more than a few minutes?** Read
+> [long-running-jobs-guide.md](long-running-jobs-guide.md) first. Osprey runs and
+> `regression.ps1` are long enough to be killed by the harness mid-run, and the
+> obvious way to capture their output puts a blank console window on the developer's
+> desktop for the life of the job.
+
 > **Conventions -- read this first.** This guide's deep-dives (parity doctrine,
 > bisection, HPC flags, determinism) are shared by both implementations, but **which
 > coding-convention set applies depends on which tree you touch** -- and that changed

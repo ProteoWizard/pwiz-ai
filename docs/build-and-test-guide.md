@@ -1,5 +1,10 @@
 # Build and Test - Comprehensive Guide
 
+> **Long builds and test runs need detaching.** A run past a few minutes can be
+> killed by the harness with its output capture silently lost. See
+> [long-running-jobs-guide.md](long-running-jobs-guide.md) for how to launch,
+> monitor, and chain them - and how to do it without spawning console windows.
+
 Detailed reference for building, testing, and analyzing Skyline from LLM-assisted IDEs.
 
 **Quick reference**: See [../WORKFLOW.md](../WORKFLOW.md) for essential build commands.
