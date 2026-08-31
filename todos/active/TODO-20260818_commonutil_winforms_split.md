@@ -1495,3 +1495,43 @@ way `TestStartToFinish` already does. NOT done tonight - it needs a build and a 
 `TestFunctional/RInstallerTest.cs` and `ToolsUI/RInstaller.cs` is EMPTY - the branch's copies are
 identical to master, so the defect and its fix belong in the master PR alongside the audit-log and
 `AssertComplete` changes.
+
+### 2026-08-30 (night run) - `TestExplicitRT`: an import that finished and was never finished with
+
+Second failure of the night, 22:51, at 8,501 instances. A DIFFERENT failure from the
+`TestRInstaller` one, and again **not in the path of anything changed today**.
+
+```
+Timeout 360 seconds exceeded in WaitForConditionUI (Expecting loaded document ...
+No ChromFileInfo.FileWriteTime for ...120315_125.mzML;...120315_126.mzML
+[unloaded=2, finalCache=none, joiningDisabled=False, 125 cached=False 126 cached=False])
+AllChromatogramsGraph (-> all four files: 100%   Total complete: 100%)
+```
+
+**The import COMPLETED and the document never noticed.** All four files report 100% in the
+progress graph, yet two are `cached=False` and `finalCache=none`, so the document never reached
+loaded and the test timed out after six minutes.
+
+**Nothing was working on it.** The failure carries a thread dump, and the only `Thread.Join` in it
+is `HangDetection.TryGetThreadDump` on the test's own thread - no loader thread anywhere. So this
+is not a hang inside cache building; the work finished and the step that would commit it never
+ran. Dump preserved at
+`D:\tests\nightly-logs\20260830_2251-TestExplicitRT-failure-with-threaddump.txt`.
+
+**A lead, NOT a conclusion.** `BackgroundLoader.OnLoadBackground` forces a document-changed
+notification on its way out, specifically because "loading blocks them from triggering new
+processing, but new processing may have accumulated" - and it does that **only when
+`!IsMultiThreadAware`** (`BackgroundLoader.cs:132`). `ChromatogramManager` sets
+`IsMultiThreadAware = true` (`Chromatogram.cs:54`), so it does not get that safety net and depends
+on a real document-changed event to re-trigger. Idle loaders plus an uncommitted final join is
+consistent with such an event being missed. **Unverified** - it fits the evidence and has not been
+reproduced or instrumented.
+
+**Not caused by today's work.** `ExplicitRTTest` is a functional test driving `SkylineWindow`; it
+references neither `MemoryDocumentContainer`, `ResultsTestDocumentContainer` nor `AssertComplete`,
+so none of tonight's three commits execute in it.
+
+**Frequency**: first sighting. 16 executions tonight, and clean in both of the day's earlier runs
+- 25 executions this morning and 35 in the 23,250-instance run - so 1 in 76 across the day. No
+nightly failure history on master. Worth watching rather than acting on: one occurrence is not
+enough to bisect against, and the next one will land in the same log with the same thread dump.
