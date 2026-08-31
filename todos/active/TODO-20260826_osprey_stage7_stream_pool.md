@@ -6391,3 +6391,98 @@ entry_id.
 
 `CodeInspectionTest.TestNoUnstableSort` requires the `// Array.Sort OK: <reason>` exemption on
 the SAME LINE as the call. A reason comment on the preceding lines does not count.
+
+### `-Dataset All`: 55 PASS / 0 FAIL, and byte-identity holds on ALL FOUR datasets (2026-08-31 00:54)
+
+Run dir `C:\proj\pwiz-work1\pwiz_tools\Osprey\TestResults\regression-20260830_233046`, against
+baseline `C:\proj\pwiz\...\regression-20260830_200811`. Every per-run 2nd-pass sidecar AND every
+experiment sidecar matches by sha256 - 16 of 16 artifacts, zero differences:
+
+| dataset | per-run sidecars | experiment sidecar |
+|---|---|---|
+| Stellar | 3/3 identical | identical (14,669,808 B) |
+| StellarLibDecoy | 3/3 identical | identical (13,795,660 B) |
+| StellarGenDecoyEntrap | 3/3 identical | identical (14,240,632 B) |
+| Astral | 3/3 identical (~32 MB each) | identical (59,857,544 B) |
+
+**StellarLibDecoy is the arm that stopped the previous run** with "best decoy for base_id 16536
+... absent in the worker's answer". It is now green AND byte-identical, which is the strongest
+available statement that the serialized `FileCompetition.BestDecoy` is the same object the
+baseline's Stage 7 folded.
+
+**Astral matters independently**: ~1.17M records per file against Stellar's ~330K, and the
+canonical-key record sort had only ever been measured on Stellar. Byte-identity there is what
+rules out the ordering fix being a Stellar-shaped coincidence.
+
+### MEASURED: the pool image loses 7.3% of the null's winning decoys on ASTRAL, 0.1% on Stellar
+
+`ai/.tmp/sessions/20260830-night-phase2/measure_decoys.py <straight-dir>`, run against the
+`-Dataset All` artifacts. "competed" is decoy base_ids in the pass-2 competition (the artifact);
+"NOT-in-pool" is winning decoy OBSERVATIONS whose entry_id has no row in the pool image - the
+set the per-run 2nd-pass sidecar structurally cannot carry.
+
+| dataset | file | competed | pool decoy base_ids | 1st-pass decoy base_ids | NOT-in-pool | artifact |
+|---|---|---|---|---|---|---|
+| Stellar | _20 | 164,475 | 166,087 | 241,573 | **104 (0.1%)** | 1.97 MB |
+| Stellar | _21 | 164,460 | 166,075 | 241,583 | **101 (0.1%)** | 1.97 MB |
+| Stellar | _22 | 164,476 | 166,095 | 241,573 | **100 (0.1%)** | 1.97 MB |
+| Astral | _49 | 547,165 | 509,277 | 967,258 | **40,080 (7.3%)** | 6.57 MB |
+| Astral | _55 | 549,052 | 511,046 | 970,588 | **40,206 (7.3%)** | 6.59 MB |
+| Astral | _60 | 526,638 | 491,848 | 930,660 | **36,947 (7.0%)** | 6.32 MB |
+
+**The rate differs by ~385x between the two acquisitions, and every number this sprint argued
+from was the SMALL one.** "140 carried decoys", "397 decoy observations, inert", "305 decoy
+base_ids" - all Stellar. On Stellar the pool happens to hold almost every winning decoy (it even
+holds 1,612 decoy base_ids the competition never ranked), so the artifact looks like bookkeeping
+for ~100 rows. On HRAM Astral it is 40,000 observations per file, 7% of the entire decoy null.
+
+That reframes the earlier "the added rows are INERT - they moved 0 of 313,537 experiment values"
+finding: it was measured on the arm where the effect is 0.1%, and it does not transfer. It also
+explains the size of the damage the pool-only fold did (113,552 moved experiment q-values on
+Stellar from ~100 lost winners per file): the null is a shared denominator, so a 0.1% change in
+it moves two orders of magnitude more q-values than the number of rows lost.
+
+**Byte-identity on Astral is therefore the essential half of the oracle**, not
+a redundant fourth dataset. Stellar alone could not distinguish a correct implementation from one
+that dropped the non-pool decoys entirely.
+
+**Second, the stratum is now observable from disk**, which is what #4581 has been reconstructing
+from code reading. `1st-pass decoy base_ids - competed` is exactly what the `protein-compact`
+stratum gate excluded: **77,098 of 241,573 (32%) on Stellar, 420,093 of 967,258 (43%) on
+Astral**. Present in the artifact == competed, so no instrumented re-run is needed to measure a
+selection rule at any scale.
+
+**One code-reading note, NOT measured**: on Stellar the pool holds 1,612 decoy base_ids the
+competition did not rank. Under `protein-compact` the old records-derived fold filtered those out
+by stratum, so they were harmless there. Under `transfer-compete`, `stratumBaseIds` is null and
+that filter is a no-op, so every pool decoy was a candidate best - which is a second way the
+records-derived decoy half was wrong, on an arm no gate in this sprint exercised.
+
+### The entry_id SEQUENCE verifier is WRITTEN but UNCOMMITTED, gated after SEA-AD (2026-08-31 01:44)
+
+Fix part 2 from "THE FRAMING THAT MATTERS" - the missing verifier. In the working tree of
+`C:\proj\pwiz-work1`, NOT in `fa366f0824`:
+
+* `ParquetScoreCache.StreamEntryIds(path)` - streams a scores parquet's `entry_id` column in
+  physical row order, one row group resident. Throws on an unreadable column rather than
+  yielding nothing, because a vacuous zero-row pass is the one outcome that must not read as
+  agreement.
+* `Pass2FdrSidecar.AssertRecordsMatchPoolSequence(...)` - pure, takes the pool sequence as an
+  `IEnumerable<uint>`, so it is unit-testable without writing a parquet. `AssertSidecarDescribesPool`
+  now does the count check and then this.
+* `FdrTest.TestSidecarRecordSequenceMustMatchPoolOrder` - reproduces the ACTUAL defect shape
+  (gap-fills in a trailing block at equal length and equal population), plus short, long and
+  empty pool sequences. 601/601, ReSharper 0/0.
+
+**Why it is not committed yet.** It is an assert, so it can fail a run, and the standing gate for
+that is `regression.ps1`. That cannot run concurrently (shared Release dir + SQLite lock) and
+would distort the SEA-AD run's wall time and memory shape. `ai/.tmp/sessions/20260830-night-phase2/Chain-AfterSeaAd.ps1`
+is armed as a waiter: it runs `-Dataset Stellar` when SEA-AD's Osprey exits and writes the verdict
+to `chain2-state.log`. Commit only if that says VERIFIER GREEN.
+
+**SEA-AD does not exercise it** - the runner snapshots the exe, so that run is `fa366f0824` and
+the working tree is deliberately ahead of it.
+
+**Cost to note before it reaches 257 files**: one extra open + entry_id column read per file
+(~4.7 MB on the largest Astral file). Small against the parquet write it follows, but it is a
+per-file cost that did not exist before.
