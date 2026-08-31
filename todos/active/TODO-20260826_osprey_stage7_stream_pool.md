@@ -6458,10 +6458,9 @@ by stratum, so they were harmless there. Under `transfer-compete`, `stratumBaseI
 that filter is a no-op, so every pool decoy was a candidate best - which is a second way the
 records-derived decoy half was wrong, on an arm no gate in this sprint exercised.
 
-### The entry_id SEQUENCE verifier is WRITTEN but UNCOMMITTED, gated after SEA-AD (2026-08-31 01:44)
+### The entry_id SEQUENCE verifier: COMMITTED `ab40c110fa`, gate GREEN (2026-08-31 04:48)
 
-Fix part 2 from "THE FRAMING THAT MATTERS" - the missing verifier. In the working tree of
-`C:\proj\pwiz-work1`, NOT in `fa366f0824`:
+Fix part 2 from "THE FRAMING THAT MATTERS" - the missing verifier. Committed in `ab40c110fa`, on top of `fa366f0824`:
 
 * `ParquetScoreCache.StreamEntryIds(path)` - streams a scores parquet's `entry_id` column in
   physical row order, one row group resident. Throws on an unreadable column rather than
@@ -6474,7 +6473,11 @@ Fix part 2 from "THE FRAMING THAT MATTERS" - the missing verifier. In the workin
   (gap-fills in a trailing block at equal length and equal population), plus short, long and
   empty pool sequences. 601/601, ReSharper 0/0.
 
-**Why it is not committed yet.** It is an assert, so it can fail a run, and the standing gate for
+**Gate result**: `regression.ps1 -Dataset Stellar` 10 PASS / 0 FAIL at 04:48, and that
+run's artifacts are still byte-identical to the baseline, so the assert changed no output.
+Committed as `ab40c110fa`.
+
+**Why it was held back until then.** It is an assert, so it can fail a run, and the standing gate for
 that is `regression.ps1`. That cannot run concurrently (shared Release dir + SQLite lock) and
 would distort the SEA-AD run's wall time and memory shape. `ai/.tmp/sessions/20260830-night-phase2/Chain-AfterSeaAd.ps1`
 is armed as a waiter: it runs `-Dataset Stellar` when SEA-AD's Osprey exits and writes the verdict
