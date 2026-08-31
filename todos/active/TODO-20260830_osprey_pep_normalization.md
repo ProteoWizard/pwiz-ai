@@ -1,0 +1,113 @@
+# Normalize PEP: stop materializing a left-outer-join across every observation
+
+## Branch Information
+- **Branch**: `Skyline/work/20260830_osprey_pep_normalization`
+- **Base**: `2d07cf48fd` ("Split the FDR sidecars by scope, making the per-file ones immutable")
+  - the Phase 1 commit whose immutability claim this repairs. NOT on master: Phase 1 and
+    Phase 2 both live on PR #4621's branch.
+- **Worktree**: `C:\proj\pwiz`
+- **Created**: 2026-08-30
+- **Status**: In Progress
+- **Issue**: [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
+- **Merges into**: the Phase 2 work in `C:\proj\pwiz-work1`
+  (`Skyline/work/20260827_osprey_stage7_stream_increment`, WIP at `d901a28d10`)
+
+## The flaw
+
+`2d07cf48fd` claims *"making the per-file ones immutable"* and deletes `PatchProteinQvalues`
+and `PatchExperimentValues`. It keeps `PatchPep`, which **re-opens every per-run 2nd-pass
+sidecar after the experiment fold and rewrites the 8-byte `pep` column**. So the 2nd-pass
+per-file sidecar is not immutable: it is written by one task and modified by another.
+
+**The HPC consequence was never surfaced**: SecondPassFDR must hold WRITE access to every run
+node's sidecar. That contradicts the contract - run nodes write, a separate machine reads what
+they wrote. Brendan: *"That breaks the design, and I was not aware of a need to break the
+design... it totally broke the contract I attempted to establish without proclaiming it loudly
+that it needed to do this and asking for permission, which I would have denied."*
+
+### Why it is a materialized left-outer-join
+
+PEP is `PepEstimator.PosteriorError(winner.score)` - **one value per base_id**, derived from the
+winning observation's score. `_winnerLoc` is `base_id -> (fileIdx, entryId, score)`: one row.
+Today that single fact is spread across ~933K per-observation slots (3 Stellar files), real on
+the winner and `1.0` everywhere else. The `1.0` is not a posterior error probability; it is a
+sentinel meaning "not the row the estimate was computed on" - the same participation-vs-value
+conflation this sprint has now root-caused three times.
+
+The estimator is fitted from `(winner score, isDecoy)`, both of which the experiment sidecar
+already carries, so nothing about PEP needs per-observation storage.
+
+**Brendan's ruling: normalize the storage and perform the left-outer-join at RUNTIME, in all
+cases.**
+
+## The design
+
+Semantics are PRESERVED exactly - normalizing is a storage change, not a meaning change.
+
+* **Store once**, in the experiment record (already keyed by entry_id, and the winner entry_id
+  determines its base_id, so this needs no new table):
+  * `Pep` (double) - real on the winning entry_id
+  * `PepWinnerFileIndex` (u32, `uint.MaxValue` = not a winner) - index into the canonical sorted
+    `file_stems` that `reconciliation.json` already distributes join-wide, so it is stable
+    across nodes and resumes rather than depending on run-time file ordering
+  * record 36 -> 48 bytes, experiment-sidecar format bump
+* **Join at read time**: `pep(f, e) = (rec.WinnerFileIndex names f && rec.EntryId == e) ? rec.Pep : 1.0`
+  - reproduces the current per-observation view bit-for-bit for any consumer that wants it.
+* **Per-file sidecar drops `pep`**, 36 -> 28 bytes, **identically on both passes**. Brendan:
+  *"The two passes should use the same normalization."* Pass 1 wrote it once as final, pass 2
+  wrote a placeholder and patched it - one column, two lifecycles, which is the trap.
+* **`PatchPep` and its whole extra traversal are deleted.**
+
+### What it buys
+
+1. Per-file FDR sidecars become genuinely write-once - the contract `2d07cf48fd` claimed.
+2. The join stops needing write access to files it does not own; the HPC contract holds.
+3. 22% off every per-file FDR sidecar: ~11 GB of the measured 52.3 GB at 257 files.
+4. Fixes mode 7's three "regeneration touched an artifact" failures on the Phase 2 branch,
+   which were PatchPep all along (verified: at this base `WriteCore`'s `DiagnosticsOnly` skip
+   leaves `sidecarsWritten` empty so the patch loop never runs; after the relocation ownership
+   comes from disk, so it runs and rewrites all three).
+
+## Verifiers to add (the rule drifted because nothing enforced it)
+
+1. **Write-once guard, in code**: a per-file FDR sidecar is written at most once per run. Fires
+   on every route including straight-through. This is the contract stated executably instead of
+   in a commit title.
+2. **Cross-task file-modification assertion in `regression.ps1` mode 3** (Brendan's): fingerprint
+   each phase dir immediately before and after `Invoke-OspreyTaskRun` and assert the task
+   modified nothing but its own declared outputs. Mode 3 is the right home because there task
+   boundaries ARE process boundaries - *"we know exactly which task is running when."*
+   Note it would NOT have fired at this base (no 2nd-pass bin is relayed, so phase 4 creates
+   what it patches); it fires once ownership moves, which is why verifier 1 is also needed.
+
+## Risks to close before merge
+
+* **KDE fit order**: `PercolatorQValues.cs:66` warns the estimator's sum is NOT associative.
+  Storing the fitted value (as designed) avoids this; deriving it by refitting at read time
+  would need the fit order pinned canonically. Do not switch to refitting casually.
+* **Diagnostics dumps** print `e.Pep` per row (`OspreyFileDiagnostics.cs:1521,1589`). With the
+  runtime join they must reproduce the same per-observation values; assert that rather than
+  assume it.
+* No scientific output consumes PEP - the blib writer has **zero** references to it, and neither
+  do the report or FDRBench writers. Consumers are the two diagnostic dumps and entry re-seeding.
+
+## Tasks
+
+- [ ] Extend `FdrExperimentRecord` + `FdrExperimentSidecar` (Pep, PepWinnerFileIndex, format bump)
+- [ ] Populate them where `_winnerLoc` / the PEP estimator are in hand
+- [ ] Drop `Pep` from `FdrScoreRecord` / `FdrScoresSidecar`, both passes (format bump)
+- [ ] Delete `PatchPep` and its call site
+- [ ] Runtime join for the diagnostics dumps
+- [ ] Write-once guard on per-file sidecar writes
+- [ ] mode 3 per-phase file-modification assertion
+- [ ] `regression.ps1 -Dataset All` green; golden updates reviewed, not absorbed
+- [ ] Merge into the Phase 2 branch and re-run its gates
+
+## Progress Log
+
+### 2026-08-30 - branch created, design agreed
+Root-caused during the Phase 2 investigation (see
+`TODO-20260826_osprey_stage7_stream_pool.md`). Brendan's direction: land the Phase 1 repair
+first as a small, independently testable change, then merge it into the Phase 2 work so that
+phase becomes a much smaller diff. The whole of #4486 is to land as ONE atomic squash-merge to
+master, fully correct and fully validated.
