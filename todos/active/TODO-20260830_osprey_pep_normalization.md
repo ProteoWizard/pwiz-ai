@@ -299,3 +299,52 @@ The defensible narrowing is to compare only where Rust has a non-1.0 value - tho
 rows carrying information on its side, and every real PEP Rust computes still gets checked. That
 is a SEMANTIC change to a parity gate, so it needs explicit sign-off and must not be a quiet edit
 to the field table.
+
+### 2026-08-30 late - cross-impl PASS, and a bug only Rust could see
+
+**The cross-impl gate caught a real defect in this change.** `FdrExperimentAccumulator.
+SetProteinQvalue` rebuilds a record to replace one column and omitted `pep`, so the
+constructor's optional default silently overwrote the value `Add` had set. Measured: **79,957
+winners per file reporting 1.0 against Rust's real values**, on every informative row.
+
+Two things about how it was found, both worth keeping:
+
+* **The whole Stellar regression passed green with the bug present.** No C#-only gate compares
+  PEP against an independent source; only the Rust comparison does - and that gate is scheduled
+  for retirement. It has now paid for itself once.
+* **I reported the divergence direction backwards before measuring it**, and built an argument on
+  it. The row-level check inverted it. Same failure mode this whole sprint has been about.
+
+**Fixed (`42542e7582`), and the hazard removed with it**: the `pep = 1.0` default is gone from
+both `FdrExperimentRecord`'s constructor and `FdrExperimentAccumulator.Add`, so a missing
+argument is now a compile error. Exactly ONE production call site had been relying on that
+default - and it was the bug.
+
+**Gated (`73063e1228`)**: a test asserting a partial update preserves the WHOLE record, not the
+column that changed. **Verified by reintroducing the defect** - the test fails, then passes again
+once the fix is restored. Not an assumed verifier.
+
+#### Results
+
+| gate | result |
+|---|---|
+| unit + inspection | 597/597, ReSharper 0/0 |
+| Stellar regression (post-fix) | **PASS, every leg** - incl. mode3 sidecars over 3,445,490 records |
+| **Compare-EndToEnd-Crossimpl (Stellar)** | **PASS** - bit-parity at 1e-9; Stage 7 protein FDR, blib content, FDR sidecars all green |
+
+Cross-impl PEP after Brendan's ruling (Rust 1.0 = absence marker, skipped): 242,488 informative
+1st-pass rows and 166,724 2nd-pass agree to a max **relative** difference of **1.5e-11** and
+**4.6e-12** - inside the gate's tolerance, residual confined to denormal-range values where a
+last-bit KDE difference is amplified in relative terms.
+
+#### Still open
+
+* `-Dataset All` - the three `--model-diagnostics` datasets are the FIRST exercise of `e.Pep` in
+  the `cs_stage5` / `cs_stage6` dump columns, i.e. the first place a REPORTED value could move.
+  Bring deltas for review; do not absorb a golden update.
+* **A fresh-vs-rehydrated agreement test for the experiment-scope columns.** BOTH PEP defects on
+  this branch (row-keyed 1st pass, dropped `SetProteinQvalue` field) were invisible to every
+  C#-only gate and both would have failed such a test immediately. It does not depend on Rust,
+  which matters given parity retirement.
+* Merge into Phase 2 (`d901a28d10` in `pwiz-work1`); the three mode-7 failures should go, since
+  they were `PatchPep` - a verified code-path argument, NOT yet a measured result.
