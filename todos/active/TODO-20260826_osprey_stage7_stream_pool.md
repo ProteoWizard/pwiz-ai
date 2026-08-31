@@ -6206,3 +6206,64 @@ against the preserved baseline sidecars is the only standard.
 **Preserve current behaviour exactly, anti-conservatism included.** Fixing #4581 is a separate
 science decision; a relocation that changed the stratum's decoy population would be
 indistinguishable from the defect that issue reports.
+
+### THE DESIGN for defect 2 (Brendan, 2026-08-30 late): write the decoy side of the competition
+
+**Minimum addition**: a per-file artifact written by PerFileRescoring, one record per decoy
+base_id in THAT FILE'S pass-2 competition: `(decoy entry_id, best composite score in this file)`.
+Two fields, 12 bytes, no q - decoys have none. This IS `FileCompetition.BestDecoy`, which
+`CompeteOneFile` already computes and currently throws away, so it is a serialization rather than
+a new computation.
+
+**Only the decoy half.** `runQ` is in the records and `bestTarget` is recoverable because the
+winning target is always a survivor (the enforced experiment-fold scope invariant). The decoy side
+is the only third the pool image structurally cannot carry.
+
+**Define it as "the decoy side of this file's competition, whatever that competition was"** - NOT
+as "the in-stratum decoy pairs". Under the shipped `protein-compact` default it happens to be the
+stratum; under `transfer-compete` it is the full pre-compaction decoy population; under a future
+#4581 fix it is whatever that fix decides. The artifact must not know. Brendan's two requirements:
+allow FDR RECALCULATION from a real decoy population (not a translation table as in `transfer`),
+and do not build a solution that depends on a PARTICULAR decoy population - so a future #4581 fix
+stays open.
+
+**This is why the earlier "read bestDecoy from the 1st-pass experiment aggregate" idea is worse**,
+despite needing no new file: it bakes in both the current decoy population AND the assumption that
+decoys are never rescored. A #4581 fix would silently produce wrong q, with no gate able to see it.
+
+**Write the COMPLETE decoy side, not the delta vs the pool.** A delta assumes
+`pool + delta == competition population`, which is another coupling. Complete makes the file
+self-contained. Cost ~2 MB/file on Stellar against an 11 MB per-run sidecar (+18%), streamed one
+file at a time, nothing resident.
+
+#### Second consumer, and it may matter more than the fold
+
+The pass-2 diagnostics cards are built from `perFileEntries` - the POOL. `BuildCoAssignment`
+walks it; `BuildModelPass2` / `DensityRatio` / `WinFraction` reduce from it. So the decoy
+distribution the HTML plots is the pool's decoys (155,337 for file 20), **not the population the
+pass-2 competition actually competed over**, and on a regeneration run nothing on disk contains
+the latter. This artifact fixes that, and it makes the selection rule OBSERVABLE: present in the
+file == competed, so set-differencing it against the 1st-pass decoy population IS the
+stratum-selection measurement #4581 currently has to reconstruct from code reading and in-memory
+state - including at 82-file scale where re-running to instrument costs 3+ hours.
+
+**Keep the record minimal.** It is enough for a score distribution, and entry_id carries the decoy
+bit and base_id so pairing is a join against artifacts already present. The format is additive and
+pre-release; a later consumer can extend it once it knows what it needs.
+
+**Land it for the FOLD first** (byte-identity oracle, no plot movement). Pointing the diagnostics
+at the true pass-2 null is a SEPARATE change - it moves published plots and their goldens, which
+needs review rather than absorption.
+
+#### Traps this re-acquires from the last attempt
+
+* The HPC relay in `regression.ps1` must copy the new file (defect #6 last time: a per-file
+  artifact silently not arriving made phase 4 recompute and produce a disjoint answer).
+* It must be DECLARED as PerFileRescoring's output so validity stamping and `IsTaskAlreadyDone`
+  treat it correctly (defects #2 and #3 last time).
+* `AssertBestsMatch`'s per-file decoy comparison stays satisfiable - both sides would have real
+  decoy bests - so the assert keeps working through the transition instead of needing retirement.
+
+**FIRST MEASUREMENT, before any format code**: confirm that `CompeteOneFile`'s `BestDecoy` folded
+across files reproduces the baseline's `bestDecoy` exactly. It should - it is the same map the
+baseline folds - but "should" was wrong twice today.
