@@ -6299,3 +6299,95 @@ the Stage 7 recompute stands, every file of every dataset validates the artifact
 > **DO NOT delete the Stage 7 recompute until the artifact has run green through `-Dataset All`
 > with the assert active.** The recompute is the transition's oracle; removing it early is the one
 > sequencing error that leaves this unverifiable.
+
+## BOTH DEFECTS FIXED; Stellar byte-identical to the baseline (2026-08-30/31 night session)
+
+Implemented against "THE DESIGN for defect 2" above, in one pass. `-Dataset Stellar` 10/10 and
+the ORACLE is met: all three `.2nd-pass.fdr_scores.bin` **and**
+`output.2nd-pass.fdr_experiment.bin` are BYTE-IDENTICAL (sha256) to the preserved baseline
+`C:\proj\pwiz\pwiz_tools\Osprey\TestResults\regression-20260830_200811\Stellar\straight`.
+
+    IDENTICAL ..._20.2nd-pass.fdr_scores.bin   (9,303,564 bytes)
+    IDENTICAL ..._21.2nd-pass.fdr_scores.bin   (9,303,312 bytes)
+    IDENTICAL ..._22.2nd-pass.fdr_scores.bin   (9,304,460 bytes)
+    IDENTICAL output.2nd-pass.fdr_experiment.bin (14,669,808 bytes)
+
+Comparison script: `ai/.tmp/sessions/20260830-night-phase2/cmp_baseline.sh`.
+New run dir: `C:\proj\pwiz-work1\pwiz_tools\Osprey\TestResults\regression-20260830_231929`.
+
+**The experiment sidecar matching byte for byte is the strong result**, and it retires the
+"FIRST MEASUREMENT" this file asked for. That file carries every experiment q, aggregate and
+PEP; it can only reproduce the baseline if the FOLDED `bestDecoy` is exactly the baseline's,
+across every base_id. The previously measured damage - 113,552 moved experiment q-values from a
+null missing real decoy observations - is gone, not merely under the reporting threshold.
+
+### Defect 1 - record ORDER: sort on the parquet's OWN canonical key, not on entry_id
+
+`BuildRecords` now emits
+`survivors.OrderBy(EntryId).ThenBy(Charge).ThenBy(ScanNumber)` - a STABLE LINQ sort.
+
+Sorting by entry_id alone (what the measurement suggested) reproduces the baseline **on these
+files**, because a pool holds about one row per entry_id. It is not the rule the pipeline
+enforces. `ParquetScoreCache.StreamReconciledScoresParquet` merges each gap-fill into its
+canonical `(entry_id, charge, scan_number)` position and HARD-FAILS on a row out of that order,
+so that triple is the key the artifact this sidecar must mirror is actually ordered by. Stable,
+because the parquet's own gap-fill merge is stable and its `KeyLess` returns false on a full key
+tie - leaving the original row ahead of the gap-fill, which a stable sort over
+`[originals..., gap-fills...]` reproduces exactly.
+
+The defect itself was as measured: gap-fills are APPENDED to `fdrEntries` by the rescore task's
+phase 2, so list order put them in a trailing block.
+
+### Defect 2 - the worker WRITES its competition's decoy side
+
+New artifact `<stem>.2nd-pass.fdr_decoys.bin`, `Osprey.IO/Pass2CompetitionDecoys.cs`.
+Magic `OSPRYDCY` (distinct from `OSPRYFDR` / `OSPRYEXP`, which share its header shape), 32-byte
+header + N x 12-byte records `(u32 decoy entry_id, f64 best composite score)`, ascending
+entry_id.
+
+* **No base_id column.** The key is the entry_id's low 31 bits. Storing it twice would let the
+  two copies disagree; instead `Write` REJECTS a target entry_id and rejects a record filed
+  under a key its entry_id does not belong to. Those are the two shapes in which a target
+  observation could end up in the decoy null.
+* **The object is serialized, never rebuilt.** `CompeteStampAndWrite` passes
+  `result.Competition.BestDecoy` straight through. This is the structural protection Brendan
+  asked for: the map is already reduced to exactly the population that competed under whatever
+  mode is active, so nothing here knows or can encode `protein-compact`'s stratum.
+* **ONE callback for both files.** `Pass2PerFileWorker._writeSidecar` became `_writeAnswer`,
+  taking records AND the decoy map, so "wrote one, not the other" is not a reachable state.
+  The DECOYS file is written first and the pool image + its validity stamp last - the stamp is
+  what makes Stage 7 fold instead of recompute, so an interruption between the two leaves a file
+  Stage 7 recomputes rather than one it folds against a decoy artifact that never landed.
+* **Absence is a stop.** `TryReadWorkerContribution` throws when the sidecar is present and the
+  decoys file is not, naming both paths. It must: there is no gate that can see a
+  decoy-depleted null.
+* `FileCompetitionFromRecords` takes `bestDecoy` as a parameter and no longer reduces decoys out
+  of the records at all - a pool decoy row now contributes its run q and nothing else. A pool
+  decoy outscoring the competition's winner is an observation the competition never ranked,
+  which is the same error the gap-fill exclusion prevents on the target side.
+
+### Wiring
+
+* Declared as a `PerFileRescoreTask` output (same `Pass2ProteinCompact || Pass2TransferCompete`
+  guard as the sidecar), so `IsTaskAlreadyDone` requires both files and a resume that found one
+  without the other re-runs rather than folding an empty null.
+* Stamped inline with `PerFileRescoring`'s task name and key, like the sidecar.
+* `regression.ps1` phase3 -> phase4 relay copies it and its stamp, and **throws** if the sidecar
+  arrives without it. That is trap #1 from the design section, made loud: last time a per-file
+  artifact silently not arriving made phase 4 recompute and answer differently.
+
+### Tests added (600/600, ReSharper 0/0)
+
+* `FdrTest.TestFileCompetitionRoundTripsThroughSidecarRecords` - rewritten. The records are now
+  the POOL (no carried decoy), the decoy half round-trips through the real file, and losing one
+  decoy from the artifact must make `AssertContributionsMatch` throw.
+* `FdrTest.TestPoolDecoyRecordDoesNotOverrideCompetitionDecoyBest` - a higher-scoring pool decoy
+  must not displace the worker's answer.
+* `IOTest.TestPass2CompetitionDecoysArtifact` - canonical order (same pairs inserted in opposite
+  orders produce byte-identical files), the two key rejections, empty-vs-unreadable, corrupt
+  magic, truncated body, missing file.
+
+### Gotcha re-acquired
+
+`CodeInspectionTest.TestNoUnstableSort` requires the `// Array.Sort OK: <reason>` exemption on
+the SAME LINE as the call. A reason comment on the preceding lines does not count.
