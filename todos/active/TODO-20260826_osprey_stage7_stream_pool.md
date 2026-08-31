@@ -6139,3 +6139,37 @@ moved on 113,552 entries with every correctness leg green.
 **Verdict: D is required, not optional.** Under the stated oracle (do the files match the
 baseline?) they do not, and a q-value is a reported quantity even at 0.08 - computed here from a
 null that is missing real decoy observations. The worker must write its competition down.
+
+## PHASE 1a MERGED IN; two defects left before the gates (2026-08-30 late)
+
+Phase 1a (`Skyline/work/20260830_osprey_pep_normalization`, `C:\proj\pwiz`) is merged into this
+branch at `66284dea76`. Merged tree: build clean, **598/598**, ReSharper 0/0. Nothing pushed.
+
+**The merge was textually clean but semantically not.** `FdrScoreRecord` lost its `pep`
+parameter, so the worker's `BuildRecords` and five test constructions had to drop it - git could
+not see that, only the build could. Worth remembering for the next cross-branch merge in this
+sprint.
+
+**Why Phase 1a mattered to Phase 2**: it repairs the write-once contract the scope split claimed.
+The per-run 2nd-pass sidecar is now written exactly once, by the node that owns it, and carries
+no experiment-scope column (36 -> 28 bytes). That is the property Phase 2's relocation depends
+on, and it is what removed the three mode-7 "regeneration touched an artifact" failures at the
+source: they were `PatchPep`.
+
+### Two defects left, in order
+
+1. **Record ORDER** (small, and mine). `BuildRecords` emits in `survivors` order, putting
+   gap-fills in a trailing block. Measured: `new == (baseline minus gapfill) + gapfill-ascending`,
+   and the baseline order is fully ASCENDING by entry_id with unique ids per file - so sorting
+   records by entry_id before writing reproduces the baseline exactly.
+2. **The join cannot recover `bestDecoy` from the pool image.** The real one, and where the last
+   run stopped. Everything measured about it is in the handoff and in "THE FIX, fully specified"
+   above. Short form: `FoldFileContribution` needs only the experiment-wide MAX; the missing
+   decoy values are already in `output.1st-pass.fdr_experiment.bin`; and for ALL 483,220 decoy
+   entry_ids that file's aggregate equals `max over files of the per-file 1st-pass score`
+   (verified, zero exceptions). Two caveats to handle rather than assume away: decoys that
+   survive somewhere, and `mean-best-N` where the aggregate is a mean rather than a max.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md`
+before starting work - it carries the startup protocol, the measured facts for defect 2 so they
+need not be re-derived, the new verifiers to expect, and the gotchas that cost time today.
