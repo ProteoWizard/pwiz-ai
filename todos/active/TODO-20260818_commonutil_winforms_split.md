@@ -1605,3 +1605,44 @@ to expire so the "expired session re-authenticates" path gets exercised, and it 
 refresh token precisely so the password grant is the path taken. That is the behaviour the port
 broke. This is a good test catching a real regression, not a flaky test needing a longer timeout -
 so raising `expires_in` would HIDE the defect rather than fix it.
+
+#### Brendan's two questions, answered (2026-08-31 morning)
+
+**Is the fix already in flight? YES - do NOT write a competing one.** PR **#4613** (rita-gwen,
+open, base master, `Skyline/work/20260825_watersConnectHttpClientWithProgress`) is exactly the
+HttpClientWithProgress conversion Brendan remembered, and it **removes this failure mode as a side
+effect**. It replaces
+
+```csharp
+tokenClient.RequestRefreshTokenAsync(expiredTokenCacheEntry.TokenResponse.RefreshToken).Result
+```
+
+with a direct form POST (`grant_type=refresh_token`, `refresh_token=...`) through
+`HttpClientWithProgress`, keeping `if (!refreshedToken.IsError)`. A form POST does no client-side
+required-parameter validation, so an empty refresh token can no longer THROW - it posts, gets a
+response, and the fallback to the password grant runs as designed. **Action: land #4613 and merge
+it through, rather than patching `Authenticate()` here.**
+
+*Merge hazard worth flagging*: #4613 is written against master's OLD `TokenClient` code, while this
+branch carries the IdentityModel 7 rewrite from Matt's `58ee602f7e`. When master merges in, both
+sides will have edited `Authenticate()`. **Take #4613's form-POST version** - it is both the newer
+design and the one without the defect.
+
+**Was master's recent fix the answer? No, and the branch already has it.** `ecf53f8859` (#4603,
+Rita, 2026-08-24, "Fixed TestWatersConnectExportMethodDlg failing on the second in-process run")
+IS an ancestor of this branch. It fixed a different thing - the pooled `IHttpClientFactory`
+pipeline serving a previous run's mock handler - and does not touch the token refresh path.
+
+**Are these tests misplaced, and do they belong in TestConnected?** Both live in `TestFunctional`.
+Split verdict:
+
+* **`TestRInstaller` - yes, it really does connect.** `RInstaller.InstallPackages()` calls
+  `RUtil.CheckForInternetConnection()`, a live HEAD to `www.r-project.org`, with no stub. So the
+  dependency is real. **But moving it to `TestConnected` is the weaker fix**: the stub seam already
+  exists and this very file already uses it twice (`SimulateNoNetworkInterface` in
+  `TestInternetConnectionFailure`, `SimulateSuccessfulDownload` in `TestStartToFinish`). Stubbing
+  the remaining paths makes the test deterministic AND keeps its coverage in ordinary runs, which
+  a move to `TestConnected` would forfeit. Recommend stubbing; move only if that proves awkward.
+* **`TestWatersConnectExportMethodDlg` - no, Brendan's own suspicion was right.** It is fully
+  mocked with `MockHttpMessageHandler` and recorded JSON under `MockHttpData\`, and makes no real
+  connection at all. It is correctly placed, and its failure was never a connectivity problem.
