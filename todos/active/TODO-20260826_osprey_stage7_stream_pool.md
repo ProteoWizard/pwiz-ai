@@ -6620,3 +6620,31 @@ Recorded because the shape is the lesson: **gating a loop is not gating what the
   sidecar, so it did not measure this phase.
 * "The join re-reads 9.2 GB to check the code that produces the answer" was wrong. Most of that
   read was Stage 7 obtaining values it genuinely needed; only now is it verification-only.
+
+### Follow-up: `.1st-pass.model.json` is 730 MB of duplication, and 99.98% of it is not the model
+
+Measured on the 82-file SEA-AD run (2026-08-31): all 82 per-file `.1st-pass.model.json` are
+BYTE-IDENTICAL - one sha256, 8.9 MB each, **730 MB total** (~2.3 GB projected at 257 files).
+
+What is actually in it:
+
+| key | size |
+|---|---|
+| `StratumBaseIds` | **6266.3 KB** |
+| `FoldWeights` | 1.3 KB |
+| `Means` / `Stds` / `FoldBiases` / `ExperimentAgg` | < 1 KB combined |
+
+So the frozen model is ~2 KB and the file is a protein STRATUM with a model attached. The two
+have different natural scopes:
+
+* **The model** is a plausible per-file quantity - DIA-NN computes per-file models, and Brendan
+  wants that flexibility preserved. At ~2 KB, keeping it per-file costs nothing.
+* **The stratum** cannot be per-file: it is the `>= 2 detected peptides` set counted across the
+  whole experiment (#4581). It is analysis-wide by definition, and it is the 6.3 MB being copied
+  82 times.
+
+**Splitting them keeps the per-file flexibility AND removes the duplication** - they are not in
+tension, they only look that way because both live in one file. Deliberately NOT done as part of
+issue #4486; recorded so the size is not rediscovered. Note this also makes SecondPassFDR's
+staging list read as "needs per-file first-pass input" when what it needs is one analysis-wide
+stratum.
