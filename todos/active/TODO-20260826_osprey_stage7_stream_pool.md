@@ -6173,3 +6173,36 @@ source: they were `PatchPep`.
 **Next session handoff**: read `ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md`
 before starting work - it carries the startup protocol, the measured facts for defect 2 so they
 need not be re-derived, the new verifiers to expect, and the gotchas that cost time today.
+
+### The pass-2 decoy population is a measured FDR invariant, not an implementation detail
+
+Found late, after several messages of me reasoning about it from first principles. Prior work had
+already settled it, and defect 2 should be framed against that rather than rediscovered.
+
+* **#4436 / `TODO-20260710_osprey_pass2_recalibration_fix.md` (CLOSED, PR #4446)**: the old 2nd
+  pass re-estimated q on the reported pool, but compaction had stripped most decoys from it, so
+  the null was **decoy-depleted and target-selected** -> anti-conservative (Stellar 1.08%, Astral
+  1.24% true FDP at nominal 1%). `transfer-compete` competes over the **full pre-compaction
+  population** instead. So `CompeteOneFile` taking its population from the 1st-pass sidecar rather
+  than the pool IS the correctness fix.
+* **#4581 (OPEN)**, governing the shipped `protein-compact` default: the `>= 2 detected peptides`
+  stratum gate is TARGET-conditioned; decoys enter by base_id pairing so complete PAIRS are kept,
+  and the in-stratum decoy null is target-selected. **1.51-1.53% true FDP at nominal 1%** on
+  82-file SEA-AD, stated as a lower bound.
+
+**Consequence**: under the shipped default the pass-2 competition is STRATUM-RESTRICTED, so the
+`bestDecoy` gap is stratum-scoped - not the 323,878 non-pool decoys per file I had been quoting.
+That is what the earlier "305 decoy base_ids" tracked, and why the carried decoys were
+stratum-filtered.
+
+**And the oracle is blind.** #4581: an entrapment oracle can audit a selection rule only if the
+entrapment set is exchangeable with the false-target population under that rule; in-stratum the
+ratio moves from ~1:0.97 to ~1000:1, so protein-grouping priors are unauditable by a per-peptide
+entrapment set. With a golden comparison unable to see calibration either, **nothing available to
+this branch can detect a subtly wrong pass-2 decoy set** - `--model-diagnostics` already passed
+once this sprint with a wrong null (113,552 moved q-values, reported set unchanged). Byte-identity
+against the preserved baseline sidecars is the only standard.
+
+**Preserve current behaviour exactly, anti-conservatism included.** Fixing #4581 is a separate
+science decision; a relocation that changed the stratum's decoy population would be
+indistinguishable from the defect that issue reports.
