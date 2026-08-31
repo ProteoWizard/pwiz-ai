@@ -217,3 +217,28 @@ that needs one is already wrong.
 The correct reading of the varying view was that the variation was an ABSENCE MARKER, and the
 join that produces it belongs at read time - which needs no provenance, because a consumer
 asking "is this precursor's PEP real here?" already knows which file it is reading.
+
+## PEP is ASPIRATIONAL, not vestigial (Brendan, 2026-08-30)
+
+Correction to an argument used above. I justified the change partly on "no scientific output
+consumes PEP" (true today: the blib writer has zero references, nor do the report or FDRBench
+writers). Brendan: PEP is **less vestigial than aspirational** - Mike added it expecting to have
+that statistic available, and like the protein q-value it needs new BLIB plumbing before Skyline
+can present it.
+
+So the standard is not "harmless now" but **right for the eventual consumer**, and the
+normalization meets it more clearly than the old form did:
+
+* Skyline would present a posterior error probability for an IDENTIFICATION - one number per
+  precursor. That is exactly the entry_id-keyed value now on `FdrExperimentRecord`.
+* The old per-observation form would have been actively WRONG for that consumer. A blib writer
+  would have had to scan every run's sidecar to find the single row holding the real value, with
+  1.0 in all the others - the materialized left-outer-join reappearing at the consumer, and
+  meaningless if ever surfaced per replicate.
+* **`ExperimentProteinQvalue` is the precedent, not an analogy**: already in this record, keyed
+  by entry_id, no file dimension, for the same reason. PEP now sits beside it in the same shape -
+  two experiment-scope statistics, one normalization, both waiting on the same BLIB plumbing.
+
+**Follow-on work (NOT this branch)**: BLIB plumbing for PEP and protein q so Skyline can present
+them. Noted here because this change is what makes that a column read rather than a cross-file
+search.
