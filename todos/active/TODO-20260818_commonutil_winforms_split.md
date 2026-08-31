@@ -1413,12 +1413,36 @@ from master rather than a cherry-pick.
 
 | Test | Before | After |
 |---|---|---|
-| `TestAuditLogTutorial` | 1 failure in 22 (nightly-shaped run) | **0 in 136** at 8 workers, five languages |
-| `WatersImsMse...AsSmallMolecules` | 2 in 291 (0.69%), 2 in the first 11 under startup load | soak running at handoff |
+| `TestAuditLogTutorial` | 1 failure in 22 (nightly-shaped run) | **0 in 609** at 8 workers, five languages |
+| `WatersImsMse...AsSmallMolecules` | 2 in 291 (0.69%); 2 in the FIRST 11 under worker-startup load | **0 in ~1400** |
+
+**The absence of failures was not accepted as proof.** A first attempt to observe the fix path
+counted zero wait-outs, which looked like the race simply never recurring - and a fix that cannot
+be told apart from luck is not a fix. The zero turned out to be a MEASUREMENT ARTIFACT: a
+parallel run discards a test's console output unless the test fails, so no worker log carries a
+single `# ` line. A temporary probe appending to the staged directory - the volume every Docker
+worker shares with the host - settled it:
+
+```
+17:10:00.131 pid=2332 Performing replicate retention time alignments
+17:10:00.679 pid=2276 正在执行重复测定的保留时间校准
+```
+
+Two wait-outs in the first 15 executions, from two processes in two languages, carrying the same
+loader message as the original failure. Pre-fix the identical condition produced two FAILURES in
+the first 11. So the race still happens at the same rate and is now ridden out - the mechanism is
+demonstrated, not inferred from silence. The probe was removed before commit; the `# Waiting out
+a cancelled loader` line stays, useful in a serial run where console output survives.
+
+**Follow-up worth having**: a deterministic unit test over `WaitForComplete` - post a cancelled
+status for a superseded document, then a restart, and assert the wait rides it out. It was not
+built here because it needs a document whose `IsLoaded` is false plus a `BackgroundLoader` double
+and a way to shorten `CANCEL_RESTART_LOOPS`, and the night run's window was better spent
+verifying. A soak proves this build; only a test keeps it proved.
 
 Commits: `a43bb777d6` (audit log test), `94c2121e39` (loader wait). Solution builds clean in
-Release/net10 (95.5s) and CodeInspection reports 0 failures, confirmed in its own log rather
-than the script summary.
+Release/net10 and CodeInspection reports 0 failures, confirmed in its own log rather than the
+script summary.
 
 #### A note on "zero failures in 9 hours"
 
