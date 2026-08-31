@@ -125,6 +125,37 @@ its terminal line — absence of a process is not presence of a result.
 accepted a run reporting `2 PASS, 0 FAIL` when a clean Stellar gate is 11 PASS. An aborted
 run and a clean one are indistinguishable under a no-failures test.
 
+## Killing a run leaves the build output locked
+
+Stopping a long run mid-flight (harness kill, `Stop-Process`, a cancelled chain) can leave its
+executable's DLLs mapped for a while afterwards. The next run then fails to build - and the
+failure does NOT read as a build failure:
+
+```
+WARN: failed to prune <TestResults dir>: The process cannot access the file
+      '...\Ospreyind\Release
+et8.0\SQLite.Interop.dll' because it is being used by
+      another process.
+```
+
+That looks like a cosmetic cleanup warning. Observed 2026-08-31: it was read as benign and the
+run was reported as "continuing" while it had in fact died at `Copy-Item SQLite.Interop.dll`
+seventeen minutes earlier. The tell was not in the message - it was that no phase had advanced
+in seventeen minutes on a step that takes seconds.
+
+**Before starting a run after killing one, prove the build tree is free.** Renaming the file is
+a definitive check and costs nothing:
+
+```powershell
+Rename-Item '<bin>\Release
+et8.0\SQLite.Interop.dll' 'SQLite.Interop.dll.locktest'
+Rename-Item '<bin>\Release
+et8.0\SQLite.Interop.dll.locktest' 'SQLite.Interop.dll'
+```
+
+Scanning loaded modules is NOT sufficient - a dying process can hold the file with nothing
+reporting it loaded. The rename either succeeds or it does not.
+
 ## Related
 
 - `osprey-development-guide.md` — Osprey build/run wrappers and gates
