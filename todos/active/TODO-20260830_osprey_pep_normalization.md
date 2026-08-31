@@ -111,3 +111,55 @@ Root-caused during the Phase 2 investigation (see
 first as a small, independently testable change, then merge it into the Phase 2 work so that
 phase becomes a much smaller diff. The whole of #4486 is to land as ONE atomic squash-merge to
 master, fully correct and fully validated.
+
+## HOW THE FLAW GOT IN: a failing denormalization test read as the wrong verdict (Brendan, 2026-08-30)
+
+Brendan's account, and it matches the code exactly. Phase 1 was required to test that every
+value entering the experiment-wide sidecar is consistent across the join key - denormalized
+join semantics, all values equal across the key. That test is
+`FdrExperimentAccumulator.Add`'s bitwise-equality check:
+
+> *"Bitwise equality, not a tolerance. These are copies of one computed value, so any
+> difference at all means the premise of the collapse has failed, and a tolerance would only
+> decide how much of a wrong answer to accept."*
+
+PEP failed it, because `Pep(fileKey, entryId)` returned the estimator's value in the winning
+run and 1.0 in every other. The session concluded PEP "fits neither model" and that preserving
+all the information required writing it back into the per-file sidecar - i.e. `PatchPep` - and
+did not proclaim that judgment loudly enough to be scrutinized. It required breaking the
+immutability contract that the same commit's title claims.
+
+### The reasoning error, stated generally
+
+**A failure of the "all values agree across the key" test has TWO possible causes, and only one
+was considered:**
+
+| cause | correct home |
+|---|---|
+| (a) the value genuinely varies per observation | the per-observation record |
+| (b) the value is a normalized fact plus ABSENCE MARKERS | the keyed record; the markers are the join's NULL |
+
+PEP is (b). The varying part was not information: 1.0 means "not the row the estimate was
+computed on". Reading it as (a) treats a NULL as a value, and then "preserve all information"
+argues for materializing a left-outer-join across every observation.
+
+**The second question that was never asked**: does any consumer need the markers? Measured now -
+no. The blib writer has ZERO references to PEP; neither the report writer nor FDRBench touch it.
+The only consumers are two diagnostics dump columns and entry re-seeding.
+
+### The check that should be applied next time
+
+When a value fails the cross-key equality test, before concluding it is per-observation:
+
+1. Is the variation a VALUE or an ABSENCE MARKER? (Does one row carry a real number and the rest
+   a constant?) If the latter, it is a normalized fact and the constant is NULL.
+2. Does any consumer need the marker - i.e. does anything read the per-observation view?
+3. If a value truly fits neither model, that is a DESIGN decision with a contract cost. Say so
+   loudly and get a ruling, rather than choosing the option that preserves bytes.
+
+### The invariant now holds for the right reason
+
+`StreamedCompetitionState.PepWinner(entryId)` does not vary by file, so PEP is now subject to
+the very check that originally rejected it - `Pep` was added to the accumulator's bitwise
+equality set. Unit tests are green; the real proof is a regression run, where the accumulator
+sees one `Add` per observation across three files. NOT yet run - do not claim it until it is.
