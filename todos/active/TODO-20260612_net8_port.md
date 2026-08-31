@@ -5708,11 +5708,13 @@ Re-run end to end after the code review and the two defects above (2026-08-25):
   duplicate of `BullseyeSharpTest.cs` declaring the same class with a different base; master's
   enumerated csproj never compiled it, so an edit to it was silently a no-op.
 - The cpp `VendorReaderTestHarness::assertMzAscending` companion is not ported.
-- **`Skyline/work/20260612_net8_port` no longer exists on origin** (noticed 2026-08-26 when
-  pushing). The surviving branch is `chambem2/pwiz-sharp`, PR #4178's head and what
-  `ProteoWizard_CoreWindowsNet` builds; it contains the merge commit `232b2a440e`. The
-  standing "push to both" directive now has one live target - confirm whether the deletion
-  was intentional before recreating it.
+- ~~**`Skyline/work/20260612_net8_port` no longer exists on origin**~~ **RESOLVED 2026-08-31.**
+  It was absent at ~16:30 UTC on 2026-08-26, which is when this was written, but PR **#4619**
+  ("Port ProteoWizard core to .NET 8") was opened on that branch at 19:38 UTC the same day and
+  the ref has existed since. Nothing was deleted - the branch was simply pushed a few hours
+  after the check. **The standing "push to both" directive has two live targets again**, and
+  both were pushed in sync on 2026-08-31 (`f436051512`). Re-check with `git ls-remote` rather
+  than trusting this line; a negative ls-remote result is only true as of the minute it ran.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
@@ -5827,10 +5829,11 @@ and that `FixtureRunContext`'s `_reader`/`_root`/`_predicate` fields the gate pr
 intact. The full build+test run is what actually settled it. **Re-derive that overlap with
 `git diff --name-only` each time rather than trusting a previous session's claim.**
 
-`Skyline/work/20260612_net8_port` **no longer exists on origin** - `git ls-remote` shows only
-`chambem2/pwiz-sharp` (and `chambem2/pwiz-sharp-mzpeak`). The standing "push both" directive
-is therefore half-stale; there is nothing to push it to, and resurrecting a deleted branch is
-not something to do incidentally. Pushed `chambem2/pwiz-sharp` only.
+`Skyline/work/20260612_net8_port` did not exist on origin at the time of this session -
+`git ls-remote` showed only `chambem2/pwiz-sharp` (and `chambem2/pwiz-sharp-mzpeak`) - so only
+`chambem2/pwiz-sharp` was pushed. **This was a timing artifact, not a deletion**: PR #4619 was
+opened on that branch at 19:38 UTC the same day, ~3 h after the check, and both refs are live
+again. Do not conclude a branch is gone from one `ls-remote`; it is only true for that minute.
 
 ### Build gate
 
@@ -6779,3 +6782,103 @@ the tree contain a `SplitContainer`, not the 3 the failing set happened to expos
   `ViewLibraryDlg.cs:1431`, `FindResultsForm.cs:172`,
   `StatementCompletionForm.cs:124,134`, and lower-traffic `CustomTip.cs`,
   `EditNoteDlg.cs`, `StripePainter.cs`, `Dendrogram{Control,Scale}.cs`.
+
+## 2026-08-31: Core Linux .NET - a guard that measured a different directory than the build
+
+`ProteoWizard_CoreLinuxNet` was red on five builds (#143/#144/#147/#148/#154, all `pull/4587`),
+every one with the same signature and **no failed tests** - it died at Step 2/5:
+
+```
+Requested SDK version: 10.0.100
+global.json file: .../pwiz-sharp/global.json     <- NESTED, not the repo root
+Installed SDKs: 8.0.423
+```
+
+### Finding it at all: the TeamCity branch locator hides builds
+
+`search_builds(build_type_id, branch="pull/4619")` returned 14 consecutive SUCCESS and the PR's
+own checks were all green, which led to reporting the config as healthy. **It was not** - the
+newest build overall was failing. Only `branch="default:any"` shows builds across branches;
+`branch=master` and a bare branch name both return "No builds found" for this config. The
+give-away was already visible and missed: the build numbers on `pull/4619` skip (132-134,
+142-144, 147-148), and a gap in build numbers means builds on other locators.
+
+### Root cause
+
+Both Linux entry points `cd "$SCRIPT_DIR"` (pwiz-sharp) and then did:
+
+```bash
+ensure_dotnet_sdk "$SCRIPT_DIR/.."                    # guard probes the repo ROOT
+dotnet --version || fail "dotnet --version failed"    # guarded command runs in pwiz-sharp/
+```
+
+`global.json` resolution walks **up**, so probing a PARENT cannot see a pin sitting below it.
+With the pin at `pwiz-sharp/global.json`, nothing governed the root, `dotnet` returned the
+newest installed SDK (8.0.423), and the guard reported **satisfied** - then the very next line
+died on the 10.0.100 pin the guard never looked at. A guard and the command it guards have to
+run in the same directory or the guard is measuring something else.
+
+### Fix (`f436051512`) - two halves, both required
+
+- `ensure_dotnet_sdk` now takes *the directory the build runs in*; callers pass `$SCRIPT_DIR`,
+  not `$SCRIPT_DIR/..`. This is what fixes the nested-pin layout.
+- `pwiz_required_sdk_channel` resolves `global.json` by walking up, as dotnet does, instead of
+  reading one fixed path. This is what keeps the root-pin layout working under the new contract.
+
+Renaming the parameter `repo_root` -> `governed_dir` initially left two stale `$repo_root`
+references in the post-install verification, which under `set -u` is an unbound-variable error.
+Caught by grepping the whole function after the rename, not by reading the diff.
+
+### Verification
+
+| check | result |
+| --- | --- |
+| new `scripts/test-ensure-dotnet.sh`, 7 cases | green on the fix, **red on the original** |
+| stub-`dotnet` repro of the CI bug | old contract reports SATISFIED; new contract detects |
+| root-pin layout (4619) under the new contract | detected - no regression |
+| real WSL run, no matching SDK | detected -> downloaded -> installed -> post-install check passed |
+| real WSL run, repo + 10.0 pin | guard satisfied AND `dotnet --version` -> 10.0.400; they agree |
+
+The test is wired into `tcbuild.sh` (sub-second, no network, optional-if-absent like `clean.sh`)
+because a guard nobody runs is the same defect over again.
+
+**A measurement trap worth remembering:** an early "real" end-to-end run reported `need .NET 8.0`
+against a tree pinned to 10.0.100, which looked like a resolver bug. It was quoting - Git Bash
+expanded `$PWD` before handing the command to WSL, so the probe ran against
+`C:\dev\pwiz-msconvert-pr` (whose global.json still pins 8.0.100). When crossing Git Bash -> WSL,
+put the script in a file; nested `$(...)`/`$PWD` inside `wsl bash -c "..."` is not worth debugging.
+
+### The two global.json layouts were both deliberate, and are now one
+
+The first diagnosis - "4587 was cut before the retarget" - was **wrong**. 4587 is *downstream* of
+4619, and `2cb66ee39d` (brendanx67, 08-21) deliberately moved `global.json` to `pwiz-sharp/`:
+back then the root pin was **8.0.100**, which capped the whole repo at the 8.0.4xx band and so at
+**C# 12**, breaking Osprey's publish (`PickLdaModel.cs` binds `SequenceEqual` to
+`MemoryExtensions`, C# 14 only). Moving it let the root float to 10.0.400.
+
+`b882847f21` then retargeted that pin to **10.0.100**, which inverts the argument: a root pin now
+*grants* C# 14 instead of capping it. So the split was obsolete, and `6949d389` moves the pin back
+to the root on 4587. Checked first, as asked: the two files were **byte-identical** (the original
+move was recorded `R100`, a pure rename), and `global.json` cannot pin a language version at all -
+it pins the SDK, and the SDK decides what `LangVersion=latest` resolves to. Osprey and pwiz-sharp
+both use `latest`; pwiz-sharp is `net10.0` on both branches, so Brendan's "target framework stays
+net8.0" premise is also spent.
+
+**Deleting the file outright would have been wrong** - that leaves the tree with no pin, so the
+root floats to whatever SDK the agent has, which is C# 12 on an 8.x-only agent and reintroduces
+exactly the Osprey breakage. Moving it back to the root removes the separate file *and* makes the
+band deterministic.
+
+**Worth being honest about:** with the pin back at the root, 4587's Linux build would pass even
+without `f436051512`, since the guard probes the root and finds it there. The guard fix is not
+load-bearing for this symptom; it is what stops the next layout divergence failing silently
+instead of loudly, which is what turned one bad assumption into five red builds.
+
+### Method notes
+
+- Update a PR from its base with `gh api -X PUT repos/<r>/pulls/<n>/update-branch`, not a local
+  worktree - pwiz is far too large to check out for a one-commit merge. The call is async: re-fetch
+  and confirm with `git merge-base --is-ancestor`.
+- A rename can be committed without any checkout at all via the Git Data API (create tree with
+  `base_tree` + the new path + the old path with `"sha": null`, create commit, PATCH the ref).
+  GitHub reported the result as a single `renamed` file.
