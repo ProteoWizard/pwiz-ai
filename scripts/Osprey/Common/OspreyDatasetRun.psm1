@@ -649,10 +649,27 @@ function Invoke-OspreyDatasetRun {
                                    '.1st-pass.model.json',
                                    '.reconciliation.json',
                                    '.reconciliation.json.FirstPassFDR.osprey.task')
+            # The per-run 2nd-pass sidecar and the decoy side of its competition are
+            # PerFileRescoring outputs since issue #4486 - the worker computes and writes them,
+            # and SecondPassFDR only folds them. This table still listed the sidecar under
+            # SecondPassFDR with the old stamp name, so `-Task SecondPassFDR -LinkFrom` staged
+            # NEITHER file and Stage 7 silently fell back to recomputing every file from the
+            # 1st-pass sidecars. Two Stage-7 A/B measurements were taken that way before anyone
+            # noticed: both arms ran the same fallback, so the comparison showed no difference
+            # and read as "verification is free".
+            #
+            # Safe for the modes that do NOT have a per-file half (transfer, the retrain modes):
+            # those never write a PerFileRescoring-stamped sidecar, so nothing matches and
+            # nothing links.
             'PerFileRescoring' = @('.scores-reconciled.parquet',
-                                   '.scores-reconciled.parquet.PerFileRescoring.osprey.task')
-            'SecondPassFDR'    = @('.2nd-pass.fdr_scores.bin',
-                                   '.2nd-pass.fdr_scores.bin.SecondPassFDR.osprey.task')
+                                   '.scores-reconciled.parquet.PerFileRescoring.osprey.task',
+                                   '.2nd-pass.fdr_scores.bin',
+                                   '.2nd-pass.fdr_scores.bin.PerFileRescoring.osprey.task',
+                                   '.2nd-pass.fdr_decoys.bin',
+                                   '.2nd-pass.fdr_decoys.bin.PerFileRescoring.osprey.task')
+            # Analysis-wide outputs (the blib, the experiment sidecar) are not per-file, so there
+            # is nothing here to hard-link per input. Kept for the shape of the table.
+            'SecondPassFDR'    = @()
         }
         # Everything strictly BEFORE the task under test. No -Task keeps the historical
         # Stage 1-4 behavior, so existing callers are unaffected.
