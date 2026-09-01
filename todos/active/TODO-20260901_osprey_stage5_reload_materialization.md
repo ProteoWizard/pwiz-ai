@@ -294,3 +294,40 @@ Neither subsumes the other.
 
 `Stage5SurvivorBufferBenchTest` for the memory shape (seconds), then a full plate run for
 byte-identity - only output equality counts, not structure.
+
+## Bench at plate scale (2026-09-01) - 31.8x
+
+A single-plate `--task FirstPassFDR` run on the branch build (86 files, 43m53s, exit 0)
+produced the first CURRENT-FORMAT directory carrying `.reconciliation.json`, hence base_ids:
+`chs-86files-libdecoy-r1.0-protein-compact-p0059-fpfdr`. Bench against it:
+
+```
+files 86   passing base ids 373,487   survivors 34,524,236
+COLLECT peak 15.14 GB      STREAM peak 0.48 GB      470 B/entry      reduction 31.8x
+```
+
+Against 3.6x on 12 files - **the ratio grows with the cohort exactly as predicted**, because
+COLLECT is O(files) and STREAM is O(one file). Extrapolated to 446: COLLECT ~136 GB at this
+bench's 470 B/entry (the real run measured ~100 GB with a seeded pool, consistent), STREAM
+~0.7 GB.
+
+**Timing in that report is NOT a valid comparison.** STREAM runs first by design so COLLECT
+cannot benefit from a file cache STREAM warmed - which protects the memory number and ruins the
+time one (402 s vs 181 s here; 21 s vs 22 s at 12 files, where everything fit in cache). The
+per-file load cost is identical for both shapes; only retention differs. A cache-cold A/B in
+both orders would be needed to say anything about wall time.
+
+## Three-point scaling confirms the MECHANISM
+
+| files | survivors | per file |
+|---|---:|---:|
+| 86 | 34,524,236 | 401,444 |
+| 257 | 132,912,754 | 517,170 |
+| 446 | 288,920,200 | 647,803 |
+
+Survivors grow as N^1.23-1.40 while bytes-per-entry stays flat (~218 B managed measured in the
+86-file run's reload, ~274 B documented). So the earlier "heap scales N^1.33" is not the step
+getting more expensive per entry - it is reconciliation transferring detections into files where
+they were not independently found, so there are simply more survivors per file in a bigger
+cohort. Removing the O(files) multiplier is therefore the whole fix, and does not depend on
+shrinking bytes-per-entry first.
