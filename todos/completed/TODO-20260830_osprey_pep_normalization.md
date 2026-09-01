@@ -7,10 +7,18 @@
     Phase 2 both live on PR #4621's branch.
 - **Worktree**: `C:\proj\pwiz`
 - **Created**: 2026-08-30
-- **Status**: In Progress
+- **Completed**: 2026-08-31
+- **Status**: Completed
 - **Issue**: [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
-- **Merges into**: the Phase 2 work in `C:\proj\pwiz-work1`
-  (`Skyline/work/20260827_osprey_stage7_stream_increment`, WIP at `d901a28d10`)
+- **PR**: [#4621](https://github.com/ProteoWizard/pwiz/pull/4621) (merged 2026-08-31 as 091d79a98b)
+- **Merged via**: folded into the Phase 2 branch
+  (`Skyline/work/20260827_osprey_stage7_stream_increment`) at merge commit `c05eb9ab19`,
+  which in turn rode into PR #4621's head branch
+  (`Skyline/work/20260826_osprey_stage7_stream_pool`). All seven commits of this branch
+  (`3e4d94ed58`..`73063e1228`) are in the squashed merge; this branch's tip `73063e1228`
+  verified an ancestor of PR head `5a5c79f5c3`. Its own PR was never opened, and
+  `/pw-complete` for #4621 therefore missed this TODO and the two stacked branches.
+  Both stacked branches deleted 2026-08-31; no separate PR exists for this work.
 
 ## The flaw
 
