@@ -281,3 +281,49 @@ leaves the directory resumable for every iteration after.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260901_osprey_firstpass_resume.md` before starting work.
+
+## (e) The underlying flaw: phase products are persisted at TASK end, not PHASE end
+
+The developer's objection - that three hours of running with files on disk should not be
+unrecoverable - is well founded, and the cause is specific rather than general.
+
+FirstPassFDR has three long phases at 446 files and only ONE writes anything while it runs:
+
+| phase | min | durable output DURING the phase |
+|---|---:|---|
+| train (subset load + SVM) | 21 | **nothing** |
+| pass 1 (score + build experiment competition) | 55 | **nothing** |
+| pass 2 (re-score + emit) | 82 | per-file sidecars |
+| protein FDR | 33 | experiment sidecar, at the end |
+| gate + reload + planning | 40 | reconciliation.json + model.json, at the end |
+
+Die halfway through pass 2 and ~220 valid sidecars are on disk and **unusable**: resuming needs
+the experiment competition maps, which live only in memory and require all of pass 1, which
+requires the model, which requires training. 117 minutes of completed, correct work is lost.
+
+The sharpest form: **the model is trained at minute ~22 and persisted at minute ~250.** For 228
+minutes a few hundred KB of fully-computed state exists only in RAM.
+
+### The fix: persist each phase's product when that phase ends
+
+1. **after training** - persist the model. The artifact already exists
+   (`.1st-pass.model.json`, `FirstPassModelIO.Save`); it is simply called from `PlanStage6`
+   instead of from the end of training.
+2. **after the pass-1 barrier** - persist the experiment maps. Also close to an existing
+   artifact: `out.1st-pass.fdr_experiment.bin` holds the analysis-wide experiment-scope records,
+   but is written after protein FDR. Needs either a two-stage write or a separate maps artifact,
+   because protein q is filled in later.
+3. **during pass 2** - per-file sidecars. Already correct.
+4. **after protein FDR** - experiment sidecar with protein q. Already correct.
+
+With 1 and 2, a death at file 300 of 446 resumes by loading the model and the maps and running
+pass 2 for the remaining 146 files. That is proportional recovery, and it is the forward-scan
+model applied INSIDE a task rather than only across tasks.
+
+What this branch delivered gets partial credit only: model REUSE works, but reads the sidecar
+written at `PlanStage6`, so it helps a completed run and not an interrupted one - which is why
+partial resume reached just 28% (31.4 min against 43.9).
+
+**This is the change that answers the original goal** (a machine lost to a Windows Update
+recovers proportionally). The per-file score guard was necessary but is not sufficient on its
+own.
