@@ -929,6 +929,31 @@ second repository to clone. (On master the same directory is untracked, so a che
 switched from this branch back to master leaves it behind as an untracked leftover. That
 is cruft, not a missing dependency.)
 
+#### Agreeing to the vendor licenses once, per checkout
+
+This branch adds something master has no equivalent for, and it is worth doing first:
+
+```cmd
+cd <checkout>\pwiz-sharp
+.\i-agree-to-the-vendor-licenses.bat
+```
+
+It writes `pwiz-sharp\Directory.Build.user.props` containing
+`<IAgreeToVendorLicenses>true</IAgreeToVendorLicenses>`, which
+`pwiz-sharp\Directory.Build.props` imports when present. That is equivalent to passing
+`-p:IAgreeToVendorLicenses=true` on every build, for this checkout, permanently. The
+generated file is gitignored; the script is in the repository. Re-running it is a no-op,
+and deleting the file opts back out.
+
+**The reason to bother: it is the only way to get the real vendor readers in an IDE
+build.** Visual Studio and Rider have nowhere to put a command-line `-p:` flag, so without
+this file they build the vendor projects in no-vendor-support mode - which fails at
+runtime when opening Thermo, Bruker, Waters, Agilent or Sciex data, rather than at build
+time. `build.bat --i-agree-to-the-vendor-licenses` covers command-line builds only.
+
+Run it once per checkout, and note it lives in `pwiz-sharp\`, not the checkout root.
+There is no Linux equivalent; on Linux pass the property or set it in your own props file.
+
 **The real entry point is in the repository:** `pwiz_tools\Skyline\build.bat`. It is
 thoroughly self-documenting - open it and read the header comment for the full flag list,
 the distro-zip targets, and the `SKYLINE_TEST_*` environment variables. It is the same
