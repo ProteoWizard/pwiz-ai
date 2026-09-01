@@ -87,11 +87,30 @@ It also blocks the HPC direction in
 ## Not yet done
 
 * Fix (b).
-* `ValidityKey` carries no cohort identity, so sidecars from a 446-file run would be adopted by
-  a 257-file run in the same directory, even though first-pass q-values come from a
-  cohort-trained model. Pre-existing for completed runs; (a) widens the window. Deliberately
-  NOT changed on 2026-09-01, because adding cohort identity would invalidate the 446 sidecars
-  currently on disk and destroy the recovery they represent. Decide once those are consumed.
+* ~~`ValidityKey` carries no cohort identity~~ - **WRONG, retracted 2026-09-01.** Asserted four
+  times without checking. `FirstPassFdrTask.ValidityKey` appends
+  `;reconciliation=` + `SearchIdentity.ReconciliationParameterHash()`, which is SHA-256 of
+  (search hash + reconciliation parameters + run FDR + **sorted, deduped input file stems**).
+  Cohort identity is therefore already in the key, unconditionally - the stems are hashed even
+  when reconciliation is disabled.
+
+  Verified against two real runs differing only in cohort:
+
+  ```
+  86-file : ...pick=lda;pickmodel=none;reconciliation=4b988704...;fdrsidecar=6;pass2=protein-compact
+  12-file : ...pick=lda;pickmodel=none;reconciliation=69954401...;fdrsidecar=6;pass2=protein-compact
+  ```
+
+  So "score 82 files, drop another 82 into the directory, start over" is already refused: the
+  stem set changes, the hash changes, the old sidecars are not adopted.
+
+  The granularity is also already correct. `PerFileScoring`'s key has NO stems, which is right -
+  its output is cohort-INDEPENDENT, proven bitwise on 2026-09-01 (a 1-file run reproduced an
+  86-file run's parquet exactly). Adding a cohort term to the base `OspreyTask.ValidityKey`
+  would have invalidated every `.scores.parquet` - 468 GB - to fix a bug that does not exist.
+
+  Stems, not paths, matters here: `LibraryIdentityHash` documents the same choice, and a
+  path-hashed key is what broke `-LinkFrom` when the SEA-AD data moved.
 
 ## (c) The real requirement: PER-FILE guards, not per-phase (developer, 2026-09-01)
 
