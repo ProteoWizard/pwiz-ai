@@ -16,55 +16,71 @@ memory, reading them back from the .skyd on demand per peptide instead.
 
 ## Architecture
 
-A `DocNode` stops being the place complete result information comes from. It reliably
-exposes only **retention time, area, and a few flags** (e.g. truncated). Everything else
-lives in the .skyd and is reached through a new object that represents **one
-`PeptideDocNode` plus all of its result information for all replicates**. Callers build
-one, calculate with it, and let it go.
+Two pieces, both landed:
 
-The conversion of existing readers is the bulk of the work, not a side effect of it.
-Nothing can be dropped from `TransitionChromInfo` until its readers go through the facade.
+**The columnar resident form.** A `DocNode` stops being the place complete result
+information comes from. `TransitionGroupResults`, held by the precursor, owns all of the
+result values for the precursor AND its transitions: the dense values every peak has live
+in one struct per level (`PrecursorPeak`, `TransitionPeak`), each held as a single
+`ChromFileIdMap<TStruct>`; the sparse values only some peaks have (`Annotations`,
+`QValues`, `ZScores`, `UserSets`, `OriginalPeakIndexes`, `ReintegratedPeakIndexes`,
+`CustomPeakBounds`) get a `ChromFileIdMap` each, which `MaybeConstant()` collapses when
+absent or uniform. A cell is 4 bytes in a flat array rather than a 104-byte object: the
+transition level goes from ~15.1 GB to roughly 660 MB on the reference document, the
+precursor level from 1.8 GB to ~180 MB (layout arithmetic - the live heap measurement is
+still owed).
+
+**The on-demand facade.** Everything else lives in the .skyd and is reached through
+`MoleculeResults` - one object representing one `PeptideDocNode` plus all of its result
+information for all replicates. Callers build one, calculate with it, and let it go.
+Rebuilt `TransitionChromInfo`/`TransitionGroupChromInfo` objects exist only inside such a
+call; after a successful load they live nowhere on the document.
 
 `TransitionChromInfo`'s peak-derived fields are exactly the contents of one `ChromPeak`
 (~48 of its 104 bytes): MassError, RetentionTime, Start/EndRetentionTime, Area,
 BackgroundArea, Height, Fwhm, IsFwhmDegenerate, IsTruncated, PointsAcrossPeak,
 IsForcedIntegration, PeakShapeValues, Identified. The rest - FileId, OptimizationStep,
-IonMobility, Rank, RankByLevel, Annotations, UserSet - is not peak data and stays.
+IonMobility, Rank, RankByLevel, Annotations, UserSet - is not peak data and lives in the
+columnar form.
 
-Rejected along the way: abstract base with compact/full subclasses; per-object lazy
-loading behind a resolver back-pointer.
+Rejected along the way: shrinking `TransitionChromInfo` in place (a compact row saved only
+~31% and the win rode entirely on most peaks being Skyline-detected); an abstract base
+with compact/full subclasses (built, then reverted); per-object lazy loading behind a
+resolver back-pointer (turns a report export into millions of random reads).
 
-### What compact actually buys, exactly
+The general rule (Nick): anything needed only once is worked out by constructing a
+`MoleculeResults` while making one pass through the document - or, where only columnar
+values and static per-transition data are needed (the dot products), computed with no
+chromatogram read at all.
 
-`TransitionChromInfo` today, x64, 104 bytes:
+## Current State (2026-09-01)
 
-| part | bytes |
-|---|---:|
-| object header | 16 |
-| `FileId`, `IonMobility`, `Annotations` (3 refs) | 24 |
-| `OptimizationStep`, `Rank`, `RankByLevel`, `_flags` (4 shorts) | 8 |
-| `_massError`, `_pointsAcrossPeak` (2 shorts) | 4 |
-| 7 floats: RetentionTime, Start, End, Area, BackgroundArea, Height, Fwhm | 28 |
-| `PeakShapeValues` | 16 |
-| `UserSet` | 4 |
-| | **104** (100 padded) |
+Last work commit `fcb132e18` (2026-08-20); master is merged in through 2026-09-01 and the
+branch is in sync with origin. Working tree clean.
 
-Moving the peak payload behind a reference and keeping only Area + RetentionTime:
+What holds now:
 
-- compact row: **~72 bytes**, a 31% saving
-- custom-peak row: **~144 bytes** (72 + a separate ~72 byte peak object), 38% *worse*
+- **Both node levels are columnar.** `TransitionDocNode` and `TransitionGroupDocNode`
+  carry no chrom infos after a load; the `Results` accessors that survive report empty and
+  exist only for unconverted readers. `LegacyChromInfos` is populated only between reading
+  a document and reading its .skyd.
+- **Save writes the columnar form** (`MoleculeWriter`/`MoleculeReader` over `XElement`); a
+  transition's peak is left out of every file its precursor speaks for, and the
+  precursor's peak says what its transitions share.
+- **The three retention holders found by dotMemory are fixed** (skipped conversion on the
+  open-with-cache path, hidden `GraphChromatogram` pinning a document, `MoleculeResults`
+  kept for uncharted molecules) - but no live before/after heap measurement on the
+  reference document has been made, and every earlier "the retention is fixed" claim was
+  wrong at least once. Treat the saving as unverified until dotMemory says so.
+- **Known failing** (2026-08-18 sweep): `ConsoleRefineResultsTest`, `TestAnnotations`,
+  `TestAddIrtStandards` - each blocked on a decision or diagnosis (see Remaining/Open
+  Questions), not on mechanical conversion. The full functional and tutorial suites have
+  not been re-measured since the 104-failure SkylineTester.log baseline; the fast suites
+  plus a 44-test Release run are the verified signal.
 
-So the win rides entirely on most peaks being Skyline-detected. On the reference
-document that is ~31% of 14 GB, roughly **4.3 GB**.
-
-To get past that the three references have to go too. `IonMobility` and `Annotations`
-are almost always the shared EMPTY singletons, and ion mobility is already aggregated
-up to the group (`IonMobilityInfo.AddIonMobilityFilterInfo`). Moving both to the group
-takes a compact row to **~52 bytes**, a 50% saving, ~7 GB.
-
-`ChromPeak` itself is ~52 bytes (7 floats + flags + massError + pointsAcross + 4
-peak-shape floats), so storing one inline as a transitional step costs +4 bytes per
-row before any of the saving arrives.
+Startup and verification-loop protocol: `ai/.tmp/handoff-20260728_chrominfo_memory.md`
+(written 2026-08-12 - its failing-test list is stale, the build/test-loop instructions and
+gotchas are not).
 
 ## Task Checklist
 
@@ -74,7 +90,6 @@ row before any of the saving arrives.
 - [x] Agree the design: minimum resident, explicit coarse-grained load per `PeptideDocNode`
 - [x] `PeptidePeakLoader` / `LoadedPeptidePeaks` - read every candidate peak for a peptide
 - [x] `PeptidePeakLoaderTest` - prove cache values reproduce `TransitionChromInfo` exactly
-
 - [x] Key candidate peaks by optimization step - each step is its own chromatogram with
       its own candidate peaks
 - [x] `MoleculeResults` - one object per `PeptideDocNode` carrying all result information
@@ -85,113 +100,202 @@ row before any of the saving arrives.
 - [x] Rebuild the group level values by driving the existing calculator
       (`TransitionGroupChromInfoListCalculator`, made internal) rather than a second copy
 - [x] Assign ranks and calculate dot products while materializing
-- [x] One factory for all replicates or a single one
 - [x] Converge the other readers onto it: `OnDemandFeatureCalculator` (and so
       `CandidatePeakForm` through `CandidatePeakGroupFactory`) and `GraphChromatogram`
-
 - [x] Cover the paths `AgilentMix` cannot reach: optimization steps (`AgilentCEOpt`) and
-      the dot products (`BlibDriftTimeTest`), each with a guard so the new assertions
-      cannot pass vacuously
+      the dot products (`BlibDriftTimeTest`) - later cut back while the design was moving;
+      restoring them is Remaining item 6
 - [x] `OriginalPeak` derived rather than stored - `ChangeResults` recalculates it from the
       chromatogram every time, so it needs no home in the columnar classes
+- [x] `ReintegratedPeak` resolved: the bounds are not needed, the peak *index* is (for
+      retention time alignment and peak imputation). `TransitionGroupResults` has
+      `ChosenPeakIndexes`, `OriginalPeakIndexes` and `ReintegratedPeakIndexes`
+- [x] Convert `TransitionDocNode`/`TransitionGroupDocNode` to the columnar classes; doc
+      nodes carry no chrom infos of their own (2026-07-30..08-01)
+- [x] A transition's results owned by its precursor; `TransitionResults` private, nested
+      in `TransitionGroupResults` (2026-08-01)
+- [x] Dense values in one struct per level (`PrecursorPeak`, `TransitionPeak`) held as a
+      single `ChromFileIdMap`; sparse values a map each (verified in code 2026-09-01)
+- [x] `IndexOfFile` off the results classes - only `ChromFileIds` keeps it, for
+      `MergeSource.Build`-style alignment (verified 2026-09-01)
+- [x] `CustomPeak` dissolved into `CustomPeakBounds` plus per-value sparse maps
+- [x] The retention holders: conversion on the open-with-cache path, hidden graph
+      pinning, `MoleculeResults` pruning in `GraphChromatogram.UpdateUI` (2026-08-02)
+- [x] `UpdateResultsSummaries` removed; quantification, refinement and the dot products
+      read the columnar results or compute in memory with no chromatogram read
+- [x] The 13-failure legacy-accessor sweep: peak area, global/surrogate standard
+      normalization, CV refinement, rdotp graph line, Apply Peak To All, candidate peak
+      form, per-file scheduling times, detection plot, spectral library export (2026-08-18)
+- [x] Save/load round trip in the columnar format; `MoleculeWriter`/`MoleculeReader` over
+      `XElement`; shared transition areas ride the precursor (2026-08-13..20)
 
-- [x] `ReintegratedPeak` resolved: the bounds are not needed. What is needed is the peak
-      *index*, for retention time alignment and peak imputation. `TransitionGroupResults`
-      now has `ChosenPeakIndexes` (renamed from `CandidatePeakIndexes`, since it holds the
-      currently chosen peak), `OriginalPeakIndexes` and `ReintegratedPeakIndexes`
+### Remaining
 
-### In Progress
-- [ ] Convert `TransitionDocNode`/`TransitionGroupDocNode` to hold the columnar classes
+Verified against the code on 2026-09-01 wherever line numbers or counts are given.
 
-### Remaining - columnar storage shape (decided 2026-07-31)
+1. [ ] **The node-addition gap** - highest value; several things wait on it. A node just
+       added by picking, refining or importing has no columnar values until a results pass
+       runs, and nothing fills them in. Symptoms already traced to it:
+       `MoleculeResults.GetPeptideChromInfos` must prefer the .skyd over the columnar
+       values (columnar-first broke all four `FullScanFilterTest` variants), and
+       `ResultsRank` survives as `ResultsRank ?? GetTransitionAverageRank` because
+       `IrtDb.GenerateDocumentXml` ranks nodes whose transition results were never read
+       back. The precursor pass DOES run and DOES read the .skyd when transitions are
+       added - two of three peaks come back with flags `IsGoodPeak` rejects, and what
+       moves those flags is the unanswered question. Diagnostic to run: print `Area`,
+       `IsEmpty` and `IsForcedIntegration` for LVNELTEFAK's three transitions in
+       `FullScanFilterTest` after the refine, then again after a forced results pass.
+2. [ ] **Readers still on the emptied chrom infos** - each answers nothing for a normally
+       loaded document: `PeakBoundaryImputer` 500/666, `RetentionTimeRegressionGraphData`
+       388 (`GetMaxQValue` answers 1.0, so `PointsTypeRT.targets_fdr` drops every peptide
+       from the regression), `GraphSummary` 580, `RTPeptideGraphPane` 129,
+       `SummaryPeptideGraphPane` 552/700. The graph ones are static with only a
+       `TransitionGroupDocNode` in hand, so a `MoleculeResults` has to be threaded down
+       from the callers - a design question - and `CalcStats` also wants mass error, which
+       the columnar results do not carry. Also matching by grep, each needing its own
+       check that the read is reached at all: `PeakImputationRescoreTest`,
+       `PeakImputationWithBatchesTest`, `RunToRunAlignmentTest`.
+3. [ ] **Delete the surviving legacy accessor family on `TransitionGroupDocNode`** once
+       (2) is done: `ChromInfos`, `GetChromInfos`, `GetSafeChromInfo`,
+       `GetChromInfoEntry`, `AveragePeakCountRatio`. An accessor which compiles and
+       answers nothing is the trap this branch keeps falling into - two of the four
+       original families were deleted for exactly that reason.
+4. [ ] **What refreshes the columnar results when a document opens with its cache** - the
+       `ConsoleRefineResultsTest` question (one peptide out; its computed dot product
+       matches the stored `library_dotp` to every digit, so the areas are the stored 2019
+       values, not recalculated ones). The node-addition gap in another shape.
+5. [ ] **The `.EmptyResults[...]` test sites** - 18 left in 6 files: `ImportDocTest` (11),
+       `ShimadzuSrmDuplicateQ1Test` (2), `ManageResultsTest` (2), and one each in
+       `DiannSearchPerfTest`, `PerfMs3ChromatogramTest`,
+       `PerfHighEnergyIonMobilityOffsetForPRM`. Each is a test asserting about no peaks,
+       passing vacuously.
+6. [ ] Restore the `MoleculeResultsTest` coverage cut while the design was moving:
+       optimization step positions (`AgilentCEOpt`), the dot products
+       (`BlibDriftTimeTest`), the stored `ChosenPeakIndexes` path. `AgilentMix.zip` has no
+       library, no isotope distribution and no optimization function, so those assertions
+       are vacuous on it; the class comment on `MoleculeResultsTest` lists the gaps.
+7. [ ] `TestAddIrtStandards` - fails at line 90 waiting for `AddIrtStandardsToDocumentDlg`
+       on a new document, which `Skyline.cs:2185` only shows when the calculator has
+       document XML or `IrtStandard.WhichStandard` matches; the 20 CiRT peptide calculator
+       has neither. `IrtFunctionalTest`, which asserts the document XML directly, passes.
+8. [ ] Re-run the full functional and tutorial suites - 67 + 9 of the original 104
+       failures have not been re-measured since several fixes landed.
+9. [ ] **Live heap baseline before/after on the reference document** (dotMemory). This is
+       the number the branch exists for.
+10. [ ] `TestCommandLineImportPeakBoundary` hangs under `-UseTestList` though it completes
+        alone - unexplained; keep it out of batch runs until diagnosed.
+11. [ ] Revisit deliberately: taking `ReadStream.ReaderWriterLock.GetReadLock()` in
+        `ChromatogramCache.CallWithStream` instead of the retry-once - blocked by a
+        lock-order inversion with `ConnectionPool.DisconnectWhile` (detail in the
+        2026-07-30 (5) log entry).
+12. [ ] Separate opportunity: deduplicate `ChromTransition` in
+        `ChromatogramCache.RawData` - 96x redundant byte for byte on the reference
+        document (~33 MB unique of 3.2 GB), no file format change needed.
+13. [ ] Cleanup: `OnDemandFeatureCalculator.GetTransitionPeakBounds` is `virtual` with no
+        subclass anywhere - vestigial.
+14. [ ] Run ReSharper inspection before the PR (`Build-Skyline.ps1 -RunInspection`).
 
-The direction: **dense values that every peak has go in one struct; sparse values that
-only some peaks have get a `ChromFileIdMap` each.** The map-per-column shape that
-`TransitionResults` and `PeptideResults` now have is a step towards this, not the
-destination.
+Probably superseded - verify before working them (written 2026-07-31, partly overtaken by
+the 2026-08-14..19 serialization commits): `ChromFileIdMap.Join` for walking two maps over
+different `ChromFileIds` (the `RelateResults`/`PositionSource` machinery in
+`TransitionGroupResults` may already cover it), and "`TransitionResults` stores a value
+only where the user moved that transition's boundaries independently" (the writer now
+leaves a transition's peak out wherever its precursor speaks for it; whether the in-memory
+form should follow is undecided).
 
-- [ ] `TransitionGroupResults`: one struct for the dense values - `RetentionTime`,
-      `StartTime`, `EndTime`, `ChosenPeakIndex` - held as a single
-      `ChromFileIdMap<ThatStruct>` rather than four parallel lists. Every peak has all
-      four, so nothing is wasted by keeping them together, and it is one indirection per
-      peak instead of four
-- [ ] `TransitionGroupResults`: the sparse values keep a `ChromFileIdMap` each -
-      `Annotations`, `QValues`, `ZScores`, `UserSets`, `OriginalPeakIndexes`,
-      `ReintegratedPeakIndexes`. These are absent or uniform in most documents, which is
-      what `MaybeConstant()` collapses; putting them in the dense struct would undo that
-- [ ] `TransitionResults`: eventually **no positionally-matched lists at all**. A
-      transition stores a value only where the user moved *that transition's* peak
-      boundaries independently of the rest of its precursor's. Everything else -
-      `Areas`, `Truncated`, `EmptyPeaks`, `Identified`, `ForcedIntegration` - comes back
-      from the .skyd via the precursor's chosen peak index.
-      NOTE: this partly undoes the current map-per-column work on `TransitionResults`.
-      Decide the transition-level shape before converting anything else there
-- [ ] `CustomPeak`: drop `Annotations` (a `ChromFileIdMap<Annotations>` on
-      `TransitionResults` instead, mirroring the precursor). Then `StartTime`/`EndTime`
-      stop being nullable - a `CustomPeak` without bounds cannot exist - and
-      `HasPeakBounds`/`IsEmpty` go with them, since a null entry in the list already
-      means "no custom peak"
-- [ ] `ChromFileIdMap.Join<TOther>(other)` for walking two maps over *different*
-      `ChromFileIds` - precursor against transition, which is where position leakage
-      lives. Proposed shape:
-      `IEnumerable<(int ReplicateIndex, ChromFileInfoId FileId, T Value, TOther OtherValue)>`,
-      a value tuple rather than `Tuple<>`. Open: inner join only, or surface the miss?
-      Inner covers `GetSharedTransitionAreas`; keep `TryGetValue` for single lookups.
-      Maps over the *same* `ChromFileIds` need no join - they are aligned by construction
-- [ ] Finish removing `IndexOfFile` from the results classes. Still public on
-      `TransitionResults`, `TransitionGroupResults`, `PeptideResults`, and these callers
-      still find-then-index: `PeptideQuantifier.FindQValue`; `MoleculeResults` 431, 482,
-      563, 604 (563 stores a position per transition in an array and reads it back at 649
-      - the most fragile); `PeptideDocNode` 386 and 1635; `PeptideResult` 197;
-      `TransitionGroupDocNode.GetPrecursorAnnotationPosition`; `MoleculeResultsTest` 249.
-      `ChromFileIds.IndexOfFile` itself stays - `MergeSource.Build` needs it to align two
-      layouts, which is the one place a raw position is the actual subject
+## Open Questions for the Developer
 
-Traps, both of which have already cost time:
+- Are the stored `<precursor_peak>` values used after load, or recalculated from the
+  children anyway? Trace `UpdateResults` / `CalcChromInfoList` in
+  `TransitionGroupDocNode`. `DocumentReader` already discards the stored `user_set` on the
+  grounds that "all values are still calculated from the child transitions".
+- Per-optimization-step precursor annotations (`TestAnnotations`): the columnar results
+  hold step zero only and give every step the step-zero annotations, so two results-grid
+  rows differing only by step cannot hold different annotations. Refuse the edit in the
+  grid, or design a per-step annotation? Not something to decide from the test.
+- `RefineResultsTest` on a loaded document (Nick's direction: load the document rather
+  than trusting stored results). No document in Refine.zip can host it - `SRM_mini.sky`
+  names 55 raw files that do not exist and has no .skyd; the single-replicate variant
+  loads but re-derives to different counts (`RTRegressionThreshold = 0.3` cuts 36 peptides
+  to 2 - peak picking drift since 2010, not an accessor bug). `CommandLineRefine.zip`'s
+  document is the only loaded multi-target refinement document in the repo, and
+  `ConsoleRefineResultsTest` already uses it. Decision needed: new test data, re-derived
+  expected numbers on the CommandLineRefine document, or leave as is. (Full analysis in
+  the 2026-08-06 log entry.)
+
+## Traps
+
+All of these have already cost real time on this branch. The log entries carry each one's
+story; this is the consolidated list to check before working.
+
 - `ChromFileIdMap` is an `IReadOnlyList<IEnumerable<T>>`, so `map.Count` is the
-  **replicate** count and `map.ToArray()` is an array of enumerables. Test comparisons
-  need `.Values.ToArray()`
-- Do not use `perl -0pi` with `s|...|...|` on these files; an unescaped `|` in a
-  replacement clobbered the head of `TransitionGroupResults.cs`
-
-### Remaining - the rest
-- [ ] Convert the readers to the facade. Ordering matters: the document cannot be put
-      into compact format until the readers stop reading dropped values off the DocNode,
-      so Reintegrate is the LAST step of this sequence, not the first
-- [ ] The four accessor families still backed by `LegacyChromInfos`, which is null for any
-      normally-loaded document: `TransitionGroupDocNode.ChromInfos`, `GetSafeChromInfo`,
-      `GetChromInfoEntry`, and the `Average*` properties. ~150 call sites; each needs a
-      `MoleculeResults`. Until then they answer "no peaks" wherever they are read
-- [ ] The ~130 test sites now saying `.EmptyResults` - each is a test asserting about no
-      peaks, and needs moving onto a `MoleculeResults`. `RefineTest` and `AnnotationTest`
-      are currently passing vacuously
-- [ ] Commit N-2: compact storage - `Area` + nullable custom-peak ref per transition cell,
-      `PeakIndex` on the group
-- [ ] Commit N-1: make Refine > Reintegrate produce the compact form
-- [ ] Commits 3..n: convert readers - reports/databinding, results grid, scoring and
-      reintegration, export
-- [ ] Commit N: delete the obscure properties from `TransitionChromInfo`
-- [ ] Live heap baseline against the reference document (before/after)
-- [ ] Separate opportunity: deduplicate `ChromTransition` in `ChromatogramCache.RawData`
-- [ ] Run ReSharper inspection before the PR (`Build-Skyline.ps1 -RunInspection`)
+  **replicate** count and `map.ToArray()` an array of enumerables. Test comparisons need
+  `.Values.ToArray()`.
+- **Never weaken `ChromFileIdMap.Equals`** to look past file identity - it deadlocks the
+  loader (results with unchanged values but new file ids are kept as "unchanged", every
+  `IndexOfFile` lookup then fails, nothing ever loads). Clear ids with
+  `SrmDocument.ClearChromFileIds` before a comparison and nowhere else; a cleared document
+  is for reading only - serializing it re-derives chrom infos from a .skyd it cannot find.
+- A user set peak CAN be one of the candidate peaks - the user may pick a candidate whose
+  boundaries match exactly. Do not reintroduce the opposite assumption
+  (`DropTransitionPeakBounds` exists because of it).
+- `ResultsTestDocumentContainer` does NOT load the cache unless the document is handed to
+  it as a change: `new ResultsTestDocumentContainer(docOld, path)` then
+  `SetDocument(docNew, docOld, true)`. Constructing with the target document and calling
+  `AssertComplete()` reports loaded while nothing is.
+- A one-replicate test document cannot see retention failures; any test of the retention
+  needs several replicates.
+- `TestReintegrateDlg` is flaky AND order-dependent (same family:
+  `TestPeakBoundaryCompare`, `TestMultiInjectRescore`). Never use it as a regression
+  signal.
+- The run summary's "N failures" column is a **running total**, not per-test; count the
+  `!!! ... FAILED` markers. An unknown test name in a list is silently skipped.
+- `Run-Tests.ps1` builds the log file name from `-TestName`, so more than about four names
+  exceeds MAX_PATH and the run dies before starting; use `-UseTestList` for batches. The
+  inspection test is named `CodeInspection`, not `TestCodeInspection`.
+- No `perl -0pi` / `sed -i` on tracked files - line endings get rewritten, and an
+  unescaped `|` in a replacement once clobbered the head of `TransitionGroupResults.cs`.
+  Use the Edit tool.
+- Do not key dictionaries on `GlobalIndex`; use `ReferenceValue<T>`.
+- `MoleculeResults` holds `ChromatogramGroupInfo` objects across calls, so anything
+  keeping one across a cache swap has use-after-close exposure (`DocumentWriter` keeps one
+  per molecule while writing, `GraphChromatogram` one per molecule).
+- The three peak index lists usually share one instance (`ShareEqualIndexes`) - estimate
+  memory as one list, not three.
+- Get the exception before theorising about a hang, and check the diagnostic already in
+  hand before adopting an explanation - each failure mode cost multiple build-and-run
+  cycles here at least once.
 
 ## Key Files
 
-- `pwiz_tools/Skyline/Model/Results/MoleculeResults.cs` - new; all result information for
-  one molecule, plus `TransitionPeaks` and `TransitionGroupChromInfos`
-- `pwiz_tools/Skyline/TestData/Results/MoleculeResultsTest.cs` - new; validation test
-- `pwiz_tools/Skyline/Model/Results/DocNodeChromInfo.cs` - `TransitionChromInfo` (104 bytes),
-  `TransitionGroupChromInfo` (144 bytes); where the compact storage lands
-- `pwiz_tools/Skyline/Model/TransitionGroupDocNode.cs` - `TransitionGroupChromInfoCalculator`
-  aggregates every group value from the child transitions
-- `pwiz_tools/Skyline/Model/Results/ChromHeaderInfo.cs` - `ChromPeak`, `ChromGroupHeaderInfo`,
+- `Model/Results/TransitionGroupResults.cs` - the columnar resident form: `PrecursorPeak`,
+  `TransitionPeak`, the sparse maps, nested private `TransitionResults`
+- `Model/Results/ChromFileIds.cs`, `Model/Results/ChromFileIdMap.cs` - interned file
+  identity and the per-column map
+- `Model/Results/MoleculeResults.cs` - the on-demand facade; all result information for
+  one molecule across all replicates
+- `Model/Serialization/MoleculeReader.cs`, `Model/Serialization/MoleculeWriter.cs` -
+  columnar save/load over `XElement`
+- `Model/Results/DocNodeChromInfo.cs` - `TransitionChromInfo` (104 bytes),
+  `TransitionGroupChromInfo` (144 bytes); rebuilt on demand only
+- `Model/TransitionGroupDocNode.cs` - `TransitionGroupChromInfoCalculator`; the surviving
+  legacy accessor family (Remaining item 3)
+- `Model/Results/ChromHeaderInfo.cs` - `ChromPeak`, `ChromGroupHeaderInfo`,
   `ChromTransition`
-- `pwiz_tools/Skyline/Model/Results/ChromatogramCache.cs` - `RawData` holds the header arrays
-  fully resident
+- `Model/Results/ChromatogramCache.cs` - `RawData` holds the header arrays fully
+  resident; `CallWithStream` and its retry
+- `TestData/Results/MoleculeResultsTest.cs` - validation test (its class comment lists the
+  coverage gaps)
+
+(All paths relative to `pwiz_tools/Skyline`.)
 
 ## Progress Log
 
-### 2026-07-28 - Session 1
+Chronological. Session numbering in the original log had drifted (two "Session 5"s, two
+"Session 6"s, July entries filed after August ones); entries are now ordered and titled by
+date, with the sequence number in parentheses.
+
+### 2026-07-28 (1) - Baseline measured; PeptidePeakLoader
 
 **Baseline measured** from the .skyd cache header of
 `I:\bugs_i\maccoss\20260722_MemoryOptimization\TnE_2a_rerun_plate1_annotated`
@@ -261,7 +365,8 @@ Height, Fwhm and MassError all match the cache exactly.
 
 Build succeeds; `TestLoadedPeaksMatchTransitionChromInfo` passes in 1 second.
 
-### 2026-07-28 - Session 2
+
+### 2026-07-28 (2) - The columnar sketch
 
 The columnar sketch (`TransitionGroupResults`, `TransitionResults`, `ChromFileIds`) is the
 agreed shape and supersedes shrinking `TransitionChromInfo` in place. A cell stops being an
@@ -287,7 +392,7 @@ GraphChromatogram needs all of them anyway. Do not optimize peak reading without
 off `TransitionDocNode.LibInfo` / `IsotopeDistInfo`, which are per-transition static data
 that do not vary by replicate, so the dot products need no library file access.
 
-### 2026-07-29 - Session 3
+### 2026-07-29 (3) - MoleculeResults; conversion in ConvertResults
 
 Both result forms now live on the doc nodes at once (`AbbreviatedResults` derived from
 `Results` on first use), so readers convert one at a time. Setting `Results` discards the
@@ -453,7 +558,285 @@ so the wrong kind still compiles, and it does not lead back to the object in a d
 `ReferenceValue<T>`, with `GlobalIndex` still allowed for existing code.
 
 
-### Session 6 (2026-08-01) - ownership move, encapsulation, chrom infos off the nodes
+### 2026-07-30 (4) - Columnar results authoritative on transitions; TestRescore hangs
+
+Branch pushed to origin for the first time (`Skyline/work/20260728_chrominfo_memory`).
+
+**The columnar results are now what a transition has.** `TransitionDocNode.Results` is always
+empty and `AbbreviatedResults` is a plain property, not derived from anything. Reading a document
+written the old way turns its chrom infos into columnar results as it goes. `File > Save` writes
+the columnar form; sharing still writes every chrom info attribute for Panorama, which means
+`DocumentWriter` works them out again through a `MoleculeResults` per molecule.
+
+A precursor carries its transitions' areas in a `transition_areas` attribute and those transitions
+are not written at all, but only where every one of them is ordinary at that file. A transition
+left out has exactly the files the precursor carried areas for, which is what lets the reader know
+which positions it owns.
+
+`GraphChromatogram` gets its chrom infos from `MoleculeResults`, keyed on the `IdentityPath` to the
+molecule. `_document` is what the graph thinks the document is, taken when it updates;
+`OnDocumentUIChanged` compares against it rather than `e.DocumentPrevious`, which differ whenever
+the graph missed an update.
+
+**TestRescore hangs, and it is not a slow loop.** Bisected: not the compact save format, not the
+graph changes, not the `AbbreviatedResults` simplification. It is the "Results always empty" change
+in `07e082999`. The developer found the cause: an `ObjectDisposedException` reading peaks from a
+`ChromatogramGroupInfo` whose cache stream has been closed, inside `CalcResultsForReplicate` during
+`UpdateResultsSummaries`, while the rescore is replacing the cache. `ParallelEx.For` propagates it
+correctly, so something further up - the chromatogram loader - is catching and retrying forever.
+
+Two effects of this work widen the window: `Results` being empty means `CalcResultsForReplicate`
+reads peaks it used to reuse, and `ConvertResults` reads every chromatogram of a molecule during
+the settings pass. Note also that `MoleculeResults` *holds* `ChromatogramGroupInfo` objects across
+calls, so anything keeping one across a cache swap has the same use-after-close exposure -
+`DocumentWriter` keeps one per molecule while writing, `GraphChromatogram` one per molecule.
+
+**Known failing**: `TestRescore` (above) and `TestCandidatePeaks` (an in-session peak edit does not
+survive `UpdateResults`, since nothing rebuilds chrom infos from the columnar results yet).
+
+**Lesson worth keeping**: three code-level hypotheses about the hang were all wrong, and each cost
+a four minute build-and-run cycle. The stack trace settled it immediately. Get the exception before
+theorising about a hang.
+
+
+### 2026-07-30 (5) - TestRescore hang fixed in ChromatogramCache.CallWithStream
+
+**The TestRescore hang is fixed.** `TestRescore` passes again in 20 seconds. The other four
+rescore tests (`TestRescoreImportDocument`, `TestRescoreSimultaneous`, `TestRescoreInPlace`,
+`TestRescoreRawChromatograms`) pass as well, as do the five verification tests from the handoff.
+
+**Where the exception went.** The previous session's guess - that the chromatogram loader catches
+and retries forever - was wrong, and the diagnostic was worth the two build cycles it cost.
+`Loader.FinishLoad` does rethrow the `ObjectDisposedException`, because
+`ExceptionUtil.IsProgrammingDefect` is true for it, but the throw happens on the
+**`Commit loaded files`** thread - the `QueueWorker` inside `FileLoadCompletionAccumulator`.
+`QueueWorker.Consume` catches everything into its `Exception` property and calls `Abort()`, and
+nobody ever reads that property. So the commit worker stops, no further completions are
+committed, the document never becomes loaded, and `WaitForDocumentLoaded` waits forever. A
+silent worker abort, not a retry loop. `FinishLoadSynch`'s `do/while` was never looping: it
+printed "pass 1" on every call.
+
+**The fix is in `ChromatogramCache.CallWithStream`.** It handed out `ReadStream.Stream` and read
+from it without holding anything that stops `CloseRemovedStreams` disposing it underneath -
+`PooledFileStream.Disconnect` takes the connection pool's monitor and the stream's write lock,
+neither of which `CallWithStream`'s `lock (ReadStream)` excludes. It now retries once on
+`ObjectDisposedException`, which either reconnects to the file or, when the file on disk has been
+replaced, throws the `FileModifiedException` from `PooledFileStream.Connect` that
+`CalcResultsForReplicate` and `UpdateResults` already catch and fall back from. Converting the
+race into the signal the existing handlers were built for, rather than inventing a new one.
+
+Rejected: taking `ReadStream.ReaderWriterLock.GetReadLock()` around the read, the way
+`ReadDataForAll` does. It is the tidier fix but it nests the connection pool's monitor inside the
+read lock, while `ConnectionPool.DisconnectWhile` takes them the other way round - a lock order
+inversion. Worth revisiting deliberately rather than as a side effect of this branch.
+
+**The silent swallow is fixed too**, at the developer's direction, on this branch rather than its
+own. `FileLoadCompletionAccumulator.Commit` is the one place every batch of loaded files is handed
+to the loader, from either the "Commit loaded files" worker or the "Load file" worker when there
+is nothing to accumulate. Both are `QueueWorker` threads, which put anything thrown into an
+`Exception` property nothing reads. It now catches and reports the failure **as a file which
+could not be loaded** - a `Completion` carrying `ChangeErrorException` - so `FinishCacheBuild`
+routes it to `MeasuredResults.Loader.Fail`, and from there to the load monitor. The user sees the
+ordinary "Failed importing results into '<document>'" error with the exception attached, and
+committing goes on to the next batch instead of stopping for the session.
+
+Not `Program.ReportException`, which is for actual defects in Skyline; most of what can arrive
+here is a user-actionable load failure. Verified by backing the `CallWithStream` fix out again:
+the hang became a `MessageDlg` reading "Failed importing results into 'Rat_plasma.sky'. Cannot
+access a closed file." and a test failure in 17 seconds.
+
+That verification also turned up a **second** racing read the first stack trace never showed:
+`MoleculeResults.ConvertResults` -> `FindChosenPeakIndex` -> `IndexOfPeak`
+(`MoleculeResults.cs:383`), reached from `UpdateTransitionGroupNode`, distinct from the
+`CalcResultsForReplicate` path. Both are covered, because the fix is at the read boundary rather
+than at either call site. Worth remembering that this branch has more than one place where the
+settings pass reads a chromatogram that may be swapped underneath it.
+
+**Known failing**: `TestCandidatePeaks` only, unchanged - the in-session peak edit does not
+survive `UpdateResults` (expected 60, got 109.88 at `CandidatePeakTest.cs:92`). That is the next
+job: `UpdateResults` should rebuild from `ChosenPeakIndexes`/`CustomPeaks` rather than re-picking
+peaks from the .skyd.
+
+### 2026-07-31 (6) - The precursor goes columnar; UpdateResultsSummaries removed
+
+**The columnar results are now what a precursor has.** `TransitionGroupDocNode.AbbreviatedResults`
+is the authoritative field, and `Results` always reports an empty list per replicate, the way
+`TransitionDocNode.Results` already did. `TransitionGroupResults` gained `ChromInfos` (kept as a
+`Results<TransitionGroupChromInfo>` rather than flattened, so an unconverted reader can be handed
+it unchanged), `IsConverted` and `ChangeChromInfos`, both in `Equals`/`GetHashCode`.
+
+`Results` survives only so unconverted readers still compile and run. It tells them the precursor
+has no peaks - wrong but quiet - and it goes when the last of them is converted.
+
+**`UpdateResultsToEmpty` was the hard part**, and two wrong attempts are worth recording:
+- Its `keepColumnarResults = !HasResults` rested on "where there are chrom infos the columnar
+  results are derived from them", which is exactly what stopped being true. The columnar results
+  are now kept whatever the precursor has.
+- Restoring them wholesale then put back their *old* `ChromInfos` alongside emptied results, so the
+  precursor claimed peaks it no longer had. The faithful translation of the old two-field state is
+  `columnarResults.ChangeChromInfos(empty)`.
+
+Both were found by instrumenting rather than reading: a stack trace printed from `ChangeResults`
+when a non-empty set of areas was about to be replaced by an empty one named
+`UpdateResultsToEmpty` in one run, after a whole session of wrong guesses about it.
+
+**The `MoleculeResults` accessors are now named for what they return** (2026-07-31). The three
+all-replicate getters were `GetTransitionResults`, `GetTransitionGroupResults` and
+`GetPeptideResults`, which read as returning the columnar classes - `TransitionResults` and
+`TransitionGroupResults` are types of their own - when what they return is
+`Results<TransitionChromInfo>` and so on. They are `GetTransitionChromInfos`,
+`GetTransitionGroupChromInfos` and `GetPeptideChromInfos` now, overloaded with the single replicate
+versions on whether a replicate index is passed. "Results" is left to mean the columnar form
+everywhere. Seven call sites, done while it was still cheap; the reader conversion will multiply
+them. Pure rename, verified by the failure counts being identical either side of it.
+
+So the three things a converted reader uses instead of the doc node:
+
+| instead of | use |
+|---|---|
+| `TransitionDocNode.Results` | `MoleculeResults.GetTransitionChromInfos(transitionGroup, transition)` |
+| `TransitionGroupDocNode.Results` | `MoleculeResults.GetTransitionGroupChromInfos(transitionGroup)` |
+| `PeptideDocNode.Results` | `MoleculeResults.GetPeptideChromInfos()` |
+
+**Readers converted so far**: `TransitionGroupResultsCalculator.UpdateTransitionGroupNode` (the
+merge), `GetScoredPeaks`, `PeptideChromInfoListCalculator.AddChromInfoList` (which is what
+aggregates the peptide level and was silently producing nothing), and `MoleculeResultsTest`'s
+`CheckTransitionGroup`, `CountChosenPeakIndexes` and `MoveEveryPeak`. All read
+`AbbreviatedResults?.ChromInfos` now.
+
+**State**: `TestMoleculeResultsMatchTransitionChromInfo` passes. Failing:
+`TestMoleculeResultsWithUserSetPeakBounds`, `TestColumnarResultsRoundTrip`,
+`TestSaveColumnarResults`, `TestChromUI`.
+
+**One open question, and it is semantic rather than mechanical.**
+`TestMoleculeResultsWithUserSetPeakBounds` moves every peak in the document's single replicate and
+then expects *no* precursor to have a chosen peak index, since every peak is now the user's. Five
+still do. `MoveEveryPeak` skips nothing - verified, the diagnostic never fired - so the five are
+assigned by the conversion path after the move, not left behind by the test. Either those five
+moved peaks still match a candidate peak exactly, or `FindChosenPeakIndex` assigns an index for a
+precursor whose transitions have been converted and so have no chrom info to compare. Worth
+settling before trusting `ChosenPeakIndexes` on a document the user has integrated by hand.
+
+`TestColumnarResultsRoundTrip` fails at `Assert.AreNotEqual(0, sharedAreasChecked)`
+(`ColumnarResultsSerializationTest.cs:185`) - no transition areas are riding on their precursor
+any more, which points at the writer's `GetSharedTransitionAreas` rather than at the doc node.
+
+**Still to do**: the reader conversion proper - roughly 20-25 files, largest being `ChromInfoData`,
+`AbstractTransitionResultFinder`, `RefinementSettings`, `ResultRef`, `ComparePeakBoundaries`,
+`PrecursorResult`, `NormalizedValueCalculator`, `DocumentAnnotationUpdater`, the graph panes and
+`PeptideQuantifier` - and then the group conversion itself, which is what actually drops the chrom
+infos and delivers the memory saving. Criterion agreed with the developer: keep the exact boundary
+match as the decider, and use `UserSet` only to skip work for `TRUE`/`IMPORTED`, which can never
+match. Keying on `UserSet.FALSE` alone would exclude `REINTEGRATED` and `MATCHED` peaks, which are
+candidate peaks - and reintegrated documents are the large ones this work is for.
+
+**Quantification reads the columnar results** (2026-07-31). `TransitionResults` gained `Truncated`
+and `EmptyPeaks`, both through `MaybeConstant`. `Truncated` is tri-state because
+`TransitionChromInfo.IsTruncated` is backed by two flag bits, so null is a state of its own.
+`EmptyPeaks` was the one the developer had not expected: `TransitionChromInfo.IsEmpty` is
+`EndRetentionTime == 0`, quantification counts an empty peak as missing and a zero area peak as
+measured, and `Areas` is zero either way, so it cannot be derived. Both are per position rather
+than on `CustomPeak`, because quantification runs over the whole document and must not read a
+chromatogram to get them.
+
+`QuantifiablePeak` - file, area, truncated, empty - is what `PeptideQuantifier` and
+`NormalizationData` read now, through `TransitionResults.GetQuantifiablePeaks(replicateIndex)`.
+The optimization step filtering went away with it, since the columnar form holds step zero only.
+Q values come from `TransitionGroupResults`, where the scores already were. Quantifying a document
+now reads no chromatograms.
+
+**`SrmDocument.UpdateResultsSummaries` is gone** (2026-07-31), along with both call sites -
+`OnChangingChildren` and `ReadXml`. Nothing keeps what it worked out any more: it is either in the
+columnar results already or read back on demand through a `MoleculeResults`.
+
+It was also doing the work twice. `ChangeSettingsInternalOrThrow` calls `ChangeSettings` on every
+molecule and then calls `ChangeChildren`, which came straight back through `OnChangingChildren`
+into `UpdateResultsSummaries` to call `ChangeSettings` on every molecule again. The
+`dictPeptideIdPeptide` guard only skipped nodes reference equal to the *previous* document's, which
+after a settings change they never are.
+
+Verified rather than assumed: `Test.dll` gives **22 failures with the removal and 22 without it**,
+the same tests either way, and the results tests are unchanged. Not yet run: `TestData.dll` and the
+functional suites.
+
+Note this leaves nothing driving `ConvertResults`, so `ChosenPeakIndexes` is populated only where a
+settings pass still reaches `UpdateResults`. Giving conversion an explicit home - run it when the
+.skyd finishes loading, which is what the developer described - is now the next thing the memory
+saving depends on.
+
+**The precursor gives up its chrom infos** (2026-07-31), which is the precursor level saving -
+1.8 GB of the 21 GB on the reference document. `ConvertResults` already had the right gate,
+`everyFileRead`, and was using it to drop the transitions' chrom infos while leaving the
+precursor's; it now drops both.
+
+It has to be the same pass, not a later one. The peak indexes are found by matching the
+transitions' peak boundaries, so once the transitions are converted there is nothing left to match
+against. For the same reason `NeedsConverting` still asks only about the transitions: letting a
+precursor whose transitions were already converted come back through would recompute every index as
+-1 and overwrite the real ones.
+
+**Three test helpers had to stop reading what the document no longer holds.** Worth recording,
+because each one shows what the check has to become:
+- `CheckTransitionGroup` compared the rebuilt chrom infos against the document's. It now compares
+  them against the columnar values position by position - file, area, retention time, q value - and
+  asserts `IsConverted`, so it actively proves the chrom infos were given up rather than merely
+  surviving their absence.
+- `CheckPeptide` compared against `PeptideDocNode.Results`. The molecule level is derived all the
+  way down now, so there is no stored form to compare with; it checks that the results are there
+  for exactly the replicates `GetReplicatesWithResults` says have them, and that asking for all
+  replicates and asking for one agree.
+- `MoveEveryPeak` read the peak bounds off the chrom infos; it reads them from a `MoleculeResults`.
+
+`Test.dll` still gives **22 failures**, the same as before this change and the same as at the
+commit before the `UpdateResultsSummaries` removal.
+
+**Knock-on worth knowing**: `PeptideChromInfoListCalculator.AddChromInfoList` reads the precursor
+chrom infos, which are now gone, so `PeptideDocNode.Results` comes out empty after a settings pass.
+That is where the design is going anyway, but it is currently empty by accident rather than by
+declaration, and should be made explicit the way `TransitionDocNode.Results` and
+`TransitionGroupDocNode.Results` were.
+
+`SameScoredPeaks` currently starts with an unconditional `return true;` (the developer's
+workaround for a StackOverflowException). Underneath it, `GetScoredPeaks` now yields
+`ImmutableList` rather than a bare sequence: `SequenceEqual` compares the elements - whole lists -
+with the default comparer, and a bare `IEnumerable` has no value equality, so the fallback could
+never return true and termination rested entirely on `ReferenceEquals(Results, other.Results)`.
+That is why losing reference stability turned into unbounded recursion.
+
+### 2026-07-31 (7) - TransitionGroupDocNode.Results readers converted; renames (pushed)
+
+Commits `0a22318a0`..`1860a68cb`, all pushed.
+
+Landed: `StripAnnotationValues` on the columnar results; every reader of
+`TransitionGroupDocNode.Results` converted and the property removed (what survives is
+`EmptyResults`, named for holding nothing, which says whether the node was built from
+chrom infos - `HasResults` cannot become `AbbreviatedResults != null`, that broke
+`TestMoleculeResultsMatchTransitionChromInfo`); `ChromInfos` renamed `LegacyChromInfos` on
+both results classes, since it is populated only between reading a document and reading
+its .skyd; precursor gained `StartTimes`/`EndTimes` and lost `Areas` (a precursor's area is
+the sum of its transitions', and one number cannot answer the MS1 and MS2 sums separately);
+precursor annotations became a plain `ImmutableList<Annotations>` and `CustomPeak` lost its
+`Position`; `ReplicatePositions` became `IReadOnlyList<IEnumerable<int>>`; `ReplicateMap`
+replaced by `ChromFileIdMap<T>`, which `TransitionResults` and `PeptideResults` now use.
+
+Bugs found on the way, all fixed: `DocumentAnnotationUpdater.UpdateTransition` guarded on
+`_precursorResultUpdater` instead of `_transitionResultUpdater`; the precursor wrote
+annotations (child elements) before `transition_areas` (an attribute), which `XmlWriter`
+refuses once an element has content; the generic three-argument
+`WriteAttribute<TAttr>(name, value, defaultValue)` formats with plain `ToString()` and so
+loses float precision - use `WriteAttributeNullable`; `GetSharedTransitionAreas` held a
+*precursor* position and read a *transition* with it.
+
+Test-result gotcha: the "N failures" column in the run summary is a **running total**, not
+per-test. Count the `!!! ... FAILED` markers instead.
+
+Still failing at baseline, unchanged by any of this: `TestColumnarResultsRoundTrip`
+(`CheckUserSetPeakStillWritten`, line 206), `TestSaveColumnarResults`,
+`TestMoleculeResultsWithUserSetPeakBounds` (5 surviving `ChosenPeakIndexes`),
+`TestAnnotations`, `TestImportAnnotations`, `TestPeakBoundaryCompare` (MessageDlg timeout).
+
+
+### 2026-08-01 (8) - Ownership move: a transition's results live on its precursor
 
 Three commits on `sky_memory`, all built and tested against the recorded baseline:
 
@@ -534,7 +917,7 @@ columnar form directly, then the reuse path stops needing chrom infos at all, th
 `Results` can go.
 
 
-### Session 7 (2026-08-02) - the retention was three separate holders, not one
+### 2026-08-02 (9) - The retention was three separate holders, not one
 
 The memory never dropped for `F:\skydata\20110215_MikeB\Bereman_5proteins_spikein.sky`
 (format_version 1.4, 39 replicates, 442 transitions, 205 MB .skyd) across four dotMemory
@@ -610,45 +993,7 @@ replicate is always known.
   81, 81 (alone) at baseline and no result (batch), 1107, 1176 (alone) at HEAD. It fails on
   both. Never use it as a regression signal.
 
-## Context for Next Session
-
-`MoleculeResults` is on the branch and is what `OnDemandFeatureCalculator` and
-`GraphChromatogram` read chromatograms through. No memory has been saved yet, because the
-doc nodes still carry both forms - the saving lands when `Results` comes off them.
-
-Known gaps:
-- `AgilentMix.zip` has no spectral library, no isotope distribution and no optimization
-  function, so the dot products and the optimization step positions are NOT covered - both
-  sides of those assertions are null. `BlibDriftTimeTest.zip` has a library,
-  `FullScan.zip` has isotope distributions, `AgilentCEOpt.zip` has optimization steps.
-- The three peak index lists often hold the same indexes, so `ShareEqualIndexes` stores an
-  incoming list equal to one already present as that same instance. Worth keeping in mind
-  when estimating memory: usually one list, not three.
-- `GetTransitionPeakBounds` on `OnDemandFeatureCalculator` is `virtual` with no subclass
-  anywhere - vestigial, not a constraint.
-
-Open questions for the developer:
-- Are the stored `<precursor_peak>` values used after load, or recalculated from the
-  children anyway? Trace `UpdateResults` / `CalcChromInfoList` in `TransitionGroupDocNode`.
-  `DocumentReader` already discards the stored `user_set` on the grounds that "all values
-  are still calculated from the child transitions".
-
-**The one thing worth doing next (added 2026-08-12).** A node which has just been added -
-by picking, refining or importing - has no columnar values until a results pass runs, and
-nothing fills them in. Two things wait on it, and both would fall out of one fix:
-- `ConsoleExportTrigger`, the single test lost by removing `UpdateResultsSummaries`
-- `MoleculeResults.GetPeptideChromInfos`, which has to prefer the .skyd for that reason
-  rather than working from the columnar results first, which is where it should end up
-
-The precursor level pass *does* run when transitions are added (`ChangedResults` is true as
-soon as the child count differs) and it *does* read the .skyd (`canUseOldResults` is
-hardcoded false). So the peaks are not missing - two of three come back with flags
-`IsGoodPeak` rejects. What moves those flags is the unanswered question; the diagnostic to
-run is printing `Area`, `IsEmpty` and `IsForcedIntegration` for LVNELTEFAK's three
-transitions in `FullScanFilterTest` after the refine, then again after a forced results
-pass.
-
-### 2026-08-06 - Session 8: working through the 104 failures in SkylineTester.log
+### 2026-08-06 (10) - Working through the 104 failures in SkylineTester.log
 
 Baseline: the run log at `sky_memory/SkylineTester.log` (1126 tests, 104 failures). Measured
 subsets locally rather than repeating the whole run.
@@ -868,292 +1213,24 @@ Files still holding `.EmptyResults[...]` reads, all in tests which were passing 
 `ShimadzuSrmDuplicateQ1Test`, `ImportDocTest`, `ManageResultsTest`, `WatersCalcurveTest`,
 `RefineTest`, and the three `TestPerf` ones.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
 
-### 2026-07-30 - Session 4
+### 2026-08-12..19 - Molecule serialization rework (reconstructed from commits)
 
-Branch pushed to origin for the first time (`Skyline/work/20260728_chrominfo_memory`).
+No session entry was written for this stretch; the record is the commit messages. The
+last two commits overlap the 2026-08-18 accessor session below.
 
-**The columnar results are now what a transition has.** `TransitionDocNode.Results` is always
-empty and `AbbreviatedResults` is a plain property, not derived from anything. Reading a document
-written the old way turns its chrom infos into columnar results as it goes. `File > Save` writes
-the columnar form; sharing still writes every chrom info attribute for Panorama, which means
-`DocumentWriter` works them out again through a `MoleculeResults` per molecule.
+- `7de8bb71b` (08-12) Worked out a molecule's chrom infos without a chromatogram where it can
+- `1c24ff594` (08-13) Moved a molecule's XML writing into a MoleculeWriter class
+- `0d28a688e` (08-14) Built a molecule's XML as XElements rather than writing it out
+- `bec6b8511` (08-14) Wrote a precursor's peaks and its transitions' in one walk of the files
+- `f764c89f7` (08-14) Left a transition's peak out of every file its precursor speaks for
+- `08a5925b8` (08-14) Related a precursor's results to its transitions' by replicate and file
+- `938c30944` (08-14) Let a precursor's results answer for their own shared areas
+- `1d5444963` (08-14) Carried a transition's area on its precursor wherever every one of them has a peak
+- `d4e6c77d3` (08-19) Don't write "Truncated" when it agrees with the other transitions
+- `ff20201ed` (08-19) Changed the columnar format so a precursor's peak says what its transitions share
 
-A precursor carries its transitions' areas in a `transition_areas` attribute and those transitions
-are not written at all, but only where every one of them is ordinary at that file. A transition
-left out has exactly the files the precursor carried areas for, which is what lets the reader know
-which positions it owns.
-
-`GraphChromatogram` gets its chrom infos from `MoleculeResults`, keyed on the `IdentityPath` to the
-molecule. `_document` is what the graph thinks the document is, taken when it updates;
-`OnDocumentUIChanged` compares against it rather than `e.DocumentPrevious`, which differ whenever
-the graph missed an update.
-
-**TestRescore hangs, and it is not a slow loop.** Bisected: not the compact save format, not the
-graph changes, not the `AbbreviatedResults` simplification. It is the "Results always empty" change
-in `07e082999`. The developer found the cause: an `ObjectDisposedException` reading peaks from a
-`ChromatogramGroupInfo` whose cache stream has been closed, inside `CalcResultsForReplicate` during
-`UpdateResultsSummaries`, while the rescore is replacing the cache. `ParallelEx.For` propagates it
-correctly, so something further up - the chromatogram loader - is catching and retrying forever.
-
-Two effects of this work widen the window: `Results` being empty means `CalcResultsForReplicate`
-reads peaks it used to reuse, and `ConvertResults` reads every chromatogram of a molecule during
-the settings pass. Note also that `MoleculeResults` *holds* `ChromatogramGroupInfo` objects across
-calls, so anything keeping one across a cache swap has the same use-after-close exposure -
-`DocumentWriter` keeps one per molecule while writing, `GraphChromatogram` one per molecule.
-
-**Known failing**: `TestRescore` (above) and `TestCandidatePeaks` (an in-session peak edit does not
-survive `UpdateResults`, since nothing rebuilds chrom infos from the columnar results yet).
-
-**Lesson worth keeping**: three code-level hypotheses about the hang were all wrong, and each cost
-a four minute build-and-run cycle. The stack trace settled it immediately. Get the exception before
-theorising about a hang.
-
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
-
-### 2026-07-30 - Session 5
-
-**The TestRescore hang is fixed.** `TestRescore` passes again in 20 seconds. The other four
-rescore tests (`TestRescoreImportDocument`, `TestRescoreSimultaneous`, `TestRescoreInPlace`,
-`TestRescoreRawChromatograms`) pass as well, as do the five verification tests from the handoff.
-
-**Where the exception went.** The previous session's guess - that the chromatogram loader catches
-and retries forever - was wrong, and the diagnostic was worth the two build cycles it cost.
-`Loader.FinishLoad` does rethrow the `ObjectDisposedException`, because
-`ExceptionUtil.IsProgrammingDefect` is true for it, but the throw happens on the
-**`Commit loaded files`** thread - the `QueueWorker` inside `FileLoadCompletionAccumulator`.
-`QueueWorker.Consume` catches everything into its `Exception` property and calls `Abort()`, and
-nobody ever reads that property. So the commit worker stops, no further completions are
-committed, the document never becomes loaded, and `WaitForDocumentLoaded` waits forever. A
-silent worker abort, not a retry loop. `FinishLoadSynch`'s `do/while` was never looping: it
-printed "pass 1" on every call.
-
-**The fix is in `ChromatogramCache.CallWithStream`.** It handed out `ReadStream.Stream` and read
-from it without holding anything that stops `CloseRemovedStreams` disposing it underneath -
-`PooledFileStream.Disconnect` takes the connection pool's monitor and the stream's write lock,
-neither of which `CallWithStream`'s `lock (ReadStream)` excludes. It now retries once on
-`ObjectDisposedException`, which either reconnects to the file or, when the file on disk has been
-replaced, throws the `FileModifiedException` from `PooledFileStream.Connect` that
-`CalcResultsForReplicate` and `UpdateResults` already catch and fall back from. Converting the
-race into the signal the existing handlers were built for, rather than inventing a new one.
-
-Rejected: taking `ReadStream.ReaderWriterLock.GetReadLock()` around the read, the way
-`ReadDataForAll` does. It is the tidier fix but it nests the connection pool's monitor inside the
-read lock, while `ConnectionPool.DisconnectWhile` takes them the other way round - a lock order
-inversion. Worth revisiting deliberately rather than as a side effect of this branch.
-
-**The silent swallow is fixed too**, at the developer's direction, on this branch rather than its
-own. `FileLoadCompletionAccumulator.Commit` is the one place every batch of loaded files is handed
-to the loader, from either the "Commit loaded files" worker or the "Load file" worker when there
-is nothing to accumulate. Both are `QueueWorker` threads, which put anything thrown into an
-`Exception` property nothing reads. It now catches and reports the failure **as a file which
-could not be loaded** - a `Completion` carrying `ChangeErrorException` - so `FinishCacheBuild`
-routes it to `MeasuredResults.Loader.Fail`, and from there to the load monitor. The user sees the
-ordinary "Failed importing results into '<document>'" error with the exception attached, and
-committing goes on to the next batch instead of stopping for the session.
-
-Not `Program.ReportException`, which is for actual defects in Skyline; most of what can arrive
-here is a user-actionable load failure. Verified by backing the `CallWithStream` fix out again:
-the hang became a `MessageDlg` reading "Failed importing results into 'Rat_plasma.sky'. Cannot
-access a closed file." and a test failure in 17 seconds.
-
-That verification also turned up a **second** racing read the first stack trace never showed:
-`MoleculeResults.ConvertResults` -> `FindChosenPeakIndex` -> `IndexOfPeak`
-(`MoleculeResults.cs:383`), reached from `UpdateTransitionGroupNode`, distinct from the
-`CalcResultsForReplicate` path. Both are covered, because the fix is at the read boundary rather
-than at either call site. Worth remembering that this branch has more than one place where the
-settings pass reads a chromatogram that may be swapped underneath it.
-
-**Known failing**: `TestCandidatePeaks` only, unchanged - the in-session peak edit does not
-survive `UpdateResults` (expected 60, got 109.88 at `CandidatePeakTest.cs:92`). That is the next
-job: `UpdateResults` should rebuild from `ChosenPeakIndexes`/`CustomPeaks` rather than re-picking
-peaks from the .skyd.
-
-### 2026-07-31 - Session 6 (uncommitted)
-
-**The columnar results are now what a precursor has.** `TransitionGroupDocNode.AbbreviatedResults`
-is the authoritative field, and `Results` always reports an empty list per replicate, the way
-`TransitionDocNode.Results` already did. `TransitionGroupResults` gained `ChromInfos` (kept as a
-`Results<TransitionGroupChromInfo>` rather than flattened, so an unconverted reader can be handed
-it unchanged), `IsConverted` and `ChangeChromInfos`, both in `Equals`/`GetHashCode`.
-
-`Results` survives only so unconverted readers still compile and run. It tells them the precursor
-has no peaks - wrong but quiet - and it goes when the last of them is converted.
-
-**`UpdateResultsToEmpty` was the hard part**, and two wrong attempts are worth recording:
-- Its `keepColumnarResults = !HasResults` rested on "where there are chrom infos the columnar
-  results are derived from them", which is exactly what stopped being true. The columnar results
-  are now kept whatever the precursor has.
-- Restoring them wholesale then put back their *old* `ChromInfos` alongside emptied results, so the
-  precursor claimed peaks it no longer had. The faithful translation of the old two-field state is
-  `columnarResults.ChangeChromInfos(empty)`.
-
-Both were found by instrumenting rather than reading: a stack trace printed from `ChangeResults`
-when a non-empty set of areas was about to be replaced by an empty one named
-`UpdateResultsToEmpty` in one run, after a whole session of wrong guesses about it.
-
-**The `MoleculeResults` accessors are now named for what they return** (2026-07-31). The three
-all-replicate getters were `GetTransitionResults`, `GetTransitionGroupResults` and
-`GetPeptideResults`, which read as returning the columnar classes - `TransitionResults` and
-`TransitionGroupResults` are types of their own - when what they return is
-`Results<TransitionChromInfo>` and so on. They are `GetTransitionChromInfos`,
-`GetTransitionGroupChromInfos` and `GetPeptideChromInfos` now, overloaded with the single replicate
-versions on whether a replicate index is passed. "Results" is left to mean the columnar form
-everywhere. Seven call sites, done while it was still cheap; the reader conversion will multiply
-them. Pure rename, verified by the failure counts being identical either side of it.
-
-So the three things a converted reader uses instead of the doc node:
-
-| instead of | use |
-|---|---|
-| `TransitionDocNode.Results` | `MoleculeResults.GetTransitionChromInfos(transitionGroup, transition)` |
-| `TransitionGroupDocNode.Results` | `MoleculeResults.GetTransitionGroupChromInfos(transitionGroup)` |
-| `PeptideDocNode.Results` | `MoleculeResults.GetPeptideChromInfos()` |
-
-**Readers converted so far**: `TransitionGroupResultsCalculator.UpdateTransitionGroupNode` (the
-merge), `GetScoredPeaks`, `PeptideChromInfoListCalculator.AddChromInfoList` (which is what
-aggregates the peptide level and was silently producing nothing), and `MoleculeResultsTest`'s
-`CheckTransitionGroup`, `CountChosenPeakIndexes` and `MoveEveryPeak`. All read
-`AbbreviatedResults?.ChromInfos` now.
-
-**State**: `TestMoleculeResultsMatchTransitionChromInfo` passes. Failing:
-`TestMoleculeResultsWithUserSetPeakBounds`, `TestColumnarResultsRoundTrip`,
-`TestSaveColumnarResults`, `TestChromUI`.
-
-**One open question, and it is semantic rather than mechanical.**
-`TestMoleculeResultsWithUserSetPeakBounds` moves every peak in the document's single replicate and
-then expects *no* precursor to have a chosen peak index, since every peak is now the user's. Five
-still do. `MoveEveryPeak` skips nothing - verified, the diagnostic never fired - so the five are
-assigned by the conversion path after the move, not left behind by the test. Either those five
-moved peaks still match a candidate peak exactly, or `FindChosenPeakIndex` assigns an index for a
-precursor whose transitions have been converted and so have no chrom info to compare. Worth
-settling before trusting `ChosenPeakIndexes` on a document the user has integrated by hand.
-
-`TestColumnarResultsRoundTrip` fails at `Assert.AreNotEqual(0, sharedAreasChecked)`
-(`ColumnarResultsSerializationTest.cs:185`) - no transition areas are riding on their precursor
-any more, which points at the writer's `GetSharedTransitionAreas` rather than at the doc node.
-
-**Still to do**: the reader conversion proper - roughly 20-25 files, largest being `ChromInfoData`,
-`AbstractTransitionResultFinder`, `RefinementSettings`, `ResultRef`, `ComparePeakBoundaries`,
-`PrecursorResult`, `NormalizedValueCalculator`, `DocumentAnnotationUpdater`, the graph panes and
-`PeptideQuantifier` - and then the group conversion itself, which is what actually drops the chrom
-infos and delivers the memory saving. Criterion agreed with the developer: keep the exact boundary
-match as the decider, and use `UserSet` only to skip work for `TRUE`/`IMPORTED`, which can never
-match. Keying on `UserSet.FALSE` alone would exclude `REINTEGRATED` and `MATCHED` peaks, which are
-candidate peaks - and reintegrated documents are the large ones this work is for.
-
-**Quantification reads the columnar results** (2026-07-31). `TransitionResults` gained `Truncated`
-and `EmptyPeaks`, both through `MaybeConstant`. `Truncated` is tri-state because
-`TransitionChromInfo.IsTruncated` is backed by two flag bits, so null is a state of its own.
-`EmptyPeaks` was the one the developer had not expected: `TransitionChromInfo.IsEmpty` is
-`EndRetentionTime == 0`, quantification counts an empty peak as missing and a zero area peak as
-measured, and `Areas` is zero either way, so it cannot be derived. Both are per position rather
-than on `CustomPeak`, because quantification runs over the whole document and must not read a
-chromatogram to get them.
-
-`QuantifiablePeak` - file, area, truncated, empty - is what `PeptideQuantifier` and
-`NormalizationData` read now, through `TransitionResults.GetQuantifiablePeaks(replicateIndex)`.
-The optimization step filtering went away with it, since the columnar form holds step zero only.
-Q values come from `TransitionGroupResults`, where the scores already were. Quantifying a document
-now reads no chromatograms.
-
-**`SrmDocument.UpdateResultsSummaries` is gone** (2026-07-31), along with both call sites -
-`OnChangingChildren` and `ReadXml`. Nothing keeps what it worked out any more: it is either in the
-columnar results already or read back on demand through a `MoleculeResults`.
-
-It was also doing the work twice. `ChangeSettingsInternalOrThrow` calls `ChangeSettings` on every
-molecule and then calls `ChangeChildren`, which came straight back through `OnChangingChildren`
-into `UpdateResultsSummaries` to call `ChangeSettings` on every molecule again. The
-`dictPeptideIdPeptide` guard only skipped nodes reference equal to the *previous* document's, which
-after a settings change they never are.
-
-Verified rather than assumed: `Test.dll` gives **22 failures with the removal and 22 without it**,
-the same tests either way, and the results tests are unchanged. Not yet run: `TestData.dll` and the
-functional suites.
-
-Note this leaves nothing driving `ConvertResults`, so `ChosenPeakIndexes` is populated only where a
-settings pass still reaches `UpdateResults`. Giving conversion an explicit home - run it when the
-.skyd finishes loading, which is what the developer described - is now the next thing the memory
-saving depends on.
-
-**The precursor gives up its chrom infos** (2026-07-31), which is the precursor level saving -
-1.8 GB of the 21 GB on the reference document. `ConvertResults` already had the right gate,
-`everyFileRead`, and was using it to drop the transitions' chrom infos while leaving the
-precursor's; it now drops both.
-
-It has to be the same pass, not a later one. The peak indexes are found by matching the
-transitions' peak boundaries, so once the transitions are converted there is nothing left to match
-against. For the same reason `NeedsConverting` still asks only about the transitions: letting a
-precursor whose transitions were already converted come back through would recompute every index as
--1 and overwrite the real ones.
-
-**Three test helpers had to stop reading what the document no longer holds.** Worth recording,
-because each one shows what the check has to become:
-- `CheckTransitionGroup` compared the rebuilt chrom infos against the document's. It now compares
-  them against the columnar values position by position - file, area, retention time, q value - and
-  asserts `IsConverted`, so it actively proves the chrom infos were given up rather than merely
-  surviving their absence.
-- `CheckPeptide` compared against `PeptideDocNode.Results`. The molecule level is derived all the
-  way down now, so there is no stored form to compare with; it checks that the results are there
-  for exactly the replicates `GetReplicatesWithResults` says have them, and that asking for all
-  replicates and asking for one agree.
-- `MoveEveryPeak` read the peak bounds off the chrom infos; it reads them from a `MoleculeResults`.
-
-`Test.dll` still gives **22 failures**, the same as before this change and the same as at the
-commit before the `UpdateResultsSummaries` removal.
-
-**Knock-on worth knowing**: `PeptideChromInfoListCalculator.AddChromInfoList` reads the precursor
-chrom infos, which are now gone, so `PeptideDocNode.Results` comes out empty after a settings pass.
-That is where the design is going anyway, but it is currently empty by accident rather than by
-declaration, and should be made explicit the way `TransitionDocNode.Results` and
-`TransitionGroupDocNode.Results` were.
-
-`SameScoredPeaks` currently starts with an unconditional `return true;` (the developer's
-workaround for a StackOverflowException). Underneath it, `GetScoredPeaks` now yields
-`ImmutableList` rather than a bare sequence: `SequenceEqual` compares the elements - whole lists -
-with the default comparer, and a bare `IEnumerable` has no value equality, so the fallback could
-never return true and termination rested entirely on `ReferenceEquals(Results, other.Results)`.
-That is why losing reference stability turned into unbounded recursion.
-
-### 2026-07-31 - Session 5
-
-Commits `0a22318a0`..`1860a68cb`, all pushed.
-
-Landed: `StripAnnotationValues` on the columnar results; every reader of
-`TransitionGroupDocNode.Results` converted and the property removed (what survives is
-`EmptyResults`, named for holding nothing, which says whether the node was built from
-chrom infos - `HasResults` cannot become `AbbreviatedResults != null`, that broke
-`TestMoleculeResultsMatchTransitionChromInfo`); `ChromInfos` renamed `LegacyChromInfos` on
-both results classes, since it is populated only between reading a document and reading
-its .skyd; precursor gained `StartTimes`/`EndTimes` and lost `Areas` (a precursor's area is
-the sum of its transitions', and one number cannot answer the MS1 and MS2 sums separately);
-precursor annotations became a plain `ImmutableList<Annotations>` and `CustomPeak` lost its
-`Position`; `ReplicatePositions` became `IReadOnlyList<IEnumerable<int>>`; `ReplicateMap`
-replaced by `ChromFileIdMap<T>`, which `TransitionResults` and `PeptideResults` now use.
-
-Bugs found on the way, all fixed: `DocumentAnnotationUpdater.UpdateTransition` guarded on
-`_precursorResultUpdater` instead of `_transitionResultUpdater`; the precursor wrote
-annotations (child elements) before `transition_areas` (an attribute), which `XmlWriter`
-refuses once an element has content; the generic three-argument
-`WriteAttribute<TAttr>(name, value, defaultValue)` formats with plain `ToString()` and so
-loses float precision - use `WriteAttributeNullable`; `GetSharedTransitionAreas` held a
-*precursor* position and read a *transition* with it.
-
-Test-result gotcha: the "N failures" column in the run summary is a **running total**, not
-per-test. Count the `!!! ... FAILED` markers instead.
-
-Still failing at baseline, unchanged by any of this: `TestColumnarResultsRoundTrip`
-(`CheckUserSetPeakStillWritten`, line 206), `TestSaveColumnarResults`,
-`TestMoleculeResultsWithUserSetPeakBounds` (5 surviving `ChosenPeakIndexes`),
-`TestAnnotations`, `TestImportAnnotations`, `TestPeakBoundaryCompare` (MessageDlg timeout).
-
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
-
-### 2026-08-18 - Session 9: the 13 failures in the 2026-08-17 SkylineTester.log
+### 2026-08-18 (11) - The 13 failures: live accessors still on LegacyChromInfos
 
 Baseline: `sky_memory/SkylineTester.log`, a run on the other machine which reached test 2.381 of
 1130 before it was stopped, with 13 `!!! ... FAILED` markers. All 13 reproduced locally. **Ten now
@@ -1221,9 +1298,10 @@ difference in a summed area can move.
 
 **Still failing (3 of the 13):**
 
-1. `ConsoleRefineResultsTest` - unchanged from Session 8, and still the same question: what
-   refreshes the columnar results when a document is opened with its cache.
-2. `TestAnnotations` - unchanged from Session 8. Per-optimization-step precursor annotations.
+1. `ConsoleRefineResultsTest` - unchanged from the 2026-08-06 session, and still the same
+   question: what refreshes the columnar results when a document is opened with its cache.
+2. `TestAnnotations` - unchanged from the 2026-08-06 session. Per-optimization-step
+   precursor annotations.
 3. `TestAddIrtStandards` - moved a long way. `CreateCalculatorWithCirtPeptides` and
    `CreateCalculatorWithDocumentPeptides` both complete now; it fails at line 90 waiting for
    `AddIrtStandardsToDocumentDlg` on a *new* document, which `Skyline.cs:2185` only shows when the
@@ -1238,6 +1316,45 @@ checked to fail identically with the changes stashed.
 **Still reading the emptied chrom infos** - found by grep, not by a failing test, so each needs its
 own check that it is reached at all: `BookmarkEnumerator` 285/484, `CarafeLibraryBuilder` 124-129,
 `PeakBoundaryImputer` 500/666, `RetentionTimeRegressionGraphData` 388 (`GetMaxQValue`, already noted
-in Session 8), `GraphSummary` 580, `RTPeptideGraphPane` 129, `SummaryPeptideGraphPane` 552/700. The
+in the 2026-08-06 session), `GraphSummary` 580, `RTPeptideGraphPane` 129, `SummaryPeptideGraphPane` 552/700. The
 last three mean the peptide level summary graphs draw nothing; `SummaryPeptideGraphPane` also wants
 mass error, which is not in the columnar results and needs a `MoleculeResults`.
+
+### 2026-08-20 (12) - MoleculeReader over XElement
+
+`MoleculeReader` now navigates an `XElement` rather than reading a stream (`fcb132e18`, local
+only). A molecule arrives as the element `DocumentReader` already had, so the parts that decide
+what to read next ask for the child they want instead of remembering what went by. The precursor
+and transition results are walked side by side, which is what a transition peak needs to find the
+precursor peak it defers to, and the per-precursor state that had to be set before the transitions
+and cleared after became a `PrecursorPeaks` built from the precursor's own results. `Util/Xml.cs`
+gained `XElement` counterparts of the `XmlReader` attribute getters, converting through the same
+code.
+
+**Bug found and fixed on the way**: molecules in documents written before 3.72 lost their
+annotations. `Pre372CustomIonTransitionGroupHandler` pretty-prints the molecule it makes, and once
+that arrived as an `XElement` its indentation became text nodes standing where the annotations were
+looked for - `ReadStartElement` landed on whitespace, so `IsStartElement` was false and the
+annotations were never read. Only `Test/Reporting/DsvWriterTest.sky` (format 3.12, a Caffeine
+molecule with an annotation) reaches it; the 25 test run that covered the rest of the conversion
+missed it entirely. Found by looking for a document old enough to use the bridge rather than by a
+failing test in the list being run.
+
+**Coverage for the bridge**: `ConvertSmallMolMzOnlyFrom37Test` (`Test/SmallMoleculesMzOnly_3-7.sky`,
+format 3.7), `TestInvariantExport` and `TestExportWithCurrentLanguage` (`DsvWriterTest.sky`),
+`TestSerializeDocument` (`DocumentSerializerTest.sky`, format 3.61). `Test.dll` has 30 loose `.sky`
+files and these are the only ones below 3.72 with molecules in them.
+
+**Verified**: all of `Test.dll`, plus the 29 test list covering the columnar round trip, the old
+formats, the crosslink paths and `CodeInspection`.
+
+**Emptied chrom info readers converted**: `BookmarkEnumerator` 285/484 and `CarafeLibraryBuilder`
+124-129 now go through `MoleculeResults.GetTransitionGroupChromInfos`, the same way the transition
+level already did.
+
+**Left**: `PeakBoundaryImputer` 500/666, `RetentionTimeRegressionGraphData` 388, `GraphSummary` 580,
+`RTPeptideGraphPane` 129, `SummaryPeptideGraphPane` 552/700. Unlike the two above, these have only
+a `TransitionGroupDocNode` in hand - `GraphSummary.IsOptimization` and
+`SummaryPeptideGraphPane.CalcStats` are static and take nothing else - so a `MoleculeResults` has to
+be threaded down from the callers. That is a design question rather than a mechanical change, and
+`CalcStats` also wants mass error, which the columnar results do not carry.
