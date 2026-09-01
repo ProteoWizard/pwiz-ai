@@ -252,3 +252,45 @@ sidecar. The 446 directory has the current format but died before `PlanStage6` w
 **To bench at a scale that matters, one current-build run must reach Stage 5 planning.** A
 single plate (86 files, ~43 min of first pass) would produce a directory good for every
 subsequent iteration.
+
+## Implementation plan (settled 2026-09-01, all four phases inspected)
+
+`Stage6Planner.Plan` runs four phases over `perFileEntries`. Three of them never needed the
+buffer:
+
+| phase | shape | needs |
+|---|---|---|
+| 1 `ComputeMultiChargeConsensus` | `foreach` file -> `SelectRescoreTargets(kvp.Value)` | one file; keeps only small per-file targets |
+| 2 `ComputeConsensusRts` | hands ALL files to `ConsensusRts.Compute` | **cross-file, but only 5 fields** |
+| 3 `RefitCalibrations` | `foreach` file -> `CalibrationRefit.Refit(consensus, kvp.Value)` | one file + consensus |
+| 4 `ReconciliationPlanner.Plan` | already takes `fileName => CwtCandidateLoader.LoadOneFile(...)` | one file at a time |
+
+**Phase 2 is the only genuine cross-file hold, and it reads a projection.** Measured field usage
+in `Osprey.FDR/Reconciliation/ConsensusRts.cs`: `ModifiedSequence` (pooled reference),
+`IsDecoy`, `Score`, `EntryId`, `RunPrecursorQvalue` - about **37 B/row** against 274 B in
+production. (Verify whether an RT field is reached through another accessor before fixing the
+record layout.)
+
+### Two passes, no buffer
+
+```
+Pass A, per file:  phase 1 targets  +  append the ~37 B consensus projection   -> DROP entries
+Barrier:           ConsensusRts.Compute over the projection
+Pass B, per file:  phase 3 refit  +  phase 4 reconciliation planning           -> DROP entries
+```
+
+Projected peak at 446 files: 289 M x 37 B = **~10.7 GB** for the projection, plus one file's
+full entries (~648 K x 392 B = ~250 MB), so **~11 GB against the measured ~100 GB**. Fits 63.7 GB
+with room, and the peak stops growing with file count except through the projection.
+
+Cost: each file's survivors are loaded **twice** rather than once. The reload is ~32 min clean at
+446 files, so ~64 min - against a run that currently cannot finish at all.
+
+**This is where the Phase 3 lean row and #4526 meet.** The lean row shrinks the projection's
+37 B and the per-file 392 B; this change removes the O(files) multiplier on the larger of them.
+Neither subsumes the other.
+
+### Validate with
+
+`Stage5SurvivorBufferBenchTest` for the memory shape (seconds), then a full plate run for
+byte-identity - only output equality counts, not structure.
