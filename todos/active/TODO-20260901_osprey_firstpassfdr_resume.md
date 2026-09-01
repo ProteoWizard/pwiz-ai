@@ -92,3 +92,71 @@ It also blocks the HPC direction in
   cohort-trained model. Pre-existing for completed runs; (a) widens the window. Deliberately
   NOT changed on 2026-09-01, because adding cohort identity would invalidate the 446 sidecars
   currently on disk and destroy the recovery they represent. Decide once those are consumed.
+
+## (c) The real requirement: PER-FILE guards, not per-phase (developer, 2026-09-01)
+
+> *"the task gets started. Upon starting, the task recognizes that it has valid completed work
+> on disk and skips repeating it. There should be both task-wide guards to repeating work and
+> internal guards to repeating work. When a single task can take over 3 hours this is critical."*
+>
+> *"Breaking it into phases risks forcing a 1 hour phase. You really want to be able to skip any
+> individual file for which you have a first-pass FDR sidecar. Think of this as the computer
+> blue-screens during processing."*
+
+Phase-level guards are the wrong granularity - a 99%-complete hour still redoes the hour. The
+unit is the file.
+
+### How badly it recovers today: completely
+
+Measured on the 86-file plate run:
+
+```
+sidecars written : 12:45:35 -> 12:59:55   (86 files, incrementally, over 14.3 min)
+markers written  : 13:13:27               (all 86, one second, at TASK END)
+```
+
+A machine lost at 12:55 leaves ~60 complete sidecars and zero markers, so the restart re-scores
+all 86. At 446 files that window is 137 minutes. **Recovery is proportional to nothing.**
+
+Commit `73e44461d7` fixes the write half: `FlushPartialSidecar` - the production write path,
+which the earlier commit missed in favour of the resident-path `WriteFdrScoresSidecars` - now
+stamps each sidecar at write time.
+
+### The read half, still to do
+
+The score pass is two passes over files in `PercolatorScorer`:
+
+* **pass 1** per file: score, per-file run q, feed `streamingQ` + clamp floors + `contribAcc`
+* **barrier**: build the experiment maps
+* **pass 2** per file: re-score, apply the maps, `sink.Accept` -> sink flush -> sidecar write
+
+For a file whose sidecar is already current, **feed both passes FROM THE SIDECAR** rather than
+skipping the file:
+
+* pass 1 - `streamingQ.Add(score, entryId, isDecoy, peptide)` and the clamp floors all come off
+  the sidecar records;
+* pass 2 - feed `sink.Accept` from the sidecar's final q-values and skip the re-write.
+
+Feeding rather than skipping is what keeps the run byte-identical: `sink.Accept` is also what
+populates `projections` and the `--model-diagnostics` accumulator, so a skipped file would
+silently shrink both the diagnostics report and the `First-pass compaction: X -> Y` counts.
+Reading a sidecar (~78 MB/file) is far cheaper than loading features and scoring.
+
+**Seam**: the task already hands the scorer `Func<string, IReadOnlyList<double[]>> loadFileFeatures`.
+Add the same shape - a predicate plus a record loader - so `Osprey.FDR` never learns about
+markers or tasks; it just asks "do you already have this file's results?"
+
+**Gate**: byte-identical output against the existing plate run, which is a 44-minute check.
+
+### Why the marker still earns its place
+
+`FdrScoresSidecar.Write` commits through `FileSaver`, an atomic rename, so a sidecar is absent or
+complete - **presence already proves completeness**. The marker carries only what presence
+cannot: which task, which build, which validity key. Without it a sidecar from another library or
+pass-2 arm is present, complete, and silently adopted.
+
+The parquets solve the same problem the better way, by self-describing in the footer
+(`osprey.version`, `osprey.search_hash`, `osprey.library_hash`). The `.bin` sidecars should
+eventually do the same and drop the companion file - the header has only 14 reserved bytes, so it
+needs a length-prefixed field and a `FormatVersion` bump, which would invalidate the 446 and 86
+sidecars currently in use. Right thing to do at the next natural format bump, not today.
