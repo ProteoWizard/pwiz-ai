@@ -331,3 +331,28 @@ getting more expensive per entry - it is reconciliation transferring detections 
 they were not independently found, so there are simply more survivors per file in a bigger
 cohort. Removing the O(files) multiplier is therefore the whole fix, and does not depend on
 shrinking bytes-per-entry first.
+
+## CORRECTION to the projection size (2026-09-01, after reading Qualifies + the detection loop)
+
+The plan above said consensus reads five fields, ~37 B/row. **That was from an incomplete scan.**
+The full set is ten:
+
+| source | fields |
+|---|---|
+| `Qualifies` | `IsDecoy`, `RunPrecursorQvalue`, `RunPeptideQvalue`, `ExperimentProteinQvalue` |
+| collection loops | `EntryId`, `ModifiedSequence` (pooled ref), `Score` |
+| detection tuple | `apexRt`, `peakWidth`, `coelutionSum` |
+
+About **72 B/row** with padding, so at 446 files the projection is **~21 GB**, not ~11 GB.
+A packed layout (float for RT / width / coelution, byte for the flag) would reach ~48 B and
+~14 GB, which is worth doing but should be measured rather than assumed.
+
+Still decisive against the ~100 GB measured buffer, and still inside 63.7 GB - but the honest
+projected peak is **~21 GB plus one file's entries**, not ~11 GB.
+
+## And the lazy shortcut is ruled out
+
+`ConsensusRts.Compute` iterates its input **three times** (ConsensusRts.cs lines 95, 111, 125):
+targets, then decoy pairing, then detections. Handing the planner a lazy per-file collection
+that reloads on access would therefore reload every file three times inside `Compute` alone,
+plus once each for phases 1 and 3. The projection is REQUIRED, not an optimisation.
