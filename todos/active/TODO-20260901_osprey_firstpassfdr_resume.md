@@ -179,3 +179,45 @@ The parquets solve the same problem the better way, by self-describing in the fo
 eventually do the same and drop the companion file - the header has only 14 reserved bytes, so it
 needs a length-prefixed field and a `FormatVersion` bump, which would invalidate the 446 and 86
 sidecars currently in use. Right thing to do at the next natural format bump, not today.
+
+## (d) Resume is a FORWARD SCAN, not a sparse-matrix fill (developer, 2026-09-01)
+
+> *"any need to run a prior stage invalidates the next stage. It is not supposed to be like
+> filling in a sparse matrix with the assumption that everything in the matrix must be valid.
+> It is really supposed to be moving forward looking for completed work until you find a gap and
+> then resuming from there."*
+
+Two different granularities, and only one of them is a scatter:
+
+* **Within a stage, per-file scatter is correct.** Given a fixed model, files score
+  independently, so adopting 77 of 86 in any order is sound and strictly better than resuming
+  from the first gap - the guard implemented on this branch does that.
+* **Across stages it is NOT.** If FirstPassFDR Runs at all, PerFileRescoring's and
+  SecondPassFDR's outputs describe a first pass that may no longer be the one on disk.
+
+**Nothing enforces the second today.** Validity is keyed on INPUT IDENTITY, not on upstream
+freshness, so a downstream marker stays current even when its upstream has just been
+regenerated. That is only safe because the artifacts are deterministic - same key implies same
+content - which makes the invariant emergent rather than constructed, and emergent invariants
+stop holding quietly.
+
+Note the blanket wipe removed in `4bf0df0683` did not provide this either: it deleted only
+FirstPassFDR's OWN declared outputs, never a downstream stage's. The cross-stage rule has never
+been implemented.
+
+### The rule to implement
+
+A task that **Runs** (rather than Skips or Rehydrates) invalidates the validity markers of every
+stage AFTER it. Resume then becomes a forward scan: walk the stages in order, take completed
+work until the first gap, run from there, and treat everything beyond as invalid by
+construction.
+
+Two things that makes correct which are currently only conventionally correct:
+
+1. A stage whose output changes cannot leave a downstream stage claiming validity against the
+   old output, whatever the key does or does not cover.
+2. The `ValidityKey` no longer has to be exhaustive to be safe. Today a key that forgets an
+   input is a silent-wrong-answer bug; under a forward scan it is at worst a redundant recompute.
+
+Sequence it with the per-file guard - the guard makes partial work adoptable, and this makes
+adopting it safe past the stage boundary.
