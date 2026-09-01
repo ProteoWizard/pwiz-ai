@@ -221,3 +221,35 @@ Two things that makes correct which are currently only conventionally correct:
 
 Sequence it with the per-file guard - the guard makes partial work adoptable, and this makes
 adopting it safe past the stage boundary.
+
+## Measured on the branch, 86-file plate (2026-09-01)
+
+Staged with `ai/scripts/Osprey/New-OspreyResumeStage.ps1` into a DISPOSABLE hard-linked
+directory - never in the run that took 44 minutes to produce, after a blanket-wipe bug in this
+very branch destroyed that run's resume state and cost a re-run.
+
+| case | gate | wall | baseline |
+|---|---|---|---|
+| full (`guard-100pct`) | `86 of 86 ... (0 to score)`, 86 skip lines | **29.2 min** | 43.9 min from scratch |
+| partial (`guard-90pct`) | `77 of 86 ... (9 to score)`, 77 skip lines | running | - |
+
+**33%, not the "far less" claimed before running it.** The guard removes the feature loads and
+dot products (~14.7 min at 86 files). It does NOT remove the row walk: both passes still
+traverse all 260 M rows - 18.5 of the remaining 29 minutes - because scoring is only one of
+three things they do. Pass 1 feeds the experiment competition; pass 2 feeds `projections`, the
+`--model-diagnostics` accumulator, and the sidecar write.
+
+### What that means for the 446 target
+
+| term at 446 | min | status |
+|---|---|---|
+| per-file score reuse | -137 | done, verified |
+| model reuse (`.1st-pass.model.json`) | -21 | built (`a00d45912e`), not yet measured |
+| row walk in both passes | ~90 | REMAINS |
+| protein FDR + protein q | ~33 | REMAINS |
+| survivor reload | ~32 | REMAINS (and is the memory peak) |
+
+Sub-hour is therefore **not** reachable with the guard alone, contrary to the earlier estimate.
+It needs the protein-FDR guard (its answers are already in the experiment sidecar) AND a way to
+skip pass 2 for a file whose sink output is already on disk - which means relocating what
+`projections` and the diagnostics accumulator consume, a design question rather than a flag.
