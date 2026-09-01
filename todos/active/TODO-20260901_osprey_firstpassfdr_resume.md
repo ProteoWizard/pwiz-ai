@@ -364,3 +364,74 @@ Today's run survived only because it died after pass 2 had written all 446.
 **Verify before implementing**: that the score pass 1 computes is bit-identical to pass 2's.
 Both call `ComputeStreamedScore` with the same averaged fold weights, so it should be, but the
 regression gate is byte-identical output and this is the assumption it rests on.
+
+### (e3) THE TARGET DESIGN: one immutable artifact per phase, written when that phase ends
+
+Settled with the developer 2026-09-01. Every phase's product becomes durable at the moment it
+exists, nothing is ever rewritten, and the only work at risk anywhere is a single in-flight file.
+
+```
+after training      -> .1st-pass.model.json          guards 21 min   (exists; called from PlanStage6 today)
+during pass 1       -> per-file .1st-pass.fdr_scores.bin, per file   (exists; written in pass 2 today)
+after pass 2        -> experiment-scope file          guards 82 min  (exists, but written after protein FDR)
+after protein FDR   -> protein-q file                 guards 33 min  (NEW - see below)
+during planning     -> .reconciliation.json, per file                (already correct)
+```
+
+**No new formats and no new concepts** - three of the five artifacts already exist and are simply
+written later than the phase that produced them. The immutable + atomic (`FileSaver`) design is
+what makes moving the writes earlier safe: a reader can trust whatever it finds, so there is no
+reason to defer a write until "everything is certain".
+
+#### The protein-q split, and the rule behind it
+
+`out.1st-pass.fdr_experiment.bin` currently carries precursor q, peptide q, PEP, aggregate score
+AND protein q, and is written once after protein FDR - complete, never mutated, so the existing
+code is NOT guilty of placeholder columns. It is guilty of the other half: pass 2's 82 minutes
+of experiment-scope work sits in an `FdrExperimentAccumulator` in RAM while protein FDR runs, and
+dying in protein FDR discards all of it.
+
+Split into TWO immutable files joined on entry_id at read time - **not** one file revisited:
+
+| written by | when | contents |
+|---|---|---|
+| pass 2 | pass 2 ends | entry_id -> precursor q, peptide q, PEP, aggregate score |
+| protein FDR | protein FDR ends | entry_id -> protein q |
+
+> **The rule: a column lives in the file written by the phase that computes it.**
+
+That is the rule that dissolves the recurring "where should PEP live" question, and it is why
+"add the column in a second stage" must never mean write-then-update. `FdrExperimentSidecar.ReadMap`
+becomes two reads merged, which is cheap.
+
+#### Why pass 2 does not collapse
+
+Pass 1 computes all four fields the per-file sidecar stores (`EntryId`, `Score`,
+`RunPrecursorQvalue`, `RunPeptideQvalue`), so pass 1 can write it. But pass 2 is NOT redundant:
+its unique product is the experiment-scope values, which cannot exist before the barrier turns
+`streamingQ` into `pepByEntryId` / `expPrecByWinnerId` / `expPeptByPeptide` / `expAggByEntryId`,
+and the barrier needs every file's pass-1 contribution.
+
+What pass 2 loses is only the expensive half - reloading features and re-running
+`ComputeStreamedScore`. It reads the score from pass 1's sidecar instead, through the path
+`tryStreamCompletedScores` already implements. It keeps the row walk, the map lookups and the
+sink feed.
+
+#### Resulting recovery profile
+
+| die during | today | with this |
+|---|---|---|
+| training | 21 min | 21 min |
+| pass 1 | everything before it | one file |
+| pass 2 | everything before it | one file |
+| protein FDR | pass 2 as well (82 min) | nothing |
+| planning | reload + planning | one file |
+
+Exposure stops growing with cohort size: at 1000 files it is still one file, where today the
+unguarded window would be roughly 4h30m.
+
+#### Assumption to verify first
+
+Pass 1 and pass 2 must produce a **bit-identical** score - both call `ComputeStreamedScore` with
+the same averaged fold weights, so they should, but the regression gate is byte-identical output
+and this is the claim it rests on. Check it before moving the sidecar write.
