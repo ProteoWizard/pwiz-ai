@@ -143,3 +143,68 @@ question: it buys per-file memory on SEPARATE nodes and independent restart gran
 parallelism. It also inherits the cross-node reduce at the pass-1/pass-2 barrier and makes every
 worker repay the 9.5 min library load. Only worth it if single-node parallelism proves
 memory-bound.
+
+## REFINED (2026-09-01, after reading the code): #4526 fixed the HOLD, not the BUILD
+
+`OspreyEnvironment.Stage6StreamSurvivors` is **already DEFAULT ON**, and its own doc names this
+issue: *"That buffer is 88.9 M entries / 28 GB live at 163 files, held for the 5.5 hours of
+Stage 6, and it grows super-linearly in file count because the passing base_id set grows too
+(issue #4526)."*
+
+But look at the order in `FirstPassFdrTask`:
+
+```
+line 2654   ReloadFirstPassSurvivors(...)         <- BUILDS all 446 files' survivors ** PEAK **
+line 2660   count, log "compaction: 1.34 B -> 289 M"
+line  552   kvp.Value.Clear() / TrimExcess()      <- releases them, post-planning
+```
+
+So Stage 6 no longer *holds* the buffer for hours - that is fixed and shipping. Stage 5 still
+*builds* it, pays the 100 GB peak, runs `PlanStage6` while it is resident, and only then clears
+it. **The 446-file wall is the build, not the hold**, which is why the run died precisely at
+`Reconciliation planning`.
+
+## The fix has a precedent in the very file that needs it
+
+`Stage6Planner` already had this exact defect for CWT candidates and already fixed it:
+
+```csharp
+// ... the former eager all-files load was the buffer that OOM'd the 82-file Stage-6 planning.
+// The planner then streams each file's candidates on demand (LoadOneFile ...)
+    fileName => CwtCandidateLoader.LoadOneFile(fileName, perFileParquetPaths),
+```
+
+The survivor buffer is the same shape one layer out: `PlanStage6` still receives a materialised
+`perFileEntries` and wraps it as `perFileForPlan`. The replacement delegate already exists -
+`FirstPassSurvivorLoader.Load(fileName, out error)` - is already published as
+`FirstPassSurvivorSource`, and is already what Stage 6 streams from.
+
+**Shape of the work**: give the planner a `Func<string, IReadOnlyList<FdrEntry>>` instead of the
+list, exactly as `CwtCandidateLoader.LoadOneFile` is passed today, and stop calling
+`ReloadFirstPassSurvivors` on the streaming path.
+
+**The open question to answer first**: the planner's cross-file phases (multi-charge consensus,
+cross-run consensus RT) need evidence from all files at once. Determine whether consensus is
+built from a PROJECTION of the entries (peptide -> per-file RT + score, order 20 B/row) or from
+whole `FdrEntry` rows (274 B). If a projection, the lean row is what makes planning fit and the
+two efforts meet here. If whole rows, consensus needs its own streaming pass before the
+per-file reconciliation planning can stream.
+
+## Iterating without re-running the 3h45m per-file half
+
+Everything the reload + planning consumes is already on disk in
+`chs-446files-...-baseline-phase3`: 446 `.scores.parquet`, 446 `.1st-pass.fdr_scores.bin`
+(35 GB), and `out.1st-pass.fdr_experiment.bin`. Only `firstPassBaseIds` is not persisted, and
+the compaction gate that computes it took 4.6 min.
+
+Three options, cheapest first:
+
+1. **Harness over the on-disk artifacts** - drive the loader + planner directly against that
+   directory. ~15 min/iteration (9.5 min library load + ~5 min gate). No pipeline changes.
+2. **Finer-grained resume** - let FirstPassFDR skip its per-file passes when the sidecars are
+   valid and re-enter at the compaction gate. Principled, doubles as the feature
+   `TODO-20260901_osprey_firstpassfdr_resume.md` wants, but blocked on defect (b) there.
+3. **Smaller cohort** - 86 or 171 files exercises the same code at ~45-90 min/iteration and a
+   15-30 GB buffer. Useful as a correctness check, useless for the 446-file memory question.
+
+Recommend (1) to develop against and (3) to gate correctness, with (2) as the shipping form.
