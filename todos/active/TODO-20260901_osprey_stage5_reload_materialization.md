@@ -108,3 +108,38 @@ cannot even be measured at 446 until the Stage 5 buffer is gone.
 * All 446 Stage 1-4 parquets are staged and joinable at 26.1.1.243 via
   `runs\_linksrc\{p0059,p0060,p0061,p0062,p0063_0064}` — a fix can be tested immediately
   without redoing any scoring.
+
+## DEFERRED: single-node per-file parallelism in the two Percolator passes
+
+Measured on the 446-file run, pass 1 (score + per-file run q) is 55.3 min and pass 2 (re-score
++ q assignment) is 82.1 min - 137 min, ~53% of the task. Both are plain sequential
+`for (int f = 0; f < nFiles; f++)` loops in `PercolatorScorer`, and **nothing algorithmic keeps
+them sequential**:
+
+| shared across the file loop | nature |
+|---|---|
+| `featureBuf`, `buffer` | reusable scratch - per-thread |
+| `streamingQ` | accumulator, commutative, mergeable |
+| `minRunBothByEntryId` / `ByPeptide` | min-reductions, commutative |
+| `contribAcc` | feature contributions, commutative |
+| `nonEmptyFiles`, `g1` | counters - interlocked |
+
+`ComputePerFileRunQvalues` is already called per file on that file's own arrays; run-level FDR
+is per-file by definition. So this needs **no task split** - a `Parallel.For` with per-thread
+scratch and per-thread accumulators merged at the end would do it, and would take those 137 min
+to roughly 10-20 at 8-16 way.
+
+**Deferred deliberately (2026-09-01, developer's call).** Concurrency multiplies the per-file
+working set inside a task whose memory is already the thing that killed the 446-file run, and
+these two passes are NOT where the memory problem is - they held 11-13 GB throughout. Adding
+concurrency here before the Stage 5 buffer is fixed would spend memory headroom exactly where
+there is none to spare.
+
+Revisit AFTER the buffer is gone, and price it then on a measured per-file resident cost during
+the passes rather than the estimate above.
+
+The related three-task split (ModelTraining / PerFileFDR / FirstPassFDR) is a different
+question: it buys per-file memory on SEPARATE nodes and independent restart granularity, not
+parallelism. It also inherits the cross-node reduce at the pass-1/pass-2 barrier and makes every
+worker repay the 9.5 min library load. Only worth it if single-node parallelism proves
+memory-bound.
