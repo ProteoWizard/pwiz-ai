@@ -6,10 +6,10 @@
 - **Worktree**: `C:\proj\pwiz-work1` — `C:\proj\pwiz` is held by the open PR #4616
   (cache-only inputs), which a CHS plate run is field-validating
 - **Created**: 2026-08-26
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
 - **Module**: `osprey`
-- **PR**: [#4621](https://github.com/ProteoWizard/pwiz/pull/4621) - opened 2026-08-27 02:40
+- **PR**: [#4621](https://github.com/ProteoWizard/pwiz/pull/4621) (merged 2026-08-31 as 091d79a98b)
 
 ## Objective
 
@@ -6716,3 +6716,22 @@ because it builds from WRITTEN RECORDS, after both columns are real.
   copies byte-identical, 8.9 MB each, 730 MB duplicated at 82 files, of which 6.3 MB is
   `StratumBaseIds` against a ~2 KB model.
 * CHS 446-file baseline - see `ai/.tmp/handoff-20260831_chs_446file_test_plan.md`. NOT started.
+
+### 2026-08-31 - Merged
+
+PR #4621 merged as commit `091d79a98b`. Stage 7 no longer holds a whole-run pool for every
+fold, and - the goal this phase was actually for - SecondPassFDR now performs its job from
+second-pass artifacts alone: no per-file first-pass sidecar, no reconciled-parquet feature
+reload, no per-survivor rescore. That is proven by ABSENCE, the regression's HPC node is no
+longer given those files, so a reach for one fails rather than passing quietly. Stage 7 at 82
+files fell 17:40 -> 10:56 with the per-file GC sawtooth largely gone.
+
+DEFERRED, and deliberately: per-file DRIFT did not move (215 -> 216 MB/file private, 38 -> 39
+managed). This phase removed transient allocation; the resident pool is untouched and is the
+p10 floor. Phase 3 (the lean row) is its own PR and must be measured on drift per file - at 446
+CHS files that term is ~17 GB managed / ~96 GB committed, and at 82 it is invisible.
+
+Follow-ups filed: `TODO-task_file_contract_from_declarations.md` (--help-files printing the task
+contract from Inputs()/Outputs(), and both harnesses staging only declared inputs), and
+`ai/.tmp/handoff-20260831_chs_446file_test_plan.md` for the CHS baseline. The per-file
+`.1st-pass.model.json` remains analysis-wide in content (730 MB duplicated at 82 files).
