@@ -327,3 +327,40 @@ partial resume reached just 28% (31.4 min against 43.9).
 **This is the change that answers the original goal** (a machine lost to a Windows Update
 recovers proportionally). The per-file score guard was necessary but is not sufficient on its
 own.
+
+### (e2) Pass 1 already computes the whole per-file sidecar - write it there
+
+`FdrScoreRecord` is four fields: `EntryId`, `Score`, `RunPrecursorQvalue`, `RunPeptideQvalue`.
+Nothing experiment-scoped - that was split to `out.1st-pass.fdr_experiment.bin` in #4486. And
+**pass 1 computes all four, per file**:
+
+```
+score = ComputeStreamedScore(...)                           -> Score
+ComputePerFileRunQvalues(fScores, fLabels, fEntryIds, ...)  -> RunPrec/RunPeptQvalue
+buffer.EntryIds[r]                                          -> EntryId
+```
+
+So pass 1 builds each file's sidecar, throws it away, and pass 2 recomputes it 82 minutes later
+in order to write it. Moving the write into pass 1 gives:
+
+1. **Proportional recovery.** With the model persisted after training, every file's work is
+   durable as it completes through pass 1. Die anywhere after minute 21 and one file is lost,
+   not two hours - and that does not grow with cohort size. At 1000 files the exposure is still
+   one file, where today it would be a ~4:30 gap.
+2. **Pass 2 stops re-scoring even on a cold run.** The earlier note called this "55 min of pure
+   recomputation" and dismissed retaining the scores as ~11 GB at 446. Wrong framing: they do
+   not need retaining, they need WRITING - to a file that must be written anyway. Pass 2 reads
+   them back through the path `tryStreamCompletedScores` already implements.
+
+| die during | lost today | lost with this |
+|---|---|---|
+| training (0-21 min) | 21 min | 21 min |
+| pass 1 (21-76) | everything | one file |
+| pass 2 (76-158) | everything | one file |
+
+The per-file sidecars were the right shape all along; they are written one whole phase too late.
+Today's run survived only because it died after pass 2 had written all 446.
+
+**Verify before implementing**: that the score pass 1 computes is bit-identical to pass 2's.
+Both call `ComputeStreamedScore` with the same averaged fold weights, so it should be, but the
+regression gate is byte-identical output and this is the assumption it rests on.
