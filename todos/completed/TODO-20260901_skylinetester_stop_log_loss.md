@@ -5,6 +5,8 @@
 - **Module**: `skyline` - SkylineTester UI and its log handling
 - **Base**: `master` @ `99609d5bc0`
 - **Created**: 2026-09-01
+- **Status**: Completed
+- **PR**: [#4630](https://github.com/ProteoWizard/pwiz/pull/4630) (merged 2026-09-01)
 
 ## Problem
 
@@ -137,3 +139,50 @@ show up as untracked. Widen to `SkylineTester*.log`. Verify it does not disturb
   Shadow copies and restore points both needed elevation and are unlikely on a dev box.
 * The habit that has been compensating for this - asking a Claude Code session to copy
   the log to `D:\test\nightly-logs` before stopping - should not be necessary.
+
+## Progress Log
+
+### 2026-09-01 - Merged
+
+PR #4630 merged as commit `893544fb6b`. All three planned parts shipped, and the
+investigation found two more destructive paths than the one the plan named:
+`TabBase.StartLog` truncated the log with `File.WriteAllText(..., "")` right after being
+handed it, and `TabQuality.Run` deleted it outright. Removing the `File.Delete` from the
+`LogFile` setter alone would not have fixed anything.
+
+Verified interactively by Brendan on the net10 build in `pwiz-work1`: Stop now changes to
+"Stopping..." and disables immediately, repeated clicking is harmless, the log rolls
+exactly once, and both it and the test list are back in `pwiz_tools/Skyline` rather than
+the SkylineTester project folder.
+
+Scope added during review, beyond the original plan:
+
+* `RootDir` now prefers a directory named exactly `Skyline`, falling back to the first
+  `Skyline*` only when there is none above. The `StartsWith` was deliberate - the
+  standalone SkylineTester zip is rooted on a SkylineTester directory - but in an
+  SDK-style build the exe sits under `Skyline\SkylineTester\bin`, so the walk stopped a
+  level early. This is why the log and test list had moved on the net10 branch.
+* Opening the window no longer deletes the log, so reopening SkylineTester to go read the
+  last run's log no longer throws it away.
+* The roll takes `LogLock`, which every other access to that file already holds, so a
+  memory-graph refresh landing mid-roll cannot fail the `Move` with a sharing violation.
+* `StopByUser` returns early when the run finished while the nightly confirmation was up,
+  which would otherwise leave the buttons disabled with no run left to restore them.
+
+Two review rounds found real defects in the fix itself, both fixed before merge: the
+`FileInfo.Length` check sat outside the `try`, and pruning the older rolled log ran
+*before* the `Move`, so a failed roll discarded it for nothing.
+
+The `.gitignore` change deliberately kept the anchored `/pwiz_tools/Skyline/` paths and
+added only `/pwiz_tools/Skyline/SkylineTester-*.log`. Widening the pattern would have
+masked the `RootDir` regression rather than fixing it.
+
+Deferred: `TabNightly.cs:297` still hard-deletes `SkylineTester.log` when a nightly
+starts. Consistency value only, on the unattended nightly path, so it did not meet the
+bar for landing here. Not filed as an issue.
+
+Merged with `--admin`: the gate was genuinely green (20/20, including
+`Skyline master and PRs`), but master had picked up an unrelated revert commit after the
+run started, and this repository requires branches to be up to date. No TeamCity
+configuration covers SkylineTester behavior, so the coverage that matters here is
+Brendan's manual testing above plus the Release compile.
