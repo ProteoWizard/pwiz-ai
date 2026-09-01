@@ -208,3 +208,47 @@ Three options, cheapest first:
    15-30 GB buffer. Useful as a correctness check, useless for the 446-file memory question.
 
 Recommend (1) to develop against and (3) to gate correctness, with (2) as the shipping form.
+
+## The contained reproduction EXISTS (2026-09-01)
+
+`Osprey.Test/Stage5SurvivorBufferBenchTest.cs`, opt-in via `OSPREY_BENCH_RUNDIR`. No pipeline
+run, no first pass, no Percolator. It works because **the passing base_id set is already
+persisted** - `FirstPassFdrTask` writes it into every `.reconciliation.json` as
+`first_pass_base_ids` (format v3), and `RescoreHydration` already reads it back. An earlier plan
+to add a new artifact for this was unnecessary.
+
+First measurement, 12-file cohort:
+
+```
+passing base ids : 264,209        survivors : 4,101,007
+COLLECT peak     : 1.50 GB (22 s)   <- what Stage 5 does today
+STREAM  peak     : 0.41 GB (21 s)   <- what the fix does
+bytes per entry  : 392 (collect)    reduction : 3.6x
+```
+
+**The 3.6x understates the win.** COLLECT is O(files); STREAM is O(one file). At 12 files the
+buffer is only 12x one file so fixed overhead dominates the ratio; at 446 files STREAM stays at
+roughly one file's survivors (~648 K x 392 B = ~250 MB) against COLLECT's ~100 GB. Streaming
+also costs nothing in wall time - the loader already reads per file, collecting merely retains.
+
+392 B/entry against the 274 B production figure is the empty sequence pool (~72 B/entry of
+unshared modified-sequence strings plus overhead), which cross-checks the harness against the
+real run. Set `OSPREY_BENCH_LIBRARY` to seed it if absolute numbers are wanted.
+
+### Which directories can drive it
+
+| directory | parquets | 1st-pass sidecars | experiment sidecar | base_ids | usable |
+|---|---|---|---|---|---|
+| `clean-full-12files` | 12 | 12 | 1 | yes | **yes** |
+| `resume-test-12files` | 12 | 12 | 1 | yes | **yes** |
+| plate `p0059` (86) | 86 | 86 | **0** | yes | **no** |
+| 446 `baseline-phase3` | 446 | 446 | 1 | **no** | **no** |
+
+The 2026-08-23/26 plate runs predate #4486's sidecar format and the reader refuses them
+("failed to overlay .1st-pass.fdr_scores.bin"), which is also why they carry no experiment
+sidecar. The 446 directory has the current format but died before `PlanStage6` wrote any
+`.reconciliation.json`, so it has no base_ids.
+
+**To bench at a scale that matters, one current-build run must reach Stage 5 planning.** A
+single plate (86 files, ~43 min of first pass) would produce a directory good for every
+subsequent iteration.
