@@ -913,6 +913,70 @@ If the build failed, check `pwiz\build64.log` for errors. Common issues:
 - Missing C++ tools: See Phase 2.3
 - NuGet errors: See Troubleshooting section
 
+### 4.5 Building the .NET 10 Port Branch
+
+**Everything above describes the master build, which is Boost.Build.** The .NET 10 port
+branch (`Skyline/work/20260612_net8_port`, and work branches taken from it) builds a
+completely different way, through the .NET SDK. The two share the `b.bat` / `bs.bat`
+*names* and nothing else, so do not carry instructions across.
+
+**Prerequisite:** the .NET 10 SDK. Check with `dotnet --list-sdks` and look for a `10.0.x`
+entry. Visual Studio is not required for the managed build; the C++ toolchain from Phase 2
+is not used by it either.
+
+`pwiz-sharp/` is **tracked on this branch** and arrives with the checkout - there is no
+second repository to clone. (On master the same directory is untracked, so a checkout
+switched from this branch back to master leaves it behind as an untracked leftover. That
+is cruft, not a missing dependency.)
+
+**The real entry point is in the repository:** `pwiz_tools\Skyline\build.bat`. It is
+thoroughly self-documenting - open it and read the header comment for the full flag list,
+the distro-zip targets, and the `SKYLINE_TEST_*` environment variables. It is the same
+script TeamCity runs through `tcbuild.bat`, so a local build is the CI build.
+
+```cmd
+cd <checkout>\pwiz_tools\Skyline
+build.bat Release --i-agree-to-the-vendor-licenses --no-tests
+```
+
+**The root `b.bat` / `bo.bat` / `bs.bat` are optional per-developer conveniences.** They
+are gitignored, so each developer creates their own; they only save typing the flags and
+the path. Three single-line files in the checkout root:
+
+**b.bat**
+```batch
+@call "%~dp0pwiz_tools\%~1\build.bat" --no-tests --i-agree-to-the-vendor-licenses %2 %3 %4 %5 %6 %7 %8 %9
+```
+
+**bs.bat** - Skyline
+```batch
+@call "%~dp0b.bat" Skyline %*
+```
+
+**bo.bat** - Osprey
+```batch
+@call "%~dp0b.bat" Osprey %*
+```
+
+Note what `b.bat` bakes in: `--no-tests` and `--i-agree-to-the-vendor-licenses`. So
+`.\bs.bat` builds Release without running the hour of tests that `build.bat` otherwise
+runs after a build, and it accepts the vendor SDK EULAs on your behalf - the same
+agreement Phase 4.1 asks for. Pass a configuration through as an argument:
+
+```cmd
+.\bs.bat            REM Release, build only
+.\bs.bat Debug      REM Debug, build only
+.\bo.bat            REM Osprey instead of Skyline
+```
+
+> Use `.\bs.bat` with the leading `.\` in both PowerShell and Command Prompt, for the
+> reasons given under 4.3.
+
+To run tests, call `build.bat` directly without `--no-tests`, or use the SkylineTester and
+`ai/scripts/Skyline/Run-Tests.ps1` paths described in
+[build-and-test-guide.md](build-and-test-guide.md). `TestPerf` and `TestTutorial` are
+deliberately excluded from `build.bat`'s standard scope; run those separately.
+
 ---
 
 ## Phase 5: Visual Studio Configuration

@@ -14,6 +14,11 @@ Detailed reference for building, testing, and analyzing Skyline from LLM-assiste
 - Visual Studio 2022 Community/Professional installed
 - Initial full build completed with `bs.bat` (Boost.Build + native dependencies)
 
+> **On the .NET 10 port branch this is not how the build works.** There the tree builds
+> through the .NET SDK via `pwiz_tools\Skyline\build.bat`, `bs.bat` means something
+> different, and neither Boost.Build nor the C++ toolchain is involved. See
+> [new-machine-setup.md](new-machine-setup.md) section 4.5.
+
 ## Script Location and Auto-Detection
 
 All build and test scripts are in `ai/scripts/Skyline/`:
