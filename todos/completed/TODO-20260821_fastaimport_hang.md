@@ -6,6 +6,8 @@
   `HttpClientWithProgress` change is in `Shared/CommonUtil` in support of it
 - **Base**: `master` @ `51ec80a968`
 - **Created**: 2026-08-21
+- **Status**: Completed
+- **PR**: [#4607](https://github.com/ProteoWizard/pwiz/pull/4607) (merged 2026-09-01)
 
 ## Problem
 
@@ -127,3 +129,36 @@ The `WaitAny` rewrite also removed three further findings: the CancelAfter/Dispo
 * Nothing enforces the no-internet flag; tests are trusted to honor it, which is why
   this went unnoticed from 2025-11-23 to 2026-08-21. A guard in `HttpClientWithProgress`
   refusing non-allowlisted hosts when `AccessInternet` is false would catch the next one.
+
+## Progress Log
+
+### 2026-09-01 - Merged
+
+PR #4607 merged as commit `27affed1c2`. Shipped as written: the response-header wait and
+the error-status body read are both bounded, and `TestFastaImport`'s negative pass no
+longer reaches the live web. `RequestTimeout` stays the no-op it was - honoring it was
+tried and reverted, and that reasoning is now carried in the squash commit body so it
+survives in `git log` rather than only here.
+
+One fix was added during review. `SendWithResponseTimeout` was missing the
+`CancellationToken.ThrowIfCancellationRequested()` guard that `ReadChunk` applies after
+its `Task.WaitAny`. Because the delay shares the caller's token, cancelling completed it
+and the wait ended exactly as on a timeout, so a user who clicked Cancel was told the
+request timed out, and `WebEnabledFastaImporter` - which catches `NetworkRequestException`
+before `OperationCanceledException` - recorded the whole batch as timed out rather than
+cancelled. A regression against the pre-diff `.Result`, which threw
+`AggregateException(TaskCanceledException)` and mapped correctly. Fixed in `c641bdadba`.
+
+Four Copilot threads were reviewed and all declined with reasons recorded on the PR: the
+abandoned request outliving its wait (deliberate, and the late response is disposed by the
+continuation), the undisposed error response (pre-existing on that path, marginally
+worsened), and the foreground thread in the new test (real mechanism, but `listener.Stop()`
+in the `finally` resets the backlog connection and unblocks the worker).
+
+Merged with `--admin` during a TeamCity outage. The last full 19/19 green predates
+`c641bdadba` and the final master merge; Brendan and Matt judged the change level
+acceptable. The cancellation fix was verified locally instead - clean build plus
+`TestHttpClientWithProgressIntegration`, `TestFastaImport`, `TestBasicFastaImport`,
+`TestSkyp`, `TestPublishToPanorama` and `TestRInstaller`, all green in en and fr.
+
+Everything under "Not touched" remains deferred; no follow-up issues were filed.
