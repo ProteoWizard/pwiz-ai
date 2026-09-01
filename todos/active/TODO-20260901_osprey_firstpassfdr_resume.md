@@ -253,3 +253,31 @@ Sub-hour is therefore **not** reachable with the guard alone, contrary to the ea
 It needs the protein-FDR guard (its answers are already in the experiment sidecar) AND a way to
 skip pass 2 for a file whose sink output is already on disk - which means relocating what
 `projections` and the diagnostics accumulator consume, a design question rather than a flag.
+
+## Progress log - 2026-09-01 (end of session)
+
+Committed on `Skyline/work/20260901_osprey_firstpass_resume` (tip `db5a8b696d`, not pushed):
+write-time stamping on the production path, the per-file resume gate, removal of the blanket
+marker wipe, persisted-model reuse, compaction-gate entry, and a named reason when that entry
+refuses.
+
+Measured on the 86-file plate, all real runs:
+
+| case | wall | to the memory peak |
+|---|---:|---:|
+| from scratch | 43.9 min | 24m53s |
+| partial resume (9 of 86 sidecars missing) | 31.4 min | - |
+| full resume, score guard only | 29.2 min | - |
+| **full resume, enter at gate** | **9.4 min** | **4m39s** |
+
+Compaction boundary identical either way (`259953530 -> 34524236, 373487 passing base_ids`),
+which is the correctness check; the timing is secondary.
+
+**Blocking finding for the 446 baseline**: that directory has neither `.reconciliation.json` nor
+`.1st-pass.model.json` - both are `PlanStage6` outputs and the run died before reaching it. So
+the fast path refuses (no stratum) AND the bench cannot run (no `first_pass_base_ids`). Develop
+the Stage 5 fix at plate scale, then spend ONE 446 run carrying it; that run both completes and
+leaves the directory resumable for every iteration after.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260901_osprey_firstpass_resume.md` before starting work.
