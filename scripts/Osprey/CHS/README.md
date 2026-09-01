@@ -156,6 +156,36 @@ prompt. All sources must carry the same Osprey version stamp or the run refuses 
 the banner tallies each source's contribution so a leg that linked nothing is visible up
 front. `-WhatIf` walks the link block in probe mode, so check the tally before committing.
 
+## Joining legs scored by DIFFERENT builds
+
+Legs scored days apart carry different `osprey.version` stamps, and `-LinkFrom` refuses the
+set. Two things are true at once and it is worth keeping them apart:
+
+* **Osprey's guard** (`ParquetScoreCache`) compares the parquet stamp to the current binary and
+  hard-fails. `OSPREY_VERSION_OVERRIDE` is the sanctioned way past it - the code says so, and
+  the stamp is pure provenance.
+* **The runner's check** reads the FIRST `*.osprey.task` in each source and throws when they
+  disagree. **`OSPREY_VERSION_OVERRIDE` does NOT rescue this** - the throw runs before the
+  override is consulted. In a completed run directory that first file is
+  `.1st-pass.fdr_scores.bin.FirstPassFDR.osprey.task`, a later stage's marker.
+
+**Stage hard links, do not restamp.** Build one directory per leg holding links to only the
+four PerFileScoring artifacts (`.scores.parquet`, `.calibration.json`, and each one's
+`.PerFileScoring.osprey.task`). Every source then holds exactly one kind of task file, the
+version sets agree, and the join links from those. Hard links cost no disk and mutate nothing;
+`ai/.tmp/chs-stage-linksrc.ps1` is a worked example, and this is the cheaper answer.
+
+Restamping is the heavier alternative and needs *evidence*, because the guard asks "was this
+scored by exactly my binary?" while restamping asserts "this scoring is identical to my
+binary's". Establish that first by re-scoring a few of the same files on the new build and
+diffing with `../Compare-ScoreParquets.py`; `../Restamp-OspreyVersion.py` then patches the
+stamp in place. Do not restamp the later stages' markers - their binary sidecars embed the
+version internally, so moving the marker alone manufactures an inconsistency.
+
+Measured on this dataset 2026-09-01: six files re-scored on 26.1.1.243 were bit-identical to
+their stored 26.1.1.233 and 26.1.1.238 originals, so `PerFileScoring` output is
+build-invariant across those three daily builds as well as cohort-independent.
+
 ## Related
 
 * `ai/docs/osprey-large-datasets.md` - the catalog entry, access, and download budgeting
