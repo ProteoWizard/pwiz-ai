@@ -964,9 +964,11 @@ cd <checkout>\pwiz_tools\Skyline
 build.bat Release --i-agree-to-the-vendor-licenses --no-tests
 ```
 
-**The root `b.bat` / `bo.bat` / `bs.bat` are optional per-developer conveniences.** They
-are gitignored, so each developer creates their own; they only save typing the flags and
-the path. Three single-line files in the checkout root:
+**The root `b.bat` / `bo.bat` / `bs.bat` are per-developer files.** They are gitignored, so
+each developer creates their own - a fresh checkout has none, and nothing in the repository
+will create them. On master they only save typing. On this branch they are also **the
+bootstrap that makes an IDE build work at all** (see "Iterating in Visual Studio" below), so
+create them before opening the solution. Three single-line files in the checkout root:
 
 **b.bat**
 ```batch
@@ -996,6 +998,51 @@ agreement Phase 4.1 asks for. Pass a configuration through as an argument:
 
 > Use `.\bs.bat` with the leading `.\` in both PowerShell and Command Prompt, for the
 > reasons given under 4.3.
+
+#### Iterating in Visual Studio
+
+**Build once from the command line, then iterate in the IDE.** This is the same rhythm master
+has always had, and the reason is the same: ProteoWizard is built by a separate build system,
+and Skyline consumes its output.
+
+```cmd
+.\bs.bat            REM or .\bs.bat Debug - do this FIRST, once
+```
+
+Then open `pwiz_tools\Skyline\Skyline.sln` and build normally. Incremental IDE builds of
+Skyline and its own projects work exactly as they do on master.
+
+**Visual Studio does not rebuild pwiz-sharp, and is not supposed to.** On master, ProteoWizard
+is C++ built by Boost.Build and Skyline links the results; the IDE never rebuilds it. On this
+branch ProteoWizard is `pwiz-sharp`, C# built through the .NET SDK by `build.bat` - but the
+relationship is deliberately the same one. **Updating ProteoWizard for Skyline still requires
+an external build.** If you change anything under `pwiz-sharp\`, re-run `.\bs.bat`; an IDE
+build will not pick it up.
+
+So on a working machine you will find `pwiz-sharp\**\bin\<config>\net10.0\*.dll` sitting at
+whatever date `bs.bat` last ran, while Skyline's own output is current. That is the design
+working, not stale binaries. It is also why `Skyline.sln` contains no pwiz-sharp projects:
+adding them would connect the two builds, which is a change in the model rather than a fix.
+
+**What the first command-line build does that the IDE cannot.** `build.bat` is not just a
+convenience wrapper:
+
+* it builds **native `Hardklor.exe`** from a C++ `vcxproj` using VS MSBuild located via
+  `vswhere`, because - in its own words - *"`dotnet build` (the .NET SDK MSBuild) cannot build
+  a C++ vcxproj"*. `Skyline.csproj` then deploys that exe beside Skyline through a `Content`
+  include, so the Hardklor/Bullseye pipeline can shell out to it
+* it runs `dotnet restore` across the whole target set
+* it passes `--i-agree-to-the-vendor-licenses`, which the IDE has nowhere to pass
+
+Skip it and the IDE has no restored packages, no Hardklor, and - unless you ran
+`i-agree-to-the-vendor-licenses.bat` - stub vendor readers.
+
+> **If an IDE build fails on a fresh checkout, the first question is whether `.\bs.bat` has
+> ever been run in it** - not whether project references or solution membership are wrong.
+> `ProteowizardWrapper.csproj` and `Skyline.csproj` reference the pwiz-sharp projects by
+> `<ProjectReference>` to their `.csproj` files, so the references resolve by path and do not
+> depend on anything being listed in `Skyline.sln`.
+
 
 To run tests, call `build.bat` directly without `--no-tests`, or use the SkylineTester and
 `ai/scripts/Skyline/Run-Tests.ps1` paths described in
