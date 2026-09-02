@@ -666,3 +666,33 @@ before spending another 446 run:
 Until that is settled, **do not describe the 446 boundary as either a regression or an
 improvement.** Note also that 288,920,200 was measured on a run that was killed while paging and
 has never been reproduced.
+
+## THE NEXT WALL, MEASURED 2026-09-02: Stage 6/7 rescore at ~110 GB on 446 files
+
+The extra-credit second-pass run (`chs-446files-...-secondpass`, `--task PerFileRescoring` over
+the completed FirstPassFDR directory) reached:
+
+```
+05:18:23   92.26% (823/892, 1h41m elapsed)   managed 109,989 MB   working set 112,031 MB
+```
+
+**~110 GB on a 63.7 GB box** - paging, at 378 of 446 files.
+
+This is NOT a regression from the Stage 5 work; it is the term the regression gate already names
+in its own "Known O(files) resident paths" block:
+
+> **#4486** - SecondPassFDR pulling `RescoredEntries` rebuilds the whole-run survivor buffer it
+> reads (#4597 moved the build off the end of Stage 6, which does not shrink it); resident for
+> the whole of Stage 7. ~4.4 GB library + 0.197 GB/file live post-GC: ~20 GB at 82 files,
+> **~103 GB projected at 500**.
+
+**Projected ~103 GB at 500 files; measured ~110 GB at 446.** The estimate was good, and it is now
+a measurement.
+
+It is the SAME SHAPE this change just removed from Stage 5 - one whole-run buffer over every
+file's survivors - one stage downstream. Removing the Stage 5 buffer is what let a 446-file run
+get far enough to hit it. The fix is the same in kind: Stage 7's input is a per-file stream, not
+a pool, and #4486 is the issue that owns it.
+
+Sequencing note: this is now the binding constraint on a 446-file end-to-end run. The Stage 5
+work is done; the next cohort-scale blocker is #4486, and it has a measured number to aim at.
