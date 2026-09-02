@@ -696,3 +696,58 @@ a pool, and #4486 is the issue that owns it.
 
 Sequencing note: this is now the binding constraint on a 446-file end-to-end run. The Stage 5
 work is done; the next cohort-scale blocker is #4486, and it has a measured number to aim at.
+
+### CORRECTION 2026-09-02 06:40: that ~110 GB is NOT #4486, and the run is not a clean measurement
+
+Two errors in the entry above.
+
+**1. Wrong term named.** The peak was attributed to #4486's whole-run `RescoredEntries` buffer
+from the memory number alone. The log says otherwise:
+
+```
+03:36:15  [TASK] PerFileRescoring:starting
+03:37:19  Hydrating reconciliation bundle...
+06:31:23  Hydrated rescore bundle for 446 file(s) (30,841,614 reconciliation actions, ...)
+```
+
+**2h54m to hydrate ONE whole-cohort rescore bundle** - every file's entries plus 30.8 M
+reconciliation actions, resident together. That is `PerFileRescoreTask`'s bundle hydration, and
+Stage 7 / #4486 has not been reached yet. It IS the `reconciliationActions` term this file
+already flagged as "the next O(files) term" - estimated ~24 M actions / ~2 GB, measured
+**30.8 M actions** and far more than 2 GB once it coexists with the entries.
+
+**2. The run is degraded, so its numbers are indicative only.** `-LinkFrom` did NOT stage the
+analysis-wide `out.1st-pass.fdr_experiment.bin` (verified absent), so:
+
+```
+[ERROR] First-pass compaction: failed to read the experiment-scope FDR sidecar
+[MODEL-DIAGNOSTICS] peak co-assignment skipped: no 1st-pass experiment-scope FDR records
+```
+
+and the run CONTINUED rather than stopping. The protein-rescue half of the compaction predicate
+reads that file, so the retained set this run computed is not the one the completed FirstPassFDR
+run produced. **Do not quote this run's identifications.** Re-stage with the experiment sidecar
+(the hand-rolled `stage-446-secondpass.ps1` includes it; `Run-Chs.ps1 -LinkFrom` does not).
+
+Worth an issue on its own: a missing experiment sidecar sets ExitCode=1 in
+`LoadFirstPassExperimentRecords` and the run keeps going and reports success-shaped output. That
+is the "hard fail over warn-and-proceed" rule being violated on a path that silently changes the
+result.
+
+### What this says about the HPC direction (the developer's question)
+
+*"If the task were sent to 1 computer per file would it produce valid results? Would each
+computer go through such an expensive preamble?"*
+
+**Valid: yes, and it is already proven** - regression mode 3 runs `--task PerFileRescoring` with
+ONE file per phase-3 directory and asserts the final blib is byte-identical to straight-through.
+That leg passed on all four datasets in TeamCity 4161271.
+
+**Expensive preamble: no.** A per-file node hydrates only its own file's bundle and takes the
+join-wide passing base_id set from `first_pass_base_ids` in its relayed `.reconciliation.json` -
+the field exists exactly so a node holding one file compacts to the join's set. It still repays
+the ~9.5 min library load per node, which is the known per-node cost.
+
+So the O(files) hydration measured here is a property of running 446 files in ONE process, not of
+the rescore task itself. The single-process route is what needs the fix; the farmed route already
+has the right shape.
