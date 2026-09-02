@@ -620,3 +620,171 @@ the two sentences that describe them as deleted.
 - Next: `/code-review max` from `C:\proj\pwiz-work2`, then the PR. Brendan also wants the
   active implementation session (the resume branch, `pwiz-work1`) to weigh in first, since
   it has the deepest working knowledge of the in-flight items doc 00 describes.
+
+---
+
+## REVIEW from the PerFileRescoring implementation session (2026-09-02)
+
+Reviewer context: this feedback comes from the session that implemented the fan-out fix doc 00
+describes as "in flight" - the per-run hydrate for `--task PerFileRescoring`, the analysis-wide
+`retained_base_ids.bin`, and the measurements behind them
+(`ai/todos/active/TODO-20260901_osprey_stage5_reload_materialization.md`). Everything below is
+grounded in code that was changed or measurements that were taken, not in reading.
+
+**The document is good.** The admissible/inadmissible taxonomy (00 L98-116) is the right frame,
+and L289-295 has the best sentence in the tree: *"an experiment-wide file that grows with the
+cohort puts the cohort in the floor."* `Osprey-workflow.html` is stronger still - see below.
+The notes are about the gap between what the doc asserts and what a reader could act on.
+
+### A. Factual corrections - two statements will mislead the next engineer
+
+**A1. The protein-compact stratum DOES have its own file.** 00 L470-474 says, in bold, *"The
+protein-compact stratum has no file of its own ... This is deliberate and worth not undoing"*,
+and `12-second-pass-fdr.md` L112-118 repeats it. `FirstPassModelIO.cs` defines
+`StratumSuffix = ".1st-pass.stratum.json"`, and the split was FORCED by the document's own P12 -
+training does not compute the stratum, first-pass protein FDR does, so the column lives in the
+file written by the phase that computes it. Two documents now argue against a change already
+made. `regression.ps1` stages it as its own relay hop (`$ph2stratum`).
+
+**A2. 00 L550 asserts a fail-fast that does not exist**, and this is the more dangerous one:
+*"A node that has one and not the other is the case the fail-fast exists for, and it is the
+orchestrator's job never to create it."* Measured behaviour: `FirstPassFdrTask` logs
+`[ERROR] First-pass compaction: failed to read the experiment-scope FDR sidecar`, sets
+`ExitCode = 1`, returns null, **and the run continues** with a different retained set, finishing
+success-shaped nearly three hours later on a 446-run cohort. The doc is not silent about this
+failure - it is reassuring about it.
+
+Two consequences for the wording: the duty is stated backwards (*"the orchestrator's job never
+to create it"* - the abdication that produced the wrong answer; the rule needed is that the
+**task** must refuse), and the same live hazard is documented and shrugged at in the calibration
+row, L497-502.
+
+### B. Missing principles - ranked by "would this have prevented the defect?"
+
+**B1. The fan-out invariant is stated as MEMORY, never as COST.** 00 L213-216 gives
+`peak = baseline + max(one run)` and says "k does not appear, and neither does N". A worker that
+reads all 446 `reconciliation.json` files to build a union **satisfies that identity at the
+instant of peak and still violates the requirement**. That is exactly what shipped: 8m42s and
+17.2 GB of startup on an 86-run plate before the first run was rescored - work the loop then
+discarded and redid. Brendan's own framing was the correct one: *"no such 17 minute, high memory
+loading phase in this task, no matter how many files it contains"* - **both terms**.
+
+The principle to add: *a fan-out task's startup cost - wall clock and memory - must be
+independent of how many runs it was handed.* Also note "block size" appears nowhere in the docs
+tree, and there is no ladder (446 runs at 50 / 20 / 10 / 5 / 1) to test against.
+
+**B2. VISITED vs RESIDENT is absent, and it is the deepest gap.** 00 L168-184 justifies the two
+joins with *"requires knowing where every other run found the same precursor"* - which is a
+**visited** claim - and then L130 grants resident O(distinct) with no statement that a whole-run
+**fold over a stream** is a third shape. The reader is left with a binary, fan-out or join, and
+no vocabulary for "stays in the join, but visits 446 runs and holds one."
+
+**That missing vocabulary is why an all-runs pre-pass could grow inside a fan-out task without
+violating any stated rule.** The code already says it - `PercolatorEngine.cs:1019`: *"Both maps
+are O(distinct) ... nothing here needs a whole-run view"* - and `StreamingFdr.StreamingFirstPassQ`
+is a worked example with a test pinning it, documented in doc 14 and invisible from doc 00. Every
+genuinely whole-run computation named in 00 (best-of-runs experiment-q floor, protein parsimony,
+the pre-blib q re-clamp) is one of these folds.
+
+**B3. No rule reaches a PER-RUN artifact carrying an ANALYSIS-WIDE payload.** P5 covers
+experiment-wide artifacts that grow with the cohort. The defect fixed this session is the mirror
+image: `reconciliation.json` is filed as a "per-run product" relayed "with the run" (contract
+table L427), while each of 446 copies restates the same join-wide 744,943-id
+`first_pass_base_ids` array - **2.79 GB of pure duplication**, and 10.7 GB of envelope JSON that
+a per-run worker had to parse to rebuild a union. P1 blesses the benign form of this
+(experiment-wide content under a per-run name, "any one copy authoritative") and never addresses
+the cost of replication.
+
+**B4. Nothing is enforced.** No principle P1-P15 names a test, gate leg, or signature. P8's
+"checkable" is a hand-maintained table in another document; the contract table was "verified
+against the path-building code" by a human, once - which is exactly how A1 went stale.
+
+Concretely from this session: **`regression.ps1` mode 3 was GREEN while the per-run path was not
+running at all.** A phase-3 node is handed ONE run, where the per-run and all-runs paths are both
+O(1) and produce identical bytes, so the outcome cannot distinguish them. This session added a
+marker assertion (`mode3 (per-run hydrate): PASS (3 worker(s))`) for that reason. The principle:
+*where a contract cannot be distinguished by output at N=1, the gate must assert the PATH.*
+
+Related: mode 3 already IS the enforcement of the single-run input contract, byte for byte. 00
+cites it twice as an anecdote (L93-95, L531-534) rather than naming it as the mechanism that
+holds the relay checklist.
+
+**B5. "Stop building X" is not one edit per producer.** Every consumer that independently
+RECONSTRUCTS X must be found. Skipping the all-runs hydrate was not sufficient:
+`HydrateRescoreBundleIfPresent` rebuilt the batch overlay on its own whenever recon sidecars were
+present, and failed - loudly, which was luck. The stack is the architectural point in miniature:
+
+```
+PerFileRescoreTask.Run -> Get<CompactedEntries> -> Demand(FirstPassFdrTask) -> Rehydrate
+                       -> Get<ScoredEntries>    -> Demand(PerFileScoringTask) -> Rehydrate
+```
+
+**Three tasks materialised by one `Get`.** Doc 00 never describes the byproduct registry at all -
+`Publish` / `Get` / `Demand` / lazy `Rehydrate` appear nowhere in it; the only description is in
+doc 15, which disclaims owning the "why". P10 forbids using byproducts for SIGNALS, which is
+narrower than the defect it was learned from. The corollary worth stating: *every byproduct
+crossing a task boundary must have a disk counterpart, and the in-process path should read the
+same artifact the distributed one does* - otherwise the two shapes drift, because the distributed
+one is forced to write files and the in-process one just reaches backwards through a cache.
+
+### C. The artifact that makes the input contract executable is absent
+
+`<blib-stem>.1st-pass.retained_base_ids.bin` is in no document. Neither is `first_pass_base_ids`.
+So 00 never explains how a per-run worker obtains the join-wide compaction set, and its
+**Boundary 2 -> 3 input list (L740-749) is a contract a single-run node cannot actually run on**.
+
+Written by FirstPassFDR when Stage 6 planning ends; carries the join-wide first-pass base_ids
+UNION every planned action target; sorted `uint32`, library-bounded (1.49 MB at 373,487 ids).
+Needs adding at: contract table (~L428), "Artifacts that must relay together" (L536-550 - "Two
+experiment-wide artifacts" becomes three or four), Boundary 2->3 (L747-749), Boundary 3->4
+(L768-772), and the blib-named-artifact enumeration (L513-514).
+
+The paragraph most worth writing, for "Rows that are not what they look like": **why the union of
+planned action targets cannot ride in a per-run envelope** - each envelope is written the instant
+that run's planning finishes, so the actions of runs planned later do not exist yet. That
+ordering fact is the whole reason a separate analysis-wide artifact is needed, and it is not
+deducible from anything currently in the doc.
+
+### D. Two smaller contract gaps
+
+* The **0-byte `.mzML` stub** is not mentioned. L744 says "`<stem>.spectra.bin` (or the raw file
+  it was built from)", which reads as "ship the 6 GB mzML if you have no cache". The real
+  contract is the opposite - `regression.ps1` ships the cache plus a 0-byte stub so path
+  derivation works and the fingerprint check is skipped, and notes "the real 6 GB mzML is never
+  shipped to a rescore worker".
+* The **library + decoy-pairing manifest** are listed for boundary 1->2 only and never restated
+  for 2->3 or 3->4, though every node needs them. Related: this session found `--cache-dir` is
+  required for a `--task` leg whose `--output-dir` differs from the data directory, because such
+  a leg has no raw input path to resolve `.spectra.bin` from. Doc 20 has no `--cache-dir` row for
+  this case and doc 00's relay checklist does not mention it.
+
+### E. `Osprey-workflow.html` - the strongest artifact of the three
+
+It is **better than doc 00** on the point that matters most here. The banner roles state the
+invariant plainly - `per-run fan-out · any batch size, 1..N nodes`, `join · 1 node · holds
+O(distinct), never O(runs x entries)`, `per-run fan-out · reads its own runs + the experiment
+baseline only` - and the three-tier File scope legend (`per-run` / `experiment-wide · relay to
+EVERY node; the resident baseline` / `shared cache`) is exactly the distinction B3 says the prose
+lacks. If anything, doc 00 should adopt the diagram's phrasing rather than the reverse.
+
+Three fixes needed, all from the same two missing artifacts:
+
+1. FirstPassFDR's out line annotates `<stem>.1st-pass.model.json` *(frozen model +
+   protein-compact stratum)* - stale per A1; the stratum is its own file.
+2. PerFileRescoring's `relay: the run's own set + 2 experiment-wide files` and FirstPassFDR's
+   `relay: both experiment-wide files to EVERY downstream node` are undercounts. With
+   `retained_base_ids.bin` and `stratum.json` it is four; "both" becomes "all".
+3. SecondPassFDR's in-list omits `<stem>.calibration.json`, which 00 L425 says it reads on every
+   leg. One of the two is wrong - worth resolving rather than leaving them to disagree.
+
+### F. Now stale as a block
+
+00's "In flight" section (L787-822) and the callout at L224-229 describe the state this session
+changed. More importantly `15-hpc-scoring-split.md` carries **no in-flight marker at all** (00's
+disclaimer at L791-793 covers only 00) while stating as current design that `--task
+PerFileRescoring` rehydrates `FirstPassFdrTask` and reads an all-runs `CompactedEntries` buffer
+(L54 truth table, L91). Both are what the fan-out fix removes.
+
+Suggestion: rather than re-editing these when the resume branch lands, state the target in the
+contract and keep ONE "known deviations" list with issue links - a per-document in-flight note
+is what let doc 15 fall out of step with doc 00.

@@ -480,7 +480,15 @@ function Invoke-OspreyDatasetRun {
     }
     if ($Task) { $cliArgs += @('--task', $Task) }
     if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
-    if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
+    # A post-scoring --task leg reads .scores.parquet out of $OutDir, so it has no raw input
+    # path to resolve the .spectra.bin cache from - and Stage 6 rescore REQUIRES that cache.
+    # The cache sits beside its source in the data directory (ai/docs/osprey-run-layout.md:
+    # "it is not a separate tree"), so point the leg at it rather than hard-linking GB of
+    # cache into every worker directory. Without this a PerFileRescoring leg runs the whole
+    # hydrate and compaction and only then fails on the first file's missing cache - 13
+    # minutes at plate scale, and it would be hours at 446.
+    $effectiveCacheDir = if ($CacheDir) { $CacheDir } elseif ($useScores) { $dataDir } else { $null }
+    if ($effectiveCacheDir) { $cliArgs += @('--cache-dir', $effectiveCacheDir) }
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
@@ -667,17 +675,35 @@ function Invoke-OspreyDatasetRun {
                                    '.2nd-pass.fdr_scores.bin.PerFileRescoring.osprey.task',
                                    '.2nd-pass.fdr_decoys.bin',
                                    '.2nd-pass.fdr_decoys.bin.PerFileRescoring.osprey.task')
-            # Analysis-wide outputs (the blib, the experiment sidecar) are not per-file, so there
-            # is nothing here to hard-link per input. Kept for the shape of the table.
+            # Analysis-wide outputs are not per-file, so there is nothing here to hard-link per
+            # input. They are NOT absent from the relay, though - see $ANALYSIS_ARTIFACTS below.
+            'SecondPassFDR'    = @()
+        }
+        # Analysis-wide artifacts: ONE file for the whole cohort, named after the output blib's
+        # stem rather than an input stem, so the per-input loop below cannot see them.
+        #
+        # Leaving them out was a real defect, not a simplification. `-Task PerFileRescoring
+        # -LinkFrom` staged no `<stem>.1st-pass.fdr_experiment.bin`, and Osprey logs
+        # "[ERROR] failed to read the experiment-scope FDR sidecar" and CONTINUES - with a
+        # different retained set, ExitCode 1, and a run that finishes success-shaped hours
+        # later. The retained base_id summary joins it here because a linked task now REFUSES
+        # to run without it, which turns the same omission into an immediate, named failure
+        # instead of a silently different answer.
+        $ANALYSIS_ARTIFACTS = [ordered]@{
+            'PerFileScoring'   = @()
+            'FirstPassFDR'     = @('.1st-pass.fdr_experiment.bin', '.1st-pass.retained_base_ids.bin')
+            'PerFileRescoring' = @()
             'SecondPassFDR'    = @()
         }
         # Everything strictly BEFORE the task under test. No -Task keeps the historical
         # Stage 1-4 behavior, so existing callers are unaffected.
         $upTo = if ($Task) { $Task } else { 'FirstPassFDR' }
         $suffixes = @()
+        $analysisSuffixes = @()
         foreach ($stage in $STAGE_ARTIFACTS.Keys) {
             if ($stage -eq $upTo) { break }
             $suffixes += $STAGE_ARTIFACTS[$stage]
+            $analysisSuffixes += $ANALYSIS_ARTIFACTS[$stage]
         }
         if ($suffixes.Count -eq 0) {
             throw ("-Task $Task is the FIRST pipeline stage, so there is nothing earlier to link. " +
@@ -713,6 +739,31 @@ function Invoke-OspreyDatasetRun {
                 $linked++
             }
         }
+        # Analysis-wide artifacts, once each rather than per input. Matched by GLOB on the
+        # suffix: the stem is the source run's output blib name, which need not match this
+        # run's, so binding to a literal name would work until someone renamed an output.
+        foreach ($suf in $analysisSuffixes) {
+            $found = $null
+            foreach ($src in $LinkFrom) {
+                $found = Get-ChildItem (Join-Path $src ('*' + $suf)) -ErrorAction SilentlyContinue |
+                         Select-Object -First 1
+                if ($found) { break }
+            }
+            if (-not $found) {
+                Write-Host ("  LinkFrom WARNING: no analysis-wide '{0}' in any source" -f $suf) `
+                    -ForegroundColor Yellow
+                continue
+            }
+            # Named for THIS run's blib stem, since that is what Osprey will look for.
+            $destName = [IO.Path]::GetFileNameWithoutExtension($blib) + $suf
+            $d = Join-Path $OutDir $destName
+            if (-not $WhatIf) {
+                if (Test-Path $d) { Remove-Item $d -Force }
+                New-Item -ItemType HardLink -Path $d -Target $found.FullName | Out-Null
+            }
+            Write-Host ("  analysis-wide: {0} <- {1}" -f $destName, $found.FullName)
+        }
+
         $verb = if ($WhatIf) { 'WOULD hard-link' } else { 'hard-linked' }
         Write-Host ("LinkFrom: {0} {1} file(s) for stages before {2}, {3} missing, from {4} source(s)" -f
                     $verb, $linked, $upTo, $missing, @($LinkFrom).Count)

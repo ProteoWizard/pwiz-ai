@@ -929,3 +929,540 @@ and `ResidentPaths.KNOWN_UNFIXED` (documented as "may only shrink") reaches zero
 
 **Cheap test for whether THIS branch caused the 446 behaviour**: the completed July TODO measured
 33.9 GB at 82 files for `--task PerFileRescoring`. Re-run 82 files on the branch tip and compare.
+
+## ROOT CAUSE, 2026-09-02: the 446 run NEVER took the fat path
+
+Read off `D:\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-secondpass\run.log`,
+not inferred. This supersedes every earlier hypothesis in this file about which trigger armed
+the resident pre-compaction pool: **none did.**
+
+### The three discriminators in the log
+
+1. **The progress denominator is 892 = 2 x 446.** `HydrateCompactedStreaming` reports over
+   `2L * nFiles` (RescoreHydration.cs:431); the batch twin `HydrateReconciliationOverlay`
+   reports over `perFileEntries.Count` (:294). The log shows `50.22% (448/892)`, i.e. the
+   **STREAMING** hydrate ran.
+2. **The per-file log lines are the streaming loader's.** `LoadJoinOnlyScoresForFile` emits
+   `    Loading file N/446` (4 spaces) and `      Loaded N FDR stubs (features not loaded ...)`
+   (6 spaces); `LoadJoinOnlyScores`'s resident loop emits the same text at 0 and 2 spaces.
+   The log has 4 and 6.
+3. **`grep -c RESIDENT run.log` = 0.** No `WarnPreCompactionPool`, no `GuardResidentPool`
+   refusal - correctly, because the run never asked for the pool.
+
+So `--task PerFileRescoring` over 446 files streams its pre-compaction pool exactly as
+designed. `NeedsResidentPool` was false, `PreCompactionPoolReason` returned null,
+`ShouldStreamCompaction` was true. The fat path is not involved and removing it would not
+have changed this run by one byte.
+
+### What IS O(files): the bundle and the survivor buffer that the BOUNDED hydrate builds
+
+`HydrateCompactedStreaming` bounds the *pre-compaction* pool to one file at a time. It does
+not bound what it accumulates across files, and there are two such terms.
+
+**Pass 1 (envelopes, 446 files, 3m22s)** holds, for every file at once:
+`plannedByFile` (`List<List<PlannedAction>>`, **30,841,614** actions), `perFileGapFill`
+(**8,849,111** targets), `retainBaseIds`, `refinedCalibrations`. Its own comment says
+*"Everything kept here is small"* - true per file, false at 446.
+
+**Pass 2 (per-file stub load + compact + append, 2h51m)** appends every file's survivors into
+the single `perFileEntries` buffer, and fills `reconciliationActions` with all 30.8 M entries.
+
+Measured slope, from the memstamp columns (managed MB / working-set MB):
+
+| point | managed | WS |
+|---|---|---|
+| hydrate start 03:37:19 | 4.7 GB | 14.4 GB |
+| 448/892 - pass 1 done 03:40:41 | 17.6 GB | 23.8 GB |
+| 892/892 - pass 2 done 06:31:23 | 92.1 GB | 107.3 GB |
+
+Pass 1 costs **~12.9 GB / 446 files = ~29 MB per file**. Pass 2 costs **~74.5 GB / 446 files
+= ~167 MB per file**. Total **~196 MB managed / ~206 MB WS per file**, plus a fixed ~14.4 GB
+(6.18 M-entry library + runtime).
+
+### The 446 result is NOT a regression - it is what the 82-file number always implied
+
+`todos/completed/TODO-20260727_osprey_stage6_rescore_streaming.md` measured **33.9 GB at 82
+files** and recorded the acceptance criterion as *"the PerFileRescoring band slope goes to ~0
+in file count"*. Apply the slope above to 82 files: `14.4 + 82 x 0.206 = 31.3 GB` - the July
+measurement, reproduced. **The slope was never ~0; it was asserted from a single point, and a
+single measurement cannot show a slope.** The 500-file projection the same TODO said to
+confirm (`14.4 + 500 x 0.206 = 117 GB`) was never run.
+
+So: nothing regressed, the loop was never "already written and demonstrated bounded" in the
+sense this file claimed, and the earlier framing of 446 as *"a REGRESSION, not a gap"* is
+withdrawn. The July work bounded the PRE-compaction pool - which it did, and which holds - and
+left the post-compaction survivor buffer and the experiment-wide bundle O(files).
+
+### Why no guard fired, and what that says about the invariant
+
+`GuardResidentPool` guards the PRE-compaction pool. `Stage6ResidentHandoffGuardError` guards
+the post-compaction survivor handoff, but only when `OSPREY_STAGE6_STREAM_SURVIVORS=0`; here
+streaming was ENABLED and the buffer was built anyway, by the hydrate rather than by Stage 5.
+The reconciliation bundle (30.8 M actions + 8.85 M gap-fill targets) has no guard at all and
+no token in `ResidentPaths.KNOWN_UNFIXED`.
+
+**The developer's invariant - "an O(files) memory request is impossible unless a token names
+it" - is not violated by a divergence between two predicates. It is violated because both
+predicates only ever described the fat pre-compaction pool, and this run's O(files) request is
+somewhere else entirely.** Widening the REFUSE predicate to match `PreCompactionPoolReason`,
+which this file proposed as the primary fix, would still not have refused this run.
+
+### Consequences for the plan
+
+* The "delete the fat path" directive is orthogonal to unblocking the 446-file run. It is
+  still worth doing on its own merits (it dissolves the guard divergence), but it does not
+  enable this processing goal.
+* What blocks the goal is two unbounded accumulations inside a hydrate documented as bounded:
+  `plannedByFile` / `reconciliationActions` (~29 MB/file) and the all-files survivor buffer
+  (~167 MB/file).
+* The survivor-buffer half is the same #4526 term this TODO opened with, one stage later:
+  commit 46a239393b took it out of Stage 6 PLANNING, and the hydrate still builds it.
+
+## THE TARGET SHAPE for --task PerFileRescoring (developer, 2026-09-02)
+
+> *"I want PerFileRescoring to loop once over each run and act as if it were performing its job
+> on separate computers with access only to a limited set of per-run and experiment-wide summary
+> files. It should have no pre-processing loop over all files. It is not a join task and should
+> act as if each iteration is completely bounded and it should be written to be parallelizable
+> on a computer with enough resources with no multiple passes over the files and only shared
+> experiment-wide summary resources, no resources built from all runs during the task."*
+
+Per iteration the task may read: that run's `.scores.parquet`, `.1st-pass.fdr_scores.bin`,
+`.reconciliation.json`, `.calibration.json`; plus experiment-wide summary artifacts that some
+EARLIER phase wrote. It may build nothing that spans runs.
+
+### What violates it today, exhaustively
+
+Everything below is inside `RescoreHydration.HydrateCompactedStreaming`, which bounds the
+per-file PRE-compaction pool and nothing else.
+
+| # | Cross-run resource built during the task | Where | Size at 446 |
+|---|---|---|---|
+| 1 | `retainBaseIds` = global set UNION **every file's** action targets | pass 1 | forces the pre-pass |
+| 2 | `plannedByFile` - all files' planned actions, held pass 1 -> pass 2 | pass 1 | 30,841,614 |
+| 3 | `perFileGapFill` - all files | pass 1 | 8,849,111 |
+| 4 | `refinedCalibrations` - all files | pass 1 | 446 |
+| 5 | `EnvelopeConsistency` - checks each envelope against its SIBLINGS | pass 1 | O(files) by nature |
+| 6 | `perFileEntries` - every file's survivors in one buffer | pass 2 | ~167 MB/file |
+| 7 | `reconciliationActions` - one map keyed (file, vec_idx) across all files | pass 2 | 30,841,614 |
+
+Items 2, 3, 4, 6 and 7 are mechanical: each is a per-run quantity accumulated into an
+all-runs container for no reason except that the task was written as a join. They move inside
+the loop and die with the iteration.
+
+Item 5 is impossible under the spec by definition - a node with one run cannot compare its
+envelope against siblings it does not have - and becomes a check against the experiment-wide
+summary instead.
+
+**Item 1 is the only structural blocker**, and it is why the pre-pass exists at all.
+
+### Why item 1 cannot be read from the run's own envelope
+
+The retained set is `first_pass_base_ids` UNION `{base_id of every planner action target,
+across all files}` (`RescoreCompaction.Apply` step 2). The first term is already an
+experiment-wide summary: `EnvelopeConsistency` documents it as *"identical in every file's
+envelope by construction"*, so one envelope supplies it.
+
+The second term is not in any envelope, and cannot be, because of an ordering fact this branch
+introduced: `WriteReconciliationFiles` writes each file's envelope **the moment that file's
+planning finishes** (`onFilePlanned`), specifically so the planner can release that file's
+entries. At that instant the actions for the files planned later do not exist yet. So no
+envelope can carry the completed union, and every consumer has had to re-derive it by reading
+all 446 envelopes.
+
+### The fix: the planner writes the union as an experiment-wide artifact
+
+The planner is the one component that legitimately holds the whole experiment - that is its
+job. When planning ends it knows the completed union. Write it there, once:
+
+```
+<blib-stem>.1st-pass.retained_base_ids.bin   (sorted uint32, same determinism rules
+                                              as the envelope's base_id array)
+```
+
+Same pattern as the existing experiment-scope `<blib-stem>.1st-pass.fdr_experiment.bin`
+(#4486): written once at experiment scope by the phase that owns it, read by per-run workers.
+
+Then:
+
+* `RescoreCompaction.Apply` consumes the set instead of re-deriving it by iterating
+  `inputs.ReconciliationActions` over every file - which is what forces the all-files action
+  map to exist in the first place. Re-keying `vec_idx` stays per file and is unaffected.
+* `--task PerFileRescoring` reads the artifact once at task start, then loops: load one run's
+  stubs, overlay its sidecar, read its own envelope, compact to the shared set, rescore, write
+  its `.scores-reconciled.parquet`, release. Bounded, single-pass, parallelizable.
+
+### KNOWN RISK: this can move mode 3's output, and that would be a fix, not a break
+
+Today a single-run node (regression mode 3) computes `retainBaseIds` from its OWN envelope
+only, so its retained set is `global UNION (that run's actions)` - a strict SUBSET of the
+join-wide union a straight-through run applies. `RescoreCompaction`'s own comment says using
+the local subset is what produced *"stale Stage 4 apex_rt / bounds for ~200 rows per Stellar
+file (0.04%)"*, and the union step exists to prevent exactly that.
+
+Mode 3 is green today, so on Stellar/Astral the subset and the union must agree, or the
+difference does not reach the output. That is a property of three-file test data, not a
+guarantee - at 446 CHS files the two sets are not likely to agree.
+
+So: making every node consume the same experiment-wide set is a correctness improvement, and
+if it moves any golden, the moved golden is the correct one. Gate `-Dataset All` and read a
+mode 3 diff as a finding to investigate, not as a regression to revert.
+
+### MEASURED: what the 446-file envelopes actually contain
+
+`ls` + a field-by-field size breakdown of
+`D:\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-secondpass\*.reconciliation.json`:
+**446 envelopes, 24.6 MB each, 10.7 GB total** - all of which pass 1 parses.
+
+One envelope (23.2 MB on disk):
+
+| field | size | n | scope |
+|---|---|---|---|
+| `first_pass_base_ids` | 6.26 MB | 744,943 | **experiment-wide, byte-identical in all 446** |
+| `forced_integration_actions` | 4.45 MB | 49,429 | this run |
+| `use_cwt_peak_actions` | 2.94 MB | 25,096 | this run |
+| `refined_rt_calibration` | 2.10 MB | 4 arrays | this run |
+| `gap_fill_targets` | 1.37 MB | 7,854 | this run |
+| `file_stems` | 0.01 MB | 446 | experiment-wide, duplicated |
+| hashes, format_version | <0.01 MB | - | experiment-wide, duplicated |
+
+Two things fall out.
+
+**The action arithmetic checks.** 49,429 + 25,096 = **74,525** actions in one run's envelope -
+exactly the "74,525 reconciliation actions hydrated" a 1-file node reported, and
+74,525 x 446 = 33.2 M against the 30,841,614 the 446-file run hydrated. The count was always
+per-run; only the container was experiment-wide.
+
+**The join-wide array is replicated 446 times.** 744,943 base_ids at 6.26 MB of JSON per copy
+is **2.79 GB of pure duplication** across the cohort. As a sorted `uint32` array written once
+it is **2.98 MB**.
+
+### The summaries PFR needs are bounded by the LIBRARY, not by files
+
+This is the answer to "they need to be fast and as low memory as possible, especially when
+they are truly O(files*entries)":
+
+* **retained base_ids** - `first_pass_base_ids` (744,943) UNION the action targets. Both terms
+  are sets of base_ids, so the union is bounded by the 6,175,389-entry library, not by file
+  count. Binary sorted `uint32`: **3-24 MB**, read once, held for the whole task exactly like
+  the library. No O(files x entries) term.
+* **experiment-scope 1st-pass FDR** - `<blib-stem>.1st-pass.fdr_experiment.bin` already exists
+  (#4486), same shape, keyed by entry_id, also library-bounded.
+
+**No all-run retention-time table is needed.** The planner does compute cross-run consensus
+RTs, but it resolves them into per-run products before writing: `gap_fill_targets` (7,854 for
+this run) and the refined calibration land in that run's OWN envelope. So the O(files x
+entries) RT structure the developer flagged exists only inside the planner, during FirstPassFDR,
+where the whole experiment is legitimately in hand - it never has to be rebuilt or re-read at
+PFR time.
+
+### Follow-on, separable and pure saving
+
+Once the retained set is an experiment-wide artifact, `first_pass_base_ids` no longer belongs
+in a per-run envelope: dropping it (format v4) stops writing 2.79 GB and stops parsing 6.26 MB
+per iteration that PFR immediately discards, and retires `EnvelopeConsistency` outright. Held
+back from the first cut only to keep the behaviour change and the format change separately
+bisectable - the cross-impl envelope comparison against Rust is the one thing a v4 bump breaks,
+and `regression.ps1` does not cover it.
+
+### Where the lean row does and does not apply to this work
+
+`TODO-20260826_osprey_stage7_stream_pool.md` (merged as `091d79a98b`, PR #4621) specs the
+Phase 3 lean row - an 88 B packed row (interned `PeptideId` replacing the per-row
+`ModifiedSequence` string) against `FdrEntry`'s ~274 B - and lists it under *"Owed,
+deliberately not done here: Phase 3 / lean row - its own PR. Measure it on DRIFT PER FILE, not
+peak or wall time."* It is spec'd, signed off, and NOT implemented.
+
+Two cases, and they need different things:
+
+**`--task PerFileRescoring` (the 446-file CHS case) needs NO lean row.** Once the retained
+base_id set is an experiment-wide artifact, nothing that crosses an iteration is O(files x
+entries): the summaries are library-bounded (<= 6.18 M base_ids), and each run's survivors are
+rescored, written to that run's `.scores-reconciled.parquet`, and released. The task ends
+holding what it started with. This is the case the developer specified and it can be made
+fully bounded now.
+
+**Straight-through needs it.** There PFR is followed in-process by Stage 7, which does have to
+hold a whole-experiment pool. That pool is exactly the Phase 3 target, and the drift numbers
+say it is the SAME pool this TODO measured from the other side:
+
+| measurement | source | per file |
+|---|---|---|
+| Stage 7 resident pool drift | `TODO-20260826` at merge | 215 -> 216 MB/file private |
+| PFR hydrate pass 2 accumulation | this TODO, 446-file log | ~167 MB/file managed, ~206 MB/file WS |
+
+Same order, same object: the all-runs survivor pool at ~274 B/entry, seen at two stages.
+
+**Consequence for how to write the loop.** Shape the per-run iteration so the thing it hands
+forward is already the lean-row seam: each iteration ends by emitting its run's contribution
+and dropping the fat `FdrEntry` objects, rather than appending them to a shared buffer. In
+`--task` mode the contribution is the reconciled parquet and nothing is retained; in
+straight-through it is whatever Stage 7 needs. Phase 3 then lands as a change of ROW TYPE at
+one seam, not another restructure - and it is measured the way its own TODO says, on drift per
+file.
+
+## Progress log - 2026-09-02 (implementation session)
+
+Branch `Skyline/work/20260901_osprey_firstpass_resume` in `C:\proj\pwiz-work1`, on top of the 12
+commits already in PR #4633. NOT yet committed at the time of writing.
+
+### Implemented: the analysis-wide retained base_id summary
+
+New `pwiz_tools/Osprey/Osprey.IO/RetainedBaseIdSidecar.cs` -
+`<blib-stem>.1st-pass.retained_base_ids.bin`, a sorted `uint32` array behind the same 32-byte
+header shape `FdrExperimentSidecar` uses (magic `OSPRYRET`, so neither file can decode as the
+other). `PathFor` resolves through `ArtifactPaths.ResolveOutputDir` off a sibling artifact, not
+off the blib's own directory, for the reason `FdrExperimentSidecar.PathFor` documents.
+
+**Producer** - `FirstPassFdrTask.PlanStage6`. The union is accumulated as each run is planned
+(`AccumulateActionTargetBaseIds`, plus the join-wide term seeded once from the first plan) and
+written by `WriteRetainedBaseIdSummary` when planning ends, BEFORE the `StopAfterStage5` return
+so `--task FirstPassFDR` produces it. A write failure is fatal, not a warning - see the method's
+doc for why the asymmetry with the per-run envelope writes is deliberate.
+
+**Consumer** - `RescoreHydration.HydrateCompactedStreaming` now takes the set as a required
+parameter and runs ONE pass. Deleted: the pre-pass over every envelope, `plannedByFile`,
+`syntheticInputs`, `reconPaths`, and the cross-run `retainBaseIds` union. Each run's envelope is
+read, used, and released inside its own iteration. `ScoringTaskShared.ReadRetainedBaseIds` is the
+shared reader and hard-fails with an operator-facing message naming FirstPassFDR as producer -
+deliberately NOT falling back to rebuilding the union, which is the O(files) pre-pass being
+deleted.
+
+`EnvelopeConsistency` no longer compares each envelope's `first_pass_base_ids` against its
+siblings (446 x 744,943 inserts + probes to re-confirm a field compaction no longer reads).
+Provenance is now checked on `library_hash` / `search_hash` / `file_stems`, which are O(1) and
+O(stems) and stay meaningful for a worker holding one run.
+
+`regression.ps1` stages the new artifact on both existing relays (phase 2 -> 3, phase 3 -> 4),
+deliberately WITHOUT `Test-Path` guards so a missing copy surfaces as the worker's failure rather
+than a skipped hop.
+
+### State
+
+* `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`: **601 passed, 1 skipped**
+  (`Stage5SurvivorBuffer_CollectVsStream`, a bench that is normally skipped), inspection clean.
+* `regression.ps1 -Dataset Stellar`: RUNNING at the time of writing, result not yet known.
+* Files touched: `RetainedBaseIdSidecar.cs` (new), `FirstPassFdrTask.cs`,
+  `PerFileScoringTask.cs`, `RescoreHydration.cs`, `ScoringTaskShared.cs`, `IOTest.cs`,
+  `regression.ps1`. +260 / -54.
+
+### What this does and does NOT fix
+
+Removes items 1-5 of the violation table: the envelope pre-pass (10.7 GB of JSON at 446 runs)
+and the ~29 MB/run pass-1 accumulation.
+
+**Items 6 and 7 are still there** - `perFileEntries` still accumulates every run's survivors
+(~167 MB/run, the dominant term) and `reconciliationActions` is still one all-runs map. Removing
+those is the second half: the per-run iteration has to end by emitting its run's reconciled
+parquet and releasing, which means restructuring `PerFileRescoreTask`'s relationship to the
+hydrate rather than the hydrate alone. Not started.
+
+### Watch this on the gate
+
+Mode 3 gives each node ONE run, so before this change a node's retained set was
+`global UNION (that run's actions)` - a strict subset of the join-wide union. It now reads the
+complete union from the summary. If mode 3's output moves, that is the latent divergence
+`RescoreCompaction`'s union step exists to prevent (~200 rows/Stellar file per its own comment)
+being fixed, not a regression - see "KNOWN RISK" above before rebaselining anything.
+
+### GATE RESULT: `regression.ps1 -Dataset Stellar` PASSED (2026-09-02)
+
+All 12 checks, blib byte-identical at 23,662,592 bytes across straight-through, the HPC 4-task
+chain, resume and Stage-5 rehydrate. Tokens required by the gate: 0.
+
+**The mode 3 risk did not materialize on Stellar**, as the "KNOWN RISK" section predicted it
+would not: on 3-file data the per-run subset and the join-wide union agree, so no golden moved.
+That is NOT evidence the two agree at 446 - it is evidence Stellar cannot tell them apart, which
+is the same blindness that let the original defect through. The discriminating test is a
+multi-run `--task PerFileRescoring`, which still does not exist (see the missing-test item).
+
+**The gate's own footer independently confirms the remaining term**, and names it as untokened:
+
+```
+=== Known O(files) resident paths this gate still traverses ===
+  #4486  token: NONE
+      SecondPassFDR pulling RescoredEntries rebuilds the whole-run survivor buffer it reads
+      (#4597 moved the build off the end of Stage 6, which does not shrink it); resident for
+      the whole of Stage 7.
+      ~4.4 GB library + 0.197 GB/file live post-GC: ~20 GB at 82 files, ~103 GB projected at 500.
+```
+
+**0.197 GB/file** against the 0.167 GB/file managed / 0.206 GB/file WS this TODO measured from
+the 446-run hydrate. Same object, three independent measurements: the gate's post-GC probe, the
+Stage 7 TODO's 215-216 MB/file drift, and the CHS log. That is items 6 + 7 of the violation
+table, it is the Phase 3 lean-row target, and the gate already tracks it as carrying no token.
+
+### CORRECTION 2026-09-02: the 446 PerFileRescoring run was KILLED, it did not complete
+
+An earlier claim in this session - that the run "completed the hydrate ... and exited 1 on the
+missing experiment-scope sidecar" and "was never killed" - is **WRONG and withdrawn**. The
+developer killed `Osprey.exe` from Task Manager while the box was thrashing.
+
+What the log actually shows, in
+`D:\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-secondpass\run.log`:
+
+* **Zero** completion markers - no `PerFileRescoring:done`, no `Analysis complete`, no
+  `[TIMING] Total pipeline`.
+* No `Pipeline failed:` line either, which is what `AnalysisPipeline`'s catch-all emits on a
+  graceful failure. Neither outcome was reached.
+* Last Osprey output `06:40:04 100%`; the runner's `DONE ... exit=1 elapsed=194min` at
+  `06:49:51`. **A 9m47s silent gap**, then a non-zero exit observed by the runner.
+
+The reasoning error worth not repeating: `exit=1` was read as caused by the
+experiment-scope-sidecar `[ERROR]` at 06:31:25. That error is documented in this very file as
+**non-fatal - it logs and the run continues** - and it is nine minutes upstream of the exit. An
+externally killed process produces the identical `DONE ... exit=1` line, because the runner only
+observes the exit code of `& $ospreyExe`. **The runner's DONE line cannot distinguish a kill
+from a failure**, and no `KILLED BY OPERATOR` annotation was added to this log the way one was
+for `baseline-phase3`.
+
+**And the framing was wrong independently of the exit code.** A run at 111.9 GB working set on a
+63.7 GB box is a failure whether or not it eventually returns: the developer reported the machine
+was barely able to accept keystrokes and that reaching Task Manager to kill it took real
+patience. "It thrashed but survived" is not a defensible reading of that. Peak private bytes
+past physical RAM is the failure condition, not a caveat on one.
+
+Consequences for what this file claims:
+* The "2h54m of bundle hydration" figure stands (it is bracketed by log timestamps), but nothing
+  downstream of `06:40:04` can be claimed at all.
+* "0 reconciled parquets" stands as an observation, but it does NOT establish that the rescore
+  self-gated - the run never got there.
+
+## THE ACTUAL DEFECT, 2026-09-02: the startup work is DISCARDED AND REDONE
+
+Measured on the 86-run plate (`chs-86files-...-retainedset-pfr2\run.log`), `--task
+PerFileRescoring` spends **14m17s / 24.7 GB managed / 46.3 GB WS before rescoring one run**,
+then drops to ~4.6 GB and stays flat. Of that startup, **11m24s and ~20.5 GB is O(runs)**:
+
+| segment | time | managed at end | scaling |
+|---|---|---|---|
+| library load (6.18 M entries) | 2m07s | 4.19 GB | fixed |
+| mdiag classification | 0m22s | - | fixed |
+| hydrate - all 86 runs' parquets | **8m42s** | **21.4 GB** | **O(runs)** |
+| `CompactFirstPass` over all runs | **2m42s** | **24.7 GB** | **O(runs)** |
+| release, enter loop | 0m22s | 4.4 GB | - |
+
+### The entries the startup loads are never read
+
+`RescoreOneFileStreamed` (`PerFileRescoreTask.cs:1015-1028`) opens each iteration with
+`survivorLoader.Load(file.Key)` - re-reading that run's `.scores.parquet` and
+`.1st-pass.fdr_scores.bin` - then `file.Value.Clear(); file.Value.AddRange(stubs)`. **It
+overwrites what the hydrate put there.** The all-runs buffer serves only as a list of run KEYS
+and a transient per-iteration slot.
+
+So this is not "an expensive way to get what the loop needs". It is work whose entire product is
+thrown away, paid for solely because the process was handed a list of N parquets instead of one.
+At N=1 (regression mode 3) it costs nothing and the gate is green; at N=446 it is the wall.
+
+`PipelineByproducts.cs:457-471` already said so: *"Every artifact the rebuild needs ... is on disk
+by the time Stage 5 compacts, **so holding the survivors is a choice rather than a
+requirement.**"*
+
+### Nothing needs all runs resident for correctness
+
+Mode 3 hands a node ONE run - 5 per-run files plus 4 analysis-wide summaries and the library -
+and produces byte-identical output to straight-through, every gate run. The genuinely whole-run
+computations are O(distinct) folds needing every run VISITED, not RESIDENT
+(`PercolatorEngine.cs:1019`: *"Both maps are O(distinct) ... nothing here needs a whole-run
+view"*). Under `--task PerFileRescoring`, `NoJoin` excludes `SecondPassFdrTask`, so nothing pulls
+`RescoredEntries` and the global pool is never built - which is why the loop is already flat.
+
+### The invariant, and why it must be a signature and not a rule
+
+> **The hydrate for rescoring a single run cannot have the parquet files for all runs.**
+
+`HydrateCompactedStreaming(perFileEntries, IList<string> parquetPaths, ...)` takes every run's
+parquet; only the loop's discipline bounded the cost, and that discipline is what failed. The
+replacement takes ONE path, so O(runs) cannot be reintroduced by a later refactor -
+CRITICAL-RULES' "strengthen the verifier rather than the wording".
+
+### Correct startup, for comparison
+
+Library 4.19 GB / 2m07s + `1st-pass.fdr_experiment.bin` (255 MB, library-bounded) +
+`1st-pass.retained_base_ids.bin` (3 MB) + the run-name list. **~2.5 min, ~5 GB, flat in run
+count.** Everything above that line is the defect.
+
+Plan: `~/.claude/plans/i-am-going-a-mossy-marble.md` (approved 2026-09-02).
+
+## Progress - 2026-09-02 (per-run hydrate, implementation)
+
+### Landed, gate green (601 tests, inspection clean)
+
+* **`RescoreHydration.HydrateOneRun(string parquetPath, ...)`** - the per-run hydrate. Takes ONE
+  parquet path, so the O(runs) startup cannot be reintroduced by a later refactor. Returns a new
+  `RunRescoreInputs` (survivors, this run's actions keyed `(file,vec_idx)`, gap-fill, refined
+  calibration, join stems, global base_ids, tally). `HydrateCompactedStreaming` keeps its
+  `IList<string>` signature and stays for the straight-through pipeline, now labelled as the
+  ALL-RUNS builder.
+* **`PerFileRescoreTask`** - `RescorePassInputs.HydrateRun` (a `Func<string, RunRescoreInputs>`),
+  built by `BuildPerRunHydrate` and non-null only for an `--input-scores` run that can read the
+  retained-set summary. `RescoreOneFileStreamed` takes the fan-out path first: hydrate under
+  `_survivorLoadLock`, rescore, release. `TryAssembleRescoreTargets` and the RT-calibration pick
+  read the per-run slice when it is present and the join dictionaries otherwise.
+* **Consensus targets are DERIVED per run**, not carried:
+  `MultiChargeConsensus.SelectRescoreTargets(run.Survivors, RunFdr)` - it only ever read one
+  run's entries, which is why building it for every run up front was pure waste.
+* `ReconTargetsForRun` projects through the SAME `GroupReconciliationActionsByFile` the join path
+  uses, so the two cannot interpret a `ReconcileAction` differently.
+
+**Trap avoided, recorded because it is easy to repeat**: the per-run `loadStubs` must read RAW
+pre-compaction stubs from `.scores.parquet`, NOT `FirstPassSurvivorLoader.Load` - that loader has
+already overlaid the 1st-pass sidecar and filtered, so feeding its output to `HydrateOneRun`
+would overlay a second time onto a list that is no longer the sidecar's superset.
+
+### Migration tool for pre-artifact run directories
+
+`ai/scripts/Osprey/retained_base_ids_migrate.py` builds
+`<stem>.1st-pass.retained_base_ids.bin` from a run directory's envelopes. Deliberately a
+separate, named, run-once tool rather than a fallback inside Osprey: the hard-fail on a missing
+summary is what stops a silent return to the O(files) pre-pass, and that refusal must not be
+weakened just because an already-successful FirstPassFDR predates the artifact.
+
+**Validated against ground truth**: run over the 86-run leg-1 directory, which has both the
+envelopes and the artifact Osprey itself wrote, it produced a **byte-identical** file (373,487
+base_ids, 1,493,980 bytes) in 17 s. That is what makes it usable on the 446-run
+`chs-446files-...-stage5stream` directory, whose FirstPassFDR completed in 5h13m and must not be
+re-run.
+
+### Still to do
+
+1. Stop `LoadJoinOnlyScores` hydrating all runs (the 8m42s / 17.2 GB), and move the
+   `--model-diagnostics` pre-compaction fold onto `HydrateOneRun`'s per-run hook at the same
+   time - it currently folds every run's rows during the all-runs hydrate, and would silently
+   degrade to a survivors-only report if the stubs stopped being loaded there.
+2. `FirstPassFdrTask.Rehydrate` - `CompactFirstPass` over empty lists once (1) lands.
+3. The failing-first multi-run test.
+4. `-Dataset All`, then the 86-run plate leg, then 446 via `-LinkFrom` + the migration tool.
+
+Until (1) lands the startup cost is UNCHANGED - the per-run path is correct but redundant, which
+is the deliberate sequencing: make the loop self-sufficient while the old path still runs, prove
+it byte-identical, then delete the old path.
+
+### The all-runs pre-load has TWO consumers, not one (found by the gate, 2026-09-02)
+
+Skipping the all-runs hydrate in `LoadJoinOnlyScores` was not sufficient: mode 3 phase 3 went
+red with
+
+```
+[ERROR] --input-scores hydration failed: HydrateReconciliationOverlay: failed to overlay
+        .1st-pass.fdr_scores.bin for <stem> (expected at <stem>.1st-pass.fdr_scores.bin)
+[ERROR] Pipeline failed: Task 'PerFileScoringTask' failed to rehydrate its state
+```
+
+`HydrateRescoreBundleIfPresent` runs AFTER the load and independently builds the batch overlay
+whenever `hasReconSidecars` is true. Handed the per-run publish's EMPTY stub lists, it fails -
+`FdrScoresSidecar.TryRead` binds each record to a stub by `entry_id` and refuses a file whose
+records have nowhere to land. That is the same empty-list precondition `FirstPassFdrTask`
+already documents for choosing its streaming arm; the value of the failure is that it is LOUD
+rather than silent - an overlay that quietly accepted an empty list would have produced a run
+with no first-pass q-values at all.
+
+Fixed by gating that call on the same `ScoringTaskShared.CanHydratePerRun` predicate.
+
+**Worth generalising for the architecture doc**: "stop building X" is not one edit per producer.
+Every consumer that independently reconstructs X has to be found, because the ones that fail
+loudly are the lucky case. The stack that named it was
+`PerFileRescoreTask.Run -> Get<CompactedEntries> -> DemandByType(FirstPassFdrTask) ->
+FirstPassFdrTask.Rehydrate -> Get<ScoredEntries> -> DemandByType(PerFileScoringTask) ->
+Rehydrate` - three tasks materialised by one Get, which is exactly the lazy-Demand chain that
+makes an in-process run's dataflow invisible at the call site.
