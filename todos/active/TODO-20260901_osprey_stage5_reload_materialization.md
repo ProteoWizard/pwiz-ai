@@ -356,3 +356,61 @@ projected peak is **~21 GB plus one file's entries**, not ~11 GB.
 targets, then decoy pairing, then detections. Handing the planner a lazy per-file collection
 that reloads on access would therefore reload every file three times inside `Compute` alone,
 plus once each for phases 1 and 3. The projection is REQUIRED, not an optimisation.
+
+## SECOND CORRECTION to the projection (2026-09-01, after reading ReconciliationPlanner)
+
+The ten-field list above is still short, and it is short because both scans stopped at
+`ConsensusRts`. **`ReconciliationPlanner.Plan` has its OWN cross-file loop over every entry of
+every file** (`ReconciliationPlanner.cs:169`), before the per-file planning loop, building
+`passingBaseIds`:
+
+```csharp
+foreach (var fileKvp in perFileEntries)
+    foreach (var entry in fileKvp.Value) {
+        if (entry.IsDecoy) continue;
+        double bestQ = Math.Min(Math.Min(entry.RunPrecursorQvalue, entry.RunPeptideQvalue),
+                                Math.Min(entry.ExperimentPrecursorQvalue, entry.ExperimentPeptideQvalue));
+        if (bestQ <= experimentFdr) passingBaseIds.Add((entry.EntryId & 0x7FFFFFFFu, entry.Charge));
+    }
+```
+
+So "phase 4 already takes a per-file delegate" is true only of the CWT CANDIDATES
+(`LoadOneFile`); the ENTRIES are still handed to it as one all-files list, and it reads them
+cross-file before it plans. Three more fields, none of them in the list above:
+
+| source | additional fields |
+|---|---|
+| `ReconciliationPlanner` passingBaseIds | `ExperimentPrecursorQvalue`, `ExperimentPeptideQvalue`, `Charge` |
+
+**Thirteen fields, not ten**: 4 + 8 (string ref) + 1 + 1 + 8x8 = 86 B, ~88 B padded. At 446
+files and 289 M survivors the projection is **~25 GB**, not ~21 GB. Still decisive against the
+~100 GB measured buffer and still inside 63.7 GB, but the margin is smaller than the last
+estimate claimed and this is now the third time the field count has grown on a closer read - so
+treat 88 B as a floor to VERIFY with the bench, not a number to quote.
+
+Float-packing the three RT-ish fields is still available (~72 B, ~21 GB), but the q-values must
+stay `double`: every one of them is compared against a threshold, and a float-rounded value can
+flip a borderline comparison, which is exactly the byte-identity the gate checks.
+
+`passingBaseIds` costs no extra pass - it is a reduction over the same projection the consensus
+barrier already walks, so it belongs in that barrier.
+
+## Why the three consensus iterations cannot simply be merged
+
+Worth recording, because "just do it in one pass over files" is the obvious first idea and it
+does not work. Step 3's TARGET inclusion test is
+`targetPeptides.Contains(modseq) && Qualifies(entry)`, and any target that qualifies had its
+modseq added to `targetPeptides` in step 1 - so for targets the test reduces to `Qualifies`
+alone and target detections CAN be collected in the first pass.
+
+Decoys cannot. The test is `decoyPeptides.Contains(entry.ModifiedSequence)`, and
+`decoyPeptides` is closed over MODIFIED SEQUENCE while the linkage that builds it is over
+BASE ID. Those differ: charge 2 and charge 3 of one peptide share a `ModifiedSequence` but have
+different base ids. If the charge-2 decoy pairs to a qualifying target and the charge-3 decoy
+does not, the sequence-level test admits BOTH detections and a per-entry base-id test would
+admit only one. So the per-entry shortcut is not equivalent, and collecting decoy detections
+needs `decoyPeptides` already complete - a second pass over all files, or the projection.
+
+Streaming instead of projecting therefore costs FOUR reloads (targets+sets, decoyPeptides,
+decoy detections, then phases 3+4), not two. At ~32 min per reload at 446 files that is ~128
+min against the projection's ~64. The projection stays the plan.
