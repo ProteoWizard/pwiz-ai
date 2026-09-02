@@ -6,7 +6,8 @@
 - **Branch**: `Skyline/work/20260818_commonutil_winforms_split` - branched off **`chambem2/pwiz-sharp`**
   @ `5ef89bd228`, NOT master. The PR targets that branch too, so Matt reviews it against his own work.
 - **Created**: 2026-08-18
-- **Status**: Implemented, verified and committed (4 commits) on 2026-08-18. Not pushed; no PR open yet.
+- **Status**: **COMPLETE 2026-09-02.** Shipped in two PRs, both squash-merged into the net8/net10
+  port branch: **#4587** (2026-08-31) and **#4629** (2026-09-02, `5c046bdb7a`).
 - **Module**: `skyline`
 - **Related**: #4497 (our Osprey PR, `C:\proj\pwiz`, stacked on the same base)
 
@@ -1685,3 +1686,56 @@ merge. They have been moved to a new branch:
 **Still to do**: this TODO covers the merged PR and should be completed/archived (`/pw-complete`),
 with a new TODO opened for the new branch. Not done here - it is Brendan's call whether to split
 the history or carry this file forward.
+
+## COMPLETE - 2026-09-02
+
+Both PRs squash-merged into `Skyline/work/20260612_net8_port`:
+
+| PR | Merged | What |
+|---|---|---|
+| **#4587** | 2026-08-31 | The CommonUtil/CommonBaseUI WinForms split itself |
+| **#4629** | 2026-09-02 (`5c046bdb7a`) | The net10 nightly failures, the NHibernate leak, two test-stability fixes and the loader trace |
+
+#4629 went in green: 8/8 checks, Skyline .NET 1799 tests, Perf/Tutorial 116, Core debug 122.
+Copilot did not review it - the requesting account had hit its quota - so `/code-review max` was
+the only AI pass, and the seven findings from it that survived verification were fixed before the
+PR opened.
+
+**Working tree at completion**: the uncommitted SkylineTester and test-runner changes found in
+`pwiz-work1` after the 2026-09-01 reboot were NOT rolled to a new branch, because they needed no
+rescuing:
+
+* the five SkylineTester files were an earlier iteration of **PR #4630**
+  ("Stopped an accidental second click from destroying the previous run log"), merged to master
+  2026-09-01. Master's `TabBase.StartLog` is byte-identical to the local change, comment included,
+  and master reaches it through a `StartLog` refactor the local copy predates - so master's
+  version is strictly the better one
+* the change under `TestRunner` was a temporary hack labelled `LOCAL SWEEP ... Restore before
+  committing`, commenting out two `ExpandedLeakCheck` entries so a leak sweep would not stop at
+  the first infinite-loop trap
+
+Both were stashed rather than deleted (`stash@{0}` in `pwiz-work1`, with a patch copy in the
+session scratchpad) and can be dropped. Note the port branch does NOT yet carry #4630 - its last
+master merge predates it - so that work arrives on the next master merge, not from this stash.
+
+**Branches cleaned**: `Skyline/work/20260831_net10_nightly_fixes` (local + remote) and
+`backup/20260818_commonutil_pre_rebase`. `Skyline/work/20260818_commonutil_winforms_split` remains
+locally at `ec87d6f705` with its remote already gone; its seven commits were cherry-picked into
+#4629, so it is redundant and safe to delete.
+
+### Carried forward - not done here
+
+* **The R installer test** makes a live HEAD to r-project.org that no stub intercepts, so it fails
+  whenever the network hiccups. The seam exists and the same file already uses it twice.
+  Master-applicable.
+* **PR #4613** (waters_connect on HttpClientWithProgress) removes the port-only refresh-token
+  regression that produced 8 of 14 failures in the 2026-08-30 night run. Review and land it rather
+  than patching `Authenticate()` separately; expect a conflict there when master merges in, and
+  take #4613's form-POST version.
+* **`TestExplicitRT`** remains an open intermittent - roughly one failure per 9-hour run, and the
+  isolation soaks did not pin a rate. The loader trace shipped in #4629 means the next occurrence,
+  wherever it happens, carries what the thread dump could not.
+* **Seven `/code-review` findings** were verified but deliberately not actioned. The one worth a
+  look on its merits: the WinForms filter runs BEFORE the `TestExceptions` branch in `Program.cs`,
+  so a test-motivated workaround also silences a genuine unhandled UI-thread exception in shipping
+  builds, at Trace level that the registered listener discards.
