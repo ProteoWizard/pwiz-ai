@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260902_PluggableNormalization` (created by Nick 2026-09-02 from the net8_port tip, pushed to origin)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619)) - NOT `master`
 - **Created**: 2026-09-02
-- **Status**: Phase 0 done (builds, baseline tests pass). Phase 1 next - hosting-model and contract decisions pending with Nick.
+- **Status**: Phase 1 in progress - contract assembly drafted (uncommitted in the checkout), awaiting Nick's review before wiring into Skyline. Decisions so far: in-process on .NET 10; contract targets `netstandard2.0`; peak detection deferred.
 - **PR**: (none yet)
 - **Module**: `skyline`
 - **Worktree**: `C:\git\sky_pluggablenormalization` (full clone, not a worktree). Start sessions with `/pw-continue C:\git\sky_pluggablenormalization`.
@@ -97,7 +97,7 @@ point above `ChromDataSet`, not an `IPeakFinder` factory swap. Do not spend Phas
   - peak detection: deferred; not a per-chromatogram contract (see Decisions 2026-09-02)
   - peak scoring: per-peak-group feature values in, score(s) out (must fit the existing `IPeakFeatureCalculator` name-based serialization)
   - normalization / rollup: transition x replicate matrix (+ RT, batch/annotation columns) in, peptide/protein matrix out
-- [ ] Put the contract in a separate small assembly (name TBD, e.g. `pwiz.Skyline.Algorithms.Contract`) so external libraries reference only that
+- [x] Put the contract in a separate small assembly so external libraries reference only that: `pwiz_tools/Skyline/SkylineAlgorithms/SkylineAlgorithms.csproj` -> `pwiz.Skyline.Algorithms.dll`, `netstandard2.0`, no dependencies, added to Skyline.sln next to SkylineTool (drafted 2026-09-02, builds with 0 warnings; not yet referenced by Skyline.csproj)
 - [ ] Decide how a plug-in is discovered and referenced (folder scan, explicit path in settings, NuGet?) and how the choice serializes into `.sky` settings, audit log, and `RemoveUnsupportedFeatures` for older Skyline (only add a downgrade clause when it causes a real compatibility problem)
 
 ### Phase 2 - Skyline plug points
@@ -189,3 +189,31 @@ Where the methods are consumed (the Phase 2 plug points):
 - 14 model files reference the built-in `NormalizationMethod` singletons (databinding entities,
   calibration, refinement, `NormalizeOption`); most only compare for equality and would pass a plug-in
   method through untouched.
+
+### 2026-09-02 - Phase 1: contract assembly drafted
+
+Decisions: in-process loading on .NET 10 (Nick); contract targets `netstandard2.0` (Nick); values in the
+contract are always log2 with NaN for missing (matches PRISM and #4170's median polish; Skyline converts,
+and treats area <= 0 as missing so -Infinity never appears); parameter values travel as strings with
+declared descriptors so Skyline can build a generic editor and serialize them.
+
+Project `pwiz_tools/Skyline/SkylineAlgorithms` (assembly and namespace `pwiz.Skyline.Algorithms`), 13 files,
+C# 8-compatible (no records/init - netstandard2.0), all with the standard header + AI attribution line:
+- `AlgorithmContract` - `MAJOR`/`MINOR` constants; a library reports the major it compiled against.
+- `AbundanceLevel` (transition/peptide/protein), `SampleInfo` (Id, Name, SampleType, BatchId, Annotations),
+  `FeatureInfo` (Id, Name, ProteinId, PeptideId, PrecursorId, RetentionTime, IsStandard),
+  `AbundanceMatrix` (level, features, samples, `double[,]` log2; indexer, row/column copies).
+- `AlgorithmParameter` + `AlgorithmParameterType` (text, number, boolean, choice, replicate_annotation,
+  protein_list) - the last two let Skyline offer document annotations (batch column) and protein lists
+  (marker panels) without the contract knowing document types.
+- `IAlgorithmContext` (CancellationToken, ReportProgress, Warn) - synchronous, no UI.
+- `IAlgorithm` (Name, DisplayName, Description, Parameters); `INormalizationAlgorithm` (Level,
+  `Normalize(matrix, parameters, context) -> NormalizationResult` = same-shape normalized matrix + named
+  per-sample diagnostics); `IRollupAlgorithm` (SupportedFromLevels, `Aggregate(group, ...) -> RollupResult`
+  = one log2 value per sample + optional residuals).
+- `IAlgorithmLibrary` (Name, DisplayName, Version, ContractMajorVersion, GetAlgorithms()) named by
+  `[assembly: AlgorithmLibrary(typeof(...))]`.
+
+Identity in the document = library `Name` + algorithm `Name` (stable strings, not CLR type names - the
+lesson from the scoring calculators). Builds with 0 warnings; registered in Skyline.sln; NOT yet referenced
+from Skyline.csproj and NOT committed - awaiting Nick's review of the shape.
