@@ -54,6 +54,10 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
 - [ ] WI-14 - slim the review commands
 - [ ] WI-15 - slim remaining REFACTOR/REVIEW skills
 - [ ] WI-16 - core five back under hard limits
+      - When they are under budget, add the Osprey entry point to `ai/MEMORY.md`: the
+        `/osprey-development` skill and `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`.
+        Deferred from `TODO-20260902_osprey_pipeline_architecture_docs.md` WI-8 rather than
+        pushing the core five (1080 of 1000) further over.
 
 ### P3 - reachability and index accuracy
 - [ ] WI-17 - make existing `ai/docs` content reachable

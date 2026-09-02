@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260902_osprey_pipeline_architecture_docs`
 - **Base**: `master`
 - **Created**: 2026-09-02
-- **Status**: In progress - WI-1..WI-10 done; needs /code-review + PR. WI-11 waits on the resume branch.
+- **Status**: In progress - WI-1..WI-10 and R1-R11 done; needs /code-review + PR. WI-11 waits on the resume branch.
 - **PR**: (none yet)
 - **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz-work2` (branch created there from `origin/master` at
@@ -276,7 +276,7 @@ library-hash claims were CONFIRMED against code. The corrections below are what 
 contradicts; fix them BEFORE `/code-review max`, because a contract document that names
 a deleted method will be trusted by the next session that reads it.
 
-- [ ] **R1 - `FdrScoresSidecar.PatchProteinQvalues` does not exist; drop the P11
+- [x] **R1 - `FdrScoresSidecar.PatchProteinQvalues` does not exist; drop the P11
       violation.** `FdrScoresSidecar.cs:116-124` records that at sidecar v5 (#4486)
       `PatchProteinQvalues` "rewrote every 1st-pass sidecar after protein FDR ... All three
       are now deleted ... a per-file sidecar is written exactly once on both passes and no
@@ -290,7 +290,7 @@ a deleted method will be trusted by the next session that reads it.
       behind it". If it is a real unmerged change to `fdr_experiment.bin`, describe THAT
       accurately as the in-flight item; if not, it is gone from the doc. Update the WI-11
       marker list in the last progress entry to match.
-- [ ] **R2 - Two missing contract rows; the "side channels" paragraph is wrong under
+- [x] **R2 - Two missing contract rows; the "side channels" paragraph is wrong under
       `--model-diagnostics`.** `<output>.model-diagnostics.data.json` is written by
       `FirstPassFDR` via `FileSaver` and read (then deleted) by `SecondPassFDR`
       (`ModelDiagnosticsReport.cs:44-54`, `:243`, `:283-292`): a genuine cross-task,
@@ -299,14 +299,14 @@ a deleted method will be trusted by the next session that reads it.
       task. Add both rows (experiment product, conditional on `--model-diagnostics`; the
       `.data.json` must reach the `SecondPassFDR` node) and rewrite the paragraph at
       ~427-430 so it names only outputs no task reads (fdrbench manifests, trace dumps).
-- [ ] **R3 - Boundary 1 -> 2: `.calibration.json` MUST travel.** Doc 00 ~665-667 says it
+- [x] **R3 - Boundary 1 -> 2: `.calibration.json` MUST travel.** Doc 00 ~665-667 says it
       need not. `PerFileScoringTask.cs:1675-1700`, `:2187-2190`, `:2658` read it on every
       `--input-scores` leg (inside the `FirstPassFDR` and `SecondPassFDR` legs) for RT
       calibration and isolation-window coverage, "so a SecondPassFDR node with no mzML
       still gets per-file coverage" (`:1694-1697`), behind a `File.Exists`, so absence
       silently changes gap-fill filtering instead of failing. That is the P10-shaped
       hazard the doc warns about; say so at the boundary.
-- [ ] **R4 - Boundary 3 -> 4 and the Read-by column omit real readers.** `SecondPassFDR`
+- [x] **R4 - Boundary 3 -> 4 and the Read-by column omit real readers.** `SecondPassFDR`
       reads `<stem>.reconciliation.json` (`Pass2FdrSidecar.cs:963-975`
       `LoadGapFillEntryIds`, from `TryReadWorkerContribution` `:886`, on the Stage-7 fold
       at `:2018`) and `.calibration.json` (R3). Add both to the 3 -> 4 list and to the
@@ -315,18 +315,18 @@ a deleted method will be trusted by the next session that reads it.
       `<stem>.1st-pass.fdr_scores.bin` is NOT a `SecondPassFDR` input on the default path
       (`SecondPassFdrTask.cs:88-101` says so in capitals), only under
       `OSPREY_PASS2_VERIFY_WORKER` or where no worker answer exists. Qualify that row.
-- [ ] **R5 - Stage 7 tests PRESENCE of the `PerFileRescoring` stamp, not its key.**
+- [x] **R5 - Stage 7 tests PRESENCE of the `PerFileRescoring` stamp, not its key.**
       `Pass2FdrSidecar.cs:763-779`: "One task cannot reconstruct another task's key from a
       different leg, and should not try." Doc 00's "`SecondPassFDR` then reads the stamp to
       decide" (~460-468) and the 3 -> 4 wording invite the bug that was fixed. Say: the
       stamp's presence under the producer's task name is the signal; the key is validated
       by the producer, never re-derived by the consumer.
-- [ ] **R6 - "Name from the blib, directory from `ResolveOutputDir`" holds for
+- [x] **R6 - "Name from the blib, directory from `ResolveOutputDir`" holds for
       `fdr_experiment.bin` only** (`FdrExperimentSidecar.cs:94-135`).
       `.1st-pass.model.json` takes its name from the run stem and its directory from the
       parquet's own directory (`FirstPassModelIO.cs:116-121`). Scope "Where experiment-wide
       artifacts live" to the blib-named artifacts and point at the replicated exception.
-- [ ] **R7 - Smaller factual fixes.**
+- [x] **R7 - Smaller factual fixes.**
       - Doc 00 ~52-56 says the `HpcTask` enum spells `PerFileRescoring`; it spells
         `FirstPassFdr`, `PerFileRescore`, `SecondPassFdr` (`OspreyConfig.cs:432-435`). The
         CLI and `.osprey.task` names are the long forms; say which is which.
@@ -353,7 +353,7 @@ a deleted method will be trusted by the next session that reads it.
       - Contract row `<blib-stem>.2nd-pass.fdr_experiment.bin` reads "terminal". A product
         no task reads is, by the doc's own definition, a side channel. Name its reader
         (a `SecondPassFDR` resume? `--model-diagnostics`?) or move it to that list.
-- [ ] **R8 - Relay hygiene, stated once.** (a) `.osprey.task` sidecars are "with its
+- [x] **R8 - Relay hygiene, stated once.** (a) `.osprey.task` sidecars are "with its
       artifact" in the table but appear only at boundary 3 -> 4; say at the top of the
       checklist that every relayed artifact travels with its sidecar. (b)
       `LibraryIdentityHash` is name + size + mtime: a library copied to a node by a tool
@@ -369,20 +369,20 @@ its border with nothing from master's render missing; the `package.ps1` regexes 
 exactly the intended README links and nothing else; the renamed dev-guide heading has no
 inbound anchors. Three content items did fall through the reconciliation:
 
-- [ ] **R9 - Restore the `FileSaver` caller enumeration.** Doc 14's removed "Atomic writes
+- [x] **R9 - Restore the `FileSaver` caller enumeration.** Doc 14's removed "Atomic writes
       via `FileSaver`" section listed the call sites; P8 in doc 00 states the rule with
       none, so "every durable artifact commits through `FileSaver`" is now unverifiable
       from the docs. Under the ownership rule this list is mechanics and belongs in doc
       14: restore it there from the CURRENT code (the Opus sweep counted 14 `FileSaver`
       call sites; the old list of 8 was itself stale, since it named the deleted
       `PatchProteinQvalues`), and have P8 point at it.
-- [ ] **R10 - Two dropped facts to put back.** (a) Doc 15's "Persistent files per input"
+- [x] **R10 - Two dropped facts to put back.** (a) Doc 15's "Persistent files per input"
       table said WHY Stage 6 reads `<stem>.calibration.json`: inverse RT prediction plus
       isolation windows. The contract row now names the reader but not the reason; add it
       to the row's prose alongside R3/R4. (b) `PerFileRescoreTask.cs:262` also appends
       `ReconciliationParameterHash` to its key; doc 14's old text said so and nothing now
       does. Add `PerFileRescoring` to "What the key is made of".
-- [ ] **R11 - Two pre-existing "load-bearing" uses in files this PR touches**:
+- [x] **R11 - Two pre-existing "load-bearing" uses in files this PR touches**:
       `Osprey-workflow.html:767` ("Rust dump-writer patch (still load-bearing)") and
       `14-intermediate-files.md:232` ("`ParquetIndex` bookkeeping is load-bearing").
       Replace with "still essential" / "is essential" while the files are open; the
@@ -554,3 +554,69 @@ the two tiers are distinguishable at a glance.
 - Next: `/code-review max` in `C:\proj\pwiz-work2`, then open the PR (label `osprey`).
   WI-11 still waits on the resume branch; the in-flight markers are the two `> **In flight**`
   blocks in doc 00 plus the `## In flight` section.
+
+### 2026-09-02 - R1-R11 applied (Opus 5), pwiz `5ae3b449e4`
+
+Every finding verified against code before applying; all eleven were correct. Doc 00 is
+now 856 lines - still under the ~900 guard rail, but close enough that the next addition
+should displace something into 14 rather than extend 00.
+
+**R1 was my error, and worth recording how it happened.** I marked
+`FdrScoresSidecar.PatchProteinQvalues` as a live P11 violation on the strength of doc 14's
+`FileSaver` caller list, which named it. That list was stale - the method was deleted at
+sidecar v5 (#4486) along with `PatchExperimentValues` - and I never grepped the code for
+it, having grepped for everything else. **A contract document must not take a writer or a
+caller from another document; only from the code.** Doc 00 now states the opposite of what
+I wrote: write-once is fully achieved, and it explains the patch paths historically so the
+next reader is not tempted to reintroduce one. I also fixed the same stale prose where it
+originated, in doc 14's section 4, which still described the two-phase write as current.
+
+Re-checked the protein-q split per R1's second half: it IS a real unmerged change, but it
+is a **P7 and P12** item, not a write-once one. `fdr_experiment.bin` is written once and
+never mutated; it is written *late* - after protein FDR - so pass 2's experiment-scope
+product sits in an in-memory accumulator across the protein-FDR phase and dies with it.
+`## In flight` item 1 now says that.
+
+**The other ten**, all confirmed against code and applied:
+- R2: `.model-diagnostics.data.json` is a genuine cross-process hand-off (FirstPassFDR
+  stashes the pass-1 data model; SecondPassFDR reads, appends, renders, deletes) and
+  `.model-diagnostics.html` is a declared Output of `SecondPassFdrTask`. Both are now
+  contract rows, and the "side channels" paragraph names only fdrbench and trace dumps.
+- R3/R4: `.calibration.json` travels on EVERY leg (isolation-scheme windows feed the
+  gap-fill m/z filter, read behind a `File.Exists`, so omission changes filtering
+  silently); `SecondPassFDR` also reads `.reconciliation.json`; `fdr_experiment.bin` is
+  read by `PerFileScoring` on rehydrate; and `<stem>.1st-pass.fdr_scores.bin` is **not** a
+  default `SecondPassFDR` input - my row contradicted the very contract #4486 established.
+- R5: Stage 7 tests the **presence** of a stamp named for `PerFileRescoring`, never
+  re-deriving that task's key - `PerFileRescoreTask.ValidityKey` folds in a per-leg flag,
+  so the two legs compute different keys for the same task. My "reads the stamp to decide"
+  invited exactly the bug that was fixed.
+- R6: the blib-name / `ResolveOutputDir` rule governs blib-named artifacts only;
+  `.1st-pass.model.json` is the replicated exception and is now scoped out of it.
+- R7: `HpcTask` spells three of four differently from the CLI and sidecar names (a name
+  copied from the enum will not match a filename); P4 now includes the peak-pick arm; P10's
+  mechanism was a published pipeline byproduct, not an in-process flag; in-flight items 2
+  and 3 cite the right section and name what `OSPREY_STAGE6_STREAM_SURVIVORS` actually
+  gates; `SpectraCache` added as a `.spectra.bin` writer; `2nd-pass.fdr_experiment.bin` is
+  read by a resumed `SecondPassFDR` via `ResolvePass2ExperimentRecords`, not terminal.
+- R8: relay hygiene stated once at the top of the checklist - every artifact travels with
+  its `.osprey.task`, and copy the library with mtime preserved or `LibraryIdentityHash`
+  changes and the join node recomputes for hours.
+- R9: `FileSaver` call-site table restored to doc 14 from a fresh sweep - 14 sites in 13
+  files, replacing the old stale list of 8. P8 now points at it, so "every durable artifact
+  commits through FileSaver" is checkable from the docs.
+- R10: doc 15 records WHY Stage 6 reads `.calibration.json`; `PerFileRescoring`'s key
+  components added to "What the key is made of".
+- R11: both in-PR uses of the banned phrase replaced. Three remain in docs 05/06/09, which
+  this PR does not touch - left alone deliberately, worth a separate sweep.
+
+Also added the deferred `MEMORY.md` pointer to `TODO-20260728_doc_reorg.md` WI-16.
+
+Verification re-run after the fixes: link check clean, doc 00 ASCII-clean and CRLF,
+headless render **pixel-identical** to the pre-R11 capture (the only HTML change was
+footer prose), no stale `PatchProteinQvalues`/`PatchExperimentValues` references outside
+the two sentences that describe them as deleted.
+
+- Next: `/code-review max` from `C:\proj\pwiz-work2`, then the PR. Brendan also wants the
+  active implementation session (the resume branch, `pwiz-work1`) to weigh in first, since
+  it has the deepest working knowledge of the in-flight items doc 00 describes.
