@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260902_osprey_pipeline_architecture_docs`
 - **Base**: `master`
 - **Created**: 2026-09-02
-- **Status**: In progress - WI-1 and WI-2 done (doc 00 through the file contract)
+- **Status**: In progress - WI-1..WI-10 done; needs /code-review + PR. WI-11 waits on the resume branch.
 - **PR**: (none yet)
 - **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz-work2` (branch created there from `origin/master` at
@@ -229,7 +229,7 @@ tiny PR after the resume branch merges.
 - [x] **WI-2 (L)** Sidecar contract table + per-row prose; in-flight rows marked; verify
       EVERY row against `Osprey.Tasks/TaskValiditySidecar.cs`,
       `Osprey.Core/ArtifactPaths.cs` and the writer classes; resolve every `?`.
-- [ ] **WI-3 (M)** Directory resolution section (`--work-dir` / `--output-dir`,
+- [x] **WI-3 (M)** Directory resolution section (`--work-dir` / `--output-dir`,
       `ArtifactPaths.ResolveCacheDir`) + the path-independence property external
       adoption relies on. Source: `Osprey.Core/OspreyEnvironment.cs`.
       **REVISED**: `-LinkFrom` is NOT an Osprey CLI flag - it is a parameter of
@@ -237,18 +237,18 @@ tiny PR after the resume branch merges.
       the tool belongs in `ai/docs` (moved to WI-8); only the code-side property that
       makes it possible (P15, path-independent identity) belongs in 00. No
       `docs/20-command-line.md` row.
-- [ ] **WI-4 (M)** Resume semantics + HPC relay checklist per boundary.
-- [ ] **WI-5 (M)** Trim doc 14 (sections 0 and 8 out) and doc 15 (per-task file lists
+- [x] **WI-4 (M)** Resume semantics + HPC relay checklist per boundary.
+- [x] **WI-5 (M)** Trim doc 14 (sections 0 and 8 out) and doc 15 (per-task file lists
       out); pointers + ownership rule in each.
-- [ ] **WI-6 (S)** Doc 12 "Inputs from the first pass"; `00` row + rule in
+- [x] **WI-6 (S)** Doc 12 "Inputs from the first pass"; `00` row + rule in
       `docs/README.md`; `README.md` Documentation block + HPC pointer.
-- [ ] **WI-7 (M)** Shrink `ai/docs/osprey-development-guide.md` (3 sections out, HPC-flag
+- [x] **WI-7 (M)** Shrink `ai/docs/osprey-development-guide.md` (3 sections out, HPC-flag
       table to doc 15, stubs in, subject rule stated). pwiz-ai master.
-- [ ] **WI-8 (S)** Pointers: `osprey-run-layout.md`, `osprey-development/SKILL.md`
+- [x] **WI-8 (S)** Pointers: `osprey-run-layout.md`, `osprey-development/SKILL.md`
       routing, `ai/MEMORY.md`; staging recipe in `osprey-large-datasets.md`. pwiz-ai master.
-- [ ] **WI-9 (L)** HTML: banner in/out edits, geometry reflow, File-scope legend, relay
+- [x] **WI-9 (L)** HTML: banner in/out edits, geometry reflow, File-scope legend, relay
       annotations, doc link, `package.ps1` link-retarget check.
-- [ ] **WI-10 (M)** Verification:
+- [x] **WI-10 (M)** Verification:
       1. `pwsh -File ai/scripts/audit-docs.ps1` on the pwiz-ai side; a relative-link
          check across both pools (every `docs/NN-*.md` and `00` link resolves; every
          `ai/docs` pointer into pwiz resolves).
@@ -343,3 +343,75 @@ standard marker for WI-11 to clear:**
   per-entry values and is entered with a materialised all-runs entry list (P5/P6).
 
 - Next: WI-4 (resume semantics + HPC relay checklist per boundary), then WI-5/WI-6.
+
+### 2026-09-02 - WI-3..WI-10 (Opus 5): doc 00 complete, docs reconciled, HTML reflowed
+
+Four pwiz commits on `Skyline/work/20260902_osprey_pipeline_architecture_docs`
+(`bd8584d355`, `aabf9905f7`, `e0079742b7`, `907a22312e`) and two pwiz-ai commits
+(`a6fb123`, `7b6ac6e`, pushed). Doc 00 is 769 lines, under the ~900 guard rail.
+
+**Corrections to my own earlier work, both caught by checking code rather than prose:**
+- **P15 stated the resume safety property backwards.** It read "a key that is not
+  exhaustive enough costs a recompute, never a wrong answer". The truth is the reverse:
+  an OVER-inclusive key costs a recompute; an UNDER-inclusive one silently reuses an
+  artifact computed under different settings and reports it as the new result. That is
+  exactly the defect each of `FirstPassFDR`'s six key components was added to prevent,
+  and the doc now presents that list as the worked example of the asymmetry.
+- **"Identity is path-independent" was an overclaim.** `SearchParameterHash` folds in
+  `DecoyPairingManifestPath` verbatim and unnormalised - the ONLY path anywhere in
+  artifact identity. That is the actual mechanism behind
+  `project_sead_pilot_mtg_dataset`'s "the move broke -LinkFrom": it breaks for cohorts
+  searched WITH a pairing manifest and not otherwise. Both doc 00 and
+  `osprey-run-layout.md` now say so precisely.
+
+**More existing-doc errors found (all fixed):**
+- Doc 15's "Safe concurrent writes" described Rust's local-temp + copy-and-verify, not
+  the C# sibling-rename that replaced it.
+- The dev guide's "path-dependent library hash" gotcha was backwards - both
+  implementations exclude the directory (verified against `crates/osprey-core/src/config.rs`,
+  whose comment names the C# port as what it matches). It had been telling developers to
+  use Windows-native paths for a reason that no longer exists.
+- The dev guide's HPC flag table is **Rust's** (`--no-join` / `--join-at-pass`), not the
+  C# `--task` family, so it stayed in `ai/docs` (WI-7 had planned to move it to doc 15,
+  which would have put Rust flags in a C# doc) and is now labelled.
+
+**Deviations from the plan, with reasons:**
+- **WI-7 did not shrink the guide by ~250 lines; it is +10 net** (1876 -> 1886). The
+  actual duplication with doc 00 was ~34 lines, not 250 - the estimate was made before 00
+  existed and assumed whole sections would move. Removing more would mean deleting
+  content 00 does not own (env vars, gates, measured costs). The guide is still the
+  largest in `ai/docs` at 1886 lines; genuinely shrinking it belongs to
+  `TODO-20260728_doc_reorg.md`, not here.
+- **WI-8's `ai/MEMORY.md` addition was skipped deliberately.** `audit-docs.ps1` reports
+  the core five at **1080 of 1000 lines, over by 80** (pre-existing). Adding pointer lines
+  to `MEMORY.md` would worsen a tracked violation to deliver routing the
+  `/osprey-development` skill now carries, which is where an entry point belongs.
+- **WI-8's staging recipe was already present** in `osprey-large-datasets.md` ("Staging a
+  cohort", ~line 160). Added only the cache-vs-product cross-link.
+- **`package.ps1` gained a README link retarget.** The bundle ships `README.md` but not
+  `docs/`, so the Documentation block WI-6 added would have shipped dead links - and the
+  pre-existing `Osprey-workflow.html` link was already dead, since the workflow page lands
+  in `Documentation/`. Retargets `docs/*` to GitHub URLs and the workflow link to its
+  subdirectory, mirroring the existing `CommandLine.html` retarget in the same function.
+
+**WI-9 (HTML)**: banners grew 64 -> 96 px; the reflow was scripted
+(`ai/.tmp/sessions/20260902-8b9d2317/reflow-svg.py`) rather than hand-edited, shifting every
+following group translate and flow-path y, viewBox 2700 -> 2868. Added a File-scope legend
+(per-run / experiment-wide / shared cache) and colored every artifact name in the banners to
+match, plus a relay line per task. Verified by headless-Chrome render: no group overlap, and
+the two tiers are distinguishable at a glance.
+
+**WI-10 verification run:**
+1. Relative-link check across both pools - clean (`check-links.sh` in the session dir).
+2. Contract-vs-code - all 14 writer classes exist and every filename fragment appears
+   (`check-contract.sh`).
+3. Cross-pool naming - all four task names byte-identical across `README.md`, `docs/00`
+   and `Osprey-workflow.html`.
+4. Headless-Chrome before/after render, plus per-banner crops.
+5. `package.ps1` retarget verified in isolation (`test-retarget.ps1`) rather than by a full
+   packaging build, which would have locked `Osprey.exe`.
+6. `audit-docs.ps1` - the core-five overage above is pre-existing and untouched by this work.
+
+- Next: `/code-review max` in `C:\proj\pwiz-work2`, then open the PR (label `osprey`).
+  WI-11 still waits on the resume branch; the in-flight markers are the two `> **In flight**`
+  blocks in doc 00 plus the `## In flight` section.
