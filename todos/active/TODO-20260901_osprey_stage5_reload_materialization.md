@@ -582,3 +582,48 @@ The removed term is the O(files) one, so the gap widens with cohort size rather 
 streamed path holds, at the barrier, only the consensus reductions (~96 K peptides, ~24 M
 detections at 257 files) plus one file's entries - and the decoy detections collected before
 pruning, which is the one term still to watch at scale.
+
+## 446-FILE RESULT, 2026-09-02: the spike is gone
+
+`chs-446files-libdecoy-r1.0-protein-compact-stage5stream`, `--task FirstPassFDR`, branch tip
+`46a239393b`. Same 446 files, same library, same arm as the killed baseline.
+
+| | baseline-phase3 (build 243-20260831-1639) | branch tip |
+|---|---|---|
+| entries in | 1,342,686,095 | 1,342,686,095 |
+| **peak at compaction** | **102.2 GB, paging, killed** | **31.81 GB (WS 25.47, managed 13.37)** |
+| survivors held | 288,920,200 | **342,715,751** |
+| survivor reload | 63m19s, page-fault bound | **none - no buffer is built** |
+
+**The larger survivor set makes the result stronger, not weaker**: 342.7 M survivors carried in
+31.8 GB where 288.9 M cost 102.2 GB - about 3.9x less memory per survivor, and no paging.
+
+### An unexplained discovery-set delta, NOT attributable to this change
+
+The two runs disagree upstream of the buffer:
+
+| | baseline-phase3 | branch tip |
+|---|---|---|
+| precursors passing run-level FDR | 4,376,266 | 4,599,744 |
+| protein-compact stratum | 630,655 base_ids | (pending) |
+| passing base_ids | 625,620 | 744,943 |
+
+Same inputs (entries in are identical to the row), same library, same arm, same peak-pick model,
+same train-set policy. **The builds differ**: baseline-phase3 ran `26.1.1.243-20260831-1639`,
+which PREDATES this branch.
+
+It is not this branch's Stage 6 work:
+
+* the 86-file plate on the branch tip reproduced the immediately-prior build's boundary
+  EXACTLY - `259953530 -> 34524236 entries (373487 passing base_ids)`;
+* `regression.ps1 -Dataset Stellar` is byte-identical to the committed golden across all
+  twelve checks.
+
+So the delta entered somewhere between the 08-31 build and the branch tip - the earlier
+commits on this branch, or master. **Queued a change-immune anchor rather than a guess**: the
+same 86-file plate run on the `26.1.1.243-20260831-1639` snapshot. Boundary equal to
+`34524236 / 373487` means the pre-branch build agrees and the delta entered during the branch;
+unequal means it predates the branch. `bisect-plate-prebranch.launch.log` records the verdict.
+
+**Do not read the 446 boundary as a regression until that anchor reports.** Note also that
+288.9 M was measured on a run that was killed while paging; nothing else has ever reproduced it.
