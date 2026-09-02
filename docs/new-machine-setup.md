@@ -1012,6 +1012,16 @@ and Skyline consumes its output.
 Then open `pwiz_tools\Skyline\Skyline.sln` and build normally. Incremental IDE builds of
 Skyline and its own projects work exactly as they do on master.
 
+> **Bootstrap the configuration you intend to build in the IDE.** Bare `.\bs.bat` builds
+> **Release**; `.\bs.bat Debug` builds Debug. They are separate output trees, so having run
+> one does nothing for the other - build Debug in the IDE with only a Release bootstrap
+> behind it and the pwiz-sharp Debug assemblies simply are not there. Run whichever you
+> iterate in, or both.
+
+Verified end to end on 2026-09-02: `clean.bat`, then `.\bs.bat` (succeeded in 10.8s), then a
+Release x64 build in Visual Studio 2026 - succeeded in 25 seconds, from clean, with no
+pwiz-sharp projects in `Skyline.sln`.
+
 **Visual Studio does not rebuild pwiz-sharp, and is not supposed to.** On master, ProteoWizard
 is C++ built by Boost.Build and Skyline links the results; the IDE never rebuilds it. On this
 branch ProteoWizard is `pwiz-sharp`, C# built through the .NET SDK by `build.bat` - but the
