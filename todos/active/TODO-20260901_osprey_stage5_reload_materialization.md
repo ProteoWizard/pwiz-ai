@@ -414,3 +414,85 @@ needs `decoyPeptides` already complete - a second pass over all files, or the pr
 Streaming instead of projecting therefore costs FOUR reloads (targets+sets, decoyPeptides,
 decoy detections, then phases 3+4), not two. At ~32 min per reload at 446 files that is ~128
 min against the projection's ~64. The projection stays the plan.
+
+## THE PROJECTION IS THE WRONG FIX (2026-09-01, with numbers from the 257-file run)
+
+Retracting the settled plan above. A 289 M x 88 B projection is **still an
+O(files x entries) structure** - it shrinks the coefficient from 274 B to 88 B and leaves the
+shape alone. This file's own "The fix" section already says why that is not the fix
+(*"Removing the collection removes the O(files) term outright rather than shrinking its
+coefficient"*), and the governing rule is blunter: **any O(files x entries) structure is the
+defect, not the baseline** - per-file compute, O(entries)/O(distinct) aggregate, streamed emit.
+The projection was reached by asking "what is the smallest row that satisfies the consumers"
+instead of "what does the barrier actually have to hold".
+
+### What the barrier actually has to hold, measured
+
+From `chs-257files-libdecoy-r1.0-protein-compact-s57base257/run.log`:
+
+```
+First-pass compaction: 764427887 -> 132912754 entries (501247 passing base_ids)
+Reconciliation multi-charge consensus: 293362 entries need re-scoring across 257 files
+Reconciliation consensus: 48039 target peptides, 47524 decoy peptides
+Reconciliation: 13950738 per-(file, entry) actions planned
+```
+
+Classifying every structure the four planning phases build:
+
+| structure | order | at 257 | at 446 (est) |
+|---|---|---|---|
+| `perFileEntries` survivor buffer | **O(files x entries)** | 132.9 M rows, 49 GB | 289 M, ~100 GB |
+| 13-field projection of the same | **O(files x entries)** | ~11 GB | ~25 GB |
+| `targetPeptides` / `decoyPeptides` | O(distinct peptides) | 95.6 K | ~0.1 M |
+| `targetBaseIds`, `passingBaseIds` | O(distinct base ids) | 501 K | ~0.9 M |
+| `detections` | O(distinct peptides x files) | ~24 M x 40 B = ~1 GB | ~42 M, **~1.7 GB** |
+| `consensus` | O(distinct peptides) | 95.6 K | ~0.1 M |
+| `perFileConsensusTargets` | O(rescore targets) | 293 K | ~0.5 M |
+| `reconciliationActions` | O(files x actions) | 13.9 M | ~24 M, ~2 GB |
+
+**The consensus barrier is ~2 GB, not 25.** 95.6 K peptides survive the consensus gate, and a
+peptide is detected roughly once per file, so the cross-file evidence is bounded by
+`distinct peptides x files` - three orders of magnitude below the survivor count. Everything
+else at the barrier is O(distinct). Holding a projection of all 289 M survivors to compute a
+median over 42 M detections is the whole defect in miniature.
+
+### The design: stream, keep only the reductions
+
+**Two passes over files, ~2 GB resident at the barrier:**
+
+```
+Pass A, per file (load -> use -> DROP):
+    phase 1  MultiChargeConsensus.SelectRescoreTargets        -> per-file targets (small)
+    consensus step 1  targetPeptides, targetBaseIds, and TARGET detections
+    consensus step 3 (decoy half)  ALL decoy detections, plus decoy modseq -> base ids seen
+    ReconciliationPlanner passingBaseIds
+Barrier (no file I/O):
+    decoyPeptides = { modseq : seen(modseq) intersects targetBaseIds }
+    prune decoy detections whose modseq is not in decoyPeptides
+    per-peptide weighted-median consensus
+Pass B, per file (load -> use -> DROP):
+    phase 3  CalibrationRefit.Refit(consensus, entries)
+    phase 4  ReconciliationPlanner per-file planning + WriteReconciliationFiles
+```
+
+Target detections can be collected in pass A because step 3's target test reduces to
+`Qualifies(entry)` - any target that qualifies had its modseq added to `targetPeptides` in step
+1, so the `targetPeptides.Contains` half is always true for them. Decoy detections cannot be
+filtered during pass A (that needs `decoyPeptides`, which needs all of `targetBaseIds`), so they
+are all collected and pruned at the barrier. That is what buys the SECOND pass back: the naive
+streaming reading of `Compute`'s three loops costs four reloads, this costs two - the same as
+the projection - at a twelfth of the memory.
+
+The unpruned decoy detections are the transient peak. Bounded by decoy survivor observations of
+peptides that reach the collection at all, not by all 289 M survivors; measure it, do not assume
+it. If it turns out large, the fallback is a third pass, not a projection.
+
+### Shape of the code change
+
+`ConsensusRts.Compute` becomes a thin wrapper over a new accumulator (`AddFile` per file,
+`Build` at the barrier) so the resident path, `FdrTest` and the streaming path cannot drift.
+`ReconciliationPlanner.Plan` splits the same way: its `passingBaseIds` loop becomes an
+accumulator fed in pass A, and its planning loop takes one file at a time.
+`FirstPassFdrTask.ReloadFirstPassSurvivors` then has no caller and goes, along with the
+`perFileEntries` contents - `CompactFromSidecars` returns the per-file shape with empty lists
+and the compaction count line takes its `afterCount` from the pass-A tally.
