@@ -501,3 +501,15 @@ PlanStage6 outputs and the run died before it.
 * One pre-existing red was cleared on the way: a `RunStreamingFirstPass` doc comment stranded
   above `TryLoadCompletedScores` had been failing the zero-warning inspection gate on this
   branch (3 `InvalidXmlDocComment`).
+
+### CORRECTION to (e2)/(e3)'s pass-2 claim, measured 2026-09-01 evening
+
+(e2) said moving the sidecar write into pass 1 would make "pass 2 stop re-scoring even on a cold
+run", and counted the 55 min pass 1 costs at 446 as recovered. **Measured on the 86-file plate,
+it is neutral**: pass 2 fell 14m27s -> 11m32s, pass 1 rose 8m35s -> 12m07s, net +37s on 23
+minutes. The write MOVED from pass 2 into pass 1; it did not disappear, and pass 2 now reads
+back what it used to recompute.
+
+So the value of the pass-1 write is proportional recovery - an interruption costs one in-flight
+file instead of both score passes - and NOT wall time. A 446-file run is still a ~4 h job. Full
+per-phase table in `TODO-20260901_osprey_stage5_reload_materialization.md`.
