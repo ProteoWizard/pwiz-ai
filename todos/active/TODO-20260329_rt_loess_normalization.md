@@ -5,7 +5,7 @@
 - **Worktree**: `sky_peakscoringandnormalization` (second machine) / `sky_normalization` (this machine)
 - **Base**: `master`
 - **Created**: 2026-03-29
-- **Status**: In Progress
+- **Status**: Superseded in direction on 2026-09-02 by [[TODO-20260902_pluggable_peak_detection_normalization]] (plug-in contract on the .NET 10 branch). Kept as a cherry-pick source; PR #4170 still open.
 - **GitHub Issue**: [#4094](https://github.com/ProteoWizard/pwiz/issues/4094)
 - **PR**: [#4170](https://github.com/ProteoWizard/pwiz/pull/4170) — bundled "New peak scoring and normalization options" (open)
 - **Related**:
