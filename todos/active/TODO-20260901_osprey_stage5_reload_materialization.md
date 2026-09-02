@@ -532,3 +532,53 @@ not from the join-wide map, so the map has no reader at all on the boundary run.
 construction there (keeping only the count for the log line) is ~10 lines and ~2 GB on exactly
 the run the 446 baseline is. Not folded into the change above so that the plate and 446
 measurements are of one thing; do it next if the 446 run wants the headroom.
+
+## MEASURED at plate scale, 2026-09-01 evening: 2.4x less memory, boundary identical
+
+`chs-86files-libdecoy-r1.0-protein-compact-p0059-stage5stream` (streamed) against
+`chs-86files-...-p0059-fpfdr/run-20260901_131329.log` (the materialized 43m53s baseline). Same
+86 files, same library, same arm, same `--task FirstPassFDR`.
+
+| | baseline (materialized) | streamed |
+|---|---|---|
+| compaction boundary | `259953530 -> 34524236 entries (373487 passing base_ids)` | **identical** |
+| peak managed heap, planning window | **30.89 GB** | **12.91 GB** |
+| peak working set, planning window | **38.56 GB** | **20.16 GB** |
+| `[MEM after Stage-5 CompactFirstPass]` WS | 24.72 GB (peak 26.24) | 19.60 GB (peak 23.80) |
+| survivor reload | 2m21s | **no reload at all** |
+| planning | 5m42s | 9m32s (2m37s scan + 6m55s plan) |
+| wall | 43m53s | 44m58s |
+
+**The boundary being byte-identical is the load-bearing result** - not the memory. Nothing at
+3 files could check it: the survivor count is now summed from rows-per-base_id rather than
+counted off a materialized buffer, and the Stellar gate compares blibs, not that arithmetic.
+Reproducing `34524236` exactly on 86 files is what says the sum is right.
+
+**Wall time is 2.5% WORSE, and that is the honest trade.** The second planning pass costs more
+than the removed reload gives back. This change buys memory and recoverability, not speed; do
+not quote it as a speedup.
+
+### Correction to the (e3) claim about pass 2
+
+The resume TODO projected that moving the sidecar write into pass 1 would stop pass 2
+re-scoring and save ~55 min at 446. Measured on this plate, per phase:
+
+| phase | baseline | with the pass-1 write |
+|---|---|---|
+| training-subset load | 3m54s | 3m51s |
+| pass 1 | 8m35s | **12m07s** |
+| pass 2 | 14m27s | **11m32s** |
+| both | 23m02s | 23m39s |
+
+Pass 2 did get faster by 2m55s - the feature reload really is gone - but pass 1 absorbed the
+sidecar write and paid it back. **Net +37s on 23 minutes, one run each: neutral within noise.**
+The write MOVED, it did not disappear. So the 446 run is still a ~4 h job, and the value of the
+pass-1 write is that an interruption costs one file instead of two phases.
+
+### What the numbers say about 446
+
+The removed term is the O(files) one, so the gap widens with cohort size rather than staying at
+2.4x. The materialized path measured 102.2 GB at 446 and could not finish on a 63.7 GB box. The
+streamed path holds, at the barrier, only the consensus reductions (~96 K peptides, ~24 M
+detections at 257 files) plus one file's entries - and the decoy detections collected before
+pruning, which is the one term still to watch at scale.
