@@ -550,3 +550,45 @@ neighbouring one.
 
 **Fix**: `Rehydrate` publishes `PlanningPerformed(true)` - a plan IS available, it is the bundle
 just adopted - and the false comment in `PerFileRescoreTask` now records the trap.
+
+### CORRECTION 2026-09-02 03:00: (b) is NOT fixed - PlanningPerformed was only the first gate
+
+The `PlanningPerformed` publish is correct and stays, but it does not fix (b). Proven by a
+reproduction that asserts the PATH, not just the outcome
+(`ai/.tmp/sessions/20260901-fpresume/repro-defect-b2.ps1`):
+
+```
+leg A  --task PerFileScoring          exit 0, 3 parquets
+leg B  --task FirstPassFDR            exit 0, 3 sidecars, 3 reconciliation.json
+leg C  straight-through continuation  exit 1, FirstPassFDR skipped=True, blib=False, 0 reconciled
+```
+
+**An earlier version of this test reported FIXED and was wrong.** It asserted only exit code,
+blib and parquet count, and its leg 1 had died on argument validation (`--task FirstPassFDR`
+rejects `--input`; it needs `--input-scores`), so leg 2 was a plain COLD run that never took the
+resume path. A resume test must assert that `FirstPassFDR:skipping` appears, or it cannot fail
+for the right reason.
+
+Leg C's trace shows the second gate:
+
+```
+Resume rehydrate: streaming the first-pass bundle from 3 file(s)
+Bundle hydration: skipping first-pass Percolator (sidecar provides q-values)
+First-pass compaction: 1448698 -> 996439 entries (166724 passing base_ids; 0 action(s) dropped)
+[TASK] PerFileRescoring:done (5.6s)
+```
+
+The bundle hydrates, compaction runs, the reconciliation actions are present ("0 action(s)
+dropped") - and then nothing executes them. `Rehydrate`'s own comment states the intent:
+*"Having built the bundle from our OWN sidecars, there is no rescore to run at all."* That
+assumption holds for a WARM directory (reconciled parquets already on disk) and is false for a
+Stage-5-only one, which has none.
+
+**So the remaining fix is an execution path**: PerFileRescoreTask must run the rescore from a
+self-built bundle, distinguishing "no rescore needed because the outputs exist" from "no rescore
+possible because no worker supplied a bundle". The `anyPass2Present` term already expresses the
+first; the second needs the self-built bundle to be a legitimate rescore input.
+
+Not attempted at 03:00 on a 22%-context night session: it is a Stage 6 behaviour change that
+`-Dataset All` alone would not fully cover. The `--task PerFileRescoring` route is unaffected and
+is what the HPC chain proves.
