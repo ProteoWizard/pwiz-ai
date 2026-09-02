@@ -513,3 +513,40 @@ back what it used to recompute.
 So the value of the pass-1 write is proportional recovery - an interruption costs one in-flight
 file instead of both score passes - and NOT wall time. A 446-file run is still a ~4 h job. Full
 per-phase table in `TODO-20260901_osprey_stage5_reload_materialization.md`.
+
+## (b) ROOT-CAUSED AND FIXED, 2026-09-02
+
+**The hypothesis in this file was wrong.** `Rehydrate` DOES reconstitute the reconciliation plan
+and the gap-fill targets - it publishes `ReconciliationActions`, `RefinedCalibrations`,
+`PerFileGapFillForRescore` and `PerFileConsensusTargets` from the adopted bundle, exactly as
+`Run` does.
+
+What it does NOT publish is **`PlanningPerformed`**. `PerFileRescoreTask` reads it as "is there a
+plan to execute":
+
+```csharp
+bool didPlan = ctx.Get<PlanningPerformed>().Value;          // false after Rehydrate
+var rescoreBundle = ctx.Get<RescoreBundle>().Value;          // null on a straight-through resume
+if (!didPlan && (rescoreBundle == null || anyPass2Present))  // -> refill-only no-op
+```
+
+Both terms are false on a straight-through continuation of a Stage-5 directory, so the whole
+rescore self-gates to a refill, no `.scores-reconciled.parquet` is written, no
+`Pass2ExperimentScope` is published, and `SecondPassFdrTask` hits the #4486 "ABSENCE IS A STOP"
+fail-fast. That is the 108.5 s / 0-parquet / exit-1 signature measured at the top of this file.
+
+`PerFileRescoreTask`'s own comment asserted the opposite - *"FirstPassFDR publishes
+PlanningPerformed alongside CompactedEntries from every materialization path"* - which is how it
+survived: the claim was checked against `Run` and never against `Rehydrate`.
+
+### Why the HPC chain stayed green the whole time
+
+Because it never resumes a SKIPPED task. Phase 3 runs `--task PerFileRescoring` in its own
+working directory, so FirstPassFDR is not in the task list at all and its upstream publishes a
+real `RescoreBundle`. `rescoreBundle == null` is then false, the short-circuit does not fire, and
+the rescore runs. Same task, two input routes: the chain exercises the on-disk one, and defect
+(b) lives only on the in-process one. A gate can be complete over its own shape and blind to a
+neighbouring one.
+
+**Fix**: `Rehydrate` publishes `PlanningPerformed(true)` - a plan IS available, it is the bundle
+just adopted - and the false comment in `PerFileRescoreTask` now records the trap.
