@@ -1,13 +1,13 @@
 # Pluggable peak detection, peak scoring and normalization algorithms
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260902_pluggable_peak_detection_normalization`
+- **Branch**: `Skyline/work/20260902_PluggableNormalization` (created by Nick 2026-09-02 from the net8_port tip, pushed to origin)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619)) - NOT `master`
 - **Created**: 2026-09-02
-- **Status**: Not started - checkout being set up
+- **Status**: Phase 0 in progress
 - **PR**: (none yet)
 - **Module**: `skyline`
-- **Worktree**: (to be filled in - Nick is cloning a fresh checkout for this work)
+- **Worktree**: `C:\git\sky_pluggablenormalization` (full clone, not a worktree). Start sessions with `/pw-continue C:\git\sky_pluggablenormalization`.
 - **GitHub Issues**: [#4094](https://github.com/ProteoWizard/pwiz/issues/4094) RT LOESS,
   [#4096](https://github.com/ProteoWizard/pwiz/issues/4096) sum coelution score,
   [#4097](https://github.com/ProteoWizard/pwiz/issues/4097) peptide/protein rollup - these asked for
@@ -70,9 +70,9 @@ Facts that went into it (verified 2026-09-02):
 ## Tasks
 
 ### Phase 0 - Set up
-- [ ] Record the checkout path in Worktree above; create the branch from `origin/Skyline/work/20260612_net8_port`
+- [x] Record the checkout path in Worktree above; create the branch from `origin/Skyline/work/20260612_net8_port` (done 2026-09-02; branch = net8_port tip `293f906d5^` + Nick's `293f906d5` "Fix build in Visual Studio by adding pwiz projects to Skyline.sln")
 - [ ] Build the .NET 10 tree and run one existing scoring test and one group comparison test to establish a baseline
-- [ ] Re-verify the seam table above against the net10 branch (files may have moved in the port)
+- [x] Re-verify the seam table above against the net10 branch - all six files exist at the same paths; `PeakIntegrator.CreatePeakFinder` still calls `PeakFinders.NewDefaultPeakFinder()` (verified 2026-09-02)
 
 ### Phase 1 - Contract
 - [ ] Decide hosting model: in-process (`AssemblyLoadContext`) vs out-of-process (data files / pipes). Decide per step - peak detection is called per chromatogram inside import (hot path, in-process only); normalization/rollup runs on a whole matrix (out-of-process is viable)
@@ -118,3 +118,39 @@ Nick decided to stop porting skyline-prism algorithms one by one (the Round 2 li
 branch as the base; chose the .NET 10 branch because the target client (skyline-prism) is .NET 10 and cannot be
 loaded in-process by a 4.7.2 Skyline. Facts and seam survey recorded above. Nick is cloning a fresh checkout;
 next session starts at Phase 0.
+
+### 2026-09-02 - Phase 0: checkout, base, seam details
+
+Checkout `C:\git\sky_pluggablenormalization`, branch `Skyline/work/20260902_PluggableNormalization` = net8_port
+tip + Nick's `293f906d5` (adds pwiz projects to Skyline.sln for Visual Studio). .NET SDK 10.0.400 installed;
+`global.json` asks for 10.0.100 with `latestFeature` roll-forward. Ran `pwiz-sharp\i-agree-to-the-vendor-licenses.bat`
+(writes the gitignored `Directory.Build.user.props`). Release build launched with
+`pwiz_tools\Skyline\build.bat Release --i-agree-to-the-vendor-licenses --no-tests` through the PowerShell tool
+(NOT `cmd /c` from Bash - clink swallows it, see the net8_port TODO); log in
+`ai/.tmp/sessions/20260902-pluggable/build-release.log`. `Run-Tests.ps1` has a `-Framework Net8` mode for the
+`bin\staging\<Config>` layout, auto-detected from Skyline.csproj.
+
+Seam details that constrain the contract (all verified on this branch):
+- **Peak detection** `IPeakFinder` is small and data-only already: `SetChromatogram(IList<float> times,
+  IList<float> intensities)`, `GetPeak(startIndex, endIndex)`, `CalcPeaks(max, int[] idIndices)`, plus
+  `Intensities1d/2d` and `IsHeightAsArea`. `PeakFinders.NewDefaultPeakFinder()` is the single factory
+  (`new PeakFinder()`), called from `PeakIntegrator.CreatePeakFinder`. So the plug point is a factory
+  selection; the interface itself can stay. Concern: `Intensities1d/2d` and `IsHeightAsArea` leak the
+  Crawdad implementation; a plug-in contract should not require them.
+- **Peak scoring** calculators are keyed by CLR type name: `FullyQualifiedName => GetType().FullName`,
+  and `FeatureNames._calculatorsByTypeName` is built once in a static ctor from the hard-coded
+  `PeakFeatureCalculator.CALCULATORS` array (`IPeakScoringModel.cs:699`). Scoring models and `.sky` files
+  store those type names. A plug-in calculator therefore needs (a) a registry that can grow after static
+  init and (b) a stable name that is not a CLR type name (or a synthetic one). Tooltips come from
+  `FeatureTooltips.resx` keyed by the same name - plug-ins need their own tooltip source.
+- **Normalization** `NormalizationMethod.FromName` parses `ratio_to_<label>` and surrogate names, then matches
+  `EQUALIZE_MEDIANS` / `GLOBAL_STANDARDS` / `TIC`, and **returns `NONE` for anything unknown** - no error.
+  Good for old-Skyline compatibility (a plug-in method name silently degrades to no normalization) but means
+  a missing plug-in must be surfaced somewhere else. `SummarizationMethod` is three static instances
+  (`regression`, `averaging`, `medianpolish`) with the same `FromName` shape.
+- **skyline-prism** (`dotnet/src/SkylinePrism.Core`) already has a minimal algorithm abstraction for rollup:
+  `IRollupMethod { double[] Aggregate(double[,] log2Matrix); }` over a LOG2 features x samples matrix, used
+  for both transition->peptide and peptide->protein. Normalization and batch correction are static
+  classes over the same matrix shape with `sealed record` results. That matrix-in / vector-out shape is a
+  strong candidate for the Skyline rollup contract; the normalization contract needs the matrix plus
+  per-feature RT and per-sample batch/annotation columns.
