@@ -627,3 +627,42 @@ unequal means it predates the branch. `bisect-plate-prebranch.launch.log` record
 
 **Do not read the 446 boundary as a regression until that anchor reports.** Note also that
 288.9 M was measured on a run that was killed while paging; nothing else has ever reproduced it.
+
+### ANCHOR RESULT 2026-09-02 03:29: all three builds AGREE at 86 files
+
+```
+pre-branch build 26.1.1.243-20260831-1639, 86 files:
+  First-pass compaction: 259953530 -> 34524236 entries (373487 passing base_ids)
+```
+
+Identical to the plate baseline AND to the branch tip. So pre-branch, mid-branch and branch tip
+all agree at plate scale.
+
+**The verdict line the anchor script printed ("the delta entered DURING the branch") is WRONG**
+and should be ignored - it assumed the plate baseline came from a mid-branch build only. What the
+result actually establishes is the opposite: **no build difference is visible at 86 files at
+all**, so the 446 delta is not explained by anything the plate cohort exercises.
+
+The open question is therefore sharper, not answered:
+
+| | baseline-phase3 (446) | branch tip (446) | all builds (86) |
+|---|---|---|---|
+| entries in | 1,342,686,095 | 1,342,686,095 | 259,953,530 |
+| precursors passing run-level FDR | 4,376,266 | 4,599,744 | agree |
+| passing base_ids | 625,620 | 744,943 | 373,487 (agree) |
+
+**Hypothesis, NOT a finding**: the trained model differs. The SVM training subsample is drawn
+cohort-wide (`MaxTrainSize` 300 K out of 1.34 B rows at 446, out of 260 M at 86), so a
+selection difference that is invisible when the pool is 5x smaller would move the model, and a
+different model moves run-level q and therefore the passing set. Two ways to test it cheaply
+before spending another 446 run:
+
+1. Compare the two runs' `[COUNT] First-pass Percolator streaming subsample` lines and the
+   trained fold weights - the 446 baseline's log still exists, and `.1st-pass.model.json` is now
+   persisted by the branch tip, so the models can be diffed directly.
+2. If the subsample sizes match but the weights differ, the difference is in training, not
+   selection.
+
+Until that is settled, **do not describe the 446 boundary as either a regression or an
+improvement.** Note also that 288,920,200 was measured on a run that was killed while paging and
+has never been reproduced.
