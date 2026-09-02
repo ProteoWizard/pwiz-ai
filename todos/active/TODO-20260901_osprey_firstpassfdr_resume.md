@@ -435,3 +435,69 @@ unguarded window would be roughly 4h30m.
 Pass 1 and pass 2 must produce a **bit-identical** score - both call `ComputeStreamedScore` with
 the same averaged fold weights, so they should, but the regression gate is byte-identical output
 and this is the claim it rests on. Check it before moving the sidecar write.
+
+## Progress log - 2026-09-01 (evening session): (e3) implemented, phases 1, 2 and 4
+
+Goal set by the developer for this session: **(1) stage sidecar writes that protect completed
+work and allow within-task resuming; (2) once proven and committed on the single plate, solve
+the reconciliation memory spike; (3) prove it on 446 files, all through `--task FirstPassFDR`.**
+The first 446 attempt is expected to take ~4 h, and iterating after a failure under an hour,
+because the sidecar staging makes the re-entry cheap.
+
+### Committed on `Skyline/work/20260901_osprey_firstpass_resume`
+
+| commit | what |
+|---|---|
+| `4142c313c1` | model persisted when TRAINING ends; stratum split into its own file, persisted when PROTEIN FDR ends |
+| `e74dfff48d` | per-file 1st-pass sidecar written during PASS 1, and read back by pass 2 |
+
+Both green on `regression.ps1 -Dataset Stellar` - all twelve checks, including mode 1
+byte-identity against the golden and mode 3's `per-file FDR sidecars==straight (3,445,490
+records)`, which is the direct proof that a sidecar written in pass 1 is byte-identical to the
+one pass 2 used to write.
+
+### (e3) status against its own five artifacts
+
+| phase ends | artifact | before | now |
+|---|---|---|---|
+| training | `.1st-pass.model.json` | PlanStage6, 228 min later at 446 | **as training returns it** |
+| pass 1, per file | `.1st-pass.fdr_scores.bin` | pass 2, one phase late | **pass 1** |
+| pass 2 | experiment-scope q + PEP + aggregate | after protein FDR | unchanged - see below |
+| protein FDR | protein q | after protein FDR | unchanged |
+| protein FDR | protein-compact stratum | PlanStage6 | **`.1st-pass.stratum.json` at protein FDR's end** |
+| planning, per file | `.reconciliation.json` | after ALL files planned | **as each file is planned** |
+
+**The experiment-scope split (the protein-q file) is DEFERRED, deliberately.** It guards the
+smallest of the phases (protein FDR, 33 min at 446) and it is the only item that needs a format
+change - which would have to enter `FirstPassFdrTask.ValidityKey` to be safe, invalidating every
+1st-pass sidecar in the plate and 446 directories and forcing a fresh multi-hour run before the
+memory work could iterate. Sequenced after the memory fix, when a fresh 446 directory exists
+anyway. Nothing else in (e3) is outstanding.
+
+### What this changes about recovery
+
+A run interrupted anywhere from minute ~21 (training's end) now keeps: the model, every file
+whose pass-1 scoring completed, and - once protein FDR has run - the experiment sidecar and the
+stratum. That is exactly the set `canEnterAtGate` needs, so a run killed at the survivor reload
+(the memory spike, which is AFTER protein FDR) re-enters at the compaction gate instead of
+repeating the score passes. That was the blocking finding of the previous session: the 446
+directory had neither `.reconciliation.json` nor `.1st-pass.model.json` because both were
+PlanStage6 outputs and the run died before it.
+
+### Side effects worth knowing
+
+* **Pass 2 no longer reloads features on a cold run.** It reads the score back from the sidecar
+  pass 1 just wrote, through the path `tryStreamCompletedScores` already implemented. At 446
+  files pass 2 was 82 min, most of it feature loading and dot products.
+* **A resumed run no longer rewrites the sidecars it adopted.** It used to rewrite every one
+  (~35 GB at 446), which also meant re-stamping artifacts a marker already attested.
+* **The model is reused on a PARTIAL resume**, not only when every file is already scored. It is
+  a function of the cohort, arm and seed, all of which the validity key covers - and the model
+  file is now stamped, which is what makes adopting it safe without the all-sidecars corroboration.
+* **The HPC relay carries one more artifact.** `regression.ps1`'s phase2 -> phase3 -> phase4 hops
+  now copy `.1st-pass.stratum.json` beside `.1st-pass.model.json`. An orchestrator that copies
+  the model and not the stratum hits `Pass2FdrSidecar`'s fail-fast under the default
+  protein-compact mode. Documented in `docs/12-second-pass-fdr.md`.
+* One pre-existing red was cleared on the way: a `RunStreamingFirstPass` doc comment stranded
+  above `TryLoadCompletedScores` had been failing the zero-warning inspection gate on this
+  branch (3 `InvalidXmlDocComment`).
