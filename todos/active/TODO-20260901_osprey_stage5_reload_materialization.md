@@ -823,3 +823,49 @@ that let defect (b) survive.
 Not attempted on 2026-09-02 at ~14% context: a half-finished change to a wide-blast-radius
 decision, on a branch that is green, proven at 446 files and already in PR #4633, is worse than
 sequencing it.
+
+### THIS WAS ALREADY BUILT AND MEASURED - so 446 is a REGRESSION, not a gap
+
+`todos/completed/TODO-20260727_osprey_stage6_rescore_streaming.md` did this work. It owns
+`PreCompactionPoolReason` (restructured so "the helper now owns the whole predicate and reports
+a 'no reconciled bundle' reason of its own"), and it states the acceptance criterion:
+
+> **Memory A/B**: the PerFileRescoring band slope goes to ~0 in file count, as the FirstPassFDR
+> band now is. Confirm the 500-file projection clears 64 GB.
+>
+> Measured at 82 files (SEA-AD Astral, `--task PerFileRescoring`): peak **33.9 GB** with
+> `--model-diagnostics` against a **~197 GB** projection for the unbounded path.
+
+It even names the trap that hides this from the gate:
+
+> **Pass N files in ONE invocation.** The HPC chain (`regression.ps1:644`) calls this task [per
+> file].
+
+**So the 446 measurement of ~110 GB contradicts completed, measured work.** Slope ~0 would put
+446 near 34 GB. Reframe accordingly: this is not a missing architecture to design, it is a
+regression or an uncovered trigger in a loop that already exists and was demonstrated bounded.
+The developer's read - "it seems like restructuring a loop to me" - is correct, and the loop is
+already written.
+
+**Discriminator already in hand**: the 3-file straight-through resume emitted
+
+```
+[WARN] No reconciled bundle on the --input-scores inputs requires the RESIDENT pre-compaction
+first-pass pool: every --input-scores file's full stub list is held in memory at once...
+```
+
+but the **446 `--task PerFileRescoring` run emitted NO such warning** - so it took the resident
+path WITHOUT the reason-reporting the July work added. Start there: instrument which branch sets
+`residentStubs > 0` on that run, and compare against the July harness, which passed N files in
+one invocation and stayed bounded.
+
+Prime suspects, in order: (1) a trigger added after 2026-07-27 that forces the pool without
+going through `PreCompactionPoolReason`; (2) `FirstPassFdrTask.IsIncludedFor` being true under
+`--task PerFileRescoring` (see the section above) reaching the pool decision by a different
+route; (3) something scale-dependent between 82 and 446 files.
+
+**Process finding**: the previous session diagrammed the per-run loop for the developer, and
+that diagram is in NO todo - not this one, not the completed sidecar-scope work. If it exists it
+is in a handoff under `ai/.tmp/`, which CRITICAL-RULES defines as temporal and never committed.
+The design rationale for a loop shape is exactly the kind of thing that must live in a TODO;
+losing it is why this had to be re-derived from logs tonight.
