@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260902_osprey_pipeline_architecture_docs`
 - **Base**: `master`
 - **Created**: 2026-09-02
-- **Status**: Planned - not started
+- **Status**: In progress - WI-1 and WI-2 done (doc 00 through the file contract)
 - **PR**: (none yet)
 - **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz-work2` (branch created there from `origin/master` at
@@ -224,13 +224,19 @@ Two PRs: WI-1..6, 9, 10 on the pwiz branch; WI-7 and WI-8 commit directly to pwi
 master (stage by path; the checkout is shared with live sessions). WI-11 is a third,
 tiny PR after the resume branch merges.
 
-- [ ] **WI-1 (M)** Draft 00: scope, scale, task graph (incl. the re-derived
-      per-run-loop figure), principles P1-P11. `docs/00-pipeline-architecture.md` (new).
-- [ ] **WI-2 (L)** Sidecar contract table + per-row prose; in-flight rows marked; verify
+- [x] **WI-1 (M)** Draft 00: scope, scale, task graph (incl. the re-derived
+      per-run-loop figure), principles P1-P15. `docs/00-pipeline-architecture.md` (new).
+- [x] **WI-2 (L)** Sidecar contract table + per-row prose; in-flight rows marked; verify
       EVERY row against `Osprey.Tasks/TaskValiditySidecar.cs`,
       `Osprey.Core/ArtifactPaths.cs` and the writer classes; resolve every `?`.
-- [ ] **WI-3 (M)** Directory resolution + `-LinkFrom` section; `-LinkFrom` row in
-      `docs/20-command-line.md`. Source: `Osprey.Core/OspreyEnvironment.cs`.
+- [ ] **WI-3 (M)** Directory resolution section (`--work-dir` / `--output-dir`,
+      `ArtifactPaths.ResolveCacheDir`) + the path-independence property external
+      adoption relies on. Source: `Osprey.Core/OspreyEnvironment.cs`.
+      **REVISED**: `-LinkFrom` is NOT an Osprey CLI flag - it is a parameter of
+      `ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`. By this TODO's own subject rule
+      the tool belongs in `ai/docs` (moved to WI-8); only the code-side property that
+      makes it possible (P15, path-independent identity) belongs in 00. No
+      `docs/20-command-line.md` row.
 - [ ] **WI-4 (M)** Resume semantics + HPC relay checklist per boundary.
 - [ ] **WI-5 (M)** Trim doc 14 (sections 0 and 8 out) and doc 15 (per-task file lists
       out); pointers + ownership rule in each.
@@ -271,3 +277,69 @@ tiny PR after the resume branch merges.
 - Created `Skyline/work/20260902_osprey_pipeline_architecture_docs` in `C:\proj\pwiz-work2`
   from `origin/master` `08a02b9e2e` (local only; push with `-u` on first commit).
 - Next: `/pw-continue C:\proj\pwiz-work2`, then WI-1.
+
+### 2026-09-02 - WI-1 + WI-2 (Opus 5): doc 00 drafted through the file contract
+
+Wrote `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` (~500 lines): scope +
+ownership rule, run/file vocabulary, scale targets, task graph with the per-run-loop
+figure, principles, and the verified sidecar contract table.
+
+**Brendan's framing became the spine** (recorded here because it outranks the planning
+session's outline where they differ): (1) HPC fan-out tasks must decompose to any batch
+size, 1..N runs per node, with joins bounded - no O(files x library-entries);
+(2) sidecars are atomic + immutable, and **a validity key is about SET INCLUSION**
+(software version, library, file set, params), NOT completeness - completeness comes
+free from FileSaver's atomic placement; (3) the two tiers are a memory model:
+experiment-wide artifacts ARE the resident baseline of a fan-out task, per-run
+artifacts are loaded and freed per iteration. The doc's central claim is the identity
+`peak = baseline + max(one run)`, in which neither batch size nor cohort size appears.
+
+**Principles went 11 -> 15**, regrouped into Decomposition / Two tiers / Write
+discipline / Resume. Four are new, each from code evidence rather than the outline:
+- **P4** a per-run artifact's validity key must not name the cohort. `PerFileScoring`'s
+  key omits file stems; `ReconciliationParameterHash` includes them. That asymmetry IS
+  the HPC decomposition - a cohort-bearing key would invalidate on every rebatch.
+- **P10** cross-phase questions are answered by artifacts, never process state. Recorded
+  failure: Stage 7 used an in-process flag to decide whether the Stage 6 worker had run;
+  correct in one process, and in an HPC chain it rewrote every sidecar survivors-only,
+  332,269 records vs the straight route's 407,624.
+- **P14** when a phase writes several files for one run, the file gating downstream
+  reuse lands last (`FileSaver` is per-file atomic, not per-set).
+- **P1 refined**: scope is about CONTENT, not naming - see the model.json finding below.
+
+**Seed-table corrections (all verified against path-building code):**
+- `.1st-pass.stratum.json` **does not exist**. The protein-compact stratum rides inside
+  `<stem>.1st-pass.model.json` as an optional field, deliberately: the mode needs model
+  AND stratum, one artifact = one relay hop, and a node cannot be shipped half of it.
+- `.1st-pass.model.json` is **experiment-wide content under a per-run name**, replicated
+  identically beside every run (`LoadFromAny` takes the first hit) so a fan-out node
+  finds it by the stem derivation it already knows. This is what forced the P1 refinement.
+- `<stem>.2nd-pass.fdr_scores.bin` is written by **`PerFileRescoring`** (pass-2 per-file
+  worker) or by `SecondPassFDR` where no worker ran - not `SecondPassFDR` alone. The
+  `.osprey.task` stamp carries the PRODUCER's task and key, and `SecondPassFDR` reads
+  that stamp to decide fold-vs-recompute.
+- **New row**: `<stem>.2nd-pass.fdr_decoys.bin` (`Pass2CompetitionDecoys`), per-run,
+  written by `PerFileRescoring` before the scores file (P14 ordering), read by Stage 7.
+- **New row**: `<blib-stem>.2nd-pass.fdr_experiment.bin` (`WritePass2ExperimentSidecar`).
+- Experiment-wide products take their NAME from the output blib and their DIRECTORY from
+  `ArtifactPaths.ResolveOutputDir` off a sibling artifact - never from the blib's own
+  directory, since each `--task` phase runs in its own working dir with the same relative
+  `-o`. The first implementation got this wrong and the HPC regression leg caught it.
+- `-LinkFrom` is a runner-script parameter, not an Osprey flag (see revised WI-3).
+
+**Staleness found in the existing docs** (feeds WI-5; the planning survey reported none):
+- Doc 14 understates the validity key: the base key also appends the peak-pick arm, and
+  `FirstPassFDR` appends six more components (reconciliation hash, sidecar format
+  version, experiment-agg, pass-2 q mode, train-sample, library-fragment release), each
+  with a recorded reason worth reusing.
+- Doc 15 lists `HpcTask` as four members. It has **six**: `SpectraCache` (data staging
+  ahead of the pipeline) and `ModelDiagnostics` (report regeneration) are selectable but
+  are not pipeline stages and not in `CanonicalPipeline()`. Doc 00 now says so.
+
+**Two live principle violations, both in-flight, both marked inline in 00 with the
+standard marker for WI-11 to clear:**
+- `FdrScoresSidecar.PatchProteinQvalues` rewrites a first-pass sidecar in place (P11).
+- `PerFileRescoring`'s baseline (`RescorePassInputs`) holds maps keyed by file name with
+  per-entry values and is entered with a materialised all-runs entry list (P5/P6).
+
+- Next: WI-4 (resume semantics + HPC relay checklist per boundary), then WI-5/WI-6.
