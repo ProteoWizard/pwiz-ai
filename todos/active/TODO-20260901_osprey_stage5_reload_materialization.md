@@ -909,3 +909,23 @@ next divergence just as silent.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260902_osprey_perfilerescore_resident.md` before starting work.
+
+### RETRACTION + the directive (2026-09-02)
+
+`Program.cs:132` sets `config.NoJoin = true` for `--task PerFileRescoring`, so
+`FirstPassFdrTask.IsIncludedFor` is FALSE there. **The "IsIncludedFor forces the pool under
+--task PerFileRescoring" claim two sections up is WRONG and is retracted.** The trigger on that
+446 run remains unidentified; instrument `PreCompactionPoolReason`, `NeedsResidentPool` and
+`residentStubs` rather than guessing a fourth time.
+
+It also means the HPC route is safe **by design** - under `--task` FirstPassFDR is not a
+pipeline member, so nothing expects an O(files) structure from it - not merely because a node
+holds one file.
+
+**Developer's directive**: *"get rid of the fat path altogether and just no longer support it.
+We stream one file at a time."* Implement that rather than continuing to guard the resident
+pool. It dissolves the `NeedsResidentPool` / `PreCompactionPoolReason` divergence recorded above,
+and `ResidentPaths.KNOWN_UNFIXED` (documented as "may only shrink") reaches zero.
+
+**Cheap test for whether THIS branch caused the 446 behaviour**: the completed July TODO measured
+33.9 GB at 82 files for `--task PerFileRescoring`. Re-run 82 files on the branch tip and compare.
