@@ -751,3 +751,75 @@ the ~9.5 min library load per node, which is the known per-node cost.
 So the O(files) hydration measured here is a property of running 446 files in ONE process, not of
 the rescore task itself. The single-process route is what needs the fix; the farmed route already
 has the right shape.
+
+## THE PerFileRescoring EXPERIMENT-WIDE JOIN - root-caused 2026-09-02, NOT yet fixed
+
+**Developer's requirement**: entering PerFileRescoring must truly iterate over the files it was
+handed, holding only per-run data. In HPC a node assigned one run would not even HAVE the files
+to build an experiment-wide buffer.
+
+### It is pre-existing, not moved by this branch
+
+Verified: `git diff master...HEAD` shows **zero non-comment changes** in `PerFileRescoreTask.cs`
+and **no changes** to `Rehydrate`, `LoadOwnReconciliationBundle`,
+`StreamOwnReconciliationBundle` or `HydrateRescore`. This branch did not reconfigure it. It
+became visible because nobody had ever run PerFileRescoring on 446 files - FirstPassFDR could
+not finish at that scale until now.
+
+### Root cause: the pool is forced by task MEMBERSHIP, not task EXECUTION
+
+`PerFileScoringTask.PreCompactionPoolReason` forces the RESIDENT pre-compaction pool when
+`FirstPassFdrTask.IsIncludedFor(config)` is true, on the reasoning "FirstPassFDR is IN this
+pipeline, so it will Run and train first-pass Percolator off ScoredEntries - which has to be the
+full pre-compaction pool".
+
+Under `--task PerFileRescoring`, `IsIncludedFor` returns TRUE:
+
+```csharp
+return (!inputs && !c.NoJoin)
+    || (inputs && c.StopAfterStage5)                      // --task FirstPassFDR
+    || (inputs && !c.NoJoin && !c.ExpectReconciledInput); // <- TRUE here
+```
+
+But FirstPassFDR does not RUN there - its outputs are valid, so it **Rehydrates**, and the
+pre-compaction pool it was reserved for is never used. With fat stubs published,
+`leanStubs == false` in `FirstPassFdrTask`, so the batch
+`RescoreHydration.HydrateReconciliationOverlay` runs instead of the per-file
+`StreamOwnReconciliationBundle`.
+
+**The per-file machinery already exists and works** - a 3-file test emitted
+`Resume rehydrate: streaming the first-pass bundle from 3 file(s) (one file's pre-compaction
+pool resident at a time)`. The 446 run never reached it.
+
+Measured cost of getting it wrong:
+
+| | 1 file (node shape) | 446 files (one process) |
+|---|---|---|
+| reconciliation actions hydrated | 74,525 | 30,841,614 |
+| bundle hydration | instant | **2h54m** |
+| peak working set | 19.32 GB | **~110 GB** (thrashed, killed) |
+
+74,525 x 446 = 33.2 M, so it is linear in files - O(files) exactly as the developer suspected.
+
+### Why the regression gate passes anyway
+
+Mode 3 phase 3 gives each node **ONE file**, so the O(files) buffer is O(1). Mode 1 runs all
+files in one process but only THREE of them. **No test puts many files through PerFileRescoring
+in a single process**, which is the only configuration where this hurts. The suite is complete
+over the per-node shape and structurally blind to the multi-file one - the same shape of gap
+that let defect (b) survive.
+
+### The fix, and what it needs to be safe
+
+1. Decide the resident pool on whether FirstPassFDR will actually RUN, not on membership - i.e.
+   consult the same validity check that makes it Rehydrate. `PreCompactionPoolReason` governs
+   several consumers, so the change needs care.
+2. **Add a test that fails today**: a multi-file (>= 8) `--task PerFileRescoring` run asserting
+   the hydrate takes the streaming arm (the log line above) and that peak memory does not scale
+   with file count. Without it this regresses silently, because nothing covers it - CRITICAL-RULES
+   "strengthen the verifier rather than the wording".
+3. Re-gate `-Dataset All` plus the new test.
+
+Not attempted on 2026-09-02 at ~14% context: a half-finished change to a wide-blast-radius
+decision, on a branch that is green, proven at 446 files and already in PR #4633, is worse than
+sequencing it.
