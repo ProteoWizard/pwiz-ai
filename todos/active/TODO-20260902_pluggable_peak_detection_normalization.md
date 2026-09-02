@@ -97,7 +97,7 @@ point above `ChromDataSet`, not an `IPeakFinder` factory swap. Do not spend Phas
   - peak detection: deferred; not a per-chromatogram contract (see Decisions 2026-09-02)
   - peak scoring: per-peak-group feature values in, score(s) out (must fit the existing `IPeakFeatureCalculator` name-based serialization)
   - normalization / rollup: transition x replicate matrix (+ RT, batch/annotation columns) in, peptide/protein matrix out
-- [x] Put the contract in a separate small assembly so external libraries reference only that: `pwiz_tools/Skyline/SkylineAlgorithms/SkylineAlgorithms.csproj` -> `pwiz.Skyline.Algorithms.dll`, `netstandard2.0`, no dependencies, added to Skyline.sln next to SkylineTool (drafted 2026-09-02, builds with 0 warnings; not yet referenced by Skyline.csproj)
+- [x] Put the contract in a separate small assembly so external libraries reference only that: `pwiz_tools/Shared/Algorithms/Algorithms.csproj` -> `pwiz.Algorithms.dll` (namespace `pwiz.Algorithms`; host-neutral, not Skyline-specific - Nick 2026-09-02), `netstandard2.0`, `LangVersion latest`, records, no dependencies, added to Skyline.sln next to SkylineTool (builds with 0 warnings; not yet referenced by Skyline.csproj)
 - [ ] Decide how a plug-in is discovered and referenced (folder scan, explicit path in settings, NuGet?) and how the choice serializes into `.sky` settings, audit log, and `RemoveUnsupportedFeatures` for older Skyline (only add a downgrade clause when it causes a real compatibility problem)
 
 ### Phase 2 - Skyline plug points
@@ -197,8 +197,15 @@ contract are always log2 with NaN for missing (matches PRISM and #4170's median 
 and treats area <= 0 as missing so -Infinity never appears); parameter values travel as strings with
 declared descriptors so Skyline can build a generic editor and serialize them.
 
-Project `pwiz_tools/Skyline/SkylineAlgorithms` (assembly and namespace `pwiz.Skyline.Algorithms`), 13 files,
-C# 8-compatible (no records/init - netstandard2.0), all with the standard header + AI attribution line:
+Project `pwiz_tools/Shared/Algorithms` (assembly and namespace `pwiz.Algorithms`), 15 files, all with the
+standard header + AI attribution line. First drafted as `pwiz_tools/Skyline/SkylineAlgorithms` /
+`pwiz.Skyline.Algorithms` with C# 8 classes; Nick asked for it to live in Shared with no "Skyline" in the name
+(interfaces any mass spectrometry software could host) and asked about records, so the data types are now
+positional `record`s with `LangVersion latest`. Records on netstandard2.0 need only the standard internal
+`IsExternalInit` shim (`IsExternalInit.cs`, `#if !NET5_0_OR_GREATER`). Language version is per project, not per
+file; on this branch Skyline.csproj and all test projects are already `LangVersion latest` (the `8.0` in
+`pwiz_tools/Directory.Build.props` is only the fallback), so Skyline can consume the records directly,
+including `with` expressions. Doc comments say "the host" and name Skyline only as an example.
 - `AlgorithmContract` - `MAJOR`/`MINOR` constants; a library reports the major it compiled against.
 - `AbundanceLevel` (transition/peptide/protein), `SampleInfo` (Id, Name, SampleType, BatchId, Annotations),
   `FeatureInfo` (Id, Name, ProteinId, PeptideId, PrecursorId, RetentionTime, IsStandard),
