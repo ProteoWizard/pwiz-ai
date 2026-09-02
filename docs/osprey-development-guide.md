@@ -26,6 +26,15 @@ project. Referenced by `TODO-OR-*.md` files, which may have workflow
 rules that differ from the Skyline-mainline conventions documented
 in `ai/WORKFLOW.md`.
 
+> **Docs are classified by SUBJECT, not by reader.** *What the code does* - architecture,
+> the file contract, the algorithms, the CLI - lives with the code in
+> `pwiz_tools/Osprey/docs`. *How we work on it* - gates, datasets, machine paths, env
+> vars, run layout, measured costs - lives here. Where this guide states a rule that
+> `docs/` owns, it links rather than restates, so the two cannot drift. Code-side start
+> points: **`docs/00-pipeline-architecture.md`** (architecture + file contract; read
+> before changing what any task reads, writes, or keeps) and **`docs/README.md`** (the
+> ordered algorithm index).
+
 ## File header attribution (C# Osprey)
 
 The `Original author:` line names **the developer who created the file with
@@ -147,10 +156,12 @@ using (var saver = new FileSaver(finalPath))
 ```
 
 `FileSaver.SafeName` is a **same-directory sibling** temp; `Commit()` is a
-same-volume rename (a metadata-only op) -- atomic, and it CANNOT truncate. A
-failure before `Commit()` disposes the temp and leaves the previous final
-content (or nothing), never a partially-written destination a resume check
-could mistake for finished output.
+same-volume rename (a metadata-only op) -- atomic, and it CANNOT truncate.
+
+*Why* every artifact must commit this way -- presence proving completeness is
+what lets every reader in the pipeline skip a completeness check -- is principle
+P8 in `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`. What follows here is
+the coding rule.
 
 **Never write to a separate temp directory (e.g. `Path.GetTempPath()`) and
 then `File.Move`/`File.Copy` to the final path.** That crosses volumes, so
@@ -779,21 +790,15 @@ science explanation, not just a green build:
 
 ## Do the work in the PerFile* tasks, not the JOIN tasks
 
-The pipeline alternates: `PerFileScoring` (per file) -> `FirstPassFDR` (join) ->
-`PerFileRescoring` (per file) -> `SecondPassFDR` (join). **Push every step into the per-file
-tasks that can go there, and leave the join tasks doing only what genuinely needs every run at
-once.**
+The rule and its rationale are principle P3 in
+`pwiz_tools/Osprey/docs/00-pipeline-architecture.md`: work goes in the fan-out tasks, and a
+join holds O(distinct), never O(runs x entries). Read that before moving a step. What follows
+is the decision procedure and what getting it wrong has actually cost us.
 
-**Why, wall clock**: a per-file task fans out across HPC workers, so its cost is divided by the
-worker count. A join task does not fan out at all - it is the bottleneck. The same minute is
-nearly free in `PerFileRescoring` and fully on the critical path in `SecondPassFDR`.
-
-**Why, memory - and this is the one that bites**: work placed in a join NATURALLY acquires
-O(files) structures, because the whole run is sitting there to be indexed. Work placed in a
-per-file task cannot: one file is all it has. Issue #4486's 40 GB survivor pool is not a memory
-bug that grew inside Stage 7 - it is a work-placement bug that could only ever have shown up as
-memory. Frozen-model scoring and a WITHIN-FILE target-decoy competition were being done in the
-join stage, and the pool is what that costs.
+Issue #4486's 40 GB survivor pool is the worked example: not a memory bug that grew inside
+Stage 7, but a work-placement bug that could only ever have shown up as memory. Frozen-model
+scoring and a WITHIN-FILE target-decoy competition were being done in the join stage, and the
+pool is what that costs.
 
 **The test for where a step belongs**: does it need more than one file at a time?
 
@@ -813,16 +818,23 @@ worker. `regression.ps1`'s HPC-chain staging is the authoritative list of what a
 already holds - the 1st-pass sidecar, calibration, reconciliation JSON, and the 1st-pass model
 sidecar (which the protein-compact stratum rides inside).
 
-## HPC split CLI flags
+## HPC split CLI flags (Rust side)
 
-Since the 2026-04-19 HPC split sprint, both tools expose CLI flags
+> **C# side, read these instead.** The architecture of the split - the four tasks, the two
+> tiers of sidecar, and the exact file list each node must be shipped - is
+> `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`. The C# `--task <Name>` CLI, the
+> membership truth table and `--input-scores` ordering are
+> `pwiz_tools/Osprey/docs/15-hpc-scoring-split.md`. The flag family below is **Rust's**
+> (`--no-join` / `--join-only` / `--join-at-pass`); the C# port does not have it.
+
+Since the 2026-04-19 HPC split sprint, the Rust tool exposes CLI flags
 that break the pipeline at Stage 4 / Stage 5 so workers can score in
-parallel and a SecondPassFDR node runs FDR + .blib output:
+parallel and a SecondPassFDR node runs FDR + .blib output.
 
 The pipeline alternates per-file fan-out phases (Stages 1-4 scoring,
 Stage 6 per-file rescore) with join phases (Stage 5 first-pass FDR
 + reconciliation planning, Stages 7-8 second-pass Percolator +
-protein FDR + .blib). The CLI exposes two orthogonal axes: an
+protein FDR + .blib). The Rust CLI exposes two orthogonal axes: an
 **entry-point selector** (`--join-at-pass=<N>`) and a **phase-shape
 modifier** (`--no-join` runs only the per-file fan-out from the
 entry; `--join-only` runs only the join from the entry).
@@ -842,11 +854,13 @@ Parquet interop gotchas:
   Rust and Osprey must share the same `major.minor` for a
   cross-impl Parquet to round-trip. When Rust bumps to a new minor
   (e.g., `26.4.0`), bump Osprey's `Program.VERSION` in lockstep.
-- **Path-dependent library hash**: `library_identity_hash` hashes
-  `lib_path.display()` verbatim, so passing `/d/test/...` (Bash-style)
-  hashes differently from `D:\test\...` (Windows-style) even when
-  the file is the same. Invoke cross-impl parity runs via `pwsh`
-  with Windows-native paths so the hash matches across tools.
+- **Library hash is NOT path-dependent** (corrected 2026-09-02; this entry said
+  the opposite for months). Both sides hash file *name* + size + mtime with the
+  directory deliberately excluded (`lib_path.file_name()` / `Path.GetFileName`),
+  so `/d/test/...` and `D:\test\...` hash the same and a library reached by
+  different paths on different nodes still identifies. That path-independence is
+  deliberate - P15 in `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` - not
+  an accident to work around with path-style discipline.
 - **Snappy disables dictionary encoding** in Rust (RLE_DICTIONARY
   isn't supported by Parquet.Net 3.x). Expect ~3x larger files on
   the Snappy path compared to the default Zstd.
@@ -1662,13 +1676,9 @@ EOF
 
 ## Never conditionally write an output artifact
 
-**A file is written or the run failed. There is no third state.** Never skip a write
-because it would be "unnecessary" - no rows, no work done, or the same values as last
-time. Write the same values again, or a header-only TSV / 0-record binary.
-
-**Why**: a missing file is an ambiguous signal. Nothing downstream can tell "this run had
-nothing to write" from "the write failed and the `FileSaver` never committed". The
-skipped files are usually the small ones, so the saving never pays for the ambiguity.
+The rule is principle P13 in `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`: a phase
+with nothing to say writes the header-only or 0-record file rather than skipping the write,
+because absence is otherwise ambiguous. What follows is how to hold the line in review.
 
 - Keep any gate on the **computation** (e.g. Rust's `total_rescored > 0`) and let it
   decide what values go in the file, **never whether the file exists**.

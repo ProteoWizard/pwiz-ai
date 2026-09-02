@@ -164,6 +164,12 @@ present. Stage 1 is the only stage that reads a source; everything after it read
 the sources become dead weight the moment the cohort is cached - which matters because disk,
 not time, is what limits cohort size on a single workstation.
 
+**The consequence for pruning**: `.spectra.bin` is normally a *cache* (rebuildable, lives in
+`--work-dir`, safe to delete), but a staged cohort inverts that - once the sources are gone the
+cache **is** the data, and deleting one loses the run. See the cache-vs-product distinction in
+`pwiz_tools/Osprey/docs/00-pipeline-architecture.md`. Prune spectra caches only where the
+source is still on disk.
+
 1. **Download** with `ai/scripts/Osprey/Get-PanoramaFiles.ps1`, **one stream**. Measured on
    BRENDANX-UW8 (single spindle): 375 GB/h at 1 stream against 138 GB/h at 4 - and the 4-stream
    case simultaneously starved caching from ~100 s/file to ~1,900 s/file.

@@ -29,6 +29,39 @@ Rules:
 * **Run output goes in `<dataset>\runs\`, never anywhere else.** The runners enforce this;
   see below.
 
+### How this maps to Osprey's own two directories
+
+The layout is the product/cache split from
+`pwiz_tools/Osprey/docs/00-pipeline-architecture.md` given fixed homes:
+
+| Layout | Osprey flag | Holds |
+|---|---|---|
+| `raw\` | `--cache-dir` (implicitly; caches sit beside their source) | sources plus their `.spectra.bin` - rebuildable, until the sources are deleted |
+| `<dataset>\runs\<run>\` | `--output-dir` | everything a run produces and you keep |
+
+The runners pass `--output-dir` and deliberately **not** `--work-dir`, because `--work-dir`
+sets both and would relocate the cache directory - rebuilding every `.spectra.bin` instead of
+finding the prebuilt ones beside their sources. That is the trap the rule above refers to.
+
+### `-LinkFrom`: adopting a completed run's artifacts
+
+`-LinkFrom` is a parameter of the dataset runners
+(`ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`), **not an Osprey CLI flag**. It hard-links a
+prior run's per-run artifacts into a new output directory so a re-measurement pays for only the
+phases it actually changes, instead of re-running Stages 1-4 for hours.
+
+It works because artifact identity is almost entirely path-independent - hashes name file
+*stems* and the library's *file name*, never directories (P15 in doc 00). Two consequences
+worth knowing before using it:
+
+* **A move invalidates only if the run used `--decoy-pairing-manifest`**, whose path is the
+  one directory anywhere in artifact identity (it enters `SearchParameterHash` verbatim). That
+  is why moving the entrapment cohorts broke `-LinkFrom` while other datasets survive a move.
+  Restore the original path with a junction rather than re-running.
+* **Pin the build.** Osprey refuses artifacts stamped by another day's build, so the runner
+  reads `OSPREY_VERSION_OVERRIDE` out of the source run and pins it; sources from two
+  different builds are rejected outright.
+
 ## Naming a run directory
 
 A run name has to carry the four things a number cannot be quoted without - **library,
@@ -85,3 +118,5 @@ script is the failure mode this guards - it is also how the `--work-dir` trap an
 * `ai/docs/osprey-large-datasets.md` - the dataset catalog, sizes, and download budgeting
 * `ai/scripts/Osprey/Common/OspreyDatasetRun.psm1` - the shared runner that owns the naming
 * `ai/docs/memory-band-guide.md` - reading `--memstamp` output from a run
+* `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` - why products and caches are
+  separate, and why a completed run is relocatable

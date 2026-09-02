@@ -21,6 +21,17 @@ The sections below are organized along that split.
 
 ## Osprey (C#) - Skyline Conventions Apply
 
+**Changing what a task reads, writes, or keeps? Read
+`pwiz_tools/Osprey/docs/00-pipeline-architecture.md` FIRST.** It is the pipeline's
+architecture and sidecar file contract: which artifact is per-run vs experiment-wide,
+which task may read it, what an HPC node must be shipped, and the fifteen principles
+that keep a 500-run cohort inside 64 GB and let a fan-out task batch at any size. The
+per-stage algorithm index is `pwiz_tools/Osprey/docs/README.md`.
+
+Those live with the code because docs are classified by SUBJECT: *what the code does*
+ships in `pwiz_tools/Osprey/docs`, *how we work on it* (gates, datasets, machine paths,
+env vars, run layout) is in `ai/docs`.
+
 When working in `pwiz_tools/Osprey`, all Skyline development
 rules apply. Read the same files the `/skyline-development` skill
 points at:
