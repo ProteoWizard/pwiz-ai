@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260902_PluggableNormalization` (created by Nick 2026-09-02 from the net8_port tip, pushed to origin)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619)) - NOT `master`
 - **Created**: 2026-09-02
-- **Status**: Phase 0 in progress
+- **Status**: Phase 0 done (builds, baseline tests pass). Phase 1 next - hosting-model and contract decisions pending with Nick.
 - **PR**: (none yet)
 - **Module**: `skyline`
 - **Worktree**: `C:\git\sky_pluggablenormalization` (full clone, not a worktree). Start sessions with `/pw-continue C:\git\sky_pluggablenormalization`.
@@ -71,7 +71,7 @@ Facts that went into it (verified 2026-09-02):
 
 ### Phase 0 - Set up
 - [x] Record the checkout path in Worktree above; create the branch from `origin/Skyline/work/20260612_net8_port` (done 2026-09-02; branch = net8_port tip `293f906d5^` + Nick's `293f906d5` "Fix build in Visual Studio by adding pwiz projects to Skyline.sln")
-- [ ] Build the .NET 10 tree and run one existing scoring test and one group comparison test to establish a baseline
+- [x] Build the .NET 10 tree and run one existing scoring test and one group comparison test to establish a baseline (2026-09-02: Release build 0 errors / 786 warnings; `TestMProphetScoringModel` and `TestGroupComparisonScenarios` both pass via `Run-Tests.ps1 -Configuration Release`, auto-detected `net10.0-windows`, staged to `bin\staging\Release`)
 - [x] Re-verify the seam table above against the net10 branch - all six files exist at the same paths; `PeakIntegrator.CreatePeakFinder` still calls `PeakFinders.NewDefaultPeakFinder()` (verified 2026-09-02)
 
 ### Phase 1 - Contract
@@ -154,3 +154,21 @@ Seam details that constrain the contract (all verified on this branch):
   classes over the same matrix shape with `sealed record` results. That matrix-in / vector-out shape is a
   strong candidate for the Skyline rollup contract; the normalization contract needs the matrix plus
   per-feature RT and per-sample batch/annotation columns.
+
+Baseline: Release build succeeded (0 errors, 786 warnings, mostly WFO1000/CA1859 from the port).
+`TestMProphetScoringModel` (0 s) and `TestGroupComparisonScenarios` (10 s) pass; `Run-Tests.ps1` staged to
+`bin\staging\Release` on its own. Logs: `ai/.tmp/sessions/20260902-pluggable/build-release.log`,
+`baseline-tests.log`.
+
+Where the methods are consumed (the Phase 2 plug points):
+- `NormalizedValueCalculator.TryGetDenominator` (`Model/Results/NormalizedValueCalculator.cs:396`) is the
+  per-replicate dispatch: `NONE` / `GLOBAL_STANDARDS` / `EQUALIZE_MEDIANS` / `TIC` / `RatioToSurrogate`
+  as an if-chain, with `RatioToLabel` handled earlier as a ratio rather than a denominator. Denominators
+  come from `NormalizationData` (per-document cache built by `GetNormalizationData`, wired as a
+  `WorkOrder` dependency at line 556 for EQUALIZE_MEDIANS). A plug-in normalization is a new branch here
+  plus a plug-in-computed `NormalizationData` equivalent.
+- `GroupComparer` (`Model/GroupComparison/GroupComparer.cs:187-191`) dispatches `SummarizationMethod`
+  REGRESSION / MEDIANPOLISH / else AVERAGING; `PeptideQuantifier` does the per-peptide rollup.
+- 14 model files reference the built-in `NormalizationMethod` singletons (databinding entities,
+  calibration, refinement, `NormalizeOption`); most only compare for equality and would pass a plug-in
+  method through untouched.
