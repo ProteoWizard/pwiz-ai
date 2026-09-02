@@ -496,3 +496,39 @@ accumulator fed in pass A, and its planning loop takes one file at a time.
 `FirstPassFdrTask.ReloadFirstPassSurvivors` then has no caller and goes, along with the
 `perFileEntries` contents - `CompactFromSidecars` returns the per-file shape with empty lists
 and the compaction count line takes its `afterCount` from the pass-A tally.
+
+## IMPLEMENTED 2026-09-01 (evening), and what is left after it
+
+The streaming decomposition above is on `Skyline/work/20260901_osprey_firstpass_resume`.
+`FirstPassFdrTask.ReloadFirstPassSurvivors` no longer runs on the default path: the compaction
+gate publishes the loader and per-file EMPTY lists, and `Stage6Planner` drives two per-file
+passes over that loader. `ConsensusRts.Compute`, `ReconciliationPlanner.Plan` and
+`GapFillTargetIdentifier.Identify` each keep their all-at-once entry point as a thin wrapper
+over the new per-file form, so the resident paths and the tests cannot drift from the streamed
+one. Green on `regression.ps1 -Dataset Stellar`, all twelve checks, byte-identical to the
+golden.
+
+Two things fell out of the design that are worth recording:
+
+* **The compaction survivor count is now arithmetic.** Nothing materializes the survivors, so
+  `First-pass compaction: X -> Y` takes Y from rows-per-base_id summed over the passing set -
+  free, because the gate pass already visits every record and computes every base_id. The
+  `OSPREY_STAGE6_STREAM_SURVIVORS=0` path still materializes, and now ASSERTS the two agree, so
+  a wrong count cannot hide on the streamed path where nothing else could notice.
+* **`OSPREY_STAGE6_STREAM_SURVIVORS=0` still builds the buffer.** It is documented as the A/B
+  byte-identity oracle for the streamed default and it can only be that if it still produces
+  what the streamed path replaced. Deleting it would have been the cheaper diff and the wrong
+  one.
+
+### The next O(files x entries) term, not this one
+
+`reconciliationActions` - `Dictionary<(string File, int Index), ReconcileAction>` - is 13.95 M
+entries at 257 files and ~24 M at 446, roughly 2 GB. It is built during pass B and published for
+the IN-PROCESS Stage 6 rescore.
+
+**Under `--task FirstPassFDR` it is built and then thrown away**: that path returns right after
+planning and never publishes it. The per-file envelope is written from the per-file action list,
+not from the join-wide map, so the map has no reader at all on the boundary run. Skipping its
+construction there (keeping only the count for the log line) is ~10 lines and ~2 GB on exactly
+the run the 446 baseline is. Not folded into the change above so that the plate and 446
+measurements are of one thing; do it next if the 446 run wants the headroom.
