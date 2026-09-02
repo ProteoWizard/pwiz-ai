@@ -48,6 +48,23 @@ Facts that went into it (verified 2026-09-02):
 - Cost of the choice: nothing on this branch can ship until #4619 lands, and the base moves daily. Keep the
   plug-in contract in a small separate assembly so the Skyline-side changes stay minimal and rebase cleanly.
 
+### 2026-09-02 - Peak detection needs a new interface, not a plug point on `IPeakFinder`
+
+Nick's assessment: `IPeakFinder` is the wrong shape for pluggable algorithms, for two reasons.
+1. It works on **one chromatogram at a time**. Skyline calls it per transition and then does the work of
+   merging the per-transition peaks into peak groups that make sense for the whole peptide
+   (`ChromDataSet.PickChromatogramPeaks` / `FindCoelutingPeaks` / `ExtendPeaks`). An external detector
+   would want all of a peptide's transitions (and precursors, and possibly reference-label chromatograms)
+   together and to decide the peak groups itself.
+2. The chromatogram it receives has **already been resampled** to evenly spaced times
+   (`PeakIntegrator` hands `InterpolatedTimeIntensities` to `CreatePeakFinder`; `RawTimeIntensities` is
+   kept only for integration). A detector may not want interpolated data at all.
+
+Consequence: pluggable peak detection is a separate, later design with a peptide-level contract (all
+chromatograms for a peptide at raw sampling in, peak groups with boundaries out) and its own insertion
+point above `ChromDataSet`, not an `IPeakFinder` factory swap. Do not spend Phase 1 on it. Peak scoring
+(`IPeakFeatureCalculator`) is unaffected by this - it already sees the whole peptide peak group.
+
 ### What #4170 contributes (cherry-pick, do not merge)
 
 - `MedianPolishScenariosTest` + the Small/Medium datasets with golden parquet from skyline-prism: reuse as
@@ -61,7 +78,7 @@ Facts that went into it (verified 2026-09-02):
 
 | Step | Seam | How closed it is |
 |------|------|------------------|
-| Peak detection | `IPeakFinder` (`pwiz_tools/Shared/Common/PeakFinding/IPeakFinder.cs`) | One implementation. Created by `PeakIntegrator.CreatePeakFinder` via `PeakFinders.NewDefaultPeakFinder()`; `ChromData.Finder`, `ChromPeak(IPeakFinder, ...)` consume it. No selection point. |
+| Peak detection | `IPeakFinder` (`pwiz_tools/Shared/Common/PeakFinding/IPeakFinder.cs`) | One implementation, but **the wrong shape for a plug-in** (Nick, 2026-09-02 - see Decisions). It sees one transition chromatogram at a time, already resampled to evenly spaced times (`PeakIntegrator.CreatePeakFinder(InterpolatedTimeIntensities)`, raw times only kept for integration); Skyline then merges per-transition peaks into peptide-level peak groups itself (`ChromDataSet.PickChromatogramPeaks` -> `FindCoelutingPeaks`, `ExtendPeaks`). A pluggable detector needs a different, peptide-level interface. Deferred. |
 | Peak scoring | `IPeakFeatureCalculator` (`Model/Results/Scoring/IPeakScoringModel.cs`) | Registry is static hard-coded lists: `PeakFeatureCalculator.Calculators`, `FeatureCalculators.ALL`, `MProphetScoringModel.DEFAULT_CALCULATORS`, `LegacyScoringModel.*FeatureCalculators`. Calculators are serialized by name in scoring models and `.sky` files. |
 | Normalization | `NormalizationMethod` (abstract, `LabeledValues<string>`, `Model/GroupComparison/NormalizationMethod.cs`) | Fixed subclasses; resolved by name from document settings / group comparison defs. `NormalizedValueCalculator`, `PeptideQuantifier` apply it. |
 | Rollup | `SummarizationMethod` (`Model/GroupComparison/SummarizationMethod.cs`) | Fixed list. |
@@ -77,14 +94,14 @@ Facts that went into it (verified 2026-09-02):
 ### Phase 1 - Contract
 - [ ] Decide hosting model: in-process (`AssemblyLoadContext`) vs out-of-process (data files / pipes). Decide per step - peak detection is called per chromatogram inside import (hot path, in-process only); normalization/rollup runs on a whole matrix (out-of-process is viable)
 - [ ] Define the data contract for each step as plain data (arrays / tables), independent of Skyline document types:
-  - peak detection: time/intensity arrays in, peak boundaries + apex out
+  - peak detection: deferred; not a per-chromatogram contract (see Decisions 2026-09-02)
   - peak scoring: per-peak-group feature values in, score(s) out (must fit the existing `IPeakFeatureCalculator` name-based serialization)
   - normalization / rollup: transition x replicate matrix (+ RT, batch/annotation columns) in, peptide/protein matrix out
 - [ ] Put the contract in a separate small assembly (name TBD, e.g. `pwiz.Skyline.Algorithms.Contract`) so external libraries reference only that
 - [ ] Decide how a plug-in is discovered and referenced (folder scan, explicit path in settings, NuGet?) and how the choice serializes into `.sky` settings, audit log, and `RemoveUnsupportedFeatures` for older Skyline (only add a downgrade clause when it causes a real compatibility problem)
 
 ### Phase 2 - Skyline plug points
-- [ ] Peak detection: selection point for the `IPeakFinder` implementation (document setting? global setting?) and an adapter from the contract to `IPeakFinder`
+- [ ] Peak detection: DEFERRED (see Decisions 2026-09-02). When picked up, design a peptide-level contract - all transition/precursor chromatograms for a peptide at raw sampling in, ranked peak groups with boundaries out - inserted above `ChromDataSet.PickChromatogramPeaks`, not an `IPeakFinder` swap
 - [ ] Peak scoring: make the calculator registry extensible; adapter from contract to `IPeakFeatureCalculator`; scoring model training must see plug-in calculators
 - [ ] Normalization / rollup: `NormalizationMethod` and `SummarizationMethod` entries that delegate to a plug-in; wire into `PeptideQuantifier` / `NormalizedValueCalculator` / group comparisons
 - [ ] Settings UI (Peptide Settings > Quantification, peak scoring model dialog) and CLI arguments (must also work via the in-process MCP `RunCommand()`)
