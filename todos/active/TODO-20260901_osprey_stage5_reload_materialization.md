@@ -869,3 +869,43 @@ that diagram is in NO todo - not this one, not the completed sidecar-scope work.
 is in a handoff under `ai/.tmp/`, which CRITICAL-RULES defines as temporal and never committed.
 The design rationale for a loop shape is exactly the kind of thing that must live in a TODO;
 losing it is why this had to be re-derived from logs tonight.
+
+### THE GUARD IS NARROWER THAN THE PATH IT GUARDS (developer's question, answered)
+
+*"Unless those switches are on it is not supposed to be possible to trigger an O(files) memory
+request... Any run, even 3 files, should have been refused."* Correct - and it was not, for a
+specific reason.
+
+There are TWO predicates and they diverged:
+
+```csharp
+// REFUSE predicate - what GuardResidentPool actually throws on (PerFileScoringTask ~1975)
+return !useFdrProjection                                   // OSPREY_FDR_PROJECTION=0
+    || !config.FdrMethod.UsesPercolatorFramework()         // non-Percolator
+    || (!string.IsNullOrEmpty(config.OutputFdrBench) && config.FdrBenchPass == 1);
+```
+
+vs the BUILD decision (`CanUseLeanProjection` / `PreCompactionPoolReason`), which ALSO covers
+"no reconciled bundle on the --input-scores inputs" and `FirstPassFdrTask.IsIncludedFor`.
+
+The source documents the split as intentional:
+
+> "This one KEEPS NeedsResidentPool deliberately, where the fat/lean choice above moved to the
+> builder. They answer different questions and **the predicates diverged when
+> ExpectReconciledInput left NeedsResidentPool (#4486)**"
+
+**Consequence**: a run that builds the resident O(files) pool for either of the extra reasons is
+never REFUSED - it only gets `WarnPreCompactionPool`, a warning it proceeds past. The invariant
+"an O(files) path is impossible unless the operator names a token" is enforced by a predicate
+that no longer covers the paths that take it. `ResidentPaths.KNOWN_UNFIXED` has four tokens
+(`FDRBENCH_PASS1`, `NON_PERCOLATOR_FDR`, `PROJECTION_OFF`, `COMPACTED_ENTRIES_BUFFER`) and none
+of them names this case.
+
+That is why a 3-file run warned and continued, and why the 446 run reached ~110 GB without any
+refusal. **The primary fix is to make the refuse predicate cover every path that can build the
+pool** - i.e. guard on the same reason `PreCompactionPoolReason` reports, with a token per
+reason - and only then fix the trigger itself. Doing the trigger without the guard leaves the
+next divergence just as silent.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260902_osprey_perfilerescore_resident.md` before starting work.
