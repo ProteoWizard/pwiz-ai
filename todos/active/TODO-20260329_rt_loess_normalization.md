@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260428_PeakScoringAndNormalization` (shared with sibling TODOs below)
-- **Worktree**: `sky_peakscoringandnormalization`
+- **Worktree**: `sky_peakscoringandnormalization` (second machine) / `sky_normalization` (this machine)
 - **Base**: `master`
 - **Created**: 2026-03-29
 - **Status**: In Progress
@@ -19,17 +19,85 @@
   branch name had a lowercase "skyline". Superseded by PR #4170 on the correctly-cased
   branch above.
 
+
 ## Objective
 
-Add "RT Loess" as a normalization option in Skyline. This performs a LOWESS fit to peptide abundances across the RT gradient per sample, then normalizes each sample's curve to the median curve. This is how DIA-NN and MapDIA perform normalization between samples.
+Port the quantification methods from [skyline-prism](https://github.com/maccoss/skyline-prism) into Skyline so
+they are available in Peptide Settings > Quantification and group comparisons without the external tool.
+
+The first piece was "RT Loess" normalization: a LOWESS fit of peptide abundances across the RT gradient per
+sample, with each sample's curve normalized to the median curve. This is how DIA-NN and MapDIA perform
+normalization between samples. Tukey median polish rollups (transition -> peptide and peptide -> protein)
+followed on the same branch.
+
+Reference implementation (C#, .NET 10): `C:\git\skyline-prism\dotnet\src\SkylinePrism.Core`. The Python
+engine the first round was verified against (v26.3.5) was removed from the PRISM repo on 2026-08-28; the
+C# code reproduces it to 1e-9 on the deterministic stages.
 
 ## Tasks
 
+### Round 1 - RT LOESS and median polish (done, in PR #4170)
+
 - [x] Add RT Loess to NormalizationMethod.cs
-- [x] Implement normalization data tracking in NormalizationData for different retention times (see `PolishedPeptideAbundances`)
+- [x] Implement normalization data tracking in NormalizationData for different retention times (`RtLoessCurves`, `PolishedPeptideAbundances`)
 - [x] Update PeptideQuantifier to use the RT Loess normalization factor
-- [ ] Make available in group comparisons and peptide settings > quantitation tab
-- [x] Add tests (`MedianPolishScenariosTest` — verifies polished/summed/median-normalized/RT-loess peptide areas against skyline-prism parquet)
+- [x] Make available in group comparisons and peptide settings > quantitation tab (separate peptide and protein rollup options)
+- [x] Tukey median polish transition -> peptide and peptide -> protein (`MedianPolisher`, `MedianPolish.GetConvergedMedianPolish`, converged stopping rule, keys x replicates orientation)
+- [x] Summed summary method
+- [x] View > Peak Areas > RT LOESS Curves graph (legend, peptides toggle, adaptive alpha, replicate selection)
+- [x] Respect MS level from QuantificationSettings in RT LOESS
+- [x] Tests: `MedianPolishScenariosTest` (Small and Medium datasets, golden parquet files from skyline-prism), `RtLoessGraphTest`
+
+### Round 2 - port the skyline-prism work done since May 2026
+
+Surveyed 2026-09-01. Of 139 PRISM commits and 30 releases since the round 1 verification (v26.3.5),
+these are the pieces that change what Skyline computes. Everything else (DuckDB merge, streaming,
+memory budgets, stage caching, QC report and plot tabs, headless export handling, .NET 10) is
+external-tool plumbing and is not portable.
+
+Verified that PRISM's median polish and RT LOESS numerics did not change after round 1
+(`TukeyMedianPolish`: tol 1e-4, 20 iterations; `RtLowessNormalize`: frac 0.3, 100 grid points,
+20-point minimum), so the round 1 parity still holds.
+
+- [ ] **ComBat batch correction** (PRISM v26.4.0 through v26.15.0). Standard empirical-Bayes ComBat plus the
+      reference-anchored variant that estimates each batch's effect from the Standard-type replicates only.
+      One estimator serves both (`BatchCorrection/ComBatCore.cs`, 554 lines, `ComBatPlan` chooses the fit set).
+      Rules to preserve: every reduction ignores NaN by compacting observed values; a feature is held out
+      unchanged when it has no variance or some batch never observed it; a (batch, feature) scale is skipped
+      and excluded from the batch prior when the fit set has < 2 observations or spread below 1e-12 of magnitude;
+      batches with 0 references fall back to location-only from the batch mean (`no_reference_batch`
+      fallback/skip/error); correct each arm once at its reporting level (v26.15.0). Golden fixtures against
+      R `sva::ComBat` 3.58.0 live in `dotnet/tests/fixtures/sva/` and `refanchored/`. Skyline has no batch
+      correction today; needs a batch column source (replicate annotation, or per-document) and a settings UI.
+- [ ] **Marker-protein normalization** (v26.19.0, `Normalization/MarkerNormalization.cs`, 224 lines). z-score
+      each marker across samples (ddof=1, sd 0 left at zero), PC1 by SVD of the m x n block, sign-orient so the
+      score correlates positively with the mean z-scored marker profile, then residualize every feature on
+      [1, score] keeping the intercept. Runs after loading normalization (and after batch correction), score
+      computed at protein level and applied to both peptide and protein output. Skip a feature with < 3
+      observations or a constant score; hard error with < 3 quantified markers; warn when PC1 variance
+      explained < 40%. Alternative `method: mean`. Maps to a new `NormalizationMethod` whose marker set is a
+      Skyline protein list. PRISM ships 57 curated panels (`Qc/BuiltInProteinPanels.cs`), and matches
+      `H4_HUMAN` / `H4_MOUSE` style names by stripping the species suffix.
+- [ ] **Marker normalization diagnostics** (v26.20.0): per-sample score and per-marker loadings, flag when one
+      marker carries > 50% of the loading. Report columns or a graph.
+- [ ] **Additional protein rollups** (`Rollup/ProteinMatrixRollup.cs`): top-N (selection by median abundance or
+      frequency), maxLFQ, iBAQ (needs theoretical peptide count). Add to `SummarizationMethod` for the protein
+      level. Also consider transition-level consensus (inverse-variance weighted, regularization 0.1) and
+      top-N (`Rollup/ConsensusRollup.cs`, `Rollup/TopNRollup.cs`).
+- [ ] **Sample outlier detection** (`Normalization/OutlierDetector.cs`, 70 lines). One-sided low-signal only:
+      per-sample median of 2^value on the linear scale, flag below Q1 - 1.5 IQR or below 0.1 x overall median.
+      Report or exclude. Small; could surface as a replicate report column or annotation.
+- [ ] **Median polish residuals as output** (v26.14.0). Both rollup stages write their residuals (Plubell et al.
+      2022: a consistently large residual flags interference, a PTM, or processing). `MedianPolishResult`
+      already holds them; expose as a report column at transition and peptide level.
+- [ ] **Enzyme-aware protein parsimony** (v26.4.3, `Parsimony/ParsimonyEngine.cs`). A shared peptide is attached
+      to a protein only when its termini are consistent with the digestion enzyme; shared-peptide handling
+      `all_groups` / `unique_only` / `razor`. Lower priority: Skyline has its own protein association, so check
+      whether the razor option is the only missing piece.
+
+Suggested order: ComBat first (the one thing the external tool does that Skyline cannot), then marker
+normalization, with outlier detection and residual output riding along with either.
+
 
 ## Progress Log
 
@@ -197,3 +265,16 @@ Files: `Settings.settings`/`.Designer.cs`, `AreaGraphController` (two bool props
 (`AddPeptidePoints`/`TransformPeptidePoint`, `_peptidesCurve`, `TryFindPeptideAt`, legend logic),
 `GraphsResources` ("Peptides" label). New test `RtLoessGraphTest` (toggles + click-to-select);
 built Release, `TestRtLoessGraph` + `TestMedianPolishSmall` PASS.
+
+### 2026-05-20 - Round 1 verified against skyline-prism
+
+Protein median polish rollup verified against skyline-prism for median and RT LOESS normalization
+(`MedianPolishScenariosTest.VerifyProteinAreas`, expected parquet files for the Small and Medium datasets).
+Median polish implementation changed to the converged R / skyline-prism stopping rule and the
+(keys x replicates) orientation to match `tukey_median_polish`. Branch handed off 2026-05-21.
+
+### 2026-09-01 - Survey of skyline-prism changes since round 1
+
+Merged master into the branch (post accidental-merge revert). Surveyed `C:\git\skyline-prism` for work
+since v26.3.5 and added the Round 2 task list above. PRISM is now C# only; the Python engine was removed
+on 2026-08-28.
