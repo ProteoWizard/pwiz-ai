@@ -49,6 +49,14 @@ param(
                            '.1st-pass.fdr_scores.bin',
                            '.1st-pass.model.json'),
     [double]$KeepFraction = 1.0,
+    # WHICH artifact KeepFraction thins. Defaulted to the 1st-pass sidecar so every existing
+    # caller is unaffected, but it must be a parameter: the partial-resume case that matters is
+    # not always FirstPassFDR's. A rescore interrupted mid-cohort leaves the PerFileRescoring
+    # set partial instead, and that is the state the 2026-09-03 `anyPass2Present` defect hid in -
+    # a resume that read 141 of 446 as "done" and rescored nothing. Staging it needs
+    # -PartialSuffixes '.scores-reconciled.parquet','.2nd-pass.fdr_scores.bin',... with the
+    # PerFileRescoring markers alongside.
+    [string[]]$PartialSuffixes = @('.1st-pass.fdr_scores.bin'),
     [string]$StampKey,
     [string]$Version = '26.1.1.243'
 )
@@ -69,12 +77,12 @@ foreach ($stem in $stems) {
     foreach ($suf in $Include) {
         # The per-file sidecar is the one artifact the KeepFraction applies to; everything else
         # is FirstPassFDR input and must be complete or the run is not comparable.
-        if ($suf -eq '.1st-pass.fdr_scores.bin' -and $sidecarStems -notcontains $stem) { continue }
+        if (($PartialSuffixes -contains $suf) -and $sidecarStems -notcontains $stem) { continue }
         $src = Join-Path $Source ($stem + $suf)
         if (-not (Test-Path $src)) { continue }
         New-Item -ItemType HardLink -Path (Join-Path $dest ($stem + $suf)) -Target $src | Out-Null
         $linked++
-        if ($StampKey -and $suf -eq '.1st-pass.fdr_scores.bin') {
+        if ($StampKey -and ($PartialSuffixes -contains $suf)) {
             # Written fresh, not linked: a marker must belong to THIS directory, so that
             # deleting the staging copy can never reach back and invalidate the source.
             @{ task = 'FirstPassFDR'; version = $Version; validity_key = $StampKey; inputs = @() } |
@@ -83,9 +91,26 @@ foreach ($stem in $stems) {
         }
     }
 }
-# Analysis-wide artifacts, not per stem.
-foreach ($f in 'out.1st-pass.fdr_experiment.bin') {
-    $src = Join-Path $Source $f
+# Analysis-wide artifacts, not per stem. Matched by GLOB on the suffix rather than by literal
+# name, the way OspreyDatasetRun.psm1's relay does: the stem is the SOURCE run's output blib name
+# and need not be 'out', so a literal bound this to one naming convention.
+#
+# retained_base_ids was missing here and that was not cosmetic. The per-run rescore REFUSES to
+# run without it - deliberately, because a silent fallback would rebuild the union from every
+# envelope and restore the O(files) pre-pass the artifact exists to delete - so a directory
+# staged by this script could not exercise the per-run path at all. The list stopped being
+# complete the moment the artifact became required, which is the "one edit PER PRODUCER" trap:
+# the producers of a relay obligation are not co-located with the relay.
+$wideSuffixes = @('.1st-pass.fdr_experiment.bin', '.1st-pass.retained_base_ids.bin')
+foreach ($suffix in $wideSuffixes) {
+    $found = @(Get-ChildItem (Join-Path $Source ('*' + $suffix)) -File -ErrorAction SilentlyContinue |
+               Where-Object { $_.Name -notlike '*.osprey.task' } | Select-Object -First 1)
+    if ($found.Count -eq 0) {
+        Write-Host ("  WARNING: no analysis-wide '{0}' in the source" -f $suffix) -ForegroundColor Yellow
+        continue
+    }
+    $f = $found[0].Name
+    $src = $found[0].FullName
     if (Test-Path $src) {
         New-Item -ItemType HardLink -Path (Join-Path $dest $f) -Target $src | Out-Null
         $linked++
