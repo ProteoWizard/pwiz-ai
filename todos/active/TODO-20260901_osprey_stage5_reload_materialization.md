@@ -2095,3 +2095,39 @@ precisely the drift this change exists to remove."
 Remaining mechanical question: how `PerFileScoringTask` reaches the FirstPassFdrTask INSTANCE from
 the pipeline array (the driver owns it). If nothing exposes tasks by type, that accessor is the
 change - not a new predicate.
+
+## MODE 8 FOUND A SECOND PARTIAL-RESUME FAILURE, ON THE MDIAG PATH (2026-09-03, Astral)
+
+`regression.ps1 -Dataset Astral` on the full fix set: **18 PASS, 1 SKIP, mode8 FAIL (33 issues)**.
+Every product change is clean - mode1/1b/1c, mode2, all four mode3 checks, mode4, all four mode5
+checks INCLUDING `mode5 (rehydrate diagnostics vs golden)`, mode6, mode7. Stellar was fully green
+including mode8.
+
+**The first issue explains the other 32:**
+
+    only 2 of 3 reconciled parquet(s) after the resume; the rescore did not finish the cohort
+
+The amputated run was never rescored; the 236 RefSpectra keys only in golden, 2,647 missing
+RetentionTimes keys and every RT/score delta are downstream of that one fact. COUNT caught it and
+VALUE confirmed the consequence - which is the pair working as designed, and is why the mode
+asserts both.
+
+**Leading hypothesis, NOT established**: Astral carries `--model-diagnostics`, so
+`CanHydratePerRun` is false and the resume runs through the ALL-RUNS BUNDLE path rather than the
+per-run path where `allPass2Present` was proven on the 446 cohort. That would make this the same
+shape as everything else found today - the mdiag path routing around the code that was fixed, like
+the over-broad exclusion and like `PerFileScoringTask.Rehydrate:703` being the arm four earlier
+removals never reached.
+
+**The alternative, which must be ruled out first**: `Invoke-PartialRescoreInvalidation` removes
+something that makes a file un-rescorable specifically on the bundle path, making this the
+harness rather than the product.
+
+**How to tell them apart**: read which arm `PerFileRescoreTask.Run` takes with
+`rescoreBundle != null`, `didPlan == false` (FirstPassFDR rehydrates - mode 8 does not invalidate
+it) and `allPass2Present == false` (2 of 3). The gate at `:410` is where the no-rescore decision
+is made; if that is not the arm, follow where the amputated file's rescore is dropped.
+
+**DO NOT COMMIT the fix set until this is resolved.** A partial resume that silently fails to
+finish the cohort is the ORIGINAL defect, on a different path - and on the mdiag path it would
+produce exactly the blib corruption above while reporting success.
