@@ -1466,3 +1466,200 @@ loudly are the lucky case. The stack that named it was
 FirstPassFdrTask.Rehydrate -> Get<ScoredEntries> -> DemandByType(PerFileScoringTask) ->
 Rehydrate` - three tasks materialised by one Get, which is exactly the lazy-Demand chain that
 makes an in-process run's dataflow invisible at the call site.
+
+### Removing an O(runs) pre-load from one producer only MOVES it (2026-09-02)
+
+Gating the `--input-scores` load did not remove the all-runs work; it relocated it. With no
+bundle published, `FirstPassFdrTask.Rehydrate` took its OWN bundle-building route -
+`LoadOwnReconciliationBundle` sees empty stub lists, reads that as the lean signature, and calls
+`StreamOwnReconciliationBundle`, which walks every run's envelope and parquet. Same cost, second
+producer.
+
+Two edits were needed, not one:
+
+1. `PerFileScoringTask.LoadJoinOnlyScores` - publish run names, paths and calibrations only.
+2. `FirstPassFdrTask.Rehydrate` - a `RehydrateForPerRunRescore` branch that publishes the
+   survivor loader plus EMPTY planning slots and builds nothing. Its retained set comes from the
+   analysis-wide summary rather than from a bundle assembled by reading every run, which is what
+   the summary is for.
+
+Plus a third, in the rescore's self-gate: `!didPlan && (rescoreBundle == null || anyPass2Present)`
+fired, because the per-run plan is not held anywhere at that moment - it is read per run inside
+the loop - so both existing "is there a plan" signals were legitimately false and a fully-
+equipped run self-gated to a no-op, writing no `.scores-reconciled.parquet`. `CanHydratePerRun`
+is now a third source of "there is a plan to execute". `anyPass2Present` deliberately stays
+outside that term: a completed run must still no-op.
+
+**Generalisation for the architecture doc**: "stop building X" is one edit PER PRODUCER, and the
+producers are not co-located - one was in the upstream load, one in a downstream task's rehydrate,
+and the gate that noticed was a missing output file rather than a wrong number. Every consumer
+that can independently RECONSTRUCT X has to be found; the ones that fail loudly are the lucky
+case.
+
+### KNOWN remaining O(runs) term on the per-run path, stated rather than assumed away
+
+`PerFileCalibrations` retains one `RTCalibration` per run (the anchor arrays `AbsResiduals`,
+`FittedRts`, `LibraryRts`). A CHS run's refined calibration is ~2 MB, so 446 runs is order-1 GB -
+invisible at plate scale, and NOT O(1).
+
+It is left in place deliberately and **must be measured at 446 rather than assumed**, because
+reading a single-point measurement as a slope is the exact mistake this whole change exists to
+correct (the July "slope goes to ~0" claim). If it matters, the fix is to move the calibration
+read inside the iteration like everything else.
+
+## THE FPFDR RETENTION TERM IS SEPARATE FROM STAGE 7, AND WAS RELEASED (2026-09-02)
+
+An earlier claim in this session - "we cannot reduce FirstPassFDR without implementing the lean
+row for SecondPassFDR" - is **WRONG and withdrawn**. Two independent O(runs) structures were
+collapsed into one:
+
+| structure | size at 446 | lives from | read by Stage 7? |
+|---|---|---|---|
+| FirstPassFDR planning products | ~13 GB | end of planning -> process exit | **no** (3 of 4) |
+| Stage 7 survivor pool | ~0.197 GB/file, ~103 GB at 500 | Stage 7 | it IS Stage 7's input |
+
+Grepping every `Get`/`Consume`/`TryGet` reader: `ReconciliationActions` (30.8 M entries at 446),
+`PerFileConsensusTargets` and `RefinedCalibrations` are read ONLY by `PerFileRescoreTask.Run`.
+`PerFileGapFillForRescore` is the sole one Stage 7 touches, via the pool rebuild
+(`Rehydrate -> OverlayReconciledIntoFiles`).
+
+**Both references had to go.** Consuming the byproduct alone frees nothing: `FirstPassFdrTask`
+holds all four as FIELDS (`:167-171`) and the task instance lives in the pipeline array for the
+life of the process, so the field outlives every consumer. That is precisely how these came to
+be held from the end of planning through the whole rescore with no reader - not a decision,
+an omission with no mechanism to catch it. Fixed by nulling the fields at the publish site (the
+byproducts hold them now, and every field is read only by `Rehydrate`, which is mutually
+exclusive with the `Run` that just published) plus `Consume` at the single reader.
+
+**Unit gate caught a real weakening on the way**: relaxing `Publish` from `Add` to upsert for the
+drop diagnostic turned `TestPublishOnceThenTryGetReads` red - "Expected publish-once violation to
+throw". Correct: an invariant relaxed for one experiment must not be relaxed for the default
+path. The upsert is now conditional on `OSPREY_DROP_BETWEEN_TASKS`.
+
+## THE STAGE 7 HANDOFF SHOULD BE A LEAN SIDECAR, NOT A LEAN STRUCT (developer, 2026-09-02)
+
+> *"lean row implementation will involve a more efficient sidecar between FPFDR and SPFDR which
+> will reduce the read time and the memory peak in SPFDR."*
+
+The drop experiment MEASURED the cost this would remove. Forcing Stage 7 to rebuild its pool from
+disk instead of inheriting it in memory, on 10 CHS files:
+
+| | pool inherited | pool rebuilt |
+|---|---|---|
+| SecondPassFDR peak | 7.2 GB | **17.8 GB** |
+| SecondPassFDR wall | 0:32 | **1:19** |
+| every other phase | unchanged | unchanged |
+
+That +10.6 GB and +47 s is entirely `BuildRescoredPool` re-reading each run's
+`.scores-reconciled.parquet` and `.1st-pass.fdr_scores.bin` and allocating fat `FdrEntry`
+objects. It is the price of the handoff being a PARQUET RE-READ rather than a purpose-built
+artifact.
+
+**Why the sidecar beats the in-memory lean row.** `TODO-20260826` specced the lean row as an
+88 B struct against `FdrEntry`'s ~274 B - a 3.1x cut, in memory, in one process. Writing those
+same 88 B as a per-run sidecar instead gets the same reduction AND:
+
+* **crosses the process boundary**, so an HPC Stage 7 node reads it directly - the in-memory
+  struct helps only the single-process case, which is the one that already works;
+* **removes the parquet decode**, not just the object allocation - the rebuild's cost is
+  columnar decode plus interning plus allocation, and a flat binary is a read plus a cast;
+* **is streamable** - Stage 7's consumers are already O(distinct) folds over `rescored.Files()`,
+  so they can fold a file at a time and never hold the pool at all, which the struct alone does
+  not achieve;
+* **matches the artifact the pipeline already writes** - `PerFileRescoring` emits
+  `.2nd-pass.fdr_scores.bin` at exactly the moment the code says all three inputs are
+  simultaneously true (`PerFileRescoreTask.cs:1250-1256`: survivors in hand, reconciled parquet
+  on disk, heavy payload not yet dropped). The lean row is the same write, widened.
+
+**What it must carry** is the lean-row audit's field list (`TODO-20260826`): `EntryId`,
+`PeptideId` (interned), `Charge`, `IsDecoy`, `Score`, both run q-values, both experiment
+q-values, `ApexRt`/`StartRt`/`EndRt`, `BoundsArea` = 88 B padded. Check it against the existing
+`.2nd-pass.fdr_scores.bin` schema first: if that already carries the q-values and score, the
+delta is the four spectral doubles plus the interned peptide id, and this becomes a format
+extension rather than a new artifact.
+
+**Sequencing note**: this also retires the last coupling found today. `PerFileGapFillForRescore`
+is held only because the pool rebuild needs it; a Stage 7 that folds per-run sidecars reads each
+run's gap-fill from that run's envelope instead, and the last of FirstPassFDR's planning products
+can be released with the other three.
+
+### REFINEMENT: the rebuild's cost is RE-DERIVATION, not just I/O (developer, 2026-09-02)
+
+> *"You said it has to recalculate from scratch, but that may indicate only that FPFDR could be
+> writing a more efficient sidecar for SPFDR that would involve less calculation."*
+
+Correct, and it reframes the fix. Framing the +10.6 GB / +47 s as a read cost misses that most
+of those steps are re-deriving state the upstream phase already had. Per run, the rebuild does:
+
+1. parquet decode -> `List<FdrEntry>` (allocation + interning)
+2. sidecar read + `entry_id` binding, **discarding most records**
+3. filter to survivors
+4. overlay reconciled scalars (a second parquet pass)
+5. append gap-fill
+6. canonical sort
+
+Only (1) is reading. (2) exists **purely because the sidecar is written at the wrong
+granularity** - `RescoreHydration` says so: *"The 1st-pass sidecar is written over the WHOLE
+pre-compaction row set, but these stubs come from the reconciled parquet, which now holds only
+the Stage 5 survivors (#4486) - so most of its records have no entry to land on."* At CHS that is
+1.34 B rows written to serve 289 M survivors: a ~4.6x overwrite paid on every write AND every
+read.
+
+**So the first fix is granularity, not format**: FirstPassFDR should write its per-run sidecar
+over the survivors it just selected. It knows the retained set at that instant - it is the same
+set it writes into `retained_base_ids.bin`, in the same phase. The downstream overlay then
+becomes a positional read with no binding and no discard, and the artifact shrinks ~4.6x.
+
+This is SMALLER than the lean row and composes with it: the lean sidecar cuts bytes per row
+(274 B -> 88 B), the survivors-only write cuts rows (~4.6x). Neither needs the other.
+
+**VERIFIED CONSTRAINT - it must be TWO artifacts, not one narrowed one.**
+`ModelDiagnostics/PeakCoAssignmentSource.cs:341,449` reads `FdrScoresSidecar.Pass1Path`
+directly, and needs the PRE-compaction rows (compaction discards ~52x of them, mostly the decoys
+and entrapment its FDP and calibration views are built from). Narrowing the sidecar would
+silently degrade that report rather than fail it. `--fdrbench-pass 1` wants the same population.
+
+So: a survivors-only sidecar on the default path, and the full pre-compaction one written only
+when `--model-diagnostics` / `--fdrbench-pass 1` ask. That is the SAME policy `ResidentPaths`
+already applies to those two modes in the memory layer, expressed in the artifact layer - which
+is where it belongs, since the cost is now paid in bytes on disk rather than bytes in RAM.
+
+### THIRD AXIS: a FIXED-WIDTH struct removes per-record work entirely (developer, 2026-09-02)
+
+> *"Fixed byte structs can be read extremely quickly also"*
+
+Three independent axes on the Stage 7 handoff, and they compose:
+
+| axis | change | effect at CHS 446 |
+|---|---|---|
+| granularity | write survivors, not the pre-compaction pool | ~4.6x fewer rows |
+| width | 88 B lean row, not ~274 B `FdrEntry` | ~3.1x fewer bytes/row |
+| **layout** | **fixed-width struct, bulk read + cast** | **no per-record work, no allocation** |
+
+The third is the one that also removes GC pressure rather than merely reducing it. A run's
+contribution is read as one buffer and reinterpreted in place -
+`MemoryMarshal.Cast<byte, LeanRow>` - and Stage 7's consumers, which are already O(distinct)
+folds over `rescored.Files()`, fold a `ReadOnlySpan<LeanRow>`. **No managed objects are created,
+so the collector never sees the pool at all.** That is the difference between shrinking the heap
+and not putting it on the heap.
+
+Scale: ~648 K survivors/run x 88 B = **~57 MB per run**. A bulk read plus a cast on 57 MB is
+milliseconds. The current path decodes parquet columns, allocates ~648 K `FdrEntry` objects,
+interns their sequences, binds them against a sidecar 4.6x larger than needed, and sorts.
+
+**The pattern is already proven in this codebase** and documented as the fix for this exact
+shape - `SpectraCache.ReadIndex`: *"Read the acquisition-order index in one compact contiguous
+EOF read - no record walk ... touching only ~40 B/record instead of seeking across the whole
+6 GB body."* So this is applying an established technique at a new boundary, not introducing one.
+
+Two mechanics for the implementer:
+
+* **The existing sidecars are already fixed-width** (`FdrExperimentSidecar` 44 B/record,
+  `RetainedBaseIdSidecar` 4 B) but are read field-by-field through `BinaryReader`, which
+  reintroduces the per-record cost the layout was chosen to avoid. **The layout is right; the
+  READER is what changes.** Worth fixing on the existing sidecars independently of the new one.
+* **`System.Memory` is already referenced for net472** (conditional ItemGroup in
+  `Osprey.IO.csproj`), so `Span`/`MemoryMarshal` build on both TFMs with no new dependency.
+  Mind endianness and explicit `[StructLayout(LayoutKind.Sequential, Pack = 1)]` so the on-disk
+  form is a contract rather than whatever the JIT chose - the parity gate compares these files
+  byte for byte across net472 and net8.0.
