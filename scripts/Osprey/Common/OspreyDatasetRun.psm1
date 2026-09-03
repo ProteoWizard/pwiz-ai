@@ -847,22 +847,6 @@ function Invoke-OspreyDatasetRun {
         Move-Item -Path $log -Destination $rotated
         Write-Host ("  rotated previous run.log -> {0}" -f (Split-Path $rotated -Leaf)) -ForegroundColor Cyan
     }
-    # Preserve the previous log BEFORE the Set-Content below truncates it. A -Resume or
-    # -LinkFrom re-run lands in the same directory by design, so without this a restart
-    # DESTROYS the --memstamp trace of the run it is continuing - and on a memory-measurement
-    # run that trace is the entire product. Observed 2026-09-03: restarting a 446-file run to
-    # test the resume path overwrote 6h13m of samples covering the whole FirstPassFDR ramp and
-    # the FirstPassFDR -> PerFileRescoring transition. Only the numbers already read out of it
-    # survived, so the plot could not be regenerated and no new question could be asked of it.
-    #
-    # Named for the OLD log's mtime, not for now, so the file says when its run ended.
-    if (Test-Path $log) {
-        $keptLog = Join-Path (Split-Path $log -Parent) `
-            ('run-{0}.log' -f (Get-Item $log).LastWriteTime.ToString('yyyyMMdd_HHmmss'))
-        Copy-Item $log $keptLog -Force
-        Write-Host ("  preserved previous run.log as {0}" -f (Split-Path $keptLog -Leaf)) `
-            -ForegroundColor Cyan
-    }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
