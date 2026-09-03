@@ -1700,3 +1700,24 @@ rows. Rebuild cost measured at +10.6 GB / +47 s on 10 files, isolated to SecondP
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260902_osprey_perrun_446.md` before starting work.
+
+### THE ACCEPTANCE CRITERION for Stage 7, stated relationally (developer, 2026-09-02)
+
+> *"I would like to see both FDR tasks lower memory and SecondPass lower than FirstPass, because
+> it is dealing with a much smaller bounded set of entries."*
+
+This is a better target than an absolute ceiling, because it is box-independent and cannot be
+satisfied by adding RAM:
+
+* FirstPassFDR processes the full PRE-compaction pool - 1,342,686,095 entries at 446 runs.
+* SecondPassFDR processes only the survivors - 288,920,200. About **4.6x smaller**, and bounded.
+* **A stage doing strictly less work must not peak higher.**
+
+The 2026-08-24 257-file plot shows the inversion: SecondPassFDR ~70 GB (past the 63.7 GB box)
+against FirstPassFDR's ~55 GB. That inversion IS the diagnosis - Stage 7's cost is its
+REPRESENTATION, not its workload. It holds ~274 B `FdrEntry` objects rebuilt from parquet where
+88 B of fixed-width row would serve, which is exactly what the three-axis plan above addresses.
+
+**Use this as the pass/fail test on any future plot**: if Stage 7 is the tallest region, the goal
+is not met even when the run completes. The middle (PerFileRescoring) was never the problem - it
+was already flat at ~20 GB across 5.5 h at 257 files, before any of this work.
