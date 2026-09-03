@@ -100,7 +100,8 @@ datetime suffix.** Truncating is silent, and what it destroys is the record of t
 about to continue.
 
 ```powershell
-# before opening <dir>un.log for a new run
+# before opening <dir>
+un.log for a new run
 if (Test-Path $log) {
     $kept = Join-Path (Split-Path $log -Parent) `
         ('run-{0}.log' -f (Get-Item $log).LastWriteTime.ToString('yyyyMMdd_HHmmss'))
@@ -121,13 +122,19 @@ Two shapes, and both are fine as long as neither truncates:
   (`"$Phase-$TimeStamp.log"`), so their first `Out-File` without `-Append` is harmless: the
   path is new every run.
 
-The cost of getting this wrong, measured: on 2026-09-03 a 446-file memory-measurement run was
-restarted to test the resume path, and `OspreyDatasetRun.psm1` opened `run.log` with
-`Set-Content`. That truncated **6h13m of `--memstamp` samples** covering the entire FirstPassFDR
-ramp and the FirstPassFDR -> PerFileRescoring transition - the exact trace the run existed to
-produce. Only the numbers already read out of it survived; the plot could not be regenerated and
-no new question could be asked of that run. A `-Resume` or `-LinkFrom` re-run lands in the same
-directory *by design*, so this is not an edge case - it is the normal path.
+The reference implementation is `OspreyDatasetRun.psm1` (search "NEVER truncate an existing
+run.log"). It rotates with `Move-Item`, stamps from the old log's `LastWriteTime`, and
+disambiguates a same-second collision rather than clobbering. Its comment records the incident
+that earned it: "one `-Resume` into the wrong directory silently destroyed an 18-hour run's
+1.8 MB log this way. Recovered that time only because a human happened to have it open in an
+editor." Copy that block; do not reinvent it.
+
+**A caution for anyone auditing this, from getting it wrong on 2026-09-03.** Grepping for the
+`Set-Content -Path $log` on the START line and concluding "this truncates" is exactly the wrong
+read - the rotation sits about thirty lines ABOVE it, and the `Set-Content` is correct precisely
+because the rotation already ran. A partial read of a file that is right can manufacture a defect
+that is not there, and the resulting "fix" was dead code duplicating a `Move-Item` that had
+already moved the file.
 
 Applies to the launcher's own tee as well: `Tee-Object -FilePath $log` without `-Append`
 truncates on the first write, which is how the second copy of that same trace was lost.
