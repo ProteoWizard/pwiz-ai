@@ -1898,3 +1898,63 @@ project keeps rediscovering: a check that passes while the thing it names is not
 Worth a regression assertion of its own: kill a rescore mid-cohort, resume, and assert the
 reconciled-parquet count reaches the full cohort. Nothing in mode 2 or mode 4 covers a PARTIAL
 per-file state today.
+
+## THE FAN-OUT STARTUP FIX DOES NOT HOLD ON A RESUME (measured 2026-09-03)
+
+Startup time on a resume is a test in its own right, and it fails. Same build
+(`245-allpass2-resume`), same 446-file cohort, same task, two paths:
+
+| `[TASK] PerFileRescoring:starting` -> `Re-scoring file 1/446` | |
+|---|---|
+| fresh straight-through (FirstPassFDR ran in-process), 03:30:15 -> 03:30:25 | **10 s** |
+| resume (FirstPassFDR skipped, outputs valid), 08:53:35 -> not reached by 09:02:54 | **> 9m19s** |
+
+Decomposed, because only part of it is legitimate:
+
+* **36 s** (08:53:35 -> 08:54:11) library cache + decoy pairing manifest, 4.19 GB resident. This
+  is P5's memory baseline and is ALLOWED - on the fresh path FirstPassFDR had already loaded it,
+  which is why the fresh number is not comparable without this split.
+* **8m41s and counting** (08:54:13 -> ) `Loading scored entries...` - a sequential pass over all
+  446 `config.InputFiles`. This is **forbidden**.
+
+### Where, and why the earlier fix missed it
+
+`PerFileScoringTask.Rehydrate:703`, the straight-through RESUME arm. It never consults
+`ScoringTaskShared.CanHydratePerRun`. Its `--input-scores` sibling at `:1343` does, and takes
+`LoadJoinOnlyPerRunNames` instead - which is why the fresh and `--task PerFileRescoring` paths
+are fast and this one is not. One more instance of "stop building X is one edit PER PRODUCER,
+and the producers are not co-located".
+
+Doc 00 P6, second term, is the rule broken:
+
+> **no fan-out task may have a loading phase whose cost grows with the number of runs it was
+> handed.** Where such a task needs a cohort-wide fact, an earlier phase computes it once and
+> writes it (P12) and the fan-out reads that bounded summary - it never conducts its own survey
+> of the batch.
+
+The doc's own example of the previous instance: "it shipped, as 8m42s and 17.2 GB of startup on
+an 86-run plate." This one is 8m41s at 446 - lighter per run, same class, same shape.
+
+### What a rescore node is allowed to load (Boundary 2 -> 3)
+
+Experiment-wide, to every node, all bounded:
+`<blib-stem>.1st-pass.fdr_experiment.bin` (O(distinct entry_ids)),
+`<stem>.1st-pass.model.json` (any one copy), `<blib-stem>.1st-pass.retained_base_ids.bin`
+(library-bounded, 2.98 MB at 446). Everything else - `.scores.parquet`,
+`.1st-pass.fdr_scores.bin`, `.reconciliation.json`, `.calibration.json`, `.spectra.bin` - is
+per-run and belongs INSIDE that run's iteration.
+
+**Also not clean**: `LoadJoinOnlyPerRunNames` still loops every run to read its
+`.calibration.json`. Small per file, but it is still a survey of the batch and violates the same
+term more mildly. Both arms want the same treatment.
+
+### The assertion this earns
+
+Startup is measurable from the log with no instrumentation, so the gate can assert it directly:
+
+    time(PerFileRescoring:starting -> first "Re-scoring file") MINUS library-load time
+    must not grow with run count, on EVERY path - fresh, resume, and --task.
+
+That is stronger than the existing mode 3 per-run-hydrate MARKER assertion, which only proves
+which path was taken, not that the path was cheap. A resume that takes the right arm and still
+surveys the batch would pass the marker check and fail this one.
