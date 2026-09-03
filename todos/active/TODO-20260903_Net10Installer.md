@@ -149,7 +149,7 @@ daily builds through ClickOnce URLs.
 
 ## Tasks
 
-- [ ] Data folder: owner check (no owner = usable), `%LOCALAPPDATA%<hash of exe path>` fallback that wins once it exists, shared by `UserConfigSettingsProvider` and the Tools folder; SkylineCmd uses the same file
+- [ ] Data folder: owner check (no owner = usable), `%LOCALAPPDATA%\<hash of exe path>` fallback that wins once it exists, shared by `UserConfigSettingsProvider` and the Tools folder; SkylineCmd uses the same file
 - [ ] Seed `user.config` + `base.config` from the exe folder; per-setting three-way merge on master change
 - [ ] Point `MigrateSettingsFromClickOnceInstallation` at the data folder; define precedence over an admin-seeded file
 - [ ] Two Tools folders; `ToolDescription` records which root a tool lives in; tool install goes to the user folder
