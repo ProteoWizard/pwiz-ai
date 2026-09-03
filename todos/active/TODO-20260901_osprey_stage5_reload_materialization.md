@@ -2253,3 +2253,38 @@ Everything else on Astral stayed green: mode1, mode1c, mode1b x2, mode2 x2, mode
    completion one line below an ERROR. Small, but it is precisely the "green check next to a
    missing thing" shape this session keeps finding. Worth fixing in `AnalysisPipeline` where the
    done line is emitted.
+
+### PROVEN PRE-EXISTING ON MASTER (2026-09-03 16:01)
+
+The developer's test: mode 8 is NEW on this branch (0 occurrences at `c955943146`), so it has
+never run on master and a pre-existing failure is possible. Settled by reverting ONLY the product
+code to `c955943146` while keeping mode 8, and running Stellar - the non-mdiag dataset, so it
+takes the COUNT/VISIBILITY/VALUE branch rather than the mdiag one.
+
+**Stellar mode 8 on pre-change product code: FAIL (35 issues)**
+
+```
+only 2 of 3 reconciled parquet(s) after the resume; the rescore did not finish the cohort
+partial-resume.log: no line containing 'Rescore resume:'
+RefSpectra: 242 key(s) only in golden, 1836 key(s) only in run
+```
+
+With this branch's changes the same leg **PASSES**. That is the before/after on one assertion,
+same dataset, same amputation.
+
+**Conclusion: the partial-resume defect is on MASTER.** A user who kills a run and resumes it gets
+a blib silently missing a run's data. It was invisible because mode 2 resumes from a COMPLETE
+directory and mode 4 re-runs fully cached - no gate had ever presented a partial cohort, on any
+dataset. Sessions clearing Stellar-only would not have caught it either; the assertion did not
+exist to clear.
+
+This also settles the scope question: the branch FIXES a shipped correctness bug rather than
+introducing one. Still open and NOT settled by this: whether the skip-arm clear is a SECOND
+defect on the mdiag/bundle path, which cannot surface until the gate stops short-circuiting there.
+
+### Refinement to the cleanup rule, learned the hard way
+
+"Clean up before" deleted a FAILED run's kept scratch: `-KeepRunDirs 0` prunes orphan
+`regression-*` dirs at startup, and the next run removed the very evidence `-KeepOutput` had
+preserved. The rule needs both halves - **the pre-run prune must also spare failed runs**, or
+step 1 undoes step 3 on the next invocation.
