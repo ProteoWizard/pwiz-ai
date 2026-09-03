@@ -2220,3 +2220,36 @@ defect class this session has been chasing.
 **Note the diagnostic that made this findable**: the VISIBILITY assertion. The log line printed the
 correct intent and was then contradicted by the very next line. Without it the symptom was only a
 missing parquet three layers downstream.
+
+### VERIFIED 2026-09-03 15:11: the gate fix works, and the capability gap is real
+
+`regression-20260903_145138/Astral/straight/partial-resume.log`:
+
+```
+15:11:38  Rescore resume: 2 of 3 run(s) already carry a current 2nd-pass sidecar; re-scoring the remaining 1.
+15:11:38  [ERROR] Rescore resume: 1 of 3 run(s) still need re-scoring, but this process has no plan
+          to do it - FirstPassFDR did not plan here, no worker bundle was supplied, and the per-run
+          hydrate is unavailable because --model-diagnostics keeps the all-runs hydrate.
+15:11:38  [TASK] PerFileRescoring:done (20.9s)
+```
+
+**Both halves confirmed.** The silent wrong answer is now a named failure with a non-zero exit -
+the 33-issue blib corruption is gone, replaced by one line saying what is missing and why. AND the
+underlying gap is genuine: under mdiag a partial resume has no plan source, which no amount of
+counting reaches. Closing it is the mdiag work, which is already merge-blocking.
+
+Everything else on Astral stayed green: mode1, mode1c, mode1b x2, mode2 x2, mode6, mode7.
+
+### Two consequences, one of them a separate defect
+
+1. **Mode 8 now ABORTS the gate rather than reporting FAIL.** Osprey exits 1, and `regression.ps1`
+   treats a non-zero Osprey exit as an abort, so the legs after it never run. Until the bundle path
+   can rescore, mode 8 should EXPECT this on a dataset with `ModelDiagnostics = $true` - assert the
+   error line and the non-zero exit, rather than crashing the run. That is the same shape as mode
+   3's `SKIP (--model-diagnostics keeps the all-runs hydrate)`: a leg that cannot apply should say
+   so, not fail.
+2. **`[TASK] PerFileRescoring:done (20.9s)` prints AFTER the task returned false.** A task that
+   failed should not log "done" - a reader scanning for task boundaries sees a successful
+   completion one line below an ERROR. Small, but it is precisely the "green check next to a
+   missing thing" shape this session keeps finding. Worth fixing in `AnalysisPipeline` where the
+   done line is emitted.
