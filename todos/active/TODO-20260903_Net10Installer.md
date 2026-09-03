@@ -60,8 +60,16 @@ Skyline picks one writable **data folder** at startup and everything per-user go
   permission on a shared install (or an admin running unelevated) still keeps settings out
   of the exe folder. Only a genuinely per-user install, or an administrator running as the
   owner, writes there. The check does not need to be perfect.
+- **No owner means ours.** When the owner cannot be determined (FAT32, exFAT, a network
+  share or any file system without owners), assume the exe folder can be the data folder.
 - Otherwise the data folder is under `%LOCALAPPDATA%` (product-named, e.g.
-  `Skyline-daily`).
+  `Skyline-daily`), in a subfolder named by a **hash of the exe folder path**, so two
+  installations on one machine never share a data folder.
+- **An existing hashed folder wins.** At startup, before the ownership check, look for the
+  hashed data folder; if it exists, use it even when the current user owns the exe folder.
+  This keeps a user's settings stable if ownership changes later (a shared install whose
+  folder is taken over, an install moved between accounts) and makes the decision
+  sticky rather than re-derived on every run.
 - `UserConfigSettingsProvider.GetDefaultConfigFolder` and
   `ToolDescriptionHelpers.GetSkylineInstallationPath` (which roots the Tools folder beside
   the exe today) both move to this.
@@ -141,7 +149,7 @@ daily builds through ClickOnce URLs.
 
 ## Tasks
 
-- [ ] Data folder: owner check, `%LOCALAPPDATA%` fallback, shared by `UserConfigSettingsProvider` and the Tools folder; SkylineCmd uses the same file
+- [ ] Data folder: owner check (no owner = usable), `%LOCALAPPDATA%<hash of exe path>` fallback that wins once it exists, shared by `UserConfigSettingsProvider` and the Tools folder; SkylineCmd uses the same file
 - [ ] Seed `user.config` + `base.config` from the exe folder; per-setting three-way merge on master change
 - [ ] Point `MigrateSettingsFromClickOnceInstallation` at the data folder; define precedence over an admin-seeded file
 - [ ] Two Tools folders; `ToolDescription` records which root a tool lives in; tool install goes to the user folder
