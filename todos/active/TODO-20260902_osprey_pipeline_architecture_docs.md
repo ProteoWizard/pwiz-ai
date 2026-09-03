@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260902_osprey_pipeline_architecture_docs`
 - **Base**: `master`
 - **Created**: 2026-09-02
-- **Status**: In progress - WI-1..WI-10 and R1-R11 done; needs /code-review + PR. WI-11 waits on the resume branch.
-- **PR**: (none yet)
+- **Status**: PR #4635 open. WI-1..WI-10, R1-R11 and the /code-review max round are done. WI-11 waits on the resume branch.
+- **PR**: [#4635](https://github.com/ProteoWizard/pwiz/pull/4635)
 - **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz-work2` (branch created there from `origin/master` at
   `08a02b9e2e`; `C:\proj\pwiz` holds the net8 branch and `pwiz-work1` holds the
@@ -788,3 +788,66 @@ PerFileRescoring` rehydrates `FirstPassFdrTask` and reads an all-runs `Compacted
 Suggestion: rather than re-editing these when the resume branch lands, state the target in the
 contract and keep ONE "known deviations" list with issue links - a per-document in-flight note
 is what let doc 15 fall out of step with doc 00.
+
+### 2026-09-02 - /code-review max applied, PR #4635 opened (Opus 5)
+
+All 15 findings verified against code before acting; **all 15 were correct**. Applied as
+pwiz `7fa5918471`. Branch pushed, PR #4635 open with the `osprey` label. Do NOT trigger the
+TeamCity Perf/Regression config: no code changed.
+
+**Three findings were mine, and my own verification is what failed:**
+- **The SVG collision.** I added a subtitle line inside the title group and never shifted
+  the legend - ~1px clearance where there had been 17.5px. The reflow script's shift
+  schedule started BELOW the legend, and my render check compared groups at 824px display
+  width, where 1px is invisible. Fixed (+16 from the legend down, viewBox 2884) and
+  re-checked at 1:1. **Lesson: a render check for overlap has to be done at the zoom where
+  the smallest gap is resolvable, not at whole-page scale.**
+- **`regression.ps1` mode 3.** I wrote that it "asserts each per-node reconciled parquet is
+  byte-identical". It never opens one - FDR sidecars and the blib are compared at
+  TOLERANCE, only `fdr_experiment.bin` byte-for-byte. I overstated the enforcement
+  mechanism in the paragraph telling readers to rely on it.
+- **The 0-byte mzML stub.** Taken from a stale comment header in `regression.ps1`; the gate
+  deliberately stopped staging one, and I named the wrong code branch (the fingerprint
+  check tolerates an ABSENT source, not a zero-byte one). A stub is actively harmful: it
+  makes the mzML path reachable, so a rejected cache silently parses an empty file and the
+  run finishes success-shaped with zero spectra.
+
+**Documentation errors with real consequences:**
+- Doc 14's FDR formats were stale by two versions: `fdr_scores` is **v6 / 28-byte records**
+  (not v4 / 68), `fdr_experiment` **v2 / 44-byte** (I had invented "v5"). Anyone
+  implementing a reader would misalign from record one. Table corrected; the detailed v4
+  layout section marked STALE rather than rewritten - this PR changes no code and cannot
+  test a reader. **Follow-up: rewrite doc 14 section 4 against `WriteRecord`.**
+- Two resume guarantees were stronger than the code: the version stamp is never compared on
+  the `.osprey.task` path (`IsValid` checks the key only), and `OSPREY_PICK_LDA_MODEL` is a
+  SECOND user path in the base validity key - I had said the pairing manifest was the only
+  one. Both now stated as gaps.
+- `OspreyReportWriter` writes `protein_groups.tsv` and `stats.tsv` with a truncating
+  `StreamWriter`, so P8 was false as written; documented as defects, not exceptions.
+- `protein-compact` is the DEFAULT pass-2 mode, so `.1st-pass.model.json` is mandatory on an
+  ordinary run, not conditional; and `OSPREY_PASS2_QVALUE=transfer` reads every run's
+  1st-pass sidecar and warns-and-proceeds when it is missing.
+- `package.ps1` corrupted the README under PowerShell 5.1 - reproduced: BOM added, bytes
+  >127 went 57 -> 155, every em dash mangled. Added `#Requires -Version 7.0` (now refuses
+  cleanly) plus explicit BOM-free UTF-8 read/write.
+
+**One finding declined, with reason recorded so it is not re-litigated:** pinning the
+bundled README's GitHub URL to the build commit instead of `master`. A commit URL 404s for
+any bundle built from an unpushed branch (every developer build), and a dead link is worse
+than a slightly newer one. Comment left in `package.ps1`. I also caught myself inventing a
+`$script:gitHash` variable that does not exist while attempting it.
+
+Also fixed: the circular 00<->14 ownership I created when moving the key section, the
+`--cache-dir` contradiction across three docs (it holds `.libcache` too), three HTML content
+errors including a Stage 6 note contradicting P11, and 28 Unicode dashes in added lines
+(CRITICAL-RULES) - converted only on lines this branch touches, to avoid reformatting
+untouched content.
+
+**Known gaps carried into review, both stated in the document itself:** doc 14 section 4's
+format layout, and doc 00 at 961 lines against its own ~900 guard rail (byte-level material
+was already moved down to 14; what remains is contract content, and splitting sideways is
+forbidden).
+
+- Next: address Copilot / human review on #4635. WI-11 after the resume branch merges -
+  markers are the `> **In flight**` blocks in 00 (three), doc 12, doc 15, and the
+  `## In flight` section items 1-5.
