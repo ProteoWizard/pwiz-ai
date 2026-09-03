@@ -93,6 +93,45 @@ launcher script should do itself:
 `*>&1` rather than `>` so **stderr is captured too**; a bare stdout redirect loses exactly
 the output you need when the job fails.
 
+### Roll the log; never truncate it
+
+**A log written to a fixed name must ROLL the previous one aside before it opens, with a
+datetime suffix.** Truncating is silent, and what it destroys is the record of the run you were
+about to continue.
+
+```powershell
+# before opening <dir>un.log for a new run
+if (Test-Path $log) {
+    $kept = Join-Path (Split-Path $log -Parent) `
+        ('run-{0}.log' -f (Get-Item $log).LastWriteTime.ToString('yyyyMMdd_HHmmss'))
+    Copy-Item $log $kept -Force
+}
+```
+
+Name the rolled copy for the OLD log's mtime, not for now, so the file records when its run
+ended rather than when the next one started.
+
+Two shapes, and both are fine as long as neither truncates:
+
+* **Fixed name + roll** - right when downstream tooling looks the file up by name.
+  `run.log` is read by `perfviz.py`, by the run-layout conventions and by every handoff, so the
+  current run has to keep that name and the previous one rolls to `run-<datetime>.log`.
+* **Datetime IN the name** - right when nothing needs a stable path.
+  `Invoke-DailyReport.ps1` and `Invoke-PRReport.ps1` already do this
+  (`"$Phase-$TimeStamp.log"`), so their first `Out-File` without `-Append` is harmless: the
+  path is new every run.
+
+The cost of getting this wrong, measured: on 2026-09-03 a 446-file memory-measurement run was
+restarted to test the resume path, and `OspreyDatasetRun.psm1` opened `run.log` with
+`Set-Content`. That truncated **6h13m of `--memstamp` samples** covering the entire FirstPassFDR
+ramp and the FirstPassFDR -> PerFileRescoring transition - the exact trace the run existed to
+produce. Only the numbers already read out of it survived; the plot could not be regenerated and
+no new question could be asked of that run. A `-Resume` or `-LinkFrom` re-run lands in the same
+directory *by design*, so this is not an edge case - it is the normal path.
+
+Applies to the launcher's own tee as well: `Tee-Object -FilePath $log` without `-Append`
+truncates on the first write, which is how the second copy of that same trace was lost.
+
 ### Verifying there is no window
 
 `(Get-Process -Id <pid>).MainWindowHandle` is **0 for both the hidden and the visible
