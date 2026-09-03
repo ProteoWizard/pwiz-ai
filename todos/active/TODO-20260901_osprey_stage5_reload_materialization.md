@@ -1721,3 +1721,98 @@ REPRESENTATION, not its workload. It holds ~274 B `FdrEntry` objects rebuilt fro
 **Use this as the pass/fail test on any future plot**: if Stage 7 is the tallest region, the goal
 is not met even when the run completes. The middle (PerFileRescoring) was never the problem - it
 was already flat at ~20 GB across 5.5 h at 257 files, before any of this work.
+
+## Progress log - 2026-09-02/03 (night session)
+
+### Gated and committed on `Skyline/work/20260901_osprey_firstpass_resume`
+
+* `550cb2a153` **Stopped FirstPassFDR holding its planning products past their reader** - the
+  fix A of the handoff: `Consume` the three planning products at their single reader on every
+  path, null the matching `FirstPassFdrTask` fields at the publish site, admit-list
+  `CanHydratePerRun`, exclude `--model-diagnostics`, and read the resume path's gap-fill and
+  refined calibrations from each run's envelope.
+* `c955943146` **Added an off-by-default drop-between-tasks diagnostic** (`OSPREY_DROP_BETWEEN_TASKS`).
+
+**Astral gate**: `gate-astral4` (`ai/.tmp/sessions/20260902-retainedset/gate-astral4.log`) ran
+18/19 PASS - including `mode3 (HPC chain==straight)`, `mode5 (rehydrate diagnostics vs golden)`
+and `mode7 (diagnostics regeneration)`, which closes both capability losses found earlier that
+day. `gate-astral5`
+(`ai/.tmp/sessions/20260903-stages567/gate-astral5.log`) then ran **Osprey regression PASSED**.
+
+### The one red was in the GATE, and it had never read anything
+
+`mode3 (per-run hydrate)` failed on Astral for doing the right thing. The skip added for
+`--model-diagnostics` was written `$Spec.ModelDiagnostics`, but in that loop the dataset spec is
+`$cfg` (`regression.ps1:1593`); `$Spec` is a parameter of the helper FUNCTIONS. The read returned
+`$null` on every dataset, `-not $null` is true, and the assertion ran regardless. Fixed to `$cfg`
+with a comment recording it.
+
+Worth keeping as a shape: the handoff's "a green check next to a missing thing" has a twin - a
+RED check for the right behaviour, from a predicate that was never evaluating the thing it named.
+Both come from an assertion whose subject is not what its text says.
+
+### Minted the retained set for the completed 446 FirstPassFDR
+
+`retained_base_ids_migrate.py` over
+`chs-446files-libdecoy-r1.0-protein-compact-stage5stream`: 446/446 envelopes, **744,943
+base_ids**, 2,979,804 bytes (= 32 + 744943 x 4, exact), 170 s. Action targets not already in the
+join-wide set: **0**.
+
+### THE STAGE 7 SIDECAR READ, and two corrections to the three-axis plan
+
+Full working notes: `ai/.tmp/sessions/20260903-stages567/stage7-read-path-findings.md`.
+
+**Correction 1 - the granularity axis cannot be a narrowing of the existing write.**
+`FirstPassFdrTask.FlushPartialSidecar` (`:2689`) is called by the StoringSink DURING the Stage 5
+score pass, so the four streamed q-values are never resident; the retained set does not exist
+until `PlanStage6` ends, hours later. Moving either to meet the other breaks P7 (persist at phase
+end, as close to the work it safeguards). The existing write is already right: `FileSaver`-atomic,
+stamped per file at write time, write-once.
+
+**Correction 2 - deriving a narrowed sidecar in FirstPassFDR would violate P3.** That is a 47 GB
+read / 8 GB write of `O(runs x entries)` work placed in a JOIN. If a narrowed per-run artifact is
+wanted, `PerFileRescoring` is where it belongs - the fan-out task already holds exactly that run's
+survivors and already writes `.2nd-pass.fdr_scores.bin` at that moment. Granularity then is not an
+axis; it is a consequence of writing in the task whose state is already narrow.
+
+**The finding underneath both**: the workflow banner (`Osprey-workflow.html:507-512`) and doc 00's
+Boundary 3 -> 4 both say `<stem>.1st-pass.fdr_scores.bin` is **not needed on the default path** for
+`SecondPassFDR`. But the in-process Stage 7 rebuild reads all 446 of them:
+`BuildRescoredPool` (`PerFileRescoreTask.cs:2310`) -> `MaterializeFileSurvivors` (`:2438`) ->
+`FirstPassSurvivorLoader.Load` (`:153`) -> `FdrScoresSidecar.TryRead`. That is P10's corollary
+inverted - *the in-process path should read the same artifact the distributed path does* - and it
+means the granularity problem is already solved on one route. It reads it because
+`.scores-reconciled.parquet` carries boundaries, area and features but not Score / q-values.
+
+**Open, and to be settled by comparison rather than reasoning**: whether the distributed route's
+per-run `.2nd-pass.fdr_scores.bin` is a like-for-like substitute. `BuildRescoredPool` is rebuilding
+the FIRST-pass survivor pool that Stage 7 then rescores, and `ResetRescoredTargetsForFile` exists
+because rescore targets must return to Score 0 / q 1, so overlaying 2nd-pass values there would
+pre-apply pass 2.
+
+### Landed: chunked sidecar reads (branch `Skyline/work/20260903_osprey_sidecar_chunked_read`)
+
+`571fb86edd` replaces the two `File.ReadAllBytes` call sites - the only two in all of Osprey, both
+in `FdrScoresSidecar` - with `TryWalkRecords`, a shared header validation plus a 2,048-record
+buffered walk (57,344 B, under the 85,000-byte LOH threshold). No format change, no consumer
+change, byte-identical result.
+
+Measured basis: `EXP25033_2025us0059aX10_A.1st-pass.fdr_scores.bin` is 106,327,120 bytes =
+3,796,682 records at 28 B (v6 - the class XML doc still says v5 / 36 B and is stale), against a
+survivor share of ~648 K. **~5.9x more records read than land; 47 GB and 1.69 B records walked at
+446 files to place 289 M.** Stage 7's band is Server-GC retained COMMITTED memory
+(`project_osprey_pipeline_peak_is_servergc_retained_committed`), so a parade of 106 MB LOH arrays
+inflates it directly even though none is reachable for long.
+
+New test `TestFdrScoresSidecarChunkBoundaries` covers counts 0, 1, 1023, 1024, 1025, 2047, 2048,
+2049, 4096, 4103. Every other sidecar test in `IOTest.cs` writes a handful of records and would
+pass against a reader that dropped or misaligned everything past the first buffer.
+
+**NOT GATED.** Build + 603 unit tests + zero-warning inspection only; `regression.ps1` cannot run
+while the 446 measurement holds the box. Run `-Dataset Stellar` then `-Dataset All` before merging.
+
+**Why this one is exempt from "no intermediate the next step deletes"**: it is an IO-layer fix on
+a read every route performs, including a fan-out worker reading its OWN run's sidecar. The
+width/layout axis is NOT exempt - it introduces a new on-disk struct, and doc 00 "In flight" item 3
+says `RescoredEntries` is a materialised whole-run pool that P3 forbids outright. Do not start it
+before the 446 measurement says the pool is still the binding term.
