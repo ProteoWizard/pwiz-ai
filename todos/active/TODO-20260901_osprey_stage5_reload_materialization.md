@@ -1816,3 +1816,28 @@ a read every route performs, including a fan-out worker reading its OWN run's si
 width/layout axis is NOT exempt - it introduces a new on-disk struct, and doc 00 "In flight" item 3
 says `RescoredEntries` is a materialised whole-run pool that P3 forbids outright. Do not start it
 before the 446 measurement says the pool is still the binding term.
+
+### CORRECTION (same session, 23:05): "already solved on one route" is withdrawn
+
+The paragraph above concluded that the distributed route does not read the pre-compaction
+1st-pass sidecar while the in-process one does - P10's corollary inverted. **That went one
+inference past the evidence and is withdrawn.**
+
+Established: `SecondPassFdrTask.cs:88-100` no longer DECLARES the per-run 1st-pass sidecars
+(only under `OSPREY_PASS2_VERIFY_WORKER`), and its own comment says in the past tense that they
+"were never DECLARED here, but they were READ every run". Not established: that no read remains.
+`RescoreHydration.OverlayFirstPassSidecar` (`:755-770`) still resolves `Pass1Path` and calls
+`TryRead`, and on `--task SecondPassFDR` the `ExpectReconciledInput` branch of
+`PerFileRescoreTask.Rehydrate` (`:600`) pulls `RescoreBundle`, which `PerFileScoringTask`
+materialises through that hydrate - gated at `PerFileScoringTask.cs:604` on
+`!CanHydratePerRun(config) && hasReconSidecars`, which I did not evaluate for that node.
+
+**Settle it the way this codebase settles this class of question** (P10: an in-memory belief
+cannot answer a question about a file that outlives the process): emit one `ctx.LogInfo` at
+`OverlayFirstPassSidecar` naming the artifact, then assert its presence or absence in every
+`phase4_*.log` from `regression.ps1 -Dataset Astral` mode 3 - the same shape as the existing
+mode 3 per-run hydrate marker.
+
+If the distributed route reads it too, granularity is solved NOWHERE and the axis is fully open.
+The chunked read is unaffected either way: it is the same reader on both routes, which is the
+other reason it was the right thing to land first.
