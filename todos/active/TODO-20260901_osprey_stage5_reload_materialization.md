@@ -2048,3 +2048,35 @@ on `id & BASE_ID_MASK`. That never allocates the 4.9 M fragment arrays, removes 
 entirely, and lowers the peak - which today is 25.50 GB *including* fragments about to be
 discarded. A fresh run keeps the current behaviour, correctly: it needs the fragments, and the
 retained set does not exist yet.
+
+### Fragment-drop-during-read: IO half DONE, wiring BLOCKED on one predicate
+
+Landed (inert - the default retains everything, so no behaviour changes yet):
+
+* `LibraryCache.LoadCache(..., HashSet<uint> retainFragmentsFor = null)` - the fragment decision
+  is now PER ENTRY (`!omitFragments && (set == null || set.Contains(id & 0x7FFFFFFFu))`) rather
+  than all-or-nothing, reusing the `SkipFragment(r)` that already advances the stream without
+  materialising. base_id, not Id, so a target and its paired decoy stay together.
+* `LibraryLoadOptions.RetainFragmentsFor`, threaded through `LibraryLoader`.
+
+**NOT wired, and this is the open question.** The caller would be
+`PerFileScoringTask.LoadLibraryAndDecoys` (`:978`), which has `config` in scope and could read
+`retained_base_ids.bin`. But:
+
+`LibraryFragmentRelease` drops non-retained fragments AFTER Stage 5, when the retained set is
+known in-process and is definitionally THIS run's. Dropping at library-load time trusts the set on
+DISK, which is only equivalent when FirstPassFDR will not run and produce a different one. Neither
+available predicate says that:
+
+* `CanHydratePerRun` tests task selection, `StopAfterStage5`, `ExpectReconciledInput`,
+  `ModelDiagnostics` and the sidecar FORMAT - not whether FirstPassFDR's outputs are valid.
+* `RetainedBaseIdSidecar.IsCurrentFormat` tests the format version, not the validity key.
+
+Getting it wrong drops fragments for entries the run still needs, and the symptom is missing peaks
+in the .blib rather than an error - a wrong answer that looks like a right one, in the artifact
+used to judge correctness. **Settle it by finding (or adding) a predicate that answers "FirstPassFDR
+will rehydrate, not run, under this run's validity key", not by assuming the on-disk set matches.**
+
+Second decision needed: mode 6 asserts "library-fragment release engaged on every leg that holds
+the library". A leg that drops during the read has nothing left to release, so mode 6 must accept
+that as satisfying the same goal, or it fails a leg for doing the better thing.
