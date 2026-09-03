@@ -2178,3 +2178,45 @@ be the same work rather than adjacent work.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260901_osprey_firstpass_resume.md` before starting work.
+
+### ROOT CAUSE of the Astral mode 8 red (2026-09-03, from kept scratch)
+
+`regression-20260903_141713/Astral/straight/partial-resume.log`:
+
+```
+14:37:13  Rescore resume: 2 of 3 run(s) already carry a current 2nd-pass sidecar; re-scoring the remaining 1.
+14:37:13  [TASK] PerFileRescoring:done (21.0s)
+```
+
+The marker announces the intent and the task ends in the SAME SECOND - no `Re-scoring file` line,
+no per-file skip lines. The rescore never ran. So this is NOT the hoisted resume check and NOT the
+skip-arm clear (my hypothesis, now withdrawn); it is the gate at `PerFileRescoreTask.cs:410`:
+
+```csharp
+if (!didPlan && ((rescoreBundle == null && !perRunPlanAvailable) || allPass2Present))
+```
+
+On Astral, `--model-diagnostics` makes `perRunPlanAvailable` FALSE, and the bundle is null on this
+resume, so the FIRST disjunct is true and the arm fires regardless of `allPass2Present`. The
+`anyPass2Present -> allPass2Present` fix corrected the SECOND disjunct only. The first self-gates
+the same way, on the mdiag path.
+
+The comment at `:368-379` already names this hazard - "both older signals are legitimately false
+and the gate below would self-gate a run that has every input it needs" - but the third signal it
+added (`perRunPlanAvailable`) does not exist under mdiag, so the hazard returns there untouched.
+
+**The fix is NOT to widen the arm.** The two cases it serves are different:
+
+* "no rescore NEEDED because the outputs exist" - `allPass2Present`. A completed run must no-op.
+* "no rescore POSSIBLE because nobody supplied a bundle" - the first disjunct. With a PARTIAL
+  set that means work is outstanding AND there is no way to do it, which must be an ERROR with a
+  non-zero exit, not a silent success. `feedback_hard_fail_over_warn_proceed`: when proceeding
+  risks silently-invalid output a user might trust, abort with a clear error.
+
+So: when the first disjunct fires while `pass2Present < pass2Expected`, log and fail rather than
+return true. That converts a blib silently missing a run into a named failure - which is the whole
+defect class this session has been chasing.
+
+**Note the diagnostic that made this findable**: the VISIBILITY assertion. The log line printed the
+correct intent and was then contradicted by the very next line. Without it the symptom was only a
+missing parquet three layers downstream.
