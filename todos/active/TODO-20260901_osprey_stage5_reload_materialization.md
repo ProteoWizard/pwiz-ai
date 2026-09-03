@@ -1663,3 +1663,40 @@ Two mechanics for the implementer:
   Mind endianness and explicit `[StructLayout(LayoutKind.Sequential, Pack = 1)]` so the on-disk
   form is a contract rather than whatever the JIT chose - the parity gate compares these files
   byte for byte across net472 and net8.0.
+
+## Progress log - 2026-09-02 (end of session)
+
+### Landed and gated
+
+* **`--task PerFileRescoring` startup is O(1) in run count.** 86-run plate: 14m17s / 24.7 GB
+  managed -> **38 s / 5.25 GB**, O(runs) portion zero. Completed 86/86 reconciled parquets, exit
+  0, 1h30m, floor LEVEL. Committed `91a2b0919f`.
+* `retained_base_ids.bin` + `retained_base_ids_migrate.py` (byte-validated against Osprey's own
+  writer), single-pass hydrate, typed `SpectraCacheException`, `--cache-dir` for task legs, the
+  analysis-wide relay in the runner, and a mode 3 assertion that the per-run PATH ran.
+
+### Uncommitted, and it is two separable changes
+
+Fix A (FirstPassFDR releases ~13 GB of planning products; per-run extends to straight-through)
+and diagnostic B (`OSPREY_DROP_BETWEEN_TASKS`). Stellar 13/13 PASS with both. Astral was
+re-running at session end - `ai/.tmp/sessions/20260902-retainedset/gate-astral2.log`.
+
+### Two capability losses found late, both silent
+
+* **`--model-diagnostics` produced NO report** on the per-run path - the fold reads
+  pre-compaction rows during a hydrate that no longer happens. The 86-run plate run exited 0 with
+  86/86 parquets, `mdiag=True`, and no HTML. `CanHydratePerRun` now excludes it; the real fix is
+  a per-run fold written after the loop.
+* **`--task ModelDiagnostics`** was routed down the per-run path because the predicate listed
+  what to EXCLUDE and admitted anything unlisted. It now names what it admits, so an unlisted
+  task fails closed.
+
+### The three-axis Stage 7 plan
+
+Granularity (survivors-only sidecar, ~4.6x fewer rows) / width (88 B vs 274 B) / layout
+(fixed struct read as a span, nothing on the heap). Independent, composing, granularity first.
+Constraint verified: two artifacts, because `PeakCoAssignmentSource` needs the pre-compaction
+rows. Rebuild cost measured at +10.6 GB / +47 s on 10 files, isolated to SecondPassFDR.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260902_osprey_perrun_446.md` before starting work.
