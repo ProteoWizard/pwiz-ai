@@ -1987,3 +1987,64 @@ Same shape as the `PerFileScoringTask.Rehydrate:703` survey, different site.
 Total resume overhead before useful work at 446: **26m23s** (08:53:35 -> 09:19:58) =
 36 s library (allowed, P5) + 9m46s all-files survey (`:703`, forbidden) + 2m08s per-run setup +
 13m43s skipping completed runs.
+
+## RESUME STARTUP: 26m23s -> 2m53s at 446 files (measured 2026-09-03)
+
+Three fixes, each measured separately on the same 141-of-446 bed, same cohort, same build chain.
+
+| phase | before | after | fix |
+|---|---|---|---|
+| library load | 36 s | ~39 s | unchanged (P5 baseline, legitimate) |
+| `Loading scored entries` | **9m46s** | **10 s** | `FdrProjections` published as a lazy factory |
+| library-fragment release | 2m07s | 1m54s | unchanged - **now 66% of the remainder** |
+| skip 141 completed runs | **13m43s** | **5 s** | resume check hoisted ABOVE the per-run hydrate |
+| **total to first real rescore** | **26m23s** | **2m53s** | |
+
+### 1. The projection nobody read
+
+`PerFileScoringTask.Rehydrate` streamed every row of every parquet - 1,342,686,095 at 446 files -
+into a counts-only `FdrProjectionSet`. Its ONLY consumer is `FirstPassFdrTask.Run`
+(`ctx.Consume<FdrProjections>()`), and a resume whose 1st-pass outputs are valid SKIPS that Run.
+Built and discarded, every time.
+
+`FdrProjections` now takes a `Func<FdrProjectionSet>` and builds on first read - the same shape
+as the `RescoredEntries` milestone. The row total the log line and the no-scored-entries guard
+need comes from `ParquetScoreCache.ProbeResumeSchemaAndRows`, which returns the PIN-schema flag
+AND the declared `NumRows` from ONE footer open - the open the lean branch was already doing for
+`HasPinFeatureColumns`. 446 opens, not 892, and no scan.
+
+### 2. The decision that followed the load
+
+`ExecuteRescore` called `inputs.HydrateRun(file.Key)` - that run's `.scores.parquet`, its ~106 MB
+1st-pass sidecar overlaid, compaction - and THEN called `RescoreOneFile`, whose first act is
+`TryResumeRescoredFile` -> "skipping (outputs valid)". Every already-complete file was fully
+loaded and thrown away, ~4.7 s each, serialized under `_survivorLoadLock`.
+
+The check is a stamp read. Hoisting it above the hydrate took 141 skips from 11m14s to **5 s**.
+
+### 3. The skip arm was also building the all-runs buffer
+
+`TryResumeRescoredFile` overlaid the reconciled parquet back into the in-memory entries so a
+downstream SecondPassFDR would not read 1st-pass RTs. That was target-shape violation item 6 in
+the one place it survived. It now CLEARS, exactly as the rescore arm does once its reconciled
+parquet is written - and for the reason that arm gives: "that parquet is what the deferred pool
+build restores them from." Stage 7 loads its own via `BuildRescoredPool`'s `loadedReconciled`
+branch. (Worth ~2.5 min on its own; fix 2 subsumed most of it.)
+
+### What is left, and it is one thing
+
+**`LibraryFragmentRelease`: ~1m54s**, walking 6,175,389 library entries to release fragments for
+the 4,924,513 not in the retained set. O(library), CONSTANT in run count - so it is ~2 minutes at
+3 files or 4,000, and it is now 66% of the resume overhead.
+
+**The developer's fix (2026-09-03): prebuild the set and drop fragments during the READ.** The
+retained set is a 2.98 MB artifact already on disk before the library load on the rescore and
+SecondPassFDR paths - the two that pay this - and the two counts already agree (the release
+reports 625,620 retained; the per-run hydrate reports 625,620 read once). `LibraryCache` already
+has an `omitFragments` overload and a `SkipFragment(r)` that "reads past one fragment record
+without materializing it, advancing the reader exactly as the full fragment read would". What is
+missing is only that it is all-or-nothing rather than per entry: pass the set, decide per entry
+on `id & BASE_ID_MASK`. That never allocates the 4.9 M fragment arrays, removes the release pass
+entirely, and lowers the peak - which today is 25.50 GB *including* fragments about to be
+discarded. A fresh run keeps the current behaviour, correctly: it needs the fragments, and the
+retained set does not exist yet.
