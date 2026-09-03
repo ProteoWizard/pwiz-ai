@@ -6882,3 +6882,98 @@ instead of loudly, which is what turned one bad assumption into five red builds.
 - A rename can be committed without any checkout at all via the Git Data API (create tree with
   `base_tree` + the new path + the old path with `"sha": null`, create commit, PATCH the ref).
   GitHub reported the result as a single `renamed` file.
+
+## 2026-09-03: dotCover CI fix, NHibernate leak (already fixed upstream), and an IdentityModel 7 backport to master
+
+### dotCover coverage tab (`7457371f59`, pushed)
+
+Both Core and Osprey Windows .NET builds ended coverage runs with "No available .NET Coverage
+report generator for type 'dotcover'" - moving TeamCity build steps into the build scripts
+removed the "Install dotCover (.NET)" step's provisioning but not the dependency: TeamCity's own
+coverage-report generator needs a dotCover of its own, previously supplied by that step.
+`Ensure-DotCover.ps1` now emits `##teamcity[dotNetCoverage dotcover_home=...]` pointing at the
+copy it just restored. That home needs `dotCover.exe`, which the 2026.1 console runner no longer
+ships (managed-only `dotCover.dll`, no HTML report type) - Osprey moved from 2026.1.1 to the
+2023.3.3 that Core/Skyline already use. Verified end to end on AWS agents that have no bundled
+dotCover (the case that was failing): Osprey #558, Core #381, both green with the coverage tab
+populated (Core: 78.08% statement coverage).
+
+### NHibernate session-factory leak - investigated, found already fixed by #4629
+
+Root-caused the SerializeIonMobilityTest/TestFilesTreeForm/TestCrosslinkIms pass-1 leaks:
+undisposed NHibernate `ISessionFactory` objects rooted forever by the static
+`SessionFactoryObjectFactory.Instances` dictionary (IonMobilityDb/OptimizationDb dropped their
+disposing `using` when NHibernate 5.5 started throwing ObjectDisposedException on a later
+OpenSession call). Independently confirmed via dotnet-dump (540 live factories against 10 live
+IonMobilityDb objects) before discovering Brendan had already fixed it in `5c046bdb7a` (#4629,
+landed mid-investigation) with the same fix shape. Re-measured on the corrected head:
+SerializeIonMobilityTest/TestFilesTreeForm/TestCrosslinkIms all clean now; FileTypeTest
+(~29 KB/run) and TestGroupedStudies1Tutorial (native heap, +933 KB/run) are NOT fixed by #4629
+and remain open.
+
+Full investigation (method, dead ends, the `build.bat --no-tests` staging trap that produced two
+wrong conclusions along the way) is in
+`ai/todos/active/TODO-20260902_net10_nhibernate_factory_leak.md` - keep that file for the method
+notes even though the headline leak is fixed.
+
+### build.bat: build all test projects, add pass-1 leak detection (uncommitted)
+
+- `build.bat` was building only 5 of 7 test projects (TestPerf/TestTutorial excluded from
+  compilation, but `Stage-Tests.ps1` stages them regardless, so a `--no-tests` build silently
+  left stale binaries in the staged test run). Now builds all 7.
+- Fixed the `--no-tests` doc comment, which claimed "Build and stage" when it actually returns
+  *before* the staging step - this exact gap produced two separate wrong conclusions during the
+  IdentityModel-7 work below before I found it (see that TODO's "staging trap" note).
+- Added the pass-1 leak-detection subset: SerializeIonMobilityTest, TestFilesTreeForm,
+  TestCrosslinkIms, TestGroupedStudies1Tutorial, FileTypeTest, IrtDocumentFunctionalTest
+  alongside the original four. Confirmed under `buildcheck=1` a leak now genuinely aborts the
+  build - an earlier claim in the leak TODO that leaks were purely informational was wrong and
+  has been corrected there.
+- **Uncommitted** in `C:\dev\pwiz-net8`.
+
+### VCS smart-build trigger: stale RemoteApi path (uncommitted, cherry-picked from #4632)
+
+`scripts/misc/vcs_trigger_and_paths_config.py` still routed on
+`pwiz_tools/Skyline/Model/Results/RemoteApi/.*`, which stopped matching anything when #3170
+moved that tree to `pwiz_tools/Shared/CommonMsData/RemoteApi/.*` in June 2025 - so changes to
+WatersConnectAccount/UnifiAccount/ArdiaAccount weren't triggering TestConnected/Container CI on
+either master or this branch. Cherry-picked `48dff2020d` (a clean, standalone commit on #4632's
+branch) onto both. **Uncommitted** in both `C:\dev\pwiz-net8` and `C:\dev\pwiz-im7`.
+
+### PR #4619 (this branch -> master): still CONFLICTING, merge not done
+
+Master has moved on; #4619 is `CONFLICTING`/`DIRTY`. Six files conflict, centered on master's
+#4613 (HttpClientWithProgress) landing against this branch's own waters_connect work. Drafted a
+resolution (keep master's HttpClientWithProgress shape; port the three deleted `TokenResponse`
+constructors onto IdentityModel 7's `ProtocolResponse.FromHttpResponseAsync`/`FromException`,
+no `async`/`Task.Run`). **Not executed** - the branch was moving too fast under active pushes to
+risk a merge commit without explicit go-ahead. See the handoff for the concrete conflict list.
+
+### PR #4631 (`Skyline/work/20260901_smallmol_library_load_race`) - closed, not merged
+
+Fixed a real race in `AsSmallMoleculeTestUtil.ConvertToSmallMolecules`: it read
+`Libraries.IsLoaded` before the library loader had actually finished, so whichever
+`RefineConvertToSmallMolecules*Test` ran first in a process silently skipped library conversion
+and then failed comparing against the other test's (library-converted) result. Verified
+reproducing on master, fixed, addressed Copilot review feedback, all green. **Closed 2026-09-02
+with "Not needed with #4629 fixes."** Worth flagging rather than silently dropping: a later
+re-verification (after finding and fixing the `build.bat --no-tests` staging bug above, which had
+produced a false "already fixed" reading the first time) showed the race still reproduces on
+`5c046bdb7a` without #4631's fix. Not re-litigated further - recording the discrepancy for
+whoever picks this up next.
+
+### IdentityModel 7 backport to master - new branch/worktree, substantial progress, not landed
+
+New worktree `C:\dev\pwiz-im7` on branch `Skyline/work/20260902_identitymodel7` (base:
+`origin/master`), started to remove the recurring #4619 merge conflict at its root: land
+IdentityModel 7 (on top of master's own `HttpClientWithProgress` shape from #4613) on master
+directly, so this branch's next merge finds master already compatible instead of refighting the
+same six files.
+
+**Full detail in the new `ai/todos/active/TODO-20260902_identitymodel7_master_backport.md`** -
+this is substantial, standalone work with its own open questions (a competing PR #4632, a
+native-rebuild-or-not decision, one still-open test failure). Read that file before continuing
+this thread; don't try to reconstruct it from this summary alone.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
