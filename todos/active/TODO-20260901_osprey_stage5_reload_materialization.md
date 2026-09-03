@@ -2131,3 +2131,50 @@ is made; if that is not the arm, follow where the amputated file's rescore is dr
 **DO NOT COMMIT the fix set until this is resolved.** A partial resume that silently fails to
 finish the cohort is the ORIGINAL defect, on a different path - and on the mdiag path it would
 produce exactly the blib corruption above while reporting success.
+
+## Progress log - 2026-09-03 (end of session)
+
+### Landed in the working tree, UNCOMMITTED and deliberately so
+
+`allPass2Present` (a partial rescore no longer reports done), the resume check hoisted above the
+per-run hydrate, `FdrProjections` as a lazy factory, the skip arm clearing instead of overlaying,
+`ProbeResumeSchemaAndRows`, `regression.ps1` mode 8 + `Invoke-PartialRescoreInvalidation`, the
+inert `LibraryCache` per-entry fragment retention, and three corrected stale comments.
+
+Build: **0 errors, 0 warnings, 602 tests / 601 passed**. Stellar **fully green** including mode 8's
+first execution. Astral **18 PASS, 1 SKIP, mode8 FAIL** - every product change clean, including
+`mode5 (rehydrate diagnostics vs golden)`.
+
+**Resume startup at 446 files: 26m23s -> 2m53s**, in three separately attributed steps.
+
+### What the session actually demonstrated
+
+The straight-through result was real but incomplete - it ran without diagnostics, and that
+limitation is what motivated treating RECOVERY as the problem rather than "re-run the whole
+analysis once the happy path finishes". That reframing is why the resume work matters: the
+developer's diagnostics design (FPFDR/SPFDR declaring the JSONs as outputs, so a run with
+`--model-diagnostics` repairs the missing one) is only usable if a resume is cheap AND correct.
+At 26m23s and silently skipping 305 files it would have been neither - and worse, a
+diagnostics-repair run would have corrupted the analysis it was describing while producing the
+report used to judge it.
+
+### The gate suite is shaped like the happy path
+
+Mode 2 resumes from a COMPLETE directory, mode 4 re-runs fully cached, mode 3 hands a node one
+file. None presented a PARTIAL cohort, which is why the defect shipped. Mode 8 - added this
+session - caught a second instance of the same class on its second dataset. The assertions that
+work here are NEGATIVE and PROPERTY-shaped, not mechanism-shaped: "the cohort came back whole",
+"the resumed blib is byte-identical", "the log does NOT contain the all-runs load". Mode 3's
+per-run marker and mode 6's "release engaged" both check that a MECHANISM ran, which is what
+breaks when the mechanism improves.
+
+### Three fixes today all routed around `--model-diagnostics`
+
+The over-broad `CanHydratePerRun` exclusion, `PerFileScoringTask.Rehydrate:703` being the arm four
+earlier removals never reached, and now the mode 8 Astral red. One structural fact, not three
+coincidences: mdiag takes a different route through the rescore, and every fix aimed at the
+per-run path leaves it behind. This is why mdiag is merge-blocking and why it keeps turning out to
+be the same work rather than adjacent work.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260901_osprey_firstpass_resume.md` before starting work.
