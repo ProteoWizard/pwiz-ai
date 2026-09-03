@@ -1841,3 +1841,60 @@ mode 3 per-run hydrate marker.
 If the distributed route reads it too, granularity is solved NOWHERE and the axis is fully open.
 The chunked read is unaffected either way: it is the same reader on both routes, which is the
 other reason it was the right thing to land first.
+
+## DEFECT FOUND BY THE RESUME TEST, 2026-09-03: a PARTIAL rescore resumes as COMPLETE
+
+The developer asked for a kill-and-restart test of the resume design. It found this.
+
+**Evidence, from the resumed 446-file run** (`chs-446files-...-stages567`, restarted 05:57:22
+after a kill at 141/446 rescored):
+
+* `[TASK] FirstPassFDR:skipping (outputs valid)` - correct, 4h46m not redone.
+* `Per-run rescore: FirstPassFDR publishes the survivor loader only; no experiment-wide bundle
+  is built for 446 run(s).`
+* **`grep -c "Re-scoring file" run.log` = 0.** Not one file was rescored.
+* Reconciled parquets stayed at **141 of 446** for the life of the run.
+* It went straight to the survivor-pool rebuild: total memory 20.5 GB at 4%, 27.1 GB at 16%,
+  35.5 GB at 26% - **0.68 GB per percentage point, projecting ~86 GB** on a 63.7 GB box. Killed
+  at 06:19 with WS 37.5 GB / private 38.6 GB.
+
+### Root cause
+
+`PerFileRescoreTask.cs:350-366` computes `anyPass2Present` with a **first-match `break`**: one
+input file with a current `.2nd-pass.fdr_scores.bin` sets it true. With 141 of 446 present it is
+true. Then `:381`:
+
+```csharp
+if (!didPlan && ((rescoreBundle == null && !perRunPlanAvailable) || anyPass2Present))
+{
+    _poolPlan = RescoredPoolPlan.RefillOnly(_perFileEntries, survivorLoader);
+    return true;   // "No rescore to run"
+}
+```
+
+`didPlan` is false because FirstPassFDR was skipped, so `anyPass2Present` alone decides. The
+gate's own comment says it exists so "a completed run must still no-op" - but **"any" is not
+"complete"**, and a partially-completed rescore is indistinguishable from a finished one under
+this test.
+
+### Two consequences, and the first is worse
+
+1. **Correctness.** 305 of 446 runs are silently left un-rescored. Had Stage 7 survived, the blib
+   would carry 1st-pass q-values for those runs - a wrong answer that finishes success-shaped.
+   The comment at `:355-358` documents this EXACT outcome from an earlier trigger of the same
+   gate: "made the WHOLE Stage 6 rescore a no-op - the run then finished green carrying 1st-pass
+   q-values into the picked-protein FDR and the .blib." Same defect, new trigger: partial
+   completion instead of a stale format version.
+2. **Memory.** Having decided there is no rescore, it takes `RefillOnly` and rebuilds the whole
+   446-run survivor pool - the O(runs) path - and heads for ~86 GB.
+
+### Fix
+
+The gate must ask whether **every** input has a current pass-2 sidecar, not whether any does, and
+it should LOG the count so a partial state is visible rather than inferred. A run that is 141/446
+done has work to do, and that is the common case for every resume - which is the shape this
+project keeps rediscovering: a check that passes while the thing it names is not happening.
+
+Worth a regression assertion of its own: kill a rescore mid-cohort, resume, and assert the
+reconciled-parquet count reaches the full cohort. Nothing in mode 2 or mode 4 covers a PARTIAL
+per-file state today.
