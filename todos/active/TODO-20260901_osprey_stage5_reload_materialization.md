@@ -1958,3 +1958,32 @@ Startup is measurable from the log with no instrumentation, so the gate can asse
 That is stronger than the existing mode 3 per-run-hydrate MARKER assertion, which only proves
 which path was taken, not that the path was cheap. A resume that takes the right arm and still
 surveys the batch would pass the marker check and fail this one.
+
+### PROVEN on the real failing case, 2026-09-03 09:06-09:20
+
+The 446-file cohort left at 141/446 was the test bed. Same directory, same cohort, build
+`245-allpass2-resume`:
+
+```
+09:06:07  Rescore resume: 141 of 446 run(s) already carry a current 2nd-pass sidecar;
+          re-scoring the remaining 305.
+09:06:09  Per-run rescore: hydrating each of 446 run(s) from its own artifacts
+          (no all-runs pre-load; 625620 retained base_id(s) read once).
+09:06:10  [MEM reconciliation-floor] managed_heap=5.19 GB (post-GC, entering rescore)
+09:06:15  [file] 1/446 ... skipping (outputs valid)      <- 141 of these
+09:19:58  Re-scoring file 142/446: EXP25033_2025us0060bX53_A
+```
+
+All three properties hold: it DETECTS the partial state, REPORTS it so the reuse is auditable,
+and RESUMES at exactly the first un-rescored run. The broken build, at the same point in the same
+directory, printed nothing, took `RefillOnly`, and rebuilt the whole 446-run survivor pool toward
+~86 GB without rescoring a single file.
+
+**One more O(runs) cost on the resume path, found here**: each SKIP of an already-complete file
+costs ~5.8 s (141 skips, 09:06:15 -> 09:19:58 = 13m43s). Bounded and far cheaper than rescoring,
+but it means resuming near the end of a 446-run cohort spends ~43 min walking completed files.
+Same shape as the `PerFileScoringTask.Rehydrate:703` survey, different site.
+
+Total resume overhead before useful work at 446: **26m23s** (08:53:35 -> 09:19:58) =
+36 s library (allowed, P5) + 9m46s all-files survey (`:703`, forbidden) + 2m08s per-run setup +
+13m43s skipping completed runs.
