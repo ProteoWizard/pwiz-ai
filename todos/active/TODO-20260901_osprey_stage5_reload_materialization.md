@@ -2080,3 +2080,18 @@ will rehydrate, not run, under this run's validity key", not by assuming the on-
 Second decision needed: mode 6 asserts "library-fragment release engaged on every leg that holds
 the library". A leg that drops during the read has nothing left to release, so mode 6 must accept
 that as satisfying the same goal, or it fails a leg for doing the better thing.
+
+**RESOLUTION PATH for that predicate** (found 2026-09-03): do not write a new one.
+`PipelineContext.CanRehydrate(OspreyTask task)` is public (`PipelineContext.cs:486`) and already
+answers exactly the question - it reads the task's own `Outputs(this)` and `ValidityKey(this)` and
+tests every declared output against the stamp. Asking it about the FirstPassFDR task instance says
+"FirstPassFDR will rehydrate, not run", which is the condition under which the on-disk retained set
+is THIS run's.
+
+Re-deriving FirstPassFDR's six key components at the library-load site instead would be the drift
+doc 00 warns about: "re-deriving the rule at one call site and importing it at the other is
+precisely the drift this change exists to remove."
+
+Remaining mechanical question: how `PerFileScoringTask` reaches the FirstPassFdrTask INSTANCE from
+the pipeline array (the driver owns it). If nothing exposes tasks by type, that accessor is the
+change - not a new predicate.
