@@ -6,8 +6,16 @@
 - **Branch**: `Skyline/work/20260902_wine11_net10` (container) / `msconvert-parity` (pwiz)
 - **Base**: `master` for the container repo; pwiz-sharp work sits on `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-01
-- **Status**: container built and green offline (7/7 vendors, no network); PR #35 open.
-  Two items left: `wineserver -k` in PR #35, and switching its payload to the installer.
+- **Status**: container built and green offline. The pwiz payload is now the vendor-bundled
+  installer (Skyline stays as the second payload) and the 43-pair sweep re-ran against it with
+  `--network none` — 43/43, 40/43 count-match, the staged-tree result. pwiz-sharp side is up
+  as a stack: **#4640** and **#4641** against #4619. Container changes verified but not yet
+  pushed to PR #35.
+- **pwiz-sharp PRs**: [#4640](https://github.com/ProteoWizard/pwiz/pull/4640)
+  (`Skyline/work/20260904_vendor_resolution_fixes`) ->
+  [#4641](https://github.com/ProteoWizard/pwiz/pull/4641)
+  (`Skyline/work/20260904_vendor_bundled_installer`), both based on #4619's branch
+- **Module**: `pwiz`
 - **Container PR**: [#35](https://github.com/ProteoWizard/container/pull/35) on
   `Skyline/work/20260902_wine11_net10`
 - **pwiz-sharp changes**: 13 files, UNCOMMITTED on `msconvert-parity` (branch is behind 8)
@@ -208,13 +216,50 @@ echo "SWEEP done: converted=$ok failed=$fail"
 - [x] `tcbuild.bat` builds it (via a new `build.bat --with-vendor-sdks` flag; opt-in so a
       developer build does not pay ~30 s / ~26 MB).
 - [x] Installer renamed `ProteoWizard-Sharp` -> `ProteoWizard` (26 replacements).
-- [ ] **PR #35: add `wineserver -k` after the install step.** This is the root-cause fix for
-      the Shimadzu hang (see §"The Shimadzu hang" below). Not yet applied.
-- [ ] **PR #35: switch the payload from the staged tree to the vendor-bundled installer**,
-      then re-run the 43-pair sweep against an image built that way.
-- [ ] Commit the 13 pwiz-sharp files (see handoff). Nothing is committed yet on that side.
+- [x] **PR #35: add `wineserver -k` after the install step.** The root-cause fix for the
+      Shimadzu hang (see §"The Shimadzu hang" below). It lives in the app Dockerfile's new
+      install stage — the item was only actionable once there WAS an install step there.
+- [x] **PR #35: switch the payload from the staged tree to the vendor-bundled installer**,
+      and re-run the 43-pair sweep against an image built that way. **43/43 converted,
+      40/43 count-match with `--network none`** — identical to the staged-tree baseline.
+      Plus ABI 4/4 and all three entry points. See the 2026-09-04b log entry.
+- [x] **Two payloads, not one** — the installer replaces only the pwiz half; `SkylineTester.zip`
+      stays as the Skyline half. See §"The image has TWO payloads".
+- [x] Commit the 13 pwiz-sharp files — done as a two-PR stack against #4619:
+      **#4640** (vendor-resolution fixes) and **#4641** (vendor-bundled installer variant,
+      based on #4640). Full build + test suite green before committing.
+- [ ] Push the container changes to PR #35 (Dockerfile two-payload rewrite, `.gitattributes`,
+      `.gitignore`) and update its description. Verified locally, not yet pushed.
 - [ ] Consider extending `Installer.Tests` beyond the per-user variant, and to the
       `-WithVendorSdks` artifact specifically — nothing currently gates that variant.
+
+## The image has TWO payloads — ANSWERED
+
+**`master` has always had two:** `pwiz-bin-windows-*.tar.bz2` into `C:\pwiz` and
+`SkylineTester.zip` into `C:\pwiz\skyline`, with `WINEPATH="C:\pwiz;C:\pwiz\skyline"`. PR #35
+collapsed them into one on the reasoning that Skyline's staging tree already carries
+msconvert. **That was the wrong simplification** — it silently made
+`proteowizard/pwiz-skyline-i-agree-to-the-vendor-licenses` a Skyline-less image, and it is
+why "switch the payload to the installer" first read as dropping Skyline.
+
+The installer replaces the **pwiz** payload only. It stages 130 files — msconvert,
+MSConvertGUI, SeeMS, idconvert — and no `Skyline.exe`, `SkylineCmd.exe` or `BlibBuild.exe`,
+so it was never a candidate to replace the Skyline half.
+
+Two consequences worth keeping:
+
+- **`C:\pwiz` must stay first in `WINEPATH`.** A real net10 `SkylineTester.zip` ships its own
+  msconvert next to Skyline, so both directories contain one. Verified by staging a decoy
+  `msconvert.exe` (a copy of `7za.exe`, which names itself in its banner) at
+  `C:\pwiz\skyline\msconvert.exe`: `C:\pwiz` still answers.
+  Probe: `ai/.tmp/wine-probe/winepath-order.sh`.
+- **One runtime serves both.** `DOTNET_ROOT` points at `C:\Program Files\dotnet`, the
+  machine-wide runtime the installer lays down, so the Skyline payload's own bundled
+  `C:\pwiz\skyline\dotnet` goes unused.
+
+Still unverified locally: the Skyline half. The only `SkylineTester.zip` on this machine is a
+**2019 net472 artifact** — no `Skyline.exe`, no `dotnet` folder. PR #35 already carries this
+caveat ("needs one build against a real net10 CI artifact"); it is unchanged, not made worse.
 
 ## Open question — ANSWERED
 
@@ -375,6 +420,65 @@ Also: renamed `ProteoWizard-Sharp` -> `ProteoWizard` across the installer (26 re
 product name + all three output filenames + the Linux tarballs + the test's discovery glob),
 and wired `--with-vendor-sdks` through `build.bat` so `tcbuild.bat` builds the vendor variant
 on CI while a developer build does not pay for it. Verified all three arg paths.
+
+### 2026-09-04b — the app image now installs the installer; sweep re-run against it
+
+The app Dockerfile's payload is the vendor-bundled installer instead of `SkylineTester.zip`.
+A first stage (`FROM proteowizard/wine:stable11.0-x64 AS install`) runs setup under `xvfb-run`
+with `/VERYSILENT /CURRENTUSER "/DIR=C:\pwiz"`, then `wineserver -k`, and the final stage copies
+forward only what the install produced: `C:\pwiz`, `C:\Program Files\dotnet` and
+`C:\ProgramData\ProteoWizard`. The stage boundary is what keeps the 104 MB setup EXE out of the
+shipped image — an `rm` in a later layer would not reclaim it. **4.94 GB, vs 5.04 GB for the
+staged-tree image.**
+
+**43/43 converted, 40/43 count-match, with `--network none`** — byte-for-byte the same verdict
+as the staged-tree baseline, including the CJK Shimadzu fixture and the 150-spectrum
+`10nmol` case. No hang: the install is a build-time layer, so the wineserver race cannot
+occur at run time.
+
+Then two things the earlier evidence did not cover:
+
+- **ABI/Sciex.** It is absent from the 43-pair manifest because one `.wiff` holds several
+  samples, so inputs do not pair with references by stem. Pairing the other way round —
+  convert, then match each PRODUCED mzML to a reference of the same name — gives
+  **4/4 converted, 11 count-matches, 1 indexRange diff, 1 with no reference (616 spectra)**.
+  Script: `ai/.tmp/wine-probe/abicheck.sh`.
+- **Entry points.** `root`/`wine64_anyuser`, uid 1450 (galaxy)/`wine64_anyuser`, and `mywine`
+  all convert to 85 spectra. Worth checking because the payload moved out of `C:\pwiz\skyline`
+  and `mywine` builds a private prefix from symlinks into `/wineprefix64`.
+
+**All four count differences are now explained mechanically, not just labelled "known".** The
+reference mzMLs are deliberately truncated by `ReaderTestConfig::indexRange`, and every
+reference count is exactly the span + 1: ABI `7600ZenoTOFMSMS` `(0,20)`→21 vs 2650, both
+Mobilion `(0,100)`→101 vs 11773/19570, Waters `QC_LCMS2` `(0,9)`→10 vs 2360. A plain
+`msconvert` run emits the whole file, so these can never match and are not regressions.
+
+**Found and fixed a pre-existing defect: `mywine` is broken in every image built from a
+Windows checkout.** Windows clones default to `core.autocrlf=true`, so `mywine` is checked out
+with CRLF, its shebang becomes `/bin/sh\r`, and the kernel reports the missing interpreter as
+`mywine: not found` — pointing at the script rather than at its first line. The committed blob
+is LF, so this never reproduced on a Linux build and is invisible in `git diff`. Fixed with a
+`.gitattributes` (`* text=auto eol=lf`); `mywine` passes after it. Same class as the
+LF-`.bat`-file trap in MEMORY.md, in the other direction.
+
+**Correction within the same session: the image has two payloads, not one.** `master` puts
+ProteoWizard in `C:\pwiz` and Skyline in `C:\pwiz\skyline`; PR #35 had collapsed them. The
+installer replaces only the pwiz half. Rebuilt that way, the sweep is **byte-identical** to
+the installer-only run (43/43, 40/43, same three diffs), and `C:\pwiz` still wins on
+`WINEPATH` against a decoy `msconvert.exe` planted in the skyline directory. Details in
+§"The image has TWO payloads".
+
+**The 13 pwiz-sharp files are committed and up as a stack against #4619**: **#4640**
+(vendor-resolution fixes, 7 files) and **#4641** (vendor-bundled installer variant, 6 files,
+based on #4640). Split two ways rather than the four the handoff suggested because `build.ps1`,
+`Setup.iss` and `InstallerTests.cs` each carry the variant AND the rename in interleaved hunks.
+Gate before committing: `build.bat Release --i-agree-to-the-vendor-licenses --with-vendor-sdks`
+after fast-forwarding the 8 upstream commits — build succeeded, all three installers produced,
+every suite green (Agilent 17, Waters 21, Bruker 15+1, Thermo 15, Sciex 8, Mobilion 2,
+Shimadzu 2, UIMF 2, UNIFI 44, BiblioSpec 142, Analysis 177, MsData 85 …), only the known
+elevation-gated `Install_PerMachine` skip.
+
+The container changes are verified but NOT pushed to PR #35.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260901_net10_wine_container.md` before starting work.
