@@ -3035,3 +3035,102 @@ only, because all three mdiag datasets skip both instantly. A few minutes, not 2
 
 Still worth reviewing before merge, and it predates this branch: **mode 3 (the HPC 4-task chain)
 is by far the most expensive leg**, and it runs on all four datasets.
+
+## MDIAG DESIGN, settled from the code 2026-09-04 (session `20260904-mdiag`)
+
+Read before implementing: doc 00 P5/P6/P7/P8/P9/P11/P12/P13/P15, doc 14 section 8
+("What a validity key is made of"), and `sessions/20260903-stages567/mdiag-restore-plan.md`.
+What follows is what reading the CODE changed about that plan.
+
+### CORRECTION to the restore plan: the pass-1 fold is ALREADY bounded, and already exists
+
+The plan proposed folding the report per run through `HydrateOneRun`'s `onStubsHydrated` hook
+inside `PerFileRescoreTask`'s loop, and flagged two obstacles (a missing `fileIdx`, and a
+`Parallel.For` needing a deterministic merge). **Both are avoidable, because the bounded per-run
+fold is already written and is on the wrong side of a fork.**
+
+`PerFileScoringTask.cs:1408` - the `streamCompaction` arm - builds
+`FirstPassFdrTask.BuildModelDiagnosticsAccumulator` and folds each run's pre-compaction rows one
+run at a time, "so FirstPassFDR's rehydrate can emit the identical report without the O(files)
+resident pool". So `--model-diagnostics` at 446 was never holding the pre-compaction pool.
+
+What `CanHydratePerRun == false` actually costs under mdiag is the **P6 startup term**: the
+all-runs hydrate walks every run before the rescore's first iteration, where the per-run path
+(`LoadJoinOnlyPerRunNames`) does not. That is the memory/scaling defect, and it is a different
+defect from the one the code comment at `ScoringTaskShared.cs:415-431` describes.
+
+### DO NOT fold inside the rescore loop - it would break byte-identity
+
+`ModelDiagnosticsData.Accumulator`'s own contract (`ModelDiagnosticsData.Accumulator.cs:30-63`)
+is that every reduction is order-independent **except one**: `BuildScoreHistogram`'s decoy
+mean/std are floating-point sums over `_best.Values`, whose enumeration is insertion order, i.e.
+row arrival order. `_frontierFileMinQ` additionally assumes "rows arrive in file-major order" and
+flushes at each file boundary.
+
+`PerFileRescoreTask.cs:819` is a `Parallel.For`. Feeding a shared accumulator from it - locked or
+not - reorders `_best` insertion and interleaves the frontier's file boundaries. It would go red
+on `mode1b` / `mode5` / `mode7` and on
+`ModelDiagnosticsDataTest.TestStreamingAccumulatorMatchesBatch`, and a lock would hide neither.
+
+**So the fold stays sequential and moves OUT of the rescore path entirely**, which is also what
+decouples mdiag from `CanHydratePerRun`.
+
+### The shape
+
+| artifact | producer | doc-00 kind | stamp |
+|---|---|---|---|
+| `<blib-stem>.model-diagnostics.pass1.json` | FirstPassFDR | experiment **product** | `.FirstPassFDR.osprey.task` |
+| `<blib-stem>.model-diagnostics.pass2.json` | SecondPassFDR | experiment **product** | `.SecondPassFDR.osprey.task` |
+| `<output>.model-diagnostics.html` | the render step | experiment **cache** | none |
+
+Today there is ONE `.model-diagnostics.data.json` and it is **"deleted once consumed"**
+(`ModelDiagnosticsReport.cs:54`), which is the single line that makes a finished run
+un-re-renderable and forces `--task ModelDiagnostics` to re-run the pipeline to rebuild what it
+just deleted. Not deleting it is most of the fix.
+
+Keys are NOT new: `pass1.json` is stamped with `FirstPassFdrTask.ValidityKey(ctx)` and
+`pass2.json` with `SecondPassFdrTask`'s, per doc 14 - the diagnostics inherit whatever
+invalidation those tasks already get right.
+
+### Session scope, in order
+
+1. **A - split, persist, stamp.** `pass1.json` / `pass2.json`, no deletion, `FileSaver` (already),
+   validity stamps. HTML becomes a pure re-render from whichever JSONs exist.
+2. **C - a standalone per-run pass-1 fold** from on-disk FirstPassFDR artifacts
+   (`.scores.parquet` + `.1st-pass.fdr_scores.bin` + `out.1st-pass.fdr_experiment.bin`), sequential
+   in input-file order so the histogram's order invariant holds. This is what builds `pass1.json`
+   for a cohort that has none - our 446 directory, launched `-NoModelDiagnostics`.
+3. **B - `--task ModelDiagnostics` becomes the state machine** the developer specified: ERROR with
+   no FirstPassFDR state, build `pass1.json` if missing, WARN 1st-pass-only when SecondPassFDR
+   state is absent, always re-render, never construct a pool or run Percolator.
+4. **The incompleteness banner IN THE HTML**, not only the console - which pass is represented,
+   how many runs of how many contributed, and why pass 2 is absent.
+
+Then prove it on `chs-446files-libdecoy-r1.0-protein-compact-stages567`, which has all 446
+`.1st-pass.fdr_scores.bin`, all 446 `.reconciliation.json`, all 446 `.scores-reconciled.parquet`,
+`out.1st-pass.fdr_experiment.bin` and `out.1st-pass.retained_base_ids.bin` - and no blib and no
+report, because Stage 7 never finished and the run was launched `-NoModelDiagnostics`.
+
+### The hazard that governs the declared-output half (doc 00, restated because it costs 4h46m)
+
+`FirstPassFDR` is a join, and **a stale sidecar is cleared BEFORE its output is recomputed**.
+So declaring `pass1.json` as its output on a cohort that lacks it makes `CanRehydrate` false,
+`Run` execute, and `Run`'s first act clear sidecars for outputs that are already correct.
+
+`Run` therefore needs a short-circuit arm at the very top - *before* any clearing - that fires
+when every output EXCEPT the diagnostics JSON is present and key-current: fold `pass1.json`,
+stamp it, render, return. Getting this wrong costs hours and still produces the right answer,
+so no red gate would ever report it.
+
+### Deferred, and why
+
+**Pass-2 diagnostics stay as they are this session.** `WritePass2AndFinalize` reads
+`SecondPassFdrTask.RescoredEntries` - the whole-run survivor pool, which IS the Stage 7 wall.
+Streaming that fold is the same work as the Stage 7 lean row and belongs with it, not here. The
+1st-pass page is what the developer asked for and it lands before Stage 7, so it survives a
+Stage 7 death.
+
+**`CanHydratePerRun`'s mdiag exclusion and the two `TODO(brendanx)` gate skips** are retired only
+once 1-4 above hold, since that is what makes the pass-1 report independent of the all-runs
+hydrate. Deleting those two branches remains the whole test change; editing their assertions
+would mean the capability did not land.
