@@ -2288,3 +2288,21 @@ defect on the mdiag/bundle path, which cannot surface until the gate stops short
 `regression-*` dirs at startup, and the next run removed the very evidence `-KeepOutput` had
 preserved. The rule needs both halves - **the pre-run prune must also spare failed runs**, or
 step 1 undoes step 3 on the next invocation.
+
+### Session close, 2026-09-03 16:10
+
+Committed on the branch: `804af25e53` (the resume fix set + mode 8) and `ac0fedf165` (the
+no-rescore gate failing loudly instead of silently dropping runs). Uncommitted and unverified:
+`regression.ps1` - `Invoke-OspreyRun -AllowNonZeroExit` plus mode 8's mdiag branch REPORTING the
+capability gap as a FAIL rather than passing on it.
+
+The mdiag branch was briefly written to PASS by asserting a well-worded refusal. The developer
+pushed back - "I wasn't necessarily expecting the changes in this branch to change tests" - and he
+was right: a green gate over a real gap encodes the limitation, which is the same trap mode 6 is
+in with "release engaged". It now fails, and it will go green on its own when the bundle path
+gains a plan source, with no test edit. That property - a leg that turns green when the product is
+fixed rather than when the test is edited - is the test for whether an assertion is about
+behaviour or about the current implementation.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260901_osprey_firstpass_resume.md` before starting work.
