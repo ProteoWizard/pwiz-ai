@@ -2715,3 +2715,37 @@ second, and the ~39 s / ~1m54s figures recorded earlier in this TODO do not repr
 
 **Next session handoff**: read `ai/.tmp/handoff-20260904_osprey_stage7_lean_row.md` before
 starting work.
+
+## A CRASH LEAVES A HALF-DONE FILE THAT THE RESUME SKIPS (2026-09-04, found by a real crash)
+
+The overnight 446-file run died at file 391 with a native `AccessViolationException` in
+`ParquetScoreCache.LoadFdrStubsFromParquet` (via `Pass2FdrSidecar.LoadReconciledFeaturesByScoreIndex`
+<- `Pass2PerFileWorker.CompeteAndStamp`), exit `0xC0000005`, after 4h01m at 17-19 GB. The
+relaunch got past it, so the fault is TRANSIENT, not deterministic on that file.
+
+The relaunch then **skipped the file that died**:
+
+```
+Rescore resume: 390 of 446 run(s) already carry a current 2nd-pass sidecar; re-scoring the remaining 56.
+[file] 391/446 EXP25033_2025us0063bX45_A: skipping (outputs valid)
+```
+
+That file has a valid `.scores-reconciled.parquet` + `PerFileRescoring` stamp and NO
+`.2nd-pass.fdr_scores.bin` at all. **Two notions of done disagree and the wrong one wins**: the
+cohort count reads 2nd-pass sidecars and says the file is outstanding; the per-file skip reads
+the reconciled parquet's stamp and says it is complete. Four log lines apart, same run.
+
+Mode 8 cannot present this. `Invoke-PartialRescoreInvalidation` removes BOTH artifacts, so the
+two notions agree; only a crash between the parquet write and the sidecar write splits them.
+That window is exactly where the process died - the same shape as the original partial-resume
+defect, one level down.
+
+**Fix**: make the per-file skip require what the count requires. Preferably by not stamping the
+reconciled parquet until the 2nd-pass sidecar is written, so a file's outputs become valid
+together or not at all. **Gate leg**: amputate ONLY the 2nd-pass sidecar, leave the parquet and
+its stamp, resume, assert the cohort comes back whole - one line different from mode 8's
+existing invalidation.
+
+Related, and independent: a 4-hour run should not be lost to one transient native fault when
+every file is individually resumable. A supervisor that relaunches on a non-zero exit would have
+cost nothing and saved the night.
