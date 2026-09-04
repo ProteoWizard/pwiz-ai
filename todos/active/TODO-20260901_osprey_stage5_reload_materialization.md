@@ -2423,3 +2423,28 @@ entry.
 unsupported version already returns null -> "rebuild from source". So the per-entry
 fragment-block byte length + version bump needs no new invalidation mechanism, which is what
 makes the "rebuild deliberately once" plan cheap.
+
+### 5. The VALIDITY KEY is keyed on the release MECHANISM, so Stage 1 must not switch the release off
+
+`LibraryFragmentRelease.ValidityKeySuffix(ctx)` is a term in THREE tasks' validity keys -
+`FirstPassFdrTask.cs:273`, `PerFileRescoreTask.cs:267`, `SecondPassFdrTask.cs:241`. It is empty
+when `RunsOnThisLeg(ctx)` is true and `;libfrag=0` when the leg COULD have released and did not
+(`LibraryFragmentRelease.cs:82-87`).
+
+The release itself is invoked from `FirstPassFdrTask.cs:2519` and `SecondPassFdrTask.cs:509` -
+not from the rescore, which only carries the suffix.
+
+So if Stage 1 makes the read-time drop replace the release and turns `RunsOnThisLeg` false, every
+one of those three keys gains `;libfrag=0` and **every existing output directory is invalidated** -
+a resume against one re-runs the pipeline it was supposed to adopt. That is the opposite of what
+this branch exists to do.
+
+The cheap correct answer: leave the release call in place. With the fragments already dropped at
+read time it releases nothing, `RunsOnThisLeg` stays true, the suffix stays empty, and no
+directory is invalidated. The suffix's stated purpose survives too - it records "this run's
+library is not carrying non-retained fragments", and under the drop that is MORE true, not less.
+
+This is the same "assert the PROPERTY, not the MECHANISM" problem already noted for mode 6, on a
+higher-stakes surface: mode 6 going vacuous costs a blind test, but a suffix flip silently
+invalidates or silently adopts. Both should move together, and the release's own count going to
+zero is exactly what makes mode 6's non-zero-count assertion fail - so the two are one change.
