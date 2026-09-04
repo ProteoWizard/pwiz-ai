@@ -3195,3 +3195,80 @@ The route the new code takes, and what to watch in the log:
 Without it the only symptom of a validity-key mismatch is that the run takes four hours and
 still produces the right report - expensive, correct, and invisible. That is the failure this
 whole arm exists to prevent, so the log line is part of the fix rather than decoration.
+
+## MDIAG AT 446 RUNS: the fold path WORKS, and the accumulator is the wall (measured 2026-09-04)
+
+Run: `--task ModelDiagnostics` over a disposable hard-linked stage of the 446 bed
+(`chs446-mdiag-render-proof`), first pass complete, second pass absent by construction.
+Log kept at `ai/.tmp/sessions/20260904-mdiag/proof-446-run.log`.
+
+### What worked, and it is the whole architecture
+
+```
+--task ModelDiagnostics: no diagnostics product on disk; folding the first pass
+                         from its completed artifacts (no rescore, no second pass).
+[TASK] PerFileScoring:skipping (outputs valid)
+[TASK] FirstPassFDR:starting
+FirstPassFDR: every output but the model-diagnostics product is current;
+              folding the report from the completed first pass.
+Resume rehydrate: streaming the first-pass bundle from 446 file(s)
+                  (one file's pre-compaction pool resident at a time).
+```
+
+Every link fired: the task built no pipeline, Stages 1-4 stayed cached, declaring the pass-1
+product made `CanRehydrate` false so the driver entered `Run`, and the guard recognised that
+only the diagnostics product was outstanding - so **no Percolator training and no re-scoring of
+1.34 B entries**. It reached 263 of 446 runs in 24 minutes.
+
+### What failed, and it is NOT the fold
+
+**`ModelDiagnosticsData.Accumulator` is O(runs x passing keys).** It holds four
+`List<HashSet<string>>` sized `NewSets(_nFiles)` - `_runSets`, `_expSets`, `_entRunSets`,
+`_entExpSets` - one passing-key set per run, for the cross-run reproducibility view. That is
+the `O(runs x entries)` shape doc 00 names as "the single failure mode this architecture exists
+to prevent".
+
+Measured working set against files folded (MB):
+
+| files | 4 | 30 | 71 | 111 | 138 | 173 | 200 | 231 | 263 |
+|---|---|---|---|---|---|---|---|---|---|
+| WS | 13,905 | 25,017 | 36,656 | 40,531 | 44,200 | 48,493 | 49,015 | 50,751 | 54,790 |
+
+Library baseline ~10-13 GB; the slope over 111 -> 263 is **~94 MB per run** and does not flatten.
+Projected at 446: **~72 GB against a 63.7 GB box.** Killed at 263 runs with 3.5 GB free rather
+than watching it thrash - the prediction was the timeout.
+
+So the developer's criterion is **not yet met**: mdiag still does not run "in contained memory
+as much as running without it". The pass-1 fold is bounded; its accumulator is not.
+
+### The fix, and it needs no new answer - only a new representation
+
+`ComputeCrossRunView` (`ModelDiagnosticsData.cs:1540`) consumes the N sets for exactly four
+things, and three are already streaming reductions:
+
+| what it needs | today | bounded form |
+|---|---|---|
+| per-run passing count | `set.Count` | a scalar per run - O(runs) |
+| cumulative union after i runs | `union.UnionWith(set)` | one running union set - O(distinct) |
+| cumulative intersection after i runs | `inter.IntersectWith(set)` | one running intersection - O(distinct), shrinking |
+| per-precursor run-count histogram | `TallyRunCountHistogram(perRunSets, n)` | `Dictionary<key, ushort>` incremented per run - O(distinct) |
+
+Every one of them is computable holding **the current run's set only**, plus O(distinct) running
+state and O(runs) scalars. The four `List<HashSet<string>>` are retained solely because the view
+is computed at the END over all of them, not because the answer needs them.
+
+**The precedent is in the same class.** `_frontier` answers the same "how many runs did this
+precursor appear in" question with a per-precursor fixed-length histogram (`FrontierPrec.RunQBins`,
+a `ushort[FrontierQGrid.Length]`), which is O(distinct) and not O(runs). The cross-run sets are
+the one reduction that did not get that treatment.
+
+Byte-identity is the gate, and it is reachable: the reductions are the same arithmetic in a
+different order of accumulation, and the union/intersection/count answers do not depend on
+retaining the sets. `mode1b` / `mode5` / `mode7` on the three mdiag datasets pin it.
+
+### Sequencing
+
+This is the remaining half of "mdiag must be memory bounded", and it is independent of the
+Stage 7 lean row - it is inside `Osprey.FDR`, touching no task. Do it before the lean row, for
+the reason already recorded: the diagnostics are how a 446-run result is judged, so shipping the
+lean row while the report cannot be produced at that scale leaves the cohort unjudgeable.
