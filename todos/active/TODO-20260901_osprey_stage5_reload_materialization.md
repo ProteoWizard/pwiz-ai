@@ -2306,3 +2306,120 @@ behaviour or about the current implementation.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260901_osprey_firstpass_resume.md` before starting work.
+
+## FRAGMENT-DROP STAGE 1: the blocker is resolved, and a SILENT hazard is in its way (2026-09-03 evening)
+
+Read-only investigation while the mode 8 verification gate ran. Three findings, and the middle
+one changes the plan rather than adding to it.
+
+### 1. The "remaining mechanical question" is already answered - no new accessor design needed
+
+The previous entry closes on *"how `PerFileScoringTask` reaches the FirstPassFdrTask INSTANCE from
+the pipeline array (the driver owns it). If nothing exposes tasks by type, that accessor is the
+change - not a new predicate."*
+
+It does expose them. `PipelineContext` holds `_tasksByType` (`PipelineContext.cs:53`, filled at
+`:194-199` from the pipeline array), and the private `DemandByType(Type, bool materialize)`
+(`:236`) already takes the flag that separates "resolve it" from "resolve AND drive Rehydrate".
+**Every one of its two callers passes `materialize: true`** (`:294`, `:415`), so the
+non-materializing half is written and unused.
+
+So Stage 1's accessor is a public wrapper, not new plumbing:
+
+```csharp
+public bool WillRehydrate<T>() where T : OspreyTask
+{
+    return _tasksByType.TryGetValue(typeof(T), out var task) && CanRehydrate(task);
+}
+```
+
+`TryGetValue`, deliberately, NOT `DemandByType`: the latter throws `UnknownTaskException` for a
+task the current pipeline does not contain (`SpectraCachePipeline` has one task), and the right
+answer there is "do not drop". That is the fail-closed direction `ScoringTaskShared`'s own
+admitted-list comment argues for - "a task added later is excluded until someone decides
+otherwise, which is the direction a predicate guarding a memory shape should fail in."
+
+### 2. THE HAZARD: the `!omitFragments` short-circuit that made the all-or-nothing case safe is WRONG per entry
+
+`DecoyGenerator.GenerateAllWithCollisionDetection` gates each target on:
+
+```csharp
+if (target.IsDecoy ||
+    (!omitFragments && (target.Fragments == null || target.Fragments.Count == 0)))
+{
+    results[i] = (null, null, 0);   // EXCLUDED - no decoy, and dropped from validTargets
+    return;
+}
+```
+
+and its caller does `library = validTargets` (`PerFileScoringTask.cs:1055-1056`). The gate is
+correct today for both existing cases: a full load has fragments everywhere, and an
+`OmitFragments` load sets the flag so the gate is skipped wholesale - the comment says exactly
+why, "every real entry had >= 1 fragment before the drop, so the gate could not have excluded
+any."
+
+**Per-entry retention breaks the assumption that makes that safe.** The read-time drop runs with
+`omitFragments == false` (it is not a StopAfterStage5 load), so the gate is LIVE, and every one of
+the ~4.9 M non-retained entries now presents `Fragments.Count == 0`. They are excluded from decoy
+generation AND removed from the target library.
+
+This is the failure shape the entry above warned about in the abstract - "the symptom is missing
+peaks in the .blib rather than an error, a wrong answer that looks like a right one" - reached by
+a route it did not name. It does not throw. `[COUNT] Library targets loaded` is emitted BEFORE the
+gate, so it still reads 6,175,389; the excluded count lands only in `nExcluded`.
+
+**So Stage 1 is two changes, not one**: wire `RetainFragmentsFor`, AND make the decoy gate ask
+"were this entry's fragments dropped deliberately?" rather than "is this entry empty?". The bool
+cannot answer that - the retained set has to reach the gate, or the load has to mark the entries
+it emptied on purpose.
+
+Second, cosmetic, same root: the `<3 fragments` diagnostic at `PerFileScoringTask.cs:1078` is
+skipped under `omitFragments` for the identical reason ("every count would read 0 and the line
+would misreport the whole library as sub-3-fragment"). Per-entry, it would report ~4.9 M
+zero-fragment entries as a library-quality problem. Log noise, not a wrong answer, but it is the
+same missed generalization and should move in the same change.
+
+### 3. The predicate is necessary but NOT sufficient - the CALL SITE is half the gate
+
+`LoadLibraryAndDecoys` has three callers, and only two may drop:
+
+| site | path | may drop? |
+|---|---|---|
+| `PerFileScoringTask.cs:204` | `Run` - Stage 1-4 compute from spectra | **NO** |
+| `:515` | `Rehydrate`, `--input-scores` worker mode | yes |
+| `:637` | `RehydrateFromOwnOutputs` | yes |
+
+`ctx.WillRehydrate<FirstPassFdrTask>()` cannot see the difference, and the combination is
+reachable: FirstPassFDR's outputs are the per-file `.1st-pass.fdr_scores.bin` + reconciliation
+files, so deleting a `.scores.parquet` leaves the 1st-pass sidecar beside it valid. FirstPassFDR
+would rehydrate while `Run` re-scores that file from spectra - which scores against EVERY library
+entry, not the retained ones. The drop has to be refused at the `Run` call site as a separate
+condition, not inferred from the predicate.
+
+### 4. `RetainFragmentsFor` is honoured on the CACHE-READ path ONLY
+
+`LibraryCache.LoadCache` applies the per-entry decision (`LibraryCache.cs:330-331`). The
+source-parse path in `LibraryLoader` applies only `OmitFragments`, in the tail block at
+`LibraryLoader.cs:205`. With no `.libcache` present, `RetainFragmentsFor` is silently inert and
+the run retains everything.
+
+That fails SAFE - the release pass still runs and the answer is right - but it makes the win
+contingent on a cache hit and leaves the two load paths behaviourally different. Worth closing in
+the same change: the tail block already has the entries in hand and every fragment-count
+dependency satisfied.
+
+### What did NOT turn out to be a hazard
+
+Dedup's fragment-count tie-break (`LibraryDeduplicator.cs:121`, `b.Fragments.Count`) and the
+min-fragment / peak-less guard both run on the SOURCE-PARSE path only, BEFORE the cache save. A
+cache read returns entries already deduplicated, so per-entry skipping there cannot perturb which
+entry became a group's representative. `nFrags` is also read unconditionally before the
+keep/skip branch (`LibraryCache.cs:299`), so the peak-less fail-fast still fires on a skipped
+entry.
+
+### Stage 2 has a clean home
+
+`LibraryCache` carries `MAGIC = "OSPRLBR\0"` and a `VERSION` checked at `:228-229`, and an
+unsupported version already returns null -> "rebuild from source". So the per-entry
+fragment-block byte length + version bump needs no new invalidation mechanism, which is what
+makes the "rebuild deliberately once" plan cheap.
