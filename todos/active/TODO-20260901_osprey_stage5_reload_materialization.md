@@ -3414,3 +3414,73 @@ then confirms it at scale.
 Changing BOTH would delete the oracle: two implementations altered together can agree with each
 other and disagree with what they replaced, which is `feedback_parity_vs_impact` exactly - parity
 with both sides patched proves only that the tools agree.
+
+## PHASE 1 MEASURED AT 446: no change. The binding term is the SURVIVOR POOL (2026-09-04)
+
+Route A re-run on the phase-1 binary (`_bin\248-phase1`, `CrossRunStream` verified present in
+the shipped `Osprey.FDR.dll`). Matched-file-count working set, pre-fix vs phase-1:
+
+| runs | 44 | 106 | 138 | 173 | 200 | 263 |
+|---|---|---|---|---|---|---|
+| pre-fix (MB) | 30,829 | 41,195 | 44,200 | 48,493 | 49,015 | 54,790 |
+| phase 1 (MB) | 29,463 | 40,917 | 43,890 | 50,403 | 49,519 | 53,290 |
+
+**Within noise in both directions.** It died at the same place for the same reason: 266 of 446
+with 3.2 GB free, where the pre-fix run reached 263 with 3.5 GB free.
+
+### What the number actually says
+
+Above a ~13 GB library baseline the cost converges on **0.15-0.22 GB per run**, and doc 00 and
+`regression.ps1:279` already name that figure:
+
+> "~4.4 GB library + **0.197 GB/file live post-GC**: ~20 GB at 82 files, ~103 GB projected at 500."
+
+That is the **whole-run survivor pool**, the known O(files) path this gate already tracks. The
+observed curve projects ~98 GB at 446 against their ~103 GB at 500. It is the same structure.
+
+`RescoreHydration.HydrateCompactedStreaming` streams each run's PRE-compaction pool - which is
+what "one file's pre-compaction pool resident at a time" in the log refers to, and it is true -
+and then **appends that run's SURVIVORS to `perFileEntries` and keeps them**, because building
+Stage 6's bundle is what `Rehydrate` exists to do. The cross-run sets I removed were worth about
+a gigabyte next to it.
+
+### The mistake, stated plainly
+
+I read the code, found a genuine `O(runs x entries)` structure, and inferred it was the dominant
+one **without measuring which structure held the bytes**. That is the same error the handoff
+already records in the time domain - "a whole day of work was spent optimising something worth
+0.5 s because a comment's number was believed instead of measured" - repeated in the memory
+domain, and the correcting figure was sitting in this repository's own gate summary the whole
+time.
+
+The run also carried `logmem=off`, so every number here is working set WITH garbage. The
+memory-band guide is explicit that `--memstamp` "shows shape, not magnitude" and that
+`OSPREY_LOG_MEMORY=1` post-GC probes "are what answer will it fit". I measured shape and read it
+as magnitude.
+
+### Phase 1 stays, with its claim corrected
+
+It is correct, byte-identical (`mode1b` and `mode5` diagnostics-vs-golden both PASS, and
+`TestStreamingAccumulatorMatchesBatch` compares the whole object), and it removes a real
+`O(runs x entries)` term that binds eventually. It simply is not the 446 wall, and this TODO must
+not be read as saying it was.
+
+### The actual fix, and it is smaller than phase 1
+
+**A diagnostics-only fold has no use for the survivor pool.** `--task ModelDiagnostics` reaches
+the pool only because it borrows `Rehydrate`, whose product is Stage 6's bundle. What the report
+needs is the accumulator; the survivors are pure waste on this path.
+
+So the fold wants its own entry: stream each run's pre-compaction rows into the accumulator and
+DISCARD them, never appending to `perFileEntries`. That is bounded at one run, needs no new
+artifact, and leaves `Rehydrate` untouched for the path that genuinely wants a bundle.
+
+**Measure before building it this time.** Re-run Route A with `OSPREY_LOG_MEMORY=1` and confirm
+from post-GC live numbers that the survivor pool is the term, rather than inferring it a second
+time from a curve that includes garbage.
+
+### Why the COLD route is expected to fit
+
+`chs-446files-...-stage5stream` ran `--task FirstPassFDR --model-diagnostics` at 446 and produced
+its report. So Route B is not blocked on any of this - it is the warm fold that does not fit.
+Useful asymmetry, and it means the equivalence test can proceed from the cold side first.
