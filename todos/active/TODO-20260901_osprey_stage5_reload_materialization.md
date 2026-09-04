@@ -2829,3 +2829,51 @@ Rescore resume: 445 of 446 run(s) already carry a current 2nd-pass sidecar; re-s
 **448 skip lines, ZERO `Re-scoring file` lines.** It announced one file outstanding and rescored
 none. So the defect recorded above no longer needs a crash to reproduce - it is deterministic,
 on demand, in about a minute, against this bed. Use it to drive the fix and to prove the fix.
+
+## KILL-AT-ANY-TIME IS A STATED GUARANTEE NOW, AND MODE 9 ENFORCES IT (2026-09-04)
+
+The developer, on the crash-shaped resume defect:
+
+> *"it should be perfectly safe and valid to just kill Osprey working on a computer in order to
+> get some other work done. These 500 file runs could take a day or longer and the computer
+> owner may not have that kind of time to allow it to work uninterrupted and they shouldn't need
+> to worry a lot about when is safe to stop the pipeline without losing hours of work."*
+
+That is a stronger requirement than "survive a crash", and doc 00 already half-stated it: **P7,
+"Persist at phase end, not task end - crash exposure is one in-flight file."** The architecture
+was right and the code violated it: exposure WAS one file, but that file was silently dropped
+rather than redone. So this was a principle the code broke, not a missing principle.
+
+Added to P7 (now on this branch as `8c38a75649`, after the docs branch merged as #4635):
+
+* killing the process is a SUPPORTED OPERATION, not an accident to survive - "do not interrupt
+  between X and Y" is a constraint the pipeline may not impose, because nobody could honour it,
+  and a user who believes stopping is risky will not start the analysis at all;
+* the corollary that makes P7 checkable - **a file's outputs become valid TOGETHER**, so a
+  resume can never read one product as done and another as outstanding. At 446 files a kill
+  lands in that window about once per run.
+
+**Mode 9** (`8f7f908e3c`) is the enforcement: it cuts ONLY the 2nd-pass sidecar, leaving the
+reconciled parquet stamped - the state a kill actually leaves - and asserts the file is
+re-scored. Proven to have teeth: **FAIL with the per-file skip's 2nd-pass requirement removed,
+PASS with it**, same dataset, one condition apart. Mode 8 cannot do this: it amputates both
+products, so its two checks agree and the defect is invisible to it.
+
+### Still owed, and doc 00 names one of them
+
+Doc 00 already records that Stage 7 has flags where "a kill during Stage 7 destroys the ..."
+output - so the guarantee is known to be violated in the stage the lean-row work is about to
+rewrite. Kill-safety should be re-checked for every multi-product task, not just
+PerFileRescoring; only PerFileRescoring has been proven.
+
+### Branch state
+
+Rebased onto master (which now carries doc 00 via #4635): **0 behind, 23 ahead**, build clean
+602 tests, and full `-Dataset Stellar` GREEN on all 15 legs including mode 9. NOT pushed - the
+rebase diverged the branch from its pushed form, so PR #4633 needs a force-push when the
+developer wants it.
+
+NOTE for the transfer: `pwiz-work1` and `pwiz-work2` are separate CLONES, not worktrees, so
+`git cherry-pick` across them fails with "bad revision". Use
+`git -C <src> format-patch -1 <sha> --stdout | git am --keep-cr` - and `--keep-cr` matters,
+because pwiz stores CRLF.
