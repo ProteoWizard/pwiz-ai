@@ -2749,3 +2749,35 @@ existing invalidation.
 Related, and independent: a 4-hour run should not be lost to one transient native fault when
 every file is individually resumable. A supervisor that relaunches on a non-zero exit would have
 cost nothing and saved the night.
+
+## STAGE 7 AT 446 FILES: 78.3 GB COMMITTED, ~240 MB/FILE (measured 2026-09-04 03:00-03:29)
+
+The overnight run finished PerFileRescoring 446/446 at 03:00:04 and entered SecondPassFDR.
+Stage 7's pool build reports a PER-FILE progress counter and its memory grows with the file
+index, not with survivor count:
+
+| files done | committed |
+|---|---|
+| 361/446 | 57.9 GB |
+| 383/446 | 61.3 GB |
+| 398/446 | 63.6 GB |
+| 446/446 (100%) | **78.3 GB** |
+
+~240 MB/file over the last 85 files, and STEEPENING (155 MB/file early, ~310 MB/file late).
+Naive extrapolation puts 1000 files near 210 GB.
+
+**It never threw OutOfMemory.** Windows evicted it instead: working set fell to 0.29 GB with
+0.45 GB system-available at 03:15, and for the NINE MINUTES after the pool build hit 100% the
+log did not advance one line while the resident set oscillated between 0.01 and 0.68 GB of a
+~69 GB commitment. Killed at 03:28:48; the box returned to 49.2 GB free.
+
+That is the failure mode the lean row has to design against - **a live process that stops making
+progress**, not an exception. Nothing watching for a crash would see it, which is exactly how the
+earlier 5h14m "killed thrashing" run went unrecognised.
+
+Before-curve for the comparison: `ai/.tmp/sessions/20260903-fragload/stage7-memory-trace.tsv`.
+Acceptance test for the lean row: this same 446-file bed completing without the resident set
+collapsing.
+
+NOTE: this run silently skipped one file (see the crash entry above), so its output is valid for
+the MEMORY question only, not for correctness.
