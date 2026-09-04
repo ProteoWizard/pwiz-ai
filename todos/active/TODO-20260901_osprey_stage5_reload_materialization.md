@@ -2877,3 +2877,28 @@ NOTE for the transfer: `pwiz-work1` and `pwiz-work2` are separate CLONES, not wo
 `git cherry-pick` across them fails with "bad revision". Use
 `git -C <src> format-patch -1 <sha> --stdout | git am --keep-cr` - and `--keep-cr` matters,
 because pwiz stores CRLF.
+
+## ACCEPTANCE SHAPE FOR THE MDIAG WORK: default route green, bad route named (developer, 2026-09-04)
+
+> *"Ideally, we would push a route that can pass all tests and implement env vars that specify
+> the undesirable routes we may have taken like the unbounded memory keys."*
+
+The codebase already has this pattern and `regression.ps1` already enforces it:
+`OSPREY_ALLOW_UNFIXED_RESIDENT` names a known-bad memory route, and the gate asserts that NO
+leg sets it - "the gate sets it nowhere" has to mean the variable is UNSET when Osprey reads
+it. Default route passes; the undesirable route is opt-in, named, and visible.
+
+**Where that does and does not apply to the standing Astral red.** Mode 8 fails under
+`--model-diagnostics` because a partial resume there has NO PLAN SOURCE - not because the code
+chooses a worse route that a flag could disable. An env var cannot manufacture the capability,
+so the red cannot be retired by a token; it is retired by the mdiag work.
+
+**But it is the right acceptance criterion for that work.** When mdiag gains a plan source:
+
+1. the DEFAULT mdiag route passes mode 8 - no token required for the good path; and
+2. if a degraded all-runs-hydrate route survives at all, it requires a NAMED token, and the
+   gate asserts that token is unset, exactly as it does for the resident-pool key.
+
+Until then the honest state is one red leg on the three mdiag datasets, which is what the
+branch carries. It goes green with no test edit when the capability lands - the property that
+says the assertion is about behaviour rather than about today's implementation.
