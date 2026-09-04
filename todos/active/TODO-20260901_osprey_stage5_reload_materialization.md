@@ -2902,3 +2902,26 @@ so the red cannot be retired by a token; it is retired by the mdiag work.
 Until then the honest state is one red leg on the three mdiag datasets, which is what the
 branch carries. It goes green with no test edit when the capability lands - the property that
 says the assertion is about behaviour rather than about today's implementation.
+
+## ORDER SET 2026-09-04: mdiag work FIRST, then the Stage 7 lean row
+
+> *"that seems to prioritize the mdiag work for the next session ahead of the Stage 7 lean-row
+> work. We still need get back to where all of our changes pass all of our testing before
+> tackling the Stage 7 lean-row work."*
+
+Two independent reasons, either sufficient:
+
+1. **Testing integrity.** Mode 8's and mode 9's mdiag arms are DISABLED behind `TODO(brendanx)`.
+   The team rule is that what we push is all green, a not-yet-passing test is commented out with
+   a `TODO(brendanx)` so the work stays visible, and **no PR merges to master with a failing
+   test**. Returning to all-tests-enabled-and-passing is a precondition for stacking the lean
+   row on this branch, not a follow-up to it.
+2. **mdiag is a MEMORY prerequisite, not just a correctness one.** It does not merely lack a
+   resume plan source - it keeps the ALL-RUNS HYDRATE. From `ScoringTaskShared`: "--model-
+   diagnostics keeps the OLD path ... Excluding it trades memory for correctness on an OPT-IN
+   diagnostic mode." So mdiag pins the O(files) resident shape the 500-run-on-64 GB target
+   forbids. Landing the lean row while that holds leaves the diagnostics unusable on exactly the
+   cohort the lean row exists to enable - and the diagnostics are how a 446-run result is judged.
+
+Done right, deleting the two `TODO(brendanx)` branches in `regression.ps1` is the entire test
+change - which is the check that the capability landed rather than the assertion being softened.
