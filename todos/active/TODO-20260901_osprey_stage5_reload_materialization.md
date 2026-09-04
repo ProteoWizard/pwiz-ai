@@ -3389,3 +3389,28 @@ establishes the pattern in this class ("rows arrive in file-major order", flush 
 file at the change) but it fires only on non-decoy rows, so the cross-run flush needs its own
 `_crossRunCurFile` tracked for EVERY row - and `Build()` must close the final run, exactly as it
 already calls `FrontierFlushFile` for the last file.
+
+### PHASE 1 REFINEMENT: stream the ACCUMULATOR only, and the existing test becomes the gate
+
+`ComputeCrossRunView` has TWO callers, not one:
+
+| caller | path | pool |
+|---|---|---|
+| `Accumulator.Build` (`:344`) | streamed | never resident - this is the one to fix |
+| `BuildCrossRunDetection` (`:1527`) | batch, from `Build` and `BuildPass2` | already fully resident |
+
+The batch caller is the RESIDENT twin, used only where the pre-compaction pool is in memory
+anyway, so it has the sets already and nothing is gained by changing it. **Leave it exactly as
+it is.** Add a streamed overload for the accumulator and let the two coexist.
+
+That is not a compromise - it is what makes phase 1 cheap to trust. The equality of the two
+implementations is already pinned, every unit-test run, by
+`ModelDiagnosticsDataTest.TestStreamingAccumulatorMatchesBatch`, whose whole purpose is that
+"the streamed reduction reproduces the resident reduction element-for-element". Streaming the
+accumulator while the batch path stands still turns that existing test into phase 1's
+byte-identity gate at unit scale, for free, on every build - and the 446 route-equivalence test
+then confirms it at scale.
+
+Changing BOTH would delete the oracle: two implementations altered together can agree with each
+other and disagree with what they replaced, which is `feedback_parity_vs_impact` exactly - parity
+with both sides patched proves only that the tools agree.
