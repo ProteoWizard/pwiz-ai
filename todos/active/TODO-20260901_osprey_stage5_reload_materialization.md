@@ -2669,3 +2669,34 @@ A lean leg emits a release line at LOAD (scope `needed by this process`) and the
 downstream. Mode 6 asserts all three: the declaration, a load-time drop that freed a non-zero
 count, and that NO post-Stage-5 release ran afterwards - the last being the one that matters,
 since paying for both walks is exactly what this change removes.
+
+## O(files) IN THE COMMAND LINE ITSELF - a hard wall at ~512 files (developer, 2026-09-03)
+
+The developer, on seeing the 464-argument invocation the CHS runner composes:
+
+> *"Seems like we probably want to implement something like Skyline's `--batch-commands
+> <path/to/file>` or `--input-list <path/to/file>` so that at least the input file list can
+> stop consuming command-line characters (another limited resource) with O(files) space."*
+
+Measured on the 446-run CHS command line
+(`ai/.tmp/sessions/20260903-fragload/profile-chs-cmdline.txt`):
+
+| | |
+|---|---|
+| composed command line | **28,621 chars** |
+| Windows `CreateProcess` limit | 32,767 chars |
+| headroom | 4,146 chars |
+| per input path | ~62 chars (`D:\test\osprey-runs\chs-seer\raw\EXP25033_2025us0059aX1_A.raw`) |
+| **files until the wall** | **~66 more, so ~512 total** |
+
+So the cohort this branch is tuning for memory is already within 13% of a limit in a completely
+different resource, and the raw path here is SHORT - 33 characters of directory. A deployment
+with deeper paths hits it sooner, and the HPC fan-out multiplies the exposure because each
+worker is handed its own `--input-scores` list the same way.
+
+The failure mode is the bad kind: `CreateProcess` fails or the argument list is truncated, and
+the error surfaces far from "you passed too many files".
+
+**Fix**: an `--input-list <file>` (and the same for `--input-scores`), one path per line, the way
+Skyline's `--batch-commands` works. Bounded command line, O(1) in file count. Independent of
+everything else in this TODO and cheap.
