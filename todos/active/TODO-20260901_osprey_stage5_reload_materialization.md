@@ -2448,3 +2448,105 @@ This is the same "assert the PROPERTY, not the MECHANISM" problem already noted 
 higher-stakes surface: mode 6 going vacuous costs a blind test, but a suffix flip silently
 invalidates or silently adopts. Both should move together, and the release's own count going to
 zero is exactly what makes mode 6's non-zero-count assertion fail - so the two are one change.
+
+## MODE 8 VERIFICATION: Stellar green, and TWO process traps that invalidated the first attempt
+
+Session dir: `ai/.tmp/sessions/20260903-fragload/`.
+
+### The change verified
+
+`regression.ps1`: `Invoke-OspreyRun -AllowNonZeroExit` plus mode 8's if/else split, with the
+`else` arm re-indented into the block (the previous session left it flush-left, so the committed
+text was not the text anyone would read). `fix-crlf.ps1` STRIPS THE UTF-8 BOM from files it
+converts - `regression.ps1` has one, and it came back BOM-less; restored by hand, and worth a
+separate look since that script runs before commits across the repo.
+
+### RESULT - Stellar, all legs
+
+```
+  Stellar mode1 (vs golden): PASS
+  Stellar mode1c (2nd-pass protein q is pass-2): PASS
+  Stellar mode2 (resume cache hits): PASS
+  Stellar mode2 (resume==straight): PASS
+  Stellar mode6 (library-fragment release engaged): PASS
+  Stellar mode8 (partial rescore resume): PASS (1 of 3 run(s) re-scored)
+```
+
+`ai/.tmp/sessions/20260903-fragload/verify-stellar.log`. The restructured else arm executes and
+the branch fixes the partial-resume defect on the non-mdiag path.
+
+### TRAP 1: the Release tree is not a function of HEAD, and a timestamp does not say it is
+
+The first attempt used `-NoBuild` on the reasoning that the Release binaries (15:54) postdated the
+last commit (`ac0fedf165`, 15:12), so they had to be current. **They were the deliberately-REVERTED
+`c955943146` build** from the previous session's "is this defect on master?" experiment -
+`sessions/20260903-stages567/build-prechange.log`, same 15:54 stamp.
+
+So the gate ran the pre-change product code and Stellar mode 8 returned the pre-change signature
+exactly - 35 issues, `only 2 of 3 reconciled parquet(s)`, `no line containing 'Rescore resume:'`,
+`242 RefSpectra key(s) only in golden`. A confident red for a branch that fixes it. The logs are
+kept as `stale-binary-verify-*.log` rather than deleted, because they are the before half of the
+comparison.
+
+The general form, now added to `ai/docs/osprey-development-guide.md` as a third entry in its
+"traps that cost real runs" list: any experiment that builds a DIFFERENT tree into the same path -
+a revert, a baseline checkout, a sibling worktree - leaves a binary NEWER than HEAD without being
+HEAD. Drop `-NoBuild` unless you built Release yourself this session and nothing has run since;
+the rebuild is 9.4 s.
+
+### TRAP 2: `regression.ps1` cannot be CHAINED in one pwsh process, only serialized across processes
+
+Both attempts' Astral leg died in seconds at `Regression\BlibGolden.ps1:213`
+`Copy-Item $nativeSrc $nativeDst -Force`, on
+`Release\net8.0\SQLite.Interop.dll ... being used by another process`.
+
+Nothing was running concurrently. The FIRST dataset's blib comparisons load System.Data.SQLite
+into the hosting pwsh process, and a native DLL stays loaded for that process's lifetime - so the
+holder is the launcher script itself. A wait-for-the-handle-to-drop loop (which the second attempt
+added) waits on itself and times out.
+
+`sessions/20260903-stages567/gate-partialresume.ps1` chose chaining deliberately, with the comment
+"Chained, not launched separately: regression.ps1 cannot run concurrently with itself (shared
+Release dir + SQLite lock)". The premise is right and the conclusion is wrong: serial is necessary
+but must be serial ACROSS PROCESSES. Its `gate-partialresume-astral.log` is 39 bytes - the same
+death, unnoticed at the time.
+
+**How to run two datasets:** one `pwsh -NoProfile -File .../regression.ps1 -Dataset <one>` per
+dataset, sequentially - or `-Dataset All`, which is a single process that never re-copies. The
+tell for this failure is a dataset log only a few dozen bytes long.
+
+### Cost of the prune, stated rather than discovered later
+
+`-KeepRunDirs 2` on the Astral leg pruned `regression-20260903_155437`, the kept scratch behind the
+"pre-existing on master" proof. Its logs were already copied into
+`sessions/20260903-stages567/stellar-prechange.log` and the result is recorded above, so nothing
+unrecoverable went with it - but it is the same startup-prune-deletes-failed-evidence behaviour the
+previous session flagged, firing again on a dir that was being kept on purpose.
+
+### RESULT - Astral, all legs
+
+```
+  Astral mode1 (vs golden): PASS
+  Astral mode1c (2nd-pass protein q is pass-2): PASS
+  Astral mode1b (diagnostics vs golden): PASS
+  Astral mode1b (FDR sanity bounds): PASS
+  Astral mode2 (resume cache hits): PASS
+  Astral mode2 (resume==straight): PASS
+  Astral mode6 (library-fragment release engaged): PASS
+  Astral mode7 (diagnostics regeneration: report only, vs golden): PASS
+  Astral mode8 (partial rescore resume): FAIL (1 issues)
+```
+
+`ai/.tmp/sessions/20260903-fragload/verify-astral.log`. Exactly ONE issue - the canned
+capability-gap line. The log-marker guard produced no issue of its own, so the error naming how
+many runs cannot be finished and why WAS present. And the run reached its summary instead of
+throwing, which is the whole point of `-AllowNonZeroExit`.
+
+Both arms of the restructure are therefore executed and correct: the else arm on Stellar, the
+mdiag arm on Astral. Committed as `447fb59bd8`.
+
+**The Astral gate is now red until the mdiag work lands**, by design, and `-Dataset All` will be
+red with it. That is the developer's call from the previous session - a green gate over a real gap
+encodes the limitation - and the leg turns green when the bundle path gains a plan source, with no
+test edit. Anyone reading a red Astral before then should check that mode 8 is the ONLY failing
+leg and that its issue count is 1.
