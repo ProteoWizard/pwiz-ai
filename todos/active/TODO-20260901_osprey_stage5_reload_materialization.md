@@ -3272,3 +3272,78 @@ This is the remaining half of "mdiag must be memory bounded", and it is independ
 Stage 7 lean row - it is inside `Osprey.FDR`, touching no task. Do it before the lean row, for
 the reason already recorded: the diagnostics are how a 446-run result is judged, so shipping the
 lean row while the report cannot be produced at that scale leaves the cohort unjudgeable.
+
+## THE 446 EQUIVALENCE TEST (developer, 2026-09-04): both routes, same 1st-pass HTML
+
+> *"we will need to test this at 446 file scale both for `--task ModelDiagnostics` on existing
+> files and `--task FirstPassFDR --model-diagnostics` to prove both generate the same 1st Pass
+> diagnostics HTML"*
+
+### The two routes are only genuinely different if one is COLD
+
+On a directory whose first pass is already complete, BOTH routes converge on the same code:
+`--task ModelDiagnostics` sets `StopAfterStage5` in `Program.RunModelDiagnosticsTask`, and
+`--task FirstPassFDR` sets it directly - after which each enters `FirstPassFdrTask.Run`, takes
+the `OnlyDiagnosticsProductOutstanding` arm and delegates to `Rehydrate`. Comparing those proves
+the ENTRY POINTS agree (worth having, and cheap), but not that the two accumulator FEEDS do.
+
+The feeds only diverge when one route is COLD:
+
+| route | how the accumulator is fed | where |
+|---|---|---|
+| `--task FirstPassFDR --model-diagnostics`, 1st-pass sidecars ABSENT | the score-pass sink, per row, as Percolator scores it | `RunFirstPassProjection` |
+| `--task ModelDiagnostics`, first pass COMPLETE | `.scores.parquet` + `.1st-pass.fdr_scores.bin` overlay, per run | `StreamOwnReconciliationBundle` |
+
+**That is the pair worth proving at scale**, and it is what regression mode 5 already asserts at
+3 files ("mode5 (rehydrate diagnostics vs golden): PASS"). At 446 it is the only test that can
+expose the one reduction the accumulator's own contract admits is order-sensitive:
+`BuildScoreHistogram`'s decoy mean/std are floating-point sums over `_best.Values` in insertion
+order. Over 1.34 B rows a difference in row arrival order between the two feeds would show up
+there and nowhere else, and 3 files cannot produce it.
+
+### A free pre-change comparator already exists
+
+`chs-446files-libdecoy-r1.0-protein-compact-stage5stream` was run `task='FirstPassFDR'
+mdiag=True` at 446 and its `out.model-diagnostics.html` is on disk. Its FirstPassFDR validity
+key is **byte-identical** to the `stages567` bed's:
+
+```
+search=dd85be27...;library=e1b6f4c9...;pick=lda;pickmodel=none;
+reconciliation=48f20a4a...;fdrsidecar=6;pass2=protein-compact;trainpick=run
+```
+
+so it is the same cohort, the same parameters and the same first pass - `stages567` was created
+`-LinkFrom stage5stream`. Comparing a Route A run against it costs nothing extra.
+
+**Its one confound, stated so it is not mistaken for a clean result**: it was produced by an
+older build, so a difference spans BOTH the route and the build change. It is a cheap smoke
+test, not the acceptance evidence. The acceptance evidence is two runs on the SAME build.
+
+### The comparator
+
+Not a byte compare of the HTML - `generatedUtc` and `ospreyVersion` differ by construction. Not
+`Get-DiagnosticsMetrics` either: that is an explicit projection whose own comment warns "a new
+card is invisible to the comparison until it is named here", which is the wrong instrument for
+"prove the pages are the same".
+
+Extract the embedded `application/json` payload from both (the `Get-DiagnosticsPayload` helper
+already does this), drop `generatedUtc` / `ospreyVersion` / `completeness`, and deep-compare the
+remainder. `completeness` is dropped deliberately: it is a render-time statement about which
+products existed, so a cold FirstPassFDR page and a warm regeneration legitimately differ there
+while describing the same first pass.
+
+### Sequencing: this test is BLOCKED on the accumulator fix
+
+Route A cannot complete at 446 today - it was killed at 263 of 446 runs with 3.5 GB free,
+projecting ~72 GB against a 63.7 GB box. So the equivalence test is not merely a check that
+follows the O(runs) accumulator fix; **it is that fix's acceptance test.** Order:
+
+1. Phase 1: the four `List<HashSet<string>>` -> four run-count dictionaries (bounded).
+2. Re-run Route A at 446. It must complete, and its floor must not rise per run.
+3. Run Route B COLD at 446 on a staged copy with the 1st-pass sidecars removed - one full first
+   pass, ~4h46m by the phase table. Expensive once; it also leaves a fresh same-build cold-feed
+   comparator for every iteration after.
+4. Deep-compare the two payloads.
+
+Step 3 is the only expensive item and it is a one-time cost. Do NOT run it before step 2
+succeeds - a cold run whose warm counterpart cannot finish proves nothing and costs five hours.
