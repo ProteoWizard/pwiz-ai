@@ -2700,3 +2700,18 @@ the error surfaces far from "you passed too many files".
 **Fix**: an `--input-list <file>` (and the same for `--input-scores`), one path per line, the way
 Skyline's `--batch-commands` works. Bounded command line, O(1) in file count. Independent of
 everything else in this TODO and cheap.
+
+### Night session 2026-09-03/04: a 446-file run is in flight toward Stage 7
+
+Launched 21:59 PDT, detached, from a snapshot of HEAD
+(`D:\test\osprey-runs\_bin\246-head\Osprey.exe`) so the build tree stays free. At 22:06 it was
+on file 154/446 at ~50 s each, 19-22 GB working set. Projected to finish PerFileRescoring
+~02:10 and then enter Stage 7, where it is EXPECTED to exhaust the 64 GB box and need killing -
+that is the goal, not a failure, because it hands the next session a run that reached Stage 7.
+
+The fragment-drop work built earlier tonight was REVERTED (stashed, `stash@{0}`) after dotTrace
+showed the library load is ~10 s and the release 0.5 s - the whole idea was worth about half a
+second, and the ~39 s / ~1m54s figures recorded earlier in this TODO do not reproduce.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260904_osprey_stage7_lean_row.md` before
+starting work.
