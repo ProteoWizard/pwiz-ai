@@ -3484,3 +3484,28 @@ time from a curve that includes garbage.
 `chs-446files-...-stage5stream` ran `--task FirstPassFDR --model-diagnostics` at 446 and produced
 its report. So Route B is not blocked on any of this - it is the warm fold that does not fit.
 Useful asymmetry, and it means the equivalence test can proceed from the cold side first.
+
+### THE FIX: a diagnostics fold that keeps nothing (`FoldPreCompactionPerRun`)
+
+`--task ModelDiagnostics` was reaching its rows through `RescoreHydration.HydrateCompactedStreaming`,
+whose product is Stage 6's BUNDLE. That loop genuinely streams one run's pre-compaction pool at a
+time - its log line is honest - and then keeps each run's SURVIVORS, because a bundle is what its
+caller wants. A report has no use for them.
+
+`RescoreHydration.FoldPreCompactionPerRun` does the four things a fold needs and stops: load the
+run's stubs, overlay its 1st-pass sidecar, hand them to the accumulator, discard them. No
+envelope, no planning, no compaction, no calibration capture - reading a run's
+`reconciliation.json` here would reintroduce a per-run cost for state nobody consumes.
+`FirstPassFdrTask` routes to it on `config.DiagnosticsOnly`; every other caller of that arm has a
+downstream task that needs the bundle and still goes through `Rehydrate`.
+
+**The measurement is inside the fix this time.** The existing post-GC probes sit in `Run`'s
+compute path, which this fold short-circuits past, so `OSPREY_LOG_MEMORY=1` on the previous
+binary emitted NOTHING and could not have answered the question - which is why the separate
+measurement run was abandoned. The fold now carries its own per-run probe, so one run reports
+both whether it fits and whether the live floor is flat, instead of a second inference from
+working set with garbage.
+
+First probes: `managed_heap=3.65 GB` at run 1, 3.84 at run 2, 3.90 at run 3. The claim to test is
+that this FLATTENS - the accumulator's O(distinct) reductions fill early and saturate - rather
+than climbing at the ~0.19 GB/run the survivor pool cost.
