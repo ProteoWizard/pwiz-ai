@@ -2781,3 +2781,51 @@ collapsing.
 
 NOTE: this run silently skipped one file (see the crash entry above), so its output is valid for
 the MEMORY question only, not for correctness.
+
+## THE ENVELOPE READ IS DEFERRED: 111 s -> 3 s at 446 files (2026-09-04, `b9dfd23df0`)
+
+The developer, reading the night log, pointed at the one remaining large gap in an otherwise
+flat rescore:
+
+```
+02:02:07  Per-run rescore: FirstPassFDR publishes the survivor loader only; ... 446 run(s).
+02:03:58  Released library fragments for 4924513 of 6175389 entries (625620 base_ids retained)
+```
+
+1m51s, and it is `RescoreHydration.ReadGapFillAndCalibrations` over 446 `reconciliation.json`
+files. Same interval after the fix: **3 s**.
+
+Three eager consumers had to go, not just the byproducts' eagerness:
+
+1. `PerFileRescoreTask.Run` dereferenced all four byproducts at `:513-516` before
+   `ExecuteRescore` decided anything - it now passes the HOLDERS into `RescorePassInputs`, and
+   `.Value` is touched only on the fallback branches (`:1333`, `:1697`) that the per-run path
+   never takes.
+2. `RescoredPoolPlan` took the dictionary; it now carries the holder and dereferences inside
+   Stage 7's pool build, which is the reader that genuinely needs the all-runs form.
+3. **The post-Stage-5 release unioned gap-fill into its retained set**, which would have
+   deferred the read only to demand it straight back one line later. Its own comment already
+   said that union was redundant on this path; the fix makes the stated reasoning the actual
+   behaviour. (Measured cost of the union itself: 0.2 s - it was never the expense, the read
+   behind it was.)
+
+`PerFileGapFillForRescore` and `RefinedCalibrations` share ONE guarded read, because a single
+pass fills both maps and two independent factories would read all 446 envelopes twice.
+
+**Gate**: full `-Dataset Stellar` GREEN, all 14 legs - including mode 3's HPC chain and per-run
+hydrate (the `--task PerFileRescoring` path this most affects), mode 5's own-sidecar rehydrate,
+mode 6, and mode 8.
+
+### The bed is now a 60-second reproducer for the resume-skip defect
+
+The verification run, on the now-complete 446-file bed:
+
+```
+Rescore resume: 445 of 446 run(s) already carry a current 2nd-pass sidecar; re-scoring the remaining 1.
+[file] 391/446 EXP25033_2025us0063bX45_A: skipping (outputs valid)
+[TASK] SecondPassFDR:starting          <- six seconds later
+```
+
+**448 skip lines, ZERO `Re-scoring file` lines.** It announced one file outstanding and rescored
+none. So the defect recorded above no longer needs a crash to reproduce - it is deterministic,
+on demand, in about a minute, against this bed. Use it to drive the fix and to prove the fix.
