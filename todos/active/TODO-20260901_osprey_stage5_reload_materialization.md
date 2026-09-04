@@ -2957,3 +2957,81 @@ many contributed, and that pass 2 is absent because the analysis has not finishe
 get mdiag working as well and still memory bounded as we have envisioned."* Treat one session
 as unlikely to finish it. The session that starts it should not try to also reach the Stage 7
 lean row.
+
+## Progress log - 2026-09-04 (night session + morning)
+
+### Landed and gated on this branch
+
+| commit | what |
+|---|---|
+| `--input-list` | the input set stops consuming the command line at O(files) |
+| lazy envelope read | the all-runs `reconciliation.json` read the per-run rescore never used: **111 s -> 3 s** at 446 runs |
+| both-products-done | a file is complete only when its parquet AND its 2nd-pass sidecar are; ends the silent drop |
+| mode 9 | crash-shaped half-done resume, proven to FAIL without the fix and PASS with it |
+| mode 8/9 mdiag arms | DISABLED behind `TODO(brendanx)` so what we push is all green |
+| doc 00 P7 | kill-at-any-time stated as a guarantee, with the valid-together corollary |
+
+Branch rebased onto master (which now carries doc 00 via #4635). Build clean, 602 tests,
+zero warnings, zero inspections.
+
+### What the night actually produced, beyond the run
+
+The stated goal - get 446 files through PerFileRescoring and into Stage 7 - was met at 03:00:05.
+The more valuable results were two defects that only a REAL interruption could produce:
+
+1. a transient native `AccessViolationException` in the Parquet reader killed the run at file
+   391 after 4h01m; and
+2. the resume then **silently skipped** that file, because the cohort count read the 2nd-pass
+   sidecar while the per-file skip read the reconciled parquet's stamp.
+
+Both are fixed. The second is the one that mattered: it is the defect class this whole branch
+exists to close, and no simulated amputation could have produced it.
+
+### Measurements that replaced beliefs
+
+* Stage 7 at 446 runs: **78.3 GB committed, ~240 MB/file and steepening**; it never threw
+  OutOfMemory - Windows evicted the working set to 0.01 GB and the process sat alive for nine
+  minutes without advancing a log line.
+* PerFileRescoring startup: 2 m 08 s -> ~20 s. With one file genuinely outstanding, the whole
+  task is 114.9 s, of which 61 s is reaching the rescore and 51 s is the rescore itself.
+* The library fragment work was worth ~0.5 s and was reverted. dotTrace settled in one 3-minute
+  profile what two sessions of reasoning had got wrong.
+
+### Order for the next sessions
+
+1. **`--model-diagnostics` at 446 runs, in bounded memory** - the raised criterion is in
+   "THE MDIAG PASSING CRITERION" above, and mdiag is a memory prerequisite for the lean row
+   because it currently pins the all-runs hydrate.
+2. **Stage 7 lean row** - target and before-curve in "STAGE 7 AT 446 FILES".
+3. Wire `Run-Chs.ps1` to `--input-list` before approaching ~1000 runs.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260904_osprey_mdiag_scale.md` before starting work.
+
+### GATE VERDICT 2026-09-04: `-Dataset All` FULLY GREEN, 78 legs, zero failures
+
+All four datasets pass. The `TODO(brendanx)` skips appear in the summary where intended:
+mode 8 and mode 9 SKIP on the three `--model-diagnostics` datasets, and both RUN and PASS on
+Stellar. `-Dataset All` wall time ~1h55m.
+
+Verified at `3c49a7eeaa`. **`b93bb88a7d` came after** - it moves mode 8's mdiag skip ABOVE the
+invalidation and the resume, so a disabled leg stops paying for a full Osprey run on three of
+four datasets (~25 min of a `-Dataset All` spent to discard the result). That commit touches
+`regression.ps1` control flow ONLY, no product code, so the green above still describes the
+Osprey behaviour on this branch - but the gate script edit itself wants a Stellar +
+StellarLibDecoy confirmation before merge: Stellar exercises the arm that still runs, and
+StellarLibDecoy exercises the new skip arm and measures the saving.
+
+### Gate cost, raised by the developer
+
+> *"we need to continually evaluate cost-v-benefit. The longer the test gets the more developers
+> are tempted to cut corners or iterate more without testing gates."*
+
+**A disabled test must cost nothing** - otherwise the gate grows while its coverage does not,
+which is the pressure that makes people stop running it. That is what `b93bb88a7d` fixes.
+
+What this branch actually adds to gate time now: modes 8 and 9 each run ONE resume, on Stellar
+only, because all three mdiag datasets skip both instantly. A few minutes, not 25.
+
+Still worth reviewing before merge, and it predates this branch: **mode 3 (the HPC 4-task chain)
+is by far the most expensive leg**, and it runs on all four datasets.
