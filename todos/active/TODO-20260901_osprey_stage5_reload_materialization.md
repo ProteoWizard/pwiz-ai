@@ -3079,8 +3079,8 @@ decouples mdiag from `CanHydratePerRun`.
 
 | artifact | producer | doc-00 kind | stamp |
 |---|---|---|---|
-| `<blib-stem>.model-diagnostics.pass1.json` | FirstPassFDR | experiment **product** | `.FirstPassFDR.osprey.task` |
-| `<blib-stem>.model-diagnostics.pass2.json` | SecondPassFDR | experiment **product** | `.SecondPassFDR.osprey.task` |
+| `<blib-stem>.1st-pass.model-diagnostics.json` | FirstPassFDR | experiment **product** | `.FirstPassFDR.osprey.task` |
+| `<blib-stem>.2nd-pass.model-diagnostics.json` | SecondPassFDR | experiment **product** | `.SecondPassFDR.osprey.task` |
 | `<output>.model-diagnostics.html` | the render step | experiment **cache** | none |
 
 Today there is ONE `.model-diagnostics.data.json` and it is **"deleted once consumed"**
@@ -3088,20 +3088,20 @@ Today there is ONE `.model-diagnostics.data.json` and it is **"deleted once cons
 un-re-renderable and forces `--task ModelDiagnostics` to re-run the pipeline to rebuild what it
 just deleted. Not deleting it is most of the fix.
 
-Keys are NOT new: `pass1.json` is stamped with `FirstPassFdrTask.ValidityKey(ctx)` and
-`pass2.json` with `SecondPassFdrTask`'s, per doc 14 - the diagnostics inherit whatever
+Keys are NOT new: `1st-pass.model-diagnostics.json` is stamped with `FirstPassFdrTask.ValidityKey(ctx)` and
+`2nd-pass.model-diagnostics.json` with `SecondPassFdrTask`'s, per doc 14 - the diagnostics inherit whatever
 invalidation those tasks already get right.
 
 ### Session scope, in order
 
-1. **A - split, persist, stamp.** `pass1.json` / `pass2.json`, no deletion, `FileSaver` (already),
+1. **A - split, persist, stamp.** `1st-pass.model-diagnostics.json` / `2nd-pass.model-diagnostics.json`, no deletion, `FileSaver` (already),
    validity stamps. HTML becomes a pure re-render from whichever JSONs exist.
 2. **C - a standalone per-run pass-1 fold** from on-disk FirstPassFDR artifacts
    (`.scores.parquet` + `.1st-pass.fdr_scores.bin` + `out.1st-pass.fdr_experiment.bin`), sequential
-   in input-file order so the histogram's order invariant holds. This is what builds `pass1.json`
+   in input-file order so the histogram's order invariant holds. This is what builds `1st-pass.model-diagnostics.json`
    for a cohort that has none - our 446 directory, launched `-NoModelDiagnostics`.
 3. **B - `--task ModelDiagnostics` becomes the state machine** the developer specified: ERROR with
-   no FirstPassFDR state, build `pass1.json` if missing, WARN 1st-pass-only when SecondPassFDR
+   no FirstPassFDR state, build `1st-pass.model-diagnostics.json` if missing, WARN 1st-pass-only when SecondPassFDR
    state is absent, always re-render, never construct a pool or run Percolator.
 4. **The incompleteness banner IN THE HTML**, not only the console - which pass is represented,
    how many runs of how many contributed, and why pass 2 is absent.
@@ -3114,11 +3114,11 @@ report, because Stage 7 never finished and the run was launched `-NoModelDiagnos
 ### The hazard that governs the declared-output half (doc 00, restated because it costs 4h46m)
 
 `FirstPassFDR` is a join, and **a stale sidecar is cleared BEFORE its output is recomputed**.
-So declaring `pass1.json` as its output on a cohort that lacks it makes `CanRehydrate` false,
+So declaring `1st-pass.model-diagnostics.json` as its output on a cohort that lacks it makes `CanRehydrate` false,
 `Run` execute, and `Run`'s first act clear sidecars for outputs that are already correct.
 
 `Run` therefore needs a short-circuit arm at the very top - *before* any clearing - that fires
-when every output EXCEPT the diagnostics JSON is present and key-current: fold `pass1.json`,
+when every output EXCEPT the diagnostics JSON is present and key-current: fold `1st-pass.model-diagnostics.json`,
 stamp it, render, return. Getting this wrong costs hours and still produces the right answer,
 so no red gate would ever report it.
 
@@ -3134,3 +3134,27 @@ Stage 7 death.
 once 1-4 above hold, since that is what makes the pass-1 report independent of the all-runs
 hydrate. Deleting those two branches remains the whole test change; editing their assertions
 would mean the capability did not land.
+
+### Naming, corrected against the prescribed convention (developer, 2026-09-04)
+
+The developer pointed at `pwiz_tools/Osprey/Osprey-workflow.html` as the source of the sidecar
+naming convention. Every artifact it names puts the PASS QUALIFIER immediately after the stem:
+
+```
+<stem>.1st-pass.fdr_scores.bin      <blib-stem>.1st-pass.fdr_experiment.bin
+<stem>.1st-pass.model.json          <blib-stem>.2nd-pass.fdr_experiment.bin
+```
+
+So the diagnostics products are `<blib-stem>.1st-pass.model-diagnostics.json` and
+`<blib-stem>.2nd-pass.model-diagnostics.json` - NOT the `.model-diagnostics.pass1.json` this
+file proposed, which reads as a variant of one artifact rather than as a member of the
+`1st-pass` / `2nd-pass` family it belongs to. Renamed everywhere, including in this file above.
+
+Doc 00's contract table is updated on the branch: the two JSONs are experiment PRODUCTS, the
+HTML becomes an experiment CACHE, and the `--task ModelDiagnostics` entry now states the
+three-state contract and why suppressing the writes never suppressed the work.
+
+**Still owed**: `Osprey-workflow.html` names no `--model-diagnostics` artifact at all. Its task
+headers are positioned SVG text, so adding the two JSONs to FirstPassFDR's and SecondPassFDR's
+`out` lines needs a layout pass rather than a blind insert. Do it before the PR is reviewed -
+the diagram is the first thing a reader consults for "which artifact is whose".
