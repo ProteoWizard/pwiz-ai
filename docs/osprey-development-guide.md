@@ -365,7 +365,7 @@ meaningful. This is the same reasoning as the pinned `pwiz-perfbase` worktree
 `Test-PerfGate.ps1` uses, one level down: worktree for a perf A/B, binary copy for "do not
 block my build".
 
-**Two traps that cost real runs:**
+**Three traps that cost real runs:**
 
 1. **Do not rebuild while a GATE is running, even if the build succeeds.** If the long job
    runs from the snapshot, your build will succeed - but `regression.ps1` launches
@@ -380,6 +380,18 @@ block my build".
    `OSPREY_VERSION_OVERRIDE` to the version that wrote the artifacts (`regression.ps1` pins
    `26.1.1.0` for the same reason; `Measure-Stage6Rescore.ps1` takes `-VersionOverride` and
    auto-detects from the prep log).
+
+3. **`-NoBuild` trusts the Release tree, and the Release tree is not a function of HEAD.** The
+   obvious check - "the binary is newer than my last commit, so it is current" - is not sound.
+   Any experiment that builds a DIFFERENT tree leaves a newer binary behind: reverting the
+   product code to prove a defect pre-exists on master, checking out a baseline commit, building
+   a sibling worktree into the same path. A later `-NoBuild` run then gates the EXPERIMENT's
+   code and reports a confident red for a branch that fixes the very thing. This has happened
+   in both directions - a Debug build followed by `-NoBuild` (which reads Release) cost 25
+   minutes, and a leftover reverted-to-master Release build cost a full Stellar+Astral cycle,
+   reproducing the pre-change failure signature exactly. Rebuild Release, or simply drop
+   `-NoBuild` and let `regression.ps1` build - a second invocation's build is a no-op. Reach for
+   `-NoBuild` only when you built Release yourself in this session and nothing has run since.
 
 Related: `Run-SeaAd.ps1`'s `-SourceRoot` warning covers the sibling hazard - taking the exe
 from a shared worktree someone else is actively developing in means the run measures THEIR
