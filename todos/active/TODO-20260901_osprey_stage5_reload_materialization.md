@@ -3158,3 +3158,40 @@ three-state contract and why suppressing the writes never suppressed the work.
 headers are positioned SVG text, so adding the two JSONs to FirstPassFDR's and SecondPassFDR's
 `out` lines needs a layout pass rather than a blind insert. Do it before the PR is reviewed -
 the diagram is the first thing a reader consults for "which artifact is whose".
+
+### The 446 mdiag proof: the invocation, and the two traps it must avoid
+
+Read off the bed's own `run.log` START line rather than reconstructed:
+
+```
+START dataset=chs arm=libdecoy r=1.0 pass2=protein-compact pick=lda trainpick=run
+      expagg='max' qualify=run files=446 threads=30 task='' mdiag=False
+      linkfrom='...chs-446files-libdecoy-r1.0-protein-compact-stage5stream'
+Exe: D:\test\osprey-runs\_bin\246-skipfix\Osprey.exe
+Osprey v26.1.1.243
+Command: -i <446 .raw>  (446 of 446 inputs absent but have a spectra cache)
+```
+
+1. **`OSPREY_VERSION_OVERRIDE=26.1.1.243` is REQUIRED.** Every artifact in that directory is
+   stamped `26.1.1.243`; a new daily build stamps something else, the parquet footer check
+   refuses reuse, and Stages 1-4 silently re-run for hours in a way that reads like a code bug.
+2. **Use `--input-list`, not 446 paths on the command line.** The original invocation was
+   28,621 of the 32,767 `CreateProcess` limit. `--input-list` landed on this branch (`3d6f0f3502`)
+   for exactly this and is the reason a ~512-run wall is not hit here.
+
+The route the new code takes, and what to watch in the log:
+
+```
+--task ModelDiagnostics
+  -> no 1st-pass.model-diagnostics.json     -> HasCompletedFirstPass (fdr_experiment.bin) = true
+  -> StopAfterStage5 = true                 -> "folding the first pass from its completed artifacts"
+  -> FirstPassFDR declares the JSON, so CanRehydrate is FALSE and Run is entered
+  -> OnlyDiagnosticsProductOutstanding      -> "every output but the model-diagnostics product is current"
+  -> Rehydrate -> StreamOwnReconciliationBundle (bounded, per run) -> report written
+```
+
+**The line that says it went wrong** is the guard naming the first output it refused:
+`not folding diagnostics from completed work - <path> is missing|present but not current`.
+Without it the only symptom of a validity-key mismatch is that the run takes four hours and
+still produces the right report - expensive, correct, and invisible. That is the failure this
+whole arm exists to prevent, so the log line is part of the fix rather than decoration.
