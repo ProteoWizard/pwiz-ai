@@ -3347,3 +3347,45 @@ follows the O(runs) accumulator fix; **it is that fix's acceptance test.** Order
 
 Step 3 is the only expensive item and it is a one-time cost. Do NOT run it before step 2
 succeeds - a cold run whose warm counterpart cannot finish proves nothing and costs five hours.
+
+### PHASE 1 ALGORITHM, settled 2026-09-04 - and why the OBVIOUS form is preferred over the small one
+
+Two forms reach the same bounded answer. They are not equally reviewable, and byte-identity is
+the gate, so the choice matters.
+
+**The minimal form.** One `Dictionary<string,(int RunCount,int LastRun)>` per stream, and
+nothing else: union after run i is the dictionary's SIZE, and intersection after run i is the
+count of keys whose `RunCount` reached `i+1` during run i (a key appears at most once per run,
+so those are exactly the keys present in every run so far). Four dictionaries total, ~O(distinct)
+each. Smallest possible - and it needs careful handling of a run that contributes NO passing
+rows, because the boundary that closes `CumUnion[i]` / `CumIntersection[i]` never fires for it.
+`ComputeCrossRunView`'s loop runs for every `i` regardless, so the streamed version must close
+skipped indices explicitly. That is where an off-by-one silently changes a curve.
+
+**The obvious form, and the one to write first.** Keep the running `union` set, the running
+`inter` set and the running run-count dictionary that `ComputeCrossRunView` already builds, plus
+ONE current-run `HashSet<string>` per stream, and execute the EXISTING loop body at each file
+boundary instead of at the end. The statements do not change - `union.UnionWith(set)`,
+`inter.IntersectWith(set)`, `perRunCount[i] = set.Count`, the per-key tally - only when they run.
+That makes byte-identity an argument about *ordering of the same operations*, which a reviewer
+can check by reading, rather than an argument about an equivalence between two different
+formulations.
+
+Memory, both flat in run count:
+
+| | structures | est. at ~3M distinct keys |
+|---|---|---|
+| today | 4 x N sets | ~38 GB at 446 and rising ~94 MB/run |
+| obvious form | 4 x (union + inter + counts) + 1 current-run set each | ~1.5 GB |
+| minimal form | 4 x one dictionary | ~0.6 GB |
+
+1.5 GB flat already clears the bar by a wide margin, and the strings are shared references with
+`_best` so the real figure is lower. **Write the obvious form, measure it at 446, and only
+compress to the minimal form if the measurement says to** - the reverse order optimises a number
+nobody has yet seen, which is how the library-fragment work spent two sessions on 0.5 s.
+
+The one genuinely new piece either way is the file boundary. `_frontierCurFile` already
+establishes the pattern in this class ("rows arrive in file-major order", flush the previous
+file at the change) but it fires only on non-decoy rows, so the cross-run flush needs its own
+`_crossRunCurFile` tracked for EVERY row - and `Build()` must close the final run, exactly as it
+already calls `FrontierFlushFile` for the last file.
