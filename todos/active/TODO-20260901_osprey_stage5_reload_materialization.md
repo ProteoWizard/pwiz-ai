@@ -2550,3 +2550,122 @@ red with it. That is the developer's call from the previous session - a green ga
 encodes the limitation - and the leg turns green when the bundle path gains a plan source, with no
 test edit. Anyone reading a red Astral before then should check that mode 8 is the ONLY failing
 leg and that its issue count is 1.
+
+## FRAGMENT DROP: shipped as a UNIFORM POST-PAIRING drop, and the 1m54s was never the freeing
+
+Supersedes the "Fragment-drop-during-read" plan above. The IO half that plan landed
+(`LibraryCache`'s per-entry `retainFragmentsFor`, `LibraryLoadOptions.RetainFragmentsFor`) is
+still inert and is NOT used by what shipped - see "why the read-time skip cannot work" below.
+
+### The design is the developer's, and it is better than the one this TODO proposed
+
+The plan here was for the PRODUCER to infer that the on-disk retained set was this run's, by
+asking `CanRehydrate` about the FirstPassFdrTask instance. The developer's instead has the
+CONSUMER declare it:
+
+> *"the context having an optional set of entries for which spectra are needed. When that set is
+> not present on the context, then the library loads as normal, but PerFileRescoring would
+> provide the set on the context before asking for the rehydrated library."*
+
+That removes the inference. The rescore ALREADY reads `retained_base_ids.bin` to decide what to
+compact, so declaring the same set trusts nothing new: if that summary were the wrong run's, the
+compaction is already wrong and the fragments are the lesser problem. The compute path is safe
+for free - `Run` never declares, so it always gets a whole library.
+
+Landed:
+
+* `PipelineContext.DeclareFragmentsNeededFor` / `FragmentsNeededFor` /
+  `FragmentNeedStillDeclarable`.
+* `ScoringTaskShared.TryDeclareFragmentNeed(ctx)` - ONE function for both callers, per the
+  developer: *"Both should use the same function to obtain a library in the presence of an
+  in-stratum subset that has been written to disk."* Called first thing in
+  `PerFileRescoreTask.Run`/`.Rehydrate` and `SecondPassFdrTask.Run`.
+* The drop itself in `PerFileScoringTask.LoadLibraryAndDecoys`, AFTER decoy pairing/generation,
+  reusing `LibraryFragmentRelease.ReleaseFragments`.
+* `LibraryFragmentRelease.AlreadyLeanAtLoad(ctx)` + `LEAN_AT_LOAD_MESSAGE`; both post-Stage-5
+  release sites skip when it holds.
+
+### WHY THE READ-TIME SKIP CANNOT WORK, in either decoy mode
+
+**libdecoy.** `DecoyPairingManifest` pairs by bucketing and matching SORTED SEQUENCE LISTS
+(`:395-419`) and then renumbers the decoy - `library[decoyIdx].Id = targetId | DECOY_ID_BIT`.
+Targets are never renumbered. So a supplied decoy's post-pairing base_id is knowable only from
+the whole identity table, never from one streamed entry.
+
+Worse than "some decoys wrong": the `.libcache` is written inside `LibraryLoader.Load`, BEFORE
+`MarkSuppliedDecoys` and pairing run in `LoadLibraryAndDecoys`, so every cached entry carries a
+plain post-dedup id with the decoy bit clear. A retained base_id is always a TARGET's id, and ids
+are unique - therefore **no supplied decoy's cache id can ever be in the retained set, and a
+read-time filter skips ALL of them**. On the 446-run CHS resume that meant materialising ~625 K
+entries where the rescore needed ~1.25 M.
+
+**gendecoy.** `BuildDecoyFromSequence` -> `RecalculateFragmentsStatic(target, ...)` builds each
+decoy's peaks FROM ITS TARGET'S peaks, so every target's spectrum is needed whatever the retained
+set says. (The developer: *"I had forgotten about the decoy generator filtering on spectral
+similarity library-wide."*)
+
+So the library is always READ whole and dropped ONCE, after pairing. That also deleted the
+`DecoyGenerator` exclusion-gate change this TODO's earlier entry called for: with the drop after
+generation, every entry still has its peaks when the gate runs.
+
+### THE TRIPWIRE IS WHY THIS WAS A CRASH AND NOT A WRONG ANSWER
+
+The developer chose to install the RELEASED tripwire at drop time rather than an empty array.
+That decision is what surfaced the libdecoy defect: the run died at
+`ScoringPipeline.RunCoelutionScoring` on file 146 of the 446-run resume. With `Array.Empty` the
+scorers' `Fragments == null || Fragments.Count == 0` guard would have absorbed it as "no
+spectrum" and written degenerate zeros into the .blib - a silent wrong answer in the artifact
+used to judge correctness.
+
+Also note which gate would have caught it: `StellarLibDecoy`. The generated-decoy `Stellar` leg
+was fully green THROUGH the defect, because ids are final at cache time there. That is the
+`-Dataset All` step this branch already owed.
+
+### MEASURED AT 446 FILES - and the premise this TODO recorded was wrong
+
+`PerFileRescoring:starting` -> the first missing file entering per-file mode:
+
+| | library load | release block | total |
+|---|---|---|---|
+| baseline | ~39 s | ~1 m 54 s | **2 m 53 s** |
+| read-time skip only (incorrect, see above) | 11 s | 1 m 53 s | **2 m 36 s** |
+| + release skipped (incorrect skip set) | 10 s | skipped | **1 m 36 s** |
+| uniform post-pairing drop (shipped) | ~39 s | skipped | **~2 m 08 s est.** |
+
+**The ~1m54s was never the cost of freeing fragment arrays.** With the arrays never built it
+still cost 1m53s. Differencing the second and third rows isolates the release block at **45 s**;
+the remaining **68 s** is upstream of it and neither change touches it.
+
+The release also reported `Released library fragments for 4924513 of 6175389 entries` while
+freeing zero bytes - `LibraryEntry` distinguishes the released SENTINEL from everything else and
+`Array.Empty` is deliberately "a readable empty spectrum rather than a released one". That is the
+fabricated-saving shape mode 6 exists to catch, emitted by the feature itself and hidden inside
+mode 6's green. `ReleaseFragments` now counts only entries that actually held a spectrum.
+
+### THE REMAINING 68 s, diagnosed
+
+`FirstPassFdrTask.cs:930` `RescoreHydration.ReadGapFillAndCalibrations(perFileParquetPaths.Values,
+...)` - a loop over ALL 446 runs' `reconciliation.json` envelopes (10.7 GB of JSON at this
+cohort), sitting exactly between the two log lines that bracket the gap.
+
+**The per-run rescore path then does not use the result.** `PerFileRescoreTask.cs:1686` takes
+`run.GapFill` and `:1333` takes `run?.RefinedCalibration` - each run's OWN envelope - and only
+falls back to the all-runs dictionaries (`:1697`, `:1333`) on the other path. The all-runs form is
+needed solely by Stage 7's pool rebuild (`Rehydrate -> OverlayReconciledIntoFiles`), which runs
+far later, and never at all on a `--task PerFileRescoring` worker.
+
+The comment at `:917-927` already prescribes "it should become LAZY". **That is necessary but not
+sufficient**: `PerFileRescoreTask.Run` dereferences all four byproducts at `:513-516` before
+`ExecuteRescore`, so a lazy byproduct would build there instead - the 68 s moves ten lines and
+stays ahead of the first file. The fix has to pass the lazy HOLDERS into `RescorePassInputs` so
+`.Value` is touched only on the fallback branches the per-run path never takes.
+
+This is now the largest term in the rescore startup - bigger than everything the fragment work
+removed - and it is the next thing to do.
+
+### Mode 6 asserts the property, in its new form
+
+A lean leg emits a release line at LOAD (scope `needed by this process`) and the skip message
+downstream. Mode 6 asserts all three: the declaration, a load-time drop that freed a non-zero
+count, and that NO post-Stage-5 release ran afterwards - the last being the one that matters,
+since paying for both walks is exactly what this change removes.
