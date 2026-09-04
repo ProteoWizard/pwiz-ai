@@ -3509,3 +3509,53 @@ working set with garbage.
 First probes: `managed_heap=3.65 GB` at run 1, 3.84 at run 2, 3.90 at run 3. The claim to test is
 that this FLATTENS - the accumulator's O(distinct) reductions fill early and saturate - rather
 than climbing at the ~0.19 GB/run the survivor pool cost.
+
+## ROUTE A IS BOUNDED (measured 2026-09-04), and what "diagnostics during the main analysis" still needs
+
+Post-GC live heap through the diagnostics fold, 446-run cohort:
+
+| run | 1 | 20 | 40 | 60 | 80 | 100 | 120 |
+|---|---|---|---|---|---|---|---|
+| managed_heap (GB) | 3.65 | 4.07 | 4.11 | 4.11 | 4.24 | 4.26 | 4.27 |
+
+**5 MB per run and decelerating** - 1.5 MB/run over runs 100-120 - which is the accumulator's
+O(distinct) reductions filling and saturating, not a per-run term. Against the survivor pool's
+measured 190 MB/run that is a ~38x reduction, and unlike it, this one flattens. Working set 6.0 GB
+and FALLING; the old path was at 40 GB by run 106 and dead at 266.
+
+### The developer's framing: post-hoc is the recovery path, not the goal
+
+> *"B to validate it also stays bounded in memory and diagnostics can be safely requested during
+> the main analysis and does not need to be requested post-analysis as we have now done."*
+
+Right, and worth being exact about what Route B does and does not establish. "Diagnostics
+requested during the main analysis" has THREE memory couplings and Route B covers ONE:
+
+| # | coupling | state |
+|---|---|---|
+| 1 | the first-pass fold, from the live score-pass sink | **Route B validates this** |
+| 2 | `PerFileRescoring` forced onto the all-runs hydrate | **STILL COUPLED** |
+| 3 | pass-2 diagnostics reading the whole-run survivor pool | **STILL COUPLED** (the lean row) |
+
+**(2) is `ScoringTaskShared.cs:430`** - `if (config.ModelDiagnostics) return false;` in
+`CanHydratePerRun`, untouched by any of this work. It is why `mode3 (per-run hydrate)` SKIPs on
+all three mdiag datasets with "--model-diagnostics keeps the all-runs hydrate". Its stated
+reason was that the report is folded from pre-compaction rows during that hydrate, so a per-run
+rescore would produce NO report - true when it was written.
+
+**That reason may no longer hold**, and checking it is the natural next step. The report is now
+FirstPassFDR's declared output, produced by its own fold arm, rather than a side effect of
+whichever hydrate happened to run. On a cold analysis the fold is already done by
+`RunFirstPassProjection` before `PerFileRescoring` starts; on a resume the fold arm produces it.
+If that holds, the exclusion retires and a THIRD gate skip (mode 3's per-run hydrate) turns
+green alongside modes 8 and 9 - which is the check that the capability landed rather than the
+assertion being softened.
+
+**(3) is `SecondPassFdrTask.cs:478`** - `WritePass2AndFinalize(perFileEntries, ...)` where
+`perFileEntries` is `RescoredEntries`, the whole-run survivor pool. Pass-2 diagnostics have no
+separate memory problem; they ride the one doc 00 already tracks. Not separable from the Stage 7
+lean row, and should not be attempted as its own piece.
+
+So after Route B the honest claim is: **the first pass can be asked for diagnostics during the
+main analysis, in bounded memory, cold or warm.** The whole analysis cannot yet, and (2) and (3)
+are what stand between.
