@@ -2925,3 +2925,35 @@ Two independent reasons, either sufficient:
 
 Done right, deleting the two `TODO(brendanx)` branches in `regression.ps1` is the entire test
 change - which is the check that the capability landed rather than the assertion being softened.
+
+### THE MDIAG PASSING CRITERION, raised 2026-09-04 (developer)
+
+> *"a more challenging passing criterion for the mdiag work, which is to be able to run
+> `--task ModelDiagnostics` and have it successfully generate diagnostic HTML for 1st pass
+> results we have been able to complete, and warn that processing is not yet completed and 2nd
+> pass diagnostics cannot be generated."*
+
+So the bar is not "mode 8 goes green". It is a user-facing capability:
+
+1. `--task ModelDiagnostics` against a PARTIALLY completed analysis produces real HTML for the
+   1st-pass results that exist; and
+2. it says plainly that processing is incomplete and 2nd-pass diagnostics cannot be generated.
+
+**Why this is the right criterion and not a harder version of the same one.** It is the
+diagnostic counterpart of P7's kill-at-any-time guarantee: an owner who stopped a day-long run
+to get their machine back should still be able to ask what the run learned so far. It also
+forces the implementation the memory fix needs - a report foldable from each run's ON-DISK
+artifacts, per run, rather than from an in-memory all-runs pre-compaction fold. A report that
+can be built from a partial cohort is necessarily one that never required the whole cohort
+resident. The two goals are the same work, which is why they should not be sequenced apart.
+
+**The warning must be IN THE HTML, not only on the console.** A report whose 2nd-pass sections
+are merely absent is the "silently invalid output a user might trust" shape: opened a week
+later with no console scrollback, it is indistinguishable from a complete report of a run with
+nothing in pass 2. State it in the artifact - which pass is represented, how many runs of how
+many contributed, and that pass 2 is absent because the analysis has not finished.
+
+**Scope warning from the developer**: *"Possible even more than a single session work just to
+get mdiag working as well and still memory bounded as we have envisioned."* Treat one session
+as unlikely to finish it. The session that starts it should not try to also reach the Stage 7
+lean row.
