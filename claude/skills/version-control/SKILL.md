@@ -131,6 +131,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Immediately after creating a PR, before any review or interaction
 - Local commits not yet pushed
 
+The first one force-pushes a branch that has a PR, which the section below otherwise
+forbids. It is allowed as a judgement about risk: seconds after `gh pr create` nobody else
+can have the branch yet, so the force-push strands no one. That window closes fast - past
+"immediately", add a commit instead, which costs nothing under squash-merge.
+
 **When amending is NOT acceptable:**
 - After a PR has been reviewed (even if just by Copilot)
 - After anyone has clicked "Update branch" on GitHub

@@ -585,6 +585,17 @@ git commit --amend --no-edit
 git push --force-with-lease
 ```
 
+**Why this survives the never-force-push-a-PR rule.** That rule exists because a force-push
+strands anyone else holding the branch. This exception is a judgement about that risk, not
+of it: seconds after `gh pr create`, the probability that a teammate has already fetched
+the branch is effectively nil, so there is nobody to strand. The window closes fast - not
+just because review starts (Copilot has been observed opening a review 2m34s after PR
+creation, on #4460) but because the longer the PR is up, the likelier someone has it.
+
+If you are past "immediately", add a commit instead. It costs nothing: the PR is
+squash-merged into a single commit on master regardless of how many commits the branch
+carries.
+
 ## Slash Commands
 
 | Command | Purpose |
