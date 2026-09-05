@@ -3672,5 +3672,124 @@ Both legs now compare `featureCount` against the golden instead of asserting it 
 **strictly stronger** than the pin it replaces. That the removal surfaced as a red rather than a
 silent pass is the gate working: a pinned metric that stops being true fails loudly.
 
+## Coupling 4 quantified: peak co-assignment is a TIME term, not a memory term
+
+The previous session ended with the peak co-assignment panel logged as "NEW, uncharacterised -
+an O(runs) term nobody has characterised... the real peak of `--task ModelDiagnostics` at 446",
+on the evidence of a perfviz plot showing total memory reaching 33.5 GB after the fold ended.
+**It is not an O(runs) memory term.** The 33.5 GB is real and the plot was read correctly; what
+it measures is not what it looked like.
+
+### Method: the scaling ladder was already on disk
+
+The panel logs its own completion, and every line of a `--memstamp` run carries managed and
+private MB:
+
+```
+[MODEL-DIAGNOSTICS] peak co-assignment (pass 1): 13954867 detected rows over 446 file(s) in 664.0s
+```
+
+So every run log ever written under `D:\test\osprey-runs` is a memory trace of this phase,
+sampled at every log line, and every `out.model-diagnostics.html` publishes the populations the
+panel's retained maps ended up holding. Mining them gives a ladder of **N = 5, 10, 12, 85, 86,
+257, 446** on the same CHS library without spending a single run.
+
+Script: `ai/scripts/Osprey/ModelDiagnostics/Measure-CoAssignmentScaling.py`, three views -
+`scaling` (per-phase wall time and in-window memory maxima), `delta` (the rise across the phase
+and the managed floor under it), `retained` (the cross-run populations, read from the reports).
+Its header carries the warning the first pass at this needed: **maxima are not attributable,
+deltas are** - ranking runs by in-phase maximum produces a table where 86 files outrank 446.
+
+### The decisive measurement: retained state saturates
+
+`CoAssignmentAccumulator` holds exactly two things across runs - `_byPrecursor`, one entry per
+DISTINCT detected precursor, and `_offendersByPair` - in two accumulators (run scope and
+experiment scope). The reports publish the first:
+
+| files | run-scope N | experiment-scope N |
+|---:|---:|---:|
+| 5 | 30,873 | 26,523 |
+| 10 | 35,290 | 27,775 |
+| 12 | 32,948 | 26,363 |
+| 85 | 42,231 | 27,533 |
+| 86 | 46,170 | 31,184 |
+| 257 | 59,719 | 35,682 |
+| 446 | 68,775 | 37,508 |
+
+**89x the files buys 2.2x the run-scope population and 1.4x the experiment-scope one.** That is
+saturation, not growth: the maps are keyed by precursor, and a precursor detected in run 300 was
+almost always already detected in one of the first 50. The panel's whole cross-run retained state
+at 446 files is ~107 K precursor entries across both accumulators - on the order of **30 MB**,
+three orders of magnitude below the 33.5 GB the phase appears to consume.
+
+### The managed floor never rises, at any N
+
+`coasgn-delta.py` measures the managed value at a GC trough inside the phase against the value at
+the phase's first line. Across all 25 CHS occurrences, at every N from 5 to 446, that delta is
+**never positive** (range -12.88 GB to +0.00 GB). The collector gives memory back across this
+phase; it does not accumulate.
+
+This is the bound that covers `_offendersByPair` too, which is the one retained map whose size no
+report publishes (`MAX_OFFENDERS = 50` trims only the REPORTED list, at
+`ModelDiagnosticsData.CoAssignment.cs:1553`; the dictionary itself accumulates uncapped). It does
+not need its own measurement: whatever it holds is already inside a managed floor that falls.
+
+### What the 33.5 GB actually was
+
+Private bytes converge on a ~25-35 GB plateau at every run size - 18.98 GB at 5 files, 45.92 GB
+at 86, 34.93 GB at 257, 32.67 GB at 446. The maximum does not track the file count at all; the
+largest figure in the whole ladder belongs to an **86-file** run.
+
+Route A rose *into* that plateau instead of starting there, which is what made the plot dramatic:
+
+| 446-file run | private at phase start | private max | rise |
+|---|---:|---:|---:|
+| `chs446-mdiag-render-proof` (Route A) | **11.68 GB** | 32.67 GB | **+21.00 GB** |
+| `chs-446files-...-baseline-phase3` | 35.56 GB | 41.73 GB | +6.17 GB |
+| `chs-446files-...-stage5stream` | 31.59 GB | 32.15 GB | **+0.56 GB** |
+
+Route A is `--task ModelDiagnostics`, a render-only path that never holds the pipeline's state, so
+it entered the phase at 11.68 GB where a full-pipeline run enters at ~31-35 GB. It then reached
+the same absolute level everything else reaches. The same 446 files on the full pipeline move the
+committed footprint by **0.56 GB**. The rise is Server-GC committed heap following an allocation
+burst - the pattern already root-caused for the pipeline peak - not retention.
+
+### What DOES scale: a second full parquet read
+
+Time is linear in detected rows, and detected rows are linear in files (~24-46 K per file,
+roughly constant across the ladder):
+
+| files | detected rows | seconds |
+|---:|---:|---:|
+| 12 | 313,020 | 8-12 |
+| 86 | 2,323,704 | 74-197 |
+| 257 | 7,690,037 | 632-698 |
+| 446 | 13,954,867 | 664-916 |
+
+~30-100 us per detected row, flat. This is the panel's real cost and the code already names it:
+"a second read of two columns of every `.scores.parquet`". At 446 files that is **11-15 minutes**;
+at a 1000-file target it projects to ~25-35 minutes of pure panel time under `--model-diagnostics`.
+
+### Recommendation
+
+**Do not give this the treatment the fold got.** There is no O(runs) retention to remove, and a
+bounded-memory rewrite would be an intermediate the architecture does not need. Coupling 4 closes
+as characterised.
+
+If the panel's cost is worth attacking it is as latency, and the lever is the second parquet read
+- not the accumulators. Worth noting only because it is opt-in: this cost is paid solely under
+`--model-diagnostics`, so no production run carries it.
+
+Two corrections to the record this produced, both worth keeping:
+
+* **A perfviz plot bounds what a probe cannot, but a rise is not a level.** The previous session
+  correctly distrusted probes that were blind to the phase after the fold. The plot's 33.5 GB was
+  read as the phase's cost when it was the process's plateau, reached from an unusually low floor
+  because the task was render-only. Comparing against the same phase in a run that entered it
+  warm is what separates the two.
+* **Maxima are not attributable; deltas are.** The first pass at this measured private max across
+  the phase window and produced a table where 86 files outranked 446. Only the rise across the
+  phase, and the managed floor under it, say anything about the panel.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
