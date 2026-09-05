@@ -3559,3 +3559,68 @@ lean row, and should not be attempted as its own piece.
 So after Route B the honest claim is: **the first pass can be asked for diagnostics during the
 main analysis, in bounded memory, cold or warm.** The whole analysis cannot yet, and (2) and (3)
 are what stand between.
+
+## PROPOSAL: retire `--input-scores` - a Rust-era seam the C# port already replaced (developer, 2026-09-04)
+
+> *"It is a vestige of the Rust implementation which was a far simpler pipeline architecture.
+> Start from mzML v start from Parquet may have been the only real seams."*
+
+That is the framing that makes this worth doing rather than merely tidy. The C# pipeline has TWO
+mechanisms for "where does this invocation start", and one of them predates the other:
+
+| era | mechanism | how it says "Stage 1-4 is done" |
+|---|---|---|
+| Rust | the INPUT KIND | you handed me parquets instead of mzML |
+| C# port | `--task` + validity sidecars + lazy `ctx.Demand` | the task names its stage; the sidecar attests each run's outputs |
+
+The second subsumes the first. What the input kind still does is give every membership predicate a
+second, older opinion about where the pipeline starts:
+
+```csharp
+PerFileScoringTask:  return !inputs;                                        // pure Rust-era
+PerFileRescoreTask:  (!inputs && !NoJoin) || (inputs && NoJoin) || (inputs && !NoJoin && ...)
+SecondPassFdrTask:   (!inputs && !NoJoin) || (inputs && ExpectReconciledInput) || ...
+```
+
+`--task FirstPassFDR` then REQUIRES `--input-scores`, which is both eras saying the same thing and
+neither being authoritative.
+
+### The evidence is a defect, not an aesthetic
+
+`--task ModelDiagnostics` set `StopAfterStage5` - the C#-era signal - while its inputs were mzML
+stems, the Rust-era signal for "start from the beginning". `PerFileRescoreTask.IsIncluded` believed
+the input kind, joined the pipeline, demanded `CompactedEntries` that a diagnostics fold never
+publishes, and **failed the run after the report it was asked for had already been written**. Fixed
+by teaching two more predicates about `StopAfterStage5`, which is patching the symptom: the real
+fault is two seams disagreeing.
+
+### What removal buys, beyond deleting the branch
+
+* **`--input-list` covers every task.** It feeds `-i` only, so FPFDR / PerFileRescoring /
+  SecondPassFDR still put every path on the command line - 446 absolute parquet paths is ~58,000
+  characters against a 32,767 limit, survivable today only by running with the working directory
+  set to the run dir and passing relative names. One input kind closes that wall for all of them.
+* **The predicates collapse.** Membership becomes a function of `--task` alone.
+* **One derivation direction.** `SyntheticInputFromParquet` exists to go BACKWARDS from a parquet
+  to an input path; forward derivation from the stem is what every other sidecar already does.
+
+### To settle before starting
+
+* `ExpectReconciledInput` - the gate that every supplied parquet carries `osprey.reconciled=true` -
+  is expressed in terms of the flag. Derived, it becomes the ordinary question "does
+  `<stem>.scores-reconciled.parquet` exist and carry a current stamp", which is what validity
+  sidecars answer for every other artifact. Likely a simplification too, but it is a correctness
+  gate and must not be lost in the move.
+* The HPC chain stages parquets into per-phase directories and names them relatively; that becomes
+  `-i <stem>` plus `--output-dir`. **Mode 3 is the leg that catches a derivation mistake**, which is
+  the reassuring part.
+* Inputs that no longer exist are already tolerated ("446 of 446 input(s) are absent but have a
+  spectra cache"); derivation must additionally tolerate the raw AND the cache being absent when
+  only the parquet is wanted, which is the 446 bed's state.
+
+### Sequencing
+
+Its own branch and its own `-Dataset All`. It touches argument validation, every task's membership,
+the chain scripts and the docs - too broad to fold into the mdiag work in flight, and it is exactly
+the kind of Rust-era removal `project_osprey_parity_removal_sprint` anticipated now that the Rust
+implementation is retired.
