@@ -6974,6 +6974,120 @@ same six files.
 this is substantial, standalone work with its own open questions (a competing PR #4632, a
 native-rebuild-or-not decision, one still-open test failure). Read that file before continuing
 this thread; don't try to reconstruct it from this summary alone.
+## 2026-09-03/04: Managed leak tooling, and the first non-wiff2 leak root-caused and fixed
+
+Two nights of leak checking on this branch. The 13-hour run of 2026-09-03 finished **zero test
+failures** across 644 leak-checked tests, with 13 tests reporting leaks. Log archived to
+`D:\test\nightly-logs\SkylineTester-20260904-net10-13hr-0failures-leaks.log`.
+
+### The measurement finding: managed is signal, native heap mostly is not
+
+Reproducing each non-wiff2 leaker in isolation (10 tests, 37 min total, median 1.4 min each):
+**only 2 of 10 reproduced.** Five of six *heap* leakers did not merely fail to reproduce, they
+went strongly negative - `TestSrmSmallMoleculeChromatograms` reported +89.4 KB/run in the nightly
+and -522.8 KB/run alone. The managed axis behaved oppositely: every test landed in a tight
+3.1-7.6 KB band, and the one real leak reproduced to within 0.7 KB (11.4 -> 12.1).
+
+Confirmed by regressing 100-iteration runs. On the *same runs*, managed gave R2 = 1.00 while heap
+gave R2 of 0.00, 0.07 and 0.63. **A real leak is almost perfectly linear**; the wiff2 leak held
+0.035 MB/run across 12,000 runs. Variance that happens to trip the gate's 8-run minimum window has
+low R2 and a slope whose confidence interval spans zero.
+
+Consequence: `HeapMemory = 20 * KB` in `TestRunner/Program.cs` is set roughly an order of magnitude
+below the measured noise floor on that axis, which is why five of seven heap reports evaporated.
+Worth either raising it or requiring a heap leak to reproduce twice before being reported -
+otherwise every long run keeps producing heap findings that cost an hour each to disprove.
+
+### The 8 KB gate hides real leaks
+
+`TestAddIrtStandards` (5.89 KB/run) and `IrtRedundantDbFunctionalTest` (4.40 KB/run) are perfectly
+linear unbounded leaks at R2 = 1.00 that the gate **never reports**, because they sit under the
+threshold. They surfaced only because they were pulled in as near-misses. Any test leaking 1-8
+KB/run is currently invisible and accumulates just as surely.
+
+### Root cause: SortableBindingList never told the BindingSource to stop
+
+Six tests with "Irt" in the name all leaked managed memory. One cause:
+
+`SortableBindingList<T>` did not implement `IRaiseItemChangedEvents`. `BindingList<T>` answers
+**false** there whenever T lacks `INotifyPropertyChanged` - which `DbIrtPeptide` does - and a
+BindingSource that gets false calls `PropertyDescriptor.AddValueChanged(item, handler)` for
+**every item in the list**. Those subscriptions live in
+`ReflectPropertyDescriptor._valueChangedHandlers`, keyed by the item and rooted through
+TypeDescriptor's static provider cache. Nothing but an explicit `RemoveValueChanged` releases them:
+not disposing the grid, not disposing the BindingSource, not dropping the list. Every row every
+one of these dialogs ever bound stayed reachable for the life of the process.
+
+`BindingListView` already answers true here, with a comment describing exactly this behaviour.
+`SortableBindingList` simply never got the same treatment.
+
+Measured before -> after, 100 iterations each:
+
+| Test | Before | After |
+|---|---|---|
+| IrtDocumentFunctionalTest | 12.68 KB/run, R2 = 1.00 | 0.00, R2 = 0.00 (noise) |
+| TestAddIrtStandards | 5.89 KB/run, R2 = 1.00 | -0.11, R2 = 0.30 (noise) |
+| IrtRedundantDbFunctionalTest | 4.40 KB/run, R2 = 1.00 | -0.01, R2 = 0.03 (noise) |
+
+**Not yet regression tested beyond a smoke run.** `SortableBindingList` is bound by 15 files
+including `EditIsolationSchemeDlg`, `EditPeakScoringModelDlg`, `EditOptimizationLibraryDlg`,
+`EditRTDlg`, `EditIonMobilityLibraryDlg`, `RenameProteinsDlg`, `ComparePeakPickingDlg`,
+`ImportTransitionListErrorDlg`, `SpectrumLibraryInfoDlg` and `BuildLibraryGridView`. The contract
+being asserted is that the LIST raises ListChanged for item edits - true where grids edit through
+the grid or repopulate wholesale, but a dialog that mutates a bound item's property from code and
+expects the grid to refresh itself would now not refresh. **A full functional run is required
+before this ships.**
+
+### New tooling: managed leak diagnosis without a GUI
+
+`TestRunnerLib/GcHeapHistogram.cs` (new) captures a per-type histogram of the managed heap after a
+full collect and diffs two captures. It pairs with the existing `GcRootReporter`: histogram answers
+*what is growing*, root reporter answers *what is holding it*. Driven by an environment variable so
+nothing has to be threaded through TestRunner, SkylineTester and the wrapper scripts:
+
+```
+SKYLINE_HEAP_HISTOGRAM=<warmup>,<span>[,<topCount>]
+SKYLINE_HEAP_HISTOGRAM_ROOTS=<comma-separated type names>   # optional; overrides the automatic pick
+```
+
+`GcRootReporter` gained **field names** on every chain link, which is what makes the output
+actionable - `_valueChangedHandlers` is a searchable fact, `ConcurrentDictionary` is not. Repeated
+links collapse to `Type.field xN` so a walk through a linked list does not consume the length
+budget before reaching the object that identifies the leak. Verified against known ground truth on
+the wiff2 leak:
+
+```
+Timer._timer -> TimerHolder._timer -> TimerQueueTimer._associatedTimerQueue
+  -> TimerQueue._longTimers -> TimerQueueTimer._next x10
+  -> TimerQueueTimer._timerCallback -> TimerCallback._target -> SampleDataProviderServer
+```
+
+**Honest assessment of the tool's first case:** it did not close it. It correctly named the growing
+types and produced correct chains, but without field names the chain was easy to misread, and it
+manufactured one false lead - a phantom `String` leak that was its own baseline snapshot's key
+strings being counted as growth (fixed by interning type names in a pool shared across captures).
+dotMemory plus a screenshot from Brendan supplied `_valueChangedHandlers`, and that is what led to
+the fix. The field-name and interning work exists so the next case can be closed unaided; that
+remains to be demonstrated.
+
+### wiff2 leak: diagnosed, deliberately not fixed
+
+Root cause established: every `MsDataFileImpl` open of a `.wiff2` leaves a
+`Clearcore2.RFLight.SampleDataProvider.SampleDataProviderServer` rooted by its own periodic Timer,
+~24 KB per open, because `CreateSampleDataApi` is called per file and the SDK exposes no shutdown
+(`ISampleDataApi` and `DataApiFactory` are both non-disposable; `CloseFile` closes a file, not the
+server). Sharing the api process-wide is what cpp does (`WiffFile2.ipp:64`) and eliminates the leak
+- but cpp keeps one reader per FILE while this port keeps one per SAMPLE, so sharing needs ownership
+arbitration cpp never needed. A shared-api attempt was **reverted** after a test proved it caused
+`ObjectDisposedException: SQLiteConnection` under concurrent readers on one path - silent data loss
+in Skyline's 12-way parallel import, worse than the leak. Two regression tests were kept:
+`Reader_Sciex_wiff2_SecondReaderSurvivesFirstReaderDispose` and
+`Reader_Sciex_wiff2_ConcurrentReadersSurviveChurnOnSamePath` (the latter fails on the shared-api
+version, passes on current code). Deferred by decision; four tests still leak 26-36 KB/run from it.
+
+Two pre-existing wiff2 defects were filed rather than fixed: [#4638](https://github.com/ProteoWizard/pwiz/issues/4638)
+(retry latch blames AddFramingZeros for any SDK failure) and [#4639](https://github.com/ProteoWizard/pwiz/issues/4639)
+(profile data stamped MS_centroid_spectrum after the centroid latch trips).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
