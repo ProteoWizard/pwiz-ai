@@ -49,6 +49,20 @@ DROP_KEYS = {
     'featureCount', 'model', 'modelComposite',
 }
 
+# Also model-derived, but NOT dropped - REPORTED SEPARATELY.
+#
+# ModelDiagnosticsData.Build sets ModelComposite, ModelDegenerate, FeatureHistEdges
+# and Model inside one `if (contributions != null)` block, and FeatureCount from
+# `contributions?.Features.Count ?? 0` right above it. So a rehydrated run leaves
+# all FIVE at their defaults, not the three the drop list names: modelDegenerate
+# stays false and featureHistEdges stays null for exactly the same reason
+# featureCount stays 0.
+#
+# Widening DROP_KEYS to swallow them would weaken the test by hiding two more
+# fields from it. Reporting them in their own bucket keeps the comparison total:
+# a difference here is explained, a difference anywhere else is not.
+MODEL_DERIVED = {'modelDegenerate', 'featureHistEdges'}
+
 
 def read_payload(path):
     with open(path, 'r', encoding='utf-8', errors='replace') as fh:
@@ -91,16 +105,35 @@ def compare(path_a, path_b, tol, maxshow, quiet=False):
     walk(read_payload(path_a), '', fa)
     walk(read_payload(path_b), '', fb)
 
-    only_a = sorted(set(fa) - set(fb))
-    only_b = sorted(set(fb) - set(fa))
+    def is_model_derived(leaf):
+        return any(part.split('[')[0] in MODEL_DERIVED for part in leaf.split('.'))
+
+    only_a_all = sorted(set(fa) - set(fb))
+    only_b_all = sorted(set(fb) - set(fa))
     shared = sorted(set(fa) & set(fb))
-    diffs = [(k, fa[k], fb[k]) for k in shared if not same(fa[k], fb[k], tol)]
+    diffs_all = [(k, fa[k], fb[k]) for k in shared if not same(fa[k], fb[k], tol)]
+
+    # Split the model-derived leaves out of every bucket before judging.
+    only_a = [k for k in only_a_all if not is_model_derived(k)]
+    only_b = [k for k in only_b_all if not is_model_derived(k)]
+    diffs = [d for d in diffs_all if not is_model_derived(d[0])]
+    model_leaves = ([k for k in only_a_all if is_model_derived(k)]
+                    + [k for k in only_b_all if is_model_derived(k)]
+                    + [d[0] for d in diffs_all if is_model_derived(d[0])])
 
     if not quiet:
         print('A leaves: %d   B leaves: %d   shared: %d' % (len(fa), len(fb), len(shared)))
         print('only in A: %d   only in B: %d   differing shared: %d'
               % (len(only_a), len(only_b), len(diffs)))
         print('tolerance: %s' % ('exact' if tol == 0 else tol))
+        if model_leaves:
+            print('\n--- MODEL-DERIVED, expected to differ (%d leaf/leaves, not counted above)'
+                  % len(model_leaves))
+            print('    A rehydrated run leaves modelDegenerate=false and featureHistEdges=null')
+            print('    for the same reason it leaves featureCount=0; a cold run trains.')
+            for k in sorted(set(model_leaves))[:maxshow]:
+                print('      %-64s A=%r B=%r'
+                      % (k, fa.get(k, '<absent>'), fb.get(k, '<absent>')))
 
         for label, keys, src in (('ONLY IN A', only_a, fa), ('ONLY IN B', only_b, fb)):
             if keys:
@@ -168,8 +201,13 @@ def selftest(src):
         if ca:
             ca.pop(sorted(ca)[0])
 
+    def bump_model_derived(doc):
+        doc['modelDegenerate'] = not doc.get('modelDegenerate', False)
+        doc['featureHistEdges'] = [1.0, 2.0, 3.0]
+
     cases = (('perturbed real field', bump_real, False),
              ('perturbed dropped fields', bump_dropped, True),
+             ('perturbed model-derived', bump_model_derived, True),
              ('removed subtree', drop_subtree, False))
     allok = True
     for name, mut, expect_match in cases:
