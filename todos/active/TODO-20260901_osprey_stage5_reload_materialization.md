@@ -3856,5 +3856,27 @@ nobody looks at. Osprey logs `Osprey v<version>` and that version is routinely o
 banner cannot distinguish two builds and actively suggests they are the same. Logging the resolved
 assembly path at startup would have made this self-evident.
 
+### Route B independently replicated the coupling-4 measurement
+
+Route B is a different feed (cold live score-pass sink, not warm sidecars) on a different build
+(`248-phase1`, not `249-mdiag-fold`), so it is a genuine replication rather than a re-reading:
+
+| | priv start | priv max | d_priv | mgd start | mgd floor | d_live | join share |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Route A (warm) | 11.68 GB | 32.67 GB | +21.00 GB | 9.45 GB | 5.66 GB | -3.78 GB | 72 % |
+| Route B (cold) | 32.68 GB | 37.23 GB | **+4.55 GB** | 9.39 GB | 7.85 GB | **-1.55 GB** | 72 % |
+
+Route B does strictly MORE work than Route A - a full cold first pass rather than a render over
+retained products - and its committed rise is **a quarter of Route A's**, because it entered the
+phase at 32.68 GB instead of 11.68 GB. The managed floor falls on both. The join share is 72 % on
+both.
+
+That is the plateau argument holding under an independent run: the phase's apparent cost is set by
+where the process already was, not by what the phase retains.
+
+**And the detected row count is identical to the digit: 13,954,867 on both routes.** The panel
+reduces the same population from either feed. That is not the payload comparison - it is one
+number out of ~18.8 K leaves - but it is the number that would move first if the feeds disagreed.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
