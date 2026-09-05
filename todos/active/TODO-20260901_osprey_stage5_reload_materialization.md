@@ -3826,5 +3826,35 @@ Two corrections to the record this produced, both worth keeping:
   the phase window and produced a table where 86 files outranked 446. Only the rise across the
   phase, and the managed floor under it, say anything about the panel.
 
+## The Route A report and the Route B run are on DIFFERENT builds
+
+Recorded because the fact was already in the previous session's own log table and its
+significance went unread, which is the kind of thing that silently invalidates an experiment.
+
+| | script | log | binary | built |
+|---|---|---|---|---|
+| Route A (approved report) | `measure-routeA-live.ps1` | `run-logmem.log` | `_bin\249-mdiag-fold` | 15:53:50 |
+| Route B | `run-446-routeB.ps1` | `run.log` | `_bin\248-phase1` | 14:29:41 |
+
+The table called `run.log` "the phase-1 attempt that DIED at run 266" - and *phase-1* is the
+`248-phase1` build. `run-446-routeB.ps1` took its exe path from that dead attempt's script, so the
+surviving Route A report and the Route B run were never on the same code.
+
+Established from artifacts rather than from the scripts, since a script can be edited after the
+fact: the approved report's `generatedUtc` is `2026-09-04 23:48:47 UTC` (= 16:48:47 PDT) and
+`run-logmem.log`'s last line is 16:48:48, so the report belongs to the run-logmem run;
+`249-mdiag-fold` finished building at 15:53:50 and that run's first line is 15:53:59.
+
+The builds straddle `4bab6717ee` (the fold). **Neither is the branch tip**: `fbf0608308` (19:49)
+and `73f16ef1f7` (21:38) postdate both. So the A/B comparison, whatever it says, is not tip
+validation - that comes from `-Dataset All`, which builds the working tree.
+
+**A build directory is an experiment input and belongs in the run record beside the command line.**
+`_bin\` holds 69 builds; the only thing separating the right one from the wrong one is a timestamp
+nobody looks at. Osprey logs `Osprey v<version>` and that version is routinely overridden
+(`OSPREY_VERSION_OVERRIDE=26.1.1.243` here, against a real FileVersion of 26.1.1.247), so the
+banner cannot distinguish two builds and actively suggests they are the same. Logging the resolved
+assembly path at startup would have made this self-evident.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
