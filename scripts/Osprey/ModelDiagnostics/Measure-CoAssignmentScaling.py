@@ -44,10 +44,43 @@ import sys
 DONE = re.compile(
     r'peak co-assignment \(pass (\d)\): ([\d,]+) detected rows over (\d+) file\(s\) in ([\d.]+)s')
 SCAN = re.compile(r'Peak co-assignment: scanning 1st-pass sidecars over (\d+) file')
+REDUCE = re.compile(r'peak co-assignment: reducing the experiment boundary over')
+JOIN = re.compile(r'Peak co-assignment: joining apex RT over (\d+) file')
 MEM = re.compile(r'^\[[\d/]+ [\d:]+\]\t(\d+)\t(\d+)\t')
+STAMP = re.compile(r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\]')
 PAYLOAD = re.compile(r'<script[^>]*type="application/json"[^>]*>(.*?)</script>', re.S)
 
 MIN_LOG_BYTES = 10000
+
+
+def split_seconds(seg):
+    """Wall seconds in the panel's two halves, from the log's own timestamps.
+
+    Phase 1 streams every record of every 1st-pass sidecar to find the decoy
+    acceptance boundaries. Phase 2 re-reads two columns of every .scores.parquet
+    and joins them against those sidecars. Which half dominates decides where a
+    latency fix would have to go, and the split is not obvious from the total.
+
+    Returns (scan_s, join_s) or (None, None) when the log predates the markers.
+    """
+    from datetime import datetime
+
+    def stamp(line):
+        m = STAMP.match(line)
+        return datetime.strptime(m.group(1), '%Y/%m/%d %H:%M:%S') if m else None
+
+    t0 = t_reduce = t_join = None
+    for line in seg:
+        if t0 is None and SCAN.search(line):
+            t0 = stamp(line)
+        elif t_reduce is None and REDUCE.search(line):
+            t_reduce = stamp(line)
+        elif t_join is None and JOIN.search(line):
+            t_join = stamp(line)
+    t_end = stamp(seg[-1]) if seg else None
+    if not (t0 and t_reduce and t_join and t_end):
+        return None, None
+    return (t_reduce - t0).total_seconds(), (t_end - t_join).total_seconds()
 
 
 def phases_in_log(path):
@@ -64,14 +97,16 @@ def phases_in_log(path):
                 # No scan marker means an older build that did not report phase 1;
                 # fall back to a window generous enough to cover it.
                 lo = start if start is not None else max(0, i - 3000)
+                seg = lines[lo:i + 1]
                 mem = [(int(x.group(1)), int(x.group(2)))
-                       for x in (MEM.match(s) for s in lines[lo:i + 1]) if x]
+                       for x in (MEM.match(s) for s in seg) if x]
                 out.append({
                     'pass': int(m.group(1)),
                     'rows': int(m.group(2).replace(',', '')),
                     'files': int(m.group(3)),
                     'secs': float(m.group(4)),
                     'mem': mem,
+                    'split': split_seconds(seg),
                 })
                 start = None
     return out
@@ -105,16 +140,24 @@ def collect_logs(root, filt):
 
 
 def view_scaling(recs):
-    print('%5s %4s %12s %9s %9s %10s  %10s %10s  %s' % (
-        'files', 'pass', 'rows', 'secs', 'us/row', 'rows/file',
-        'mgd max', 'priv max', 'log'))
+    print('%5s %4s %12s %9s %8s %8s %6s %10s  %10s  %s' % (
+        'files', 'pass', 'rows', 'secs', 'scan_s', 'join_s', 'join%', 'rows/file',
+        'priv max', 'log'))
     for r in recs:
-        mg = max((m[0] for m in r['mem']), default=0) / 1024.0
         pv = max((m[1] for m in r['mem']), default=0) / 1024.0
-        usrow = (r['secs'] * 1e6 / r['rows']) if r['rows'] else 0
-        print('%5d %4d %12d %9.1f %9.2f %10.0f  %7.2f GB %7.2f GB  %s' % (
-            r['files'], r['pass'], r['rows'], r['secs'], usrow,
-            r['rows'] / float(r['files']), mg, pv, r['log']))
+        scan_s, join_s = r.get('split', (None, None))
+        if scan_s is None:
+            span, pct = '       -        -', '     -'
+        else:
+            span = '%8.1f %8.1f' % (scan_s, join_s)
+            tot = scan_s + join_s
+            pct = '%5.0f%%' % (100.0 * join_s / tot) if tot > 0 else '     -'
+        print('%5d %4d %12d %9.1f %s %s %10.0f  %7.2f GB  %s' % (
+            r['files'], r['pass'], r['rows'], r['secs'], span, pct,
+            r['rows'] / float(r['files']), pv, r['log']))
+    print('\nscan_s is phase 1 (stream every 1st-pass sidecar record for the acceptance')
+    print('boundaries); join_s is phase 2 (re-read two columns of every .scores.parquet and')
+    print('join them). priv max is NOT attributable to the panel - use the delta view.')
 
 
 def view_delta(recs):

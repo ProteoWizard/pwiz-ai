@@ -3754,6 +3754,17 @@ the same absolute level everything else reaches. The same 446 files on the full 
 committed footprint by **0.56 GB**. The rise is Server-GC committed heap following an allocation
 burst - the pattern already root-caused for the pipeline peak - not retention.
 
+The cleanest control in the ladder is the `stage5stream` pair, which holds the code generation
+fixed and varies only the run count:
+
+| stage5stream run | files | priv at start | priv max | rise | managed floor |
+|---|---:|---:|---:|---:|---:|
+| `chs-86files-...-p0059-stage5stream` | 86 | 22.05 GB | 25.67 GB | +3.61 GB | -4.32 GB |
+| `chs-446files-...-stage5stream` | 446 | 31.59 GB | 32.15 GB | **+0.56 GB** | -2.73 GB |
+
+Same code, 5.2x the files, and the phase's committed rise went DOWN. An O(runs) term cannot do
+that.
+
 ### What DOES scale: a second full parquet read
 
 Time is linear in detected rows, and detected rows are linear in files (~24-46 K per file,
@@ -3770,15 +3781,29 @@ roughly constant across the ladder):
 "a second read of two columns of every `.scores.parquet`". At 446 files that is **11-15 minutes**;
 at a 1000-file target it projects to ~25-35 minutes of pure panel time under `--model-diagnostics`.
 
+The panel's two halves split as follows (`scaling` view, from the log's own timestamps):
+
+| files | phase 1 scan (sidecars) | phase 2 join (parquet) | join share |
+|---:|---:|---:|---:|
+| 86 | 67-106 s | 79-82 s | 43-55 % |
+| 257 | 232-270 s | 388-416 s | 61-63 % |
+| 446 | 184-295 s | 467-606 s | **67-72 %** |
+
+The join share RISES with the run count, so the parquet re-read is both the majority of the cost
+and the half that is getting worse. Phase 1 streams sidecars that are already being read; phase 2
+is the second full pass over the cohort's parquets.
+
 ### Recommendation
 
 **Do not give this the treatment the fold got.** There is no O(runs) retention to remove, and a
 bounded-memory rewrite would be an intermediate the architecture does not need. Coupling 4 closes
 as characterised.
 
-If the panel's cost is worth attacking it is as latency, and the lever is the second parquet read
-- not the accumulators. Worth noting only because it is opt-in: this cost is paid solely under
-`--model-diagnostics`, so no production run carries it.
+If the panel's cost is worth attacking it is as latency, and the lever is phase 2 - the second
+parquet read, 67-72 % of the panel at 446 and rising with N - not the accumulators. Worth noting
+only because it is opt-in: this cost is paid solely under `--model-diagnostics`, so no production
+run carries it. That is also the argument for leaving it alone until someone actually asks for a
+faster diagnostics render.
 
 Two corrections to the record this produced, both worth keeping:
 
