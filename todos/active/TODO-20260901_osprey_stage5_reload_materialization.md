@@ -3943,5 +3943,44 @@ in the session dir in case a later change reopens the question.
 Corroborating, from the panel's own log line on each route: **13,954,867 detected rows on both**,
 identical to the digit.
 
+## `regression.ps1 -Dataset All`: GREEN, and it is the tip validation
+
+Ran 02:52:38 -> 04:34:45, **exit 0, wall 1h42m06s**, on a build of the working tree at
+`73f16ef1f7`. Log: `ai/.tmp/sessions/20260905-routeB/gate-all.log`.
+
+```
+legs      : 72 PASS, 0 FAIL, 6 SKIP  (total 78)
+  Stellar                15 leg(s)
+  StellarLibDecoy        21 leg(s)
+  StellarGenDecoyEntrap  21 leg(s)
+  Astral                 21 leg(s)
+GATE ACCEPTED
+```
+
+Accepted by `sessions/20260905-routeB/check-gate.ps1` rather than by reading "exit 0": it asserts
+that every selected dataset contributed legs and that the total clears a floor, because an
+**aborted run reports zero failures too**. Stellar's 15 against the others' 21 is correct - it
+carries no `ModelDiagnostics` key in the dataset spec, so the mdiag legs do not apply to it.
+
+All 6 SKIPs are the two pre-existing ones (`mode8` partial rescore resume, `mode9` crash-shaped
+half-done resume, both wanting a `--model-diagnostics` plan source) across the three mdiag
+datasets. No new skip appeared.
+
+### This is what the A/B comparison could not prove
+
+Neither binary in the Route A/B experiment is the branch tip, so that match validates the feeds,
+not the tip. This gate builds the working tree, and the three legs the last two commits touched
+are green on **every** dataset rather than only on the StellarLibDecoy the previous session ran:
+
+| leg | Stellar | StellarLibDecoy | StellarGenDecoyEntrap | Astral |
+|---|---|---|---|---|
+| `mode3 (per-run hydrate)` | PASS (3 workers) | PASS (3 workers) | PASS (3 workers) | PASS (3 workers) |
+| `mode5 (rehydrate diagnostics vs golden)` | n/a | PASS | PASS | PASS |
+| `mode7 (diagnostics regeneration vs golden)` | n/a | PASS | PASS | PASS |
+
+`StellarGenDecoyEntrap` and `Astral` had never seen any of the six commits on this branch. The
+retired `CanHydratePerRun` exclusion holds on both, and modes 5 and 7 compare `featureCount`
+against the golden on both - the strictly-stronger check that replaced the `-NoTrainedModel` pin.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
