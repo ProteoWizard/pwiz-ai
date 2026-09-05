@@ -41,9 +41,18 @@ may differ from the Skyline defaults in this file.
 - **Skyline/skyline_YY_N** - Release branches
 - **Skyline/work/YYYYMMDD_description** - Feature/fix branches (all development)
 
+**Updating a feature branch from master:** once it has a PR, `git merge origin/master`
+and a plain `git push`. **Never rebase and never force-push a branch with a PR** - that
+rewrites history and forces everyone else holding the branch to reset, which is what
+stops two people working one branch. Merge commits are free here because the PR is
+squash-merged. Before the PR exists, rebasing is fine. Full rule in
+[docs/version-control-guide.md](docs/version-control-guide.md#updating-a-branch-from-master).
+
 **For pwiz-ai repository (ai/):**
 - **master** - All work happens here directly
 - No feature branches needed - commit and push to master
+- Update with `git pull --rebase` - the OPPOSITE of the pwiz rule above, because
+  nothing squashes this history later, so master must stay linear
 
 ## Backlog and TODO System
 

@@ -138,6 +138,38 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 The commits will be squashed on merge anyway, so there is no cost to having multiple commits.
 
+## Updating a pwiz Branch from master — Merge, Never Rebase
+
+**Once a branch has a PR, its history is public. Do not rewrite it.** Update it by
+merging master in:
+
+```bash
+git fetch origin
+git merge origin/master     # NOT git rebase, NOT git pull --rebase
+git push                    # plain push; never --force / --force-with-lease
+```
+
+**Why.** A rebase rewrites every commit on the branch, so the remote can then only be
+updated by force-pushing — and that force-push makes everyone else holding the branch
+reset to recover. Merging leaves the existing commits reachable, so a teammate's
+`git pull` is a fast-forward and several people can work the same branch at once. The
+merge commits cost nothing: the PR is squash-merged, so they never reach master.
+
+**Before the PR exists, a rebase is fine** — nobody else has the branch yet. The rule
+starts at `gh pr create`.
+
+**This is the opposite of the pwiz-ai rule below, and deliberately so.** The two repos
+differ in whether anything cleans up the history later:
+
+| | pwiz feature branch, once it has a PR | pwiz-ai master |
+|---|---|---|
+| update with | `git merge origin/master` | `git pull --rebase` |
+| push with | `git push` | `git push` |
+| force-push | **never** | never |
+| why | others may be working the branch; the squash-merge discards the merge commits | no squash later, so master history must stay linear |
+
+Do not carry the heading below across to a pwiz branch. It is scoped to `ai/`.
+
 ## Committing to pwiz-ai (ai/) — Rebase, Never Merge
 
 Changes under `ai/` commit **directly to pwiz-ai master** (no PR, no feature branch).

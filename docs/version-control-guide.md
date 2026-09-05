@@ -508,6 +508,46 @@ git branch --show-current
 # TODO location: ai/todos/active/TODO-20251217_feature_name.md
 ```
 
+## Updating a Branch from master
+
+**Once a branch has a PR, its history is public. Do not rewrite it.**
+
+```bash
+git fetch origin
+git merge origin/master     # NOT git rebase, NOT git pull --rebase
+git push                    # plain push; never --force / --force-with-lease
+```
+
+A rebase rewrites every commit on the branch. The remote can then only be updated by
+force-pushing, and that force-push invalidates every other clone: anyone else who has the
+branch has to reset to recover, and any work they have on top of it is stranded. Merging
+leaves the existing commits reachable, so a teammate's `git pull` is an ordinary
+fast-forward. **That is what lets more than one person work a branch** — which is the
+point of the rule, not tidiness.
+
+The merge commits cost nothing. Every PR is squash-merged, so the branch's history is
+collapsed to a single commit on master and the merges never appear there. A pwiz feature
+branch's history is scratch space that other people may be standing on; it is not the
+history that ships.
+
+**Before the PR exists, rebasing is fine** — nobody else has the branch. The rule starts
+at `gh pr create`.
+
+Note the machine's global `pull.rebase false`: a bare `git pull` on a pwiz feature branch
+already does the right thing. It is `--rebase` that has to be typed, and on a branch with
+a PR it should not be.
+
+### Contrast with pwiz-ai
+
+`ai/` follows the opposite rule — see "Committing to pwiz-ai" in the `/version-control`
+skill. The difference is whether anything cleans up the history afterwards:
+
+| | pwiz feature branch, once it has a PR | pwiz-ai master |
+|---|---|---|
+| update with | `git merge origin/master` | `git pull --rebase` |
+| force-push | **never** | never |
+| why | others may hold the branch; the squash-merge discards the merges | no squash later, so master must stay linear |
+
 ## Amending Commits
 
 **NEVER amend after a PR has been reviewed.** When addressing review feedback (from humans or Copilot), always create a NEW commit. This preserves the review history and makes it easy to see what changed in response to feedback. PRs are squash-merged, so extra commits have zero cost.
@@ -604,4 +644,7 @@ Cherry-pick of #<original-PR> to release branch `Skyline/skyline_XX_X`.
 ### Common Gotchas
 
 1. **Deleting PR branch too early** - Wait for the cherry-pick PR to be created before deleting your branch
-2. **Merge commits in history** - Use `git pull --rebase` or `/rebase` comment before squash-and-merge
+2. **Rebasing a branch that already has a PR** - it rewrites every commit, so the remote can
+   only be updated by force-pushing, and that forces everyone else holding the branch to reset.
+   Merge `origin/master` in and push normally; the squash-merge discards the merge commits so
+   they never reach master. See "Updating a Branch from master".
