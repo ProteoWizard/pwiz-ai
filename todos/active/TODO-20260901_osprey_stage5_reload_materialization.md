@@ -3624,3 +3624,50 @@ Its own branch and its own `-Dataset All`. It touches argument validation, every
 the chain scripts and the docs - too broad to fold into the mdiag work in flight, and it is exactly
 the kind of Rust-era removal `project_osprey_parity_removal_sprint` anticipated now that the Rust
 implementation is retired.
+
+## THE PEAK IS NOT IN THE FOLD: peak co-assignment reaches ~33 GB at 446 (2026-09-04)
+
+Found in the developer's perfviz screenshot of `run-logmem.log`, not in my instrumentation.
+
+The fold is bounded and that measurement stands: post-GC live 3.65 GB at run 1, 4.62 GB at run
+446, flat from run 100. But the plot shows a SECOND phase after the fold ends, where total memory
+climbs to **33.5 GB** and managed to 14 GB:
+
+```
+16:40:56  Peak co-assignment: joining apex RT over 446 file(s)...
+16:48:43  peak co-assignment (pass 1): 13954867 detected rows over 446 file(s) in 664.0s
+16:48:47  [TASK] FirstPassFDR:done (3287.8s)
+```
+
+13.95 M detected rows joined across 446 files, 11 minutes, ~7x the fold it follows. It FITS in
+64 GB so nothing is broken, but it is an O(runs) term nobody has characterised and it is the real
+peak of `--task ModelDiagnostics` at this scale.
+
+**This is `feedback_read_the_perfviz_png_not_the_probes` demonstrated on this branch.** The per-run
+probes I added were inside the fold loop and blind to the phase after it, so the instrumentation
+reported "bounded" for the part it watched while the actual peak was elsewhere. The plot found
+what the probe could not, and a bounded claim that rests only on probes is a claim about the
+instrumented window, not about the run.
+
+Lives in `PeakCoAssignmentSource.Build`, reached from `FoldDiagnosticsOnly` and from every other
+report path. Quantify how it scales with runs before deciding whether it needs the same treatment
+the fold got.
+
+## Gate correction the retirement forced: `-NoTrainedModel` is obsolete
+
+Removing the `CanHydratePerRun` exclusion turned modes 5 and 7 red with:
+
+```
+diagnostics: featureCount run='21', expected '0' - this run adopted first-pass q-values
+from the sidecars and trained no model, so it has no feature contributions to report
+```
+
+**The gate was encoding a limitation the retained product removed.** `-NoTrainedModel` pinned
+`featureCount` at 0 because a rehydrate passed a null `FeatureContributions` and reported no model
+- true only while the pass-1 sidecar was DELETED once consumed and the report had to be rebuilt
+from a modelless rehydrate. It is retained now and carries the model the training run wrote, so a
+resumed report is a full-fidelity render of the straight-through one.
+
+Both legs now compare `featureCount` against the golden instead of asserting it is zero, which is
+**strictly stronger** than the pin it replaces. That the removal surfaced as a red rather than a
+silent pass is the gate working: a pinned metric that stops being true fails loudly.
