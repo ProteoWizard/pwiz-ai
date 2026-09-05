@@ -3722,6 +3722,16 @@ almost always already detected in one of the first 50. The panel's whole cross-r
 at 446 files is ~107 K precursor entries across both accumulators - on the order of **30 MB**,
 three orders of magnitude below the 33.5 GB the phase appears to consume.
 
+**At the 500-1000 file target the conclusion does not depend on the fit.** Take the two extreme
+readings of the ladder and extrapolate both to 1000 files:
+
+* logarithmic (what the ladder actually looks like): ~75.6 K run-scope entries
+* LINEAR at the steepest late-ladder slope (257 -> 446 is 47.9 entries per file, which the
+  saturating curve says is already an overestimate): ~95.3 K
+
+Either way the retained population lands near 100 K entries and tens of MB. There is no reading of
+this data on which the accumulators become a memory problem at the stated target.
+
 ### The managed floor never rises, at any N
 
 `coasgn-delta.py` measures the managed value at a GC trough inside the phase against the value at
