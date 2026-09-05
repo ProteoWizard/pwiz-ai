@@ -3671,3 +3671,6 @@ resumed report is a full-fidelity render of the straight-through one.
 Both legs now compare `featureCount` against the golden instead of asserting it is zero, which is
 **strictly stronger** than the pin it replaces. That the removal surfaced as a red rather than a
 silent pass is the gate working: a pinned metric that stops being true fails loudly.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
