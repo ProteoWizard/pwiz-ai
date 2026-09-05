@@ -533,6 +533,29 @@ history that ships.
 **Before the PR exists, rebasing is fine** — nobody else has the branch. The rule starts
 at `gh pr create`.
 
+**Rebasing after that is rare, not forbidden** — but it is a deliberate, announced
+decision, never a routine way to update. Whoever rebases owns telling anyone holding the
+branch, because they have to reset to recover.
+
+### Check whether a force-push is actually needed
+
+A branch described as "diverged, needs a force-push" often is not. If the rebase was
+followed by a push, the remote already carries the rewritten history and everything since
+is a plain descendant. Test it rather than trusting the note:
+
+```bash
+git fetch origin <branch>
+git merge-base --is-ancestor FETCH_HEAD HEAD && echo "fast-forward, no force needed"
+git log --oneline FETCH_HEAD --not HEAD    # commits ONLY on the remote - what a force would destroy
+```
+
+Measured 2026-09-05 on PR #4633: a handoff carried "the branch has been rebased, so the
+remote has diverged and a force-push would be needed" for a full day after the rebased
+branch had already been pushed. The remote tip was an ancestor of HEAD, nothing existed
+only on the remote, and a plain `git push` fast-forwarded it. Run the two commands above
+before every force-push: if the second prints nothing and the first says fast-forward,
+you do not need `--force` at all.
+
 Note the machine's global `pull.rebase false`: a bare `git pull` on a pwiz feature branch
 already does the right thing. It is `--rebase` that has to be typed, and on a branch with
 a PR it should not be.

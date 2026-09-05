@@ -156,7 +156,19 @@ reset to recover. Merging leaves the existing commits reachable, so a teammate's
 merge commits cost nothing: the PR is squash-merged, so they never reach master.
 
 **Before the PR exists, a rebase is fine** — nobody else has the branch yet. The rule
-starts at `gh pr create`.
+starts at `gh pr create`. After that a rebase is **rare, not forbidden**: a deliberate,
+announced decision, never the routine way to update, and whoever does it owns telling
+anyone holding the branch that they must reset.
+
+**Before any force-push, check whether one is actually needed.** A branch labelled
+"diverged" often is not — if the rebase was followed by a push, the remote already has the
+rewritten history:
+
+```bash
+git fetch origin <branch>
+git merge-base --is-ancestor FETCH_HEAD HEAD && echo "fast-forward, no force needed"
+git log --oneline FETCH_HEAD --not HEAD    # only-on-remote commits a force would destroy
+```
 
 **This is the opposite of the pwiz-ai rule below, and deliberately so.** The two repos
 differ in whether anything cleans up the history later:

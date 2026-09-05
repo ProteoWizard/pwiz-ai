@@ -45,7 +45,10 @@ may differ from the Skyline defaults in this file.
 and a plain `git push`. **Never rebase and never force-push a branch with a PR** - that
 rewrites history and forces everyone else holding the branch to reset, which is what
 stops two people working one branch. Merge commits are free here because the PR is
-squash-merged. Before the PR exists, rebasing is fine. Full rule in
+squash-merged into a single commit on master, which drops the branch's iterative commits
+anyway. Before the PR exists, rebasing is fine; after it, rare and announced. Check a
+force-push is even needed first - a "diverged" branch whose rebase was already pushed
+fast-forwards. Full rule in
 [docs/version-control-guide.md](docs/version-control-guide.md#updating-a-branch-from-master).
 
 **For pwiz-ai repository (ai/):**
