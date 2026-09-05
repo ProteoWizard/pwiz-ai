@@ -3878,5 +3878,70 @@ where the process already was, not by what the phase retains.
 reduces the same population from either feed. That is not the payload comparison - it is one
 number out of ~18.8 K leaves - but it is the number that would move first if the feeds disagreed.
 
+## THE ROUTE A/B RESULT: exact match on 18,821 leaves
+
+```
+A leaves: 18822   B leaves: 18883   shared: 18821
+only in A: 0   only in B: 0   differing shared: 0
+tolerance: exact
+RESULT: MATCH
+```
+
+Route A: warm, folded from the on-disk 1st-pass sidecars, `_bin\249-mdiag-fold`.
+Route B: cold, folded from the LIVE score-pass sink as Percolator scored each row,
+`_bin\248-phase1`, on a bed carrying 446 `.scores.parquet` + `.calibration.json` and **nothing
+else** - verified before launch, and confirmed by the run's own refusal to take the warm path:
+
+```
+FirstPassFDR: not folding diagnostics from completed work - ...1st-pass.fdr_scores.bin is
+missing, so the first pass is re-run.
+```
+
+**Two independent feeds reduce to the same first-pass answer at 446 runs.** That is the claim the
+experiment was built to test, and it holds at zero tolerance across every leaf the two feeds share.
+
+### The match is not trivial - the control that proves it
+
+The three model fields are dropped BY NAME, so a match would be vacuous if Route B had also failed
+to train. It did not:
+
+| field | Route A (warm) | Route B (cold) |
+|---|---|---|
+| `featureCount` | 0 | **21** |
+| `model` | len 0 | **len 21** |
+| `modelComposite` | 0.0 | **0.12467664851908865** |
+| `modelDegenerate` | false | false |
+| `cal` | null | null |
+| `pass2` | null | null |
+| `fileCount` | 446 | 446 |
+
+Route B trained a real 21-feature model and Route A carried none, and the reports still agree
+exactly everywhere else. The 63 leaves separated into the model-derived bucket were all
+`featureHistEdges` (61 edges plus its length/None bookkeeping) - the field the previous handoff's
+three-name drop list would have missed.
+
+Two predictions made before the run, both confirmed by the result:
+
+* `cal` is null on BOTH. It is a Stage-3 capture and neither route runs Stage 3, so a difference
+  there would have been real and worth chasing. There was none.
+* `pass2` is null on BOTH, so Route B is the pass-1-only page the comparison requires - not the
+  two-pass report a Stages 5-7 run would have produced.
+
+### It also settles the different-builds confound, without the disambiguator
+
+Route A and Route B ran different binaries straddling the fold commit `4bab6717ee`. A MISMATCH
+would have been ambiguous between "the feeds disagree" and "the fold commit changed the report".
+**A match cannot be produced by two confounded differences cancelling** - not exactly, across
+18,821 leaves at zero tolerance. So the single result proves both:
+
+1. the live score-pass sink and the on-disk sidecars reduce to the same first-pass answer, and
+2. `4bab6717ee` is report-neutral.
+
+`run-routeA-prime-248.ps1` was staged to disambiguate a mismatch and is **not needed**. It is left
+in the session dir in case a later change reopens the question.
+
+Corroborating, from the panel's own log line on each route: **13,954,867 detected rows on both**,
+identical to the digit.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
