@@ -1827,9 +1827,21 @@ one thing it names is the only omission.
 Measured leg counts from a green `-Dataset All`: **Stellar 15, StellarLibDecoy 21,
 StellarGenDecoyEntrap 21, Astral 19.**
 
+**Do not read those totals as coverage depth** - they sum two different things, and the
+comparison inverts depending on which you mean:
+
+| | Stellar | Astral |
+|---|---:|---:|
+| workflow-DETECTION legs (modes 2, 3, 4, 5-equality, 8, 9) | **12** | 11 |
+| model-diagnostics REPORTING legs | 0 | 6 |
+| total | 15 | 19 |
+
 **Stellar omits 6 legs** - it carries no `ModelDiagnostics` key, so mode 1b (2 legs),
 mode 5's diagnostics-vs-golden and FDR-sanity legs (2), mode 3's "chain report is
-two-pass" (1) and mode 7 (1) do not apply to it.
+two-pass" (1) and mode 7 (1) cannot exist there: there is no report to check. That is the
+whole reason its total is the smallest, and it is NOT a statement about how much workflow
+testing it does. On the detection axis Stellar runs MORE than Astral - it keeps both mode 2
+legs that Astral now omits - which is the intended division of labour, not an accident.
 
 **Astral omits the entire library-decoy axis.** It is never searched against a
 library-supplied decoy library, so nothing on Astral exercises `DecoysInLibrary`, and
