@@ -1,8 +1,9 @@
 # TODO-20260906_osprey_stage7_lean_row.md - Stage 7 (SecondPassFDR) holds ~274 B objects where 88 B of row would serve
 
 **Module**: `osprey`
-**Status**: Not started
-**Branch**: not yet created
+**Status**: Not started - branch created, no commits yet
+**Branch**: `Skyline/work/20260906_osprey_stage7_lean_row` in `C:\proj\pwiz-work1`,
+cut from `c4921f3d6c` (master with #4633 merged). Local only - not pushed, no PR yet.
 **Predecessor**: `todos/completed/TODO-20260901_osprey_stage5_reload_materialization.md`,
 merged as [#4633](https://github.com/ProteoWizard/pwiz/pull/4633) / `c4921f3d6c` on 2026-09-06.
 
