@@ -4054,5 +4054,38 @@ would have violated this: PowerShell FLATTENS `@($empty, $threeItems)`, so with 
 selected the three Stellar variants each became their own lane. Build the lane list with
 `List.Add`, never an array literal.
 
+### Which dataset a leg belongs on — the rule the mode 2 cut follows
+
+Exact leg parity between Stellar and Astral is **not a goal**, and never has been: the
+largest existing asymmetry is that Astral runs no library-decoy configuration at all,
+a deliberate call made on library size and run time.
+
+The division of labour, stated so future cuts do not have to re-derive it:
+
+* **Workflow-DETECTION tests belong on the cheap dataset.** Does the pipeline notice that
+  something is missing, and can it resume from there? Those are Stellar's job. They are
+  about plumbing - stamps, sidecars, invalidation shapes - and plumbing does not care
+  about acquisition or resolution.
+* **The expensive dataset's job is proving it reproduces the same answer one task at a
+  time.** That is mode 3, the HPC 4-task chain parity leg, and it must stay on Astral.
+
+Mode 2 on Astral sat on the wrong side of that line. It is a workflow-detection test -
+delete the FirstPassFDR stamp, re-run, assert the answer is unchanged - and detection plus
+resume is already covered on Stellar, while Astral's ability to reproduce the answer task
+by task is covered by the mode 3 chain that remains. That is why it was the cut, rather
+than because it was merely the most redundant leg by assertion count.
+
+What is genuinely given up: mode 2's invalidation shape (a full in-process
+`FirstPassFdrTask.Run` re-execution) is no longer exercised at hram. Modes 5, 8 and 9 each
+use a DIFFERENT shape, and mode 3 re-runs FirstPassFDR as a separate `--task` process, so
+this is a real gap rather than pure duplication - it is simply a gap on the cheap side of
+the line above.
+
+**Before cutting any other leg, check what reads its log.** Mode 6 asserts the
+library-fragment release fired on every leg that HOLDS the library, and it inspects five
+legs, not the four its header lists - `resume.log` (mode 2) and `rehydrate.log` (mode 5)
+among them. Cutting either without gating mode 6's check list turns mode 6 red, which is
+how the first attempt at this cut failed.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
