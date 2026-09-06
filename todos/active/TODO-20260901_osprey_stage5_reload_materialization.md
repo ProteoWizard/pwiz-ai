@@ -3982,5 +3982,77 @@ are green on **every** dataset rather than only on the StellarLibDecoy the previ
 retired `CanHydratePerRun` exclusion holds on both, and modes 5 and 7 compare `featureCount`
 against the golden on both - the strictly-stronger check that replaced the `-NoTrainedModel` pin.
 
+## Regression suite cost: measured, then halved by lanes rather than threads
+
+The suite had grown from "under an hour" to 2h04m and nobody could say which leg cost
+what - the log carries no timestamps, `-KeepRunDirs` prunes the run dirs, and the summary
+prints only PASS/FAIL/SKIP. Estimates in comments were the only cost data, and one of them
+("about 25 minutes") turned out to be for a leg nobody had ever timed.
+
+### The gate now reports its own cost
+
+`Write-Progress-Tc` stamps every phase boundary and the summary prints a per-phase table,
+most expensive first. No leg carries a stopwatch, so new legs are covered automatically.
+Measured `-Dataset All`, 78 legs, 2h04m30s:
+
+| mode | total across 4 datasets | share |
+|---|---:|---:|
+| 3 — HPC 4-task chain | 43m 09s | 34.7 % |
+| straight-through | 25m 09s | 20.2 % |
+| 2 — resume self-consistency | 17m 51s | 14.3 % |
+| 9 — crash-shaped resume | 12m 07s | 9.7 % |
+| 8 — partial rescore resume | 12m 02s | 9.7 % |
+| 5 — Stage-5 rehydrate | 11m 32s | 9.3 % |
+| 1 — vs golden | 2m 27s | 2.0 % |
+| **1b, 1c, 4, 6, 7 — all five, all datasets** | **~1.5 s** | **0.02 %** |
+
+Two results worth keeping. **Five of the eleven modes are free** - they analyse artifacts
+the earlier legs already produced, so pruning modes by COUNT would save nothing and lose
+real coverage; only the six Osprey-invoking phases cost anything. And **Astral is 51.8 %
+of the suite**, almost exactly the other three datasets combined.
+
+### Threads do not help; processes do
+
+That balance suggested two lanes, but the local serial baseline ran `-Threads 16` on a
+32-logical box - so the parallel gain might have been nothing but the idle half. The
+control settles it:
+
+| local `-Dataset All` | wall |
+|---|---:|
+| serial `-Threads 16` | 2:04:30 |
+| serial `-Threads 32` | **1:59:38** |
+| parallel, 2 lanes x 16 | **1:14:03** |
+
+**Doubling threads bought 3.9 %. Running two processes bought 40 %.** Osprey saturates
+well below 16 threads, so the only way to use a bigger machine is more processes. That is
+why `regression-parallel.ps1` exists rather than a larger `-Threads` default, and it is
+the reason the approach should also help MacCoss TeamCity Agent 1, which is 8 cores / 16
+logical: 2 lanes x 8 beats 1 x 16 for the same reason.
+
+Threads per lane are therefore sized from `[Environment]::ProcessorCount / lanes`, the
+only value correct on both boxes (32 logical -> 2x16 here, 16 -> 2x8 on the agent).
+
+### Two shared-path collisions had to be fixed first
+
+Neither was architectural, and both would bite anyone running two gates at once:
+
+* `Initialize-Sqlite` overwrote `SQLite.Interop.dll` unconditionally while `Add-Type` held
+  it open in the other lane, killing the second lane in 2 seconds. A mutex cannot help -
+  the winner holds the handle for its whole life - so it compares bytes and copies only on
+  a real difference.
+* The run root was keyed on a whole-second timestamp, so lanes starting in the same second
+  SHARED it, and a finishing run deletes its run root: the short lane ended 12:20:18 and
+  the long one died at 12:20:22 on "unable to open database file". The name now carries
+  the PID, and `Remove-StaleRunDirs` skips dirs whose PID names a live `pwsh`.
+
+### The lanes are data-disjoint, and that is load-bearing
+
+Astral reads the `astral` folder and its own library; the three Stellar variants share the
+`stellar` folder, the stellar-libdecoy extract and `TestResults\_derived`, so they stay
+together in one lane and run sequentially within it. A lane-split test caught a bug that
+would have violated this: PowerShell FLATTENS `@($empty, $threeItems)`, so with Astral not
+selected the three Stellar variants each became their own lane. Build the lane list with
+`List.Add`, never an array literal.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
