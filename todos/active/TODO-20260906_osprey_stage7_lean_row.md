@@ -67,3 +67,7 @@ Recorded so this work does not re-litigate settled ground:
   costs double a Stellar-only run, so run the full gate rather than Stellar as a stand-in.
 * The per-dataset coverage matrix and the reason for each asymmetry are in that same guide,
   beside the dataset table. Astral omits mode 2 deliberately; that is budgeted, not an oversight.
+
+**Next session handoff**: For detailed startup protocol - including the 446-file bed whose
+entire first pass is already done, the two settings required to reuse it, and what to measure
+- read `ai/.tmp/handoff-20260906_osprey_stage7_lean_row.md` before starting work.
