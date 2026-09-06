@@ -99,6 +99,50 @@ among #4633's 49 files; `FdrScoresSidecar.FormatVersion` is still 6; the `TaskVa
 change is an additive `TryReadValidityKey` for `--task ModelDiagnostics`; and the only
 `OspreyEnvironment` addition is `OSPREY_DROP_BETWEEN_TASKS`, default off and in no key.
 
+## THE "BEFORE" AT 446 ON THE MERGED TIP (measured 2026-09-06 10:41-11:05)
+
+Run `chs-446files-libdecoy-r1.0-protein-compact-s7base`, exe `_bin\249-s7lean-base`
+(v26.1.1.249, `c4921f3d6c`), `--task SecondPassFDR` linked from `stages567`, mdiag off.
+Plot: `ai/.tmp/sessions/20260906-s7lean/stage7-before-446.png`.
+
+**It reached 85% (file 381/446) in 17:27, then froze for 6.5 minutes and was killed.**
+
+```
+managed MB : peak 68.0 GB  floor 25.2 -> 56.1 GB  drift +30.92 GB  +71 MB/file  RISING
+             sustained 55.6 GB for 87s  (82% of peak - mostly LIVE)
+total MB   : peak 70.5 GB  floor 35.3 -> 61.5 GB  drift +26.26 GB  +60 MB/file  RISING
+             sustained 61.2 GB for 87s  (87% of peak - mostly LIVE)
+```
+
+At the kill: working set **3.86 GB** against **69.94 GB private**, with **0.34 GB available of
+63.69 GB** - Windows had evicted nearly the whole process. That is the 2026-09-04 signature
+(WS 0.29 GB, 0.45 GB available) reproduced on the merged tip, and it confirms #4633's Stage 6
+planning fix does nothing for Stage 7, as expected - it addressed a different stage.
+
+**The gate is satisfied: the pool is still the binding term, so the width/layout work is
+cleared to start.**
+
+**And the sustained level is MOSTLY LIVE - 82-87% of peak.** This is the finding that directs
+the work. An earlier reading of the 40% probe (managed flat at 31.7 GB while private ran to
+44.0 GB) suggested a large burst-allocation component; the 50% probe showed that was one GC's
+timing, and perfviz confirms it. The peak is live, reachable pool, not committed-but-free
+garbage. Consequences:
+
+* **Representation is the right attack** - width (274 B -> 88 B) and layout, exactly as the
+  predecessor's diagnosis says. Not allocation churn.
+* **`571fb86edd` (chunked sidecar read) will not carry this peak.** Worth having for the LOH
+  churn on a read every route performs, but do not expect it to move the sustained level.
+* The plot shows why: a clean sawtooth whose FLOOR climbs monotonically to ~60 GB, and in the
+  final three minutes **the teeth disappear entirely** - the GC has nothing left to reclaim.
+  Rising floor = O(files) accumulation, per the memory-band guide.
+
+Two reporting gaps over 30s (59s at 10:54:36, 62s at 10:56:18), both after a
+`Loaded N FDR stubs` line - the paging starting.
+
+**Cost of reproducing this: about 20 minutes.** `--task SecondPassFDR` linked from `stages567`
+reaches `[TASK] SecondPassFDR:starting` in under a minute, and the wall arrives ~15 minutes
+later. The A/B loop for this work is short; there is no need to schedule it overnight.
+
 ## Before starting
 
 * Read `ai/docs/osprey-development-guide.md` on the two-lane gate - `-Dataset All` no longer
