@@ -61,6 +61,44 @@ Recorded so this work does not re-litigate settled ground:
 * **The gate is green and affordable**: `-Dataset All` is 1:06 on MacCoss TeamCity Agent 1 under
   the two-lane runner, with modes 8 and 9 now running on every dataset.
 
+## CORRECTION 2026-09-06: the handoff names the wrong bed
+
+The handoff points at `chs446-mdiag-coldfpfdr`, whose first pass is done but which stops
+short of PerFileRescoring - reaching Stage 7 from it means running Stage 6 rescore first.
+**Use `chs-446files-libdecoy-r1.0-protein-compact-stages567` instead.** It already carries a
+complete 446-file PerFileRescoring (`.scores-reconciled.parquet`, `.2nd-pass.fdr_scores.bin`,
+`.2nd-pass.fdr_decoys.bin`) plus both analysis-wide sidecars, and it is the very directory the
+78.3 GB before-curve was measured in.
+
+```powershell
+.\Run-Chs.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact -Threads 30 `
+  -Task SecondPassFDR -Tag '-s7base' -NoModelDiagnostics -Exe <snapshot>\Osprey.exe `
+  -LibraryDir D:\test\osprey-runs\sea-ad\lib\target+decoy+entrapment-20260817 `
+  -LinkFrom D:\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-stages567
+```
+
+That reaches `[TASK] SecondPassFDR:starting` in **under a minute**, and the runner pins
+`OSPREY_VERSION_OVERRIDE=26.1.1.243` itself from the source stamps - no manual override.
+
+Three things that are easy to get wrong here:
+
+* **`-Task SecondPassFDR` is not merely faster, it is the only variant that reuses the work.**
+  `-LinkFrom` links the stages strictly BEFORE `-Task`; with no `-Task` the runner links 1784
+  files (`for stages before FirstPassFDR`, i.e. PerFileScoring only) and re-runs FirstPassFDR
+  and PerFileRescoring. With it, 6690 link and 0 are missing.
+* **`-NoModelDiagnostics` is required for the comparison.** The 78.3 GB baseline run records
+  `mdiag=False` in its START line. Measuring with diagnostics on would compare two things.
+  A separate mdiag-on leg is what measures coupling 3, and costs the same minute to set up.
+* **`-Tag` is appended raw** (`OspreyDatasetRun.psm1:436`), so it must carry its own leading
+  `-` or the run directory comes out as `...protein-compacts7base`.
+
+**#4633 cannot invalidate the linked artifacts** - checked, not assumed. `PerFileRescoreTask`'s
+validity key is `base + fdrsidecar + reconciliation + expagg + pass2 + trainpick + stage6stream
++ libfrag`, and `SearchIdentity.cs` (which computes the base and reconciliation hashes) is not
+among #4633's 49 files; `FdrScoresSidecar.FormatVersion` is still 6; the `TaskValiditySidecar`
+change is an additive `TryReadValidityKey` for `--task ModelDiagnostics`; and the only
+`OspreyEnvironment` addition is `OSPREY_DROP_BETWEEN_TASKS`, default off and in no key.
+
 ## Before starting
 
 * Read `ai/docs/osprey-development-guide.md` on the two-lane gate - `-Dataset All` no longer
