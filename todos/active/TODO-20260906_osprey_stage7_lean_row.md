@@ -143,6 +143,62 @@ Two reporting gaps over 30s (59s at 10:54:36, 62s at 10:56:18), both after a
 reaches `[TASK] SecondPassFDR:starting` in under a minute, and the wall arrives ~15 minutes
 later. The A/B loop for this work is short; there is no need to schedule it overnight.
 
+## THE CONTRACT SETTLES THE DIRECTION: FOLD, DO NOT SHRINK (2026-09-06)
+
+Read `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` and `Osprey-workflow.html` BEFORE
+touching this - the osprey-development skill says so for any change to what a task reads,
+writes or keeps, and this work is exactly that. Reading only the Boundary 3 -> 4 section
+cost most of a session pointed at the wrong fix.
+
+**A leaner resident row is not an option, it is the forbidden shape.** P3: *"Work goes in the
+fan-out tasks; a join holds O(distinct), never O(runs x entries)."* The lean 88 B row would
+take the pool from ~79 GB to ~25 GB and still be O(runs x entries) - it fits this box and
+fails at 1000 runs, and doc 00 is explicit that this is "a scaling shape, not a constant
+factor" that "no amount of available RAM changes". **Do not spend the width axis on Stage 7's
+pool.** The 88 B row remains interesting only as an on-disk record, which the 28 B
+`.2nd-pass.fdr_scores.bin` already is.
+
+**The admissible shape is a fold over a stream**, and doc 00 supplies both the vocabulary and
+the worked example:
+
+| | Visits | Holds |
+|---|---|---|
+| Fold over a stream | every run | a bounded summary |
+| Resident whole-experiment structure | every run | every run - **inadmissible** |
+
+"Visited is not resident." Counting Stage 7's ten walks as if visiting were the cost is the
+error that led to the lean-resident recommendation. Doc 00 names Stage 7's own computations
+as folds - *"the best-of-runs experiment-q floor, protein parsimony, the pre-blib q
+re-clamp"* - and points at `StreamingFdr.StreamingFirstPassQ` as the worked example, **pinned
+against its resident twin by a test**. Copy that pattern AND that test shape; do not
+improvise one.
+
+**One defect, three descriptions.** `BuildRescoredPool` -> `MaterializeFileSurvivors` ->
+`FirstPassSurvivorLoader.Load` reads all 446 `<stem>.1st-pass.fdr_scores.bin`. That single
+read is:
+
+* the **boundary violation** - doc 00's Boundary 3 -> 4 says "Not needed on the default path:
+  `<stem>.1st-pass.fdr_scores.bin`. Establishing that is what issue #4486 was for", and the
+  workflow page's SecondPassFDR band lists no per-run first-pass FDR file at all;
+* the **P3 violation** - it is what materialises the O(runs x entries) pool;
+* the **5.9x over-read** - the 1st-pass sidecar spans the whole pre-compaction set, so 1.69 B
+  records / 47 GB are walked to place 289 M survivors. The 2nd-pass sidecar is written FROM
+  the survivor set, so it is 1:1 and ~7.5 GB.
+
+**Target per-run materialize**: survivor stubs from `.scores-reconciled.parquet`, then
+`TryReadOverlay(pass2Path, byEntryId, Pass.SecondPass, pass2ExperimentRecords)` - which is
+already the body of `ReloadPass2Sidecars`, a method Stage 7 runs today AFTER the competition.
+Sourcing at materialize time collapses three steps into one read of the file the contract
+designates, and removes `ResetRescoredTargetsForFile`, which exists only to undo values read
+from the wrong file. Note the workflow page's qualifier: `.2nd-pass.fdr_scores.bin` is a
+Stage 7 INPUT where the rescore worker produced it and an OUTPUT where it did not, so the
+materialize needs both arms.
+
+**Still to settle by comparison, not argument** (the predecessor's standing instruction): the
+2nd-pass sidecar as a like-for-like substitute. `ResetRescoredTargetsForFile`'s existence says
+rescore targets must return to Score 0 / q 1, so a pass-2 overlay could pre-apply pass 2. Gate
+it: `regression.ps1 -Dataset Stellar`, then `-Dataset All`.
+
 ## Before starting
 
 * Read `ai/docs/osprey-development-guide.md` on the two-lane gate - `-Dataset All` no longer
