@@ -1864,10 +1864,13 @@ sole configuration where `DecoyGenerator` runs AND an entrapment true-FDP oracle
 to measure it. Do not cut it to save time.
 
 **Before cutting any leg, check what reads its log.** Mode 6 asserts the library-fragment
-release fired on every leg that HOLDS the library, and it inspects five legs, not the four
-its header lists - `resume.log` (mode 2) and `rehydrate.log` (mode 5) among them. Its
-check list is gated on `SkipModes` for exactly this reason, and it reports its leg count
-on PASS so a shrinking set is visible.
+release fired on every leg that HOLDS the library, and it inspects **eight** legs, not the
+four KINDS its header lists - the `--task PerFileRescoring` kind expands to one check per
+file stem (three of them), and `resume.log` (mode 2) and `rehydrate.log` (mode 5) are
+among the rest. Its check list is gated on `SkipModes` for exactly this reason, and it
+reports its leg count on PASS so a shrinking set is visible: a green
+`-Dataset All` shows `PASS (8 leg(s))` on the three Stellar datasets and
+`PASS (7 leg(s))` on Astral, the missing one being the resume leg.
 
 `StellarGenDecoyEntrap` is the only leg that can catch a decoy-construction
 regression: it is the sole configuration where `DecoyGenerator` runs AND an

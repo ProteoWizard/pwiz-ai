@@ -4082,8 +4082,9 @@ this is a real gap rather than pure duplication - it is simply a gap on the chea
 the line above.
 
 **Before cutting any other leg, check what reads its log.** Mode 6 asserts the
-library-fragment release fired on every leg that HOLDS the library, and it inspects five
-legs, not the four its header lists - `resume.log` (mode 2) and `rehydrate.log` (mode 5)
+library-fragment release fired on every leg that HOLDS the library, and it inspects EIGHT
+legs, not the four KINDS its header lists (the --task PerFileRescoring kind expands to one
+check per file stem) - `resume.log` (mode 2) and `rehydrate.log` (mode 5)
 among them. Cutting either without gating mode 6's check list turns mode 6 red, which is
 how the first attempt at this cut failed.
 
