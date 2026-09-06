@@ -1,4 +1,4 @@
-# TODO-20260901_osprey_stage5_reload_materialization.md - Stage 5 collects all survivors into one O(files) buffer
+# TODO-20260901_osprey_stage5_reload_materialization.md - Stage 5 collects all survivors into one O(files) buffer [COMPLETED - merged as c4921f3d6c]
 
 **Found**: 2026-09-01, by the 446-file CHS join that this was supposed to be the baseline for.
 The join ran 5h14m and was killed thrashing. See
@@ -4090,3 +4090,56 @@ how the first attempt at this cut failed.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
+
+## COMPLETED - merged 2026-09-06
+
+**Status**: Completed
+**PR**: [#4633](https://github.com/ProteoWizard/pwiz/pull/4633) (merged 2026-09-06 as `c4921f3d6c`)
+**Successor**: `todos/active/TODO-20260906_osprey_stage7_lean_row.md`
+
+### 2026-09-06 - Merged
+
+PR #4633 merged as `c4921f3d6c`. What shipped: every first-pass phase's product becomes durable
+when that phase ends (model at training, protein-compact stratum in its own
+`.1st-pass.stratum.json` at protein FDR, per-file `.1st-pass.fdr_scores.bin` in pass 1), so a run
+interrupted after training re-enters at the compaction gate instead of repeating the score
+passes; Stage 6 planning's all-files survivor buffer is replaced by two per-file passes over the
+survivor loader (30.89 -> 12.91 GB peak managed at 86 files, compaction boundary identical); and
+`--model-diagnostics` became a render over retained per-pass products rather than a side effect
+of the all-runs hydrate.
+
+The equivalence that justified the last of those: a COLD `--task FirstPassFDR --model-diagnostics`
+at 446 runs, folding from the live score-pass sink, produced a first-pass report **exactly equal**
+to the warm fold from the on-disk sidecars - 18,821 payload leaves, zero differences, at zero
+tolerance, with 13,954,867 detected rows on both. Not vacuous: the cold run trained a real
+21-feature model (composite 0.1247) where the warm one carried none.
+
+Also shipped, arising from the same work rather than planned at the outset:
+
+* **Coupling 4 closed.** Peak co-assignment was logged as an uncharacterised O(runs) memory term
+  at ~33.5 GB. It is a TIME term: retained state saturates (89x the files buys 2.2x the
+  precursor population, ~30 MB at 446), the managed floor never rises at any N from 5 to 446, and
+  the 33.5 GB is the plateau every CHS run reaches regardless of size.
+* **The regression gate reports its own per-leg cost**, and runs as two lanes. Measured control:
+  doubling threads bought 3.9 % while running two processes bought 40 %, so Osprey saturates well
+  below 16 threads and lanes - not a bigger `-Threads` - are the lever. `-Dataset All` is 1:06 on
+  MacCoss TeamCity Agent 1, against ~1:46 serial, with SIX MORE legs than before.
+* **Modes 8 and 9 now run on every dataset**, including Astral where the defect they guard was
+  measured. Their `--model-diagnostics` skips were retired by the per-run hydrate change, exactly
+  as their own comments predicted ("deleting this branch is the whole change").
+* **Two concurrency defects fixed** that would bite anyone running two gates at once: the
+  unconditional `SQLite.Interop.dll` overwrite while the other lane held it open, and a run root
+  keyed on a whole-second timestamp so lanes starting in the same second shared - and deleted -
+  one directory.
+
+**Deferred, and carried to the successor TODO**: the Stage 7 / SecondPassFDR lean row itself,
+which is what this TODO was opened to reach, plus coupling 3 (pass-2 diagnostics reading the
+whole-run survivor pool). The acceptance criterion, the three-axis plan, the sidecar-not-struct
+decision and the 78.3 GB / ~240 MB-per-file measurement at 446 all remain in this file and are
+cited from the successor rather than duplicated.
+
+**One coverage reduction was taken deliberately** to bring the gate back inside its ~85 min
+budget: Astral no longer runs mode 2 (resume vs straight-through). It is a workflow-DETECTION
+test, which belongs on the cheap dataset; Astral's job is proving it reproduces the same answer
+one task at a time, which is mode 3's HPC chain parity and remains. Full per-dataset accounting,
+with the reason for every asymmetry, is in `ai/docs/osprey-development-guide.md`.
