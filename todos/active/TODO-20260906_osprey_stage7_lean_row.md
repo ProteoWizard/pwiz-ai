@@ -1,9 +1,11 @@
 # TODO-20260906_osprey_stage7_lean_row.md - Stage 7 (SecondPassFDR) holds ~274 B objects where 88 B of row would serve
 
 **Module**: `osprey`
-**Status**: In Progress - 7 commits, not pushed, no PR yet
+**Status**: In Review - [#4642](https://github.com/ProteoWizard/pwiz/pull/4642) open, pushed,
+all gates green. **NOT mergeable yet**: the developer will not merge until pass-2 diagnostics
+fold within bounded memory (see "THE NEXT PHASE").
 **Branch**: `Skyline/work/20260906_osprey_stage7_lean_row` in `C:\proj\pwiz-work1`,
-cut from `c4921f3d6c` (master with #4633 merged). Local only - not pushed, no PR yet.
+cut from `c4921f3d6c` (master with #4633 merged).
 **Predecessor**: `todos/completed/TODO-20260901_osprey_stage5_reload_materialization.md`,
 merged as [#4633](https://github.com/ProteoWizard/pwiz/pull/4633) / `c4921f3d6c` on 2026-09-06.
 
@@ -610,3 +612,29 @@ the leg goes red and you need to know which of the two ideas moved.
 UNCHANGED committed golden is the byte-identity proof. Had the fold moved any output, mode 1
 would have gone red. Mode 10 asserts the artifact contract rather than values, deliberately -
 these two arms are still moving, and a golden would freeze a number nobody has agreed on.
+
+## Session close, 2026-09-07 07:15
+
+**PR [#4642](https://github.com/ProteoWizard/pwiz/pull/4642)** - 11 commits, pushed, all gates
+green, Copilot addressed. Held open deliberately: the developer will not merge until pass-2
+diagnostics fold within bounded memory.
+
+Final state of the four gate legs:
+
+| gate | result |
+|---|---|
+| `Build-Osprey.ps1 -RunTests -RunInspection` | 606 tests (605 pass, 1 pre-existing skip), zero-warning |
+| `regression.ps1 -Dataset Stellar` | PASSED, 16 legs (incl. the new `mode3 (streamed join)`) |
+| `regression.ps1 -Dataset StellarLibDecoy` | PASSED, 22 legs (mode 10, one arm, both markers) |
+| `regression.ps1 -Dataset All` | PASSED, 79 PASS / 0 FAIL |
+| TeamCity Perf/Regression `pull/4642` | 78 PASS / 0 FAIL / 0 SKIP in **01:19:30** - ran on `1cc6fcc1`, predates the review fixes AND the mode-10 cut |
+
+The mode-10 cut removes 223.1 s, so the next Perf/Regression run should land near **01:15:45**.
+Still marginally over the 75-minute target; the remaining overage is not mode 10's.
+
+**Do not re-trigger TeamCity without asking.** The developer's standing rule, and they have
+said they will not merge before the next phase lands anyway - so the natural moment for the
+re-trigger is when that work is ready, not now.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260906_osprey_stage7_lean_row.md` before starting work.
