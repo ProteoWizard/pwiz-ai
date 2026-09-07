@@ -490,3 +490,75 @@ it: `regression.ps1 -Dataset Stellar`, then `-Dataset All`.
 **Next session handoff**: For detailed startup protocol - including the 446-file bed whose
 entire first pass is already done, the two settings required to reuse it, and what to measure
 - read `ai/.tmp/handoff-20260906_osprey_stage7_lean_row.md` before starting work.
+
+## NIGHT SESSION RESULT, 2026-09-06/07
+
+**PR #4642** - https://github.com/ProteoWizard/pwiz/pull/4642
+
+### The 446-run proof
+
+`chs-446files-libdecoy-r1.0-protein-compact-s7fold`, same bed / recipe / pinned version as the
+"before". **exit 0 in 71 minutes.**
+
+| | before (`-s7base`) | after (`-s7fold`) | `FirstPassFDR`, same cohort |
+|---|---|---|---|
+| managed peak | 68.0 GB | **23.5 GB** | 32.5 GB |
+| private peak | 70.5 GB | **36.4 GB** | 40.1 GB |
+| floor drift | +71 MB/run RISING | **-5 MB/run FALLING** | +4 MB/run |
+| outcome | killed at run 381/446 | completed | - |
+
+**The acceptance criterion is met**: SecondPassFDR peaks below FirstPassFDR on both axes.
+Post-GC live footprint stays under 3 GB across the whole stage (`stage7-pass2-scored` 2.97 GB,
+`stage7-protein-fdr` 2.98 GB), so what is left in the peak is transient, not a pool.
+Zero reporting gaps over 30 s across the 71 minutes.
+
+Output checked, not assumed: 45,643 `RefSpectra`, 20,351,447 `RetentionTimes`,
+**446 `SpectrumSourceFiles`** (the count that catches a `.blib` silently missing runs), 5,502
+protein groups at 1% protein FDR, 54.5 MB `out.2nd-pass.fdr_experiment.bin`.
+Plot: `ai/.tmp/sessions/20260906-s7lean/stage7-after-446.png`.
+
+### Gates
+
+`-Dataset Stellar` PASSED (15 legs, incl. `mode3 (HPC chain==straight)` - byte-identity on the
+leg this changes). `-Dataset StellarLibDecoy` PASSED (23 legs, both mode 10 arms).
+`-Dataset All` re-run on the post-review code. 606 unit tests, inspection zero-warning.
+
+### `/code-review max` - what was fixed, and what was dropped
+
+Fixed in `cb1d67369a` (see the commit for the reasoning): the `transfer`-mode throw, the
+empty-`.blib`-on-exit-0 path, the write loop that would blank worker-owned sidecars, the
+format-probe-vs-validity-stamp divergence, the unresolved parquet path, the eager 400 MB
+experiment map, the `_streamed`-after-yield window, and mode 10's env-var deletion.
+
+**DROPPED, with the reason** (per the triage rule - not filed as issues):
+
+* *"`totalScored == 0` aborts the perRunJoin leg"* - marked PLAUSIBLE by the reviewer and
+  **disproved by the 446 run**: it logs "No scored entries found. Cannot perform FDR control."
+  and continues to a complete `.blib`, exactly as the pre-existing `CanHydratePerRun` leg does.
+* *`MaterializeAllFromSource` bypasses `_postMaterialize`* - the reviewer's own sweep shows it
+  is unreachable (the `_streamed` throw precedes the `Lazy` build). Left as the expensive
+  fallback it is; a future consumer must be converted to `StreamFiles` rather than left to it.
+* Efficiency items (per-run dictionary churn in the overlay, the reference-array copy in
+  `RefillOneRunSurvivors`, 4 KB stream buffers, `WriteSummaryReport` defaulting on). Real, and
+  all of them trade wall clock, which is the axis this work is explicitly allowed to spend.
+  Measure before optimising.
+
+### STILL OPEN, in priority order
+
+1. **The gate cannot see the streamed arm on 3 of 4 datasets.** `--model-diagnostics` is set on
+   StellarLibDecoy, StellarGenDecoyEntrap and Astral, and `CanStreamStage7Join` declines on it -
+   so mode 3's phase 4 takes the OLD resident path everywhere except plain Stellar. A defect on
+   the streamed arm that needs library decoys, entrapment or hram data passes the suite green.
+   Cheapest honest fix, and the one doc 00 prescribes for a path output cannot distinguish:
+   assert the marker line (`Second-pass join: folding over N run(s)`) in mode 3's phase-4 log.
+   Nothing runs the `OSPREY_STAGE7_STREAM=0` A/B either, and the variable is absent from
+   `docs/20-command-line.md` and from `regression.ps1`'s `$abSwitchSet`.
+2. **`--model-diagnostics` still needs the resident pool** - the last O(runs x entries)
+   structure in Stage 7. `ModelDiagnosticsData`'s pass-2 builders index runs by position and
+   revisit a run across two loops. The fix is the accumulator the pass-1 report already uses.
+3. **Steps 2b and 3** (transfer's per-run half into `Pass2PerFileWorker`; delete Stage 7's
+   per-file pass-2 compute). Still "one calculation, one task" - and now also what lets
+   `CanStreamStage7Join` stop naming a single mode.
+4. `FdrScoresSidecar.TryWalkRecords`' OOM-filtered catch was widened (in the cherry-picked
+   `4b9df2a836`) to enclose the whole walk, so a mid-body IO fault returns false with records
+   already overlaid - and the caller treats false as non-fatal.
