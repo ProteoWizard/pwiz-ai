@@ -191,6 +191,33 @@ than today, where `pass2Contributions` is null under `transfer` so the card is s
    O(distinct-precursor) best-run assignment and emit per run, writing the rows whose best run
    is this one - the same fold-then-apply shape as the experiment-q clamp.
 
+### Progress
+
+| step | state |
+|---|---|
+| 1. cut `transfer-compete` + retrain toggle | **DONE** `ad4ef8d106`, `regression.ps1 -Dataset Stellar` PASSED (15/15, incl. mode 1 vs golden) |
+| 2. move `transfer` into `Pass2PerFileWorker` | next |
+| 3. delete Stage 7's per-file pass-2 compute/write | |
+| 4. pass-2 diagnostics as a fan-out product | |
+| 5. roll-up as folds | |
+| 6. bound the blib write | |
+
+Also on the branch: `4b9df2a836` (chunked sidecar read, cherry-picked from the #4633 branch
+where it was orphaned by the squash), `9a1eb514c1` (the per-file survivor source + StreamFiles),
+`187c0a214c` (workflow page + doc 00 boundary lists updated for #4633).
+
+**Step 2 is a port, not a rewrite** - verified by reading `TransferPerRunQ`: its
+`foreach (var kvp in perFileEntries)` body resolves that file's own `.1st-pass.fdr_scores.bin`,
+builds that file's own score->q tables from it, and classifies that file's survivors. The only
+cross-file state is O(1) tallies. The first-pass sidecar it reads is a legal Boundary 2 -> 3
+input in the fan-out, which is what makes the move delete Stage 7's last documented reason to
+read per-run first-pass files.
+
+**Test harness for the folds (steps 4-6)**: copy `TestStreamingFirstPassQMatchesFlat`
+(`FdrTest.cs:2145`) - a seeded population fed to both the streaming builder row by row and the
+flat oracle as arrays, asserting byte-identical maps, with `applyExperimentAgg: false` so an
+ambient A/B sweep cannot produce a spurious failure. Do not improvise a different shape.
+
 ### Why the cuts need no re-litigation
 
 The statistical argument is already written down in
