@@ -562,3 +562,51 @@ experiment map, the `_streamed`-after-yield window, and mode 10's env-var deleti
 4. `FdrScoresSidecar.TryWalkRecords`' OOM-filtered catch was widened (in the cherry-picked
    `4b9df2a836`) to enclose the whole walk, so a mid-body IO fault returns false with records
    already overlaid - and the caller treats false as non-fatal.
+
+## THE NEXT PHASE, decided by the developer 2026-09-07
+
+> *"Next phase requires applying FirstPassFDR diagnostics handling to SecondPassFDR to make
+> diagnostics achievable within bounded memory."*
+
+This is item 1 of "STILL OPEN" promoted to THE next piece of work, and the developer has said
+**#4642 will not be merged until it is done**. So it belongs on this branch or its immediate
+successor, not in a backlog.
+
+**What to copy.** `FirstPassFdrTask` already solved this for pass 1: it folds the report from a
+streaming accumulator during the score pass (`mdiagAccumulator`, fed per run) instead of
+walking a resident pool afterwards, and `--task ModelDiagnostics` then RENDERS from the
+retained `.1st-pass.model-diagnostics.json` without processing anything. Pass 2 has neither
+half - `ModelDiagnosticsReport.WritePass2AndFinalize` takes the whole pool.
+
+**What blocks a naive conversion**, established 2026-09-07 and worth not rediscovering:
+`ModelDiagnosticsData`'s pass-2 builders take `IReadOnlyList` and mean it. They index runs BY
+POSITION (`perFileEntries[i]`, `perFileEntries[f].Key`) and `ModelDiagnosticsData.CoAssignment`
+revisits the same run across two separate loops. Widening the parameter to `IEnumerable` makes
+it compile and makes every view re-materialize each run several times - a fold per view, not a
+fold per run. The accumulator is the fix; the parameter type is not.
+
+**Why it is the last thing holding a pool.** With it landed, `CanStreamStage7Join` drops its
+`config.ModelDiagnostics` term, and with that term gone the gate stops SKIPping the streamed
+arm on StellarLibDecoy, StellarGenDecoyEntrap and Astral - so item 2 (three of four datasets
+never exercise the streamed path) closes at the same time. Two of the four open items are one
+change.
+
+**Sequence it before steps 2b/3** (moving `transfer` into the worker). Those are architectural
+tidiness - "one calculation, one task" - and this one is a merge blocker.
+
+## Mode 10 cut to one arm (developer, 2026-09-07)
+
+> *"Cut transfer alone run from regression.ps1. Its benefit may be diagnostic."*
+
+Done. The `meanbest2` arm remains and exercises BOTH ideas, because protein-compact refuses a
+mean(best-N) first pass and so that arm runs `transfer` for pass 2 regardless. The standalone
+arm was the half whose coverage was already implied, and it cost 223.1 s of a 01:19:30
+Perf/Regression wall that has to come in under 75 minutes. It stays reproducible by hand -
+`OSPREY_PASS2_QVALUE=transfer` with `OSPREY_EXPERIMENT_AGG` unset - which is what you want when
+the leg goes red and you need to know which of the two ideas moved.
+
+**No goldens were produced or regenerated anywhere on this branch**, and that is the point:
+`git diff master` touches no golden file, and mode 1 (`vs golden`) passing against the
+UNCHANGED committed golden is the byte-identity proof. Had the fold moved any output, mode 1
+would have gone red. Mode 10 asserts the artifact contract rather than values, deliberately -
+these two arms are still moving, and a golden would freeze a number nobody has agreed on.
