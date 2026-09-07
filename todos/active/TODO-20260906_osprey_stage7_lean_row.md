@@ -638,3 +638,82 @@ re-trigger is when that work is ready, not now.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260906_osprey_stage7_lean_row.md` before starting work.
+
+## THE NEXT PHASE LANDED, 2026-09-07 - pass-2 diagnostics fold within bounded memory
+
+The merge blocker. `--model-diagnostics` no longer needs the resident survivor pool in
+SecondPassFDR, so `CanStreamStage7Join`'s `config.ModelDiagnostics` term is gone and the
+streamed join is reachable on every dataset.
+
+### What the analysis found, and why it was smaller than the handoff feared
+
+The handoff framed this as "apply FirstPassFDR's accumulator to SecondPassFDR". Comparing
+what `BuildPass2` needs against what `ModelDiagnosticsData.Accumulator` already folds, **eight
+of the nine pass-2 cards were already there**:
+
+| pass-2 card | the reduction the accumulator already held |
+|---|---|
+| `ReduceToPrecs` -> `precs` | `_best` (max score, min q per modseq\|charge) |
+| `BuildPerFile` | `_fileTargets` / `_fileDecoys` / `_fileEntrap` |
+| `BuildIdYield` | from `_best` |
+| `BuildCrossRunDetection` | the four `CrossRunStream`s (already folded, not retained) |
+| `BuildPass2FdpViews` | from `_best` |
+| `BuildModelPass2` | from `_best` |
+| `BuildDensityRatio` | from `Model.Scores` |
+| `BuildWinFraction` | `_bt` / `_tClass` |
+| **`BuildCoAssignment`** | **nothing - the only real work** |
+
+`Accumulator.Add` already takes exactly what an `FdrEntry` carries, so feeding it from the
+stream is direct. What it needed was a `BuildPass2(contributions, coAssignment)` sibling to
+`Build(contributions)` emitting `Pass2Data`, plus a `pass` ctor argument so pass 2 skips the
+Frontier fold (`Pass2Data` has no Frontier card, and it is a dictionary lookup + update per
+target row over the whole reported pool).
+
+### Co-assignment is a TWO-PASS problem, not a resident-pool problem
+
+`CoAssignmentPassBuilder` was already bounded to one run at a time (`SealRunCutoff`,
+`FlushFile`). What it cannot do is fold in one walk: phase 1 draws the acceptance boundary as
+a reduction over every row, and phase 2 compares every row against it. **There is no fold that
+yields both.**
+
+Phase 1 is per-row and cheap, so it rides along in the accumulator's pass. **Two stream passes,
+not three:**
+
+* **Pass A** - `accumulator.Add` + `ObserveCoAssignmentRun` (phase 1), one read
+* **Pass B** - `BuildCoAssignmentDetection` (phase 2)
+
+Stage 7 already re-streams several times over (experiment-q reclamp, retained base_ids, protein
+FDR, the FDRBench TSV, the blib gates), so this is the stage's existing idiom, not a new cost
+class - and it replaces a 78.3 GB resident pool. Wall clock is the cost, which is the axis this
+work is explicitly allowed to spend.
+
+### The alternative that was REJECTED, and why
+
+Pass 1 gets its co-assignment panel from `PeakCoAssignmentSource` - the per-file sidecars joined
+to `.scores.parquet` apex RT - rather than from the fold. The pass-2 analogue would read
+`.2nd-pass.fdr_scores.bin` + `.scores-reconciled.parquet`, and would be cheaper per pass than a
+rebuild.
+
+**It was not taken.** The pass-2 panel must describe *the reported pool*, and the reported pool
+is defined by the Stage 7 rebuild itself: retained base_ids, the pass-2 sidecar overlay, the
+experiment-q floors. Reconstructing it from sidecars would put that definition in a SECOND
+place - the class of defect this area keeps producing. One definition, two reads.
+
+### Why the order-sensitivity worry does not apply
+
+The accumulator's byte-identity argument has one order-sensitive step: `BuildScoreHistogram`'s
+decoy mean/std accumulate non-associative floating-point sums, so both paths must enumerate
+`_best.Values` in the same order. That was never exercised on the streamed arm before, because
+`--model-diagnostics` forced the resident path.
+
+It holds here **by construction, checked not assumed**: `PerFileRescoreTask.cs:705` builds the
+resident whole-run pool with `MaterializeAllFromSource(buffer, stage7Source, ctx)` - the SAME
+per-run source `StreamFiles` uses. Both arms fill each run's list through one code path, so row
+order within a run is identical and the files are walked in `base.Value` order either way.
+
+### Guards added, because a wrong panel is worse than no panel
+
+The two phases index the acceptance boundary BY RUN POSITION. A source that yielded runs in a
+different order on the second pass - or stopped short - would judge every row against another
+run's boundary and still produce a complete, plausible panel that nothing downstream could
+detect. `VerifyRunOrder` and `VerifyRunCount` throw instead.
