@@ -1,7 +1,7 @@
 # TODO-20260906_osprey_stage7_lean_row.md - Stage 7 (SecondPassFDR) holds ~274 B objects where 88 B of row would serve
 
 **Module**: `osprey`
-**Status**: Not started - branch created, no commits yet
+**Status**: In Progress - 7 commits, not pushed, no PR yet
 **Branch**: `Skyline/work/20260906_osprey_stage7_lean_row` in `C:\proj\pwiz-work1`,
 cut from `c4921f3d6c` (master with #4633 merged). Local only - not pushed, no PR yet.
 **Predecessor**: `todos/completed/TODO-20260901_osprey_stage5_reload_materialization.md`,
@@ -195,16 +195,34 @@ than today, where `pass2Contributions` is null under `transfer` so the card is s
 
 | step | state |
 |---|---|
-| 1. cut `transfer-compete` + retrain toggle | **DONE** `ad4ef8d106`, `regression.ps1 -Dataset Stellar` PASSED (15/15, incl. mode 1 vs golden) |
-| 2. move `transfer` into `Pass2PerFileWorker` | next |
-| 3. delete Stage 7's per-file pass-2 compute/write | |
+| 1. cut `transfer-compete` + retrain toggle | **DONE** `ad4ef8d106`, `-Dataset Stellar` PASSED (15/15, incl. mode 1 vs golden) |
+| 2a. extract `TransferOneFile` (the per-run seam) | **DONE** `d969570a3c` |
+| 2b. wire it into `Pass2PerFileWorker`, admit `transfer` in `TryCreatePass2Worker` | **NEXT** |
+| 3. delete Stage 7's per-file pass-2 compute/write | **the step that removes the pool** |
 | 4. pass-2 diagnostics as a fan-out product | |
 | 5. roll-up as folds | |
 | 6. bound the blib write | |
 
 Also on the branch: `4b9df2a836` (chunked sidecar read, cherry-picked from the #4633 branch
 where it was orphaned by the squash), `9a1eb514c1` (the per-file survivor source + StreamFiles),
-`187c0a214c` (workflow page + doc 00 boundary lists updated for #4633).
+`187c0a214c` (workflow page + doc 00 boundary lists updated for #4633), `73dda2efaa` (gate
+mode 10). `-Dataset StellarLibDecoy` PASSED with mode 10, both new arms green on first run.
+
+**NIGHT SESSION 2026-09-07**: the goal, the 446-file proof recipe, the gate order, the standing
+authorizations and the traps already paid for are in
+`ai/.tmp/handoff-20260907_osprey_stage7_night.md`. Read it before starting.
+
+**Open decision for the developer**: mode 10's two arms measured 253.3s + 255.0s = 8.5 min on
+StellarLibDecoy, against the ~5 min the second lane finishes early by - so both arms move lane 2
+onto the critical path and take `-Dataset All` from ~1:05 to ~1:08. Keeping only the `meanbest2`
+arm fits free and still exercises transfer, because protein-compact refuses a mean(best-N) first
+pass so that arm runs transfer for pass 2 regardless.
+
+**The gate already tracks this work's target.** Its "Known O(files) resident paths" section
+names #4486 - `SecondPassFDR` pulling `RescoredEntries` rebuilds the whole-run survivor buffer,
+"~20 GB at 82 files, ~103 GB projected at 500" - with a required-token count of 0. When the
+folds land, that entry stops being reported. That is an asserted acceptance signal, better than
+reading a plot.
 
 **Step 2 is a port, not a rewrite** - verified by reading `TransferPerRunQ`: its
 `foreach (var kvp in perFileEntries)` body resolves that file's own `.1st-pass.fdr_scores.bin`,
