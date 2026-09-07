@@ -7091,3 +7091,114 @@ Two pre-existing wiff2 defects were filed rather than fixed: [#4638](https://git
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
+
+## 2026-09-05/07: The binding leak landed as a master PR, and the heap axis was disproved at scale
+
+### The 2026-09-05 nightly: first complete run, and the population-level before/after
+
+**8h25m, both passes, zero failures** (previous run: 13 hours, stopped during pass 2). Log archived to
+`D:\test\nightly-logs\SkylineTester-20260905-net10-9hr-COMPLETE-bindinglist-fix.log`. Leaks 13 -> 9,
+and **no handle leakers at all** (previous run had TestKoinaConnection at 2/run).
+
+Because the pre-fix log was archived first, the two runs are directly comparable across the same 644
+tests. Thirteen tests with a positive managed slope went to zero and **nothing regressed** - the
+largest positive anywhere afterwards is 4.1 KB/run:
+
+| Test | before | after |
+|---|---|---|
+| IrtDocumentFunctionalTest | 11.4 | -1.2 |
+| TestAddIrtStandards | 5.4 | 0.1 |
+| IrtRedundantDbFunctionalTest | 4.0 | 1.1 |
+| ConsoleImportNonSRMFile | 3.7 | 0.1 |
+| TestLabelLayoutDeterminism | 3.6 | -0.6 |
+| TestIrtTutorial | 3.1 | -0.5 |
+| TestExportSpectralLibrary | 2.9 | -0.3 |
+| TestSmallMoleculeIrt | 2.6 | -0.8 |
+| TestFilesTreeForm | 2.6 | -0.0 |
+| IrtBlibFunctionalTest | 2.6 | 0.4 |
+| UpgradeCancelFunctionalTest | 1.9 | -0.2 |
+| TestSpectrumFilterTransitionList | 1.9 | -0.5 |
+| TestUniquePeptidesSettings | 1.4 | -1.5 |
+
+One shared-class fix, far beyond the six iRT tests it was found through.
+
+### The native heap axis reports a different random set every night
+
+Six of seven heap leakers **changed identity** between two runs of the same suite:
+
+| | 09-04 | 09-05 |
+|---|---|---|
+| AgilentMseChromatogramTest x2 | 39.9 / 20.6 | gone |
+| TestInternationalFilenames | 50.8 | gone |
+| TestLogScaleAxis | 33.8 | gone |
+| TestSrmSmallMoleculeChromatograms | 91.5 | gone |
+| TestSmallMoleculesQuantificationTutorial | 178.2 | gone |
+| ConsoleAddDecoysTest | - | new, 55.9 |
+| TestTreeRestoration | - | new, 40.8 |
+| TestMSstatsTutorialLegacy | - | new, 39.1 |
+| **TestGroupedStudies1Tutorial** | 2056.6 | 1925.3 |
+
+`HeapMemory = 20 * KB` sits an order of magnitude below that axis's noise floor. Either raise it or
+require a heap leak to reproduce across two runs before reporting - otherwise every long run
+manufactures findings that cost an hour each to disprove. **TestGroupedStudies1Tutorial is the one
+real one**, now confirmed four ways (2056 and 1925 in two nightlies, 929 in isolation here, 933
+independently in the parallel session).
+
+`TestKoinaConnection` reported **16900.6 bytes in both runs, identical to the decimal** - deterministic
+given the test sequence, not variance, yet only 3.5 KB in isolation. Best remaining managed lead.
+
+### Root cause corrected, by amplification rather than argument
+
+Three explanations were wrong before the right one, and each was disproved by measurement:
+
+- "the BindingSource subscribes to **every** row" - wrong; it hooks the **current** row only.
+- "current item only, so the leak is one row" - also wrong; a 100-row list retained **all 100**.
+- "the dialog is not disposed" - wrong; instrumented `EditIrtCalcDlg` disposes 1:1, `disposing=True`.
+
+The amplification settled it (200 iterations, rows/list varied, `BindingList` vs the fixed
+`SortableBindingList`): with disposal, 0 survivors everywhere; without, **200 / 2000 / 20000 vs 0**.
+A per-row hook cannot retain 100 rows from one subscription. What can is the hook's **target**: the
+handler points at the BindingSource, TypeDescriptor's static cache roots it, and it holds `DataSource`
+-> the list -> every row. One hook, whole list. Both conditions are required, and the fix makes both
+moot by never creating the hook.
+
+### The guard, which matters as much as the fix
+
+`SimpleGridViewDriver` now registers its BindingSource with `Program.GcTracker`. One line, all 14
+drivers. Verified both directions on both runtimes: with the leak, `IrtRedundantDbFunctionalTest`
+fails in **under 7 seconds** with `GC-LEAK Objects not garbage collected after test: BindingSource x3`
+and the retention chain printed; with the fix, the grid-dialog suite passes clean.
+
+This is the important generalization. The nightly **never reported this leak** - 3.83 KB/run is below
+the 8 KB gate. A magnitude check cannot see a leak smaller than its threshold; a GC assertion does not
+care about size. `CheckAllFormsDisposed` cannot cover it either: that asks only whether Dispose ran,
+and here the form was disposed *and* collected while the BindingSource it owned was not. Form-level
+tracking was prototyped and **abandoned** for exactly that reason - it would have passed this case.
+
+### Landed and filed
+
+- **PR [#4644](https://github.com/ProteoWizard/pwiz/pull/4644)** to **master**, not the port branch:
+  the leak is on `origin/master` and affects shipping Skyline. Measured there directly - 3.83 KB/run
+  at R2 0.985 before, 0.00 at R2 0.000 after, on net472. Cherry-pick-to-release is an open question.
+- **Issue [#4643](https://github.com/ProteoWizard/pwiz/issues/4643)**: `EditOptimizationLibraryDlg` in
+  small-molecule mode, five defects in one - the Molecule cell throws on an adduct edit, no DataError
+  handler so it shows the .NET default box, `#` refused with no feedback, "Sequence cannot be empty"
+  in a column headed Molecule, and Product Ion rendering the precursor adduct. All pre-existing.
+
+### Method notes worth keeping
+
+- **A real leak is near-perfectly linear.** R2 ~ 1.00 with a large t-statistic separates a leak from a
+  filling cache from chance alignment; the 24-iteration gate cannot. On identical runs managed gave
+  R2 1.00 where heap gave 0.00-0.63.
+- **`/code-review max` severity claims need verifying before acting.** Two of its confident
+  assertions were wrong (the "current item only" mechanism, and a "real behavioural regression" in
+  EditOptimizationLibraryDlg that turned out to be unreachable because the edit throws). Treating the
+  second as established cost most of a session chasing a dialog unrelated to the leak.
+- **Do not put a DataError handler on `SimpleGridViewDriver`.** Six dialogs already handle it
+  individually; a base-class handler pre-empts them and breaks `TestIsolationScheme`, which asserts on
+  `" must be a valid number."`. Tried, reverted, recorded in #4643.
+- **`git reset --hard` discards uncommitted work in the tree, not just commits.** It silently took a
+  developer's `PauseTest` mid-investigation.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
