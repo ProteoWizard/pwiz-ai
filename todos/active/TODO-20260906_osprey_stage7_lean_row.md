@@ -803,3 +803,41 @@ sessions). So the comparison runs against the BRANCH.
 **Follow-up the developer asked for**: open a PR in `maccoss/osprey` for `90c8968` once
 this is passing. A prior session appears to have done the Rust-side work and never opened
 one, which is how the two implementations start separating.
+
+### Cross-impl parity confirmed, 2026-09-07
+
+`Compare-EndToEnd-Crossimpl.ps1 -Files All` against the Rust branch, both datasets:
+
+| check | Stellar | Astral |
+|---|---|---|
+| Stage 7 protein FDR (per-col 1e-9) | PASS | PASS |
+| Blib content (SQL row+col 1e-9) | PASS | PASS |
+| FDR sidecars (per-field 1e-9) | PASS | PASS |
+
+**The comparison script has no `-SourceRoot` and defaults to `<project root>\pwiz`.** The
+first attempt therefore aimed at `C:\proj\pwiz`, not the `pwiz-work1` checkout this branch
+lives in, and hard-failed **exit 3 on a stale binary** - the guard working exactly as
+designed, refusing to report a divergence measured against the wrong tree. Set
+`$env:PWIZ_ROOT` to the active checkout before running it; the sibling-checkout rule in the
+project CLAUDE.md applies to this script and nothing in its parameters enforces it.
+
+Worth running rather than reasoning about: the static argument that this branch is inert on
+the cross-impl path (no `--model-diagnostics`, no `--input-scores`, so
+`CanStreamStage7Join` returns false at its first condition) was correct, and would still
+have missed that the run was pointed at another checkout entirely.
+
+### maccoss/osprey PR #67 opened
+
+`90c8968` ("Read pass-1 experiment q-values per entry, not per file") had sat unmerged on
+its branch since 2026-08-29 while C# carried the equivalent shape. Opened as
+[maccoss/osprey#67](https://github.com/maccoss/osprey/pull/67) so `main` stops diverging
+from pwiz Osprey. Rust CI gates verified green on the branch first (`cargo fmt --check`,
+`clippy -D warnings`, `cargo test`).
+
+**Until it merges, the cross-impl comparison must run against that BRANCH, not `main`** -
+comparing against `main` would surface Rust's missing fix as a C# divergence.
+
+### Commit
+
+`a9f5190b8f` "Changed pass-2 model diagnostics to fold run by run" - 8 files,
+692 insertions, 76 deletions. Not yet pushed.
