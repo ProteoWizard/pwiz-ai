@@ -231,7 +231,14 @@ checks.
 everything else is validated. Recipe and results:
 `ai/todos/active/TODO-20260804_osprey_pass2_ab_and_library_production.md`.
 
-Numbers the transfer arm must reproduce (arm B there):
+**Those numbers are HISTORICAL, not targets** (developer, 2026-09-06): recorded 2026-08-04,
+and superseded. The change that invalidates them specifically is
+[#4593](https://github.com/ProteoWizard/pwiz/pull/4593) - first-pass training now samples one
+run per precursor - which increased detections substantially AND made them much more stable,
+most visibly on SEA-AD. Any pass-2 comparison recorded before it is measuring a different
+first pass. They establish that these are the two paths in competition, not a
+bar to hit - the comparison needs re-running fresh, and protein-compact has improvements still
+to try. Kept so the SHAPE of the comparison is not reconstructed from scratch:
 
 | | protein-compact | **transfer** |
 |---|---|---|
@@ -239,10 +246,10 @@ Numbers the transfer arm must reproduce (arm B there):
 | library spectra written | 37,078 | **38,913** |
 | protein groups @ 1% FDR | 5,022 | **5,155** |
 
-Pass 1 is calibrated identically in both arms (0.777% / 0.775%), so they start level - which is
-what makes the pass-2 difference attributable. Note this is also why `transfer` must survive: it
-is not a compatibility mode, it beats the default on calibration, spectra, protein groups, wall
-time AND memory at 82 files.
+Pass 1 was calibrated identically in both arms (0.777% / 0.775%), so they started level - the
+property that made the pass-2 difference attributable, and the one a fresh comparison must
+preserve. The reason `transfer` must survive is not any single number: it is a genuine contender
+against the default rather than a compatibility mode.
 
 **Run it with `-LinkFrom` arm A so Stages 1-4 are byte-identical**, and read arm A's `run.log`
 START line field-by-field rather than reconstructing its config - two errors that `-WhatIf`
