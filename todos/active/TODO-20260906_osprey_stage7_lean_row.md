@@ -717,3 +717,89 @@ The two phases index the acceptance boundary BY RUN POSITION. A source that yiel
 different order on the second pass - or stopped short - would judge every row against another
 run's boundary and still produce a complete, plausible panel that nothing downstream could
 detect. `VerifyRunOrder` and `VerifyRunCount` throw instead.
+
+### What the gate proved, 2026-09-07
+
+`regression.ps1 -Dataset All` on the fold:
+
+| leg | result |
+|---|---|
+| `mode3 (streamed join)` | **PASS on all four datasets** - previously SKIP on three |
+| `mode1 (vs golden)`, `mode1b/1c`, `mode2`, `mode4`-`mode10` | PASS everywhere |
+| `mode3 (HPC chain==straight)`, per-file FDR sidecars, experiment sidecars | PASS |
+| `Build-Osprey -RunTests -RunInspection` | 606 tests (605 pass, 1 pre-existing skip), zero-warning |
+
+**The streamed arm is now exercised on StellarLibDecoy, StellarGenDecoyEntrap and
+Astral**, which is item 1 of "STILL OPEN" closed: `--model-diagnostics` no longer keeps
+the resident pool, so `CanStreamStage7Join` stops declining and mode 3's phase 4 folds
+per run on every dataset. That was two of the four open items in one change.
+
+### The streamed fold reproduces the resident build - proven on real data
+
+A temporary mode-3 leg comparing the pass-2 diagnostics product across routes went red on
+StellarGenDecoyEntrap. **It was not the fold**, established by A/B rather than argument:
+
+* `chain-streamed.json` and `chain-resident.json` (`OSPREY_STAGE7_STREAM=0`, same bed,
+  same inputs) are **byte-identical** - `cmp` clean, 115,740 bytes each.
+* Both differ from the straight-through product in the *same* 496 `fdpViews[].paired[]`
+  values, to the last digit. Forcing the resident arm changes nothing.
+
+So the accumulator + two-pass co-assignment reproduce the resident `BuildPass2` exactly on
+production data, which is what the unit test asserts on a fixture.
+
+### The leg was REMOVED, and why
+
+It compared the HPC chain against straight-through and demanded BYTE identity of a derived
+artifact. Mode 3 never contracted that: it compares sidecars at 1e-9. The difference it
+found is real and pre-existing - filed as
+[#4645](https://github.com/ProteoWizard/pwiz/issues/4645) - but it is not this branch's,
+and a leg that reds on someone else's defect blocks the wrong PR.
+
+**Developer's direction on the replacement (2026-09-07)**: do NOT build an
+`OSPREY_STAGE7_STREAM` A/B into the gate.
+
+> *"The long-term goal is to remove the ability to not-stream. So, it doesn't make a lot of
+> sense to build the switch into the tests. Instead, we should post the issue and dig into
+> it to understand the difference and how we might test against getting the wrong outcome
+> before removing the option."*
+
+What survives in the gate instead: `mode3 (streamed join)` asserted on every dataset (the
+shape that ran), plus the existing blib / sidecar comparisons (the pool the fold reads).
+The accumulator half is pinned by `TestStreamingAccumulatorMatchesBatchPass2`.
+
+### Kept for the manual A/B, until the option goes
+
+`OSPREY_STAGE7_STREAM` is now in `$abSwitchSet` (so the resident tokens are not stripped
+under it), the streamed-join assertion SKIPs when it is set to 0 rather than failing a run
+for complying, and doc 00 documents it as the Stage 7 sibling of
+`OSPREY_STAGE6_STREAM_SURVIVORS`. That is what makes #4645 investigable.
+
+### Pre-merge: cross-impl parity, and a Rust PR that was never opened
+
+**Developer, 2026-09-07**: run the cross-impl comparison before merging, to confirm the
+ability to compare C# and Rust is intact.
+
+**Why the change is inert on that path** (static argument, still to be confirmed by the run):
+`Compare-EndToEnd-Crossimpl.ps1` invokes a plain straight-through pipeline -
+`-i ... -l ... -o output.blib --protein-fdr 0.01 --threads N --work-dir ...` - with NO
+`--model-diagnostics` and NO `--input-scores`. So `ExpectReconciledInput` is false and
+`CanStreamStage7Join` returns false at its FIRST condition, exactly as before this branch,
+and the pass-2 diagnostics block never runs. `mode1 (vs golden)` passing on all four
+datasets independently establishes the C# output is byte-identical, so the C#-to-Rust
+relationship cannot have moved.
+
+**The Rust checkout was parked on an UNMERGED branch.** `C:\proj\osprey` sits on
+`fix/experiment-q-per-entry-not-per-file` (`90c8968`, 2026-08-29, pushed to its own remote
+branch, clean). It is NOT in `origin/main`, and the repo's default branch is `main`, not
+`master`. The commit makes the Rust protein-compact pass-2 map-back read pass-1 experiment
+q per ENTRY (`read_analysis_wide_experiment_q`) instead of per file - the shape C# already
+has via the analysis-wide `out.1st-pass.fdr_experiment.bin` (format v5, #4486).
+
+Comparing against `main` would therefore surface Rust's MISSING fix as a divergence and
+read as a regression of this branch - the stale-baseline trap
+`ai/scripts/Osprey/Compare/README.md` documents (a "46% divergence" chased across three
+sessions). So the comparison runs against the BRANCH.
+
+**Follow-up the developer asked for**: open a PR in `maccoss/osprey` for `90c8968` once
+this is passing. A prior session appears to have done the Rust-side work and never opened
+one, which is how the two implementations start separating.
