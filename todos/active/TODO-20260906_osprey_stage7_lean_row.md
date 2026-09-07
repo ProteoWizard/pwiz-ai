@@ -143,6 +143,74 @@ Two reporting gaps over 30s (59s at 10:54:36, 62s at 10:56:18), both after a
 reaches `[TASK] SecondPassFDR:starting` in under a minute, and the wall arrives ~15 minutes
 later. The A/B loop for this work is short; there is no need to schedule it overnight.
 
+## THE TARGET, DECIDED 2026-09-06 (developer)
+
+> *"The only modes we want to preserve are transfer and protein-compact and we want those to
+> work with PerFileRescoring doing the per-file calculations and SecondPassFDR doing roll up.
+> ... we should do everything we can to emulate through the experiment-wide FDR bin and
+> diagnostics HTML, which leaves just writing the BLIB as the final thing to bound memory."*
+
+**One calculation, one task.** The per-run pass-2 q-value is computed and written by
+`PerFileRescoring` and by nothing else. `SecondPassFDR` rolls up. Today BOTH tasks compute and
+write `<stem>.2nd-pass.fdr_scores.bin`, through four paths - the duplication is the defect.
+
+| | today | target |
+|---|---|---|
+| per-run pass-2 q + sidecar | both tasks, 4 write paths | `PerFileRescoring` only |
+| `transfer-compete` | frozen full-population competition | **CUT** |
+| `OSPREY_PROTEIN_COMPACT_RETRAIN` | diagnostic A/B | **CUT** |
+| `SecondPassFDR` | competes, writes per-run sidecars, holds 289 M `FdrEntry` | folds only |
+
+**There is no second-pass model any more.** With retraining dead the pass-2 model IS the
+pass-1 model; only the score distributions differ, because pass 2 runs on a subset. So the
+`--model-diagnostics` pass-2 structural card decomposes into a model half and a distribution
+half: `Coefficient` is the frozen weight (already on disk in `.1st-pass.model.json`, already a
+Stage 7 input) and `TargetDecoyMeanGap` is `mean_target - mean_decoy`, i.e. **42 running sums**
+(21 features x target/decoy, sum and count). `Weighted`, `Percent` and `Composite` derive from
+those two. That is O(features) and folds per run in the fan-out - and it is strictly better
+than today, where `pass2Contributions` is null under `transfer` so the card is simply missing.
+
+### Sequence
+
+1. **Cut `transfer-compete` and `OSPREY_PROTEIN_COMPACT_RETRAIN`.** With only `protein-compact`
+   and `transfer` left, `ComputeAndPersist`'s projection branch becomes unreachable and deletes.
+2. **Move `transfer` into `Pass2PerFileWorker`.** Already per-run by algorithm (#4438: "THAT
+   FILE'S OWN score->run-q table, one file at a time"), and it wants the reconciled features the
+   fan-out has in hand and Stage 7 reloads. Deletes one of doc 00's two documented exceptions to
+   "Stage 7 reads no per-run first-pass file".
+3. **Delete Stage 7's per-file pass-2 compute and write.** Worker becomes mandatory; an
+   unreadable model sidecar becomes a hard failure instead of a silent relocation to the join.
+   **The 289 M-entry pool goes here** - `ComputePass2Resident` and the resident branch delete.
+4. **Pass-2 diagnostics become a fan-out product** - frozen coefficients + the 42 folded sums.
+5. **Roll-up as folds**, on `RunFirstPassProteinFdrStreaming`'s pattern: experiment-wide bin via
+   `FdrExperimentAccumulator`, protein FDR via the two-pass streamed shape. Reads the per-run
+   2nd-pass sidecars: ~7.5 GB of 28 B records, a fifth of what FirstPassFDR already streams
+   twice in 18 minutes over 1.34 B entries.
+6. **Bound the blib write** - the last term. The two gates already fold to O(distinct); the
+   collect does not (a compact record per passing observation, ~14 M at 446 runs). Keep the
+   O(distinct-precursor) best-run assignment and emit per run, writing the rows whose best run
+   is this one - the same fold-then-apply shape as the experiment-q clamp.
+
+### Why the cuts need no re-litigation
+
+The statistical argument is already written down in
+`pwiz_tools/Osprey/docs/12-second-pass-fdr.md`, "Why a second-pass null is a problem": first-pass
+compaction leaves the pool **decoy-depleted**, so retraining an SVM on it "estimates the null
+from a thin, biased decoy population and reports anti-conservative (optimistic) q-values" -
+measured at 1.57% true FDP against a nominal 1% on Stellar libdecoy entrapment (0.92% for the
+pass-1 q) and ~9% on 82-file SEA-AD, with the error growing with run count. The decision is
+[#4484](https://github.com/ProteoWizard/pwiz/issues/4484), CLOSED. **Do not re-open the retrain
+path**; git history holds the dropped approach.
+
+Coverage check before cutting: **no gate leg and no unit test exercises either mode.**
+`regression.ps1` mentions `transfer-compete` only in two comments; `FdrTest.cs` references it in
+prose and in one assertion message on `TestFrozenModelScorerAcceptsBothClassifiers`, which tests
+`FrozenModelScorer` (kept - both surviving modes score frozen) and needs only its wording fixed.
+
+**Docs to update with the cut**: doc 12's mode table, its "Frozen vs. retrain" section, and its
+stale in-flight note claiming the stratum "is moving out of the model sidecar" (it moved, in
+#4633) plus the table above it still crediting `.1st-pass.model.json` with carrying the stratum.
+
 ## THE CONTRACT SETTLES THE DIRECTION: FOLD, DO NOT SHRINK (2026-09-06)
 
 Read `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` and `Osprey-workflow.html` BEFORE
