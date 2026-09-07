@@ -263,6 +263,35 @@ caught before an 8-hour run came from exactly that:
 
 Always `-WhatIf` first.
 
+### Gate legs for the two contender arms (mode 10), and the 4x multiplier rule
+
+`regression.ps1` gained **mode 10**: the non-default pass-2 arms run and produce their
+artifacts. Two arms - `transfer`, and `mean-best-2 + transfer` (they pair by necessity:
+protein-compact REFUSES a mean(best-N) first pass). It asserts the ARTIFACT CONTRACT, not
+values: the arm completes, writes `output.blib`, writes the analysis-wide
+`output.2nd-pass.fdr_experiment.bin`, and writes a per-run `.2nd-pass.fdr_scores.bin` per
+input. Deliberately not a golden - these arms are still moving, and a golden would freeze a
+number nobody has agreed on. What must not change silently is that they RUN and PRODUCE,
+which is exactly the defect that already shipped (transfer wrote no experiment sidecar at
+all, invisible because the arm had never run under the gate).
+
+**THE RULE THAT MATTERS MORE THAN THIS LEG** (developer, 2026-09-06): *"we need to be careful
+about adding new test cases that are just blindly applied across everything we try. It doesn't
+necessarily give us better coverage, but definitely multiplies the testing time consumed."*
+
+The gate has **four dataset configs** - Stellar, StellarLibDecoy, StellarGenDecoyEntrap,
+Astral - which is two acquisitions searched four ways. A leg written into the per-dataset loop
+inherits a **4x multiplier** by default. Mode 10 as first written would have added EIGHT
+straight-through runs and wrecked the 1:05 that `-Dataset All` was just tuned to. It is now
+opted in by a single `AltPass2 = $true` on **StellarLibDecoy** - chosen because
+library-SUPPLIED decoys are what the pass-2 comparison runs on real cohorts (SEA-AD is
+`-DecoyMode libdecoy`), so the arms meet the decoy provenance they are actually used with, at
+Stellar speed and off Astral's critical path.
+
+**Backlog: audit the existing legs for the same blind 4x.** Some modes may be running on all
+four configs where one would do. `SkipModes = @(2)` on Astral is the precedent for cutting
+deliberately and pricing it; the question is which other legs never had that conversation.
+
 ### Why the cuts need no re-litigation
 
 The statistical argument is already written down in
