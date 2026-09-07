@@ -218,6 +218,44 @@ read per-run first-pass files.
 flat oracle as arrays, asserting byte-identical maps, with `applyExperimentAgg: false` so an
 ambient A/B sweep cannot produce a spurious failure. Do not improvise a different shape.
 
+### HOW `transfer` GETS VALIDATED - the long run, last
+
+**`regression.ps1` does not exercise `transfer` at all.** Every `OSPREY_PASS2_QVALUE` mention in
+it is a comment; all 15 legs run the default. What IS covered is the algorithmic core -
+`BuildScoreToQTable` and `AssignPerRunQ` have unit tests (`Pass2FdrSidecarTest.cs:306, 353`) - so
+a port that reuses those helpers unchanged keeps them. The ORCHESTRATION around them (resolving
+the file's sidecar, iterating survivors, the tallies) is what a port moves and what nothing
+checks.
+
+**The oracle is the 82-file SEA-AD A/B**, per the developer: a longer validation, run after
+everything else is validated. Recipe and results:
+`ai/todos/active/TODO-20260804_osprey_pass2_ab_and_library_production.md`.
+
+Numbers the transfer arm must reproduce (arm B there):
+
+| | protein-compact | **transfer** |
+|---|---|---|
+| pass-2 true FDP @ 1% reported q | 1.156% | **0.770%** |
+| library spectra written | 37,078 | **38,913** |
+| protein groups @ 1% FDR | 5,022 | **5,155** |
+
+Pass 1 is calibrated identically in both arms (0.777% / 0.775%), so they start level - which is
+what makes the pass-2 difference attributable. Note this is also why `transfer` must survive: it
+is not a compatibility mode, it beats the default on calibration, spectra, protein groups, wall
+time AND memory at 82 files.
+
+**Run it with `-LinkFrom` arm A so Stages 1-4 are byte-identical**, and read arm A's `run.log`
+START line field-by-field rather than reconstructing its config - two errors that `-WhatIf`
+caught before an 8-hour run came from exactly that:
+
+* `-LibraryDir` must be arm A's library (`target+decoy+entrapment-gated-no-il`). The default
+  resolution picks a DIFFERENT library, and with `-LinkFrom` hard-linking arm A's parquets that
+  silently pairs one library's Stage 1-4 with another's Stage 5+.
+* `-FdrBenchPass 2`, never the `both` default: `--fdrbench-pass 1` forces the RESIDENT
+  first-pass pool, which OOMs at 82 files.
+
+Always `-WhatIf` first.
+
 ### Why the cuts need no re-litigation
 
 The statistical argument is already written down in
