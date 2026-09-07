@@ -122,6 +122,35 @@ planning fix does nothing for Stage 7, as expected - it addressed a different st
 **The gate is satisfied: the pool is still the binding term, so the width/layout work is
 cleared to start.**
 
+> ### CORRECTION 2026-09-07: this measurement was attributed to the wrong code
+>
+> Everything above about the SHAPE is right - rising floor, mostly live, O(files) - and the
+> attribution underneath it was wrong, in a way that would have sent the night session at the
+> wrong function. The run does **not** die in Stage 7's pool rebuild
+> (`BuildRescoredPool` -> `MaterializeFileSurvivors` -> `FirstPassSurvivorLoader.Load`). Read
+> the log's last lines: it dies inside
+>
+> ```
+> --input-scores: loading 446 per-file score parquet(s)
+>     Loading file 381/446: ... (from ....scores-reconciled.parquet)
+>       Loaded 788801 FDR stubs (features not loaded - not read on this path)
+> ```
+>
+> That is `PerFileScoringTask`'s `--input-scores` merge building `ScoredEntries`, **before
+> Stage 7 has computed anything at all**. `BuildRescoredPool` is never reached on this leg:
+> `PerFileRescoreTask.Rehydrate`'s `ExpectReconciledInput` branch publishes
+> `new RescoredEntries(_perFileEntries)` - the resident constructor, no per-file source.
+>
+> The consequence is that **the fix is at the hydrate, not at the pool build**, and the
+> width/layout attack the paragraphs below recommend would not have moved this number: a
+> narrower row is still 446 runs of rows held before the first fold starts. What moves it is
+> giving the merge the per-run shape `CanHydratePerRun` already gives the rescore. Landed in
+> `4d0bae8caf`; see "WHAT LANDED" below for the measurement.
+>
+> Method note, since this is the second time this branch has mis-attributed a peak: the
+> correction came from reading the failing run's own last 25 lines, which cost one command.
+> Neither the handoff nor this section had done that.
+
 **And the sustained level is MOSTLY LIVE - 82-87% of peak.** This is the finding that directs
 the work. An earlier reading of the 40% probe (managed flat at 31.7 GB while private ran to
 44.0 GB) suggested a large burst-allocation component; the 50% probe showed that was one GC's
@@ -197,11 +226,69 @@ than today, where `pass2Contributions` is null under `transfer` so the card is s
 |---|---|
 | 1. cut `transfer-compete` + retrain toggle | **DONE** `ad4ef8d106`, `-Dataset Stellar` PASSED (15/15, incl. mode 1 vs golden) |
 | 2a. extract `TransferOneFile` (the per-run seam) | **DONE** `d969570a3c` |
-| 2b. wire it into `Pass2PerFileWorker`, admit `transfer` in `TryCreatePass2Worker` | **NEXT** |
-| 3. delete Stage 7's per-file pass-2 compute/write | **the step that removes the pool** |
-| 4. pass-2 diagnostics as a fan-out product | |
-| 5. roll-up as folds | |
-| 6. bound the blib write | |
+| 2b. wire it into `Pass2PerFileWorker`, admit `transfer` in `TryCreatePass2Worker` | open |
+| 3. delete Stage 7's per-file pass-2 compute/write | open - and NO LONGER the step that removes the pool, see below |
+| 4. pass-2 diagnostics as a fan-out product | open - and now the last thing holding the pool, see below |
+| 5. roll-up as folds | **DONE** `4d0bae8caf` |
+| 6. bound the blib write | **DONE** `4d0bae8caf` (the three gates fold; the collect keeps its ~14 M compact records) |
+
+### WHAT LANDED 2026-09-07, and how the plan changed
+
+The sequence above was written against the belief that Stage 7's pool was built by Stage 7.
+It is not, on the leg that matters (see the CORRECTION in the "BEFORE" section): the
+`--input-scores` merge hands the stage every run's survivors before it starts. So steps 5 and 6
+turned out to be reachable FIRST, without steps 2b-4, and they are what removes the peak.
+
+`4d0bae8caf` "Made SecondPassFDR fold over the runs instead of holding them":
+
+* `ScoringTaskShared.CanStreamStage7Join` admits the reconciled-input leg to the per-run shape
+  `CanHydratePerRun` already gives the rescore. The merge publishes one EMPTY list per run and
+  reads no rows.
+* `RescoreHydration.RefillOneRunSurvivors` rebuilds ONE run in place - load its reconciled
+  stubs, overlay, compact - and Stage 7 folds it and drops it.
+* Every Stage 7 consumer moved to `RescoredEntries.StreamFiles`: fragment release, the pass-2
+  competition, protein FDR, the experiment-q re-clamp, all three blib gates, FDRBench.
+* The two facts a resident pool carried BETWEEN passes - the 2nd-pass sidecar overlay and the
+  experiment-q floors - are re-applied per run via `AddPostMaterialize`, in that order.
+* `OSPREY_STAGE7_STREAM=0` keeps the resident arm as the byte-identity oracle, with a
+  validity-key term so an in-place A/B cannot adopt the other arm's `.blib`.
+
+**Measured at 446 runs** (`chs-446files-libdecoy-r1.0-protein-compact-s7fold`, same bed, same
+recipe, same pinned version as the "before"):
+
+| | before | after |
+|---|---|---|
+| `stage7-inherited` | (never reached) | 5.12 GB |
+| `stage7-pool` | (never reached) | **5.12 GB** - flat, no pool built |
+| outcome | killed at run 381/446 inside the load, 0.34 GB free | reaches the fold in ~1 min |
+
+The log line to look for is `Second-pass join: folding over 446 run(s), each rebuilt from its
+own artifacts and dropped`, and beside it `446 of 446 run(s) carry a current 2nd-pass sidecar
+and are rebuilt without opening any 1st-pass file` - which is the Boundary 3 -> 4 contract
+holding for the whole cohort, asserted per run rather than assumed.
+
+**What is left holding a pool, and it is now step 4 rather than step 3.**
+`--model-diagnostics` is the one Stage 7 consumer still handed the whole buffer:
+`ModelDiagnosticsData`'s pass-2 builders index their runs BY POSITION and revisit a run across
+two loops (`ModelDiagnosticsData.CoAssignment`), so they need a list, not a stream.
+`CanStreamStage7Join` therefore declines the report leg outright - better than letting it stream
+and then pull the pool back through `.Value`, which is the same peak by a longer route with
+nothing in the log to say so. The fix is the accumulator the PASS-1 report already uses
+(`FirstPassFdrTask`'s `mdiagAccumulator`, folded per run in the score pass); give pass 2 the
+same and the exclusion goes.
+
+**Two defects fixed on the way, both worth knowing about:**
+
+1. `TransferOneFile`'s missing-features branch was a `return` where the loop it was extracted
+   from (`d969570a3c`) had a `continue` - so ONE entry without reconciled features abandoned the
+   rest of that run's survivors at their Stage-6 q AND skipped the run's `FilesDone` count. An
+   extraction that "changed nothing" changed a control-flow keyword.
+2. `-LinkFrom` did not stage `.1st-pass.stratum.json` (nor the model sidecar's own
+   `.osprey.task`). #4633 split the stratum out of the model sidecar and the runner's
+   `$STAGE_ARTIFACTS` table was not updated, so a cohort that reported "6690 file(s), 0 missing"
+   was one artifact short and failed 11 minutes into Stage 7 with "could not run the frozen
+   recompute ... or protein stratum are absent" - which reads as a code bug. Fixed in
+   `ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`; the link count is now 8028 = 446 x 18.
 
 Also on the branch: `4b9df2a836` (chunked sidecar read, cherry-picked from the #4633 branch
 where it was orphaned by the squash), `9a1eb514c1` (the per-file survivor source + StreamFiles),

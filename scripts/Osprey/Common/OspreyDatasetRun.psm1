@@ -652,9 +652,22 @@ function Invoke-OspreyDatasetRun {
         $STAGE_ARTIFACTS = [ordered]@{
             'PerFileScoring'   = @('.calibration.json', '.calibration.json.PerFileScoring.osprey.task',
                                    '.scores.parquet', '.scores.parquet.PerFileScoring.osprey.task')
+            # .1st-pass.stratum.json is the protein-compact stratum, split out of the model
+            # sidecar by PR #4633 because a different phase produces it. Omitting it staged a
+            # cohort that LOOKED complete - 6690 files, 0 missing - and then failed 11 minutes
+            # into Stage 7 with "could not run the frozen recompute ... or protein stratum are
+            # absent", which reads as a code bug rather than as "the link set is one artifact
+            # short". Its stamp travels with it for the same reason every other stamp does.
+            #
+            # The model sidecar's own stamp is here now too. It was the only per-run artifact
+            # staged without one, which is the state doc 00 says turns a valid reuse into a
+            # recompute "or worse".
             'FirstPassFDR'     = @('.1st-pass.fdr_scores.bin',
                                    '.1st-pass.fdr_scores.bin.FirstPassFDR.osprey.task',
                                    '.1st-pass.model.json',
+                                   '.1st-pass.model.json.FirstPassFDR.osprey.task',
+                                   '.1st-pass.stratum.json',
+                                   '.1st-pass.stratum.json.FirstPassFDR.osprey.task',
                                    '.reconciliation.json',
                                    '.reconciliation.json.FirstPassFDR.osprey.task')
             # The per-run 2nd-pass sidecar and the decoy side of its competition are
