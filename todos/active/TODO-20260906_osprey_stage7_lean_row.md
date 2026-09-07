@@ -245,9 +245,16 @@ a port that reuses those helpers unchanged keeps them. The ORCHESTRATION around 
 the file's sidecar, iterating survivors, the tallies) is what a port moves and what nothing
 checks.
 
-**The oracle is the 82-file SEA-AD A/B**, per the developer: a longer validation, run after
-everything else is validated. Recipe and results:
-`ai/todos/active/TODO-20260804_osprey_pass2_ab_and_library_production.md`.
+**The oracle is a SINGLE CHS PLATE, not SEA-AD** (developer, 2026-09-07): that is what the
+#4633 session ran transfer + mean-best-N on, against a comparable library - libdecoys plus
+entrapment peptides. Cheaper than it sounds, because the plates are already staged with
+linkable Stage 1-4: `chs-86files-libdecoy-r1.0-protein-compact-p0059` (also p0060/85, p0061,
+p0062). `Run-Chs.ps1 -Plates 0059 -Pass2Mode transfer -ExperimentAgg mean-best-6 -LinkFrom
+<that dir>`, `-FdrBenchPass 2` to measure FDP, `-WhatIf` first.
+
+The 82-file SEA-AD A/B in
+`ai/todos/active/TODO-20260804_osprey_pass2_ab_and_library_production.md` remains where the
+comparison's SHAPE is written down, and it is the larger validation if one is wanted later.
 
 **Those numbers are HISTORICAL, not targets** (developer, 2026-09-06): recorded 2026-08-04,
 and superseded. The change that invalidates them specifically is
