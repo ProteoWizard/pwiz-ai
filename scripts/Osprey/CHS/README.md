@@ -236,6 +236,43 @@ Small-scale coverage for the same property is `regression.ps1` **mode 11**, whic
 both diagnostics products from a completed run and asserts that the folds run, that the
 join's markers do NOT appear, and that the products come back byte-identical.
 
+### The library directory is part of `search_hash` - pin it from the SOURCE run
+
+A re-entry must resolve the SAME library file the bed was scored with, or Osprey refuses
+the parquets:
+
+```
+[ERROR] Pipeline failed: ...scores-reconciled.parquet: search_hash mismatch: parquet was
+scored with search_hash=dd85be27... but current config hashes to 661d98d9...
+```
+
+That is the guard working - it fails in about two minutes rather than describing a
+different search - but the message names hashes, not the argument that differs, so it does
+not tell you what to change.
+
+The trap is that the lib root holds more than one library and the runner picks one by
+convention. `chs-446files-libdecoy-r1.0-protein-compact-s7mdiag` was scored against
+`target+decoy+entrapment-20260817`, while the default resolution finds
+`target+decoy+entrapment` - same file name, different directory, different hash.
+
+**Read the source run's own command line and pass `-LibraryDir` to match it:**
+
+```powershell
+Select-String -Path '<the source run>\run.log' -Pattern 'Command:' |
+    Select-Object -First 1
+```
+
+then pass that directory explicitly:
+
+```powershell
+.\Run-Chs.ps1 -Task ModelDiagnostics -LinkThroughTask `
+    -LibraryDir 'D:\test\osprey-runs\sea-ad\lib\target+decoy+entrapment-20260817' ...
+```
+
+`-WhatIf` prints the resolved `library :` line and the full command it would run. Diff that
+command against the source run's `Command:` line before launching: for a diagnostics
+re-entry the two should differ in `--task` and the output paths and in NOTHING ELSE.
+
 ## Related
 
 * `ai/docs/osprey-large-datasets.md` - the catalog entry, access, and download budgeting
