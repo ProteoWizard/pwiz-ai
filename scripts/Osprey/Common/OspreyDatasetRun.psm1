@@ -720,7 +720,18 @@ function Invoke-OspreyDatasetRun {
         # instead of a silently different answer.
         $ANALYSIS_ARTIFACTS = [ordered]@{
             'PerFileScoring'   = @()
-            'FirstPassFDR'     = @('.1st-pass.fdr_experiment.bin', '.1st-pass.retained_base_ids.bin')
+            # EACH ARTIFACT'S .osprey.task STAMP TRAVELS WITH IT, exactly as the per-file
+            # table's entries carry theirs. It did not, and that is the expensive kind of
+            # omission: a staged bed held out.1st-pass.fdr_experiment.bin without its stamp,
+            # so a task asking "is this output current?" got NO for an artifact that was in
+            # fact complete, declined to adopt the finished first pass, and re-ran it - 4h46m
+            # on a 446-run cohort, to produce a report identical to the one the fold produces
+            # in minutes. Nothing in the output says which of the two happened.
+            # retained_base_ids.bin is deliberately unstamped here: no task declares it as an
+            # output, so there is no stamp to carry and asking for one would only warn.
+            'FirstPassFDR'     = @('.1st-pass.fdr_experiment.bin',
+                                   '.1st-pass.fdr_experiment.bin.FirstPassFDR.osprey.task',
+                                   '.1st-pass.retained_base_ids.bin')
             'PerFileRescoring' = @()
             # The analysis-wide 2nd-pass experiment sidecar is SecondPassFDR's own end-of-join
             # output, and it is how a later invocation learns a second pass EXISTS to describe
@@ -728,7 +739,8 @@ function Invoke-OspreyDatasetRun {
             # empty here because nothing downstream of Stage 7 used to be stageable; a
             # -Task ModelDiagnostics re-entry is, and without this it concludes the cohort has
             # no second pass and renders a pass-1-only page - complete, plausible, and half.
-            'SecondPassFDR'    = @('.2nd-pass.fdr_experiment.bin')
+            'SecondPassFDR'    = @('.2nd-pass.fdr_experiment.bin',
+                                   '.2nd-pass.fdr_experiment.bin.SecondPassFDR.osprey.task')
             'ModelDiagnostics' = @()
         }
         # Everything strictly BEFORE the task under test. No -Task keeps the historical
