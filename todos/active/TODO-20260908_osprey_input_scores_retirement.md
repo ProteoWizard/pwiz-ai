@@ -1,7 +1,7 @@
 # TODO-20260908_osprey_input_scores_retirement.md - retire `--input-scores`, a Rust-era seam the C# port already replaced
 
 **Module**: `osprey`
-**Status**: Not started. Proposed by the developer 2026-09-04 and written up in
+**Status**: In Progress. Proposed by the developer 2026-09-04 and written up in
 `todos/completed/TODO-20260901_osprey_stage5_reload_materialization.md:3563` ("PROPOSAL: retire
 `--input-scores`"); re-raised 2026-09-08. **That section is the design - read it first.** This
 file carries what has been learned since and the one constraint it must not miss.
@@ -119,3 +119,66 @@ proves the derivation; modes 2 and 5 cover the resume arms. Then TeamCity Perf/R
 Also re-run the `--task ModelDiagnostics` case that fails today, at 10 files first (33 s to a
 verdict) and then at 446: it is the defect this retirement is expected to fix, so it is the
 acceptance test.
+
+---
+
+## Progress log (2026-09-08 session)
+
+The streaming prerequisite LANDED first on this branch
+([#4646](https://github.com/ProteoWizard/pwiz/pull/4646), Stellar green, all four legs asserting
+the per-run fold), so "Sequencing" above is satisfied and this half is being built on top of it.
+
+### The constraint is already discharged
+
+`CanStreamStage7Join` no longer mentions `ExpectReconciledInput`. It asks the disk question the
+flag stood in for - every run's `.scores-reconciled.parquet` present in the survivor-subset
+shape - so deleting the flag cannot return Stage 7 to the O(files) pool. That was THE item in
+this file, and it was closed by the predecessor rather than by this work.
+
+### What the retirement actually turned out to be
+
+Smaller than the file implies in one way and larger in another.
+
+**Smaller**: `NoJoin` / `StopAfterStage5` / `ExpectReconciledInput` were ALREADY derived from
+`--task` and from nothing else (`Program.Main`). They are not a second era's flags; they are
+`--task` in three fields. The only Rust-era seam left was the INPUT KIND, and every predicate
+that read it was reading something the task flags already said. The three membership
+predicates collapse to one line each, and the truth table is unchanged - which is the claim
+worth pinning, and `PipelineMembershipTest` now pins it against `--task` alone.
+
+**Larger**: `--input-scores` was also the only form that accepted a DIRECTORY, so retiring it
+moves ordering responsibility to the caller (`--input-list`, which exists and composes with
+`-i`). And a task after Stage 4 is now handed data-file names that may not exist at all - the
+446 bed's state - so `Program.Main`'s input check gained a third acceptance beside the spectra
+cache: a run whose `.scores.parquet` (or reconciled sibling) is on disk. That is the same
+tolerance `--input-scores` expressed by naming a different input kind, said once instead.
+
+### Done in this branch
+
+* `--input-scores`, `OspreyConfig.InputScores` and `Program.ResolveInputScores` deleted.
+* `AnalysisPipeline`'s synthetic-input normalisation deleted - the round trip this TODO names
+  as the evidence.
+* `ScoringTaskShared.StartsAfterPerFileScoring` and `.ScoresPathsForInputs` replace the
+  input-kind test and the ready-made parquet list.
+* Membership: `FirstPassFdrTask` = `!NoJoin && !ExpectReconciledInput`;
+  `PerFileRescoreTask` = its own task or a full run; `SecondPassFdrTask` = its own node or a
+  full run; `PerFileScoringTask` = `!StartsAfterPerFileScoring`.
+* `ValidateArgs`: every task requires `--input`; the input-kind crosses cannot be typed.
+* Tests: the membership and release truth tables now build configs from `--task`;
+  `ProgramTests` loses the cross-rejection and `ResolveInputScores` suites and gains the
+  `--input` requirements. A `ModelDiagnostics` row REPLACES the retired `input-scores-full`
+  row - it is the mode that was actually at risk from the two seams.
+* Runner (`OspreyDatasetRun.psm1`) passes `-i` on every leg; docs 15 and 20 rewritten.
+
+### NOT done, and deliberately
+
+* **`RescoreHydration.SyntheticInputFromParquet` survives**, with its reason documented at the
+  declaration. Its CLI purpose is gone; what is left is internal - the hydrate methods still
+  take a PARQUET path per run (from `PerFileParquetPaths`) and derive the stem back from it.
+  Inverting those signatures to take the input and derive the parquet is a no-behaviour-change
+  refactor, deliberately not folded into the CLI change so a red gate can be attributed to one
+  of them. **This is the remaining half of "One derivation direction".**
+* The one-line `--input-scores` mentions in docs 00, 11, 16, 19, README and DIVERGENCES.
+* `regression.ps1`'s four chain-phase argument lines: the gate was RUNNING, and a running
+  script must not be edited. They are the first thing to do next, and mode 3 is the leg that
+  proves the derivation.
