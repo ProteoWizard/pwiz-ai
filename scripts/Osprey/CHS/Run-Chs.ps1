@@ -76,6 +76,15 @@ Import-Module (Join-Path $PSScriptRoot '..\Common\OspreyDatasetRun.psm1') -Force
 
 # -Plates composes the include regex so a cohort is expressible as an ARM rather than as a
 # hand-listed set of inputs. Both may be given; -IncludePattern then wins and is used as-is.
+# PowerShell's -File does not pass an ARRAY: `-Plates 0059,0060,0061` arrives as the single
+# string "0059,0060,0061", which joins to 'us(0059,0060,0061)' - a regex matching nothing, so
+# the run dies on "matched none of the 446 .raw file(s)". -LinkFrom already splits for this
+# reason; -Plates had not, and it is the parameter the README's own examples lead with.
+# Splitting on both separators means the documented dot-invoked form still works unchanged.
+if ($Plates) {
+    $Plates = @($Plates | ForEach-Object { $_ -split '[,;]' } |
+                ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
 if ($Plates -and -not $IncludePattern) {
     $IncludePattern = 'us(' + ($Plates -join '|') + ')'
     $null = $PSBoundParameters.Remove('Plates')
