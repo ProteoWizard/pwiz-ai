@@ -1382,3 +1382,23 @@ hard-fail on, and it wants daylight, a named consumer analysis, and its own gate
 both products against the flag-up-front run; a hydrate that handed the folds empty lists
 would red it immediately. That is the recommended order: make the change, red-or-green it at
 3 files in ~6 minutes, and only then spend a 446-file run.
+
+### DECISION: the lean-projection fix is NOT applied, and the reason is P16's own reframing
+
+A one-term change to `CanUseLeanProjection` (allow the lean path when `config.DiagnosticsOnly`)
+was written and held back. It would make `--task ModelDiagnostics` scale, and mode 11 would
+gate it cheaply. It is still the wrong change to land:
+
+* It covers `--task ModelDiagnostics` ONLY. The developer's P16 REFRAMED section says the
+  entry point is the ORDINARY command plus the flag - not a special task - and at hydrate
+  time that run is not yet known to be diagnostics-only. `--task FirstPassFDR
+  --model-diagnostics` is not covered either.
+* So it would satisfy the acceptance scenario while leaving the principle unmet, which is
+  the shape of fix that reads as done and is not.
+* And it is an intermediate the real fix deletes: making the hydrate DEFER the fat stubs
+  (or publishing the file-name/parquet-path pair without them) subsumes it entirely.
+
+The general fix is a design decision about the hydrate, and it belongs to whoever takes
+item 2 - the same area, since `FoldDiagnosticsOnly` is the caller that wants neither the
+stubs nor the pool. The patch text is preserved at
+`ai/.tmp/sessions/20260908-night/` if it is wanted as a starting point.
