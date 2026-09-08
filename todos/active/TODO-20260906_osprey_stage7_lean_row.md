@@ -1492,3 +1492,36 @@ entry point. So the honest summary of this PR's P16 claim is:
 * pass-2 pay-later fold: **implemented and correct where it runs** (mode 11 proves it
   byte-for-byte at 3 files), but **unreachable** via `--task SecondPassFDR` on a complete bed
 * `--task ModelDiagnostics`: **broken over `--input-scores`** at every scale
+
+### THE PASS-2 REACHABILITY FIX IS VERIFIED, NOT PROPOSED - two lines, measured
+
+Applied locally, measured, then REVERTED so the tree stays at the pushed `7de17740d9`. The
+exact patch is `ai/.tmp/sessions/20260908-night/verified-fix-pass2-outputs.diff`.
+
+Two halves, and it needs both - the first alone is not enough:
+
+1. `SecondPassFdrTask.Outputs` yields `ModelDiagnosticsReport.Pass2SidecarPath` whenever
+   `config.ModelDiagnostics`, WITHOUT the `FirstPassFdrTask.IsIncludedFor` term.
+2. `OnlyDiagnosticsProductOutstanding` skips that path as well as the report path - a
+   predicate asking "is every OTHER output current" must exclude its own product, exactly as
+   pass 1's version does.
+
+**Measured on the 10-file CHS bed, `--task SecondPassFDR --model-diagnostics` over
+`--input-scores`:**
+
+| state | result |
+|---|---|
+| unpatched, blib staged | `SecondPassFDR: skipping (outputs valid)` - fold never runs |
+| half 1 only | task starts, then declines: `out.2nd-pass.model-diagnostics.json is missing` |
+| both halves | **`folding the pass-2 report from the completed second pass`**, then `finalized report (2 pass-2 FDR view(s))`, `out.2nd-pass.model-diagnostics.json` written at 121,288 bytes, **zero join markers**, exit 0 |
+
+The middle row is the useful one: it shows the predicate correctly refusing to adopt a pass
+whose own product it was counting as an outstanding input, and it is why half 1 alone would
+have looked like the fix failing.
+
+Wall clock at 10 files: the fold leg is 29.7 s against 64.1 s for the join it replaces - and
+the join is 69 minutes at 446.
+
+**NOT committed**, for one reason only: it invalidates TeamCity 4168475, which is running on
+the current tip, and the standing rule is to ask before any re-trigger. The change is
+turnkey; it needs `regression.ps1 -Dataset All` and a fresh Perf/Regression before merge.
