@@ -1239,3 +1239,60 @@ naive hoist a correctness bug.
   needs (the default, strictly-before, is right for a re-MEASUREMENT).
 * `SecondPassFDR`'s `.2nd-pass.fdr_experiment.bin` now travels with the bed - it is how a
   later invocation learns a second pass exists to describe.
+
+### MODE 11 FOUND A REAL DEFECT IN THE PASS-2 FOLD, AND A PRE-EXISTING ONE IN PASS 1
+
+The new leg caught both on its first run, which is the argument for it existing.
+
+**DEFECT (mine, introduced by the fold, now FIXED).** The pass-2 fold reported the FIRST
+pass's q-values under a pass-2 heading. `InstallStreamedPass2Overlay` returns immediately
+when `rescored.Streams` is false, and the join never needed a resident equivalent because
+`ComputeAndPersist` stamps the second-pass values onto the resident pool as it computes
+them. The fold skips that compute by definition, so on the resident arm nothing carried
+pass 2 onto the pool.
+
+The evidence is exact rather than inferred: the folded pass-2 product's
+`coAssignment.experimentCutoff` was **0.6691**, and the run log shows 0.6691 is the PASS-1
+boundary (`peak co-assignment boundary (pass 1): experiment 0.6691`); the flag-up-front
+run's pass-2 cutoff is **-0.1516**. Every one of the 64 differing leaves was inside
+`coAssignment`, and the decoy count collapsed 302 -> 74 because entries were being judged
+against the wrong pass's acceptance boundary.
+
+**This failure is invisible to everything except the P16 comparison.** The page is
+complete, every card is populated, every number is real - they are just from the wrong
+pass. Exit code, marker lines, memory band and file-level checks all pass.
+
+Fixed by `Pass2FdrSidecar.OverlayPass2OntoResidentPool`, the resident sibling of the
+streamed overlay; the fold now installs both and each is a no-op on the other's arm. The
+pass-2 product is byte-identical to the flag-up-front one after the fix.
+
+Note which arm the small gate exercises: `rescored.Streams` is FALSE at 3 files, so mode 11
+covers the resident arm. The 446-file bed streams (the s7mdiag run logged the streamed-join
+marker), so the two scales cover different arms - which is why the small leg found what a
+446-file run would not have.
+
+**PRE-EXISTING GAP (pass 1), NOT in tonight's (A) scope - this is the TODO's item 2.** The
+folded pass-1 product is 139,060 bytes against the flag-up-front 168,367, and the three
+missing views are named:
+
+| view | why it cannot survive the pay-later path |
+|---|---|
+| `cal` | captured in `PerFileScoringTask` memory at Stage 3 and published from there; nothing reads the per-file `.calibration.json` back, and the shaped `CalFileRow` is not in that file yet (the format change this TODO already lists as wanted before first public release) |
+| `model` | the feature table needs the TRAINED model's contributions. The fold logs it plainly: *"first-pass model not retrained on this run (resumed/rehydrated); the Model tab's feature table and per-feature distributions are unavailable. Clear the 1st-pass FDR sidecars to force a retrain."* - i.e. the remedy it offers is to re-run the analysis, which is what P16 forbids |
+| `featureHistEdges` | the per-feature histograms are built from feature vectors as the model trains, so they go with the model |
+
+`BuildCalibrationData` returns null when `PerFileCalibrationDiagnostics` is absent, and
+returns BEFORE its own omission warning - so the CAL view vanishes with no line at all.
+That is the silent degrade P16's completeness half predicts, confirmed rather than argued.
+
+Costs differ per view and should be decided separately: the model's coefficients are
+already on disk in `.1st-pass.model.json` (so the feature TABLE is recoverable), the
+histograms need a fold over the parquets' feature vectors, and the CAL view needs the
+`.calibration.json` format change.
+
+**Mode 11 excludes exactly these three views BY NAME**, so the leg is green on everything
+achievable today and reds the moment any OTHER part of pass 1 diverges. The exclusion is
+printed in the summary line on every run rather than hidden, and the pass-2 half is
+compared byte-for-byte with no exclusion at all. **This is a new gate with a named
+skip-list, not an existing gate loosened - but it wants the developer's explicit sign-off,
+and removing the skip-list is the acceptance test for item 2.**
