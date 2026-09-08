@@ -1045,54 +1045,54 @@ invariant is what prevents the whole class.
 Item 2 is the one that would have shipped a quietly incomplete report, and no existing gate
 would have caught it - the small-dataset gates always run the flag up front.
 
-### AUDIT RESULT: two format changes are needed, and the flag is not additive
+### AUDIT RESULT: ONE format change, and a misleading dead condition
 
 Checked at the developer's request, because format changes are cheap pre-release and
 expensive once a released Osprey can meet a sidecar it did not write.
 
-**1. Retrained pass-2 contributions persist NOWHERE.** `pass2Contributions` is a local
-(`Pass2FdrSidecar.cs:97`), assigned once at `:384`, returned at `:540`, consumed in memory.
-There is no `.2nd-pass.model.json` or equivalent - grep finds no pass-2 model sidecar at all.
+**CORRECTION.** An earlier version of this section claimed pass-2 contributions need
+persisting and that `--model-diagnostics` changes the pass-2 computation. **Both were wrong**,
+and the developer caught it: pass-2 SVM retraining was CUT in `ad4ef8d106` (step 1 above), so
+that analysis was of dead code. What follows replaces it.
 
-**2. Worse: `--model-diagnostics` CHANGES THE COMPUTATION.** The routing condition at
-`Pass2FdrSidecar.cs:330` reads
+**There is no pass-2 model to persist.** With retraining cut, the pass-2 model IS the pass-1
+model - already on disk in `.1st-pass.model.json`, already a Stage 7 input. `pass2Contributions`
+is a local that is null in every reachable configuration, which is why the pass-2 Model /
+DensityRatio / WinFraction cards are absent today. The replacement design is already specified
+above ("There is no second-pass model any more"): frozen coefficients plus **42 running sums**
+(21 features x target/decoy, sum and count) for `TargetDecoyMeanGap`, with `Weighted`,
+`Percent` and `Composite` derived. O(features), folds per run. **No new model sidecar.**
 
-```csharp
-else if (OspreyEnvironment.UseFdrProjection && config.FdrMethod.UsesPercolatorFramework() &&
-    !config.ModelDiagnostics && !OspreyEnvironment.Pass2TransferQ)
+**The flag does NOT change the computation.** The routing condition at
+`Pass2FdrSidecar.cs:330` contains `!config.ModelDiagnostics`, which reads as though the flag
+routes the second pass to the resident path - but the branch it guards is UNREACHABLE:
+
+```
+frozenCompetition = Pass2ProteinCompact   -> protein-compact takes the first branch
+the else-if additionally requires !Pass2TransferQ -> false when the mode is transfer
+NormalizePass2QValue returns ONLY transfer or protein-compact
 ```
 
-so WITHOUT the flag the second pass streams through the projection engine, and WITH it the
-run falls through to `ComputePass2Resident`, which loads every survivor's 21-feature vector
-resident. The comment says it outright: *"--model-diagnostics needs the resident 2nd-pass
-model ... Route --model-diagnostics to the resident path so ComputePass2Resident can return
-the model."*
+so the else-if can never be true. This is exactly the dead projection branch step 1 predicted
+("`ComputeAndPersist`'s projection branch becomes unreachable and deletes") and step 3 has not
+yet removed. **Delete the `!config.ModelDiagnostics` term with it**: it is a leftover from the
+removed retrain mode whose only remaining effect is to convince a reader - it convinced this
+session - that the flag alters the analysis. That is a real cost for a term that does nothing.
 
-**This is the same defect this PR just fixed, one stage earlier.** `--model-diagnostics`
-forcing Stage 7 resident is what the fold removed today; `--model-diagnostics` forcing the
-SECOND PASS resident is still there. Same species - a report reaching back into a phase and
-changing that phase's memory shape - and the same reason the 500-file target kept receding.
-
-Outputs were verified byte-identical either way (#4377), so nothing is WRONG today. What is
-wrong is that the flag is not additive, which P16 forbids, and that a pay-later run cannot
-reproduce the model at all.
-
-**Under protein-compact** (the streaming default, and the only config where Stage 7 streams)
-`frozenCompetition` wins, contributions stay null and the Model / DensityRatio / WinFraction
-cards are absent regardless. So the default already ships a report without them while a
-transfer-mode run ships one with them, by taking a heavier path - an inconsistency invisible
-unless two modes' reports are compared.
-
-### The two format changes, both wanted BEFORE first public release
+### The one format change, wanted BEFORE first public release
 
 | # | what | why a standard (unconditional) sidecar |
 |---|---|---|
-| 1 | shaped `CalFileRow` into `.calibration.json` | the CAL view is computed in PFS memory and lost to any resume; ~40 KB files, a histogram + curve + scalars is a small delta |
-| 2 | pass-2 feature contributions into a standard sidecar | the only way a pay-later run can render the pass-2 Model card, and the precondition for deleting `!config.ModelDiagnostics` from the routing condition |
+| 1 | shaped `CalFileRow` into `.calibration.json` | the CAL view is computed in PFS memory and lost to any resume; ~40 KB files, so a histogram + curve + scalars is a small delta |
 
-Change 2 is what lets the flag become additive: once the model is on disk, the second pass
-can always take the projection path and the report reads the model from the sidecar.
+Only Brendan and Mike run this pipeline today, so a format change costs a re-run. After the
+first public release it costs multi-version read support, possibly several versions in one run.
 
-**Do these now.** Only Brendan and Mike run this pipeline today, so a format change costs a
-re-run. After the first public release it costs multi-version read support, and the run may
-meet several format versions at once.
+### Tension to resolve: step 4 vs the fan-out rule
+
+Step 4 above says "Pass-2 diagnostics become a fan-out product", and the developer's rule is
+that PFS/PFR must not produce a sidecar CONDITIONALLY on `--model-diagnostics`. These are
+compatible only if the 42 sums are folded and written **unconditionally**, as part of a
+standard per-run sidecar - cheap (O(features) per run) and it keeps the pay-later path whole.
+Folding them only under the flag would put a diagnostics-only artifact in the fan-out, which
+is the thing the rule forbids. Decide this explicitly when step 4 is implemented.
