@@ -308,18 +308,72 @@ no import, no layout file. The probe is kept at
 978 bytes/form against 43 KB per layout load implies roughly 44 dock operations per load, plausible
 for ~10 forms that each dock, tab and activate.
 
-### Next steps
+### Root cause: Control.Region on a created handle, set once per docked form
 
-1. **Instrument DigitalRune's Show/dock path** — now buildable, so its GDI+ object creation can be
-   traced directly. The renderers under `Rendering/` (Office2003, Office2007, Professional, System,
-   VisualStyles) plus `DockPaneStrip`/`AutoHideStrip` are where brushes, pens and images are made.
-2. The library's IL is identical on both runtimes, so whatever it does is benign on .NET Framework
-   and leaks on .NET 10. Find which GDI+ object survives, then decide whether the fix is a
-   `Dispose` in DigitalRune — which we can now ship, having built it — or an upstream .NET report.
-   The reproduction above is small enough to serve as the upstream repro either way.
-3. Nearly closed: whether this is offscreen-only. `LoadLayout` calls `MoveLayoutOffScreen` under
-   `Program.SkylineOffscreen`; that segment measured -112 bytes/load, and the docking repro does
-   not involve it at all.
+Instrumenting DigitalRune (a `DockProbe` hook plus marks, diff kept at
+`ai/.tmp/leak-tools/digitalrune-gdiplus-instrumentation.diff`) and bisecting the Show path by
+GDI+ heap bytes. Every segment reconciles to the 976 B/Show total:
+
+| segment | bytes/Show |
+|---|---|
+| `DockingHandler.Show` -> `Pane` setter -> `SetDockState` -> **`SetPaneAndVisible`** | **+1,152** |
+| `resumeLayout` -> `activate` | -176 |
+| all fifteen other segments | 0 |
+
+`SetPaneAndVisible` -> `SetPane`, which sets `FlagClipWindow = true`, and that setter
+(`DockingHandler.cs:1415`) is the whole story:
+
+```csharp
+_flagClipWindow = value;
+if (_flagClipWindow)
+  Form.Region = new Region(Rectangle.Empty);   // suppresses flicker while docking
+else
+  Form.Region = null;
+```
+
+`DockPane.cs:831` clears it again only once the form becomes **visible**, so in a tabbed pane every
+form behind the active tab is disposed with that `Region` still assigned.
+
+**The leak is in applying a `Region` to a created window handle, not in the managed object.**
+Measured on .NET 10, 100 forms each:
+
+| | leaked |
+|---|---|
+| `Region` set, cleared **before** the form is shown | **0** |
+| `Region` set before `Show`, form shown | 978 B/form |
+| `Region` set **after** `Show` | 978 B/form |
+| `Region` set after `Show`, then set to `null` | 976 B/form |
+| `Region` set after `Show`, then nulled **and** `Dispose`d | 976 B/form |
+
+A `Region` object is only 176 bytes, so the ~976 is the native window-region state. On
+.NET Framework 4.7.2 every one of these is **0**.
+
+Two fixes were tried and **failed**, for the same reason - once the handle has it, giving the
+managed object back is too late:
+
+- `FlagClipWindow = false` in `DockingHandler.Dispose` - never runs; `DockableForm.Dispose` does
+  not dispose its `DockingHandler`.
+- `DockingHandler.FlagClipWindow = false` in `DockableForm.Dispose` - runs, and still leaks 978.
+
+### The fix that works
+
+**Do not assign the clip `Region` at all.** With the assignment skipped, the docked cycle measures
+**0 bytes/form**, down from 978, on the same build:
+
+| x100 docked forms, .NET 10 | after `Show` | retained |
+|---|---|---|
+| as shipped | 976 B/form | 978 B/form |
+| Region cleared before close | 976 B/form | 978 B/form |
+| **no clip region assigned** | **0** | **0** |
+
+Open question before shipping it: the `Region` exists to suppress flicker while a form docks, so
+dropping it needs a visual check on a real (non-offscreen) session. If flicker returns, the
+alternatives are to guard the assignment to .NET Framework only, or to set and clear the region
+before the handle is created. Either way the fix belongs in DigitalRune, which is now buildable via
+`ai/scripts/Skyline/DigitalRune/Build-DigitalRune.ps1`.
+
+Worth reporting upstream regardless: on .NET Framework, `Control.Dispose` released the window
+region; on .NET 10 nothing does. The 40-line reproduction above is small enough to file as-is.
 
 ## Method notes
 
