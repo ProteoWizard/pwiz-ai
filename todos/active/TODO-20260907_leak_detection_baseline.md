@@ -277,20 +277,49 @@ Probing committed heap-7 bytes at ten points across `LoadLayout`, over 100 loads
 Heavy churn with a net +44 KB. No single call is "the leak", so segment attribution cannot separate
 allocated-and-freed from allocated-and-leaked. Object-level tracking is the next instrument.
 
-**The most actionable lead is `InsertFilesViewIntoLegacyLayout`** at +53 KB/load: it is Skyline's
-own recent FilesTree code rather than the third-party library, and it creates a `FilesTreeForm`
-when `_filesTreeForm == null && _shouldShowFilesTree`, which the destroy block above has just
-nulled — so it builds a form on every layout load.
+**The most actionable lead looked like `InsertFilesViewIntoLegacyLayout`** at +53 KB/load — Skyline's
+own recent FilesTree code rather than the third-party library, and it does build a `FilesTreeForm`
+on *every* layout load rather than once, because the tutorial `.view` files predate
+`FILES_TREE_SHOWN_ONCE_TOKEN` and the destroy block has just nulled `_filesTreeForm`. **Refuted by
+measurement**: suppressing it entirely moved the leak from 4.50 to 4.40 MB/run, about 2%. The
++53 KB it allocates is freed elsewhere. (Building that form on every load is still odd and may
+deserve its own look, but it is not this leak.)
+
+### Minimal reproduction: docking a form, nothing else
+
+Eliminating by construction — 100 create/show/close/dispose cycles each, GC and finalizers settled
+before and after, measuring the GDI+ heap, which the probe **locates at run time** by allocating
+500 `SolidBrush` and taking the heap that grows. That matters: GDI+ is heap index 7 on .NET 10 but
+index **10** on net472, so a hard-coded index would have silently compared the wrong heaps.
+
+| cycle x100 | .NET 10 | .NET Framework 4.7.2 |
+|---|---|---|
+| plain `Form`, empty | 0 | 0 |
+| plain `Form` + `ZedGraphControl` | 0 | 150 B/form |
+| plain `Form` + `TreeView` / `DataGridView` / `ToolStrip` / `SplitContainer` | 0 | — |
+| **`DockableForm.Show(DockPanel, DockLeft)` + `Close` + `Dispose`, empty** | **978 B/form** | **0** |
+| **same, holding a `ZedGraphControl`** | **978 B/form** | **0** |
+
+It is the **docking operation itself** — byte-identical (97,776 for 100 forms, twice) whether the
+form is empty or holds a graph, so neither the content nor the control types matter. No document,
+no import, no layout file. The probe is kept at
+`ai/.tmp/leak-tools/GdiPlusDockingRepro-probe.cs.txt`.
+
+978 bytes/form against 43 KB per layout load implies roughly 44 dock operations per load, plausible
+for ~10 forms that each dock, tab and activate.
 
 ### Next steps
 
-1. Track GDI+ object lifetimes rather than heap bytes — which objects survive a load, and what
-   roots them. A `Bitmap`/`Image` of roughly 40 KB is the shape to look for.
-2. Check whether the leak is offscreen-only. `LoadLayout` calls `MoveLayoutOffScreen` under
-   `Program.SkylineOffscreen`, so a test-only path is in play; that segment measured near zero
-   (-112 bytes/load), which argues against it, but it has not been tested with an on-screen run.
-3. If it survives 1 and 2 as a genuine runtime regression, it is worth an upstream report against
-   .NET WinForms/System.Drawing with the amplification above as a reproduction.
+1. **Instrument DigitalRune's Show/dock path** — now buildable, so its GDI+ object creation can be
+   traced directly. The renderers under `Rendering/` (Office2003, Office2007, Professional, System,
+   VisualStyles) plus `DockPaneStrip`/`AutoHideStrip` are where brushes, pens and images are made.
+2. The library's IL is identical on both runtimes, so whatever it does is benign on .NET Framework
+   and leaks on .NET 10. Find which GDI+ object survives, then decide whether the fix is a
+   `Dispose` in DigitalRune — which we can now ship, having built it — or an upstream .NET report.
+   The reproduction above is small enough to serve as the upstream repro either way.
+3. Nearly closed: whether this is offscreen-only. `LoadLayout` calls `MoveLayoutOffScreen` under
+   `Program.SkylineOffscreen`; that segment measured -112 bytes/load, and the docking repro does
+   not involve it at all.
 
 ## Method notes
 
