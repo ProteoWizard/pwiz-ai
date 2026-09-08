@@ -841,3 +841,85 @@ comparing against `main` would surface Rust's missing fix as a C# divergence.
 
 `a9f5190b8f` "Changed pass-2 model diagnostics to fold run by run" - 8 files,
 692 insertions, 76 deletions. Not yet pushed.
+
+## THE 446-FILE PROOF WITH DIAGNOSTICS ON (measured 2026-09-07 16:21-17:30)
+
+Run `chs-446files-libdecoy-r1.0-protein-compact-s7mdiag`, exe `_bin\250-s7mdiag`
+(v26.1.1.250, commit `a9f5190b8f`), `--task SecondPassFDR --model-diagnostics` linked from
+`stages567`, 8028 artifacts linked / 0 missing, 30 threads.
+Plot: `ai/.tmp/sessions/20260907-s7mdiag/s7mdiag-446.png`.
+Reference plot regenerated alongside it: `s7fold-446-reference.png`.
+
+**exit 0 in 69 minutes (1:08:40).** The marker line proves the shape that ran:
+
+```
+Second-pass join: folding over 446 run(s), each rebuilt from its own artifacts and
+dropped (no all-runs survivor pool; 625620 retained base_id(s) read once).
+446 of 446 run(s) carry a current 2nd-pass sidecar and are rebuilt without opening
+any 1st-pass file.
+```
+
+That line could not exist before this branch: `--model-diagnostics` made
+`CanStreamStage7Join` decline, so the report forced the resident pool - the 78.3 GB that
+was killed at run 381/446. **Coupling 3 is closed.**
+
+| | s7mdiag (mdiag ON) | s7fold (mdiag off) | FirstPassFDR | s7base (resident) |
+|---|---|---|---|---|
+| managed peak | **18.2 GB** | 23.5 GB | 32.5 GB | 68.0 GB |
+| private peak | **29.0 GB** | 36.4 GB | 40.1 GB | 70.5 GB |
+| sustained total | 24.0 GB / 300s | 26.2 GB / 300s | - | - |
+| floor drift | **-3 MB/file FALLING** | -4 MB/file LEVEL | +4 MB/file | +71 MB/file RISING |
+| gaps >= 30s | **0** (max 23s) | 0 (max 20s) | - | - |
+| outcome | **exit 0, 1:08:40** | exit 0, 1:10:54 | - | killed 381/446 |
+
+**THE ACCEPTANCE CRITERION IS MET WITH DIAGNOSTICS ON**: SecondPassFDR peaks below
+FirstPassFDR on both axes, and the floor FALLS rather than rising. Stage 7 is not the
+tallest region on the plot.
+
+It also came in below the mdiag-OFF run while doing MORE work (two stream passes rather
+than one, in comparable wall time). Treat the gap as partly GC-timing noise - `--memstamp`
+includes uncollected garbage, so it shows shape not magnitude - but the sustained levels
+agree (24.0 vs 26.2 GB).
+
+### What this run does NOT cover - stated so nobody reads it as more than it is
+
+* `[MODEL-DIAGNOSTICS] pass-1 data sidecar not found; pass-2 enrichment skipped`. The
+  `stages567` bed has no `out.1st-pass.model-diagnostics.json`, so `Accumulator.BuildPass2`
+  and the render NEVER EXECUTED. **Only the two stream passes are measured.** Those steps
+  are O(distinct precursors), but unmeasured is unmeasured.
+* It ran commit `a9f5190b8f`, not the tip. `2a8c198c0a` adds a guard that checks for the
+  pass-1 product BEFORE folding - so on this bed the fixed binary would skip the fold
+  entirely, and this measurement cannot be reproduced here with it. The guard is in front
+  of the fold and does not change it, so the profile stands for the fold.
+* The two sibling 446-file pass-1 products (`chs446-mdiag-coldfpfdr`,
+  `chs446-mdiag-render-proof`) DIFFER from each other (252,021 vs 233,498 bytes), so
+  neither is safely attributable to this pool. Not borrowed - a page splicing two first
+  passes would be a misleading artifact.
+
+### The rigorous matrix the developer asked for, and its blocker
+
+> *"Truly rigorous testing would include some testing of --task ModelDiagnostics that
+> should run the diagnostics passes in isolation and produce the same output as --task
+> FirstPassFDR --model-diagnostics, and then --task SecondPassFDR --model-diagnostics with
+> just the diagnostics JSON files deleted."*
+
+| # | run | oracle |
+|---|---|---|
+| T1 | `--task FirstPassFDR --model-diagnostics` | produces the missing pass-1 product |
+| T2 | `--task SecondPassFDR --model-diagnostics` on T1's dir, tip binary | the COMPLETE path: fold -> BuildPass2 -> render. Closes both gaps above |
+| T3 | `--task ModelDiagnostics` on T2's dir | byte-identical HTML, no analysis (seconds) |
+| T4 | delete only the pass-2 JSON, re-run T2 | reproduces it byte-for-byte |
+| T5 | delete both JSONs, re-run T1 | reproduces the pass-1 JSON byte-for-byte |
+
+**BLOCKER, measured with `-WhatIf`**: `-Task FirstPassFDR` with `-LinkFrom` stages only
+**1784** files - "stages before FirstPassFDR", i.e. PerFileScoring only. The 446
+`.1st-pass.fdr_scores.bin` are NOT staged, so FirstPassFDR RECOMPUTES rather than
+re-entering, which is precisely the sidecar reproduction the developer wants to avoid.
+`Program.cs` advertises the re-entry ("produce the pass-1 product from the completed
+first-pass artifacts"), so the capability exists and the RUNNER is what does not stage it.
+
+Way around: hard-link the WHOLE bed into a fresh dir (links cost no space) so the 1st-pass
+sidecars are present and current, then run there. Validate on a small bed before spending
+446-scale time. Note the 86-file bed
+(`chs-86files-libdecoy-r1.0-protein-compact-retainedset-pfr3`) has **no**
+`.1st-pass.stratum.json`, so it is not a drop-in for a protein-compact pass-2 leg.
