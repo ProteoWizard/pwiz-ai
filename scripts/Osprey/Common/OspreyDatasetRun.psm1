@@ -480,10 +480,12 @@ function Invoke-OspreyDatasetRun {
     # naming the vendor reader. Artifacts go to the run dir; the cache stays beside the data
     # unless -CacheDir says otherwise (what a genuinely read-only data directory needs).
     $blib = Join-Path $OutDir 'out.blib'
-    # The HPC per-task modes AFTER PerFileScoring consume .scores.parquet, not the raw inputs:
-    # "--task FirstPassFDR cannot be combined with --input. Use --input-scores instead."
-    # With -LinkFrom the parquets are already hard-linked into $OutDir, so that directory IS
-    # the score input. Mutually exclusive with -i, hence the branch rather than an extra flag.
+    # The HPC per-task modes AFTER PerFileScoring read per-file ARTIFACTS rather than
+    # spectra, so they still need those artifacts staged - but they are named the same way
+    # every other task names its runs. --input-scores used to take their place on the
+    # command line ('--input-scores $OutDir'); it retired, and -i plus --output-dir says the
+    # same thing: these runs, artifacts over there. Osprey accepts an input that is absent
+    # when its scores parquet is on disk, which is the state a staged phase directory is in.
     $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR',
                             'ModelDiagnostics')
     $useScores = $Task -and ($POST_SCORING_TASKS -contains $Task)
@@ -492,7 +494,7 @@ function Invoke-OspreyDatasetRun {
                "run over the same files> so every stage BEFORE $Task is hard-linked into the output " +
                "directory first, or -Resume into a directory that already has them.")
     }
-    $cliArgs = if ($useScores) { @('--input-scores', $OutDir) } else { @('-i') + $inputs }
+    $cliArgs = @('-i') + $inputs
     $cliArgs += @(
         '-l', $libraryPath,
         '-o', $blib,
@@ -507,8 +509,13 @@ function Invoke-OspreyDatasetRun {
     }
     if ($Task) { $cliArgs += @('--task', $Task) }
     if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
-    # A post-scoring --task leg reads .scores.parquet out of $OutDir, so it has no raw input
-    # path to resolve the .spectra.bin cache from - and Stage 6 rescore REQUIRES that cache.
+    # A post-scoring --task leg used to read .scores.parquet out of $OutDir with no raw input
+    # path at all, so it could not resolve the .spectra.bin cache - and Stage 6 rescore
+    # REQUIRES that cache. Since --input-scores retired the leg names its runs by their data
+    # files and resolves the cache beside them on its own, so this is now an explicit
+    # restatement of the default rather than the only way to get it. Kept because it is
+    # exactly what -CacheDir means for these legs, and losing it costs a 13-minute hydrate
+    # that fails on the first file.
     # The cache sits beside its source in the data directory (ai/docs/osprey-run-layout.md:
     # "it is not a separate tree"), so point the leg at it rather than hard-linking GB of
     # cache into every worker directory. Without this a PerFileRescoring leg runs the whole
