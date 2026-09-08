@@ -1044,3 +1044,55 @@ invariant is what prevents the whole class.
 
 Item 2 is the one that would have shipped a quietly incomplete report, and no existing gate
 would have caught it - the small-dataset gates always run the flag up front.
+
+### AUDIT RESULT: two format changes are needed, and the flag is not additive
+
+Checked at the developer's request, because format changes are cheap pre-release and
+expensive once a released Osprey can meet a sidecar it did not write.
+
+**1. Retrained pass-2 contributions persist NOWHERE.** `pass2Contributions` is a local
+(`Pass2FdrSidecar.cs:97`), assigned once at `:384`, returned at `:540`, consumed in memory.
+There is no `.2nd-pass.model.json` or equivalent - grep finds no pass-2 model sidecar at all.
+
+**2. Worse: `--model-diagnostics` CHANGES THE COMPUTATION.** The routing condition at
+`Pass2FdrSidecar.cs:330` reads
+
+```csharp
+else if (OspreyEnvironment.UseFdrProjection && config.FdrMethod.UsesPercolatorFramework() &&
+    !config.ModelDiagnostics && !OspreyEnvironment.Pass2TransferQ)
+```
+
+so WITHOUT the flag the second pass streams through the projection engine, and WITH it the
+run falls through to `ComputePass2Resident`, which loads every survivor's 21-feature vector
+resident. The comment says it outright: *"--model-diagnostics needs the resident 2nd-pass
+model ... Route --model-diagnostics to the resident path so ComputePass2Resident can return
+the model."*
+
+**This is the same defect this PR just fixed, one stage earlier.** `--model-diagnostics`
+forcing Stage 7 resident is what the fold removed today; `--model-diagnostics` forcing the
+SECOND PASS resident is still there. Same species - a report reaching back into a phase and
+changing that phase's memory shape - and the same reason the 500-file target kept receding.
+
+Outputs were verified byte-identical either way (#4377), so nothing is WRONG today. What is
+wrong is that the flag is not additive, which P16 forbids, and that a pay-later run cannot
+reproduce the model at all.
+
+**Under protein-compact** (the streaming default, and the only config where Stage 7 streams)
+`frozenCompetition` wins, contributions stay null and the Model / DensityRatio / WinFraction
+cards are absent regardless. So the default already ships a report without them while a
+transfer-mode run ships one with them, by taking a heavier path - an inconsistency invisible
+unless two modes' reports are compared.
+
+### The two format changes, both wanted BEFORE first public release
+
+| # | what | why a standard (unconditional) sidecar |
+|---|---|---|
+| 1 | shaped `CalFileRow` into `.calibration.json` | the CAL view is computed in PFS memory and lost to any resume; ~40 KB files, a histogram + curve + scalars is a small delta |
+| 2 | pass-2 feature contributions into a standard sidecar | the only way a pay-later run can render the pass-2 Model card, and the precondition for deleting `!config.ModelDiagnostics` from the routing condition |
+
+Change 2 is what lets the flag become additive: once the model is on disk, the second pass
+can always take the projection path and the report reads the model from the sidecar.
+
+**Do these now.** Only Brendan and Mike run this pipeline today, so a format change costs a
+re-run. After the first public release it costs multi-version read support, and the run may
+meet several format versions at once.
