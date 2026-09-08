@@ -183,7 +183,114 @@ These are leaks to fix, not detection problems. Listed so they are not confused 
   decision. Two regression tests exist (uncommitted in `pwiz-work1`).
 - **`TestKoinaConnection`** (16.5 KB/run managed): reported 16900.6 bytes in *both* nightlies,
   identical to the decimal, so deterministic given the test sequence — yet only 3.5 KB in isolation.
-- **`TestGroupedStudies1Tutorial`** (~1.9 MB/run native).
+- **`TestGroupedStudies1Tutorial`** (~1.9 MB/run native) — root-caused 2026-09-08, see below.
+
+## `TestGroupedStudies1Tutorial`: a .NET 10 GDI+ regression in layout loading
+
+Not a detection problem and not an old Skyline bug — a **port blocker**. Every claim below is a
+measurement; the reasoning that produced them is in the session, the numbers are here.
+
+### Per-heap attribution turns a 20-minute cycle into 3 minutes
+
+`-ReportHeaps` already logs committed bytes for **every** Win32 heap, and the leak check only ever
+reports their sum. Split out, **one heap carries the entire leak** — index 7, 2.12 MB/run at
+R² = 1.00, deltas of 2.12 MB on *every single iteration*, deterministic to 0.01 MB, while every
+other heap is flat. Summing them buries that in the process heap's churn, which swings hundreds of
+KB within a single operation.
+
+That is worth building into the tooling: it makes 4 iterations a better oracle than 25 were.
+`ai/.tmp/leak-tools/Heap-Deltas.ps1` parses the `# Heaps` lines into per-heap slopes.
+
+It also retired a false lead: English-only looked like it "plateaued" while 5 languages looked
+linear. Heap 7 is identical in both. The language difference was noise in the summed heap.
+
+### It is `SkylineWindow.LoadLayout`, at ~43 KB per call
+
+Bisecting `DoTest` (heap 7, MB/run): import only 0.24 -> +`ExploreTopPeptides` 0.92 ->
++`ExploreGlobalStandards`+`ExploreBottomPeptides` 1.89 -> full test 2.12. Spread proportionally, so
+not one hotspot. Against per-phase call counts only `RestoreViewOnScreen` fits all four groups
+(0.047 / 0.043 / 0.048 / 0.058 MB per call); `SelectNode` and `ActivateReplicate` do not, since the
+import phase has zero of the latter and still leaks.
+
+Amplification settled it: import-only baseline plus 100 extra `RestoreViewOnScreen(6)` calls
+predicted ~4.9 MB/run and measured **4.50** — **42.6 KB per call**, a 19x inflation. 45 calls x
+42.6 KB = 1.92 MB of the measured 2.12.
+
+### The runtime is the difference, not the code
+
+Identical amplification, byte-identical test file, 400 layout loads each:
+
+| | .NET 10 | .NET Framework 4.7.2 |
+|---|---|---|
+| heap 7, first -> last | 4.69 -> **18.18 MB** | 0.01 -> **0.01 MB** |
+| slope | **4.50 MB/run** | 0.00 |
+| all 12 heaps summed | rising | 30.23 -> 30.51, flat |
+
+Both runtimes report 12 heaps and every one is flat on net472.
+
+### Heap 7 is the GDI+ heap
+
+Allocating known types and watching which one moves it:
+
+| allocation | heap 7 | after `Dispose` |
+|---|---|---|
+| `SolidBrush` x500 | 376 bytes each | 0 |
+| `Pen` x500 | 559 bytes each | 0 |
+| `Bitmap(1,1)` x500 | 1,956 bytes each | 0 |
+| `Font` x200 | 48 bytes each | 0 |
+| WinForms `Control` x500 | 0 | - |
+| managed `byte[4096]` x500 | 0 | - |
+
+**GDI+ finalizers work fine on .NET 10** — abandoning 500 of each without `Dispose`, then
+`GC.Collect` + `WaitForPendingFinalizers`, returned heap 7 to zero for all three types. So the
+leaked objects are either still rooted or have no managed wrapper. Managed memory is flat
+(~0.36 KB per load), which rules out ~100 retained small wrappers and is consistent with a small
+number of **large** GDI+ objects — a single 100x100 32bpp bitmap is ~40 KB, close to the 43 KB.
+
+### Rebuilding DigitalRune for .NET 10 does not fix it
+
+Skyline references `DigitalRune.Windows.Docking.dll` as a prebuilt **net472** binary
+(`pwiz_tools/Shared/Lib`, HintPath, no NuGet equivalent), loaded on .NET 10 through WinForms compat.
+Source is in `uw-maccosslab/developers` under `skylinedev/DigitalRune-Docking-Windows/Source`; it is
+now cloned at `C:\proj\developers` and buildable via
+`ai/scripts/Skyline/DigitalRune/Build-DigitalRune.ps1`.
+
+Rebuilt for `net10.0-windows` and swapped in (same assembly identity, 1.3.5.0, unsigned), the
+measurement is **unchanged**: 4.68 / 9.20 / 13.69 / 18.18, the same 4.50 MB/run. The original binary
+has been restored. This is expected in hindsight — the same IL runs either way — but the rebuild is
+what makes the docking code instrumentable, and the script keeps it repeatable.
+
+### Where the GDI+ churn happens
+
+Probing committed heap-7 bytes at ten points across `LoadLayout`, over 100 loads (segments sum to
+44.5 KB/load, reconciling with the 42.6 KB measured independently):
+
+| segment | bytes/load |
+|---|---|
+| `destroys` -> `LoadFromXml` (DigitalRune `dockPanel.LoadFromXml`) | **+66,706** |
+| `LoadFromXml` -> `InsertFilesView` (Skyline `InsertFilesViewIntoLegacyLayout`) | **+53,126** |
+| `lockedStart` -> `destroys` (the ~15 `Destroy*` calls) | -36,416 |
+| `beforeUnlock` -> `unlocked` (`DockPanelLayoutLock` disposal) | -24,014 |
+| `unlocked` -> `enter` (between loads) | -11,143 |
+| everything else | < 2,400 each |
+
+Heavy churn with a net +44 KB. No single call is "the leak", so segment attribution cannot separate
+allocated-and-freed from allocated-and-leaked. Object-level tracking is the next instrument.
+
+**The most actionable lead is `InsertFilesViewIntoLegacyLayout`** at +53 KB/load: it is Skyline's
+own recent FilesTree code rather than the third-party library, and it creates a `FilesTreeForm`
+when `_filesTreeForm == null && _shouldShowFilesTree`, which the destroy block above has just
+nulled — so it builds a form on every layout load.
+
+### Next steps
+
+1. Track GDI+ object lifetimes rather than heap bytes — which objects survive a load, and what
+   roots them. A `Bitmap`/`Image` of roughly 40 KB is the shape to look for.
+2. Check whether the leak is offscreen-only. `LoadLayout` calls `MoveLayoutOffScreen` under
+   `Program.SkylineOffscreen`, so a test-only path is in play; that segment measured near zero
+   (-112 bytes/load), which argues against it, but it has not been tested with an on-screen run.
+3. If it survives 1 and 2 as a genuine runtime regression, it is worth an upstream report against
+   .NET WinForms/System.Drawing with the amplification above as a reproduction.
 
 ## Method notes
 
