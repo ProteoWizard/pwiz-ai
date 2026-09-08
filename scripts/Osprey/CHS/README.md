@@ -186,6 +186,56 @@ Measured on this dataset 2026-09-01: six files re-scored on 26.1.1.243 were bit-
 their stored 26.1.1.233 and 26.1.1.238 originals, so `PerFileScoring` output is
 build-invariant across those three daily builds as well as cohort-independent.
 
+## Paying for the diagnostics after the fact (P16)
+
+A run that finished WITHOUT `--model-diagnostics` can be asked for the report later, and
+the only work that happens is producing the diagnostics artifacts. That is principle P16 in
+`pwiz_tools/Osprey/docs/00-pipeline-architecture.md`, and the recipe is:
+
+```powershell
+$env:OSPREY_CHS_LIB = 'D:\test\osprey-runs\sea-ad\lib'
+.\Run-Chs.ps1 -Task ModelDiagnostics -LinkThroughTask `
+    -LinkFrom '<the completed run>;<the run that produced its first pass>' `
+    -Exe D:\test\osprey-runs\_bin\<tag>\Osprey.exe -Tag '-p16proof' -WhatIf
+```
+
+**`-LinkThroughTask` is the part that is easy to get wrong and expensive to get wrong.**
+Without it, `-LinkFrom` stages only the stages strictly BEFORE `-Task`, which is right for a
+re-MEASUREMENT of one phase and wrong for a re-ENTRY. A re-entry needs each stage's own
+outputs *and their `.osprey.task` stamps* on disk, because the stamp is the only thing that
+tells a pass it has already run. Stage too little and both passes recompute - and they
+produce the CORRECT report, so no artifact and no gate can tell you it happened. The cost
+at 446 files is 4h46m for the first pass and 69 min for the second, against minutes for the
+fold.
+
+**Assert the marker, not the wall clock.** Each pass logs the line that names the path it
+took:
+
+```
+FirstPassFDR: every output but the model-diagnostics product is current;
+folding the report from the completed first pass.
+SecondPassFDR: every output but the model-diagnostics product is current;
+folding the pass-2 report from the completed second pass.
+```
+
+Check for both within the first minutes and kill the run if either is missing. Wall clock
+alone cannot serve: a compliant fold still STREAMS every run (the pass-2 cards are
+reductions over every 2nd-pass sidecar and reconciled parquet, and the co-assignment panel
+needs two reads of the pool), so a fold and a join differ by a factor rather than by a
+category. "No analysis" means no recomputation, not no I/O.
+
+**Two sources, in this order.** The completed Stage 7 run supplies the per-file artifacts
+and the 2nd-pass experiment sidecar; an older leg may be the only place the *pass-1*
+experiment sidecar's stamp survives, because staging used to drop the stamps of
+analysis-wide artifacts. The first source that has a given file wins, so listing the
+completed run first and the older leg second gets both. `-WhatIf` prints one
+`analysis-wide:` line per file with the source it came from - read them, and treat a
+`LinkFrom WARNING: no analysis-wide ...` as a staging error rather than a note.
+
+Small-scale coverage for the same property is `regression.ps1` **mode 11**, which deletes
+both diagnostics products from a completed run and asserts that the folds run, that the
+join's markers do NOT appear, and that the products come back byte-identical.
+
 ## Related
 
 * `ai/docs/osprey-large-datasets.md` - the catalog entry, access, and download budgeting
