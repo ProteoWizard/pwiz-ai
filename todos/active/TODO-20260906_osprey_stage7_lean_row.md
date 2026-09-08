@@ -923,3 +923,27 @@ sidecars are present and current, then run there. Validate on a small bed before
 446-scale time. Note the 86-file bed
 (`chs-86files-libdecoy-r1.0-protein-compact-retainedset-pfr3`) has **no**
 `.1st-pass.stratum.json`, so it is not a drop-in for a protein-compact pass-2 leg.
+
+## PUSHED AND UNDER CI, 2026-09-07 ~20:00
+
+Three commits on [#4642](https://github.com/ProteoWizard/pwiz/pull/4642):
+`a9f5190b8f` (the fold), `2a8c198c0a` (pass-1 check ahead of the fold),
+`89069ca270` (nine `/code-review max` fixes).
+
+* Local `regression.ps1 -Dataset All`: **PASSED**, 0 FAIL / 0 SKIP, `mode3 (streamed join)`
+  PASS on all four datasets. Built from a mid-state tree, so TeamCity is the tip's gate.
+* **TeamCity Perf/Regression 4168207** on `pull/4642` @ `89069ca270`, MacCoss Agent 1.
+* **Unit build 4168209 FAILED on infrastructure, not code**: auto-triggered on push with no
+  agent pin, landed on AWS agent `pwiz-windows-i-0e5ffda1b844d6c28`, died on
+  `dotcover not on PATH`. Zero failed tests; #575/#576 SUCCESS on Agent 1. Re-triggered
+  pinned by the developer. **Osprey TC runs must pin MacCoss Agent 1** - the push
+  auto-trigger cannot, which is a standing hazard rather than a one-off.
+* Copilot re-review triaged in PR comment 5578423943 - three findings, all pre-dating this
+  work, none changed: one closed with reason, two recorded as deferred (`TryWalkRecords`
+  partial overlay; `Pass2FdrSidecar` per-run experiment-record resolution, whose naive fix
+  is a correctness bug because the late resolution is deliberate).
+
+**Night session spec**: `ai/.tmp/handoff-20260908_osprey_mdiag_446_night.md`. Its headline
+is that `FirstPassFdrTask.OnlyDiagnosticsProductOutstanding` ALREADY implements the
+"add --model-diagnostics to a finished analysis" path, and that a silent recompute of it
+costs 4h46m while producing the RIGHT report - so only the log line distinguishes them.
