@@ -355,25 +355,85 @@ managed object back is too late:
   not dispose its `DockingHandler`.
 - `DockingHandler.FlagClipWindow = false` in `DockableForm.Dispose` - runs, and still leaks 978.
 
-### The fix that works
+### There is no disposal point - the cost is charged at assignment
 
-**Do not assign the clip `Region` at all.** With the assignment skipped, the docked cycle measures
-**0 bytes/form**, down from 978, on the same build:
+Bisecting the lifespan of the property, 100 forms each, on .NET 10:
 
-| x100 docked forms, .NET 10 | after `Show` | retained |
+| variant | leaked |
+|---|---|
+| never assigned | **0** |
+| assigned **once** | 978 B/form |
+| assigned **5x** | 4,882 B/form |
+| assigned **10x** | 9,762 B/form |
+| null right after | 976 B/form |
+| null + `Application.DoEvents()` | 976 B/form |
+| null in `OnFormClosing` | 976 B/form |
+| null in `OnFormClosed` | 976 B/form |
+| null before `Close` | 976 B/form |
+| null in `OnHandleDestroyed` | 976 B/form |
+| `RecreateHandle()` first | 976 B/form |
+
+~976 bytes per **non-null** `Control.Region` assignment, charged when it is assigned and never
+recoverable. Assigning `null` costs nothing, so setting the flag back to false does nothing for the
+memory already gone. Every clearing point is identical to doing nothing.
+
+### The fix: keep the clipping, bypass GDI+
+
+`Control.Region` routes through GDI+ - its `Region` lives on the GDI+ heap. `SetWindowRgn` is what
+that setter ends up calling anyway, and it takes a plain **GDI** region, so no GDI+ object exists to
+leak. The system takes ownership of a region it accepts and frees it with the window.
+
+In `DockingHandler.FlagClipWindow`, replacing the two `Form.Region` lines with:
+
+```csharp
+if (Form.IsHandleCreated)
+{
+  IntPtr region = _flagClipWindow ? NativeMethods.CreateRectRgn(0, 0, 0, 0) : IntPtr.Zero;
+  if (NativeMethods.SetWindowRgn(Form.Handle, region, false) == 0 && region != IntPtr.Zero)
+    NativeMethods.DeleteObject(region);   // the window refused it, so we still own it
+}
+```
+
+plus three P/Invokes in `Win32/NativeMethods.cs`. 36 lines total, saved at
+`ai/.tmp/leak-tools/digitalrune-native-clip-fix.diff`, uncommitted in `C:\proj\developers`.
+
+Measured clean on **both** axes - 0 GDI+ bytes and 0 GDI handles - so it is not trading one leak for
+another:
+
+| | before | after |
 |---|---|---|
-| as shipped | 976 B/form | 978 B/form |
-| Region cleared before close | 976 B/form | 978 B/form |
-| **no clip region assigned** | **0** | **0** |
+| one docked form cycle | 978 B/form | **0** |
+| 100 layout loads per iteration | 4.50 MB/run | **0.01 MB/run** |
+| **`TestGroupedStudies1Tutorial`, unmodified** | **2.12 MB/run** | **0.017 MB/run** |
 
-Open question before shipping it: the `Region` exists to suppress flicker while a form docks, so
-dropping it needs a visual check on a real (non-offscreen) session. If flicker returns, the
-alternatives are to guard the assignment to .NET Framework only, or to set and clear the region
-before the handle is created. Either way the fix belongs in DigitalRune, which is now buildable via
-`ai/scripts/Skyline/DigitalRune/Build-DigitalRune.ps1`.
+A control variant in the same run - a raw `Control.Region` assignment, which the fix does not touch -
+still reads 978 B/form, so the probe stayed sensitive and the runtime bug is untouched. Only
+DigitalRune's use of it is fixed.
 
-Worth reporting upstream regardless: on .NET Framework, `Control.Dispose` released the window
-region; on .NET 10 nothing does. The 40-line reproduction above is small enough to file as-is.
+Nothing reads `Form.Region` in the docking path; the only other readers are `DockOutline` and
+`SplitterOutline`, on their own transient drag forms. **Those two also assign Regions and so leak the
+same way**, but only per user drag rather than per docked form - worth the same treatment, not
+urgent.
+
+### Validation so far
+
+- `TestGroupedStudies1Tutorial` passed 4 consecutive iterations with its normal layout restores.
+- `TestFilesTreeForm`, `TestTreeRestoration`, `TestLogScaleAxis`, `TestRetentionTimeManager`,
+  `TestFindNodeCancel` - all pass, 0 failures.
+- **Not yet done**: a full functional pass, and a look at real (non-offscreen) docking for flicker.
+  The flicker risk is much smaller than for "do not clip at all", since the clipping still happens
+  through the same underlying call, but every measurement here ran offscreen.
+
+### Shipping notes
+
+`pwiz_tools/Shared/Lib/DigitalRune.Windows.Docking.dll` is a **tracked binary**, so the fix ships as
+a rebuilt DLL + PDB, the way the Jan 2026 `DockPaneStrip` fix did (see
+`ai/todos/completed/2026/01/TODO-20260128_DockPaneStrip_race_condition.md`). The source change has to
+land in `uw-maccosslab/developers` alongside it or the next rebuild silently loses it.
+
+Worth reporting upstream regardless: `Control.Region` leaks ~976 bytes of GDI+ heap per assignment on
+.NET 10 and nothing reclaims it, where .NET Framework released it on `Control.Dispose`. The probe in
+`ai/.tmp/leak-tools/` is a self-contained reproduction.
 
 ## Method notes
 
