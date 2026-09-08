@@ -1114,3 +1114,128 @@ where the standing rule is hard-fail, and it is why the retrain code cannot yet 
 Added to the night session as scope (C), with the unreachable projection branch and its
 misleading `!config.ModelDiagnostics` term. Sequenced so the fallback becomes an error FIRST -
 that is what makes `pass2Contributions` null everywhere and lets the plumbing delete.
+
+## NIGHT SESSION 2026-09-07/08 - (C) RETRAIN REMOVAL AND (A) P16 LANDED
+
+Session opened 22:18 PT at 89% context, on the order the developer confirmed: (C), then
+(A), then (B) with what remains. Working build verified first: 606 tests (605 pass, 1
+pre-existing skip), zero inspection warnings, PR #4642 green on all 17 GitHub checks.
+
+### (C) Pass-2 retrain removal - COMPLETE
+
+All three pieces, in the dependency order the plan specified.
+
+1. **The silent retrain fallback is now an error.** `ComputePass2Resident`'s
+   `case Percolator/Gbdt` transferred, or fell through to
+   `FirstPassFdrTask.RunPercolatorFdr(..., "Second-pass")` on a WARNING. It now throws
+   `InvalidOperationException` naming #4484, the reason (a compacted pool is
+   decoy-depleted, so a retrain mis-estimates the null), and the remedy (re-run
+   FirstPassFDR, then SecondPassFDR). The message deliberately does NOT re-derive which
+   input was missing - every declining path inside `TransferPerRunQ` already logged its
+   own reason, and restating them here would let the two drift.
+
+   The `OspreyEnvironment.Pass2TransferQ &&` term went with it: `NormalizePass2QValue`
+   returns transfer or protein-compact and nothing else, protein-compact is handled by
+   the frozen competition before this point, so on this path the test was always true.
+   Same class of residue as the `!config.ModelDiagnostics` term below - a condition that
+   reads as a choice and is not one.
+
+2. **The unreachable projection branch is gone**, with its misleading
+   `!config.ModelDiagnostics` term. Unreachability re-verified from the code rather than
+   taken from the plan: `frozenCompetition == Pass2ProteinCompact`, the else-if requires
+   `!Pass2TransferQ`, and the two modes are exhaustive - so the branch could only be
+   entered by a mode that no longer exists. Deleting it orphaned
+   `ComputePass2Projection` (~125 lines), which went too.
+
+3. **`pass2Contributions` is deleted end to end.** `ComputePass2Resident` and
+   `ComputeAndPersist` are now `void`; the parameter is gone from
+   `WritePass2DiagnosticsStreamed`, `WritePass2DiagnosticsStreamedCore`,
+   `ModelDiagnosticsReport.WritePass2AndFinalize` and
+   `WritePass2AndFinalizeFromAccumulator`, both of which now pass `null` at the
+   `BuildPass2` call with the reason stated there.
+
+   **`BuildPass2` KEEPS its contributions parameter**, as the plan required. Its
+   structural cards (Model / DensityRatio / WinFraction) are the shape sequence step 4
+   re-sources from frozen pass-1 coefficients plus 42 running sums, and
+   `TestStreamingAccumulatorMatchesBatchPass2`'s first arm keeps the non-null contract
+   under test. That arm's comment now says it is a contract test rather than implying a
+   live mode, and the null arm is labelled as the representative one.
+
+**Scope taken beyond the three pieces, flagged for review rather than buried.** Deleting
+the projection branch left `Pass2FdrSidecar.BuildReconciledScoreIndexToRow` reachable only
+from two tests written to gate it - `IOTest.TestBuildReconciledScoreIndexToRowMatchesFeatureBinding`
+and `Pass2FdrSidecarTest.TestScanOmittedProjectionSortMatchesLegacyOrder`. The method and
+both tests are deleted. The argument: (C) exists because a half-finished removal misleads,
+and a helper plus two tests whose entire subject is a deleted path is that same residue one
+layer down. It is one revert of a labelled commit if the developer wants them kept.
+
+Stale prose corrected in `ModelDiagnosticsData` (three places still described
+`OSPREY_PASS2_QVALUE=percolator` as a live retrain mode).
+
+### (A) P16 - a report is a derived view
+
+**A pass-2 diagnostics-only fold**, symmetric with pass 1's.
+`SecondPassFdrTask.OnlyDiagnosticsProductOutstanding` + `FoldPass2DiagnosticsOnly`, placed
+**ahead of the marker wipe** at the top of `Run` - the placement is the correctness
+argument, because the wipe clears the very stamps that entitle the fold to adopt the
+completed second pass. Pass 1 has its arm above its writers for the same reason.
+
+The fold does the two things the join does between its second pass and its report, in the
+same order, and nothing else: install the streamed pass-2 overlay, then
+`ReclampExperimentQToBestRun`. The reclamp is NOT optional and NOT persisted - the join
+applies it to the reported pool after protein FDR, so a fold that skipped it would describe
+a pool the analysis never reported, and only the byte-comparison against the flag-up-front
+report would catch it. Three stream passes total (reclamp; accumulator fold sharing a pass
+with the panel's cutoff phase; the panel's detection phase).
+
+**`--task ModelDiagnostics` now invokes the missing folds instead of refusing.**
+`RunModelDiagnosticsTask` was `TryRenderFromProducts` and an error naming FirstPassFDR as
+the producer. It is now three states: no first-pass state is still an ERROR; every product
+current is a pure render in seconds; a missing product falls through to the pipeline, where
+each FDR task takes its own fold arm. New `ModelDiagnosticsReport.AllProductsCurrent`
+decides, and it requires the pass-2 half only once `HasCompletedSecondPass` is true - so an
+analysis that has genuinely not run its second pass is not sent into a fold with nothing to
+fold.
+
+Falling through is not the old behavior returning. The task used to reach the pipeline and
+run Stages 1-7 with the WRITES suppressed and the WORK intact; what changed is the other
+end, where both FDR tasks now recognise "the diagnostics product is my only outstanding
+output". That is P15's ordinary resume applied to the diagnostics outputs, which is what
+P16 says this should have been - not a special mode and not a special task.
+
+**Shared, not duplicated**: the frozen-model/stratum reload was lifted out of
+`ComputeAndPersist` into `Pass2FdrSidecar.EnsureFrozenFirstPassPublished` and called from
+the fold too. Under protein-compact the stratum SPLITS the pass-2 acceptance boundary
+(#4573); a fold that resolved it differently from the join would describe a different pool
+while looking like the same report.
+
+### Two defects found on the way, both on the critical path of this work
+
+**1. `-LinkFrom` dropped the `.osprey.task` stamps of analysis-wide artifacts.** The
+`s7mdiag` bed has `out.1st-pass.fdr_experiment.bin` with NO stamp; its source
+`stages567` HAS one. FirstPassFDR declares that file as an output, so
+`OnlyDiagnosticsProductOutstanding` asks `IsCurrent` of it, gets NO for an artifact that is
+in fact complete, declines the fold and re-runs the first pass - **the 4h46m trap the
+handoff warned about, armed by the runner rather than by the code, and it would have fired
+on the first leg of (B) tonight.** Fixed in `ANALYSIS_ARTIFACTS`, which now carries each
+artifact's stamp the way the per-file table always has.
+
+**2. Copilot finding #3 becomes hot on exactly the path (A) adds.** It was triaged as
+deferred and "NOT reached by this PR's two added passes", which was true: they run after
+the competition publishes `Pass2ExperimentScope`, so they take the in-memory branch. The
+pass-2 FOLD runs no competition, so nothing publishes that scope, and
+`InstallStreamedPass2Overlay` resolved the records INSIDE its per-materialization callback -
+re-deserializing the whole analysis-wide 2nd-pass experiment sidecar once per run per pass,
+O(runs x sidecar), at the moment a fold is supposed to be cheap. Now a `Lazy` resolved once.
+Lazily and not eagerly because WHEN it resolves is a correctness question: deferring to the
+first materialization keeps the join's read after the competition, which is what made the
+naive hoist a correctness bug.
+
+### Runner changes (committed to pwiz-ai)
+
+* `-Task ModelDiagnostics` is runnable, placed at the END of the stage table so
+  "everything before it" is the whole analysis.
+* `-LinkThroughTask` stages stages up to AND INCLUDING `-Task`, which is what a re-entry
+  needs (the default, strictly-before, is right for a re-MEASUREMENT).
+* `SecondPassFDR`'s `.2nd-pass.fdr_experiment.bin` now travels with the bed - it is how a
+  later invocation learns a second pass exists to describe.
