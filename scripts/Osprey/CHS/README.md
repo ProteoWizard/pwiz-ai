@@ -236,6 +236,45 @@ Small-scale coverage for the same property is `regression.ps1` **mode 11**, whic
 both diagnostics products from a completed run and asserts that the folds run, that the
 join's markers do NOT appear, and that the products come back byte-identical.
 
+## Re-measuring Stage 7 on the ORDINARY run (`-LinkUpTo`)
+
+Stage 7 is the stage a memory measurement usually wants, and reaching it honestly is the
+awkward part: the arm an operator exercises is a plain `-i ... --output-dir` run resumed at a
+completed bed, and getting there through the runner used to cost either hours or the wrong
+arm.
+
+* No `-Task` links only the stages before `FirstPassFDR`, so the run re-does Stage 5 and the
+  whole Stage 6 rescore before it reaches the thing being measured.
+* `-Task SecondPassFDR` links exactly the right set, but puts `--task SecondPassFDR` on the
+  command line - the HPC **merge** route, which is different code from the ordinary run.
+  (That difference is not academic: the merge route was the only route that could stream the
+  Stage-7 join until the admission was derived from the reconciled parquets on disk.)
+
+`-LinkUpTo` names the boundary directly and leaves the command line alone:
+
+```powershell
+.\Run-Chs.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact -Threads 30 `
+    -NoModelDiagnostics -Tag '-s7straight' -Exe D:\test\osprey-runs\_bin\<tag>\Osprey.exe `
+    -LibraryDir D:\test\osprey-runs\sea-ad\lib\target+decoy+entrapment-20260817 `
+    -LinkFrom D:\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-stages567 `
+    -LinkUpTo SecondPassFDR -WhatIf
+```
+
+Every pre-Stage-7 artifact is hard-linked in, nothing but the inputs is on the command line,
+and the run resumes straight into the join. Read the `-WhatIf` link tally first: `0 missing`
+is the precondition, and a non-zero count means the bed does not cover this cohort.
+
+**Assert the marker.** A streamed join logs
+
+```
+Second-pass join: folding over 446 run(s), ... (no all-runs survivor pool)
+```
+
+and a resident one logs `Stage 7 is taking the RESIDENT join` plus
+`Rebuilding first-pass survivors from 446 file(s)`. The output is IDENTICAL either way - that
+is the whole design - so the log line is the only evidence, exactly as it is for the P16 folds
+above. `regression.ps1` asserts the same marker per leg at Stellar scale.
+
 ### The library directory is part of `search_hash` - pin it from the SOURCE run
 
 A re-entry must resolve the SAME library file the bed was scored with, or Osprey refuses

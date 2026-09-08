@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Shared engine behind the per-dataset Osprey large-run wrappers.
 
@@ -215,6 +215,22 @@ function Invoke-OspreyDatasetRun {
         # failure is SILENT and expensive - the re-run produces the RIGHT report, so only the
         # log line separates a 4h46m recompute from a minutes-long fold.
         [switch]$LinkThroughTask,
+        # Link every stage strictly BEFORE this one, independently of -Task. The switch a
+        # STRAIGHT-THROUGH resume needs, and the only way to express it: with no -Task the
+        # link loop stops before FirstPassFDR, so a `-LinkFrom` run re-does Stage 5 and the
+        # whole Stage 6 rescore - hours at cohort scale - to reach a Stage 7 that was the
+        # only thing being measured. -Task SecondPassFDR links exactly the right set but
+        # also puts `--task SecondPassFDR` on the command line, which is the HPC MERGE
+        # route, a different arm of the code from the ordinary `-i ... --output-dir` run an
+        # operator types.
+        #
+        # `-LinkUpTo SecondPassFDR` with no -Task is therefore the ordinary run resumed at a
+        # completed bed: every pre-Stage-7 artifact hard-linked in, nothing on the command
+        # line but the inputs. That is the shape the 446-run 91.1 GB Stage-7 measurement was
+        # taken on (issue #4486), so it is the shape its re-measurement has to use.
+        [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
+                     'SecondPassFDR', 'ModelDiagnostics')]
+        [string]$LinkUpTo,
         [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
         # First-pass EXPERIMENT-score aggregation: '' (the max default) or 'mean-best-<N>'.
         # A first-class parameter rather than a caller-exported OSPREY_EXPERIMENT_AGG because
@@ -757,7 +773,15 @@ function Invoke-OspreyDatasetRun {
         # re-measurement: the task's own outputs and stamps have to be on disk for it to
         # recognise that it has already run. See the parameter's own note for why getting this
         # wrong is silent.
-        $upTo = if ($Task) { $Task } else { 'FirstPassFDR' }
+        # -LinkUpTo wins over the -Task-derived default, and over -LinkThroughTask with it:
+        # it names the boundary directly, so "through the task" has no task to be relative
+        # to. Refused together rather than silently resolved, because the two would disagree
+        # by exactly one stage and the symptom - a whole stage re-running - reads as a
+        # caching bug rather than as an argument mistake.
+        if ($LinkUpTo -and $LinkThroughTask) {
+            throw '-LinkUpTo names the boundary itself; drop -LinkThroughTask.'
+        }
+        $upTo = if ($LinkUpTo) { $LinkUpTo } elseif ($Task) { $Task } else { 'FirstPassFDR' }
         $suffixes = @()
         $analysisSuffixes = @()
         foreach ($stage in $STAGE_ARTIFACTS.Keys) {
