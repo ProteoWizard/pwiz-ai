@@ -203,7 +203,7 @@ still resident the ratchet items under "When this lands" cannot all be taken:
 * [x] part 1 - derive the admission
 * [x] part 2 - resume arm per-run source
 * [x] cold `Run` arm per-run source
-* [ ] `regression.ps1`: correct the `#4486` gap `Legs` text, and ADD an assertion that the
+* [x] `regression.ps1`: correct the `#4486` gap `Legs` text, and ADD an assertion that the
       straight-through leg took the STREAMED join. Today only a memory profile says which arm
       ran, which is the inference #4642's own marker lines exist to replace. Deferred only
       because the gate was running - never edit a running script.
@@ -212,3 +212,42 @@ still resident the ratchet items under "When this lands" cannot all be taken:
       Faithfulness to the resident arm was chosen over I/O; if 446 shows it, reading the
       reconciled parquet directly is the fix, and it changes row ORDER, so it needs mode 1.
 * [ ] then the `--input-scores` retirement (the other TODO), on this same branch
+
+### Result: every in-process leg now folds run by run (2026-09-08)
+
+`regression.ps1 -Dataset Stellar` PASSED, and the four legs each assert the marker rather than
+leaving it to a memory profile:
+
+```
+Stellar mode1 (streamed join): PASS (per-run fold, no all-runs pool)   <- the COLD run
+Stellar mode2 (streamed join): PASS (per-run fold, no all-runs pool)   <- resume
+Stellar mode5 (streamed join): PASS (per-run fold, no all-runs pool)   <- own-sidecar rehydrate
+Stellar mode3 (streamed join): PASS (per-run fold, no all-runs pool)   <- the HPC merge, as before
+Tokens REQUIRED by this gate: 0 (target: 0).
+```
+
+Every leg's blib is **23,662,592 bytes**, identical to the straight-through one and to the
+pre-change run, and modes 1/2/3/5/8/9 compare at 1e-9. Wall clock is unchanged within noise
+(resume 1:20 -> 1:23), so the extra parquet reads a fold pays are not visible at Stellar scale;
+446 is where that gets measured.
+
+The first gate run of the day is worth keeping as the intermediate evidence: with part 1 + part 2
+only, `resume.log` and `rehydrate.log` folded per run while `straight.log` logged
+`Stage 7 is taking the RESIDENT join` - which is exactly the hole the cold arm closes, seen
+directly rather than argued.
+
+**PR**: [#4646](https://github.com/ProteoWizard/pwiz/pull/4646), based on #4642's branch.
+
+### One hazard found while writing the cold arm, and how it is handled
+
+`ExecuteRescore` drops a run's entries only when its reconciled parquet reached disk, and
+KEEPS them when the write no-opped or failed - because then those entries are the only copy of
+the rescore. A fold drops every run it hands over, so streaming such a run would discard that
+copy and the next pass would rebuild it from the Stage 4 parquet: a blib silently carrying
+1st-pass boundaries for one run, from a process that exits 0.
+
+The resident build survives it by never dropping anything, so this is new with the fold rather
+than a defect being uncovered. The source raises it as a named error at fold time - the
+condition cannot be asked at publish time, since the rescore that decides it has not run yet.
+The resume arms have no such hazard and say so in their own doc: a resume runs no rescore, so
+no run's list ever holds state that is not already on disk.
