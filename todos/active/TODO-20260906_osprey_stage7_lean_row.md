@@ -1402,3 +1402,20 @@ The general fix is a design decision about the hydrate, and it belongs to whoeve
 item 2 - the same area, since `FoldDiagnosticsOnly` is the caller that wants neither the
 stubs nor the pool. The patch text is preserved at
 `ai/.tmp/sessions/20260908-night/` if it is wanted as a starting point.
+
+## GATED, PUSHED AND UNDER CI, 2026-09-08 02:15
+
+**Local `regression.ps1 -Dataset All`: PASSED - 84 legs, 0 FAIL.** Built from the tip, so
+unlike the previous round this IS the tip's local gate.
+
+* `mode1 (vs golden)`: PASS on all four datasets - the retrain removal and the P16 work
+  moved nothing.
+* `mode10 (meanbest2/transfer arm)`: PASS - the only leg that executes the changed
+  `ComputePass2Resident`.
+* `mode11 (pay-later diagnostics)`: PASS independently on StellarLibDecoy,
+  StellarGenDecoyEntrap and Astral, each reporting pass-2 byte-exact and the five named
+  pass-1 exclusions.
+
+Pushed `34ea446f3a` + `7de17740d9`. **TeamCity Perf/Regression 4168475** triggered on
+`pull/4642`, MacCoss Agent 1 - the developer pre-authorised one run for this night session,
+spent here because this is the first genuine merge candidate.
