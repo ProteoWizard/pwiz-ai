@@ -1862,3 +1862,52 @@ structure and the `#4486` disclosure entry's whole content.
   prints for us and never for the operator whose run is about to take it - they got an OOM
   at a file count nothing had warned them about.
 * The gate still requires ZERO tokens: no leg sets the switch.
+
+### THE DERIVATION IS NECESSARY BUT NOT SUFFICIENT - measured, and my "one predicate" claim was wrong
+
+Prototyped the derivation (replace `CanStreamStage7Join`'s `config.ExpectReconciledInput`
+with an all-runs on-disk reconciled-parquet check), built it, and ran a 10-file
+straight-through resume. **The predicate flipped correctly and the join stayed resident.**
+
+```
+[TASK] PerFileRescoring:skipping (outputs valid)
+[TASK] SecondPassFDR:starting
+   SecondPassFDR: ... folding the pass-2 report from the completed second pass.
+   Rebuilding first-pass survivors from 10 file(s)...          <-- the resident pool
+```
+
+The new deficiency warning did NOT fire, which is the proof the predicate changed: it fires
+on `!couldStream`, and `couldStream` was now true. The pool was built anyway.
+
+**The second blocker is structural, not a proxy.** `PerFileRescoreTask.Rehydrate` has two
+arms, and only ONE consults the predicate:
+
+```csharp
+if (!ctx.Config.ExpectReconciledInput)          // the straight-through resume
+{
+    _perFileEntries = ctx.Get<CompactedEntries>().Value;   // O(files) resident, here
+    ...
+    ctx.Publish(new RescoredEntries(_perFileEntries));      // no per-run source
+    return true;
+}
+// only BELOW this does BuildStage7PerRunSource (which calls CanStreamStage7Join) run
+```
+
+So the straight-through resume is resident at TWO levels - it pulls `CompactedEntries.Value`
+and publishes a source-less milestone - and no change to `CanStreamStage7Join` can reach
+either. Extending streaming to this route means giving that arm a per-run source, which is
+the same work #4486 did for the `--input-scores` route, done again for the second entry
+point. That is a real piece of work, not a predicate swap.
+
+**Reverted, because leaving it in REGRESSES two things this branch just added**:
+
+* the deficiency warning stops firing (it keys on `!couldStream`, now true), so the
+  O(files) path goes silent again on exactly the run that takes it;
+* a straight-through run with `OSPREY_STAGE7_STREAM=0` would be FALSELY REFUSED by the new
+  guard, which would be telling the operator to choose a streamed join that does not exist
+  for them.
+
+Tree is back at `32ea5f6aa3`. The derivation is right and wanted - it is just the first half
+of a two-part change, and shipping the half that only moves a predicate makes the diagnostics
+lie. **Do it together with the Rehydrate per-run source, on its own branch, with mode 2 and
+mode 5 as the legs that gate the resume arm.**
