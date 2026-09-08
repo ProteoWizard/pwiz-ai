@@ -371,3 +371,90 @@ project, not built by anything); Osprey.IO's HintPath to the wrapper (hard-off).
   its 5 tool ProjectReferences, the Content globs, the Mascot special case and the
   PrmScheduling reference; SkylineTester/TestData/TestFunctional use `$(PwizSharpRoot)`.
   Output verified identical against a same-branch baseline. Next: Phase 2.
+- 2026-09-08: Phase 2 infrastructure written and verified (see "Phase 2 implementation
+  notes" below): `pwiz-sharp\build.bat Release --i-agree-to-the-vendor-licenses --no-tests`
+  ends with "Packed 23 ProteoWizard packages". Inspected: Thermo carries all six SDK
+  DLLs as copyToOutput content (the Phase 1 gap is closed), Bruker keeps its VC90
+  side-by-side subfolders, Sciex has its 29 runtime files, Waters has MassLynxRaw.dll +
+  license.key, Vendor.Common has 7za.exe, PrmScheduling has prmscheduler.dll, Wiff2 ships
+  its assembly as content only, MsData depends on HDF.PInvoke 1.10.612, every inter-package
+  dependency says 4.0.26250, Pwiz.All lists 18 dependencies, Pwiz.Util carries
+  build\Pwiz.Util.props with vendor flags and the source tree path.
+  Not yet exercised: the consumer side (PwizConsumer.targets) - that is Phase 2b.
+  Lessons that cost a build each: `Project` is reserved metadata on ProjectReference
+  (renamed ours to `ProjectPath`); no custom metadata in evaluation-time conditions at all
+  (selection now uses item functions + Include/Exclude); the SDK packs Content items by
+  itself (`IncludeContentInPack=false`); unqualified `%(CopyToOutputDirectory)` across two
+  item lists fails when one list lacks it; TargetsForTfmSpecificContentInPackage targets
+  run in the per-TFM inner build, so anything needing the computed version must
+  DependsOn `SetPwizSharpVersion`.
+  Work is committed and pushed so it can resume on another machine.
+
+## Phase 2 implementation notes (2026-09-08)
+
+What was built, and the reasoning that is not obvious from the files:
+
+- **`<repo>\nuget.config`** (new, repo root): nuget.org + `pwiz-local` (relative
+  `artifacts/nuget/feed`), with package source mapping `Pwiz.*` -> pwiz-local, `*` ->
+  nuget.org. Applies to pwiz-sharp and pwiz_tools alike because NuGet walks up from the
+  project directory.
+- **`pwiz-sharp\Directory.Build.props`**: `PwizArtifactsDir` = `<repo>\artifacts\nuget\`,
+  `PwizPackageFeedDir` = `...\feed\`, `RestorePackagesPath` = `...\packages\` (tree-local
+  extraction folder; the MSBuild property outranks NUGET_PACKAGES), `IsPackable=false`
+  default. `artifacts/` is already gitignored at the repo root.
+- **`pwiz-sharp\build\PwizPackageSet.props`** (new): the `PwizPackage` item list, one per
+  package, with `Project`, `InAll`, `RuntimeOnly`, `WindowsOnly` metadata. Single source
+  of truth for pack, for Pwiz.All's dependencies, and for the consumer expansion.
+  23 packages: 6 core, Vendor.Common + 9 vendors, 2 runtime-only wiff2 plugins
+  (Sciex.Wiff2, OfxLoggingStub), Bruker.PrmScheduling, StlContainers, ZedGraph, MSGraph
+  (the last two Windows-only), plus Pwiz.All. Metadata is `ProjectPath` (not `Project`,
+  which ProjectReference reserves for the project GUID).
+- **`pwiz-sharp\build\PwizPack.targets`** (new, imported by Directory.Build.targets when
+  IsPackable): pdb in lib\, output to the feed, and the `PwizCollectRuntimeAssets` target
+  (via `TargetsForTfmSpecificContentInPackage`) that maps what ProjectReference delivers
+  today onto package assets: copy-local `<Reference>` assemblies (the vendor SDKs) and
+  Content/None-with-CopyToOutput items become `contentFiles\any\<tfm>\<TargetPath>` with
+  `copyToOutput`, subfolders preserved (Bruker's VC90 SxS folders). Runtime-only plugins
+  put their own assembly there too, with `IncludeBuildOutput=false`. Collected from the
+  same item lists MSBuild copies to bin\, so the per-vendor csproj need no pack-specific
+  entries. `Pwiz.Util` additionally carries `build\Pwiz.Util.props` with
+  `PwizSharpVendorSupport`, `PwizSharpNativeVendorSupport`, `PwizSharpSourceTree`,
+  `PwizSharpPackageVersion` (generated at pack time).
+  Why contentFiles and not `runtimes\win-x64\native`: consumers do not build RID-specific,
+  several SDKs resolve their files relative to the exe, and Skyline already found that
+  files linked under `runtimes\` do not deploy into consuming bins.
+- **`pwiz-sharp\build\PwizConsumer.targets`** (new): a consumer sets `PwizReferences`
+  (package ids, `Pwiz.All` expands to the InAll members) and imports it. Emits
+  PackageReference (floating `4.0.*`) by default or ProjectReference when
+  `UsePwizSharpProjects=true` (runtime-only plugins get ReferenceOutputAssembly=false +
+  OutputItemType=Content, matching how msconvert consumes them today). Also defines
+  NO_VENDOR_SUPPORT from the package props (or IAgreeToVendorLicenses in project mode),
+  validates names at restore, and runs the tripwire (`PwizSharpSourceTree` vs
+  `PwizRepoRoot`, case-insensitive, before CoreCompile). Not yet used by anything; Phase
+  2b (Tools) and Phase 3 (Skyline) import it.
+- **`pwiz-sharp\build\PwizPackages.proj`** (new, plain MSBuild): `CleanPwizFeed` deletes
+  `feed\*.nupkg` and `packages\pwiz.*`, then Restore (own MSBuildRestoreSessionId) and
+  Pack over the set, then checks the nupkg count. Invoked from build.bat after the build.
+- **`pwiz-sharp\pwiz\src\Pwiz.All\Pwiz.All.csproj`** (new, in Pwiz.sln under src): no
+  sources, `IncludeBuildOutput=false`, ProjectReferences = InAll members.
+- **`pwiz-sharp\Directory.Build.targets`**: `SetPwizSharpVersion` now also sets
+  `PackageVersion` and runs BeforeTargets `GenerateNuspec` and `_GetProjectVersion`
+  (the target a referencing project's pack calls, in a separate evaluation, to learn the
+  dependency version; without it packages would depend on 4.0.0).
+- **22 csproj**: `IsPackable=true`; `PackageId` where the assembly name is not `Pwiz.*`
+  (StlContainers, ZedGraph, MSGraph, OfxLoggingStub); `PwizPackRuntimeOnly=true` on
+  Sciex.Wiff2 and OfxLoggingStub.
+- **`pwiz-sharp\build.bat`**: `--no-tests` flag; pack stage after build.
+
+Verified 2026-09-08 (see Progress). Still to check when convenient: the no-vendor build
+(`build.bat Release --no-tests` without the licence flag) packs the same 23 with
+`PwizSharpVendorSupport=false`; and `build.sh` on Linux skips the two Windows-only
+packages cleanly.
+
+Next on resume: **Phase 2b**, starting with BiblioSpec. Replace its `pwiz\src`
+ProjectReferences with `<PwizReferences>` + `<Import Project="$(PwizSharpRoot)build\PwizConsumer.targets" />`,
+build it, and compare BlibBuild's bin against today's. Expect to have to move msconvert's
+`StageWiff2NativeAssemblies` (wiff2\ subfolder: System.Data.SQLite, SQLite.Interop,
+Unity.Abstractions, CRT) into Sciex.Wiff2.csproj as Content so it travels in the package.
+Then decide how `build.bat` stages Tools after pack (Pwiz.sln currently builds libraries and
+Tools in one graph; with Tools on PackageReference the sln restore needs the feed first).
