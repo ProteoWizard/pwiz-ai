@@ -5,7 +5,12 @@
 `todos/completed/TODO-20260901_osprey_stage5_reload_materialization.md:3563` ("PROPOSAL: retire
 `--input-scores`"); re-raised 2026-09-08. **That section is the design - read it first.** This
 file carries what has been learned since and the one constraint it must not miss.
-**Branch**: not cut yet.
+**Branch**: `Skyline/work/20260908_osprey_stage7_stream_and_scores_retirement` in
+`C:\proj\pwiz-work2`, STACKED on #4642's branch. SHARED with
+`TODO-20260908_osprey_stage7_straightthrough_stream.md` - the developer chose one branch for
+both (2026-09-08), streaming commits first and the retirement after, so "Sequencing" below is
+satisfied by commit order rather than by two PRs. The "its own branch" note under "Gating" is
+superseded; the `-Dataset All` requirement is not.
 **Depends on**: `TODO-20260908_osprey_stage7_straightthrough_stream.md`. See "Sequencing".
 
 ## The goal

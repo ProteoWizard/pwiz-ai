@@ -1,10 +1,15 @@
 # TODO-20260908_osprey_stage7_straightthrough_stream.md - Stage 7 streams only on `--task SecondPassFDR`; the straight-through run still builds the pool
 
 **Module**: `osprey`
-**Status**: Not started. Successor to
+**Status**: In Progress. Successor to
 `todos/active/TODO-20260906_osprey_stage7_lean_row.md` ([#4642](https://github.com/ProteoWizard/pwiz/pull/4642)),
 which made the streamed Stage-7 join exist and proved it at 446 files.
-**Branch**: not cut yet; cut from master once #4642 merges.
+**Branch**: `Skyline/work/20260908_osprey_stage7_stream_and_scores_retirement` in
+`C:\proj\pwiz-work2`, STACKED on #4642's branch (cut from `32ea5f6aa3`), not from master.
+**Shared branch**: the developer chose ONE branch for this TODO and
+`TODO-20260908_osprey_input_scores_retirement.md` (2026-09-08), streaming commits first and
+the retirement after, so the dependency is satisfied by commit order inside the branch. Both
+TODOs therefore name the same branch and will name the same PR.
 **Predecessor detail**: #4642's TODO carries the measurements, the marker lines and the
 resident-path token work. **Do not duplicate them here - cite them.**
 
