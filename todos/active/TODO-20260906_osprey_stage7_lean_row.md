@@ -1811,3 +1811,54 @@ sets ExpectReconciledInput)".
 **And the projection is now confirmed.** Its model is 4.4 GB library + 0.197 GB/file, which
 predicts 92.3 GB at 446; the measured private peak on the 446-run CHS cohort was 91.1 GB.
 First endpoint past 82 files, and it validates the model rather than replacing it.
+
+## THE STAGE-7 STREAMING ADMISSION IS SEPARABLE FROM THE `--input-scores` RETIREMENT
+
+The developer's framing, and it is right: `--task SecondPassFDR` was a REPRO ACCELERATOR -
+a way to reach the bug in 30 minutes with every earlier stage already on disk - not the
+definition of the fix's scope. The intent was always that the lean path works on a
+straight-through run. What happened is that the streaming admission was expressed in terms
+of the flag the repro happened to use.
+
+**The sidecar work is done; only the predicate is behind.** The 446-file fold's own marker
+is the proof:
+
+```
+Second-pass join: folding over 446 run(s), each rebuilt from its own artifacts and dropped
+(no all-runs survivor pool; 625620 retained base_id(s) read once). 446 of 446 run(s) carry
+a current 2nd-pass sidecar and are rebuilt without opening any 1st-pass file.
+```
+
+Every run was rebuilt from artifacts alone. Nothing about that depends on how the run was
+INVOKED.
+
+**And the route-independent helper already exists.** `SecondPassFdrTask.AnyReconciledParquet`
+carries exactly the needed doc: *"Disk-based so it reads identically in the in-process
+pipeline (Stage 6 just wrote them) and the `--task SecondPassFDR` node (the Stage 6 worker
+wrote them)."* `CanStreamStage7Join`'s own doc says what the flag stands in for - *"The leg
+has to be the reconciled-input merge, whose parquets already hold the survivor subset"* -
+and on a straight-through run Stage 6 has just written those same parquets, so the condition
+holds while the proxy is false.
+
+**So the change is one predicate**: replace `config.ExpectReconciledInput` with an ALL-runs
+form of the disk check (`AnyReconciledParquet` is the ANY form and the model for how to
+write it, version-fenced like `AllHaveReconSidecars`). It does NOT require retiring
+`--input-scores`; the retirement would inherit it. `regression.ps1` mode 3 is the leg that
+catches a derivation mistake, which is the reassuring part.
+
+Doing it removes the 91.1 GB straight-through path, which is the last O(files) Stage-7
+structure and the `#4486` disclosure entry's whole content.
+
+### Landed in the meantime (`32ea5f6aa3`)
+
+* `OSPREY_STAGE7_STREAM=0` is TOKENED (`stage7-stream-off`), joining the two sibling A/B
+  oracles. It was untokened only because there was no alternative to choose; a token can
+  only be demanded for a choice, and the streamed join created one.
+* The guard refuses ONLY the chosen case. A run that cannot stream is not refused, because a
+  mandatory token on the default path grants nothing and is the blanket amnesty the
+  named-token scheme replaced.
+* That case now WARNS, naming the shape, the issue and the cost model evaluated for its own
+  file count. Previously the deficiency was stated only in `regression.ps1`'s summary, which
+  prints for us and never for the operator whose run is about to take it - they got an OOM
+  at a file count nothing had warned them about.
+* The gate still requires ZERO tokens: no leg sets the switch.
