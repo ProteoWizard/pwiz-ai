@@ -54,10 +54,12 @@ points at:
 4. **`ai/TESTING.md`** - translation-proof tests, consolidated
    `[TestMethod]` structure, `AssertEx` over `Assert`.
 
-**Running a large named dataset (SEA-AD, TDP-43) - DO NOT write your own run script:**
+**Running a large named dataset (SEA-AD, TDP-43, CHS) - DO NOT write your own run script:**
 - Each cohort has ONE sanctioned runner beside its README:
-  `ai/scripts/Osprey/SEA-AD/Run-SeaAd.ps1` and `ai/scripts/Osprey/TDP43/Run-Tdp43.ps1`,
-  sharing `ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`. Decoy arm, entrapment ratio and
+  `ai/scripts/Osprey/SEA-AD/Run-SeaAd.ps1`, `ai/scripts/Osprey/TDP43/Run-Tdp43.ps1` and
+  `ai/scripts/Osprey/CHS/Run-Chs.ps1`,
+  sharing `ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`. CHS is the 446-run cohort the
+  Stage 7 / diagnostics memory work is measured on, and it was missing from this list. Decoy arm, entrapment ratio and
   pass-2 mode are PARAMETERS, not separate scripts. **Read the folder's README first**, and
   run `-WhatIf` to confirm path resolution before committing to a multi-hour job.
 - **A `ai/.tmp/run-*.ps1` script is a previous session's shortcut, not a template** - even
