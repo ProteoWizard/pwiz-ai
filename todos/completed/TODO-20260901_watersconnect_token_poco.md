@@ -90,3 +90,10 @@ usage #4613 removed from waters_connect.
   a conflict resolution in Matt's file.
 * Once this lands, the master -> `20260612_net8_port` merge for this file becomes
   mechanical and stays that way.
+
+### 2026-09-08 - Superseded by PR #4637
+
+Matt's PR #4637 extracts a shared OAuthPasswordGrantClient into CommonUtil used by
+both the managed and native waters_connect/UNIFI readers - a more general solution
+to the same IdentityModel coupling. PR #4632 closed unmerged; branch and the
+uncommitted UNIFI extension discarded per developer decision.
