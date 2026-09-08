@@ -66,12 +66,14 @@ on a branch and inventories the breakage to size the real fix.
       Verified at 150%: window size restored correctly, rows use full
       panel width, name/path lines have proper separation. All 12
       StartPage functional tests pass (offscreen).
-- [ ] ActionBoxControl wizard tile captions clip at 150%
-      ("Import DIA Peptide Se...") - fixed-size tiles, add to the
-      dialog-layout package
-- [ ] Broader dialog sweep at 150% (needs a 150% display or a session
-      with scaling changed); export/import wizards, Document Grid
-- [ ] Effort estimate for the system-aware pass; report on issue #4599
+- [x] ActionBoxControl wizard tile captions clip at 150% - FIXED
+      2026-08-25 (designer geometry + caller image sizes scaled;
+      committed on the branch).
+- [x] Broader dialog sweep at 150% - DONE across the 2026-08-25/26
+      overnight sessions; every item dispositioned in the companion
+      TODO-20260820_dpiAwareness-dialogsweep.md (gallery: 17 sections).
+- [x] Effort estimate for the system-aware pass - DONE 2026-08-21,
+      posted to issue #4599 (5 work packages, ~4-6 developer-weeks).
 - [ ] Icon assets follow-up issue: one 32px variant per icon (16px kept
       for 100%); 20/24px produced by HighQualityBicubic downscale of the
       32px source at load - per-icon hand-authoring only if a glyph
@@ -412,3 +414,13 @@ like it) is where the system-aware pass will spend its effort. The
 inventory should grep-hunt this pattern (runtime `new Font(`, manual
 `Width/Height =` arithmetic, persisted pixel Sizes) rather than only
 eyeballing dialogs.
+
+### 2026-09-07 - Registry-driven form sweep started (Chunk 1)
+
+Manual brute-force sweep, driven by TestRunnerFormLookup.csv (265 forms),
+risk-ranked (ai/.tmp/dpi-sweep/form-risk-ranking.tsv). Gallery now has a
+checkable alphabetical sidebar. Chunk 1: 5 before/after pairs captured
+(InsertTransitionListDlg, EditNoteDlg, EditPepModsDlg, AreaCVToolbarProperties,
+EditIsolationSchemeDlg) - awaiting developer review. Image-diff automation
+ruled a dead end (logical-res captures). **Next session handoff**: read
+ai/.tmp/handoff-dpi-form-sweep.md for the full continue protocol.
