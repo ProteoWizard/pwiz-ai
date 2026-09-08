@@ -34,6 +34,30 @@ Secondary motivation: MSConvertGUI and SeeMS (in `pwiz-sharp\Tools\`) each refer
 15+ pwiz-sharp projects to get the full reader set. Whatever "one thing to reference"
 Skyline ends up with should be usable by them too.
 
+## Scope decision (2026-09-07, Nick)
+
+**The package is ProteoWizard proper: the libraries under `pwiz-sharp\pwiz\src`** (core
+data layer, vendor readers, Bruker.PrmScheduling, and whatever else there is a consumer
+for). **Everything under `pwiz-sharp\Tools\` is a consumer of that package, exactly like
+Skyline is.** That includes BiblioSpec and its executables (BlibBuild, BlibFilter,
+BlibSearch, BlibToMs2), msconvert, bullseye-sharp, MSConvertGUI and SeeMS.
+
+Consequences:
+
+- There is no `Pwiz.Tools` package. The earlier draft that packed the executables so
+  Skyline could pull them from a package is withdrawn.
+- How Skyline obtains BlibBuild, BlibFilter, msconvert and bullseye-sharp is a separate,
+  later question ("after we do that, we'll figure out how to get Skyline to use
+  BlibBuild"). Until then Skyline keeps the `PwizSharpDeployTools` block from Phase 1
+  (ProjectReference + Content glob), unchanged.
+- pwiz-sharp's own build becomes two stages: build + pack `pwiz\src`, then build `Tools\`
+  against the packages. `Pwiz.sln` today builds both in one graph through
+  ProjectReference; the Tools projects need the same PackageReference/ProjectReference
+  switch Skyline gets, and `build.bat` needs to run the stages in order.
+- The package's consumer surface is therefore tested three ways before Skyline touches
+  it: BiblioSpec (library consumer with vendor readers), msconvert (command-line
+  consumer), MSConvertGUI/SeeMS (WinForms consumers). Skyline is the last and largest.
+
 ## What exists today (surveyed 2026-09-07 on the net8_port base)
 
 **Consumers of pwiz-sharp outside `pwiz-sharp\`:**
@@ -76,16 +100,16 @@ wrapper csproj).
 
 - `pwiz-sharp\build.bat` gains a **pack** step after the build. Output: `.nupkg` files in
   a tree-local folder, e.g. `pwiz-sharp\artifacts\packages\`. This folder is the feed.
-- Pack every library Skyline consumes. ProjectReferences become package dependencies
-  automatically; pwiz-sharp's own PackageReferences (HDF.PInvoke, System.Data.SQLite.Core,
-  MathNet, Parquet.Net, Snappier, ...) are recorded in the nuspec so consumers get them
-  transitively without redeclaring anything.
-- **One meta package** (working name `Pwiz.Skyline`, or a broader `Pwiz.Readers` if
-  MSConvertGUI/SeeMS adopt it) that depends on the core libraries + all vendor readers.
-  A consumer has exactly one `PackageReference`.
-- **Tools package** (`Pwiz.Tools`): publish BlibBuild, BlibFilter, BlibToMs2, msconvert,
-  bullseye-sharp into `tools\` with a `build\Pwiz.Tools.targets` that copies them into the
-  consumer's output. Replaces the Exists()-guarded bin globs in Skyline.csproj.
+- Pack every library under `pwiz\src` that has a consumer (see Scope decision).
+  ProjectReferences become package dependencies automatically; pwiz-sharp's own
+  PackageReferences (HDF.PInvoke, System.Data.SQLite.Core, MathNet, Parquet.Net, Snappier,
+  ...) are recorded in the nuspec so consumers get them transitively without redeclaring
+  anything.
+- **One meta package** (working name `Pwiz.All`; it is no longer Skyline-specific) that
+  depends on the core libraries + all vendor readers + IdentData/TraData. A consumer has
+  exactly one `PackageReference`. Consumers that want less (msconvert without a GUI
+  dependency, say) reference the individual packages.
+- Tools are NOT packed. BlibBuild and friends consume the packages (Scope decision).
 - **Vendor natives** go into the package's `runtimes\win-x64\native\` layout so the
   runtime probes them through deps.json. Must be checked against the MascotShim/msparser
   problem noted in Skyline.csproj (files linked under `runtimes\` not deploying).
@@ -119,6 +143,17 @@ wrapper csproj).
   a ProjectReference block, switched by `UsePwizSharpProjects=true`, for people editing
   pwiz-sharp and Skyline together. All pwiz-sharp references in Skyline.csproj,
   ProteowizardWrapper.csproj and SkylineTester.csproj are consolidated into this one file.
+
+### Package consumption (pwiz-sharp Tools side)
+
+- The same mechanism, inside pwiz-sharp: a `Tools\Directory.Build.props` (or a shared
+  `build\PwizPackages.targets`) that gives every Tools project a PackageReference to the
+  meta package by default and the ProjectReference graph under `UsePwizSharpProjects=true`.
+- Tree-local `RestorePackagesPath` and the `Pwiz.*` source mapping apply here too; the
+  feed folder is the same one Skyline reads.
+- `Pwiz.sln` splits or gains solution configurations so that "build the libraries" and
+  "build the tools" are separable; `build.bat` runs: restore/build `pwiz\src` -> pack ->
+  restore/build `Tools\` -> tests. The Tools test projects follow their project.
 
 ### Rejected alternatives
 
@@ -208,22 +243,37 @@ Executables\Tools\SkylineMcp projects, and version stamping may come from the pa
 later); `ProteowizardWrapper.PwizSharp\` (sandbox project referenced only by the Smoke
 project, not built by anything); Osprey.IO's HintPath to the wrapper (hard-off).
 
-### Phase 2: Produce packages from pwiz-sharp
-- [ ] Decide package ids and which projects pack (core libs, Vendor.Common + 9 vendors,
-      Bruker.PrmScheduling, StlContainers if needed, MSGraph/ZedGraph only if SeeMS wants
-      them).
-- [ ] Meta package `Pwiz.Skyline` (or `Pwiz.Readers`) with `build\*.props` carrying
-      `PwizSharpVendorSupport` and `PwizSharpSourceTree`.
-- [ ] `Pwiz.Tools` package: publish the five exes into `tools\`, targets file copies
-      them to the consumer's output. Verify MascotShim/msparser/msparser-config land flat
-      next to BlibBuild.exe as they do today.
+### Phase 2: Produce packages from pwiz-sharp\pwiz\src
+- [ ] Inventory what `Tools\*` and Skyline consume from `pwiz\src` (which projects, and
+      which files beyond the assemblies: natives, license.key, 7za.exe, SDK helper DLLs).
+      Decide package ids and which projects pack (core libs, IdentData, TraData,
+      Vendor.Common + 9 vendors, Bruker.PrmScheduling, StlContainers, MSGraph/ZedGraph
+      for SeeMS).
+- [ ] Meta package `Pwiz.All` with `build\*.props` carrying `PwizSharpVendorSupport`
+      and `PwizSharpSourceTree`.
 - [ ] Vendor natives via `runtimes\win-x64\native`; verify Waters license.key, 7za.exe,
-      and the CRT files from `VendorNativeCrt.targets` still arrive.
+      and the CRT files from `VendorNativeCrt.targets` still arrive. Decide per vendor
+      which SDK helper DLLs ship (Phase 1 finding: Thermo's BackgroundSubtraction and
+      MassPrecisionEstimator currently do not reach consumers).
 - [ ] Include pdbs in the packages.
 - [ ] Add the pack step to `pwiz-sharp\build.bat` (both vendor and no-vendor modes),
       clearing old `pwiz.*` from the feed folder and the tree-local packages folder first.
 - [ ] Decide whether `Pwiz.sln` also gets a solution-level "pack" so a developer in VS
       on the pwiz-sharp side can refresh the feed without leaving the IDE.
+
+### Phase 2b: pwiz-sharp Tools consume the packages
+- [ ] Shared props/targets under `pwiz-sharp\Tools\` with the PackageReference default and
+      the `UsePwizSharpProjects` escape hatch; tree-local `RestorePackagesPath` and
+      `Pwiz.*` source mapping for the pwiz-sharp tree.
+- [ ] Convert BiblioSpec + BlibBuild/BlibFilter/BlibSearch/BlibToMs2 first (library
+      consumer with vendor readers and the MascotShim native). BiblioSpec.Tests pass.
+- [ ] Convert msconvert and bullseye-sharp. msconvert's tests and Installer.Tests pass.
+- [ ] Convert MSConvertGUI and SeeMS (WinForms consumers; SeeMS also wants MSGraph/ZedGraph).
+- [ ] `build.bat` runs the two stages in order; `Pwiz.sln` still opens and builds in VS
+      after a command-line build of the libraries. TeamCity ProteoWizard_CoreWindowsNet
+      config stays green.
+- [ ] Record in the TODO what the Tools conversion taught us about the package shape
+      before Skyline is converted.
 
 ### Phase 3: Consume packages from Skyline
 - [ ] `pwiz_tools\Directory.Build.props`: tree-local `RestorePackagesPath`.
@@ -232,11 +282,20 @@ project, not built by anything); Osprey.IO's HintPath to the wrapper (hard-off).
       (`UsePwizSharpProjects=true`), tripwire target.
 - [ ] ProteowizardWrapper: derive `NO_VENDOR_SUPPORT` from the package props; remove the
       `Directory.Build.user.props` import.
-- [ ] Skyline.csproj: remove the tools ProjectReferences and Content globs, the
-      MascotShim special case, and the Bruker.PrmScheduling ProjectReference.
-- [ ] Remove `AssignOutOfSolutionProjectReferenceConfiguration` from
-      `pwiz_tools\Directory.Build.targets` if #4634 has merged by then (nothing left for
-      it to fix).
+- [ ] `PwizSharp.targets`: the libraries and PrmScheduling blocks switch to
+      PackageReference. The `PwizSharpDeployTools` block stays as ProjectReference +
+      Content glob until the "how does Skyline get BlibBuild" question is answered
+      (Scope decision). Note that this block is then the only out-of-solution
+      ProjectReference left, so #4634's `AssignOutOfSolutionProjectReferenceConfiguration`
+      target is still needed for it.
+- [ ] Move Skyline's `MathNet.Numerics` pin to 5.0.0 (Phase 1 finding).
+
+### Phase 3b: How Skyline obtains the tools (design TBD with Nick)
+- [ ] Options to weigh once Phases 2-3 have landed: (a) keep ProjectReference + Content
+      glob; (b) a pwiz-sharp "tools" publish step that drops the exes into a known folder
+      Skyline's Content items read from; (c) a separate `Pwiz.Tools`-style package after
+      all, now that the tools themselves are package consumers; (d) Skyline builds the
+      tool projects into its own output via a shared props file. Not decided.
 - [ ] Verify Phase 1's output checklist matches byte-for-byte in file list.
 
 ### Phase 4: Prove it
@@ -253,9 +312,8 @@ project, not built by anything); Osprey.IO's HintPath to the wrapper (hard-off).
 - [ ] Docker parallel test workers: confirm the staged test folder still carries every
       native and tool (`Stage-Tests.ps1` copies from Skyline's output, so this should be
       automatic, but check).
-- [ ] MSConvertGUI / SeeMS: try switching one of them to the meta package as a proof
-      that the package works for a consumer inside `pwiz-sharp\`. If it does not fit
-      (they live in `Pwiz.sln` alongside the projects), note why and leave them.
+- [ ] MSConvertGUI / SeeMS / BlibBuild / msconvert: already converted in Phase 2b; confirm
+      they still run from a clean two-stage `pwiz-sharp\build.bat`.
 
 ### Phase 5: Documentation and follow-ons
 - [ ] Update `ai/docs/build-and-test-guide.md` (or the net10 equivalent) with the new
@@ -289,7 +347,10 @@ project, not built by anything); Osprey.IO's HintPath to the wrapper (hard-off).
 - `pwiz-sharp/build.bat` - pack step
 - `pwiz-sharp/build/Pack.targets` (new) - pack orchestration, feed cleanup
 - `pwiz-sharp/pwiz/src/**/*.csproj` - `IsPackable`, package metadata, native asset packing
-- `pwiz-sharp/Tools/**` - tools package
+- `pwiz-sharp/Tools/Directory.Build.props` (new) or `pwiz-sharp/build/PwizPackages.targets` (new) - Tools consume the packages
+- `pwiz-sharp/Tools/**/*.csproj` - ProjectReferences into `pwiz\src` replaced by the shared import
+- `pwiz-sharp/Pwiz.sln` - library/tool stages
+- `pwiz-sharp/nuget.config` (new) - feed + source mapping for the pwiz-sharp tree
 - `pwiz_tools/nuget.config` (new) - feed + source mapping
 - `pwiz_tools/Directory.Build.props` - `RestorePackagesPath`
 - `pwiz_tools/Shared/PwizSharp.targets` (new) - single reference point, escape hatch, tripwire
