@@ -1576,3 +1576,82 @@ different mis-staged beds each produced a plausible wrong conclusion before it.
   apply. Being measured now.
 * `--task ModelDiagnostics` over `--input-scores` is broken and should be fixed or blocked.
 * Pass-1 completeness (`cal` / model views) is unchanged.
+
+## (B) AT 446 VIA THE ORDINARY ENTRY POINT - PASS 1 MEETS THE BAND, PASS 2 DOES NOT
+
+Bed: `chs-446files-libdecoy-r1.0-protein-compact-p16proof`, staged from `s7mdiag` +
+`stages567` with `out.blib` hard-linked in, no diagnostics products. Exe `_bin\251-p16fold`
+= the pushed `7de17740d9`. Command: the ORDINARY `--input-scores` run plus
+`--model-diagnostics` - no `--task`. Log:
+`ai/.tmp/sessions/20260908-night/p16proof-446-ordinary.log`.
+
+### Pass 1: the band is MET, cleanly
+
+```
+FirstPassFDR: every output but the model-diagnostics product is current;
+folding the report from the completed first pass.
+--task ModelDiagnostics: folding the first pass from 446 run(s), one run resident
+at a time (no rescore bundle, no survivor pool).
+```
+
+| probe | value |
+|---|---|
+| entering the fold | 5.3 GB managed / 14.6 GB private |
+| run 208 of 446 | `[MEM mdiag-fold-live] managed_heap=7.12 GB` (post-GC) |
+| run 305 of 446 | 7.43 GB |
+| run 446 of 446 | **7.45 GB** |
+| floor drift | **~1.4 MB/run over 238 runs - flat** |
+| errors | 0 |
+
+A post-GC live set that moves 0.33 GB across 238 runs is O(distinct), not O(files). **This
+is the memory shape P16 asks for, at 446 files, on the pushed code.** It also settles the
+earlier pessimistic finding: the ~60 GB pre-compaction hydrate is NOT taken on this entry
+point. It was `--task ModelDiagnostics` that took it, and that task is separately broken.
+
+### Pass 2: the fold ENGAGES and then exceeds the box
+
+```
+SecondPassFDR: every output but the model-diagnostics product is current;
+folding the pass-2 report from the completed second pass.
+```
+
+so the arm added by this PR is reached at 446 - but its stream passes grow past the
+machine:
+
+| point | managed / private |
+|---|---|
+| entering the pass-2 fold | 3.9 GB / 27.6 GB |
+| stream pass 1, 279/446 (14m33s) | 40.3 GB / 48.3 GB |
+| stream pass 1, 88% | 66.8 GB / 68.5 GB - **over the 63.7 GB box**, 0 GB free |
+| stream pass 1, 100% | 75.6 GB / 77.4 GB |
+| stream pass 2 starting (0%) | **86.5 GB / 91.2 GB** |
+
+Killed there, deliberately: the conclusion was already determined, a second full stream pass
+at 91 GB private on a 63.7 GB box would have ground for hours, and leaving the developer's
+machine paging until morning buys nothing.
+
+**The comparison that makes this actionable**: the SAME pass-2 diagnostics work, inside the
+full Stage 7 join on the SAME cohort, peaked at **18.2 GB managed / 29.0 GB private**
+(the s7mdiag run recorded earlier in this TODO). The FOLD - which does strictly less work -
+uses roughly three times that. So this is not "the pass-2 diagnostics are inherently big";
+something the fold path holds that the join path does not.
+
+**The most likely candidate, stated as a hypothesis and NOT verified**: the pass-1 fold runs
+first in the same process and its `ModelDiagnosticsData.Accumulator` (plus the classification
+over 6.2M library entries) is still reachable when
+`FirstPassFdrTask.BuildModelDiagnosticsAccumulator` builds a SECOND one for pass 2. On the
+join path pass 1 ran in an earlier process, so only one ever exists. That would predict
+roughly a doubling plus the co-assignment structures, which is the order of what is
+observed. Whoever picks this up should check retention first - it is cheap to test by
+running the two halves as separate invocations (`--task FirstPassFDR --model-diagnostics`,
+then the ordinary run) and comparing the pass-2 peak.
+
+### The honest (B) verdict
+
+* P16's scenario, both halves, **works end to end at 10 files** with every analysis marker
+  at zero and the blib untouched.
+* At 446 the **pass-1 half meets the memory band** with a flat floor.
+* At 446 the **pass-2 half does not fit** - it engages correctly and then exceeds the box,
+  using ~3x what the same work costs inside the join.
+* `--task ModelDiagnostics` is broken over `--input-scores` at every scale and is a separate
+  defect from all of the above.
