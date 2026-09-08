@@ -480,5 +480,62 @@ elevation-gated `Install_PerMachine` skip.
 
 The container changes are verified but NOT pushed to PR #35.
 
+### 2026-09-08 — CI installer failure, and what `/code-review max` found on top of it
+
+The reported `Remove-Item ... vendor_api ... "The directory is not empty"` was **agent-specific,
+not a code defect**: build 4164785 on TeamCity EC2 agent `EC2AMAZ-HH9KVFB` failed, while two
+builds of the same commit with the same `-WithVendorSdks` step passed on `MacCoss TeamCity
+Agent 1`. Replaying the flatten locally showed Waters' `vendor_api` holds two empty directories
+at that point — 108-char deepest path, no reparse points, nothing read-only.
+
+**The bigger problem was that it went green.** `build.bat` downgraded the installer failure to a
+WARNING, both `Installer.Tests` then went Inconclusive on "No ProteoWizard-Setup-*.exe found",
+and the build reported SUCCESS — so the coverage that gates the vendor-resolution fixes had not
+been running on that agent at all. `build.bat` now treats it as fatal (that branch is only
+reached when ISCC is present).
+
+Then `/code-review max 4640` found three real defects, two of them in the first version of that
+very fix. All three verified against the repo before acting:
+
+- **The installer was shipping 46 MB of Linux binaries, licensed vendor SDKs among them.**
+  `Should-Skip`'s vendor-prefix test is gated on `\.(dll|exe|manifest)$`, so `.so` files bypass
+  it, and this PR's new `Stage-From $msconvertOut` pulled in `libMassLynxRaw.so` (Waters),
+  `libbaf2sql_c.so` + `libtimsdata.so` (Bruker), libhdf5's `.so`/`.dylib` set and the Linux
+  apphosts. **Payload 97.0 -> 50.9 MB; WithVendorSdks installer 103.8 -> 94.4 MB.**
+- **The retry fix was dead code.** `Verify-VendorCache` threw `"vendor_api not flattened"`
+  unconditionally 46 lines after `Build-VendorCache` warned and continued — and `build.bat` had
+  just made that fatal. The invariant is fabricated: `VendorSdkLoader.FlattenVendorArchiveLayout`
+  deletes `vendor_api` in a best-effort `try/catch` and `EnsureExtracted` keys only off `.ok`.
+- **"Leftover files mean the flatten failed" was wrong.** The flatten skips `x86`/`mips` on
+  purpose — Shimadzu 18 files, Agilent 8, ABI 3, Waters and Thermo 0. The local probe only
+  covered Waters, which is why it read clean.
+
+**Lesson worth keeping: a probe that exercises one vendor is not a probe of the flatten.** Waters
+is the one archive with no `x86` subtree, so it is the single worst choice for validating this
+code path.
+
+### Open, from the same review — NOT yet acted on
+
+Confirmed by reading the code, needing a decision:
+
+- **The vendor-bundled variant has zero test coverage.** `TryFindSetup` globs
+  `ProteoWizard-Setup-*.exe`, which cannot match `ProteoWizard-WithVendorSdks-Setup-<ver>.exe`.
+  The variant `tcbuild.bat` builds every CI run, and the one the container ships, is never
+  installed or converted with. Fixing it is a design choice: cover both variants (doubling a
+  9-vendor install/uninstall cycle) or switch the test over.
+- **`AssertMsconvertConverts` can deadlock** — sequential blocking `ReadToEnd()` on stdout then
+  stderr before `WaitForExit`, so a full stderr pipe hangs it and the 3-minute timeout never
+  fires. `VendorSdkLoader.ExtractArchive` already uses `BeginOutputReadLine` for this reason.
+
+Reported but **not verified** — do not treat as established: the Agilent Cecil-patch overlay
+missing from the default installer; `{commonappdata}` writes under `PrivilegesRequired=lowest`;
+`vendor-cache-root.txt` having no uninstall entry; `build.bat` making the installer a hard
+prerequisite of `Debug` builds; the size-inequality patch heuristic; `Interop.` prefix collision
+between ABI and BrukerCompassXtract; `Installer.Tests` silently dropping absent fixtures.
+
+Also unfixed: the shallow-clone pin version (CI collapses every vendor pin to the build SHA), and
+a pre-existing `Analysis.Tests`/`Waters.Tests` race over `ATEHLSTLSEK_profile.raw` — the suites
+run as concurrent jobs and the Waters SDK writes `lmgt.inf` inside the `.raw`.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260901_net10_wine_container.md` before starting work.
