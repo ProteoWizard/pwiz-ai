@@ -947,3 +947,46 @@ Three commits on [#4642](https://github.com/ProteoWizard/pwiz/pull/4642):
 is that `FirstPassFdrTask.OnlyDiagnosticsProductOutstanding` ALREADY implements the
 "add --model-diagnostics to a finished analysis" path, and that a silent recompute of it
 costs 4h46m while producing the RIGHT report - so only the log line distinguishes them.
+
+## P16 ADDED TO THE ARCHITECTURE, AND WHAT IT MAKES OUTSTANDING (developer, 2026-09-07)
+
+> *"I am trying to design tests that flush out short-sighted design choices and improve our
+> pipeline design specification ... because the past week or two has proven that the design
+> was under-specified and the design was not sufficient to achieve the desired and much
+> discussed target of 500 files on this 64 GB RAM computer."*
+
+**P16** now stands in `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`: a report is a
+DERIVED VIEW over the artifacts, never an output only its producing phase can make. The
+defining scenario it requires, verbatim from the doc:
+
+> Run an analysis WITHOUT `--model-diagnostics`. Then run `--task ModelDiagnostics` on the
+> finished output directory. It produces the full report - both passes - by reading the
+> sidecars for the pass in question, and re-runs no analysis of any kind.
+
+The doc carries the PRINCIPLE only. Implementation status belongs here - the architecture is
+a design document, not an implementation catalog (developer, 2026-09-07).
+
+### Where the code stands against P16
+
+| | folds the report from sidecars alone? | cost on a 446-run cohort |
+|---|---|---|
+| pass 1 | YES - `FirstPassFdrTask.OnlyDiagnosticsProductOutstanding` adopts the completed pass | minutes |
+| pass 2 | **no equivalent exists** | re-runs the whole Stage 7 join, **69 min measured** |
+| `--task ModelDiagnostics` | **no** - `TryRenderFromProducts` only, both passes | exits 1 with guidance |
+
+**The asymmetry is the tell.** The same requirement was met once deliberately (pass 1, where
+it saves 4h46m), not at all for pass 2, and never for the task actually named after it -
+because it was nowhere written down. That is exactly the under-specification the developer
+is pointing at, and P16 is the fix at the specification level.
+
+### What this PR now owes
+
+1. **A pass-2 diagnostics-only fold**, symmetric with pass 1's - fold the pass-2 report from
+   the 2nd-pass sidecars + reconciled parquets without running the rest of Stage 7.
+2. **`--task ModelDiagnostics` invokes whichever folds are missing** instead of refusing.
+   The pass tasks keep folding opportunistically; they stop being the only route.
+3. **Proven at 446 files**: the P16 scenario end to end, asserting the no-analysis marker
+   and an O(distinct) memory band - not merely that the report appeared. A re-analysis
+   produces the right report too, silently and slowly, which is why the marker is the oracle.
+
+Sequenced into the night session: `ai/.tmp/handoff-20260908_osprey_mdiag_446_night.md`.
