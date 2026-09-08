@@ -1,0 +1,634 @@
+Skyline Release output (pwiz_tools/Skyline/bin/x64/Release/net10.0-windows) - 2026-09-07 baseline
+Branch Skyline/work/20260907_pwiz_local_nuget at base 5c046bdb7a, vendor licenses agreed.
+Source column: which upstream output directory holds an identical relative path.
+  wrapper      = ProteowizardWrapper bin (pwiz-sharp libraries + vendor SDK assemblies via ProjectReference)
+  prmsched     = Bruker.PrmScheduling bin (direct ProjectReference from Skyline)
+  tool:*       = Content glob over a pwiz-sharp tool's bin (BlibBuild, BlibFilter, msconvert, bullseye-sharp)
+  skyline-own  = everything else (Skyline, Shared projects, Skyline's own packages, Method/ builders)
+  MascotShim.dll, msparser.dll and msparser-config/* show as skyline-own because they are copied
+  FLAT from BlibBuild's runtimes/win-x64/native by the special-case Content items.
+
+wrapper tool:BlibBuild|7za.exe
+skyline-own|Antlr3.Runtime.dll
+tool:BlibBuild|Apache.Arrow.dll
+wrapper tool:msconvert-or-bullseye|BaseCommon.dll
+wrapper tool:msconvert-or-bullseye|BaseDataAccess.dll
+wrapper tool:msconvert-or-bullseye|BaseDataAccess.dll.config
+wrapper tool:msconvert-or-bullseye|BaseError.dll
+wrapper tool:msconvert-or-bullseye|BaseTof.dll
+skyline-own|BiblioSpec.dll
+skyline-own|BiblioSpec.pdb
+tool:BlibBuild|BlibBuild.deps.json
+tool:BlibBuild|BlibBuild.dll
+tool:BlibBuild|BlibBuild.exe
+tool:BlibBuild|BlibBuild.pdb
+tool:BlibBuild|BlibBuild.runtimeconfig.json
+tool:BlibBuild|BlibBuild.xml
+tool:BlibFilter|BlibFilter.deps.json
+tool:BlibFilter|BlibFilter.dll
+tool:BlibFilter|BlibFilter.exe
+tool:BlibFilter|BlibFilter.pdb
+tool:BlibFilter|BlibFilter.runtimeconfig.json
+tool:BlibFilter|BlibFilter.xml
+wrapper tool:BlibBuild|CABINET.DLL
+wrapper tool:BlibBuild|CLFIO32.dll
+wrapper tool:BlibBuild|CPCNLSS.dll
+wrapper tool:BlibBuild|CRHAKEI2.dll
+wrapper tool:BlibBuild|Clearcore2.Compression.dll
+wrapper tool:BlibBuild|Clearcore2.Data.AnalystDataProvider.dll
+wrapper tool:BlibBuild|Clearcore2.Data.Client.dll
+wrapper tool:BlibBuild|Clearcore2.Data.CommonInterfaces.dll
+wrapper tool:BlibBuild|Clearcore2.Data.Wiff2.dll
+wrapper tool:BlibBuild|Clearcore2.Data.WiffReader.dll
+wrapper tool:BlibBuild|Clearcore2.Data.dll
+wrapper tool:BlibBuild|Clearcore2.Devices.Types.dll
+wrapper tool:BlibBuild|Clearcore2.Domain.Acquisition.dll
+wrapper tool:BlibBuild|Clearcore2.Infrastructure.dll
+wrapper tool:BlibBuild|Clearcore2.InternalRawXYProcessing.dll
+wrapper tool:BlibBuild|Clearcore2.Muni.dll
+wrapper tool:BlibBuild|Clearcore2.RawXYProcessing.dll
+wrapper tool:BlibBuild|Clearcore2.StructuredStorage.dll
+wrapper tool:BlibBuild|Clearcore2.Utility.dll
+wrapper tool:BlibBuild|Clearcore2.XmlHelpers.dll
+wrapper tool:BlibBuild|CompressedTLMRawDataReader.dll
+skyline-own|Dapper.dll
+wrapper tool:BlibBuild|DataReader.dll
+wrapper tool:BlibBuild|DataServiceClientComponent.config
+wrapper tool:BlibBuild|DataServiceComponent.config
+wrapper tool:BlibBuild|DataServiceInternalComponent.config
+skyline-own|DigitalRune.Windows.Docking.dll
+skyline-own|DigitalRune.Windows.Docking.pdb
+skyline-own|DigitalRune.Windows.Docking.xml
+wrapper tool:BlibBuild|DualProbeInterfaceParametersCS.dll
+wrapper tool:BlibBuild|GCMSProtoCS.dll
+wrapper tool:BlibBuild|Google.Protobuf.dll
+skyline-own|Grpc.Core.Api.dll
+skyline-own|Grpc.Net.Client.dll
+skyline-own|Grpc.Net.Common.dll
+tool:BlibBuild|HDF.PInvoke.1.10.dll
+skyline-own|Hardklor.exe
+wrapper tool:BlibBuild|IDQuantLSS.dll
+wrapper tool:BlibBuild|IOModuleQTFL.dll
+skyline-own|IdentityModel.dll
+skyline-own|Iesi.Collections.dll
+wrapper tool:BlibBuild|IoModuleGCMSParameters.dll
+wrapper tool:BlibBuild|IoModuleGCMSRawDataRepository.dll
+tool:BlibBuild|IronCompress.dll
+skyline-own|JetBrains.Annotations.dll
+skyline-own|Kajabity Tools.dll
+wrapper tool:BlibBuild|LSSMngTools.dll
+wrapper tool:BlibBuild|LibDBCntl.dll
+wrapper tool:msconvert-or-bullseye|MBI_SDK.dll
+wrapper tool:msconvert-or-bullseye|MIDAC.dll
+skyline-own|MSGraph.dll
+skyline-own|MSGraph.pdb
+wrapper tool:BlibBuild|MSMSDBCntl.dll
+skyline-own|MascotShim.dll
+wrapper tool:BlibBuild|MassCalcWrapObject.dll
+wrapper tool:BlibBuild|MassLibrarySearchCS.dll
+wrapper tool:BlibBuild|MassLynxRaw.dll
+wrapper tool:msconvert-or-bullseye|MassSpecDataReader.dll
+wrapper tool:BlibBuild|MassStandardSpectrumCS.dll
+tool:BlibBuild|MathNet.Numerics.dll
+skyline-own|Method/AbSciex/SciexOS/BuildSciexMethod.exe
+skyline-own|Method/AbSciex/SciexOS/BuildSciexMethod.exe.config
+skyline-own|Method/AbSciex/SciexOS/BuildSciexMethod.pdb
+skyline-own|Method/AbSciex/SciexOS/Microsoft.IO.RecyclableMemoryStream.dll
+skyline-own|Method/AbSciex/SciexOS/SCIEX.Apis.Control.v1.dll
+skyline-own|Method/AbSciex/TOF/BuildAnalystFullScanMethod.exe
+skyline-own|Method/AbSciex/TOF/BuildAnalystFullScanMethod.exe.config
+skyline-own|Method/AbSciex/TOF/BuildAnalystMethod.dll
+skyline-own|Method/AbSciex/TOF/Interop.AcqMethodDir.dll
+skyline-own|Method/AbSciex/TOF/Interop.AcqMethodSvr.dll
+skyline-own|Method/AbSciex/TOF/Interop.Analyst.dll
+skyline-own|Method/AbSciex/TOF/Interop.AnalystService.dll
+skyline-own|Method/AbSciex/TOF/Interop.DDEMethodSvr.dll
+skyline-own|Method/AbSciex/TOF/Interop.IDAMethodSvr.dll
+skyline-own|Method/AbSciex/TOF/Interop.MSMethodSvr.dll
+skyline-own|Method/AbSciex/TOF/Interop.ParameterSvr.dll
+skyline-own|Method/AbSciex/TOF/Interop.QueueDispatcher.dll
+skyline-own|Method/AbSciex/TOF/Interop.ROTMan.dll
+skyline-own|Method/AbSciex/TOF/Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll
+skyline-own|Method/AbSciex/TOF/ROTMANLib.dll
+skyline-own|Method/AbSciex/TOF/StdType.dll
+skyline-own|Method/AbSciex/TOF/stdole.dll
+skyline-own|Method/AbSciex/TQ/BuildAnalystMethod.dll
+skyline-own|Method/AbSciex/TQ/BuildQTRAPMethod.exe
+skyline-own|Method/AbSciex/TQ/BuildQTRAPMethod.exe.config
+skyline-own|Method/AbSciex/TQ/Interop.AcqMethodDir.dll
+skyline-own|Method/AbSciex/TQ/Interop.AcqMethodSvr.dll
+skyline-own|Method/AbSciex/TQ/Interop.Analyst.dll
+skyline-own|Method/AbSciex/TQ/Interop.AnalystService.dll
+skyline-own|Method/AbSciex/TQ/Interop.DDEMethodSvr.dll
+skyline-own|Method/AbSciex/TQ/Interop.IDAMethodSvr.dll
+skyline-own|Method/AbSciex/TQ/Interop.MSMethodSvr.dll
+skyline-own|Method/AbSciex/TQ/Interop.ParameterSvr.dll
+skyline-own|Method/AbSciex/TQ/Interop.QueueDispatcher.dll
+skyline-own|Method/AbSciex/TQ/Interop.ROTMan.dll
+skyline-own|Method/AbSciex/TQ/Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll
+skyline-own|Method/AbSciex/TQ/QueueDispatcherLib.dll
+skyline-own|Method/AbSciex/TQ/ROTMANLib.dll
+skyline-own|Method/AbSciex/TQ/StdType.dll
+skyline-own|Method/AbSciex/TQ/stdole.dll
+skyline-own|Method/Agilent/6400/BuildAgilentMethod.exe
+skyline-own|Method/Agilent/6400/BuildAgilentMethod.exe.config
+skyline-own|Method/Agilent/6400/MethodCreator.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.CommonUtilities.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.DataInterfaces.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.ESW.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.HWConfigResourceMgr.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.KeyValueInterfaces.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MRMObjectFactory.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSActualProvider.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSDataStorage.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSDataStorageIF.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSIF.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSMethodDO.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSParamProvider.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSTrace.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSTraceDataSystemIF.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MSTuneDO.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MethodCreator.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MethodLocaleServiceProvider.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MethodResourceMgr.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.MethodValidationModule.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.ModelSpecificMethodResourceManager.dll
+skyline-own|Method/Agilent/MH12/Agilent.MSDrivers.LCQuadrupole.ValidationBase.dll
+skyline-own|Method/Agilent/MH12/Agilent.MsdTcd.SuperTune.dll
+skyline-own|Method/Agilent/MH12/BaseCommon.dll
+skyline-own|Method/Agilent/MH12/BaseError.dll
+skyline-own|Method/Agilent/MH12/BaseMSUtils.dll
+skyline-own|Method/Agilent/MH12/BaseTof.dll
+skyline-own|Method/Agilent/MH12/BuildAgilentMH12Method.exe
+skyline-own|Method/Agilent/MH12/BuildAgilentMH12Method.exe.config
+skyline-own|Method/Agilent/MH12/BuildAgilentMH12Method.pdb
+skyline-own|Method/Agilent/MH12/ESWShared.dll
+skyline-own|Method/Agilent/MH12/Newtonsoft.Json.dll
+skyline-own|Method/Agilent/MH12/Newtonsoft.Json.pdb
+skyline-own|Method/Agilent/MH12/Newtonsoft.Json.xml
+skyline-own|Method/Agilent/MH12/RapidControlIF.dll
+skyline-own|Method/Bruker/BDal.Submethod.Wrapper.dll
+skyline-own|Method/Bruker/BDal.Submethod.Wrapper.xml
+skyline-own|Method/Bruker/BdalRetentionTimeMassList.dll
+skyline-own|Method/Bruker/BuildBrukerMethod.exe
+skyline-own|Method/Bruker/BuildBrukerMethod.exe.config
+skyline-own|Method/Shimadzu/BuildShimadzuMethod.exe
+skyline-own|Method/Shimadzu/BuildShimadzuMethod.exe.config
+skyline-own|Method/Shimadzu/BuildShimadzuMethod.pdb
+skyline-own|Method/Shimadzu/MethodConverter.dll
+skyline-own|Method/Shimadzu/MethodWriter.dll
+skyline-own|Method/Shimadzu/Shimadzu.LabSolutions.IO.IoModule.dll
+skyline-own|Method/Thermo/BuildLTQMethod.exe
+skyline-own|Method/Thermo/BuildTSQEZMethod.exe
+skyline-own|Method/Thermo/BuildThermoMethod.exe
+skyline-own|Method/Thermo/BuildThermoMethod.exe.config
+skyline-own|Method/Thermo/Thermo.TNG.MethodXMLFactory.dll
+skyline-own|Method/Thermo/Thermo.TNG.MethodXMLInterface.dll
+skyline-own|Method/Thermo/Thermo.TNG.MethodXMLInterface2.dll
+skyline-own|Method/Waters/BuildWatersMethod.exe
+skyline-own|Method/Waters/BuildWatersMethod.exe.config
+skyline-own|Method/Waters/VerifyESkylineLibrary.dll
+tool:BlibBuild|Microsoft.Data.Analysis.dll
+skyline-own|Microsoft.Extensions.Configuration.Abstractions.dll
+skyline-own|Microsoft.Extensions.Configuration.Binder.dll
+skyline-own|Microsoft.Extensions.Configuration.dll
+skyline-own|Microsoft.Extensions.DependencyInjection.Abstractions.dll
+skyline-own|Microsoft.Extensions.DependencyInjection.dll
+skyline-own|Microsoft.Extensions.Diagnostics.Abstractions.dll
+skyline-own|Microsoft.Extensions.Diagnostics.dll
+skyline-own|Microsoft.Extensions.Http.dll
+skyline-own|Microsoft.Extensions.Logging.Abstractions.dll
+skyline-own|Microsoft.Extensions.Logging.dll
+tool:BlibBuild|Microsoft.Extensions.ObjectPool.dll
+skyline-own|Microsoft.Extensions.Options.ConfigurationExtensions.dll
+skyline-own|Microsoft.Extensions.Options.dll
+skyline-own|Microsoft.Extensions.Primitives.dll
+tool:BlibBuild|Microsoft.IO.RecyclableMemoryStream.dll
+tool:BlibBuild|Microsoft.ML.DataView.dll
+wrapper tool:BlibBuild|Microsoft.VC90.CRT/Microsoft.VC90.CRT.manifest
+wrapper tool:BlibBuild|Microsoft.VC90.CRT/msvcm90.dll
+wrapper tool:BlibBuild|Microsoft.VC90.CRT/msvcp90.dll
+wrapper tool:BlibBuild|Microsoft.VC90.CRT/msvcr90.dll
+wrapper tool:BlibBuild|Microsoft.VC90.MFC/Microsoft.VC90.MFC.manifest
+wrapper tool:BlibBuild|Microsoft.VC90.MFC/mfc90.dll
+wrapper tool:BlibBuild|Microsoft.VC90.OpenMP/Microsoft.VC90.OpenMP.manifest
+wrapper tool:BlibBuild|Microsoft.VC90.OpenMP/vcomp90.dll
+skyline-own|Microsoft.Web.WebView2.Core.dll
+skyline-own|Microsoft.Web.WebView2.WinForms.dll
+skyline-own|Microsoft.Web.WebView2.Wpf.dll
+wrapper tool:msconvert-or-bullseye|MobilionShim.dll
+skyline-own|NHibernate.dll
+skyline-own|Newtonsoft.Json.dll
+wrapper tool:BlibBuild|OFX.Core.Contracts.dll
+tool:msconvert-or-bullseye|OFX.Logging.dll
+wrapper tool:BlibBuild|OpenMcdf.Extensions.dll
+wrapper tool:BlibBuild|OpenMcdf.dll
+skyline-own|PanoramaClient.dll
+skyline-own|PanoramaClient.dll.config
+skyline-own|PanoramaClient.pdb
+tool:BlibBuild|Parquet.dll
+wrapper tool:BlibBuild|PeakIDEA.dll
+wrapper tool:BlibBuild|PeakItgLSS.dll
+skyline-own|ProDotNetZip.dll
+skyline-own|ProteomeDb.dll
+skyline-own|ProteomeDb.pdb
+wrapper|ProteowizardWrapper.dll
+wrapper|ProteowizardWrapper.pdb
+wrapper tool:BlibBuild|Pwiz.Analysis.dll
+wrapper tool:BlibBuild|Pwiz.Analysis.pdb
+wrapper tool:BlibBuild|Pwiz.Analysis.xml
+wrapper tool:BlibBuild|Pwiz.Data.Common.dll
+wrapper tool:BlibBuild|Pwiz.Data.Common.pdb
+wrapper tool:BlibBuild|Pwiz.Data.Common.xml
+wrapper tool:BlibBuild|Pwiz.Data.IdentData.dll
+wrapper tool:BlibBuild|Pwiz.Data.IdentData.pdb
+wrapper tool:BlibBuild|Pwiz.Data.IdentData.xml
+wrapper tool:BlibBuild|Pwiz.Data.MsData.dll
+wrapper tool:BlibBuild|Pwiz.Data.MsData.pdb
+wrapper tool:BlibBuild|Pwiz.Data.MsData.xml
+tool:BlibBuild|Pwiz.Tools.BiblioSpec.dll
+tool:BlibBuild|Pwiz.Tools.BiblioSpec.pdb
+tool:BlibBuild|Pwiz.Tools.BiblioSpec.xml
+wrapper tool:BlibBuild|Pwiz.Util.dll
+wrapper tool:BlibBuild|Pwiz.Util.pdb
+wrapper tool:BlibBuild|Pwiz.Util.xml
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.Agilent.dll
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.Agilent.pdb
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.Agilent.xml
+prmsched|Pwiz.Vendor.Bruker.PrmScheduling.dll
+prmsched|Pwiz.Vendor.Bruker.PrmScheduling.pdb
+prmsched|Pwiz.Vendor.Bruker.PrmScheduling.xml
+wrapper tool:BlibBuild|Pwiz.Vendor.Bruker.dll
+wrapper tool:BlibBuild|Pwiz.Vendor.Bruker.pdb
+wrapper tool:BlibBuild|Pwiz.Vendor.Bruker.xml
+wrapper tool:BlibBuild|Pwiz.Vendor.Common.dll
+wrapper tool:BlibBuild|Pwiz.Vendor.Common.pdb
+wrapper tool:BlibBuild|Pwiz.Vendor.Common.xml
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.Mobilion.dll
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.Mobilion.pdb
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.Mobilion.xml
+tool:msconvert-or-bullseye|Pwiz.Vendor.Sciex.Wiff2.dll
+wrapper tool:BlibBuild|Pwiz.Vendor.Sciex.dll
+wrapper tool:BlibBuild|Pwiz.Vendor.Sciex.pdb
+wrapper tool:BlibBuild|Pwiz.Vendor.Sciex.xml
+wrapper tool:BlibBuild|Pwiz.Vendor.Shimadzu.dll
+wrapper tool:BlibBuild|Pwiz.Vendor.Shimadzu.pdb
+wrapper tool:BlibBuild|Pwiz.Vendor.Shimadzu.xml
+wrapper tool:BlibBuild|Pwiz.Vendor.Thermo.dll
+wrapper tool:BlibBuild|Pwiz.Vendor.Thermo.pdb
+wrapper tool:BlibBuild|Pwiz.Vendor.Thermo.xml
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.UIMF.dll
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.UIMF.pdb
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.UIMF.xml
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.UNIFI.dll
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.UNIFI.pdb
+wrapper tool:msconvert-or-bullseye|Pwiz.Vendor.UNIFI.xml
+wrapper tool:BlibBuild|Pwiz.Vendor.Waters.dll
+wrapper tool:BlibBuild|Pwiz.Vendor.Waters.pdb
+wrapper tool:BlibBuild|Pwiz.Vendor.Waters.xml
+wrapper tool:BlibBuild|QTFLDebugLog.dll
+wrapper tool:BlibBuild|QTFLProtoCS.dll
+skyline-own|Remotion.Linq.EagerFetching.dll
+skyline-own|Remotion.Linq.dll
+wrapper tool:BlibBuild|SCIEX.Apis.Data.v1.dll
+wrapper tool:BlibBuild|Sciex.Clearcore.FMan.dll
+wrapper tool:BlibBuild|Sciex.Data.Processing.dll
+wrapper tool:BlibBuild|Sciex.Data.SimpleTypes.dll
+wrapper tool:BlibBuild|Sciex.Data.XYData.dll
+wrapper tool:BlibBuild|Sciex.FMan.dll
+wrapper tool:BlibBuild|Sciex.Wiff.dll
+wrapper tool:BlibBuild|Shimadzu.AIPeakIntegration.Client.dll
+wrapper tool:BlibBuild|Shimadzu.AIPeakIntegration.InstallConfigration.dll
+wrapper tool:BlibBuild|Shimadzu.Converter.MassSpectrumConverters.dll
+wrapper tool:BlibBuild|Shimadzu.Converter.MassSpectrumConvertersByMSPPP.dll
+wrapper tool:BlibBuild|Shimadzu.GCMS.DebugLog.dll
+wrapper tool:BlibBuild|Shimadzu.GCMS.RawDataRepository.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.ComStreamWrapper.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.Data.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.DataRepository.FileRepository.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.DataRepository.Interface.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.DataRepository.RawDataRepository.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.DebugLog.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.LSSDebugLogger.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.ParameterValidation.dll
+wrapper tool:BlibBuild|Shimadzu.GMNT.Protos.dll
+wrapper tool:BlibBuild|Shimadzu.LabSolutions.IO.IoModule.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.ComStreamWrapper.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.Data.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.DebugLog.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.LSSDebugLogger.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.ParameterValidation.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.Protos.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.RawDataRepository.FileRepository.dll
+wrapper tool:BlibBuild|Shimadzu.SQCL.RawDataRepository.Interface.dll
+skyline-own|Skyline-daily.deps.json
+skyline-own|Skyline-daily.dll
+skyline-own|Skyline-daily.dll.config
+skyline-own|Skyline-daily.exe
+skyline-own|Skyline-daily.pdb
+skyline-own|Skyline-daily.runtimeconfig.json
+skyline-own|SkylineCmd.deps.json
+skyline-own|SkylineCmd.dll
+skyline-own|SkylineCmd.exe
+skyline-own|SkylineCmd.pdb
+skyline-own|SkylineCmd.runtimeconfig.json
+skyline-own|SkylineLog4Net.config
+skyline-own|SkylineProcessRunner.deps.json
+skyline-own|SkylineProcessRunner.dll
+skyline-own|SkylineProcessRunner.exe
+skyline-own|SkylineProcessRunner.pdb
+skyline-own|SkylineProcessRunner.runtimeconfig.json
+skyline-own|SkylineTool.dll
+skyline-own|SkylineTool.pdb
+tool:BlibBuild|Snappier.dll
+skyline-own|Sprache.dll
+tool:BlibBuild|System.Configuration.ConfigurationManager.dll
+tool:BlibBuild|System.Data.SQLite.dll
+tool:BlibBuild|System.Diagnostics.EventLog.dll
+skyline-own|System.Management.dll
+tool:BlibBuild|System.Runtime.Caching.dll
+tool:BlibBuild|System.Runtime.Serialization.Formatters.dll
+tool:BlibBuild|System.Security.Cryptography.Pkcs.dll
+tool:BlibBuild|System.Security.Cryptography.ProtectedData.dll
+tool:BlibBuild|System.Security.Cryptography.Xml.dll
+tool:BlibBuild|System.ServiceModel.Duplex.dll
+tool:BlibBuild|System.ServiceModel.Primitives.dll
+tool:BlibBuild|System.ServiceModel.Security.dll
+wrapper tool:BlibBuild|System.ServiceModel.dll
+wrapper tool:BlibBuild|System.ValueTuple.dll
+wrapper tool:BlibBuild|ThermoFisher.CommonCore.Data.dll
+wrapper tool:BlibBuild|ThermoFisher.CommonCore.RawFileReader.dll
+wrapper tool:msconvert-or-bullseye|UIMFLibrary.dll
+wrapper tool:msconvert-or-bullseye|UIMFLibrary.xml
+skyline-own|ZedGraph.dll
+skyline-own|ZedGraph.pdb
+tool:BlibBuild|ZstdSharp.dll
+wrapper tool:msconvert-or-bullseye|agtsampleinforw.dll
+tool:msconvert-or-bullseye|api-ms-win-core-console-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-datetime-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-debug-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-errorhandling-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-file-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-file-l1-2-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-file-l2-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-handle-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-heap-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-interlocked-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-libraryloader-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-localization-l1-2-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-memory-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-namedpipe-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-processenvironment-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-processthreads-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-processthreads-l1-1-1.dll
+tool:msconvert-or-bullseye|api-ms-win-core-profile-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-rtlsupport-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-string-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-synch-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-synch-l1-2-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-sysinfo-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-timezone-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-core-util-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-conio-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-convert-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-environment-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-filesystem-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-heap-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-locale-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-math-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-multibyte-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-private-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-process-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-runtime-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-stdio-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-string-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-time-l1-1-0.dll
+tool:msconvert-or-bullseye|api-ms-win-crt-utility-l1-1-0.dll
+wrapper tool:BlibBuild|baf2sql_c.dll
+tool:msconvert-or-bullseye|bullseye-sharp.deps.json
+tool:msconvert-or-bullseye|bullseye-sharp.dll
+tool:msconvert-or-bullseye|bullseye-sharp.exe
+tool:msconvert-or-bullseye|bullseye-sharp.pdb
+tool:msconvert-or-bullseye|bullseye-sharp.runtimeconfig.json
+tool:msconvert-or-bullseye|bullseye-sharp.xml
+tool:BlibBuild|cs/System.ServiceModel.Primitives.resources.dll
+tool:BlibBuild|de/System.ServiceModel.Primitives.resources.dll
+skyline-own|de/ZedGraph.resources.dll
+tool:BlibBuild|es/System.ServiceModel.Primitives.resources.dll
+skyline-own|es/ZedGraph.resources.dll
+tool:BlibBuild|fr/System.ServiceModel.Primitives.resources.dll
+skyline-own|fr/ZedGraph.resources.dll
+skyline-own|hu/ZedGraph.resources.dll
+tool:BlibBuild|it/System.ServiceModel.Primitives.resources.dll
+skyline-own|it/ZedGraph.resources.dll
+skyline-own|ja/BiblioSpec.resources.dll
+skyline-own|ja/DigitalRune.Windows.Docking.resources.dll
+skyline-own|ja/MSGraph.resources.dll
+skyline-own|ja/PanoramaClient.resources.dll
+skyline-own|ja/ProteomeDb.resources.dll
+skyline-own|ja/Skyline-daily.resources.dll
+tool:BlibBuild|ja/System.ServiceModel.Primitives.resources.dll
+skyline-own|ja/ZedGraph.resources.dll
+skyline-own|ja/pwiz.Common.resources.dll
+skyline-own|ja/pwiz.CommonBaseUI.resources.dll
+skyline-own|ja/pwiz.CommonFileDialogs.resources.dll
+skyline-own|ja/pwiz.CommonMsData.resources.dll
+wrapper|ja/pwiz.CommonUtil.resources.dll
+tool:BlibBuild|ko/System.ServiceModel.Primitives.resources.dll
+wrapper tool:BlibBuild|license.key
+skyline-own|log4net.dll
+tool:BlibBuild|modifications.xml
+tool:msconvert-or-bullseye|msconvert.deps.json
+tool:msconvert-or-bullseye|msconvert.dll
+tool:msconvert-or-bullseye|msconvert.exe
+tool:msconvert-or-bullseye|msconvert.pdb
+tool:msconvert-or-bullseye|msconvert.runtimeconfig.json
+tool:msconvert-or-bullseye|msconvert.xml
+skyline-own|msparser-config/quantitation_1.xsd
+skyline-own|msparser-config/quantitation_2.xsd
+skyline-own|msparser-config/unimod_2.xsd
+skyline-own|msparser.dll
+tool:msconvert-or-bullseye|msvcp110.dll
+wrapper tool:msconvert-or-bullseye|msvcp120.dll
+tool:msconvert-or-bullseye|msvcp140.dll
+skyline-own|msvcr100.dll
+tool:msconvert-or-bullseye|msvcr110.dll
+wrapper tool:msconvert-or-bullseye|msvcr120.dll
+tool:BlibBuild|pl/System.ServiceModel.Primitives.resources.dll
+prmsched|prmscheduler.dll
+wrapper tool:BlibBuild|protobuf-net.dll
+tool:BlibBuild|pt-BR/System.ServiceModel.Primitives.resources.dll
+skyline-own|pt/ZedGraph.resources.dll
+skyline-own|pwiz.Common.dll
+skyline-own|pwiz.Common.pdb
+skyline-own|pwiz.CommonBaseUI.dll
+skyline-own|pwiz.CommonBaseUI.pdb
+skyline-own|pwiz.CommonFileDialogs.dll
+skyline-own|pwiz.CommonFileDialogs.pdb
+skyline-own|pwiz.CommonMsData.dll
+skyline-own|pwiz.CommonMsData.pdb
+wrapper|pwiz.CommonUtil.dll
+wrapper|pwiz.CommonUtil.pdb
+tool:BlibBuild|ru/System.ServiceModel.Primitives.resources.dll
+skyline-own|ru/ZedGraph.resources.dll
+tool:BlibBuild|runtimes/linux-arm64/native/libnironcompress.so
+tool:BlibBuild|runtimes/linux-x64/native/SQLite.Interop.dll
+tool:BlibBuild|runtimes/linux-x64/native/libhdf5.so
+tool:BlibBuild|runtimes/linux-x64/native/libhdf5_hl.so
+tool:BlibBuild|runtimes/linux-x64/native/libnironcompress.so
+tool:BlibBuild|runtimes/osx-arm64/native/libnironcompress.dylib
+tool:BlibBuild|runtimes/osx-x64/native/SQLite.Interop.dll
+tool:BlibBuild|runtimes/osx-x64/native/libhdf5.103.2.0.dylib
+tool:BlibBuild|runtimes/osx-x64/native/libhdf5.103.dylib
+tool:BlibBuild|runtimes/osx-x64/native/libhdf5.dylib
+tool:BlibBuild|runtimes/osx-x64/native/libhdf5_hl.100.1.3.dylib
+tool:BlibBuild|runtimes/osx-x64/native/libhdf5_hl.100.dylib
+tool:BlibBuild|runtimes/osx-x64/native/libhdf5_hl.dylib
+skyline-own|runtimes/win-arm64/native/WebView2Loader.dll
+tool:BlibBuild|runtimes/win-x64/native/MascotShim.dll
+tool:BlibBuild|runtimes/win-x64/native/SQLite.Interop.dll
+skyline-own|runtimes/win-x64/native/WebView2Loader.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-console-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-datetime-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-debug-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-errorhandling-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-file-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-file-l1-2-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-file-l2-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-handle-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-heap-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-interlocked-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-libraryloader-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-localization-l1-2-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-memory-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-namedpipe-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-processenvironment-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-processthreads-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-processthreads-l1-1-1.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-profile-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-rtlsupport-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-string-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-synch-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-synch-l1-2-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-sysinfo-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-timezone-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-core-util-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-conio-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-convert-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-environment-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-filesystem-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-heap-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-locale-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-math-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-multibyte-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-private-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-process-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-runtime-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-stdio-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-string-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-time-l1-1-0.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/api-ms-win-crt-utility-l1-1-0.dll
+tool:BlibBuild|runtimes/win-x64/native/hdf5.dll
+tool:BlibBuild|runtimes/win-x64/native/hdf5_hl.dll
+tool:BlibBuild|runtimes/win-x64/native/msparser-config/quantitation_1.xsd
+tool:BlibBuild|runtimes/win-x64/native/msparser-config/quantitation_2.xsd
+tool:BlibBuild|runtimes/win-x64/native/msparser-config/unimod_2.xsd
+tool:BlibBuild|runtimes/win-x64/native/msparser.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/msvcp110.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/msvcp120.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/msvcp140.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/msvcr110.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/msvcr120.dll
+tool:BlibBuild|runtimes/win-x64/native/nironcompress.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/ucrtbase.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/vcomp110.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/vcomp140.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/vcruntime140.dll
+tool:msconvert-or-bullseye|runtimes/win-x64/native/vcruntime140_1.dll
+tool:BlibBuild|runtimes/win-x86/native/SQLite.Interop.dll
+skyline-own|runtimes/win-x86/native/WebView2Loader.dll
+tool:BlibBuild|runtimes/win-x86/native/hdf5.dll
+tool:BlibBuild|runtimes/win-x86/native/hdf5_hl.dll
+tool:BlibBuild|runtimes/win/lib/net8.0/System.Diagnostics.EventLog.Messages.dll
+tool:BlibBuild|runtimes/win/lib/net8.0/System.Diagnostics.EventLog.dll
+skyline-own|runtimes/win/lib/net8.0/System.Management.dll
+tool:BlibBuild|runtimes/win/lib/net8.0/System.Runtime.Caching.dll
+tool:BlibBuild|runtimes/win/lib/net8.0/System.Security.Cryptography.Pkcs.dll
+skyline-own|sk/ZedGraph.resources.dll
+skyline-own|sv/ZedGraph.resources.dll
+wrapper tool:BlibBuild|timsdata.dll
+tool:BlibBuild|tr/System.ServiceModel.Primitives.resources.dll
+skyline-own|tr/ZedGraph.resources.dll
+tool:msconvert-or-bullseye|ucrtbase.dll
+tool:BlibBuild|unimod.xml
+tool:msconvert-or-bullseye|vcomp110.dll
+tool:msconvert-or-bullseye|vcomp140.dll
+tool:msconvert-or-bullseye|vcruntime140.dll
+tool:msconvert-or-bullseye|vcruntime140_1.dll
+tool:msconvert-or-bullseye|wiff2/SQLite.Interop.dll
+tool:msconvert-or-bullseye|wiff2/System.Data.SQLite.dll
+tool:msconvert-or-bullseye|wiff2/Unity.Abstractions.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-console-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-datetime-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-debug-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-errorhandling-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-file-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-file-l1-2-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-file-l2-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-handle-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-heap-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-interlocked-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-libraryloader-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-localization-l1-2-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-memory-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-namedpipe-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-processenvironment-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-processthreads-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-processthreads-l1-1-1.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-profile-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-rtlsupport-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-string-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-synch-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-synch-l1-2-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-sysinfo-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-timezone-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-core-util-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-conio-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-convert-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-environment-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-filesystem-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-heap-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-locale-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-math-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-multibyte-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-private-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-process-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-runtime-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-stdio-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-string-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-time-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/api-ms-win-crt-utility-l1-1-0.dll
+tool:msconvert-or-bullseye|wiff2/msvcp110.dll
+tool:msconvert-or-bullseye|wiff2/msvcp120.dll
+tool:msconvert-or-bullseye|wiff2/msvcp140.dll
+tool:msconvert-or-bullseye|wiff2/msvcr110.dll
+tool:msconvert-or-bullseye|wiff2/msvcr120.dll
+tool:msconvert-or-bullseye|wiff2/ucrtbase.dll
+tool:msconvert-or-bullseye|wiff2/vcomp110.dll
+tool:msconvert-or-bullseye|wiff2/vcomp140.dll
+tool:msconvert-or-bullseye|wiff2/vcruntime140.dll
+tool:msconvert-or-bullseye|wiff2/vcruntime140_1.dll
+skyline-own|zh-Hans/BiblioSpec.resources.dll
+skyline-own|zh-Hans/MSGraph.resources.dll
+skyline-own|zh-Hans/PanoramaClient.resources.dll
+skyline-own|zh-Hans/ProteomeDb.resources.dll
+skyline-own|zh-Hans/Skyline-daily.resources.dll
+tool:BlibBuild|zh-Hans/System.ServiceModel.Primitives.resources.dll
+skyline-own|zh-Hans/ZedGraph.resources.dll
+skyline-own|zh-Hans/pwiz.Common.resources.dll
+skyline-own|zh-Hans/pwiz.CommonBaseUI.resources.dll
+skyline-own|zh-Hans/pwiz.CommonFileDialogs.resources.dll
+skyline-own|zh-Hans/pwiz.CommonMsData.resources.dll
+wrapper|zh-Hans/pwiz.CommonUtil.resources.dll
+tool:BlibBuild|zh-Hant/System.ServiceModel.Primitives.resources.dll
+skyline-own|zh-tw/ZedGraph.resources.dll

@@ -155,13 +155,58 @@ actually uses.
 
 ## Tasks
 
-### Phase 1: Survey and consolidate (no behavior change)
-- [ ] List exactly which pwiz-sharp assemblies land in Skyline's output today
+### Phase 1: Survey and consolidate (no behavior change) - DONE 2026-09-07
+- [x] List exactly which pwiz-sharp assemblies land in Skyline's output today
       (`bin\x64\Release\net10.0-windows`) and where each came from (ProjectReference,
       Content glob, transitive package). This is the acceptance checklist for Phase 3.
-- [ ] Move every pwiz-sharp reference in Skyline.csproj, ProteowizardWrapper.csproj and
+      Result: `TODO-20260907_pwiz_local_nuget-output-attribution.txt` (per-file), summary
+      in "Phase 1 findings" below.
+- [x] Move every pwiz-sharp reference in Skyline.csproj, ProteowizardWrapper.csproj and
       SkylineTester.csproj into `pwiz_tools\Shared\PwizSharp.targets` (ProjectReference
       form only at this point). Build + run a smoke test; output must be identical.
+      Result: file list identical (624 files); no pwiz-sharp, vendor or tool file changed
+      hash. `TestInstrumentInfo` (Thermo/Agilent/Bruker reads) and `LibraryBuildTest`
+      (BlibBuild) pass on the Release build. SkylineTester builds.
+
+#### Phase 1 findings
+
+Skyline's Release output holds 624 files. Attribution by identical relative path in the
+upstream output directories:
+
+| Files | Arrive through |
+|---|---|
+| 159 | ProteowizardWrapper's ProjectReference graph: 13 `Pwiz.*` assemblies (+pdb/xml), vendor SDK assemblies (Thermo, Clearcore2/Sciex, Shimadzu, MIDAC, MassLynxRaw, UIMFLibrary, timsdata, baf2sql_c, MobilionShim), `license.key`, `7za.exe`, `wiff2\`, HDF5 and vendor natives under `runtimes\win-x64\native\` |
+| 4 | Bruker.PrmScheduling ProjectReference |
+| 246 | Tool Content globs only (BlibBuild 75, BlibFilter 6, msconvert + bullseye-sharp 165); 79 of these are under `runtimes\` |
+| 4 | Mascot natives copied FLAT by the special-case items (`MascotShim.dll`, `msparser.dll`, `msparser-config\*.xsd`) |
+| ~211 | Skyline's own (Skyline, Shared projects, Skyline's packages, `Method\` builders, satellite assemblies) |
+
+Two things the survey turned up that the package work has to handle deliberately:
+
+- **Vendor SDK helper DLLs do not always reach consumers.** Thermo.csproj references
+  `ThermoFisher.CommonCore.BackgroundSubtraction` and `.MassPrecisionEstimator` with
+  `Private=true`, and they sit in Thermo's own bin, but `Pwiz.Vendor.Thermo.dll` does not
+  reference them, so ResolveAssemblyReferences never carries them into the wrapper or
+  Skyline. A Sep 3 output from the same sources had them (built through Visual Studio
+  with the pwiz-sharp projects in the .sln at the time); today's command-line build does
+  not, and the incremental clean removed them. Packages fix this properly: a vendor
+  package's `lib\` or `runtimes\` carries whatever the vendor project says it needs,
+  independent of what the compiled assembly happens to reference. Phase 2 must decide
+  per vendor which SDK files are genuinely required (Reader_Thermo loads them by name at
+  runtime or not at all).
+- **Package version skew between Skyline and pwiz-sharp.** Skyline pins
+  `MathNet.Numerics` 4.15.0; pwiz-sharp's Util.csproj uses 5.0.0. Skyline's assets file
+  resolves 4.15.0, yet the file in Skyline's output is 5.0.0.0 because the wrapper's
+  copy-local output wins the copy race. With PackageReference NuGet will unify the graph
+  and flag the downgrade (NU1605); the answer is to move Skyline to 5.0.0 as part of
+  Phase 3. Check the other shared packages the same way (System.Data.SQLite.Core and
+  Newtonsoft.Json already match).
+
+Not touched in Phase 1, on purpose: `SkylineVersion.targets` still imports
+`pwiz-sharp\build\PwizVersion.targets` by relative path (it is also consumed by
+Executables\Tools\SkylineMcp projects, and version stamping may come from the package
+later); `ProteowizardWrapper.PwizSharp\` (sandbox project referenced only by the Smoke
+project, not built by anything); Osprey.IO's HintPath to the wrapper (hard-off).
 
 ### Phase 2: Produce packages from pwiz-sharp
 - [ ] Decide package ids and which projects pack (core libs, Vendor.Common + 9 vendors,
@@ -256,4 +301,12 @@ actually uses.
 ## Progress
 
 - 2026-09-07: Branch created from `origin/Skyline/work/20260612_net8_port` at
-  `5c046bdb7a`. Survey of current references done (table above). No code changes yet.
+  `5c046bdb7a`. Survey of current references done (table above).
+- 2026-09-07: Phase 1 complete. New `pwiz_tools\Shared\PwizSharp.targets` with three
+  opt-in blocks (`PwizSharpReferenceLibraries`, `PwizSharpDeployTools`,
+  `PwizSharpReferencePrmScheduling`); `$(PwizSharpRoot)` defined in
+  `pwiz_tools\Directory.Build.props`. ProteowizardWrapper.csproj lost its 13
+  ProjectReferences + user.props import + NO_VENDOR_SUPPORT block; Skyline.csproj lost
+  its 5 tool ProjectReferences, the Content globs, the Mascot special case and the
+  PrmScheduling reference; SkylineTester/TestData/TestFunctional use `$(PwizSharpRoot)`.
+  Output verified identical against a same-branch baseline. Next: Phase 2.
