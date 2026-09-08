@@ -152,3 +152,63 @@ the rest: *"Moving the CALLER is the point ... only its home is still wrong."* T
   peak in the 20-30 GB band rather than 91 GB. Use `ai/scripts/Osprey/CHS/Run-Chs.ps1`; read
   its README's `search_hash` section first, and pin `-LibraryDir` from the source run's own
   `Command:` line.
+
+---
+
+## Progress log (2026-09-08 session)
+
+### Scope decision: this branch does part 1, part 2 and the COLD arm, not the transfer worker
+
+The "two parts" above are necessary but not sufficient, and the reason is worth writing down
+because the TODO's own framing hid it. Part 2 converts `Rehydrate`'s straight-through arm - the
+RESUME. A COLD straight-through run never reaches that arm: it takes `Run`, whose comment said
+in so many words that it keeps its resident pool because `MaterializeRescoredFile` is one-shot.
+Deriving the admission (part 1) makes `CanStreamStage7Join` TRUE on a cold run by the time
+Stage 7 asks - Stage 6 has just written the parquets - so with parts 1+2 alone a cold run would
+be *admissible* and still resident, which is the same silent-fat-path shape #4642 removed. The
+cold arm is therefore in scope here, not later.
+
+Step 2b (`OSPREY_PASS2_QVALUE=transfer` -> `Pass2PerFileWorker`) is NOT. It is the predecessor's
+own item, it is a redesign of the transfer arm rather than a call-shape change, and with it
+still resident the ratchet items under "When this lands" cannot all be taken:
+
+* `Stage7ResidentGuardError`'s `streamingAvailable` exemption STAYS - `transfer` genuinely has
+  no streamed alternative, so its resident join is still a fact rather than a choice.
+* the `#4486` row in `$knownResidentGaps` STAYS, with its `Legs` text corrected: it is no longer
+  "every leg except mode 3's SecondPassFDR phase" but "the legs whose pass-2 mode has no
+  per-file worker", i.e. mode 10's transfer arm.
+
+### What changed in the code
+
+| file | change |
+|---|---|
+| `Osprey.IO/ParquetScoreCache.cs` | new `IsCurrentReconciledSurvivorSubset` - marker + `score_index` in ONE open. The positive form of `IsSubsetWithoutScoreIndex`, so the Stage-7 refusal and the streaming admission ask one question. |
+| `Osprey.Tasks/ScoringTaskShared.cs` | `CanStreamStage7Join` = `Stage7StreamAdmittedBeforeRescore` AND `AllReconciledParquetsCurrent`. `ExpectReconciledInput` is GONE from it. The split exists for the cold `Run` arm, which decides at the TOP of Stage 6, before the parquets the full predicate asks about have been written. |
+| `Osprey.Tasks/PerFileRescoreTask.cs` | `BuildResumePerRunSource` (resume arm) and `BuildRunPerRunSource` (cold arm), both built out of the per-file halves the whole-run loops already call, so run-at-a-time is the same work in the same order. `PublishedSurvivorLoader` reads the loader WITHOUT the Stage-6 switch - one switch per stage. |
+| `Osprey.Tasks/SecondPassFdrTask.cs` | the O(files) warning now keys on `rescored.Streams` (the milestone), not on the predicate, and is called from both arms that pull it. `StaleReconciledParquets` routed through the shared predicate. |
+| tests | `TestIsCurrentReconciledSurvivorSubset` (real artifacts: absent / Stage-4 original / current) and `AssertStage7StreamAdmission` (ALL-not-any, and empty is not vacuously true). |
+
+### The two design rules that decided the shape
+
+1. **The source is the whole-run loop's own per-file half.** Not a second implementation. That
+   is what makes byte-identity an argument rather than a hope, and it is the same move #4642
+   made for the merge leg.
+2. **A source is offered only when a dropped run can be rebuilt.** Cold arm: a survivor loader
+   AND every list already empty (an empty list is what makes the one-shot materializer
+   repeatable - it takes the rebuild-from-the-reconciled-parquet branch and skips the
+   gap-fill-appending overlay). Resume arm: a published survivor loader.
+
+### Open items in this branch
+
+* [x] part 1 - derive the admission
+* [x] part 2 - resume arm per-run source
+* [x] cold `Run` arm per-run source
+* [ ] `regression.ps1`: correct the `#4486` gap `Legs` text, and ADD an assertion that the
+      straight-through leg took the STREAMED join. Today only a memory profile says which arm
+      ran, which is the inference #4642's own marker lines exist to replace. Deferred only
+      because the gate was running - never edit a running script.
+* [ ] measure Stage 7 wall time on the resume arm. Its source reads TWO parquets per run per
+      pass (Stage 4 + reconciled) where the merge arm reads one, and a fold makes 2-3 passes.
+      Faithfulness to the resident arm was chosen over I/O; if 446 shows it, reading the
+      reconciled parquet directly is the fix, and it changes row ORDER, so it needs mode 1.
+* [ ] then the `--input-scores` retirement (the other TODO), on this same branch
