@@ -22,10 +22,16 @@ logger = logging.getLogger("teamcity_mcp")
 # =============================================================================
 
 _config = None
+_config_mtime = None
 
 
 def get_config() -> dict:
     """Load TeamCity config from ~/.teamcity-mcp/config.json.
+
+    Re-reads the file whenever its mtime changes, so rotating a token takes effect
+    on the next call. Caching it for the life of the process instead makes an expired
+    token unfixable without a restart, and the symptom is a plain 401 that gives no
+    hint the server is still holding the old value.
 
     Returns:
         Dict with 'url' and 'token' keys.
@@ -34,9 +40,7 @@ def get_config() -> dict:
         FileNotFoundError: If config file doesn't exist.
         KeyError: If required fields are missing.
     """
-    global _config
-    if _config is not None:
-        return _config
+    global _config, _config_mtime
 
     config_path = Path.home() / ".teamcity-mcp" / "config.json"
     if not config_path.exists():
@@ -45,16 +49,21 @@ def get_config() -> dict:
             "Create it with {\"url\": \"https://teamcity.labkey.org\", \"token\": \"...\"}"
         )
 
+    mtime = config_path.stat().st_mtime
+    if _config is not None and mtime == _config_mtime:
+        return _config
+
     with open(config_path) as f:
-        _config = json.load(f)
+        config = json.load(f)
 
     for key in ("url", "token"):
-        if key not in _config:
+        if key not in config:
             raise KeyError(f"Missing '{key}' in {config_path}")
 
     # Strip trailing slash from URL
-    _config["url"] = _config["url"].rstrip("/")
+    config["url"] = config["url"].rstrip("/")
 
+    _config, _config_mtime = config, mtime
     logger.info(f"Loaded TeamCity config for {_config['url']}")
     return _config
 

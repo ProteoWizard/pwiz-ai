@@ -130,7 +130,29 @@ param(
     [switch]$TrackAllocations,
 
     [ValidateSet("net472", "net8.0")]
-    [string]$TargetFramework = "net472"
+    [string]$TargetFramework = "net472",
+
+    # Profile an ARBITRARY Osprey invocation instead of a packaged single-file dataset:
+    # the complete argument list to hand Osprey, e.g. a resume in an existing 446-run
+    # directory. Dataset resolution, the -Stage gate and - critically - the score-cache
+    # CLEAN below are all skipped: that clean exists to make a repeatable one-file run and
+    # would delete the very artifacts a resume is being profiled against.
+    #
+    # NOT named $AppArgs: PowerShell variable names are case-insensitive, so it would be
+    # the same variable as the $appArgs the dataset path builds below.
+    [string[]]$OspreyArgs,
+
+    # Profile a specific Osprey.exe (e.g. a snapshot under D:\test\osprey-runs\_bin)
+    # instead of the build tree's. A profiled run locks the exe for its duration, so
+    # pointing at a snapshot keeps the build tree free - the same reason the long-run
+    # guidance gives for snapshotting.
+    [string]$Exe = "",
+
+    # Stop profiling after this long and SAVE the snapshot (dotTrace --timeout, e.g. "3m30s"
+    # or "00:03:30"). Needed whenever the interesting part is a prefix of a much longer run -
+    # profiling a 446-run resume's STARTUP, say, where the rescore that follows runs for
+    # hours. Killing the process instead risks losing the snapshot entirely.
+    [string]$Timeout = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -150,6 +172,7 @@ $mzml = Join-Path $testDir $ds.SingleFile
 $library = Join-Path $testDir $ds.Library
 $tempBlib = Join-Path $testDir "_profile_output.blib"
 $csharpBin = Get-OspreyExe -Framework $TargetFramework
+if ($Exe) { $csharpBin = $Exe }
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
@@ -350,12 +373,17 @@ if ([string]::IsNullOrEmpty($OutputPath)) {
     $OutputPath = Join-Path $aiTmpDir "osprey-profile-$timestamp.dtp"
 }
 
-# Clean score caches (keep library cache for warm Stage 1 comparison)
-$patterns = @("*.scores.parquet", "*.calibration.json", "*.spectra.bin",
-              "*.fdr_scores.bin", "_profile_output*")
-foreach ($p in $patterns) {
-    Get-ChildItem -Path $testDir -Filter $p -ErrorAction SilentlyContinue |
-        Remove-Item -Force
+# Clean score caches (keep library cache for warm Stage 1 comparison).
+# NEVER on the -OspreyArgs path: there the caller is profiling an EXISTING run directory
+# (a resume, a worker phase), and these are exactly the artifacts that make it a resume.
+# Deleting them would not merely change the measurement, it would destroy the bed.
+if (-not $OspreyArgs) {
+    $patterns = @("*.scores.parquet", "*.calibration.json", "*.spectra.bin",
+                  "*.fdr_scores.bin", "_profile_output*")
+    foreach ($p in $patterns) {
+        Get-ChildItem -Path $testDir -Filter $p -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+    }
 }
 
 # Set up environment
@@ -378,7 +406,8 @@ $diagVars = @('OSPREY_DUMP_CAL_MATCH','OSPREY_CAL_MATCH_ONLY','OSPREY_DUMP_LDA_S
 foreach ($v in $diagVars) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
 
 # Build dotTrace command
-$appArgs = @("-i", $mzml, "-l", $library, "-o", $tempBlib, "--resolution", $ds.Resolution) + $extraAppArgs
+$appArgs = if ($OspreyArgs) { $OspreyArgs }
+           else { @("-i", $mzml, "-l", $library, "-o", $tempBlib, "--resolution", $ds.Resolution) + $extraAppArgs }
 
 $dotTraceArgs = @(
     "start",
@@ -387,6 +416,7 @@ $dotTraceArgs = @(
     "--overwrite",
     "--propagate-exit-code"
 )
+if ($Timeout) { $dotTraceArgs += "--timeout=$Timeout" }
 if ($ScopeToMainSearch) {
     # Use API mode: Osprey's ProfilerHooks.StartMeasure /
     # SaveAndStopMeasure brackets the main-search loop, so the .dtp
@@ -403,9 +433,20 @@ $scopeLabel = switch ($Stage) {
 
 Write-Host ""
 Write-Host "Osprey Performance Profile" -ForegroundColor Yellow
-Write-Host "  Dataset: $($ds.Name) ($($ds.Resolution))" -ForegroundColor Gray
-Write-Host "  Profiling type: $ProfilingType" -ForegroundColor Gray
-Write-Host "  Scope: $scopeLabel" -ForegroundColor Gray
+if ($OspreyArgs) {
+    # Do not print the dataset banner on this path: $ds is still resolved (Stellar by
+    # default) and would label a 446-run CHS profile as a Stellar Stages 1-4 run. A
+    # snapshot that misnames what it profiled is worse than one with no banner.
+    Write-Host "  Command: custom (-OspreyArgs, $($OspreyArgs.Count) argument(s))" -ForegroundColor Gray
+    Write-Host "  Exe: $csharpBin" -ForegroundColor Gray
+    Write-Host "  Profiling type: $ProfilingType" -ForegroundColor Gray
+    if ($Timeout) { Write-Host "  Timeout: $Timeout" -ForegroundColor Gray }
+}
+else {
+    Write-Host "  Dataset: $($ds.Name) ($($ds.Resolution))" -ForegroundColor Gray
+    Write-Host "  Profiling type: $ProfilingType" -ForegroundColor Gray
+    Write-Host "  Scope: $scopeLabel" -ForegroundColor Gray
+}
 Write-Host "  Snapshot: $OutputPath" -ForegroundColor Gray
 Write-Host ""
 

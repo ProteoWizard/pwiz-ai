@@ -365,7 +365,7 @@ meaningful. This is the same reasoning as the pinned `pwiz-perfbase` worktree
 `Test-PerfGate.ps1` uses, one level down: worktree for a perf A/B, binary copy for "do not
 block my build".
 
-**Two traps that cost real runs:**
+**Three traps that cost real runs:**
 
 1. **Do not rebuild while a GATE is running, even if the build succeeds.** If the long job
    runs from the snapshot, your build will succeed - but `regression.ps1` launches
@@ -380,6 +380,18 @@ block my build".
    `OSPREY_VERSION_OVERRIDE` to the version that wrote the artifacts (`regression.ps1` pins
    `26.1.1.0` for the same reason; `Measure-Stage6Rescore.ps1` takes `-VersionOverride` and
    auto-detects from the prep log).
+
+3. **`-NoBuild` trusts the Release tree, and the Release tree is not a function of HEAD.** The
+   obvious check - "the binary is newer than my last commit, so it is current" - is not sound.
+   Any experiment that builds a DIFFERENT tree leaves a newer binary behind: reverting the
+   product code to prove a defect pre-exists on master, checking out a baseline commit, building
+   a sibling worktree into the same path. A later `-NoBuild` run then gates the EXPERIMENT's
+   code and reports a confident red for a branch that fixes the very thing. This has happened
+   in both directions - a Debug build followed by `-NoBuild` (which reads Release) cost 25
+   minutes, and a leftover reverted-to-master Release build cost a full Stellar+Astral cycle,
+   reproducing the pre-change failure signature exactly. Rebuild Release, or simply drop
+   `-NoBuild` and let `regression.ps1` build - a second invocation's build is a no-op. Reach for
+   `-NoBuild` only when you built Release yourself in this session and nothing has run since.
 
 Related: `Run-SeaAd.ps1`'s `-SourceRoot` warning covers the sibling hazard - taking the exe
 from a shared worktree someone else is actively developing in means the run measures THEIR
@@ -1745,10 +1757,43 @@ The **Osprey Windows .NET Perf/Regression Tests** config
 `pwiz_tools/Osprey/tctest.bat` as its command-line step, which is exactly:
 
 ```
-pwsh -NoProfile -File regression.ps1 -TeamCity -Dataset All
+pwsh -NoProfile -File regression-parallel.ps1 -TeamCity -Dataset All
 ```
 
-plus a perf leg - about an hour. It is deliberately **manual / overnight**, NOT
+### It runs in TWO LANES now - stop running Stellar-only to save time
+
+**This is the thing to know before planning a session.** The suite used to be
+serial, and `-Dataset All` cost roughly double a Stellar-only run, so sessions
+routinely ran one dataset as a stand-in. **That trade is gone.**
+`regression-parallel.ps1` runs Astral in one lane and the three Stellar variants
+in the other, and the wall time is now the longer lane rather than the sum:
+
+| | wall |
+|---|---:|
+| serial `-Dataset All` (as it was) | 2:04 local / ~1:46 on TCA1 |
+| **parallel `-Dataset All`** | **1:14 local / ~1:06 on TCA1** |
+
+Astral is 51.8 % of the serial work and almost exactly equals the other three
+combined, which is why the split is balanced. **So `-Dataset All` is now the
+default expectation for anything heading to merge**, and running Stellar alone no
+longer buys back a long Astral validation - it only skips it.
+
+Running one dataset is still right for FAST LOCAL ITERATION when you are
+debugging that dataset's red. It is no longer right as a stand-in for the gate.
+
+Why lanes rather than a bigger `-Threads`: measured on a 32-logical box, doubling
+threads bought **3.9 %** while running two processes bought **40 %**. Osprey
+saturates well below 16 threads, so the only way to use a bigger machine is more
+processes. Threads per lane are sized as logical processors / lane count, which is
+16 here and 8 on MacCoss TeamCity Agent 1 (8 cores / 16 logical).
+
+Two shared-path collisions had to be fixed before two gates could coexist, and
+anything new that is shared between lanes needs the same care: `SQLite.Interop.dll`
+was overwritten while the other lane held it open, and the run root was keyed on a
+whole-second timestamp so lanes starting in the same second shared - and deleted -
+one directory. See `regression-parallel.ps1`'s header.
+
+It is deliberately **manual / overnight**, NOT
 triggered on every commit or push, so opening or pushing a PR does **not** start
 it. When a PR is otherwise ready (review findings settled, the
 `Osprey Windows .NET` unit build green), it must run before human review / merge.
@@ -1772,6 +1817,60 @@ at setup (`StripDecoys`), not a third library:
 | `StellarLibDecoy` | the same 3 | `stellar-libdecoy` as-is, `DecoysInLibrary` | supplied by the library; `DecoyGenerator` never runs | yes |
 | `StellarGenDecoyEntrap` | the same 3 | the SAME file + `StripDecoys` | generated, entrapment peptides retained | yes |
 | `Astral` | `astral`, 3 | astral lib | generated, no entrapment | yes |
+
+### What each dataset does NOT run - the complete accounting
+
+Leg parity across datasets is **not** a goal, and the asymmetries are deliberate. They
+are listed together here because a partial accounting is worse than none: it implies the
+one thing it names is the only omission.
+
+Measured leg counts from a green `-Dataset All`: **Stellar 15, StellarLibDecoy 21,
+StellarGenDecoyEntrap 21, Astral 19.**
+
+**Do not read those totals as coverage depth** - they sum two different things, and the
+comparison inverts depending on which you mean:
+
+| | Stellar | Astral |
+|---|---:|---:|
+| workflow-DETECTION legs (modes 2, 3, 4, 5-equality, 8, 9) | **12** | 11 |
+| model-diagnostics REPORTING legs | 0 | 6 |
+| total | 15 | 19 |
+
+**Stellar omits 6 legs** - it carries no `ModelDiagnostics` key, so mode 1b (2 legs),
+mode 5's diagnostics-vs-golden and FDR-sanity legs (2), mode 3's "chain report is
+two-pass" (1) and mode 7 (1) cannot exist there: there is no report to check. That is the
+whole reason its total is the smallest, and it is NOT a statement about how much workflow
+testing it does. On the detection axis Stellar runs MORE than Astral - it keeps both mode 2
+legs that Astral now omits - which is the intended division of labour, not an accident.
+
+**Astral omits the entire library-decoy axis.** It is never searched against a
+library-supplied decoy library, so nothing on Astral exercises `DecoysInLibrary`, and
+`DecoyGenerator` is always the decoy source there. This is the largest asymmetry in the
+suite and predates every other one - it was a deliberate call on library size and run
+time.
+
+**Astral carries no entrapment**, so the entrapment-derived tier-2 bounds do not apply to
+it: it is gated on `MaxAbsTilt` (null-alignment tilt) where the entrapment datasets are
+gated on `MaxPass1Fdp` and the paired-win coin.
+
+**Astral omits mode 2** (`SkipModes = @(2)`), the resume-vs-straight-through leg. It is a
+workflow-DETECTION test - delete the FirstPassFDR stamp, re-run, assert the answer is
+unchanged - and detection plus resume is Stellar's job. Astral's job is proving it
+reproduces the same answer one task at a time, which is mode 3's HPC chain parity, and
+that stays. Costs ~20 min on TCA1, which is what brought the gate back inside its budget.
+
+**Only `StellarGenDecoyEntrap` can catch a decoy-construction regression** - it is the
+sole configuration where `DecoyGenerator` runs AND an entrapment true-FDP oracle exists
+to measure it. Do not cut it to save time.
+
+**Before cutting any leg, check what reads its log.** Mode 6 asserts the library-fragment
+release fired on every leg that HOLDS the library, and it inspects **eight** legs, not the
+four KINDS its header lists - the `--task PerFileRescoring` kind expands to one check per
+file stem (three of them), and `resume.log` (mode 2) and `rehydrate.log` (mode 5) are
+among the rest. Its check list is gated on `SkipModes` for exactly this reason, and it
+reports its leg count on PASS so a shrinking set is visible: a green
+`-Dataset All` shows `PASS (8 leg(s))` on the three Stellar datasets and
+`PASS (7 leg(s))` on Astral, the missing one being the resume leg.
 
 `StellarGenDecoyEntrap` is the only leg that can catch a decoy-construction
 regression: it is the sole configuration where `DecoyGenerator` runs AND an

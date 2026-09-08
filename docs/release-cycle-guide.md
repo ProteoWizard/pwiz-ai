@@ -106,9 +106,9 @@ on the release branch. Always verify before labeling.
 
 ## Cherry-Pick Label Gotchas
 
-The "Cherry pick to release" label triggers an automatic cherry-pick when a PR is merged. Two common issues can cause this to fail:
+The "Cherry pick to release" label triggers an automatic cherry-pick when a PR is merged.
 
-### 1. Deleting the PR branch too early
+### Deleting the PR branch too early
 
 **Problem**: If you delete the source branch immediately after merging, the cherry-pick bot may not have time to create the cherry-pick PR.
 
@@ -120,16 +120,17 @@ git push -u origin Skyline/work/YYYYMMDD_feature_release
 gh pr create --base Skyline/skyline_26_1
 ```
 
-### 2. Merge commits in the PR history
+### Merge commits in the PR history are NOT a problem
 
-**Problem**: If you update your branch with `git merge master` instead of rebasing, the merge commits interfere with the squash-and-merge process, causing the cherry-pick to fail or produce unexpected results.
+This page used to say the opposite - that `git merge master` broke the cherry-pick and that
+you should always rebase instead. **That is stale**: the auto-cherry-picker has since been
+improved and handles merge commits in the branch history.
 
-**Solution**: Always update your branch with rebase:
-```bash
-git pull --rebase origin master
-```
-
-Or use the `/rebase` comment on the PR before squash-and-merge to have GitHub rebase your commits automatically.
+Update a branch that has a PR by merging `origin/master` in and pushing normally. The
+cherry-pick operates on the single squash-merge commit the PR produces on master, which
+never contains the branch's internal merges. Rebasing a branch with a PR is the thing to
+avoid - it forces everyone else holding the branch to reset. See "Updating a Branch from
+master" in [version-control-guide.md](version-control-guide.md#updating-a-branch-from-master).
 
 ## Nightly Test Interpretation
 

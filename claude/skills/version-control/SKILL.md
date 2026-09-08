@@ -131,12 +131,61 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Immediately after creating a PR, before any review or interaction
 - Local commits not yet pushed
 
+The first one force-pushes a branch that has a PR, which the section below otherwise
+forbids. It is allowed as a judgement about risk: seconds after `gh pr create` nobody else
+can have the branch yet, so the force-push strands no one. That window closes fast - past
+"immediately", add a commit instead, which costs nothing under squash-merge.
+
 **When amending is NOT acceptable:**
 - After a PR has been reviewed (even if just by Copilot)
 - After anyone has clicked "Update branch" on GitHub
 - After any merge commits from master
 
 The commits will be squashed on merge anyway, so there is no cost to having multiple commits.
+
+## Updating a pwiz Branch from master — Merge, Never Rebase
+
+**Once a branch has a PR, its history is public. Do not rewrite it.** Update it by
+merging master in:
+
+```bash
+git fetch origin
+git merge origin/master     # NOT git rebase, NOT git pull --rebase
+git push                    # plain push; never --force / --force-with-lease
+```
+
+**Why.** A rebase rewrites every commit on the branch, so the remote can then only be
+updated by force-pushing — and that force-push makes everyone else holding the branch
+reset to recover. Merging leaves the existing commits reachable, so a teammate's
+`git pull` is a fast-forward and several people can work the same branch at once. The
+merge commits cost nothing: the PR is squash-merged, so they never reach master.
+
+**Before the PR exists, a rebase is fine** — nobody else has the branch yet. The rule
+starts at `gh pr create`. After that a rebase is **rare, not forbidden**: a deliberate,
+announced decision, never the routine way to update, and whoever does it owns telling
+anyone holding the branch that they must reset.
+
+**Before any force-push, check whether one is actually needed.** A branch labelled
+"diverged" often is not — if the rebase was followed by a push, the remote already has the
+rewritten history:
+
+```bash
+git fetch origin <branch>
+git merge-base --is-ancestor FETCH_HEAD HEAD && echo "fast-forward, no force needed"
+git log --oneline FETCH_HEAD --not HEAD    # only-on-remote commits a force would destroy
+```
+
+**This is the opposite of the pwiz-ai rule below, and deliberately so.** The two repos
+differ in whether anything cleans up the history later:
+
+| | pwiz feature branch, once it has a PR | pwiz-ai master |
+|---|---|---|
+| update with | `git merge origin/master` | `git pull --rebase` |
+| push with | `git push` | `git push` |
+| force-push | **never** | never |
+| why | others may be working the branch; the squash-merge discards the merge commits | no squash later, so master history must stay linear |
+
+Do not carry the heading below across to a pwiz branch. It is scoped to `ai/`.
 
 ## Committing to pwiz-ai (ai/) — Rebase, Never Merge
 

@@ -1,4 +1,4 @@
-# TODO-20260901_osprey_stage5_reload_materialization.md - Stage 5 collects all survivors into one O(files) buffer
+# TODO-20260901_osprey_stage5_reload_materialization.md - Stage 5 collects all survivors into one O(files) buffer [COMPLETED - merged as c4921f3d6c]
 
 **Found**: 2026-09-01, by the 446-file CHS join that this was supposed to be the baseline for.
 The join ran 5h14m and was killed thrashing. See
@@ -2253,3 +2253,1893 @@ Everything else on Astral stayed green: mode1, mode1c, mode1b x2, mode2 x2, mode
    completion one line below an ERROR. Small, but it is precisely the "green check next to a
    missing thing" shape this session keeps finding. Worth fixing in `AnalysisPipeline` where the
    done line is emitted.
+
+### PROVEN PRE-EXISTING ON MASTER (2026-09-03 16:01)
+
+The developer's test: mode 8 is NEW on this branch (0 occurrences at `c955943146`), so it has
+never run on master and a pre-existing failure is possible. Settled by reverting ONLY the product
+code to `c955943146` while keeping mode 8, and running Stellar - the non-mdiag dataset, so it
+takes the COUNT/VISIBILITY/VALUE branch rather than the mdiag one.
+
+**Stellar mode 8 on pre-change product code: FAIL (35 issues)**
+
+```
+only 2 of 3 reconciled parquet(s) after the resume; the rescore did not finish the cohort
+partial-resume.log: no line containing 'Rescore resume:'
+RefSpectra: 242 key(s) only in golden, 1836 key(s) only in run
+```
+
+With this branch's changes the same leg **PASSES**. That is the before/after on one assertion,
+same dataset, same amputation.
+
+**Conclusion: the partial-resume defect is on MASTER.** A user who kills a run and resumes it gets
+a blib silently missing a run's data. It was invisible because mode 2 resumes from a COMPLETE
+directory and mode 4 re-runs fully cached - no gate had ever presented a partial cohort, on any
+dataset. Sessions clearing Stellar-only would not have caught it either; the assertion did not
+exist to clear.
+
+This also settles the scope question: the branch FIXES a shipped correctness bug rather than
+introducing one. Still open and NOT settled by this: whether the skip-arm clear is a SECOND
+defect on the mdiag/bundle path, which cannot surface until the gate stops short-circuiting there.
+
+### Refinement to the cleanup rule, learned the hard way
+
+"Clean up before" deleted a FAILED run's kept scratch: `-KeepRunDirs 0` prunes orphan
+`regression-*` dirs at startup, and the next run removed the very evidence `-KeepOutput` had
+preserved. The rule needs both halves - **the pre-run prune must also spare failed runs**, or
+step 1 undoes step 3 on the next invocation.
+
+### Session close, 2026-09-03 16:10
+
+Committed on the branch: `804af25e53` (the resume fix set + mode 8) and `ac0fedf165` (the
+no-rescore gate failing loudly instead of silently dropping runs). Uncommitted and unverified:
+`regression.ps1` - `Invoke-OspreyRun -AllowNonZeroExit` plus mode 8's mdiag branch REPORTING the
+capability gap as a FAIL rather than passing on it.
+
+The mdiag branch was briefly written to PASS by asserting a well-worded refusal. The developer
+pushed back - "I wasn't necessarily expecting the changes in this branch to change tests" - and he
+was right: a green gate over a real gap encodes the limitation, which is the same trap mode 6 is
+in with "release engaged". It now fails, and it will go green on its own when the bundle path
+gains a plan source, with no test edit. That property - a leg that turns green when the product is
+fixed rather than when the test is edited - is the test for whether an assertion is about
+behaviour or about the current implementation.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260901_osprey_firstpass_resume.md` before starting work.
+
+## FRAGMENT-DROP STAGE 1: the blocker is resolved, and a SILENT hazard is in its way (2026-09-03 evening)
+
+Read-only investigation while the mode 8 verification gate ran. Three findings, and the middle
+one changes the plan rather than adding to it.
+
+### 1. The "remaining mechanical question" is already answered - no new accessor design needed
+
+The previous entry closes on *"how `PerFileScoringTask` reaches the FirstPassFdrTask INSTANCE from
+the pipeline array (the driver owns it). If nothing exposes tasks by type, that accessor is the
+change - not a new predicate."*
+
+It does expose them. `PipelineContext` holds `_tasksByType` (`PipelineContext.cs:53`, filled at
+`:194-199` from the pipeline array), and the private `DemandByType(Type, bool materialize)`
+(`:236`) already takes the flag that separates "resolve it" from "resolve AND drive Rehydrate".
+**Every one of its two callers passes `materialize: true`** (`:294`, `:415`), so the
+non-materializing half is written and unused.
+
+So Stage 1's accessor is a public wrapper, not new plumbing:
+
+```csharp
+public bool WillRehydrate<T>() where T : OspreyTask
+{
+    return _tasksByType.TryGetValue(typeof(T), out var task) && CanRehydrate(task);
+}
+```
+
+`TryGetValue`, deliberately, NOT `DemandByType`: the latter throws `UnknownTaskException` for a
+task the current pipeline does not contain (`SpectraCachePipeline` has one task), and the right
+answer there is "do not drop". That is the fail-closed direction `ScoringTaskShared`'s own
+admitted-list comment argues for - "a task added later is excluded until someone decides
+otherwise, which is the direction a predicate guarding a memory shape should fail in."
+
+### 2. THE HAZARD: the `!omitFragments` short-circuit that made the all-or-nothing case safe is WRONG per entry
+
+`DecoyGenerator.GenerateAllWithCollisionDetection` gates each target on:
+
+```csharp
+if (target.IsDecoy ||
+    (!omitFragments && (target.Fragments == null || target.Fragments.Count == 0)))
+{
+    results[i] = (null, null, 0);   // EXCLUDED - no decoy, and dropped from validTargets
+    return;
+}
+```
+
+and its caller does `library = validTargets` (`PerFileScoringTask.cs:1055-1056`). The gate is
+correct today for both existing cases: a full load has fragments everywhere, and an
+`OmitFragments` load sets the flag so the gate is skipped wholesale - the comment says exactly
+why, "every real entry had >= 1 fragment before the drop, so the gate could not have excluded
+any."
+
+**Per-entry retention breaks the assumption that makes that safe.** The read-time drop runs with
+`omitFragments == false` (it is not a StopAfterStage5 load), so the gate is LIVE, and every one of
+the ~4.9 M non-retained entries now presents `Fragments.Count == 0`. They are excluded from decoy
+generation AND removed from the target library.
+
+This is the failure shape the entry above warned about in the abstract - "the symptom is missing
+peaks in the .blib rather than an error, a wrong answer that looks like a right one" - reached by
+a route it did not name. It does not throw. `[COUNT] Library targets loaded` is emitted BEFORE the
+gate, so it still reads 6,175,389; the excluded count lands only in `nExcluded`.
+
+**So Stage 1 is two changes, not one**: wire `RetainFragmentsFor`, AND make the decoy gate ask
+"were this entry's fragments dropped deliberately?" rather than "is this entry empty?". The bool
+cannot answer that - the retained set has to reach the gate, or the load has to mark the entries
+it emptied on purpose.
+
+Second, cosmetic, same root: the `<3 fragments` diagnostic at `PerFileScoringTask.cs:1078` is
+skipped under `omitFragments` for the identical reason ("every count would read 0 and the line
+would misreport the whole library as sub-3-fragment"). Per-entry, it would report ~4.9 M
+zero-fragment entries as a library-quality problem. Log noise, not a wrong answer, but it is the
+same missed generalization and should move in the same change.
+
+### 3. The predicate is necessary but NOT sufficient - the CALL SITE is half the gate
+
+`LoadLibraryAndDecoys` has three callers, and only two may drop:
+
+| site | path | may drop? |
+|---|---|---|
+| `PerFileScoringTask.cs:204` | `Run` - Stage 1-4 compute from spectra | **NO** |
+| `:515` | `Rehydrate`, `--input-scores` worker mode | yes |
+| `:637` | `RehydrateFromOwnOutputs` | yes |
+
+`ctx.WillRehydrate<FirstPassFdrTask>()` cannot see the difference, and the combination is
+reachable: FirstPassFDR's outputs are the per-file `.1st-pass.fdr_scores.bin` + reconciliation
+files, so deleting a `.scores.parquet` leaves the 1st-pass sidecar beside it valid. FirstPassFDR
+would rehydrate while `Run` re-scores that file from spectra - which scores against EVERY library
+entry, not the retained ones. The drop has to be refused at the `Run` call site as a separate
+condition, not inferred from the predicate.
+
+### 4. `RetainFragmentsFor` is honoured on the CACHE-READ path ONLY
+
+`LibraryCache.LoadCache` applies the per-entry decision (`LibraryCache.cs:330-331`). The
+source-parse path in `LibraryLoader` applies only `OmitFragments`, in the tail block at
+`LibraryLoader.cs:205`. With no `.libcache` present, `RetainFragmentsFor` is silently inert and
+the run retains everything.
+
+That fails SAFE - the release pass still runs and the answer is right - but it makes the win
+contingent on a cache hit and leaves the two load paths behaviourally different. Worth closing in
+the same change: the tail block already has the entries in hand and every fragment-count
+dependency satisfied.
+
+### What did NOT turn out to be a hazard
+
+Dedup's fragment-count tie-break (`LibraryDeduplicator.cs:121`, `b.Fragments.Count`) and the
+min-fragment / peak-less guard both run on the SOURCE-PARSE path only, BEFORE the cache save. A
+cache read returns entries already deduplicated, so per-entry skipping there cannot perturb which
+entry became a group's representative. `nFrags` is also read unconditionally before the
+keep/skip branch (`LibraryCache.cs:299`), so the peak-less fail-fast still fires on a skipped
+entry.
+
+### Stage 2 has a clean home
+
+`LibraryCache` carries `MAGIC = "OSPRLBR\0"` and a `VERSION` checked at `:228-229`, and an
+unsupported version already returns null -> "rebuild from source". So the per-entry
+fragment-block byte length + version bump needs no new invalidation mechanism, which is what
+makes the "rebuild deliberately once" plan cheap.
+
+### 5. The VALIDITY KEY is keyed on the release MECHANISM, so Stage 1 must not switch the release off
+
+`LibraryFragmentRelease.ValidityKeySuffix(ctx)` is a term in THREE tasks' validity keys -
+`FirstPassFdrTask.cs:273`, `PerFileRescoreTask.cs:267`, `SecondPassFdrTask.cs:241`. It is empty
+when `RunsOnThisLeg(ctx)` is true and `;libfrag=0` when the leg COULD have released and did not
+(`LibraryFragmentRelease.cs:82-87`).
+
+The release itself is invoked from `FirstPassFdrTask.cs:2519` and `SecondPassFdrTask.cs:509` -
+not from the rescore, which only carries the suffix.
+
+So if Stage 1 makes the read-time drop replace the release and turns `RunsOnThisLeg` false, every
+one of those three keys gains `;libfrag=0` and **every existing output directory is invalidated** -
+a resume against one re-runs the pipeline it was supposed to adopt. That is the opposite of what
+this branch exists to do.
+
+The cheap correct answer: leave the release call in place. With the fragments already dropped at
+read time it releases nothing, `RunsOnThisLeg` stays true, the suffix stays empty, and no
+directory is invalidated. The suffix's stated purpose survives too - it records "this run's
+library is not carrying non-retained fragments", and under the drop that is MORE true, not less.
+
+This is the same "assert the PROPERTY, not the MECHANISM" problem already noted for mode 6, on a
+higher-stakes surface: mode 6 going vacuous costs a blind test, but a suffix flip silently
+invalidates or silently adopts. Both should move together, and the release's own count going to
+zero is exactly what makes mode 6's non-zero-count assertion fail - so the two are one change.
+
+## MODE 8 VERIFICATION: Stellar green, and TWO process traps that invalidated the first attempt
+
+Session dir: `ai/.tmp/sessions/20260903-fragload/`.
+
+### The change verified
+
+`regression.ps1`: `Invoke-OspreyRun -AllowNonZeroExit` plus mode 8's if/else split, with the
+`else` arm re-indented into the block (the previous session left it flush-left, so the committed
+text was not the text anyone would read). `fix-crlf.ps1` STRIPS THE UTF-8 BOM from files it
+converts - `regression.ps1` has one, and it came back BOM-less; restored by hand, and worth a
+separate look since that script runs before commits across the repo.
+
+### RESULT - Stellar, all legs
+
+```
+  Stellar mode1 (vs golden): PASS
+  Stellar mode1c (2nd-pass protein q is pass-2): PASS
+  Stellar mode2 (resume cache hits): PASS
+  Stellar mode2 (resume==straight): PASS
+  Stellar mode6 (library-fragment release engaged): PASS
+  Stellar mode8 (partial rescore resume): PASS (1 of 3 run(s) re-scored)
+```
+
+`ai/.tmp/sessions/20260903-fragload/verify-stellar.log`. The restructured else arm executes and
+the branch fixes the partial-resume defect on the non-mdiag path.
+
+### TRAP 1: the Release tree is not a function of HEAD, and a timestamp does not say it is
+
+The first attempt used `-NoBuild` on the reasoning that the Release binaries (15:54) postdated the
+last commit (`ac0fedf165`, 15:12), so they had to be current. **They were the deliberately-REVERTED
+`c955943146` build** from the previous session's "is this defect on master?" experiment -
+`sessions/20260903-stages567/build-prechange.log`, same 15:54 stamp.
+
+So the gate ran the pre-change product code and Stellar mode 8 returned the pre-change signature
+exactly - 35 issues, `only 2 of 3 reconciled parquet(s)`, `no line containing 'Rescore resume:'`,
+`242 RefSpectra key(s) only in golden`. A confident red for a branch that fixes it. The logs are
+kept as `stale-binary-verify-*.log` rather than deleted, because they are the before half of the
+comparison.
+
+The general form, now added to `ai/docs/osprey-development-guide.md` as a third entry in its
+"traps that cost real runs" list: any experiment that builds a DIFFERENT tree into the same path -
+a revert, a baseline checkout, a sibling worktree - leaves a binary NEWER than HEAD without being
+HEAD. Drop `-NoBuild` unless you built Release yourself this session and nothing has run since;
+the rebuild is 9.4 s.
+
+### TRAP 2: `regression.ps1` cannot be CHAINED in one pwsh process, only serialized across processes
+
+Both attempts' Astral leg died in seconds at `Regression\BlibGolden.ps1:213`
+`Copy-Item $nativeSrc $nativeDst -Force`, on
+`Release\net8.0\SQLite.Interop.dll ... being used by another process`.
+
+Nothing was running concurrently. The FIRST dataset's blib comparisons load System.Data.SQLite
+into the hosting pwsh process, and a native DLL stays loaded for that process's lifetime - so the
+holder is the launcher script itself. A wait-for-the-handle-to-drop loop (which the second attempt
+added) waits on itself and times out.
+
+`sessions/20260903-stages567/gate-partialresume.ps1` chose chaining deliberately, with the comment
+"Chained, not launched separately: regression.ps1 cannot run concurrently with itself (shared
+Release dir + SQLite lock)". The premise is right and the conclusion is wrong: serial is necessary
+but must be serial ACROSS PROCESSES. Its `gate-partialresume-astral.log` is 39 bytes - the same
+death, unnoticed at the time.
+
+**How to run two datasets:** one `pwsh -NoProfile -File .../regression.ps1 -Dataset <one>` per
+dataset, sequentially - or `-Dataset All`, which is a single process that never re-copies. The
+tell for this failure is a dataset log only a few dozen bytes long.
+
+### Cost of the prune, stated rather than discovered later
+
+`-KeepRunDirs 2` on the Astral leg pruned `regression-20260903_155437`, the kept scratch behind the
+"pre-existing on master" proof. Its logs were already copied into
+`sessions/20260903-stages567/stellar-prechange.log` and the result is recorded above, so nothing
+unrecoverable went with it - but it is the same startup-prune-deletes-failed-evidence behaviour the
+previous session flagged, firing again on a dir that was being kept on purpose.
+
+### RESULT - Astral, all legs
+
+```
+  Astral mode1 (vs golden): PASS
+  Astral mode1c (2nd-pass protein q is pass-2): PASS
+  Astral mode1b (diagnostics vs golden): PASS
+  Astral mode1b (FDR sanity bounds): PASS
+  Astral mode2 (resume cache hits): PASS
+  Astral mode2 (resume==straight): PASS
+  Astral mode6 (library-fragment release engaged): PASS
+  Astral mode7 (diagnostics regeneration: report only, vs golden): PASS
+  Astral mode8 (partial rescore resume): FAIL (1 issues)
+```
+
+`ai/.tmp/sessions/20260903-fragload/verify-astral.log`. Exactly ONE issue - the canned
+capability-gap line. The log-marker guard produced no issue of its own, so the error naming how
+many runs cannot be finished and why WAS present. And the run reached its summary instead of
+throwing, which is the whole point of `-AllowNonZeroExit`.
+
+Both arms of the restructure are therefore executed and correct: the else arm on Stellar, the
+mdiag arm on Astral. Committed as `447fb59bd8`.
+
+**The Astral gate is now red until the mdiag work lands**, by design, and `-Dataset All` will be
+red with it. That is the developer's call from the previous session - a green gate over a real gap
+encodes the limitation - and the leg turns green when the bundle path gains a plan source, with no
+test edit. Anyone reading a red Astral before then should check that mode 8 is the ONLY failing
+leg and that its issue count is 1.
+
+## FRAGMENT DROP: shipped as a UNIFORM POST-PAIRING drop, and the 1m54s was never the freeing
+
+Supersedes the "Fragment-drop-during-read" plan above. The IO half that plan landed
+(`LibraryCache`'s per-entry `retainFragmentsFor`, `LibraryLoadOptions.RetainFragmentsFor`) is
+still inert and is NOT used by what shipped - see "why the read-time skip cannot work" below.
+
+### The design is the developer's, and it is better than the one this TODO proposed
+
+The plan here was for the PRODUCER to infer that the on-disk retained set was this run's, by
+asking `CanRehydrate` about the FirstPassFdrTask instance. The developer's instead has the
+CONSUMER declare it:
+
+> *"the context having an optional set of entries for which spectra are needed. When that set is
+> not present on the context, then the library loads as normal, but PerFileRescoring would
+> provide the set on the context before asking for the rehydrated library."*
+
+That removes the inference. The rescore ALREADY reads `retained_base_ids.bin` to decide what to
+compact, so declaring the same set trusts nothing new: if that summary were the wrong run's, the
+compaction is already wrong and the fragments are the lesser problem. The compute path is safe
+for free - `Run` never declares, so it always gets a whole library.
+
+Landed:
+
+* `PipelineContext.DeclareFragmentsNeededFor` / `FragmentsNeededFor` /
+  `FragmentNeedStillDeclarable`.
+* `ScoringTaskShared.TryDeclareFragmentNeed(ctx)` - ONE function for both callers, per the
+  developer: *"Both should use the same function to obtain a library in the presence of an
+  in-stratum subset that has been written to disk."* Called first thing in
+  `PerFileRescoreTask.Run`/`.Rehydrate` and `SecondPassFdrTask.Run`.
+* The drop itself in `PerFileScoringTask.LoadLibraryAndDecoys`, AFTER decoy pairing/generation,
+  reusing `LibraryFragmentRelease.ReleaseFragments`.
+* `LibraryFragmentRelease.AlreadyLeanAtLoad(ctx)` + `LEAN_AT_LOAD_MESSAGE`; both post-Stage-5
+  release sites skip when it holds.
+
+### WHY THE READ-TIME SKIP CANNOT WORK, in either decoy mode
+
+**libdecoy.** `DecoyPairingManifest` pairs by bucketing and matching SORTED SEQUENCE LISTS
+(`:395-419`) and then renumbers the decoy - `library[decoyIdx].Id = targetId | DECOY_ID_BIT`.
+Targets are never renumbered. So a supplied decoy's post-pairing base_id is knowable only from
+the whole identity table, never from one streamed entry.
+
+Worse than "some decoys wrong": the `.libcache` is written inside `LibraryLoader.Load`, BEFORE
+`MarkSuppliedDecoys` and pairing run in `LoadLibraryAndDecoys`, so every cached entry carries a
+plain post-dedup id with the decoy bit clear. A retained base_id is always a TARGET's id, and ids
+are unique - therefore **no supplied decoy's cache id can ever be in the retained set, and a
+read-time filter skips ALL of them**. On the 446-run CHS resume that meant materialising ~625 K
+entries where the rescore needed ~1.25 M.
+
+**gendecoy.** `BuildDecoyFromSequence` -> `RecalculateFragmentsStatic(target, ...)` builds each
+decoy's peaks FROM ITS TARGET'S peaks, so every target's spectrum is needed whatever the retained
+set says. (The developer: *"I had forgotten about the decoy generator filtering on spectral
+similarity library-wide."*)
+
+So the library is always READ whole and dropped ONCE, after pairing. That also deleted the
+`DecoyGenerator` exclusion-gate change this TODO's earlier entry called for: with the drop after
+generation, every entry still has its peaks when the gate runs.
+
+### THE TRIPWIRE IS WHY THIS WAS A CRASH AND NOT A WRONG ANSWER
+
+The developer chose to install the RELEASED tripwire at drop time rather than an empty array.
+That decision is what surfaced the libdecoy defect: the run died at
+`ScoringPipeline.RunCoelutionScoring` on file 146 of the 446-run resume. With `Array.Empty` the
+scorers' `Fragments == null || Fragments.Count == 0` guard would have absorbed it as "no
+spectrum" and written degenerate zeros into the .blib - a silent wrong answer in the artifact
+used to judge correctness.
+
+Also note which gate would have caught it: `StellarLibDecoy`. The generated-decoy `Stellar` leg
+was fully green THROUGH the defect, because ids are final at cache time there. That is the
+`-Dataset All` step this branch already owed.
+
+### MEASURED AT 446 FILES - and the premise this TODO recorded was wrong
+
+`PerFileRescoring:starting` -> the first missing file entering per-file mode:
+
+| | library load | release block | total |
+|---|---|---|---|
+| baseline | ~39 s | ~1 m 54 s | **2 m 53 s** |
+| read-time skip only (incorrect, see above) | 11 s | 1 m 53 s | **2 m 36 s** |
+| + release skipped (incorrect skip set) | 10 s | skipped | **1 m 36 s** |
+| uniform post-pairing drop (shipped) | ~39 s | skipped | **~2 m 08 s est.** |
+
+**The ~1m54s was never the cost of freeing fragment arrays.** With the arrays never built it
+still cost 1m53s. Differencing the second and third rows isolates the release block at **45 s**;
+the remaining **68 s** is upstream of it and neither change touches it.
+
+The release also reported `Released library fragments for 4924513 of 6175389 entries` while
+freeing zero bytes - `LibraryEntry` distinguishes the released SENTINEL from everything else and
+`Array.Empty` is deliberately "a readable empty spectrum rather than a released one". That is the
+fabricated-saving shape mode 6 exists to catch, emitted by the feature itself and hidden inside
+mode 6's green. `ReleaseFragments` now counts only entries that actually held a spectrum.
+
+### THE REMAINING 68 s, diagnosed
+
+`FirstPassFdrTask.cs:930` `RescoreHydration.ReadGapFillAndCalibrations(perFileParquetPaths.Values,
+...)` - a loop over ALL 446 runs' `reconciliation.json` envelopes (10.7 GB of JSON at this
+cohort), sitting exactly between the two log lines that bracket the gap.
+
+**The per-run rescore path then does not use the result.** `PerFileRescoreTask.cs:1686` takes
+`run.GapFill` and `:1333` takes `run?.RefinedCalibration` - each run's OWN envelope - and only
+falls back to the all-runs dictionaries (`:1697`, `:1333`) on the other path. The all-runs form is
+needed solely by Stage 7's pool rebuild (`Rehydrate -> OverlayReconciledIntoFiles`), which runs
+far later, and never at all on a `--task PerFileRescoring` worker.
+
+The comment at `:917-927` already prescribes "it should become LAZY". **That is necessary but not
+sufficient**: `PerFileRescoreTask.Run` dereferences all four byproducts at `:513-516` before
+`ExecuteRescore`, so a lazy byproduct would build there instead - the 68 s moves ten lines and
+stays ahead of the first file. The fix has to pass the lazy HOLDERS into `RescorePassInputs` so
+`.Value` is touched only on the fallback branches the per-run path never takes.
+
+This is now the largest term in the rescore startup - bigger than everything the fragment work
+removed - and it is the next thing to do.
+
+### Mode 6 asserts the property, in its new form
+
+A lean leg emits a release line at LOAD (scope `needed by this process`) and the skip message
+downstream. Mode 6 asserts all three: the declaration, a load-time drop that freed a non-zero
+count, and that NO post-Stage-5 release ran afterwards - the last being the one that matters,
+since paying for both walks is exactly what this change removes.
+
+## O(files) IN THE COMMAND LINE ITSELF - a hard wall at ~512 files (developer, 2026-09-03)
+
+The developer, on seeing the 464-argument invocation the CHS runner composes:
+
+> *"Seems like we probably want to implement something like Skyline's `--batch-commands
+> <path/to/file>` or `--input-list <path/to/file>` so that at least the input file list can
+> stop consuming command-line characters (another limited resource) with O(files) space."*
+
+Measured on the 446-run CHS command line
+(`ai/.tmp/sessions/20260903-fragload/profile-chs-cmdline.txt`):
+
+| | |
+|---|---|
+| composed command line | **28,621 chars** |
+| Windows `CreateProcess` limit | 32,767 chars |
+| headroom | 4,146 chars |
+| per input path | ~62 chars (`D:\test\osprey-runs\chs-seer\raw\EXP25033_2025us0059aX1_A.raw`) |
+| **files until the wall** | **~66 more, so ~512 total** |
+
+So the cohort this branch is tuning for memory is already within 13% of a limit in a completely
+different resource, and the raw path here is SHORT - 33 characters of directory. A deployment
+with deeper paths hits it sooner, and the HPC fan-out multiplies the exposure because each
+worker is handed its own `--input-scores` list the same way.
+
+The failure mode is the bad kind: `CreateProcess` fails or the argument list is truncated, and
+the error surfaces far from "you passed too many files".
+
+**Fix**: an `--input-list <file>` (and the same for `--input-scores`), one path per line, the way
+Skyline's `--batch-commands` works. Bounded command line, O(1) in file count. Independent of
+everything else in this TODO and cheap.
+
+### Night session 2026-09-03/04: a 446-file run is in flight toward Stage 7
+
+Launched 21:59 PDT, detached, from a snapshot of HEAD
+(`D:\test\osprey-runs\_bin\246-head\Osprey.exe`) so the build tree stays free. At 22:06 it was
+on file 154/446 at ~50 s each, 19-22 GB working set. Projected to finish PerFileRescoring
+~02:10 and then enter Stage 7, where it is EXPECTED to exhaust the 64 GB box and need killing -
+that is the goal, not a failure, because it hands the next session a run that reached Stage 7.
+
+The fragment-drop work built earlier tonight was REVERTED (stashed, `stash@{0}`) after dotTrace
+showed the library load is ~10 s and the release 0.5 s - the whole idea was worth about half a
+second, and the ~39 s / ~1m54s figures recorded earlier in this TODO do not reproduce.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260904_osprey_stage7_lean_row.md` before
+starting work.
+
+## A CRASH LEAVES A HALF-DONE FILE THAT THE RESUME SKIPS (2026-09-04, found by a real crash)
+
+The overnight 446-file run died at file 391 with a native `AccessViolationException` in
+`ParquetScoreCache.LoadFdrStubsFromParquet` (via `Pass2FdrSidecar.LoadReconciledFeaturesByScoreIndex`
+<- `Pass2PerFileWorker.CompeteAndStamp`), exit `0xC0000005`, after 4h01m at 17-19 GB. The
+relaunch got past it, so the fault is TRANSIENT, not deterministic on that file.
+
+The relaunch then **skipped the file that died**:
+
+```
+Rescore resume: 390 of 446 run(s) already carry a current 2nd-pass sidecar; re-scoring the remaining 56.
+[file] 391/446 EXP25033_2025us0063bX45_A: skipping (outputs valid)
+```
+
+That file has a valid `.scores-reconciled.parquet` + `PerFileRescoring` stamp and NO
+`.2nd-pass.fdr_scores.bin` at all. **Two notions of done disagree and the wrong one wins**: the
+cohort count reads 2nd-pass sidecars and says the file is outstanding; the per-file skip reads
+the reconciled parquet's stamp and says it is complete. Four log lines apart, same run.
+
+Mode 8 cannot present this. `Invoke-PartialRescoreInvalidation` removes BOTH artifacts, so the
+two notions agree; only a crash between the parquet write and the sidecar write splits them.
+That window is exactly where the process died - the same shape as the original partial-resume
+defect, one level down.
+
+**Fix**: make the per-file skip require what the count requires. Preferably by not stamping the
+reconciled parquet until the 2nd-pass sidecar is written, so a file's outputs become valid
+together or not at all. **Gate leg**: amputate ONLY the 2nd-pass sidecar, leave the parquet and
+its stamp, resume, assert the cohort comes back whole - one line different from mode 8's
+existing invalidation.
+
+Related, and independent: a 4-hour run should not be lost to one transient native fault when
+every file is individually resumable. A supervisor that relaunches on a non-zero exit would have
+cost nothing and saved the night.
+
+## STAGE 7 AT 446 FILES: 78.3 GB COMMITTED, ~240 MB/FILE (measured 2026-09-04 03:00-03:29)
+
+The overnight run finished PerFileRescoring 446/446 at 03:00:04 and entered SecondPassFDR.
+Stage 7's pool build reports a PER-FILE progress counter and its memory grows with the file
+index, not with survivor count:
+
+| files done | committed |
+|---|---|
+| 361/446 | 57.9 GB |
+| 383/446 | 61.3 GB |
+| 398/446 | 63.6 GB |
+| 446/446 (100%) | **78.3 GB** |
+
+~240 MB/file over the last 85 files, and STEEPENING (155 MB/file early, ~310 MB/file late).
+Naive extrapolation puts 1000 files near 210 GB.
+
+**It never threw OutOfMemory.** Windows evicted it instead: working set fell to 0.29 GB with
+0.45 GB system-available at 03:15, and for the NINE MINUTES after the pool build hit 100% the
+log did not advance one line while the resident set oscillated between 0.01 and 0.68 GB of a
+~69 GB commitment. Killed at 03:28:48; the box returned to 49.2 GB free.
+
+That is the failure mode the lean row has to design against - **a live process that stops making
+progress**, not an exception. Nothing watching for a crash would see it, which is exactly how the
+earlier 5h14m "killed thrashing" run went unrecognised.
+
+Before-curve for the comparison: `ai/.tmp/sessions/20260903-fragload/stage7-memory-trace.tsv`.
+Acceptance test for the lean row: this same 446-file bed completing without the resident set
+collapsing.
+
+NOTE: this run silently skipped one file (see the crash entry above), so its output is valid for
+the MEMORY question only, not for correctness.
+
+## THE ENVELOPE READ IS DEFERRED: 111 s -> 3 s at 446 files (2026-09-04, `b9dfd23df0`)
+
+The developer, reading the night log, pointed at the one remaining large gap in an otherwise
+flat rescore:
+
+```
+02:02:07  Per-run rescore: FirstPassFDR publishes the survivor loader only; ... 446 run(s).
+02:03:58  Released library fragments for 4924513 of 6175389 entries (625620 base_ids retained)
+```
+
+1m51s, and it is `RescoreHydration.ReadGapFillAndCalibrations` over 446 `reconciliation.json`
+files. Same interval after the fix: **3 s**.
+
+Three eager consumers had to go, not just the byproducts' eagerness:
+
+1. `PerFileRescoreTask.Run` dereferenced all four byproducts at `:513-516` before
+   `ExecuteRescore` decided anything - it now passes the HOLDERS into `RescorePassInputs`, and
+   `.Value` is touched only on the fallback branches (`:1333`, `:1697`) that the per-run path
+   never takes.
+2. `RescoredPoolPlan` took the dictionary; it now carries the holder and dereferences inside
+   Stage 7's pool build, which is the reader that genuinely needs the all-runs form.
+3. **The post-Stage-5 release unioned gap-fill into its retained set**, which would have
+   deferred the read only to demand it straight back one line later. Its own comment already
+   said that union was redundant on this path; the fix makes the stated reasoning the actual
+   behaviour. (Measured cost of the union itself: 0.2 s - it was never the expense, the read
+   behind it was.)
+
+`PerFileGapFillForRescore` and `RefinedCalibrations` share ONE guarded read, because a single
+pass fills both maps and two independent factories would read all 446 envelopes twice.
+
+**Gate**: full `-Dataset Stellar` GREEN, all 14 legs - including mode 3's HPC chain and per-run
+hydrate (the `--task PerFileRescoring` path this most affects), mode 5's own-sidecar rehydrate,
+mode 6, and mode 8.
+
+### The bed is now a 60-second reproducer for the resume-skip defect
+
+The verification run, on the now-complete 446-file bed:
+
+```
+Rescore resume: 445 of 446 run(s) already carry a current 2nd-pass sidecar; re-scoring the remaining 1.
+[file] 391/446 EXP25033_2025us0063bX45_A: skipping (outputs valid)
+[TASK] SecondPassFDR:starting          <- six seconds later
+```
+
+**448 skip lines, ZERO `Re-scoring file` lines.** It announced one file outstanding and rescored
+none. So the defect recorded above no longer needs a crash to reproduce - it is deterministic,
+on demand, in about a minute, against this bed. Use it to drive the fix and to prove the fix.
+
+## KILL-AT-ANY-TIME IS A STATED GUARANTEE NOW, AND MODE 9 ENFORCES IT (2026-09-04)
+
+The developer, on the crash-shaped resume defect:
+
+> *"it should be perfectly safe and valid to just kill Osprey working on a computer in order to
+> get some other work done. These 500 file runs could take a day or longer and the computer
+> owner may not have that kind of time to allow it to work uninterrupted and they shouldn't need
+> to worry a lot about when is safe to stop the pipeline without losing hours of work."*
+
+That is a stronger requirement than "survive a crash", and doc 00 already half-stated it: **P7,
+"Persist at phase end, not task end - crash exposure is one in-flight file."** The architecture
+was right and the code violated it: exposure WAS one file, but that file was silently dropped
+rather than redone. So this was a principle the code broke, not a missing principle.
+
+Added to P7 (now on this branch as `8c38a75649`, after the docs branch merged as #4635):
+
+* killing the process is a SUPPORTED OPERATION, not an accident to survive - "do not interrupt
+  between X and Y" is a constraint the pipeline may not impose, because nobody could honour it,
+  and a user who believes stopping is risky will not start the analysis at all;
+* the corollary that makes P7 checkable - **a file's outputs become valid TOGETHER**, so a
+  resume can never read one product as done and another as outstanding. At 446 files a kill
+  lands in that window about once per run.
+
+**Mode 9** (`8f7f908e3c`) is the enforcement: it cuts ONLY the 2nd-pass sidecar, leaving the
+reconciled parquet stamped - the state a kill actually leaves - and asserts the file is
+re-scored. Proven to have teeth: **FAIL with the per-file skip's 2nd-pass requirement removed,
+PASS with it**, same dataset, one condition apart. Mode 8 cannot do this: it amputates both
+products, so its two checks agree and the defect is invisible to it.
+
+### Still owed, and doc 00 names one of them
+
+Doc 00 already records that Stage 7 has flags where "a kill during Stage 7 destroys the ..."
+output - so the guarantee is known to be violated in the stage the lean-row work is about to
+rewrite. Kill-safety should be re-checked for every multi-product task, not just
+PerFileRescoring; only PerFileRescoring has been proven.
+
+### Branch state
+
+Rebased onto master (which now carries doc 00 via #4635): **0 behind, 23 ahead**, build clean
+602 tests, and full `-Dataset Stellar` GREEN on all 15 legs including mode 9. NOT pushed - the
+rebase diverged the branch from its pushed form, so PR #4633 needs a force-push when the
+developer wants it.
+
+NOTE for the transfer: `pwiz-work1` and `pwiz-work2` are separate CLONES, not worktrees, so
+`git cherry-pick` across them fails with "bad revision". Use
+`git -C <src> format-patch -1 <sha> --stdout | git am --keep-cr` - and `--keep-cr` matters,
+because pwiz stores CRLF.
+
+## ACCEPTANCE SHAPE FOR THE MDIAG WORK: default route green, bad route named (developer, 2026-09-04)
+
+> *"Ideally, we would push a route that can pass all tests and implement env vars that specify
+> the undesirable routes we may have taken like the unbounded memory keys."*
+
+The codebase already has this pattern and `regression.ps1` already enforces it:
+`OSPREY_ALLOW_UNFIXED_RESIDENT` names a known-bad memory route, and the gate asserts that NO
+leg sets it - "the gate sets it nowhere" has to mean the variable is UNSET when Osprey reads
+it. Default route passes; the undesirable route is opt-in, named, and visible.
+
+**Where that does and does not apply to the standing Astral red.** Mode 8 fails under
+`--model-diagnostics` because a partial resume there has NO PLAN SOURCE - not because the code
+chooses a worse route that a flag could disable. An env var cannot manufacture the capability,
+so the red cannot be retired by a token; it is retired by the mdiag work.
+
+**But it is the right acceptance criterion for that work.** When mdiag gains a plan source:
+
+1. the DEFAULT mdiag route passes mode 8 - no token required for the good path; and
+2. if a degraded all-runs-hydrate route survives at all, it requires a NAMED token, and the
+   gate asserts that token is unset, exactly as it does for the resident-pool key.
+
+Until then the honest state is one red leg on the three mdiag datasets, which is what the
+branch carries. It goes green with no test edit when the capability lands - the property that
+says the assertion is about behaviour rather than about today's implementation.
+
+## ORDER SET 2026-09-04: mdiag work FIRST, then the Stage 7 lean row
+
+> *"that seems to prioritize the mdiag work for the next session ahead of the Stage 7 lean-row
+> work. We still need get back to where all of our changes pass all of our testing before
+> tackling the Stage 7 lean-row work."*
+
+Two independent reasons, either sufficient:
+
+1. **Testing integrity.** Mode 8's and mode 9's mdiag arms are DISABLED behind `TODO(brendanx)`.
+   The team rule is that what we push is all green, a not-yet-passing test is commented out with
+   a `TODO(brendanx)` so the work stays visible, and **no PR merges to master with a failing
+   test**. Returning to all-tests-enabled-and-passing is a precondition for stacking the lean
+   row on this branch, not a follow-up to it.
+2. **mdiag is a MEMORY prerequisite, not just a correctness one.** It does not merely lack a
+   resume plan source - it keeps the ALL-RUNS HYDRATE. From `ScoringTaskShared`: "--model-
+   diagnostics keeps the OLD path ... Excluding it trades memory for correctness on an OPT-IN
+   diagnostic mode." So mdiag pins the O(files) resident shape the 500-run-on-64 GB target
+   forbids. Landing the lean row while that holds leaves the diagnostics unusable on exactly the
+   cohort the lean row exists to enable - and the diagnostics are how a 446-run result is judged.
+
+Done right, deleting the two `TODO(brendanx)` branches in `regression.ps1` is the entire test
+change - which is the check that the capability landed rather than the assertion being softened.
+
+### THE MDIAG PASSING CRITERION, raised 2026-09-04 (developer)
+
+> *"a more challenging passing criterion for the mdiag work, which is to be able to run
+> `--task ModelDiagnostics` and have it successfully generate diagnostic HTML for 1st pass
+> results we have been able to complete, and warn that processing is not yet completed and 2nd
+> pass diagnostics cannot be generated."*
+
+So the bar is not "mode 8 goes green". It is a user-facing capability:
+
+1. `--task ModelDiagnostics` against a PARTIALLY completed analysis produces real HTML for the
+   1st-pass results that exist; and
+2. it says plainly that processing is incomplete and 2nd-pass diagnostics cannot be generated.
+
+**Why this is the right criterion and not a harder version of the same one.** It is the
+diagnostic counterpart of P7's kill-at-any-time guarantee: an owner who stopped a day-long run
+to get their machine back should still be able to ask what the run learned so far. It also
+forces the implementation the memory fix needs - a report foldable from each run's ON-DISK
+artifacts, per run, rather than from an in-memory all-runs pre-compaction fold. A report that
+can be built from a partial cohort is necessarily one that never required the whole cohort
+resident. The two goals are the same work, which is why they should not be sequenced apart.
+
+**The warning must be IN THE HTML, not only on the console.** A report whose 2nd-pass sections
+are merely absent is the "silently invalid output a user might trust" shape: opened a week
+later with no console scrollback, it is indistinguishable from a complete report of a run with
+nothing in pass 2. State it in the artifact - which pass is represented, how many runs of how
+many contributed, and that pass 2 is absent because the analysis has not finished.
+
+**Scope warning from the developer**: *"Possible even more than a single session work just to
+get mdiag working as well and still memory bounded as we have envisioned."* Treat one session
+as unlikely to finish it. The session that starts it should not try to also reach the Stage 7
+lean row.
+
+## Progress log - 2026-09-04 (night session + morning)
+
+### Landed and gated on this branch
+
+| commit | what |
+|---|---|
+| `--input-list` | the input set stops consuming the command line at O(files) |
+| lazy envelope read | the all-runs `reconciliation.json` read the per-run rescore never used: **111 s -> 3 s** at 446 runs |
+| both-products-done | a file is complete only when its parquet AND its 2nd-pass sidecar are; ends the silent drop |
+| mode 9 | crash-shaped half-done resume, proven to FAIL without the fix and PASS with it |
+| mode 8/9 mdiag arms | DISABLED behind `TODO(brendanx)` so what we push is all green |
+| doc 00 P7 | kill-at-any-time stated as a guarantee, with the valid-together corollary |
+
+Branch rebased onto master (which now carries doc 00 via #4635). Build clean, 602 tests,
+zero warnings, zero inspections.
+
+### What the night actually produced, beyond the run
+
+The stated goal - get 446 files through PerFileRescoring and into Stage 7 - was met at 03:00:05.
+The more valuable results were two defects that only a REAL interruption could produce:
+
+1. a transient native `AccessViolationException` in the Parquet reader killed the run at file
+   391 after 4h01m; and
+2. the resume then **silently skipped** that file, because the cohort count read the 2nd-pass
+   sidecar while the per-file skip read the reconciled parquet's stamp.
+
+Both are fixed. The second is the one that mattered: it is the defect class this whole branch
+exists to close, and no simulated amputation could have produced it.
+
+### Measurements that replaced beliefs
+
+* Stage 7 at 446 runs: **78.3 GB committed, ~240 MB/file and steepening**; it never threw
+  OutOfMemory - Windows evicted the working set to 0.01 GB and the process sat alive for nine
+  minutes without advancing a log line.
+* PerFileRescoring startup: 2 m 08 s -> ~20 s. With one file genuinely outstanding, the whole
+  task is 114.9 s, of which 61 s is reaching the rescore and 51 s is the rescore itself.
+* The library fragment work was worth ~0.5 s and was reverted. dotTrace settled in one 3-minute
+  profile what two sessions of reasoning had got wrong.
+
+### Order for the next sessions
+
+1. **`--model-diagnostics` at 446 runs, in bounded memory** - the raised criterion is in
+   "THE MDIAG PASSING CRITERION" above, and mdiag is a memory prerequisite for the lean row
+   because it currently pins the all-runs hydrate.
+2. **Stage 7 lean row** - target and before-curve in "STAGE 7 AT 446 FILES".
+3. Wire `Run-Chs.ps1` to `--input-list` before approaching ~1000 runs.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260904_osprey_mdiag_scale.md` before starting work.
+
+### GATE VERDICT 2026-09-04: `-Dataset All` FULLY GREEN, 78 legs, zero failures
+
+All four datasets pass. The `TODO(brendanx)` skips appear in the summary where intended:
+mode 8 and mode 9 SKIP on the three `--model-diagnostics` datasets, and both RUN and PASS on
+Stellar. `-Dataset All` wall time ~1h55m.
+
+Verified at `3c49a7eeaa`. **`b93bb88a7d` came after** - it moves mode 8's mdiag skip ABOVE the
+invalidation and the resume, so a disabled leg stops paying for a full Osprey run on three of
+four datasets (~25 min of a `-Dataset All` spent to discard the result). That commit touches
+`regression.ps1` control flow ONLY, no product code, so the green above still describes the
+Osprey behaviour on this branch - but the gate script edit itself wants a Stellar +
+StellarLibDecoy confirmation before merge: Stellar exercises the arm that still runs, and
+StellarLibDecoy exercises the new skip arm and measures the saving.
+
+### Gate cost, raised by the developer
+
+> *"we need to continually evaluate cost-v-benefit. The longer the test gets the more developers
+> are tempted to cut corners or iterate more without testing gates."*
+
+**A disabled test must cost nothing** - otherwise the gate grows while its coverage does not,
+which is the pressure that makes people stop running it. That is what `b93bb88a7d` fixes.
+
+What this branch actually adds to gate time now: modes 8 and 9 each run ONE resume, on Stellar
+only, because all three mdiag datasets skip both instantly. A few minutes, not 25.
+
+Still worth reviewing before merge, and it predates this branch: **mode 3 (the HPC 4-task chain)
+is by far the most expensive leg**, and it runs on all four datasets.
+
+## MDIAG DESIGN, settled from the code 2026-09-04 (session `20260904-mdiag`)
+
+Read before implementing: doc 00 P5/P6/P7/P8/P9/P11/P12/P13/P15, doc 14 section 8
+("What a validity key is made of"), and `sessions/20260903-stages567/mdiag-restore-plan.md`.
+What follows is what reading the CODE changed about that plan.
+
+### CORRECTION to the restore plan: the pass-1 fold is ALREADY bounded, and already exists
+
+The plan proposed folding the report per run through `HydrateOneRun`'s `onStubsHydrated` hook
+inside `PerFileRescoreTask`'s loop, and flagged two obstacles (a missing `fileIdx`, and a
+`Parallel.For` needing a deterministic merge). **Both are avoidable, because the bounded per-run
+fold is already written and is on the wrong side of a fork.**
+
+`PerFileScoringTask.cs:1408` - the `streamCompaction` arm - builds
+`FirstPassFdrTask.BuildModelDiagnosticsAccumulator` and folds each run's pre-compaction rows one
+run at a time, "so FirstPassFDR's rehydrate can emit the identical report without the O(files)
+resident pool". So `--model-diagnostics` at 446 was never holding the pre-compaction pool.
+
+What `CanHydratePerRun == false` actually costs under mdiag is the **P6 startup term**: the
+all-runs hydrate walks every run before the rescore's first iteration, where the per-run path
+(`LoadJoinOnlyPerRunNames`) does not. That is the memory/scaling defect, and it is a different
+defect from the one the code comment at `ScoringTaskShared.cs:415-431` describes.
+
+### DO NOT fold inside the rescore loop - it would break byte-identity
+
+`ModelDiagnosticsData.Accumulator`'s own contract (`ModelDiagnosticsData.Accumulator.cs:30-63`)
+is that every reduction is order-independent **except one**: `BuildScoreHistogram`'s decoy
+mean/std are floating-point sums over `_best.Values`, whose enumeration is insertion order, i.e.
+row arrival order. `_frontierFileMinQ` additionally assumes "rows arrive in file-major order" and
+flushes at each file boundary.
+
+`PerFileRescoreTask.cs:819` is a `Parallel.For`. Feeding a shared accumulator from it - locked or
+not - reorders `_best` insertion and interleaves the frontier's file boundaries. It would go red
+on `mode1b` / `mode5` / `mode7` and on
+`ModelDiagnosticsDataTest.TestStreamingAccumulatorMatchesBatch`, and a lock would hide neither.
+
+**So the fold stays sequential and moves OUT of the rescore path entirely**, which is also what
+decouples mdiag from `CanHydratePerRun`.
+
+### The shape
+
+| artifact | producer | doc-00 kind | stamp |
+|---|---|---|---|
+| `<blib-stem>.1st-pass.model-diagnostics.json` | FirstPassFDR | experiment **product** | `.FirstPassFDR.osprey.task` |
+| `<blib-stem>.2nd-pass.model-diagnostics.json` | SecondPassFDR | experiment **product** | `.SecondPassFDR.osprey.task` |
+| `<output>.model-diagnostics.html` | the render step | experiment **cache** | none |
+
+Today there is ONE `.model-diagnostics.data.json` and it is **"deleted once consumed"**
+(`ModelDiagnosticsReport.cs:54`), which is the single line that makes a finished run
+un-re-renderable and forces `--task ModelDiagnostics` to re-run the pipeline to rebuild what it
+just deleted. Not deleting it is most of the fix.
+
+Keys are NOT new: `1st-pass.model-diagnostics.json` is stamped with `FirstPassFdrTask.ValidityKey(ctx)` and
+`2nd-pass.model-diagnostics.json` with `SecondPassFdrTask`'s, per doc 14 - the diagnostics inherit whatever
+invalidation those tasks already get right.
+
+### Session scope, in order
+
+1. **A - split, persist, stamp.** `1st-pass.model-diagnostics.json` / `2nd-pass.model-diagnostics.json`, no deletion, `FileSaver` (already),
+   validity stamps. HTML becomes a pure re-render from whichever JSONs exist.
+2. **C - a standalone per-run pass-1 fold** from on-disk FirstPassFDR artifacts
+   (`.scores.parquet` + `.1st-pass.fdr_scores.bin` + `out.1st-pass.fdr_experiment.bin`), sequential
+   in input-file order so the histogram's order invariant holds. This is what builds `1st-pass.model-diagnostics.json`
+   for a cohort that has none - our 446 directory, launched `-NoModelDiagnostics`.
+3. **B - `--task ModelDiagnostics` becomes the state machine** the developer specified: ERROR with
+   no FirstPassFDR state, build `1st-pass.model-diagnostics.json` if missing, WARN 1st-pass-only when SecondPassFDR
+   state is absent, always re-render, never construct a pool or run Percolator.
+4. **The incompleteness banner IN THE HTML**, not only the console - which pass is represented,
+   how many runs of how many contributed, and why pass 2 is absent.
+
+Then prove it on `chs-446files-libdecoy-r1.0-protein-compact-stages567`, which has all 446
+`.1st-pass.fdr_scores.bin`, all 446 `.reconciliation.json`, all 446 `.scores-reconciled.parquet`,
+`out.1st-pass.fdr_experiment.bin` and `out.1st-pass.retained_base_ids.bin` - and no blib and no
+report, because Stage 7 never finished and the run was launched `-NoModelDiagnostics`.
+
+### The hazard that governs the declared-output half (doc 00, restated because it costs 4h46m)
+
+`FirstPassFDR` is a join, and **a stale sidecar is cleared BEFORE its output is recomputed**.
+So declaring `1st-pass.model-diagnostics.json` as its output on a cohort that lacks it makes `CanRehydrate` false,
+`Run` execute, and `Run`'s first act clear sidecars for outputs that are already correct.
+
+`Run` therefore needs a short-circuit arm at the very top - *before* any clearing - that fires
+when every output EXCEPT the diagnostics JSON is present and key-current: fold `1st-pass.model-diagnostics.json`,
+stamp it, render, return. Getting this wrong costs hours and still produces the right answer,
+so no red gate would ever report it.
+
+### Deferred, and why
+
+**Pass-2 diagnostics stay as they are this session.** `WritePass2AndFinalize` reads
+`SecondPassFdrTask.RescoredEntries` - the whole-run survivor pool, which IS the Stage 7 wall.
+Streaming that fold is the same work as the Stage 7 lean row and belongs with it, not here. The
+1st-pass page is what the developer asked for and it lands before Stage 7, so it survives a
+Stage 7 death.
+
+**`CanHydratePerRun`'s mdiag exclusion and the two `TODO(brendanx)` gate skips** are retired only
+once 1-4 above hold, since that is what makes the pass-1 report independent of the all-runs
+hydrate. Deleting those two branches remains the whole test change; editing their assertions
+would mean the capability did not land.
+
+### Naming, corrected against the prescribed convention (developer, 2026-09-04)
+
+The developer pointed at `pwiz_tools/Osprey/Osprey-workflow.html` as the source of the sidecar
+naming convention. Every artifact it names puts the PASS QUALIFIER immediately after the stem:
+
+```
+<stem>.1st-pass.fdr_scores.bin      <blib-stem>.1st-pass.fdr_experiment.bin
+<stem>.1st-pass.model.json          <blib-stem>.2nd-pass.fdr_experiment.bin
+```
+
+So the diagnostics products are `<blib-stem>.1st-pass.model-diagnostics.json` and
+`<blib-stem>.2nd-pass.model-diagnostics.json` - NOT the `.model-diagnostics.pass1.json` this
+file proposed, which reads as a variant of one artifact rather than as a member of the
+`1st-pass` / `2nd-pass` family it belongs to. Renamed everywhere, including in this file above.
+
+Doc 00's contract table is updated on the branch: the two JSONs are experiment PRODUCTS, the
+HTML becomes an experiment CACHE, and the `--task ModelDiagnostics` entry now states the
+three-state contract and why suppressing the writes never suppressed the work.
+
+**Still owed**: `Osprey-workflow.html` names no `--model-diagnostics` artifact at all. Its task
+headers are positioned SVG text, so adding the two JSONs to FirstPassFDR's and SecondPassFDR's
+`out` lines needs a layout pass rather than a blind insert. Do it before the PR is reviewed -
+the diagram is the first thing a reader consults for "which artifact is whose".
+
+### The 446 mdiag proof: the invocation, and the two traps it must avoid
+
+Read off the bed's own `run.log` START line rather than reconstructed:
+
+```
+START dataset=chs arm=libdecoy r=1.0 pass2=protein-compact pick=lda trainpick=run
+      expagg='max' qualify=run files=446 threads=30 task='' mdiag=False
+      linkfrom='...chs-446files-libdecoy-r1.0-protein-compact-stage5stream'
+Exe: D:\test\osprey-runs\_bin\246-skipfix\Osprey.exe
+Osprey v26.1.1.243
+Command: -i <446 .raw>  (446 of 446 inputs absent but have a spectra cache)
+```
+
+1. **`OSPREY_VERSION_OVERRIDE=26.1.1.243` is REQUIRED.** Every artifact in that directory is
+   stamped `26.1.1.243`; a new daily build stamps something else, the parquet footer check
+   refuses reuse, and Stages 1-4 silently re-run for hours in a way that reads like a code bug.
+2. **Use `--input-list`, not 446 paths on the command line.** The original invocation was
+   28,621 of the 32,767 `CreateProcess` limit. `--input-list` landed on this branch (`3d6f0f3502`)
+   for exactly this and is the reason a ~512-run wall is not hit here.
+
+The route the new code takes, and what to watch in the log:
+
+```
+--task ModelDiagnostics
+  -> no 1st-pass.model-diagnostics.json     -> HasCompletedFirstPass (fdr_experiment.bin) = true
+  -> StopAfterStage5 = true                 -> "folding the first pass from its completed artifacts"
+  -> FirstPassFDR declares the JSON, so CanRehydrate is FALSE and Run is entered
+  -> OnlyDiagnosticsProductOutstanding      -> "every output but the model-diagnostics product is current"
+  -> Rehydrate -> StreamOwnReconciliationBundle (bounded, per run) -> report written
+```
+
+**The line that says it went wrong** is the guard naming the first output it refused:
+`not folding diagnostics from completed work - <path> is missing|present but not current`.
+Without it the only symptom of a validity-key mismatch is that the run takes four hours and
+still produces the right report - expensive, correct, and invisible. That is the failure this
+whole arm exists to prevent, so the log line is part of the fix rather than decoration.
+
+## MDIAG AT 446 RUNS: the fold path WORKS, and the accumulator is the wall (measured 2026-09-04)
+
+Run: `--task ModelDiagnostics` over a disposable hard-linked stage of the 446 bed
+(`chs446-mdiag-render-proof`), first pass complete, second pass absent by construction.
+Log kept at `ai/.tmp/sessions/20260904-mdiag/proof-446-run.log`.
+
+### What worked, and it is the whole architecture
+
+```
+--task ModelDiagnostics: no diagnostics product on disk; folding the first pass
+                         from its completed artifacts (no rescore, no second pass).
+[TASK] PerFileScoring:skipping (outputs valid)
+[TASK] FirstPassFDR:starting
+FirstPassFDR: every output but the model-diagnostics product is current;
+              folding the report from the completed first pass.
+Resume rehydrate: streaming the first-pass bundle from 446 file(s)
+                  (one file's pre-compaction pool resident at a time).
+```
+
+Every link fired: the task built no pipeline, Stages 1-4 stayed cached, declaring the pass-1
+product made `CanRehydrate` false so the driver entered `Run`, and the guard recognised that
+only the diagnostics product was outstanding - so **no Percolator training and no re-scoring of
+1.34 B entries**. It reached 263 of 446 runs in 24 minutes.
+
+### What failed, and it is NOT the fold
+
+**`ModelDiagnosticsData.Accumulator` is O(runs x passing keys).** It holds four
+`List<HashSet<string>>` sized `NewSets(_nFiles)` - `_runSets`, `_expSets`, `_entRunSets`,
+`_entExpSets` - one passing-key set per run, for the cross-run reproducibility view. That is
+the `O(runs x entries)` shape doc 00 names as "the single failure mode this architecture exists
+to prevent".
+
+Measured working set against files folded (MB):
+
+| files | 4 | 30 | 71 | 111 | 138 | 173 | 200 | 231 | 263 |
+|---|---|---|---|---|---|---|---|---|---|
+| WS | 13,905 | 25,017 | 36,656 | 40,531 | 44,200 | 48,493 | 49,015 | 50,751 | 54,790 |
+
+Library baseline ~10-13 GB; the slope over 111 -> 263 is **~94 MB per run** and does not flatten.
+Projected at 446: **~72 GB against a 63.7 GB box.** Killed at 263 runs with 3.5 GB free rather
+than watching it thrash - the prediction was the timeout.
+
+So the developer's criterion is **not yet met**: mdiag still does not run "in contained memory
+as much as running without it". The pass-1 fold is bounded; its accumulator is not.
+
+### The fix, and it needs no new answer - only a new representation
+
+`ComputeCrossRunView` (`ModelDiagnosticsData.cs:1540`) consumes the N sets for exactly four
+things, and three are already streaming reductions:
+
+| what it needs | today | bounded form |
+|---|---|---|
+| per-run passing count | `set.Count` | a scalar per run - O(runs) |
+| cumulative union after i runs | `union.UnionWith(set)` | one running union set - O(distinct) |
+| cumulative intersection after i runs | `inter.IntersectWith(set)` | one running intersection - O(distinct), shrinking |
+| per-precursor run-count histogram | `TallyRunCountHistogram(perRunSets, n)` | `Dictionary<key, ushort>` incremented per run - O(distinct) |
+
+Every one of them is computable holding **the current run's set only**, plus O(distinct) running
+state and O(runs) scalars. The four `List<HashSet<string>>` are retained solely because the view
+is computed at the END over all of them, not because the answer needs them.
+
+**The precedent is in the same class.** `_frontier` answers the same "how many runs did this
+precursor appear in" question with a per-precursor fixed-length histogram (`FrontierPrec.RunQBins`,
+a `ushort[FrontierQGrid.Length]`), which is O(distinct) and not O(runs). The cross-run sets are
+the one reduction that did not get that treatment.
+
+Byte-identity is the gate, and it is reachable: the reductions are the same arithmetic in a
+different order of accumulation, and the union/intersection/count answers do not depend on
+retaining the sets. `mode1b` / `mode5` / `mode7` on the three mdiag datasets pin it.
+
+### Sequencing
+
+This is the remaining half of "mdiag must be memory bounded", and it is independent of the
+Stage 7 lean row - it is inside `Osprey.FDR`, touching no task. Do it before the lean row, for
+the reason already recorded: the diagnostics are how a 446-run result is judged, so shipping the
+lean row while the report cannot be produced at that scale leaves the cohort unjudgeable.
+
+## THE 446 EQUIVALENCE TEST (developer, 2026-09-04): both routes, same 1st-pass HTML
+
+> *"we will need to test this at 446 file scale both for `--task ModelDiagnostics` on existing
+> files and `--task FirstPassFDR --model-diagnostics` to prove both generate the same 1st Pass
+> diagnostics HTML"*
+
+### The two routes are only genuinely different if one is COLD
+
+On a directory whose first pass is already complete, BOTH routes converge on the same code:
+`--task ModelDiagnostics` sets `StopAfterStage5` in `Program.RunModelDiagnosticsTask`, and
+`--task FirstPassFDR` sets it directly - after which each enters `FirstPassFdrTask.Run`, takes
+the `OnlyDiagnosticsProductOutstanding` arm and delegates to `Rehydrate`. Comparing those proves
+the ENTRY POINTS agree (worth having, and cheap), but not that the two accumulator FEEDS do.
+
+The feeds only diverge when one route is COLD:
+
+| route | how the accumulator is fed | where |
+|---|---|---|
+| `--task FirstPassFDR --model-diagnostics`, 1st-pass sidecars ABSENT | the score-pass sink, per row, as Percolator scores it | `RunFirstPassProjection` |
+| `--task ModelDiagnostics`, first pass COMPLETE | `.scores.parquet` + `.1st-pass.fdr_scores.bin` overlay, per run | `StreamOwnReconciliationBundle` |
+
+**That is the pair worth proving at scale**, and it is what regression mode 5 already asserts at
+3 files ("mode5 (rehydrate diagnostics vs golden): PASS"). At 446 it is the only test that can
+expose the one reduction the accumulator's own contract admits is order-sensitive:
+`BuildScoreHistogram`'s decoy mean/std are floating-point sums over `_best.Values` in insertion
+order. Over 1.34 B rows a difference in row arrival order between the two feeds would show up
+there and nowhere else, and 3 files cannot produce it.
+
+### A free pre-change comparator already exists
+
+`chs-446files-libdecoy-r1.0-protein-compact-stage5stream` was run `task='FirstPassFDR'
+mdiag=True` at 446 and its `out.model-diagnostics.html` is on disk. Its FirstPassFDR validity
+key is **byte-identical** to the `stages567` bed's:
+
+```
+search=dd85be27...;library=e1b6f4c9...;pick=lda;pickmodel=none;
+reconciliation=48f20a4a...;fdrsidecar=6;pass2=protein-compact;trainpick=run
+```
+
+so it is the same cohort, the same parameters and the same first pass - `stages567` was created
+`-LinkFrom stage5stream`. Comparing a Route A run against it costs nothing extra.
+
+**Its one confound, stated so it is not mistaken for a clean result**: it was produced by an
+older build, so a difference spans BOTH the route and the build change. It is a cheap smoke
+test, not the acceptance evidence. The acceptance evidence is two runs on the SAME build.
+
+### The comparator
+
+Not a byte compare of the HTML - `generatedUtc` and `ospreyVersion` differ by construction. Not
+`Get-DiagnosticsMetrics` either: that is an explicit projection whose own comment warns "a new
+card is invisible to the comparison until it is named here", which is the wrong instrument for
+"prove the pages are the same".
+
+Extract the embedded `application/json` payload from both (the `Get-DiagnosticsPayload` helper
+already does this), drop `generatedUtc` / `ospreyVersion` / `completeness`, and deep-compare the
+remainder. `completeness` is dropped deliberately: it is a render-time statement about which
+products existed, so a cold FirstPassFDR page and a warm regeneration legitimately differ there
+while describing the same first pass.
+
+### Sequencing: this test is BLOCKED on the accumulator fix
+
+Route A cannot complete at 446 today - it was killed at 263 of 446 runs with 3.5 GB free,
+projecting ~72 GB against a 63.7 GB box. So the equivalence test is not merely a check that
+follows the O(runs) accumulator fix; **it is that fix's acceptance test.** Order:
+
+1. Phase 1: the four `List<HashSet<string>>` -> four run-count dictionaries (bounded).
+2. Re-run Route A at 446. It must complete, and its floor must not rise per run.
+3. Run Route B COLD at 446 on a staged copy with the 1st-pass sidecars removed - one full first
+   pass, ~4h46m by the phase table. Expensive once; it also leaves a fresh same-build cold-feed
+   comparator for every iteration after.
+4. Deep-compare the two payloads.
+
+Step 3 is the only expensive item and it is a one-time cost. Do NOT run it before step 2
+succeeds - a cold run whose warm counterpart cannot finish proves nothing and costs five hours.
+
+### PHASE 1 ALGORITHM, settled 2026-09-04 - and why the OBVIOUS form is preferred over the small one
+
+Two forms reach the same bounded answer. They are not equally reviewable, and byte-identity is
+the gate, so the choice matters.
+
+**The minimal form.** One `Dictionary<string,(int RunCount,int LastRun)>` per stream, and
+nothing else: union after run i is the dictionary's SIZE, and intersection after run i is the
+count of keys whose `RunCount` reached `i+1` during run i (a key appears at most once per run,
+so those are exactly the keys present in every run so far). Four dictionaries total, ~O(distinct)
+each. Smallest possible - and it needs careful handling of a run that contributes NO passing
+rows, because the boundary that closes `CumUnion[i]` / `CumIntersection[i]` never fires for it.
+`ComputeCrossRunView`'s loop runs for every `i` regardless, so the streamed version must close
+skipped indices explicitly. That is where an off-by-one silently changes a curve.
+
+**The obvious form, and the one to write first.** Keep the running `union` set, the running
+`inter` set and the running run-count dictionary that `ComputeCrossRunView` already builds, plus
+ONE current-run `HashSet<string>` per stream, and execute the EXISTING loop body at each file
+boundary instead of at the end. The statements do not change - `union.UnionWith(set)`,
+`inter.IntersectWith(set)`, `perRunCount[i] = set.Count`, the per-key tally - only when they run.
+That makes byte-identity an argument about *ordering of the same operations*, which a reviewer
+can check by reading, rather than an argument about an equivalence between two different
+formulations.
+
+Memory, both flat in run count:
+
+| | structures | est. at ~3M distinct keys |
+|---|---|---|
+| today | 4 x N sets | ~38 GB at 446 and rising ~94 MB/run |
+| obvious form | 4 x (union + inter + counts) + 1 current-run set each | ~1.5 GB |
+| minimal form | 4 x one dictionary | ~0.6 GB |
+
+1.5 GB flat already clears the bar by a wide margin, and the strings are shared references with
+`_best` so the real figure is lower. **Write the obvious form, measure it at 446, and only
+compress to the minimal form if the measurement says to** - the reverse order optimises a number
+nobody has yet seen, which is how the library-fragment work spent two sessions on 0.5 s.
+
+The one genuinely new piece either way is the file boundary. `_frontierCurFile` already
+establishes the pattern in this class ("rows arrive in file-major order", flush the previous
+file at the change) but it fires only on non-decoy rows, so the cross-run flush needs its own
+`_crossRunCurFile` tracked for EVERY row - and `Build()` must close the final run, exactly as it
+already calls `FrontierFlushFile` for the last file.
+
+### PHASE 1 REFINEMENT: stream the ACCUMULATOR only, and the existing test becomes the gate
+
+`ComputeCrossRunView` has TWO callers, not one:
+
+| caller | path | pool |
+|---|---|---|
+| `Accumulator.Build` (`:344`) | streamed | never resident - this is the one to fix |
+| `BuildCrossRunDetection` (`:1527`) | batch, from `Build` and `BuildPass2` | already fully resident |
+
+The batch caller is the RESIDENT twin, used only where the pre-compaction pool is in memory
+anyway, so it has the sets already and nothing is gained by changing it. **Leave it exactly as
+it is.** Add a streamed overload for the accumulator and let the two coexist.
+
+That is not a compromise - it is what makes phase 1 cheap to trust. The equality of the two
+implementations is already pinned, every unit-test run, by
+`ModelDiagnosticsDataTest.TestStreamingAccumulatorMatchesBatch`, whose whole purpose is that
+"the streamed reduction reproduces the resident reduction element-for-element". Streaming the
+accumulator while the batch path stands still turns that existing test into phase 1's
+byte-identity gate at unit scale, for free, on every build - and the 446 route-equivalence test
+then confirms it at scale.
+
+Changing BOTH would delete the oracle: two implementations altered together can agree with each
+other and disagree with what they replaced, which is `feedback_parity_vs_impact` exactly - parity
+with both sides patched proves only that the tools agree.
+
+## PHASE 1 MEASURED AT 446: no change. The binding term is the SURVIVOR POOL (2026-09-04)
+
+Route A re-run on the phase-1 binary (`_bin\248-phase1`, `CrossRunStream` verified present in
+the shipped `Osprey.FDR.dll`). Matched-file-count working set, pre-fix vs phase-1:
+
+| runs | 44 | 106 | 138 | 173 | 200 | 263 |
+|---|---|---|---|---|---|---|
+| pre-fix (MB) | 30,829 | 41,195 | 44,200 | 48,493 | 49,015 | 54,790 |
+| phase 1 (MB) | 29,463 | 40,917 | 43,890 | 50,403 | 49,519 | 53,290 |
+
+**Within noise in both directions.** It died at the same place for the same reason: 266 of 446
+with 3.2 GB free, where the pre-fix run reached 263 with 3.5 GB free.
+
+### What the number actually says
+
+Above a ~13 GB library baseline the cost converges on **0.15-0.22 GB per run**, and doc 00 and
+`regression.ps1:279` already name that figure:
+
+> "~4.4 GB library + **0.197 GB/file live post-GC**: ~20 GB at 82 files, ~103 GB projected at 500."
+
+That is the **whole-run survivor pool**, the known O(files) path this gate already tracks. The
+observed curve projects ~98 GB at 446 against their ~103 GB at 500. It is the same structure.
+
+`RescoreHydration.HydrateCompactedStreaming` streams each run's PRE-compaction pool - which is
+what "one file's pre-compaction pool resident at a time" in the log refers to, and it is true -
+and then **appends that run's SURVIVORS to `perFileEntries` and keeps them**, because building
+Stage 6's bundle is what `Rehydrate` exists to do. The cross-run sets I removed were worth about
+a gigabyte next to it.
+
+### The mistake, stated plainly
+
+I read the code, found a genuine `O(runs x entries)` structure, and inferred it was the dominant
+one **without measuring which structure held the bytes**. That is the same error the handoff
+already records in the time domain - "a whole day of work was spent optimising something worth
+0.5 s because a comment's number was believed instead of measured" - repeated in the memory
+domain, and the correcting figure was sitting in this repository's own gate summary the whole
+time.
+
+The run also carried `logmem=off`, so every number here is working set WITH garbage. The
+memory-band guide is explicit that `--memstamp` "shows shape, not magnitude" and that
+`OSPREY_LOG_MEMORY=1` post-GC probes "are what answer will it fit". I measured shape and read it
+as magnitude.
+
+### Phase 1 stays, with its claim corrected
+
+It is correct, byte-identical (`mode1b` and `mode5` diagnostics-vs-golden both PASS, and
+`TestStreamingAccumulatorMatchesBatch` compares the whole object), and it removes a real
+`O(runs x entries)` term that binds eventually. It simply is not the 446 wall, and this TODO must
+not be read as saying it was.
+
+### The actual fix, and it is smaller than phase 1
+
+**A diagnostics-only fold has no use for the survivor pool.** `--task ModelDiagnostics` reaches
+the pool only because it borrows `Rehydrate`, whose product is Stage 6's bundle. What the report
+needs is the accumulator; the survivors are pure waste on this path.
+
+So the fold wants its own entry: stream each run's pre-compaction rows into the accumulator and
+DISCARD them, never appending to `perFileEntries`. That is bounded at one run, needs no new
+artifact, and leaves `Rehydrate` untouched for the path that genuinely wants a bundle.
+
+**Measure before building it this time.** Re-run Route A with `OSPREY_LOG_MEMORY=1` and confirm
+from post-GC live numbers that the survivor pool is the term, rather than inferring it a second
+time from a curve that includes garbage.
+
+### Why the COLD route is expected to fit
+
+`chs-446files-...-stage5stream` ran `--task FirstPassFDR --model-diagnostics` at 446 and produced
+its report. So Route B is not blocked on any of this - it is the warm fold that does not fit.
+Useful asymmetry, and it means the equivalence test can proceed from the cold side first.
+
+### THE FIX: a diagnostics fold that keeps nothing (`FoldPreCompactionPerRun`)
+
+`--task ModelDiagnostics` was reaching its rows through `RescoreHydration.HydrateCompactedStreaming`,
+whose product is Stage 6's BUNDLE. That loop genuinely streams one run's pre-compaction pool at a
+time - its log line is honest - and then keeps each run's SURVIVORS, because a bundle is what its
+caller wants. A report has no use for them.
+
+`RescoreHydration.FoldPreCompactionPerRun` does the four things a fold needs and stops: load the
+run's stubs, overlay its 1st-pass sidecar, hand them to the accumulator, discard them. No
+envelope, no planning, no compaction, no calibration capture - reading a run's
+`reconciliation.json` here would reintroduce a per-run cost for state nobody consumes.
+`FirstPassFdrTask` routes to it on `config.DiagnosticsOnly`; every other caller of that arm has a
+downstream task that needs the bundle and still goes through `Rehydrate`.
+
+**The measurement is inside the fix this time.** The existing post-GC probes sit in `Run`'s
+compute path, which this fold short-circuits past, so `OSPREY_LOG_MEMORY=1` on the previous
+binary emitted NOTHING and could not have answered the question - which is why the separate
+measurement run was abandoned. The fold now carries its own per-run probe, so one run reports
+both whether it fits and whether the live floor is flat, instead of a second inference from
+working set with garbage.
+
+First probes: `managed_heap=3.65 GB` at run 1, 3.84 at run 2, 3.90 at run 3. The claim to test is
+that this FLATTENS - the accumulator's O(distinct) reductions fill early and saturate - rather
+than climbing at the ~0.19 GB/run the survivor pool cost.
+
+## ROUTE A IS BOUNDED (measured 2026-09-04), and what "diagnostics during the main analysis" still needs
+
+Post-GC live heap through the diagnostics fold, 446-run cohort:
+
+| run | 1 | 20 | 40 | 60 | 80 | 100 | 120 |
+|---|---|---|---|---|---|---|---|
+| managed_heap (GB) | 3.65 | 4.07 | 4.11 | 4.11 | 4.24 | 4.26 | 4.27 |
+
+**5 MB per run and decelerating** - 1.5 MB/run over runs 100-120 - which is the accumulator's
+O(distinct) reductions filling and saturating, not a per-run term. Against the survivor pool's
+measured 190 MB/run that is a ~38x reduction, and unlike it, this one flattens. Working set 6.0 GB
+and FALLING; the old path was at 40 GB by run 106 and dead at 266.
+
+### The developer's framing: post-hoc is the recovery path, not the goal
+
+> *"B to validate it also stays bounded in memory and diagnostics can be safely requested during
+> the main analysis and does not need to be requested post-analysis as we have now done."*
+
+Right, and worth being exact about what Route B does and does not establish. "Diagnostics
+requested during the main analysis" has THREE memory couplings and Route B covers ONE:
+
+| # | coupling | state |
+|---|---|---|
+| 1 | the first-pass fold, from the live score-pass sink | **Route B validates this** |
+| 2 | `PerFileRescoring` forced onto the all-runs hydrate | **STILL COUPLED** |
+| 3 | pass-2 diagnostics reading the whole-run survivor pool | **STILL COUPLED** (the lean row) |
+
+**(2) is `ScoringTaskShared.cs:430`** - `if (config.ModelDiagnostics) return false;` in
+`CanHydratePerRun`, untouched by any of this work. It is why `mode3 (per-run hydrate)` SKIPs on
+all three mdiag datasets with "--model-diagnostics keeps the all-runs hydrate". Its stated
+reason was that the report is folded from pre-compaction rows during that hydrate, so a per-run
+rescore would produce NO report - true when it was written.
+
+**That reason may no longer hold**, and checking it is the natural next step. The report is now
+FirstPassFDR's declared output, produced by its own fold arm, rather than a side effect of
+whichever hydrate happened to run. On a cold analysis the fold is already done by
+`RunFirstPassProjection` before `PerFileRescoring` starts; on a resume the fold arm produces it.
+If that holds, the exclusion retires and a THIRD gate skip (mode 3's per-run hydrate) turns
+green alongside modes 8 and 9 - which is the check that the capability landed rather than the
+assertion being softened.
+
+**(3) is `SecondPassFdrTask.cs:478`** - `WritePass2AndFinalize(perFileEntries, ...)` where
+`perFileEntries` is `RescoredEntries`, the whole-run survivor pool. Pass-2 diagnostics have no
+separate memory problem; they ride the one doc 00 already tracks. Not separable from the Stage 7
+lean row, and should not be attempted as its own piece.
+
+So after Route B the honest claim is: **the first pass can be asked for diagnostics during the
+main analysis, in bounded memory, cold or warm.** The whole analysis cannot yet, and (2) and (3)
+are what stand between.
+
+## PROPOSAL: retire `--input-scores` - a Rust-era seam the C# port already replaced (developer, 2026-09-04)
+
+> *"It is a vestige of the Rust implementation which was a far simpler pipeline architecture.
+> Start from mzML v start from Parquet may have been the only real seams."*
+
+That is the framing that makes this worth doing rather than merely tidy. The C# pipeline has TWO
+mechanisms for "where does this invocation start", and one of them predates the other:
+
+| era | mechanism | how it says "Stage 1-4 is done" |
+|---|---|---|
+| Rust | the INPUT KIND | you handed me parquets instead of mzML |
+| C# port | `--task` + validity sidecars + lazy `ctx.Demand` | the task names its stage; the sidecar attests each run's outputs |
+
+The second subsumes the first. What the input kind still does is give every membership predicate a
+second, older opinion about where the pipeline starts:
+
+```csharp
+PerFileScoringTask:  return !inputs;                                        // pure Rust-era
+PerFileRescoreTask:  (!inputs && !NoJoin) || (inputs && NoJoin) || (inputs && !NoJoin && ...)
+SecondPassFdrTask:   (!inputs && !NoJoin) || (inputs && ExpectReconciledInput) || ...
+```
+
+`--task FirstPassFDR` then REQUIRES `--input-scores`, which is both eras saying the same thing and
+neither being authoritative.
+
+### The evidence is a defect, not an aesthetic
+
+`--task ModelDiagnostics` set `StopAfterStage5` - the C#-era signal - while its inputs were mzML
+stems, the Rust-era signal for "start from the beginning". `PerFileRescoreTask.IsIncluded` believed
+the input kind, joined the pipeline, demanded `CompactedEntries` that a diagnostics fold never
+publishes, and **failed the run after the report it was asked for had already been written**. Fixed
+by teaching two more predicates about `StopAfterStage5`, which is patching the symptom: the real
+fault is two seams disagreeing.
+
+### What removal buys, beyond deleting the branch
+
+* **`--input-list` covers every task.** It feeds `-i` only, so FPFDR / PerFileRescoring /
+  SecondPassFDR still put every path on the command line - 446 absolute parquet paths is ~58,000
+  characters against a 32,767 limit, survivable today only by running with the working directory
+  set to the run dir and passing relative names. One input kind closes that wall for all of them.
+* **The predicates collapse.** Membership becomes a function of `--task` alone.
+* **One derivation direction.** `SyntheticInputFromParquet` exists to go BACKWARDS from a parquet
+  to an input path; forward derivation from the stem is what every other sidecar already does.
+
+### To settle before starting
+
+* `ExpectReconciledInput` - the gate that every supplied parquet carries `osprey.reconciled=true` -
+  is expressed in terms of the flag. Derived, it becomes the ordinary question "does
+  `<stem>.scores-reconciled.parquet` exist and carry a current stamp", which is what validity
+  sidecars answer for every other artifact. Likely a simplification too, but it is a correctness
+  gate and must not be lost in the move.
+* The HPC chain stages parquets into per-phase directories and names them relatively; that becomes
+  `-i <stem>` plus `--output-dir`. **Mode 3 is the leg that catches a derivation mistake**, which is
+  the reassuring part.
+* Inputs that no longer exist are already tolerated ("446 of 446 input(s) are absent but have a
+  spectra cache"); derivation must additionally tolerate the raw AND the cache being absent when
+  only the parquet is wanted, which is the 446 bed's state.
+
+### Sequencing
+
+Its own branch and its own `-Dataset All`. It touches argument validation, every task's membership,
+the chain scripts and the docs - too broad to fold into the mdiag work in flight, and it is exactly
+the kind of Rust-era removal `project_osprey_parity_removal_sprint` anticipated now that the Rust
+implementation is retired.
+
+## THE PEAK IS NOT IN THE FOLD: peak co-assignment reaches ~33 GB at 446 (2026-09-04)
+
+Found in the developer's perfviz screenshot of `run-logmem.log`, not in my instrumentation.
+
+The fold is bounded and that measurement stands: post-GC live 3.65 GB at run 1, 4.62 GB at run
+446, flat from run 100. But the plot shows a SECOND phase after the fold ends, where total memory
+climbs to **33.5 GB** and managed to 14 GB:
+
+```
+16:40:56  Peak co-assignment: joining apex RT over 446 file(s)...
+16:48:43  peak co-assignment (pass 1): 13954867 detected rows over 446 file(s) in 664.0s
+16:48:47  [TASK] FirstPassFDR:done (3287.8s)
+```
+
+13.95 M detected rows joined across 446 files, 11 minutes, ~7x the fold it follows. It FITS in
+64 GB so nothing is broken, but it is an O(runs) term nobody has characterised and it is the real
+peak of `--task ModelDiagnostics` at this scale.
+
+**This is `feedback_read_the_perfviz_png_not_the_probes` demonstrated on this branch.** The per-run
+probes I added were inside the fold loop and blind to the phase after it, so the instrumentation
+reported "bounded" for the part it watched while the actual peak was elsewhere. The plot found
+what the probe could not, and a bounded claim that rests only on probes is a claim about the
+instrumented window, not about the run.
+
+Lives in `PeakCoAssignmentSource.Build`, reached from `FoldDiagnosticsOnly` and from every other
+report path. Quantify how it scales with runs before deciding whether it needs the same treatment
+the fold got.
+
+## Gate correction the retirement forced: `-NoTrainedModel` is obsolete
+
+Removing the `CanHydratePerRun` exclusion turned modes 5 and 7 red with:
+
+```
+diagnostics: featureCount run='21', expected '0' - this run adopted first-pass q-values
+from the sidecars and trained no model, so it has no feature contributions to report
+```
+
+**The gate was encoding a limitation the retained product removed.** `-NoTrainedModel` pinned
+`featureCount` at 0 because a rehydrate passed a null `FeatureContributions` and reported no model
+- true only while the pass-1 sidecar was DELETED once consumed and the report had to be rebuilt
+from a modelless rehydrate. It is retained now and carries the model the training run wrote, so a
+resumed report is a full-fidelity render of the straight-through one.
+
+Both legs now compare `featureCount` against the golden instead of asserting it is zero, which is
+**strictly stronger** than the pin it replaces. That the removal surfaced as a red rather than a
+silent pass is the gate working: a pinned metric that stops being true fails loudly.
+
+## Coupling 4 quantified: peak co-assignment is a TIME term, not a memory term
+
+The previous session ended with the peak co-assignment panel logged as "NEW, uncharacterised -
+an O(runs) term nobody has characterised... the real peak of `--task ModelDiagnostics` at 446",
+on the evidence of a perfviz plot showing total memory reaching 33.5 GB after the fold ended.
+**It is not an O(runs) memory term.** The 33.5 GB is real and the plot was read correctly; what
+it measures is not what it looked like.
+
+### Method: the scaling ladder was already on disk
+
+The panel logs its own completion, and every line of a `--memstamp` run carries managed and
+private MB:
+
+```
+[MODEL-DIAGNOSTICS] peak co-assignment (pass 1): 13954867 detected rows over 446 file(s) in 664.0s
+```
+
+So every run log ever written under `D:\test\osprey-runs` is a memory trace of this phase,
+sampled at every log line, and every `out.model-diagnostics.html` publishes the populations the
+panel's retained maps ended up holding. Mining them gives a ladder of **N = 5, 10, 12, 85, 86,
+257, 446** on the same CHS library without spending a single run.
+
+Script: `ai/scripts/Osprey/ModelDiagnostics/Measure-CoAssignmentScaling.py`, three views -
+`scaling` (per-phase wall time and in-window memory maxima), `delta` (the rise across the phase
+and the managed floor under it), `retained` (the cross-run populations, read from the reports).
+Its header carries the warning the first pass at this needed: **maxima are not attributable,
+deltas are** - ranking runs by in-phase maximum produces a table where 86 files outrank 446.
+
+### The decisive measurement: retained state saturates
+
+`CoAssignmentAccumulator` holds exactly two things across runs - `_byPrecursor`, one entry per
+DISTINCT detected precursor, and `_offendersByPair` - in two accumulators (run scope and
+experiment scope). The reports publish the first:
+
+| files | run-scope N | experiment-scope N |
+|---:|---:|---:|
+| 5 | 30,873 | 26,523 |
+| 10 | 35,290 | 27,775 |
+| 12 | 32,948 | 26,363 |
+| 85 | 42,231 | 27,533 |
+| 86 | 46,170 | 31,184 |
+| 257 | 59,719 | 35,682 |
+| 446 | 68,775 | 37,508 |
+
+**89x the files buys 2.2x the run-scope population and 1.4x the experiment-scope one.** That is
+saturation, not growth: the maps are keyed by precursor, and a precursor detected in run 300 was
+almost always already detected in one of the first 50. The panel's whole cross-run retained state
+at 446 files is ~107 K precursor entries across both accumulators - on the order of **30 MB**,
+three orders of magnitude below the 33.5 GB the phase appears to consume.
+
+**At the 500-1000 file target the conclusion does not depend on the fit.** Take the two extreme
+readings of the ladder and extrapolate both to 1000 files:
+
+* logarithmic (what the ladder actually looks like): ~75.6 K run-scope entries
+* LINEAR at the steepest late-ladder slope (257 -> 446 is 47.9 entries per file, which the
+  saturating curve says is already an overestimate): ~95.3 K
+
+Either way the retained population lands near 100 K entries and tens of MB. There is no reading of
+this data on which the accumulators become a memory problem at the stated target.
+
+### The managed floor never rises, at any N
+
+`coasgn-delta.py` measures the managed value at a GC trough inside the phase against the value at
+the phase's first line. Across all 25 CHS occurrences, at every N from 5 to 446, that delta is
+**never positive** (range -12.88 GB to +0.00 GB). The collector gives memory back across this
+phase; it does not accumulate.
+
+This is the bound that covers `_offendersByPair` too, which is the one retained map whose size no
+report publishes (`MAX_OFFENDERS = 50` trims only the REPORTED list, at
+`ModelDiagnosticsData.CoAssignment.cs:1553`; the dictionary itself accumulates uncapped). It does
+not need its own measurement: whatever it holds is already inside a managed floor that falls.
+
+### What the 33.5 GB actually was
+
+Private bytes converge on a ~25-35 GB plateau at every run size - 18.98 GB at 5 files, 45.92 GB
+at 86, 34.93 GB at 257, 32.67 GB at 446. The maximum does not track the file count at all; the
+largest figure in the whole ladder belongs to an **86-file** run.
+
+Route A rose *into* that plateau instead of starting there, which is what made the plot dramatic:
+
+| 446-file run | private at phase start | private max | rise |
+|---|---:|---:|---:|
+| `chs446-mdiag-render-proof` (Route A) | **11.68 GB** | 32.67 GB | **+21.00 GB** |
+| `chs-446files-...-baseline-phase3` | 35.56 GB | 41.73 GB | +6.17 GB |
+| `chs-446files-...-stage5stream` | 31.59 GB | 32.15 GB | **+0.56 GB** |
+
+Route A is `--task ModelDiagnostics`, a render-only path that never holds the pipeline's state, so
+it entered the phase at 11.68 GB where a full-pipeline run enters at ~31-35 GB. It then reached
+the same absolute level everything else reaches. The same 446 files on the full pipeline move the
+committed footprint by **0.56 GB**. The rise is Server-GC committed heap following an allocation
+burst - the pattern already root-caused for the pipeline peak - not retention.
+
+The cleanest control in the ladder is the `stage5stream` pair, which holds the code generation
+fixed and varies only the run count:
+
+| stage5stream run | files | priv at start | priv max | rise | managed floor |
+|---|---:|---:|---:|---:|---:|
+| `chs-86files-...-p0059-stage5stream` | 86 | 22.05 GB | 25.67 GB | +3.61 GB | -4.32 GB |
+| `chs-446files-...-stage5stream` | 446 | 31.59 GB | 32.15 GB | **+0.56 GB** | -2.73 GB |
+
+Same code, 5.2x the files, and the phase's committed rise went DOWN. An O(runs) term cannot do
+that.
+
+### What DOES scale: a second full parquet read
+
+Time is linear in detected rows, and detected rows are linear in files (~24-46 K per file,
+roughly constant across the ladder):
+
+| files | detected rows | seconds |
+|---:|---:|---:|
+| 12 | 313,020 | 8-12 |
+| 86 | 2,323,704 | 74-197 |
+| 257 | 7,690,037 | 632-698 |
+| 446 | 13,954,867 | 664-916 |
+
+~30-100 us per detected row, flat. This is the panel's real cost and the code already names it:
+"a second read of two columns of every `.scores.parquet`". At 446 files that is **11-15 minutes**;
+at a 1000-file target it projects to ~25-35 minutes of pure panel time under `--model-diagnostics`.
+
+The panel's two halves split as follows (`scaling` view, from the log's own timestamps):
+
+| files | phase 1 scan (sidecars) | phase 2 join (parquet) | join share |
+|---:|---:|---:|---:|
+| 86 | 67-106 s | 79-82 s | 43-55 % |
+| 257 | 232-270 s | 388-416 s | 61-63 % |
+| 446 | 184-295 s | 467-606 s | **67-72 %** |
+
+The join share RISES with the run count, so the parquet re-read is both the majority of the cost
+and the half that is getting worse. Phase 1 streams sidecars that are already being read; phase 2
+is the second full pass over the cohort's parquets.
+
+### Recommendation
+
+**Do not give this the treatment the fold got.** There is no O(runs) retention to remove, and a
+bounded-memory rewrite would be an intermediate the architecture does not need. Coupling 4 closes
+as characterised.
+
+If the panel's cost is worth attacking it is as latency, and the lever is phase 2 - the second
+parquet read, 67-72 % of the panel at 446 and rising with N - not the accumulators. Worth noting
+only because it is opt-in: this cost is paid solely under `--model-diagnostics`, so no production
+run carries it. That is also the argument for leaving it alone until someone actually asks for a
+faster diagnostics render.
+
+Two corrections to the record this produced, both worth keeping:
+
+* **A perfviz plot bounds what a probe cannot, but a rise is not a level.** The previous session
+  correctly distrusted probes that were blind to the phase after the fold. The plot's 33.5 GB was
+  read as the phase's cost when it was the process's plateau, reached from an unusually low floor
+  because the task was render-only. Comparing against the same phase in a run that entered it
+  warm is what separates the two.
+* **Maxima are not attributable; deltas are.** The first pass at this measured private max across
+  the phase window and produced a table where 86 files outranked 446. Only the rise across the
+  phase, and the managed floor under it, say anything about the panel.
+
+## The Route A report and the Route B run are on DIFFERENT builds
+
+Recorded because the fact was already in the previous session's own log table and its
+significance went unread, which is the kind of thing that silently invalidates an experiment.
+
+| | script | log | binary | built |
+|---|---|---|---|---|
+| Route A (approved report) | `measure-routeA-live.ps1` | `run-logmem.log` | `_bin\249-mdiag-fold` | 15:53:50 |
+| Route B | `run-446-routeB.ps1` | `run.log` | `_bin\248-phase1` | 14:29:41 |
+
+The table called `run.log` "the phase-1 attempt that DIED at run 266" - and *phase-1* is the
+`248-phase1` build. `run-446-routeB.ps1` took its exe path from that dead attempt's script, so the
+surviving Route A report and the Route B run were never on the same code.
+
+Established from artifacts rather than from the scripts, since a script can be edited after the
+fact: the approved report's `generatedUtc` is `2026-09-04 23:48:47 UTC` (= 16:48:47 PDT) and
+`run-logmem.log`'s last line is 16:48:48, so the report belongs to the run-logmem run;
+`249-mdiag-fold` finished building at 15:53:50 and that run's first line is 15:53:59.
+
+The builds straddle `4bab6717ee` (the fold). **Neither is the branch tip**: `fbf0608308` (19:49)
+and `73f16ef1f7` (21:38) postdate both. So the A/B comparison, whatever it says, is not tip
+validation - that comes from `-Dataset All`, which builds the working tree.
+
+**A build directory is an experiment input and belongs in the run record beside the command line.**
+`_bin\` holds 69 builds; the only thing separating the right one from the wrong one is a timestamp
+nobody looks at. Osprey logs `Osprey v<version>` and that version is routinely overridden
+(`OSPREY_VERSION_OVERRIDE=26.1.1.243` here, against a real FileVersion of 26.1.1.247), so the
+banner cannot distinguish two builds and actively suggests they are the same. Logging the resolved
+assembly path at startup would have made this self-evident.
+
+### Route B independently replicated the coupling-4 measurement
+
+Route B is a different feed (cold live score-pass sink, not warm sidecars) on a different build
+(`248-phase1`, not `249-mdiag-fold`), so it is a genuine replication rather than a re-reading:
+
+| | priv start | priv max | d_priv | mgd start | mgd floor | d_live | join share |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Route A (warm) | 11.68 GB | 32.67 GB | +21.00 GB | 9.45 GB | 5.66 GB | -3.78 GB | 72 % |
+| Route B (cold) | 32.68 GB | 37.23 GB | **+4.55 GB** | 9.39 GB | 7.85 GB | **-1.55 GB** | 72 % |
+
+Route B does strictly MORE work than Route A - a full cold first pass rather than a render over
+retained products - and its committed rise is **a quarter of Route A's**, because it entered the
+phase at 32.68 GB instead of 11.68 GB. The managed floor falls on both. The join share is 72 % on
+both.
+
+That is the plateau argument holding under an independent run: the phase's apparent cost is set by
+where the process already was, not by what the phase retains.
+
+**And the detected row count is identical to the digit: 13,954,867 on both routes.** The panel
+reduces the same population from either feed. That is not the payload comparison - it is one
+number out of ~18.8 K leaves - but it is the number that would move first if the feeds disagreed.
+
+## THE ROUTE A/B RESULT: exact match on 18,821 leaves
+
+```
+A leaves: 18822   B leaves: 18883   shared: 18821
+only in A: 0   only in B: 0   differing shared: 0
+tolerance: exact
+RESULT: MATCH
+```
+
+Route A: warm, folded from the on-disk 1st-pass sidecars, `_bin\249-mdiag-fold`.
+Route B: cold, folded from the LIVE score-pass sink as Percolator scored each row,
+`_bin\248-phase1`, on a bed carrying 446 `.scores.parquet` + `.calibration.json` and **nothing
+else** - verified before launch, and confirmed by the run's own refusal to take the warm path:
+
+```
+FirstPassFDR: not folding diagnostics from completed work - ...1st-pass.fdr_scores.bin is
+missing, so the first pass is re-run.
+```
+
+**Two independent feeds reduce to the same first-pass answer at 446 runs.** That is the claim the
+experiment was built to test, and it holds at zero tolerance across every leaf the two feeds share.
+
+### The match is not trivial - the control that proves it
+
+The three model fields are dropped BY NAME, so a match would be vacuous if Route B had also failed
+to train. It did not:
+
+| field | Route A (warm) | Route B (cold) |
+|---|---|---|
+| `featureCount` | 0 | **21** |
+| `model` | len 0 | **len 21** |
+| `modelComposite` | 0.0 | **0.12467664851908865** |
+| `modelDegenerate` | false | false |
+| `cal` | null | null |
+| `pass2` | null | null |
+| `fileCount` | 446 | 446 |
+
+Route B trained a real 21-feature model and Route A carried none, and the reports still agree
+exactly everywhere else. The 63 leaves separated into the model-derived bucket were all
+`featureHistEdges` (61 edges plus its length/None bookkeeping) - the field the previous handoff's
+three-name drop list would have missed.
+
+Two predictions made before the run, both confirmed by the result:
+
+* `cal` is null on BOTH. It is a Stage-3 capture and neither route runs Stage 3, so a difference
+  there would have been real and worth chasing. There was none.
+* `pass2` is null on BOTH, so Route B is the pass-1-only page the comparison requires - not the
+  two-pass report a Stages 5-7 run would have produced.
+
+### It also settles the different-builds confound, without the disambiguator
+
+Route A and Route B ran different binaries straddling the fold commit `4bab6717ee`. A MISMATCH
+would have been ambiguous between "the feeds disagree" and "the fold commit changed the report".
+**A match cannot be produced by two confounded differences cancelling** - not exactly, across
+18,821 leaves at zero tolerance. So the single result proves both:
+
+1. the live score-pass sink and the on-disk sidecars reduce to the same first-pass answer, and
+2. `4bab6717ee` is report-neutral.
+
+`run-routeA-prime-248.ps1` was staged to disambiguate a mismatch and is **not needed**. It is left
+in the session dir in case a later change reopens the question.
+
+Corroborating, from the panel's own log line on each route: **13,954,867 detected rows on both**,
+identical to the digit.
+
+## `regression.ps1 -Dataset All`: GREEN, and it is the tip validation
+
+Ran 02:52:38 -> 04:34:45, **exit 0, wall 1h42m06s**, on a build of the working tree at
+`73f16ef1f7`. Log: `ai/.tmp/sessions/20260905-routeB/gate-all.log`.
+
+```
+legs      : 72 PASS, 0 FAIL, 6 SKIP  (total 78)
+  Stellar                15 leg(s)
+  StellarLibDecoy        21 leg(s)
+  StellarGenDecoyEntrap  21 leg(s)
+  Astral                 21 leg(s)
+GATE ACCEPTED
+```
+
+Accepted by `sessions/20260905-routeB/check-gate.ps1` rather than by reading "exit 0": it asserts
+that every selected dataset contributed legs and that the total clears a floor, because an
+**aborted run reports zero failures too**. Stellar's 15 against the others' 21 is correct - it
+carries no `ModelDiagnostics` key in the dataset spec, so the mdiag legs do not apply to it.
+
+All 6 SKIPs are the two pre-existing ones (`mode8` partial rescore resume, `mode9` crash-shaped
+half-done resume, both wanting a `--model-diagnostics` plan source) across the three mdiag
+datasets. No new skip appeared.
+
+### This is what the A/B comparison could not prove
+
+Neither binary in the Route A/B experiment is the branch tip, so that match validates the feeds,
+not the tip. This gate builds the working tree, and the three legs the last two commits touched
+are green on **every** dataset rather than only on the StellarLibDecoy the previous session ran:
+
+| leg | Stellar | StellarLibDecoy | StellarGenDecoyEntrap | Astral |
+|---|---|---|---|---|
+| `mode3 (per-run hydrate)` | PASS (3 workers) | PASS (3 workers) | PASS (3 workers) | PASS (3 workers) |
+| `mode5 (rehydrate diagnostics vs golden)` | n/a | PASS | PASS | PASS |
+| `mode7 (diagnostics regeneration vs golden)` | n/a | PASS | PASS | PASS |
+
+`StellarGenDecoyEntrap` and `Astral` had never seen any of the six commits on this branch. The
+retired `CanHydratePerRun` exclusion holds on both, and modes 5 and 7 compare `featureCount`
+against the golden on both - the strictly-stronger check that replaced the `-NoTrainedModel` pin.
+
+## Regression suite cost: measured, then halved by lanes rather than threads
+
+The suite had grown from "under an hour" to 2h04m and nobody could say which leg cost
+what - the log carries no timestamps, `-KeepRunDirs` prunes the run dirs, and the summary
+prints only PASS/FAIL/SKIP. Estimates in comments were the only cost data, and one of them
+("about 25 minutes") turned out to be for a leg nobody had ever timed.
+
+### The gate now reports its own cost
+
+`Write-Progress-Tc` stamps every phase boundary and the summary prints a per-phase table,
+most expensive first. No leg carries a stopwatch, so new legs are covered automatically.
+Measured `-Dataset All`, 78 legs, 2h04m30s:
+
+| mode | total across 4 datasets | share |
+|---|---:|---:|
+| 3 — HPC 4-task chain | 43m 09s | 34.7 % |
+| straight-through | 25m 09s | 20.2 % |
+| 2 — resume self-consistency | 17m 51s | 14.3 % |
+| 9 — crash-shaped resume | 12m 07s | 9.7 % |
+| 8 — partial rescore resume | 12m 02s | 9.7 % |
+| 5 — Stage-5 rehydrate | 11m 32s | 9.3 % |
+| 1 — vs golden | 2m 27s | 2.0 % |
+| **1b, 1c, 4, 6, 7 — all five, all datasets** | **~1.5 s** | **0.02 %** |
+
+Two results worth keeping. **Five of the eleven modes are free** - they analyse artifacts
+the earlier legs already produced, so pruning modes by COUNT would save nothing and lose
+real coverage; only the six Osprey-invoking phases cost anything. And **Astral is 51.8 %
+of the suite**, almost exactly the other three datasets combined.
+
+### Threads do not help; processes do
+
+That balance suggested two lanes, but the local serial baseline ran `-Threads 16` on a
+32-logical box - so the parallel gain might have been nothing but the idle half. The
+control settles it:
+
+| local `-Dataset All` | wall |
+|---|---:|
+| serial `-Threads 16` | 2:04:30 |
+| serial `-Threads 32` | **1:59:38** |
+| parallel, 2 lanes x 16 | **1:14:03** |
+
+**Doubling threads bought 3.9 %. Running two processes bought 40 %.** Osprey saturates
+well below 16 threads, so the only way to use a bigger machine is more processes. That is
+why `regression-parallel.ps1` exists rather than a larger `-Threads` default, and it is
+the reason the approach should also help MacCoss TeamCity Agent 1, which is 8 cores / 16
+logical: 2 lanes x 8 beats 1 x 16 for the same reason.
+
+Threads per lane are therefore sized from `[Environment]::ProcessorCount / lanes`, the
+only value correct on both boxes (32 logical -> 2x16 here, 16 -> 2x8 on the agent).
+
+### Two shared-path collisions had to be fixed first
+
+Neither was architectural, and both would bite anyone running two gates at once:
+
+* `Initialize-Sqlite` overwrote `SQLite.Interop.dll` unconditionally while `Add-Type` held
+  it open in the other lane, killing the second lane in 2 seconds. A mutex cannot help -
+  the winner holds the handle for its whole life - so it compares bytes and copies only on
+  a real difference.
+* The run root was keyed on a whole-second timestamp, so lanes starting in the same second
+  SHARED it, and a finishing run deletes its run root: the short lane ended 12:20:18 and
+  the long one died at 12:20:22 on "unable to open database file". The name now carries
+  the PID, and `Remove-StaleRunDirs` skips dirs whose PID names a live `pwsh`.
+
+### The lanes are data-disjoint, and that is load-bearing
+
+Astral reads the `astral` folder and its own library; the three Stellar variants share the
+`stellar` folder, the stellar-libdecoy extract and `TestResults\_derived`, so they stay
+together in one lane and run sequentially within it. A lane-split test caught a bug that
+would have violated this: PowerShell FLATTENS `@($empty, $threeItems)`, so with Astral not
+selected the three Stellar variants each became their own lane. Build the lane list with
+`List.Add`, never an array literal.
+
+### Which dataset a leg belongs on — the rule the mode 2 cut follows
+
+Exact leg parity between Stellar and Astral is **not a goal**, and never has been: the
+largest existing asymmetry is that Astral runs no library-decoy configuration at all,
+a deliberate call made on library size and run time.
+
+The division of labour, stated so future cuts do not have to re-derive it:
+
+* **Workflow-DETECTION tests belong on the cheap dataset.** Does the pipeline notice that
+  something is missing, and can it resume from there? Those are Stellar's job. They are
+  about plumbing - stamps, sidecars, invalidation shapes - and plumbing does not care
+  about acquisition or resolution.
+* **The expensive dataset's job is proving it reproduces the same answer one task at a
+  time.** That is mode 3, the HPC 4-task chain parity leg, and it must stay on Astral.
+
+Mode 2 on Astral sat on the wrong side of that line. It is a workflow-detection test -
+delete the FirstPassFDR stamp, re-run, assert the answer is unchanged - and detection plus
+resume is already covered on Stellar, while Astral's ability to reproduce the answer task
+by task is covered by the mode 3 chain that remains. That is why it was the cut, rather
+than because it was merely the most redundant leg by assertion count.
+
+What is genuinely given up: mode 2's invalidation shape (a full in-process
+`FirstPassFdrTask.Run` re-execution) is no longer exercised at hram. Modes 5, 8 and 9 each
+use a DIFFERENT shape, and mode 3 re-runs FirstPassFDR as a separate `--task` process, so
+this is a real gap rather than pure duplication - it is simply a gap on the cheap side of
+the line above.
+
+**Before cutting any other leg, check what reads its log.** Mode 6 asserts the
+library-fragment release fired on every leg that HOLDS the library, and it inspects EIGHT
+legs, not the four KINDS its header lists (the --task PerFileRescoring kind expands to one
+check per file stem) - `resume.log` (mode 2) and `rehydrate.log` (mode 5)
+among them. Cutting either without gating mode 6's check list turns mode 6 red, which is
+how the first attempt at this cut failed.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260905_osprey_mdiag_routeB.md` before starting work.
+
+## COMPLETED - merged 2026-09-06
+
+**Status**: Completed
+**PR**: [#4633](https://github.com/ProteoWizard/pwiz/pull/4633) (merged 2026-09-06 as `c4921f3d6c`)
+**Successor**: `todos/active/TODO-20260906_osprey_stage7_lean_row.md`
+
+### 2026-09-06 - Merged
+
+PR #4633 merged as `c4921f3d6c`. What shipped: every first-pass phase's product becomes durable
+when that phase ends (model at training, protein-compact stratum in its own
+`.1st-pass.stratum.json` at protein FDR, per-file `.1st-pass.fdr_scores.bin` in pass 1), so a run
+interrupted after training re-enters at the compaction gate instead of repeating the score
+passes; Stage 6 planning's all-files survivor buffer is replaced by two per-file passes over the
+survivor loader (30.89 -> 12.91 GB peak managed at 86 files, compaction boundary identical); and
+`--model-diagnostics` became a render over retained per-pass products rather than a side effect
+of the all-runs hydrate.
+
+The equivalence that justified the last of those: a COLD `--task FirstPassFDR --model-diagnostics`
+at 446 runs, folding from the live score-pass sink, produced a first-pass report **exactly equal**
+to the warm fold from the on-disk sidecars - 18,821 payload leaves, zero differences, at zero
+tolerance, with 13,954,867 detected rows on both. Not vacuous: the cold run trained a real
+21-feature model (composite 0.1247) where the warm one carried none.
+
+Also shipped, arising from the same work rather than planned at the outset:
+
+* **Coupling 4 closed.** Peak co-assignment was logged as an uncharacterised O(runs) memory term
+  at ~33.5 GB. It is a TIME term: retained state saturates (89x the files buys 2.2x the
+  precursor population, ~30 MB at 446), the managed floor never rises at any N from 5 to 446, and
+  the 33.5 GB is the plateau every CHS run reaches regardless of size.
+* **The regression gate reports its own per-leg cost**, and runs as two lanes. Measured control:
+  doubling threads bought 3.9 % while running two processes bought 40 %, so Osprey saturates well
+  below 16 threads and lanes - not a bigger `-Threads` - are the lever. `-Dataset All` is 1:06 on
+  MacCoss TeamCity Agent 1, against ~1:46 serial, with SIX MORE legs than before.
+* **Modes 8 and 9 now run on every dataset**, including Astral where the defect they guard was
+  measured. Their `--model-diagnostics` skips were retired by the per-run hydrate change, exactly
+  as their own comments predicted ("deleting this branch is the whole change").
+* **Two concurrency defects fixed** that would bite anyone running two gates at once: the
+  unconditional `SQLite.Interop.dll` overwrite while the other lane held it open, and a run root
+  keyed on a whole-second timestamp so lanes starting in the same second shared - and deleted -
+  one directory.
+
+**Deferred, and carried to the successor TODO**: the Stage 7 / SecondPassFDR lean row itself,
+which is what this TODO was opened to reach, plus coupling 3 (pass-2 diagnostics reading the
+whole-run survivor pool). The acceptance criterion, the three-axis plan, the sidecar-not-struct
+decision and the 78.3 GB / ~240 MB-per-file measurement at 446 all remain in this file and are
+cited from the successor rather than duplicated.
+
+**One coverage reduction was taken deliberately** to bring the gate back inside its ~85 min
+budget: Astral no longer runs mode 2 (resume vs straight-through). It is a workflow-DETECTION
+test, which belongs on the cheap dataset; Astral's job is proving it reproduces the same answer
+one task at a time, which is mode 3's HPC chain parity and remains. Full per-dataset accounting,
+with the reason for every asymmetry, is in `ai/docs/osprey-development-guide.md`.

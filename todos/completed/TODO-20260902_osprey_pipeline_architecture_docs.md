@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260902_osprey_pipeline_architecture_docs`
 - **Base**: `master`
 - **Created**: 2026-09-02
-- **Status**: PR #4635 open. WI-1..WI-10, R1-R11 and the /code-review max round are done. WI-11 waits on the resume branch.
-- **PR**: [#4635](https://github.com/ProteoWizard/pwiz/pull/4635)
+- **Status**: Completed (WI-11 deferred to the resume branch)
+- **PR**: [#4635](https://github.com/ProteoWizard/pwiz/pull/4635) (merged 2026-09-03 as 51c0c248)
 - **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz-work2` (branch created there from `origin/master` at
   `08a02b9e2e`; `C:\proj\pwiz` holds the net8 branch and `pwiz-work1` holds the
@@ -851,3 +851,35 @@ forbidden).
 - Next: address Copilot / human review on #4635. WI-11 after the resume branch merges -
   markers are the `> **In flight**` blocks in 00 (three), doc 12, doc 15, and the
   `## In flight` section items 1-5.
+
+### 2026-09-03 - Merged
+
+PR #4635 merged as commit `51c0c248`. Copilot reviewed and left zero comments; the CI gate
+was 20/20 green. What shipped: `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` (961
+lines), the reconciliation of docs 12/14/15/20 and both READMEs under the 00/14/15 ownership
+rule, the `Osprey-workflow.html` File-scope legend and banner/geometry rewrite, and the
+`package.ps1` README link retarget with a PowerShell 7 requirement.
+
+The document went through three review rounds after the first draft - the planning session's
+R1-R11, the `PerFileRescoring` implementation session's A/B/C/D/E/F set, and
+`/code-review max` - and every round found real errors, including several in claims the
+previous round had passed. The pattern worth carrying forward: **a contract document must
+take every writer, reader and version from the code, never from another document.** Two of
+the worst findings (a deleted method cited as a live violation, and sidecar formats stale by
+two versions) came from trusting doc 14's prose instead of grepping.
+
+**Deferred, not shipped:**
+- **WI-11** - clearing the in-flight markers after
+  `Skyline/work/20260901_osprey_firstpass_resume` lands. Markers are the `> **In flight**`
+  blocks in doc 00 (three), doc 12 (one), doc 15 (one), and `## In flight` items 1-5. When
+  that branch merges, `.1st-pass.stratum.json` and `.1st-pass.retained_base_ids.bin` become
+  real artifacts and "two experiment-wide artifacts that must relay together" becomes four.
+- **Doc 14 section 4's format layout** still documents the superseded v4 record. It carries
+  a STALE warning naming the current values (v6, 32-byte header + 28-byte records) but was
+  not rewritten: this PR changed no code and could not test a reader against a transcribed
+  format. Worth a follow-up with someone who can run one.
+- **Doc 00 is 961 lines against its own ~900 guard rail.** Byte-level material was moved
+  down to 14 per the rule; what remains is contract content, and splitting sideways into a
+  second architecture doc is explicitly forbidden. Left as-is deliberately.
+- **The `ai/MEMORY.md` Osprey pointer** (WI-8) was parked on
+  `TODO-20260728_doc_reorg.md` WI-16 rather than pushing the core five further over budget.
