@@ -739,8 +739,15 @@ function Invoke-OspreyDatasetRun {
             # empty here because nothing downstream of Stage 7 used to be stageable; a
             # -Task ModelDiagnostics re-entry is, and without this it concludes the cohort has
             # no second pass and renders a pass-1-only page - complete, plausible, and half.
+            # The blib is SecondPassFDR's headline output, and a RE-ENTRY needs it present:
+            # the task declares it, so a diagnostics-only arm asking "is every other output
+            # current?" gets NO without it and re-runs the whole join. Only ever staged when
+            # -LinkThroughTask carries the loop through SecondPassFDR - a plain
+            # `-Task SecondPassFDR` re-measurement still stops before this row and regenerates
+            # its own blib, which is what that mode is for.
             'SecondPassFDR'    = @('.2nd-pass.fdr_experiment.bin',
-                                   '.2nd-pass.fdr_experiment.bin.SecondPassFDR.osprey.task')
+                                   '.2nd-pass.fdr_experiment.bin.SecondPassFDR.osprey.task',
+                                   '.blib', '.blib.SecondPassFDR.osprey.task')
             'ModelDiagnostics' = @()
         }
         # Everything strictly BEFORE the task under test. No -Task keeps the historical

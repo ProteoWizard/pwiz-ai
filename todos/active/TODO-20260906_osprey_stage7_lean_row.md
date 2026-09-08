@@ -1419,3 +1419,76 @@ unlike the previous round this IS the tip's local gate.
 Pushed `34ea446f3a` + `7de17740d9`. **TeamCity Perf/Regression 4168475** triggered on
 `pull/4642`, MacCoss Agent 1 - the developer pre-authorised one run for this night session,
 spent here because this is the first genuine merge candidate.
+
+## THE 446 MEMORY WALL WAS A RED HERRING - `--task ModelDiagnostics` FAILS AT 10 FILES TOO
+
+Continued after the 446 run, and the follow-up changes the conclusion. Each of these is a
+measured run, not an inference.
+
+| # | run (10-file CHS bed, `-LinkThroughTask`) | result |
+|---|---|---|
+| 1 | `--task ModelDiagnostics` | **FAILS in 33 s**, 7.2 GB - `HydrateReconciliationOverlay: failed to overlay .1st-pass.fdr_scores.bin` |
+| 2 | `--task FirstPassFDR --model-diagnostics` | **exit 0 in 75 s** - took the fold arm, wrote the report |
+| 3 | `--task SecondPassFDR --model-diagnostics`, blib absent | declined correctly and said why: `out.blib is missing, so the second pass is re-run` |
+| 4 | `--task SecondPassFDR --model-diagnostics`, blib staged | **`SecondPassFDR: skipping (outputs valid)`** - the fold arm never runs |
+
+### 1. `--task ModelDiagnostics` over `--input-scores` is broken at every scale
+
+The 446-file thrash was real but it is NOT the reason that run failed. The same failure
+reproduces at 10 files in 33 seconds with 7.2 GB in use and no memory pressure of any kind.
+At 446 it loads all 446 files (peaking ~75.9 GB managed / 77.5 GB private on a 63.7 GB box,
+paging) and then fails the same way - the memory cost is real and worth fixing, but it is
+downstream of a functional break.
+
+**Why mode 11 does not catch it**: mode 11 drives `-i <mzML>`, the straight-through input
+shape. The runners drive `--input-scores <dir>`, which is how every large cohort is run, and
+only that route reaches `HydrateReconciliationOverlay`. `--task FirstPassFDR` does not reach
+it either, because `StopAfterStage5` excludes PerFileRescore and SecondPassFDR from the
+graph; `--task ModelDiagnostics` includes them, and their hydration takes the strict batch
+overlay whose stub list (reconciled parquet = Stage-5 survivors) is a subset of the pass-1
+sidecar's pre-compaction records.
+
+**The error message is also wrong.** `RescoreHydration.OverlayFirstPassSidecar` throws
+`"... failed to overlay .1st-pass.fdr_scores.bin for {1} (expected at {2})"` for ANY
+`FdrScoresSidecar.TryRead` false return. The named file exists, is 106 MB and is readable -
+"expected at" reads as absence and is not. That is the absent-vs-unreadable ambiguity this
+codebase elsewhere treats as a defect, and it is the second face of the deferred Copilot
+finding #2.
+
+### 2. `--task SecondPassFDR --model-diagnostics` can never produce the pass-2 product
+
+Run 4 is the cleaner finding. On a bed where every declared output is present, the driver
+skips the task as already-done, so `Run` - and therefore the new fold arm - never executes.
+The pass-2 diagnostics product is not a DECLARED output on this path: `Outputs` yields
+`ReportPath` only when `config.ModelDiagnostics && FirstPassFdrTask.IsIncludedFor(config)`,
+and `IsIncludedFor` is false under `--task SecondPassFDR`.
+
+The `Outputs` comment explains why it was left that way, and the reason has now expired:
+
+> *"CanRehydrate requires every declared output to exist, so the task was never skippable and
+> every invocation re-ran pass-2 Percolator, protein FDR and the whole .blib write, still
+> producing no report."*
+
+That was true when producing the product meant re-running the join. **The pass-2 fold added
+by this PR is precisely what removes the objection**: with the fold, an outstanding pass-2
+diagnostics product costs minutes rather than a 69-minute join, so it can be declared.
+
+**Proposed (NOT done tonight)**: declare `ModelDiagnosticsReport.Pass2SidecarPath` from
+`SecondPassFdrTask.Outputs` whenever `config.ModelDiagnostics`, without the
+`FirstPassFdrTask.IsIncludedFor` term. Then a completed cohort asked for diagnostics has
+exactly one outstanding output per pass and P15's forward scan produces just those - which is
+what P16 says should happen. Not done because it would invalidate TeamCity 4168475, which is
+running on the current tip, and the developer asked for that gate to be spent close to merge.
+
+### What this means for the ship/hold decision
+
+The pay-later capability EXISTS and works: `--task FirstPassFDR --model-diagnostics`
+produces the pass-1 product from a completed run over `--input-scores`, exit 0. What does not
+work is the convenience task that was supposed to do both halves, and the pass-2 half's
+entry point. So the honest summary of this PR's P16 claim is:
+
+* pass-1 pay-later: **works** (pre-existing arm, now also reachable from `--task
+  ModelDiagnostics` - which is where it breaks for an unrelated reason)
+* pass-2 pay-later fold: **implemented and correct where it runs** (mode 11 proves it
+  byte-for-byte at 3 files), but **unreachable** via `--task SecondPassFDR` on a complete bed
+* `--task ModelDiagnostics`: **broken over `--input-scores`** at every scale
