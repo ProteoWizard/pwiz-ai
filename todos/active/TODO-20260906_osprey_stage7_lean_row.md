@@ -1655,3 +1655,82 @@ then the ordinary run) and comparing the pass-2 peak.
   using ~3x what the same work costs inside the join.
 * `--task ModelDiagnostics` is broken over `--input-scores` at every scale and is a separate
   defect from all of the above.
+
+## CORRECTIONS AND THE FIX, 2026-09-08 morning (with the developer awake)
+
+Three things above are WRONG or mis-attributed. Corrected here rather than edited in place,
+so the reasoning that produced the error stays visible.
+
+### 1. The 446 memory blow-up was the ORDINARY path's resident pool, not the fold
+
+The log attributes it exactly:
+
+```
+03:58:06   4.9 GB / 28.1 GB   Rebuilding first-pass survivors from 446 file(s)...
+04:54:26  85.9 GB / 91.1 GB   Read gap-fill and refined calibrations ... in 952.2s
+```
+
+`Rebuilding first-pass survivors` is `RescoredEntries.Value` - the resident survivor pool this
+PR exists to remove. It was built because `ScoringTaskShared.CanStreamStage7Join` opens with
+
+```csharp
+if (!config.ExpectReconciledInput || !OspreyEnvironment.Stage7Stream)
+    return false;
+```
+
+and `ExpectReconciledInput` is set ONLY by `--task SecondPassFDR`. So the ordinary `-i` run
+declines the streamed join and takes the resident arm - **as it always has**. This is not a
+regression from the pass-2 fold, and the fold does not add the pool; it inherits it.
+
+**The earlier claim that "the fold uses ~3x what the join costs" is withdrawn.** It compared
+the STREAMED `--task SecondPassFDR` arm against the RESIDENT ordinary arm - two different
+arms, not two different implementations of the same work. There is no evidence the fold is
+expensive; the measurement below shows the opposite.
+
+### 2. The fix is committed, and the pass-2 pay-later path is bounded at 446
+
+`652043b003`. Two halves, both required:
+
+* `SecondPassFdrTask.Outputs` declares `Pass2SidecarPath` whenever `config.ModelDiagnostics`,
+  without the `FirstPassFdrTask.IsIncludedFor` term - that term is false on
+  `--task SecondPassFDR`, so nothing this task owned was outstanding on a completed cohort and
+  the driver skipped it (`SecondPassFDR: skipping (outputs valid)`).
+* `OnlyDiagnosticsProductOutstanding` excludes that path as well as the report path, as pass
+  1's version excludes its own product.
+
+**Measured at 446 files** (bed `chs-446files-...-p16proof`: every artifact current, pass-1
+product present, pass-2 product absent), `--task SecondPassFDR --model-diagnostics`, exe
+`_bin\253-p16sp`:
+
+| | pay-later fold | same work inside the join (s7mdiag) |
+|---|---|---|
+| peak | **14.0 GB managed / 22.1 GB private** | 18.2 GB / 29.0 GB |
+| wall | **18 min** (06:53:54 -> 07:12:10) | 1:08:40 |
+| exit | **0** | 0 |
+
+Markers: the streamed join line (`folding over 446 run(s) ... no all-runs survivor pool;
+625620 retained base_id(s) read once`), then `folding the second pass from 446 run(s), one run
+resident at a time (no second-pass FDR, no protein FDR, no blib)`. Zero occurrences of
+`[STAGE-WALL] second-pass-fdr`, `Running protein-level FDR`, `Re-scoring file`, `Scoring file`,
+`Running First-pass Percolator` and `Rebuilding first-pass survivors`.
+`out.2nd-pass.model-diagnostics.json` written at 218,060 B with its stamp; `out.blib`
+untouched at its original timestamp.
+
+So the pay-later pass-2 report costs LESS than the join that used to produce it, on both axes.
+
+### 3. `--task ModelDiagnostics` is a known class, and its fix is already designed
+
+The `HydrateReconciliationOverlay` failure is not new - it is the two-seams problem written up
+in `TODO-20260901_osprey_stage5_reload_materialization.md:3563`, "PROPOSAL: retire
+`--input-scores` - a Rust-era seam the C# port already replaced". That section already records
+this exact failure mode (`PerFileRescoreTask.IsIncluded` believing the input kind, joining the
+pipeline and demanding state a diagnostics fold never publishes) and names patching predicates
+as treating the symptom.
+
+`RescoreHydration.SyntheticInputFromParquet` is the concrete evidence: it converts each
+supplied parquet path BACK into a synthetic `<stem>.mzML` that does not exist, purely so the
+sidecar helpers - which all derive from the data-file root - can work.
+
+That proposal is explicitly scoped to its own branch and its own `-Dataset All`. **Not folded
+in here**, and `--task ModelDiagnostics` over `--input-scores` remains broken until it lands.
+The working entry points are the ordinary command plus the flag, and the per-task ones.
