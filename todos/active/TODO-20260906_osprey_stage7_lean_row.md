@@ -1525,3 +1525,54 @@ the join is 69 minutes at 446.
 **NOT committed**, for one reason only: it invalidates TeamCity 4168475, which is running on
 the current tip, and the standing rule is to ask before any re-trigger. The change is
 turnkey; it needs `regression.ps1 -Dataset All` and a fresh Perf/Regression before merge.
+
+## CORRECTION: P16's ACTUAL ENTRY POINT WORKS ON THE PUSHED CODE
+
+The pessimistic reading above was drawn from `--task ModelDiagnostics`, which is not the
+entry point P16 REFRAMED names. The developer's own words are *"a run that was run without
+--model-diagnostics should be able to re-run with --model-diagnostics"* - the ORDINARY
+command plus the flag, no `--task` at all. That was never tested until now, and it works.
+
+**Measured on a 10-file CHS bed staged to the pay-later starting state** (every analysis
+artifact current INCLUDING `out.blib`, no diagnostics products), exe `_bin\251-p16fold` =
+the pushed `7de17740d9`, over `--input-scores`:
+
+| oracle | result |
+|---|---|
+| pass-1 fold marker | **1** |
+| pass-2 fold marker | **1** |
+| `[STAGE-WALL] second-pass-fdr` | **0** |
+| `Running protein-level FDR` | **0** |
+| `Re-scoring file` / `Scoring file` / `Running First-pass Percolator` | **0 / 0 / 0** |
+| exit code | **0** |
+| products | `out.1st-pass.model-diagnostics.json` 136,519 B, `out.2nd-pass.model-diagnostics.json` 121,287 B, `out.model-diagnostics.html` 412,777 B, all stamped |
+| `out.blib` | **untouched - still dated Sep 2 19:26** |
+
+Both halves folded, NO analysis of any kind ran, and the only artifacts written were the
+diagnostics products and the page. **That is P16's defining scenario, satisfied.**
+
+### Why the earlier runs looked worse than the truth
+
+Every failing run was a mis-framing, and each one is worth keeping because it names a real
+secondary defect:
+
+* `--task ModelDiagnostics` - genuinely broken over `--input-scores` at every scale
+  (`HydrateReconciliationOverlay`). It is a convenience task, NOT the entry point P16 names.
+* `--task SecondPassFDR --model-diagnostics` - cannot reach its fold on a complete bed
+  (product not declared). Two-line fix verified above.
+* The first ordinary-entry-point run declined the pass-2 fold and re-ran protein FDR - and
+  it was RIGHT to: that bed had no `out.blib`, because it had been staged for
+  `--task ModelDiagnostics`, where DiagnosticsOnly removes the blib from `Outputs`. The
+  predicate named the missing file. Staging the blib is what the runner fix added, and with
+  it the fold arm engages.
+
+The lesson for the gate: the 10-file bed with a blib is the shape that matters, and three
+different mis-staged beds each produced a plausible wrong conclusion before it.
+
+### What remains genuinely open
+
+* **Does the ordinary entry point scale to 446?** The hydrate is the same one that
+  materialises the pre-compaction pool, so the ~60 GB cost recorded above should still
+  apply. Being measured now.
+* `--task ModelDiagnostics` over `--input-scores` is broken and should be fixed or blocked.
+* Pass-1 completeness (`cal` / model views) is unchanged.
