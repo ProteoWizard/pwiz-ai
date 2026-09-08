@@ -1,9 +1,10 @@
 # TODO-20260906_osprey_stage7_lean_row.md - Stage 7 (SecondPassFDR) holds ~274 B objects where 88 B of row would serve
 
 **Module**: `osprey`
-**Status**: In Review - [#4642](https://github.com/ProteoWizard/pwiz/pull/4642) open, pushed,
-all gates green. **NOT mergeable yet**: the developer will not merge until pass-2 diagnostics
-fold within bounded memory (see "THE NEXT PHASE").
+**Status**: Completed.
+**PR**: [#4642](https://github.com/ProteoWizard/pwiz/pull/4642) (merged 2026-09-08 as
+`ade29fa42d`). The merge blocker - "the developer will not merge until pass-2 diagnostics fold
+within bounded memory" - was cleared on this branch; see "THE NEXT PHASE LANDED".
 **Branch**: `Skyline/work/20260906_osprey_stage7_lean_row` in `C:\proj\pwiz-work1`,
 cut from `c4921f3d6c` (master with #4633 merged).
 **Predecessor**: `todos/completed/TODO-20260901_osprey_stage5_reload_materialization.md`,
@@ -1911,3 +1912,41 @@ Tree is back at `32ea5f6aa3`. The derivation is right and wanted - it is just th
 of a two-part change, and shipping the half that only moves a predicate makes the diagnostics
 lie. **Do it together with the Rehydrate per-run source, on its own branch, with mode 2 and
 mode 5 as the legs that gate the resume arm.**
+
+### 2026-09-08 - Merged
+
+PR #4642 merged as commit `ade29fa42d`. The streamed Stage-7 join shipped: `SecondPassFDR`
+folds over the runs one at a time instead of holding every run's survivors, which carried a
+446-run CHS cohort to completion (exit 0, 71 min) at 23.5 GB managed / 36.4 GB private where it
+had been killed at run 381 of 446, and put the memory floor on a FALLING trend. The acceptance
+criterion this TODO carried verbatim - "SecondPass lower than FirstPass" - is met on both axes.
+
+**Merged on the local gates, with the TeamCity gate STALE and that stated at the merge.** The
+last Perf/Regression run was `1cc6fcc1`, which predates both the review fixes and the mode-10
+cut; the merged tip is `32ea5f6aa3`. Green at that tip locally: 606 tests + zero-warning
+inspection, and `-Dataset All` 79 PASS / 0 FAIL. The 18 GitHub checks on the PR were green.
+
+**What was deferred, and where it went:**
+
+* Item 1 of STILL OPEN (the gate cannot see the streamed arm on 3 of 4 datasets) - CLOSED on
+  this branch by the next-phase work, which removed `CanStreamStage7Join`'s
+  `config.ModelDiagnostics` term, plus the mode-3 marker assertion.
+* Item 2 (`--model-diagnostics` needs the resident pool) - CLOSED, and it was the merge
+  blocker.
+* Item 3 (steps 2b/3: `transfer`'s per-run half into `Pass2PerFileWorker`) - NOT done, and
+  deliberately: it is a redesign of the transfer arm rather than a call-shape change. It is the
+  one route that still cannot stream, so `Stage7ResidentGuardError` keeps its
+  `streamingAvailable` exemption and `regression.ps1` keeps the `#4486` disclosure row, now
+  scoped to that mode alone. Carried in
+  `todos/active/TODO-20260908_osprey_stage7_straightthrough_stream.md`.
+* Item 4 (`FdrScoresSidecar.TryWalkRecords`' widened OOM catch) - NOT done. Untouched by this
+  branch; it arrived in the cherry-picked `4b9df2a836`.
+
+**Successor, already open and stacked on this one**:
+[#4646](https://github.com/ProteoWizard/pwiz/pull/4646) makes the STRAIGHT-THROUGH run stream
+the join too. This branch's own closing note called that out - the derivation of
+`CanStreamStage7Join`'s admission is necessary but not sufficient, because
+`PerFileRescoreTask.Rehydrate`'s straight-through arm publishes a source-less milestone that no
+predicate change can reach. #4646 does both halves and adds the cold `Run` arm, which that note
+did not yet know was also resident. #4646 was retargeted from this branch onto `master` at the
+merge; the remote branch was deliberately NOT deleted until that retarget was confirmed.
