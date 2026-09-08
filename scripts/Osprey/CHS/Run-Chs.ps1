@@ -24,6 +24,15 @@
 .EXAMPLE
     # The staged 3-plate cohort
     .\Run-Chs.ps1 -Plates 0059,0060,0061 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact
+
+.EXAMPLE
+    # Pay for the diagnostics AFTER a run that finished without them (P16). -LinkThroughTask is
+    # what makes this a re-entry rather than a re-analysis: it stages each stage's outputs AND
+    # their .osprey.task stamps, so every pass sees that it has already run and folds its report
+    # instead of recomputing it. Without the switch the stamps are absent, the passes recompute,
+    # and the RIGHT report appears hours later with nothing in the artifact to say so.
+    .\Run-Chs.ps1 -Plates 0059,0060,0061 -Task ModelDiagnostics -LinkThroughTask `
+        -LinkFrom D:\test\osprey-runs\chs-seer\runs\<a completed run> -WhatIf
 #>
 #requires -Version 7
 param(
@@ -45,8 +54,9 @@ param(
     [int]$ParallelFiles = 0,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                 'SecondPassFDR')]
+                 'SecondPassFDR', 'ModelDiagnostics')]
     [string]$Task,
+    [switch]$LinkThroughTask,
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,

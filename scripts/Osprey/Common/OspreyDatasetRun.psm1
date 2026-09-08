@@ -203,8 +203,18 @@ function Invoke-OspreyDatasetRun {
         # -LinkFrom this makes a single-phase re-measurement cost only that phase - e.g. Stage 5
         # at 163 files is ~75 min instead of the 18 h a full run takes.
         [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                     'SecondPassFDR')]
+                     'SecondPassFDR', 'ModelDiagnostics')]
         [string]$Task,
+        # Link the stages up to AND INCLUDING -Task, instead of strictly before it.
+        #
+        # The default (strictly before) is right when the task under test is meant to REGENERATE
+        # its outputs - that is what a single-phase re-measurement is. It is wrong for a
+        # diagnostics-only re-entry, where the whole point is that the task adopts a completed
+        # pass rather than recomputing it: with its own outputs and their .osprey.task markers
+        # absent, the task cannot see that it has already run and does the work again. That
+        # failure is SILENT and expensive - the re-run produces the RIGHT report, so only the
+        # log line separates a 4h46m recompute from a minutes-long fold.
+        [switch]$LinkThroughTask,
         [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
         # First-pass EXPERIMENT-score aggregation: '' (the max default) or 'mean-best-<N>'.
         # A first-class parameter rather than a caller-exported OSPREY_EXPERIMENT_AGG because
@@ -458,7 +468,8 @@ function Invoke-OspreyDatasetRun {
     # "--task FirstPassFDR cannot be combined with --input. Use --input-scores instead."
     # With -LinkFrom the parquets are already hard-linked into $OutDir, so that directory IS
     # the score input. Mutually exclusive with -i, hence the branch rather than an extra flag.
-    $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR')
+    $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR',
+                            'ModelDiagnostics')
     $useScores = $Task -and ($POST_SCORING_TASKS -contains $Task)
     if ($useScores -and -not $LinkFrom -and -not $Resume) {
         throw ("-Task $Task consumes per-file artifacts, not raw input. Pass -LinkFrom <a completed " +
@@ -691,6 +702,11 @@ function Invoke-OspreyDatasetRun {
             # Analysis-wide outputs are not per-file, so there is nothing here to hard-link per
             # input. They are NOT absent from the relay, though - see $ANALYSIS_ARTIFACTS below.
             'SecondPassFDR'    = @()
+            # -Task ModelDiagnostics is not a pipeline stage that produces per-file artifacts;
+            # it sits at the END of the table so that "everything strictly before it" is the
+            # WHOLE analysis. That is exactly the bed a diagnostics re-entry needs: it re-enters
+            # on a completed run and must find every stage's outputs, including their stamps.
+            'ModelDiagnostics' = @()
         }
         # Analysis-wide artifacts: ONE file for the whole cohort, named after the output blib's
         # stem rather than an input stem, so the per-input loop below cannot see them.
@@ -706,17 +722,30 @@ function Invoke-OspreyDatasetRun {
             'PerFileScoring'   = @()
             'FirstPassFDR'     = @('.1st-pass.fdr_experiment.bin', '.1st-pass.retained_base_ids.bin')
             'PerFileRescoring' = @()
-            'SecondPassFDR'    = @()
+            # The analysis-wide 2nd-pass experiment sidecar is SecondPassFDR's own end-of-join
+            # output, and it is how a later invocation learns a second pass EXISTS to describe
+            # (ModelDiagnosticsReport.HasCompletedSecondPass asks exactly this file). It was
+            # empty here because nothing downstream of Stage 7 used to be stageable; a
+            # -Task ModelDiagnostics re-entry is, and without this it concludes the cohort has
+            # no second pass and renders a pass-1-only page - complete, plausible, and half.
+            'SecondPassFDR'    = @('.2nd-pass.fdr_experiment.bin')
+            'ModelDiagnostics' = @()
         }
         # Everything strictly BEFORE the task under test. No -Task keeps the historical
         # Stage 1-4 behavior, so existing callers are unaffected.
+        #
+        # -LinkThroughTask makes it INCLUSIVE, which is what a re-entry needs rather than a
+        # re-measurement: the task's own outputs and stamps have to be on disk for it to
+        # recognise that it has already run. See the parameter's own note for why getting this
+        # wrong is silent.
         $upTo = if ($Task) { $Task } else { 'FirstPassFDR' }
         $suffixes = @()
         $analysisSuffixes = @()
         foreach ($stage in $STAGE_ARTIFACTS.Keys) {
-            if ($stage -eq $upTo) { break }
+            if ($stage -eq $upTo -and -not $LinkThroughTask) { break }
             $suffixes += $STAGE_ARTIFACTS[$stage]
             $analysisSuffixes += $ANALYSIS_ARTIFACTS[$stage]
+            if ($stage -eq $upTo) { break }
         }
         if ($suffixes.Count -eq 0) {
             throw ("-Task $Task is the FIRST pipeline stage, so there is nothing earlier to link. " +
@@ -778,8 +807,9 @@ function Invoke-OspreyDatasetRun {
         }
 
         $verb = if ($WhatIf) { 'WOULD hard-link' } else { 'hard-linked' }
-        Write-Host ("LinkFrom: {0} {1} file(s) for stages before {2}, {3} missing, from {4} source(s)" -f
-                    $verb, $linked, $upTo, $missing, @($LinkFrom).Count)
+        $through = if ($LinkThroughTask) { 'through' } else { 'before' }
+        Write-Host ("LinkFrom: {0} {1} file(s) for stages {2} {3}, {4} missing, from {5} source(s)" -f
+                    $verb, $linked, $through, $upTo, $missing, @($LinkFrom).Count)
         foreach ($src in $LinkFrom) {
             $n = $linkedBySource[$src]
             $color = if ($n -eq 0) { 'Yellow' } else { 'Gray' }
