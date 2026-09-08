@@ -990,3 +990,57 @@ is pointing at, and P16 is the fix at the specification level.
    produces the right report too, silently and slowly, which is why the marker is the oracle.
 
 Sequenced into the night session: `ai/.tmp/handoff-20260908_osprey_mdiag_446_night.md`.
+
+### P16 REFRAMED (developer, 2026-09-07) - it is the resume model, not a special task
+
+The developer's framing, which fits the existing architecture better than the first draft:
+
+> *"a run that was run without --model-diagnostics should be able to re-run with
+> --model-diagnostics and the only work that would happen would be generating diagnostics
+> side-cars and in the end diagnostics HTML ... a user can choose to run without
+> --model-diagnostics for a streamlined run and then later decide they would like to review
+> the diagnostics HTML ... cleanly able to pay for the diagnostics after the fact without
+> re-running the primary analysis."*
+
+So the entry point is the ORDINARY command plus the flag, not `--task ModelDiagnostics`. The
+diagnostics products are declared outputs; on a completed run they are the only outstanding
+ones and P15's forward scan produces just them. Pass 1's `OnlyDiagnosticsProductOutstanding`
+is not a special case - it is this model, implemented once.
+
+The developer also proposed the invariant: **diagnostics work belongs in FPFDR/SPFDR, never
+in PFS/PFR.** Checked against the code:
+
+| task | does diagnostics work today? | consistent with the invariant? |
+|---|---|---|
+| PerFileRescoring | none | YES |
+| PerFileScoring | builds + feeds the pass-1 accumulator (`PerFileScoringTask.cs:1418-1459`), and captures the CAL view (`:2549`, published `:893`) | **NO** |
+
+### THE CAL VIEW IS THE PROOF, and it is a live silent defect
+
+`.calibration.json` is written per file and is durable. But `_perFileCalibrationDiagnostics`
+is populated only in memory during PerFileScoring and published from there; **nothing ever
+reads those files back**. The report writer admits it:
+
+> *"The CAL view: per-file calibration diagnostics captured at Stage 3 (null when none were
+> captured - a resumed run, or no files calibrated)."*
+
+So on exactly the pay-later workflow, PFS does not re-run, `Cal` is null, and the HTML
+**silently loses its calibration tab** while every input for it sits on disk. Degraded, not
+failed, and nothing says so - the reader cannot tell absence from emptiness.
+
+That generalises: **any diagnostic captured in a fan-out task is lost to the pay-later
+path**, because that path's premise is that the fan-out does not re-run. The developer's
+invariant is what prevents the whole class.
+
+### What this PR owes, revised to three items
+
+1. **Pass-2 diagnostics-only fold**, symmetric with pass 1's - fold from the 2nd-pass
+   sidecars + reconciled parquets without the rest of the Stage 7 join (69 min measured).
+2. **Move the pass-1 diagnostics work out of PerFileScoring into FirstPassFDR**, and rebuild
+   the CAL view from the per-file `.calibration.json` artifacts so it survives a resume.
+3. **Prove at 446 files** with BOTH halves of the oracle: the no-analysis marker AND a
+   byte-comparison against the report the same analysis produces with the flag passed up
+   front. "It produced a report" is not the test; "it produced the SAME report" is.
+
+Item 2 is the one that would have shipped a quietly incomplete report, and no existing gate
+would have caught it - the small-dataset gates always run the flag up front.
