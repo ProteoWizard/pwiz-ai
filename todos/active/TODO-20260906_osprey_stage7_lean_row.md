@@ -1776,3 +1776,38 @@ pool this PR exists to remove. The proposal's "must not be lost in the move" bul
 question the proposal suggests - "does `<stem>.scores-reconciled.parquet` exist and carry a
 current stamp" - then a straight-through 446 run would stream Stage 7 too, and the 91 GB
 resident path would go with it. That is a bigger prize than the flag removal itself.
+
+### THE RESIDENT-PATH TOKEN AUDIT (developer question, 2026-09-08)
+
+**Does regression.ps1 require any `OSPREY_ALLOW_UNFIXED_RESIDENT` tokens? NO - zero**, and
+the gate asserts it on every run: `Tokens REQUIRED by this gate: 0 (target: 0)`. Line 309
+only SAVES and RESTORES an operator's token so running the gate interactively does not
+clobber it; it never sets one.
+
+**Is the Stage-7 resident pool represented? Yes, and deliberately as untokenable.** It is
+`$knownResidentGaps` entry `#4486` with `Token = 'NONE'`, and the comment above it states the
+design: *"Untokened by nature, which is exactly why it belongs here: no guard demands a token
+for it, so a token audit cannot see it and a green gate printed 'none' while every leg walked
+it."* The disclosure table exists precisely to catch what the token mechanism structurally
+cannot.
+
+**Why no env var is possible for it.** The guard is `PerFileScoringTask.NeedsResidentPool`,
+which decides the PRE-compaction pool. The Stage-7 buffer is built POST-compaction, when
+Stage 7 pulls `RescoredEntries`, so the guard never sees it and no token could refuse it.
+`ResidentPaths.COMPACTED_ENTRIES_BUFFER`'s own doc records the identical reasoning for its
+case - *"the older guard's invariant stops at the compaction line ... so no token could refuse
+it and none was required"* - and then names it anyway, "the ratchet reaching further". So
+there IS precedent for extending the guard past the compaction line if this one should be
+tokened rather than merely disclosed. That is a design decision, not an oversight.
+
+**What WAS inaccurate, now fixed (`22f16b246e`).** The entry said
+`Legs = 'Every leg of every dataset.'` This PR made that false - mode 3's SecondPassFDR phase
+takes the streamed join - and the same file already said so twelve lines below (*"hpc-merge is
+GONE (#4486): --task SecondPassFDR takes the bounded streaming hydrate"*). The file
+contradicted itself and the summary printed the stale half on every CI run. The disclosure
+now reads "Every leg EXCEPT the streamed Stage-7 join (mode 3's SecondPassFDR phase, which
+sets ExpectReconciledInput)".
+
+**And the projection is now confirmed.** Its model is 4.4 GB library + 0.197 GB/file, which
+predicts 92.3 GB at 446; the measured private peak on the 446-run CHS cohort was 91.1 GB.
+First endpoint past 82 files, and it validates the model rather than replacing it.
