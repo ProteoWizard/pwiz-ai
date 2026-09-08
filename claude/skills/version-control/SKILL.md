@@ -160,10 +160,18 @@ reset to recover. Merging leaves the existing commits reachable, so a teammate's
 `git pull` is a fast-forward and several people can work the same branch at once. The
 merge commits cost nothing: the PR is squash-merged, so they never reach master.
 
-**Before the PR exists, a rebase is fine** — nobody else has the branch yet. The rule
-starts at `gh pr create`. After that a rebase is **rare, not forbidden**: a deliberate,
-announced decision, never the routine way to update, and whoever does it owns telling
-anyone holding the branch that they must reset.
+**Before the PR exists, a rebase is fine** - nobody else has the branch yet. The rule
+starts at `gh pr create`. **After that we do not rebase.** Not "rarely": that wording used
+to stand here and was read as permission.
+
+**The case that looks like an exception is a branch stacked on a squash-merged parent.**
+When the parent merges, its commits are replaced by one commit sharing no ancestry with
+them, so the child's merge base falls back and BOTH sides re-introduce the parent's whole
+content - the child conflicts with master although master moved by one commit. It is the
+textbook `rebase --onto` shape and the answer is still `git merge origin/master` and
+resolve: both sides already hold the parent's content, so you are reconciling your own
+later edits, not re-deriving the parent's work. Measured case and numbers in
+version-control-guide.md.
 
 **Before any force-push, check whether one is actually needed.** A branch labelled
 "diverged" often is not — if the rebase was followed by a push, the remote already has the

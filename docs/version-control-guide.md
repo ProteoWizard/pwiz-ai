@@ -533,9 +533,43 @@ history that ships.
 **Before the PR exists, rebasing is fine** — nobody else has the branch. The rule starts
 at `gh pr create`.
 
-**Rebasing after that is rare, not forbidden** — but it is a deliberate, announced
-decision, never a routine way to update. Whoever rebases owns telling anyone holding the
-branch, because they have to reset to recover.
+**After that we do not rebase.** Not "rarely" - the earlier wording here said "rare, not
+forbidden", and a session read that as permission and reached for `git rebase --onto` on an
+open PR. There is no routine case, and the cases that feel like exceptions have the same
+answer: merge master in and resolve.
+
+### The one that looks like an exception: a branch stacked on a squash-merged parent
+
+This is the case that tempts a rebase, because it is the textbook `rebase --onto` shape and
+because the branch suddenly conflicts with master for no visible reason.
+
+A squash-merge replaces the parent branch's commits with ONE new commit that shares no
+ancestry with them. So the moment the parent merges, git's merge base for the child falls
+back to the last real master the parent had merged in - and from that base BOTH sides
+re-introduce the parent's entire content: master as the squash, the child as the original
+commits. Git cannot tell they are the same work.
+
+Measured 2026-09-08, PR #4646 stacked on #4642:
+
+```
+merge-base(origin/master, 4646) = 4cb159f1e6   # the last master #4642 had merged in
+master side since base:  1 commit              # the #4642 squash
+branch side since base:  15 commits            # all of #4642, plus the child's own
+```
+
+Seven files conflicted. They were exactly the files the child's own commit had edited
+FURTHER, on lines the parent introduced; the files where the two sides were byte-identical
+auto-merged with no conflict. Master had moved by one commit, and that commit was the
+parent's own work.
+
+**Do the ordinary thing**: `git merge origin/master` and resolve. The conflicts look
+alarming and are not - both sides already hold the parent's content, so resolving means
+reconciling your own later edits against lines you recognise, not re-deriving the parent's
+work. `rebase --onto origin/master <parent-tip>` would drop the redundant commits and
+produce a tidier branch, and it is still wrong: it force-pushes an open PR.
+
+Retarget the child onto master when the parent merges (`gh pr edit <N> --base master`).
+That does not cause the conflict - it surfaces one that the squash already created.
 
 ### Check whether a force-push is actually needed
 
