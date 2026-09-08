@@ -1296,3 +1296,89 @@ printed in the summary line on every run rather than hidden, and the pass-2 half
 compared byte-for-byte with no exclusion at all. **This is a new gate with a named
 skip-list, not an existing gate loosened - but it wants the developer's explicit sign-off,
 and removing the skip-list is the acceptance test for item 2.**
+
+## (B) AT 446: THE FOLDS RUN, AND THE MEMORY BAND IS NOT MET - ROOT CAUSE IDENTIFIED
+
+Run: `chs-446files-libdecoy-r1.0-protein-compact-p16proof`, exe `_bin\251-p16fold`
+(v26.1.1.251, commit `7de17740d9`), `--task ModelDiagnostics` over a bed hard-linked from
+`s7mdiag` (per-file + 2nd-pass experiment sidecar) and `stages567` (the pass-1 experiment
+stamp). 8028 artifacts linked, 0 missing. Logs:
+`ai/.tmp/sessions/20260908-night/p16proof-446{,b}.log`.
+
+### Two attempts, and the first one is a result rather than a mistake
+
+**Attempt 1 failed in 2 minutes on a `search_hash` mismatch** - the runner resolved
+`target+decoy+entrapment` while the bed was scored against
+`target+decoy+entrapment-20260817`. That is the guard doing exactly its job: it refused the
+parquets rather than describing a different search, and it cost 2 minutes instead of hours.
+Recorded in `ai/scripts/Osprey/CHS/README.md` because the message names hashes, not the
+argument that differs.
+
+**Attempt 2 reached file 380/446 of the load at 61.5 GB managed / 63.1 GB private on a
+63.7 GB box**, working set collapsed to 6.2 GB against 60.6 GB private (i.e. paging, not
+computing) with a ~3 minute reporting gap. Killed deliberately - it was thrashing, and the
+mechanism was already identified.
+
+### Root cause: the pass-1 fold materialises the pre-compaction pool to obtain file names
+
+`FirstPassFdrTask.FoldDiagnosticsOnly` opens with
+
+```csharp
+var perFileEntries = ctx.Get<ScoredEntries>().Value;
+...
+var fileNames = perFileEntries.ConvertAll(kv => kv.Key);
+```
+
+and then never reads `perFileEntries` again - `RescoreHydration.FoldPreCompactionPerRun`
+re-loads each run's stubs itself, one run at a time, which is the whole point of the fold.
+So the resident pool is built purely to enumerate keys, and then paid for a second time
+per run.
+
+**Why the lean path cannot rescue it, and why that is structural rather than a tuning
+miss.** `PerFileScoringTask.CanUseLeanProjection` is
+
+```csharp
+return !NeedsResidentPool(config, useFdrProjection)
+       && !hasReconSidecars
+       && !config.ExpectReconciledInput;
+```
+
+`NeedsResidentPool` is false here (projection on, Percolator, no FDRBench pass 1), so
+features are NOT loaded - these are fat STUBS without features. But `hasReconSidecars` is
+TRUE, because the bed is a COMPLETED analysis and every file has its `.reconciliation.json`
+and reconciled parquet. **A pay-later diagnostics run is by definition a finished analysis,
+so it always has reconciled sidecars - the one shape that can never take the lean path is
+the exact shape P16 describes.**
+
+This is the second cost P16 itself names, observed: *"the report inherits the memory shape
+of the phase, not of the reduction."* The reduction is O(distinct); the phase's hydrate is
+O(files x entries).
+
+### Status against the (B) oracles, stated honestly
+
+| oracle | verdict |
+|---|---|
+| no analysis ran | **not reached** - the run never got past the hydrate to the fold markers |
+| memory band O(distinct) | **FAILS at 446**: ~60 GB private in the hydrate, before any folding |
+| wall clock minutes | not reached |
+
+`--task ModelDiagnostics` is correct in its ROUTING (it recognised the missing product and
+entered the fold arm - the log line is in both attempts) and correct at 3 files, where mode
+11 proves both folds run, no analysis runs, and the products come back identical. It does
+not yet meet the memory half of P16 at 446.
+
+### NOT fixed tonight, deliberately
+
+The fix is to stop `FoldDiagnosticsOnly` needing the resident pool - either a cheap
+publisher for the file-name/parquet-path pair, or a diagnostics-only allowance in
+`CanUseLeanProjection`. The second is where the change naturally goes and is exactly where
+it must not be made casually: that predicate's own comment records that making the lean path
+newly reachable once handed Stage 7 empty per-file lists and produced *"a near-empty .blib,
+written with no error"*. That is the silently-invalid-output class the standing rule says to
+hard-fail on, and it wants daylight, a named consumer analysis, and its own gate - not a
+00:45 edit under time pressure.
+
+**Mode 11 is the gate that would validate such a fix cheaply**, because it byte-compares
+both products against the flag-up-front run; a hydrate that handed the folds empty lists
+would red it immediately. That is the recommended order: make the change, red-or-green it at
+3 files in ~6 minutes, and only then spend a 446-file run.
