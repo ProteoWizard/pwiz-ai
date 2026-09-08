@@ -1734,3 +1734,45 @@ sidecar helpers - which all derive from the data-file root - can work.
 That proposal is explicitly scoped to its own branch and its own `-Dataset All`. **Not folded
 in here**, and `--task ModelDiagnostics` over `--input-scores` remains broken until it lands.
 The working entry points are the ordinary command plus the flag, and the per-task ones.
+
+### CORRECTION to the "ordinary entry point" framing (developer challenge, 2026-09-08)
+
+I called `-i <raw> --output-dir <completed dir> --model-diagnostics` "the ordinary command"
+and said P16's scenario works. **That is true at 10 files and false at 446**, and the
+evidence was already in this cohort's own history.
+
+`chs-446files-libdecoy-r1.0-protein-compact-stages567` - the bed everything else descends
+from - was produced by exactly that straight-through `-i ... --output-dir` invocation. Its
+log shows `[TASK] PerFileRescoring:done` followed by `[TASK] SecondPassFDR:starting` and
+NEVER `:done`, and the bed carries no `out.2nd-pass.fdr_experiment.bin`. Stage 7 did not
+complete. The cohort was finished only by re-entering with `--task SecondPassFDR`, which is
+the leg that streams.
+
+So at 446 the per-task legs are not one option among several - they are the only ones that
+fit. Two further facts make the "ordinary" framing weaker still:
+
+* 446 absolute `-i` paths is ~28,600 characters, **87% of the 32,767 Windows command-line
+  limit** (measured, and quoted in `OspreyCommandArgs` above `--input-list`). The ordinary
+  form is near a wall of its own at this scale.
+* Without `-i` OR `--input-scores` there is no file set at all. Validity stamps say whether a
+  run's outputs are current; nothing says WHICH runs exist. That is the developer's point:
+  it is a file-set mechanism, not a stage-skipping one.
+
+### THE CONSTRAINT THE RETIREMENT PROPOSAL MUST NOT MISS
+
+`--input-scores` is today the ONLY route to the bounded Stage-7 arm, because
+
+```csharp
+if (!config.ExpectReconciledInput || !OspreyEnvironment.Stage7Stream) return false;
+```
+
+and `ExpectReconciledInput` is set only by `--task SecondPassFDR`. Retiring the flag
+therefore cannot be a deletion: `CanStreamStage7Join`'s admission has to be re-expressed on
+something derived first, or the retirement silently returns every Stage 7 to the resident
+pool this PR exists to remove. The proposal's "must not be lost in the move" bullet about
+`ExpectReconciledInput` is the critical item in it, not a footnote.
+
+**Corollary worth its own consideration**: if that admission were re-expressed as the derived
+question the proposal suggests - "does `<stem>.scores-reconciled.parquet` exist and carry a
+current stamp" - then a straight-through 446 run would stream Stage 7 too, and the 91 GB
+resident path would go with it. That is a bigger prize than the flag removal itself.
