@@ -1096,3 +1096,21 @@ compatible only if the 42 sums are folded and written **unconditionally**, as pa
 standard per-run sidecar - cheap (O(features) per run) and it keeps the pay-later path whole.
 Folding them only under the flag would put a diagnostics-only artifact in the fan-out, which
 is the thing the rule forbids. Decide this explicitly when step 4 is implemented.
+
+### Pass-2 retrain removal is INCOMPLETE - a live fallback keeps it alive
+
+Found while auditing for P16. `ComputePass2Resident` (~`Pass2FdrSidecar.cs:2465`) returns null
+when transfer succeeds, but when the frozen-model byproduct is ABSENT it logs a warning and
+falls through into the 2nd-pass Percolator retrain:
+
+> *"OSPREY_PASS2_QVALUE=transfer could not transfer (frozen 1st-pass model byproduct absent);
+> falling back to the 2nd-pass Percolator retrain."*
+
+So the retrain the project removed is still reachable, on a warning, and would ship output
+computed by a method rejected for correctness - compaction leaves the pool decoy-depleted, so
+retraining mis-estimates the null (#4484 CLOSED, "do not re-open the retrain"). Warn-and-proceed
+where the standing rule is hard-fail, and it is why the retrain code cannot yet be deleted.
+
+Added to the night session as scope (C), with the unreachable projection branch and its
+misleading `!config.ModelDiagnostics` term. Sequenced so the fallback becomes an error FIRST -
+that is what makes `pass2Contributions` null everywhere and lets the plumbing delete.
