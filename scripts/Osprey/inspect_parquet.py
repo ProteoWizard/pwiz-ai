@@ -52,7 +52,14 @@ def main():
     ap.add_argument('--tolerance', type=float, default=1e-9,
                     help='Numeric tolerance for diff mode (default: 1e-9, '
                          'much tighter than Diff-Parquet.ps1 default)')
+    ap.add_argument('--codec-bench', action='store_true',
+                    help='Re-encode this parquet with each candidate codec and '
+                         'report write time and output size. Answers what a '
+                         'codec change would cost in disk and save in CPU.')
     args = ap.parse_args()
+
+    if args.codec_bench:
+        return run_codec_bench(args)
 
     if args.diff:
         return run_diff(args)
@@ -207,6 +214,59 @@ def run_diff(args):
     print(f'summary: {n_diff_cols} divergent column(s); '
           f'{len(only_a)} only-A and {len(only_b)} only-B entries')
     sys.exit(0 if (n_diff_cols == 0 and not only_a and not only_b) else 1)
+
+
+def run_codec_bench(args):
+    """Re-encode one .scores.parquet with each candidate codec.
+
+    Osprey writes Zstd at whatever level Parquet.Net hands IronCompress
+    (ParquetWriter exposes no CompressionLevel in 4.25.0). This measures what
+    the alternatives cost in bytes and save in time on REAL Osprey data.
+
+    Caveat worth carrying into any decision: pyarrow uses the native reference
+    codecs, while Parquet.Net's Zstd path goes through the MANAGED ZstdSharp
+    port. So the SIZE numbers here transfer directly, but the Zstd TIME is a
+    lower bound on what Osprey actually pays.
+    """
+    import os
+    import shutil
+    import tempfile
+    import time
+
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(args.path)
+    src_size = os.path.getsize(args.path)
+    rows = table.num_rows
+    print(f'=== codec bench: {args.path} ===')
+    print(f'rows: {rows}   columns: {table.num_columns}   '
+          f'current size: {src_size / 2**30:.2f} GiB')
+    print(f'{"codec":<16}{"level":>6}{"write s":>10}{"size GiB":>11}'
+          f'{"vs zstd":>9}{"MB/s":>9}')
+
+    # Osprey's own row-group cap, so the comparison matches what it writes.
+    cases = [('none', None), ('snappy', None), ('lz4', None),
+             ('zstd', 1), ('zstd', 3), ('zstd', 9), ('gzip', 6)]
+    baseline = None
+    tmpdir = tempfile.mkdtemp(prefix='osprey_codec_')
+    try:
+        for codec, level in cases:
+            out = os.path.join(tmpdir, f'{codec}_{level}.parquet')
+            t0 = time.perf_counter()
+            pq.write_table(table, out, compression=codec,
+                           compression_level=level, row_group_size=100_000)
+            dt = time.perf_counter() - t0
+            size = os.path.getsize(out)
+            if codec == 'zstd' and level == 3:
+                baseline = size
+            os.remove(out)
+            ratio = f'{size / baseline:.2f}x' if baseline else '-'
+            print(f'{codec:<16}{str(level or "-"):>6}{dt:>10.1f}'
+                  f'{size / 2**30:>11.2f}{ratio:>9}'
+                  f'{src_size / 2**20 / dt:>9.0f}')
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    sys.exit(0)
 
 
 def pa_array_int(s):
