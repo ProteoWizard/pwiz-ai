@@ -295,6 +295,117 @@ review-response commit. Decide before merge: delete it, or keep it defensive and
 
 ---
 
+### The `.scores.parquet` fallback is retired in code, and all three surfaces now say so (2026-09-08)
+
+Brendan's question: why does `SecondPassFDR` read two parquets per run when the architecture
+says it reads only the `PerFileRescoring` one? Then his correction, which is the actual finding:
+**there is no fallback** - "a missing `scores-reconciled.parquet` means it was not calculated,
+and it is not replaceable with the `.scores.parquet`."
+
+He is right, and the doc line I first answered from was stale. The decision is
+`TODO-20260826_osprey_stage7_stream_pool.md:473` (increment 2, `WriteUnchangedReconciled` -
+"that bail was the ONLY reason a file could lack the artifact") plus his 2026-08-27 instruction
+at `:2192`, written up as **P13** (`docs/00-pipeline-architecture.md:497`) and the team-wide
+rule at `ai/docs/osprey-development-guide.md:1689`: *"In consumers, an absent artifact is a
+reported fault, not a `continue`."* Absence stopped being a run shape three weeks ago; five
+live sites had not been told.
+
+**So the two-parquet read was never an I/O-vs-faithfulness trade** - which is how the item
+under "Open items" recorded it, and how I re-derived it before he corrected me. It was the
+retired fallback still being the main road: the resume arm read Stage 4 for ROWS because the
+overlay-restores-VALUES shape existed to serve no-work files that Stage 6 now always writes.
+
+#### What changed
+
+| site | was | now |
+|---|---|---|
+| `SecondPassFdrTask.cs:1098` | `if (!File.Exists(reconciledPath)) continue;` | `UnusableReconciledParquets` returns `(Missing, Stale)` and refuses on both, with the remedy each needs |
+| `PerFileRescoreTask.Rehydrate:696` | refill-all-runs loop, then overlay-all-runs loop | one `MaterializeAllResumedFiles` loop over the shared per-file half |
+| `BuildResumePerRunSource` | `MaterializeFileSurvivors` (Stage 4) + `OverlayReconciledIntoFile` | one call to `MaterializeResumedFile` - the same half the loop calls |
+| `MaterializeRescoredFile` | `reconciledPath != null && entries.Count == 0` | `ReconciledPathOrFail`; the `Count == 0` term stays (it is not a fallback - see below) |
+| `OverlayReconciledIntoFile` | took the map, silently skipped a run absent from it | takes a resolved, already-judged path |
+| `BuildRunPerRunSource:2787` | fold-arm-only throw (finding F3's site) | deleted; the per-file half fails on BOTH arms, so absence stops being a property of the arm |
+
+New `ReconciledPathOrFail` is the single fault, logged and thrown, naming the run and saying
+why the Stage 4 file is not a substitute.
+
+#### Two things that look like the fallback and are not - checked before touching them
+
+1. **`RescoredPoolPlan.RefillOnly`** (`:476`). Its call site records that the resident arm does
+   nothing at all on this route and `SecondPassFDR` reloads the reconciled features by identity,
+   so overlaying here "applied Stage-6 boundaries the resident arm never applies", breaking the
+   `OSPREY_STAGE6_STREAM_SURVIVORS=0` byte-identity oracle. A previous session already made and
+   reverted that mistake. The refill-only branch now comes FIRST in `MaterializeRescoredFile`,
+   explicitly, so it reads as the separate route it is rather than as a missing artifact.
+2. **`entries.Count == 0`**. Not "no parquet, use Stage 4" but "these rows are already in
+   memory" - the resident-oracle case, where re-reading would be the duplicate build. Both
+   branches read exactly one parquet, and it is the reconciled one.
+
+#### Why the row order works out
+
+The worry was that loading direct interleaves gap-fill where the overlay appends it. It
+resolves itself: `FirstPassSurvivorLoader` sorts canonically and documents that callers must
+not re-order, which is why the cold arm already passes `canonicalize: false`. The load route
+arrives in canonical order; only the overlay route needs the sort, and it keeps it.
+
+#### The three surfaces
+
+* **code** - above.
+* **`docs/00-pipeline-architecture.md`** - the artifact table's `.scores.parquet` row no longer
+  lists `SecondPassFDR` at all (it said "fallback for runs with no reconciled sibling",
+  contradicting P13 forty lines below its own statement of it); the reconciled row now says
+  "written for **every** run" and "the join's only row source"; Boundary 3 -> 4 gains a
+  paragraph stating that absence fails and naming the retired form so it is not re-derived.
+* **`Osprey-workflow.html`** - the `--task SecondPassFDR` header said its input arrives
+  "via --input-scores; falls back to `<stem>.scores.parquet`". Both halves were wrong. Now
+  "every run - one parquet per run, no `.scores.parquet` fallback". The other two
+  `--input-scores` labels (FirstPassFDR, PerFileRescoring) are corrected to "derived from
+  --input" in passing, which closes the HTML half of finding **F5**.
+* Swept for the same claim elsewhere, per this branch's own Copilot lesson: fixed stale
+  comments in `ScoringTaskShared:559`, `SecondPassFdrTask:76`, `SortFileEntriesCanonical`,
+  and `docs/16-determinism.md:198`.
+
+#### Left deliberately, and it is the real remaining hole
+
+`ParquetScoreCache.EffectiveScoresPathFromScoresPath` is `File.Exists(reconciled) ? reconciled
+: scoresPath` - the fallback at its lowest layer, with **12 call sites**. Its doc now states
+the contract and why the "otherwise" is residue, but the code is unchanged, because the fix is
+not "make it throw": ~5 of those callers are PRE-Stage-6 and the original genuinely is their
+answer. The right shape is resolution that depends on the TASK - which is exactly **F2**
+("the effective path has to depend on the TASK"), scheduled next. Converting the Stage-7-side
+callers blind, while a gate was running, would have been a wide change to pass-2 code I had
+not read. Doing it as part of F2 also concentrates what is left in one place instead of five.
+
+**F3 is re-read by this change.** It called the fold arm's throw a defect - "refuses runs the
+resident arm handles". Under the contract the fold arm was right and the resident arm's silence
+was the defect, so both now fail. F3's substance survives and is unchanged: its three triggers
+are runs whose parquet IS correctly written but is absent from `CurrentReconciledPaths` because
+`IsCurrent` said no. That is a validity-map-vs-artifact disagreement, and the fix is to make
+them agree - not to restore a Stage 4 substitution. A fix aimed only at F3 would have pushed
+the wrong way.
+
+#### Gates
+
+* `Build-Osprey.ps1 -SourceRoot C:/proj/pwiz-work2 -RunTests -RunInspection`: 591 tests
+  (590 passed, 1 pre-existing skip), inspection 0 warnings. Run twice - before the regression
+  and again after the last comment edits - both green.
+* `regression.ps1 -Dataset Stellar`: **PASSED**, 20 legs, 0 failures, 856.8s across 14 phases.
+  The legs that carry this change:
+  * `mode1 (vs golden)`: PASS - **the golden did not move**, which is the row-order answer.
+    Loading a run's rows from its reconciled parquet instead of Stage 4 + overlay is
+    byte-identical, because `FirstPassSurvivorLoader` already sorts canonically.
+  * straight-through blib **23,662,592 bytes**, the same size every leg has produced on this
+    branch and before it.
+  * `mode1 / mode2 / mode5 / mode3 (streamed join)`: PASS (per-run fold, no all-runs pool) -
+    the cold arm, both resumes and the HPC merge all still fold run by run.
+  * `mode2 (resume==straight)`, `mode5 (rehydrate==straight)`, `mode3 (HPC chain==straight)`:
+    PASS - the arms this change re-plumbed still agree with each other.
+  * `mode8 (partial rescore resume)` and `mode9 (crash-shaped half-done resume)`: PASS -
+    the two legs where a run is deliberately left half-done, i.e. the closest coverage the
+    gate has to the missing-artifact case the new fault guards.
+  * `Tokens REQUIRED by this gate: 0 (target: 0)`.
+* `regression-parallel.ps1 -Dataset All` still owed before merge (NOT the serial entry point),
+  then TeamCity Perf/Regression on `pull/4646` - **ask Brendan first**.
 ## `/code-review max 4646` findings, 2026-09-08 - ALL FIFTEEN, none fixed yet
 
 Run at the cap, so read this as "the 15 most severe", not "all of them". **Verify each before
