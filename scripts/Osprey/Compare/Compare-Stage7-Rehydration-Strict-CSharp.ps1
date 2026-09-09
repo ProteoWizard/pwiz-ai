@@ -260,7 +260,7 @@ Write-Host "[Phase 2] HPC FirstPassFDR (--task FirstPassFDR, Stage 5) ..." -Fore
 $args2 = @('--task', 'FirstPassFDR')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
-    $args2 += @('--input-scores', ($stem + '.scores.parquet'))
+    $args2 += @('-i', ($stem + '.mzML'))
 }
 $args2 += @('-l', $libraryName, '-o', 'output.blib',
             '--resolution', $resolution,
@@ -309,7 +309,7 @@ foreach ($f in $mzmls) {
     Stage-DatasetFiles -Dir $ph3Dir -IncludeMzml:$false
     Write-Host ("  -- worker for {0} ..." -f $stem) -ForegroundColor DarkCyan
     $args3 = @('--task', 'PerFileRescore',
-               '--input-scores', ($stem + '.scores.parquet'),
+               '-i', ($stem + '.mzML'),
                '-l', $libraryName, '-o', 'output.blib',
                '--resolution', $resolution,
                '--protein-fdr', '0.01', '--threads', $Threads.ToString())
@@ -378,7 +378,7 @@ Write-Host "[Phase 4] HPC SecondPassFDR (--task SecondPassFDR, Stage 7) ..." -Fo
 $args4 = @('--task', 'SecondPassFDR')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
-    $args4 += @('--input-scores', ($stem + '.scores-reconciled.parquet'))
+    $args4 += @('-i', ($stem + '.mzML'))
 }
 $args4 += @('-l', $libraryName, '-o', 'output.blib',
             '--resolution', $resolution,

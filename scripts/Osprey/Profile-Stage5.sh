@@ -18,6 +18,8 @@ DOTTRACE=/home/brendanx/.dotnet/tools/dottrace
 SAMPLY=/home/brendanx/.cargo/bin/samply
 
 INPUTS=/home/brendanx/test/osprey-runs/stellar
+# NOTE: the C# arm names the RUN (-i) and derives its parquet from the stem; Rust osprey
+# still takes --input-scores, so the two invocations below differ deliberately.
 MZML_NAME=$(ls "$INPUTS"/Ste-*.mzML | head -1 | xargs -n1 basename)
 LIB_NAME=$(ls "$INPUTS"/*.tsv | head -1 | xargs -n1 basename)
 SCORES_NAME=${MZML_NAME%.mzML}.scores.parquet
@@ -53,7 +55,7 @@ time "$DOTTRACE" start \
     -- \
     -l "$LIB_NAME" -o /tmp/_prof_cs.blib \
     --resolution unit --threads 16 \
-    --join-at-pass=1 --input-scores "$SCORES_NAME" 2>&1 | tail -15
+    --join-at-pass=1 -i "$MZML_NAME" 2>&1 | tail -15
 echo ""
 ls -la "$CS_DTP"
 echo ""

@@ -22,8 +22,8 @@
     1. ALL FILES IN ONE INVOCATION. The HPC chain (regression.ps1:644) runs this task once
        per stem, so `_perFileEntries` holds exactly ONE file and the band is flat BY
        CONSTRUCTION. Measured that way you would "confirm" a fix that does not exist.
-       `--input-scores` takes many parquets (OspreyConfig.InputScores is a List<string>),
-       which is what populates the real multi-file buffer.
+       Runs are named with `-i` and the task derives each parquet from the stem, so one
+       invocation naming N runs is what populates the real multi-file buffer.
 
     2. CLEAR THE PASS-2 SIDECARS BETWEEN REPEATS. PerFileRescoreTask.Run:240-248 self-gates
        to a NO-OP when any *.2nd-pass.fdr_scores.bin is present -- a repeat run then
@@ -58,8 +58,8 @@
        streamed that load and retired the token, so a current binary needs no allowance at
        all. The Stage-7 leg still passes the token because the A/B needs BOTH arms; it is
        set for that leg only, never for the Stage-6 leg (which must stream).
-    5. --input-scores TAKES THE RECONCILED PARQUETS. Stage 7 hard-fails on a raw Stage-4
-       parquet (osprey.reconciled != "true"), which reads like a harness bug and is not.
+    5. STAGE 7 READS THE RECONCILED PARQUETS - decided by the TASK, not by the file list.
+       It hard-fails on a raw Stage-4 parquet, which reads like a harness bug and is not.
 
     -Stage7 AND -StraightThrough MEASURE DIFFERENT ARMS, AND CONFLATING THEM IS THE EASIEST
     MISTAKE HERE. `--task SecondPassFDR` is the HPC node: it reloads every input file's FULL
@@ -267,15 +267,15 @@ if ($WhatIf) {
     Write-Host '-WhatIf: not running. Plan:' -ForegroundColor Yellow
     Write-Host ("  1. hard-link {0} mzML + .spectra.bin + library into the phase dir" -f $maxN)
     Write-Host ('  2. ' + (Split-Path $ospreyExe -Leaf) + ' ' + ($prepArgs1 -join ' '))
-    Write-Host '  3. --task FirstPassFDR --input-scores <all> ...'
+    Write-Host '  3. --task FirstPassFDR -i <all runs> ...'
     foreach ($n in $counts) {
         if ($StraightThrough) {
             Write-Host ("  4. rm Stage 5-7 outputs (1st-pass/reconciliation/reconciled/2nd-pass/blib); -i <{0} mzML> with no --task, i.e. Stages 5-7 in one process (OSPREY_LOG_MEMORY=1, no resident token)" -f $n)
             continue
         }
-        Write-Host ("  4. rm *.2nd-pass.fdr_scores.bin *.scores-reconciled.parquet; --task PerFileRescoring --input-scores <{0} parquets> (OSPREY_LOG_MEMORY=1)" -f $n)
+        Write-Host ("  4. rm *.2nd-pass.fdr_scores.bin *.scores-reconciled.parquet; --task PerFileRescoring -i <{0} runs> (OSPREY_LOG_MEMORY=1)" -f $n)
         if ($Stage7) {
-            Write-Host ("  5. rm output.blib* *.2nd-pass.fdr_scores.bin*; --task SecondPassFDR --input-scores <{0} reconciled parquets> (OSPREY_LOG_MEMORY=1, OSPREY_ALLOW_UNFIXED_RESIDENT=hpc-merge)" -f $n)
+            Write-Host ("  5. rm output.blib* *.2nd-pass.fdr_scores.bin*; --task SecondPassFDR -i <{0} runs> (OSPREY_LOG_MEMORY=1, OSPREY_ALLOW_UNFIXED_RESIDENT=hpc-merge)" -f $n)
         }
     }
     return
@@ -343,7 +343,7 @@ if ($needPrep) {
     Write-Host ("    done in {0:hh\:mm\:ss}" -f $t)
 
     Write-Host '--- Stage 5: FirstPassFDR (one time) ---' -ForegroundColor Cyan
-    $p2 = @('--task', 'FirstPassFDR') + ((& $scoresFor $maxN) | ForEach-Object { @('--input-scores', $_.Name) } | ForEach-Object { $_ }) + @(
+    $p2 = @('--task', 'FirstPassFDR') + ((& $scoresFor $maxN) | ForEach-Object { @('-i', ($_.Name -replace '\.scores\.parquet$', '.mzML')) } | ForEach-Object { $_ }) + @(
         '-l', (Split-Path $libPath -Leaf), '-o', 'output.blib', '--resolution', 'hram',
         '--decoys-in-library', '--decoy-pairing-manifest', (Split-Path $manifestPath -Leaf),
         '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
@@ -433,7 +433,7 @@ foreach ($n in $counts) {
 
     $log = if ($ModelDiagnostics) { "stage6-${n}f-mdiag.log" } else { "stage6-${n}f.log" }
     $mdiagArgs = if ($ModelDiagnostics) { @('--model-diagnostics') } else { @() }
-    $a = @('--task', 'PerFileRescoring') + ((& $scoresFor $n) | ForEach-Object { @('--input-scores', $_.Name) } | ForEach-Object { $_ }) + $mdiagArgs + @(
+    $a = @('--task', 'PerFileRescoring') + ((& $scoresFor $n) | ForEach-Object { @('-i', ($_.Name -replace '\.scores\.parquet$', '.mzML')) } | ForEach-Object { $_ }) + $mdiagArgs + @(
         '-l', (Split-Path $libPath -Leaf), '-o', 'output.blib', '--resolution', 'hram',
         '--decoys-in-library', '--decoy-pairing-manifest', (Split-Path $manifestPath -Leaf),
         '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
@@ -471,7 +471,7 @@ foreach ($n in $counts) {
     }
 
     $log7 = if ($ModelDiagnostics) { "stage7-${n}f-mdiag.log" } else { "stage7-${n}f.log" }
-    $a7 = @('--task', 'SecondPassFDR') + ($reconciled | ForEach-Object { @('--input-scores', $_.Name) } | ForEach-Object { $_ }) + $mdiagArgs + @(
+    $a7 = @('--task', 'SecondPassFDR') + ($reconciled | ForEach-Object { @('-i', ($_.Name -replace '\.scores-reconciled\.parquet$', '.mzML')) } | ForEach-Object { $_ }) + $mdiagArgs + @(
         '-l', (Split-Path $libPath -Leaf), '-o', 'output.blib', '--resolution', 'hram',
         '--decoys-in-library', '--decoy-pairing-manifest', (Split-Path $manifestPath -Leaf),
         '--protein-fdr', '0.01', '--threads', $Threads.ToString(),

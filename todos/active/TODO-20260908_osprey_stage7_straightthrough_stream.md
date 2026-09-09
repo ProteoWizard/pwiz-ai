@@ -406,7 +406,105 @@ the wrong way.
   * `Tokens REQUIRED by this gate: 0 (target: 0)`.
 * `regression-parallel.ps1 -Dataset All` still owed before merge (NOT the serial entry point),
   then TeamCity Perf/Regression on `pull/4646` - **ask Brendan first**.
-## `/code-review max 4646` findings, 2026-09-08 - ALL FIFTEEN, none fixed yet
+### `EffectiveScoresPathFromScoresPath` is DELETED; the task picks the parquet (2026-09-08)
+
+Brendan, on the doc-only mitigation above: *"This should be removed and it should be determined
+which score cache is appropriate for each caller... it is still only right as far as the pipeline
+itself makes it right. Just like the usage that initiated this review was essentially harmless
+under correct pipeline functioning, but it confused you enough that you stated SecondPassFDR
+reads 2 Parquet files per data-file. The usage is confusing if harmless under correct pipeline
+functioning."*
+
+That is the general principle behind both halves of this session's work, and it is worth keeping
+in those terms: **a disk probe standing in for a design fact is wrong even when it returns the
+right answer**, because its correctness is a property of the caller's position in the pipeline
+rather than of the expression. It cannot be read locally, so every reader has to reconstruct the
+whole pipeline to know what it does - and I demonstrably failed that reconstruction on the
+first attempt, from the code, with the architecture doc open.
+
+**This is finding F2's fix.** F2 said "the effective path has to depend on the TASK"; that is
+now what it does, so F2 is closed by this rather than pending.
+
+#### What the two answers are, and why disk cannot tell them apart
+
+`ScoringTaskShared.ReadsReconciledScores(config)` - `SelectedTask == SecondPassFdr`:
+
+| task | reads | why |
+|---|---|---|
+| `FirstPassFDR` | `<stem>.scores.parquet` | it computes the FIRST pass; the survivor subset is not its population |
+| `PerFileRescoring` | `<stem>.scores.parquet` | rescores from first-pass rows; writes the reconciled file as OUTPUT |
+| `SecondPassFDR` | `<stem>.scores-reconciled.parquet` | the join, and the only parquet its node is shipped |
+
+The last column is the part that makes probing indefensible rather than merely untidy: it is
+also **what each node is shipped**. `regression.ps1:1592` stages phase 4 with the reconciled
+parquets and *deletes* the Stage 4 originals from the worker dir first - "never the original
+Stage 4 parquet" - so on a correct node exactly ONE of the two is present. A probe therefore
+cannot distinguish "the artifact for my pass" from "the only artifact here", and it gets the
+right answer for a reason that has nothing to do with what it asks.
+
+Where it breaks is the case with BOTH present, which is what a completed run leaves on disk:
+`--task FirstPassFDR` re-run over it took the reconciled parquets and would have trained the
+first pass on ~1/52 of its rows, with every version, search and library hash matching.
+
+#### The 12 call sites, each now naming its artifact
+
+* `ScoringTaskShared.ScoresPathsForInputs` - task-dependent (above). Reached only by the three
+  tasks `StartsAfterPerFileScoring` names, so every case has an answer.
+* `Program.cs:226` - the absent-input acceptance asks for EITHER parquet explicitly. Which one
+  a task reads is not this check's question; it runs before dispatch. Truth value is unchanged
+  (`Exists(effective)` is exactly `Exists(stage4) || Exists(reconciled)`).
+* `SecondPassFdrTask.Inputs`, `Pass2FdrSidecar` x4, `PerFileRescoreTask` x2 - all post-Stage-6
+  readers, all now `GetReconciledScoresPath` / `ReconciledPathFromScoresPath`. The derivation
+  is idempotent, so ONE expression is correct both in-process (the published map holds Stage 4
+  paths, because Stage 1-4 ran here) and on a merge node (it holds reconciled ones).
+* `PerFileRescoreTask.BuildStage7PerRunSource` - no longer re-resolves at all. The published
+  path IS reconciled on that leg by task membership, so it ASSERTS that (`IsReconciledScoresPath`)
+  and fails loudly instead of quietly converting.
+* `IOTest.TestEffectiveScoresPathFromScoresPath` -> `TestScoresPathsDependOnTaskNotDisk`.
+
+#### The test is the negative one on purpose
+
+The old test laid down one file, then the other, and asserted the probe followed disk - it
+pinned the defect. The replacement puts **both** files on disk (the state a completed run
+leaves) and asserts the task still decides. A test that writes only one file passes against
+the probe too, so it would not have caught this.
+
+#### Still owed
+
+The unit test pins the seam; it does not prove end-to-end that a re-run reads the Stage 4 file.
+The enforcement that would is regression.ps1's own idiom from phase 4: stage a decoy
+`.scores-reconciled.parquet` into the mode-3 **phase 2** dir and assert `FirstPassFDR` output is
+unchanged - absence of an enforcement being why this survived. Worth a mode; not added here.
+
+#### Gates
+
+* `Build-Osprey.ps1 -RunTests -RunInspection`: 591 tests (590 passed, 1 pre-existing skip),
+  inspection 0 warnings. `TestScoresPathsDependOnTaskNotDisk` passes.
+* Docs carrying the retired rule updated with the code: `14-intermediate-files.md` (x2),
+  `15-hpc-scoring-split.md` (x2, including the "Reconciled wins per stem" bullet), and
+  `regression.ps1`'s phase-4 comment - which now says the task decides AND that the staging
+  enforcement is deliberately independent of it, because staging alone would hide a regression
+  back to a probe.
+* `regression.ps1 -Dataset Stellar -KeepOutput`: running, and the retained straight-through
+  directory is the bed for the F2 re-run reproduction.
+## `/code-review max 4646` findings, 2026-09-08 - 12 of 15 open
+
+**Status after the fallback-retirement work above** (read that section before acting on any of
+these - it moved three of them):
+
+* **F2 - FIXED.** `ScoresPathsForInputs` now resolves by TASK
+  (`ScoringTaskShared.ReadsReconciledScores`), and `EffectiveScoresPathFromScoresPath` is
+  deleted, so there is no longer a way to ask disk which pass an artifact belongs to.
+  `TestScoresPathsDependOnTaskNotDisk` pins it with BOTH parquets present.
+* **F3 - re-read, still open, and the direction is INVERTED.** It called the fold arm's throw a
+  defect for refusing runs the resident arm handles; the fold arm was right and the resident
+  arm's silence was the defect, so both now fail. Its substance survives: the three triggers are
+  runs whose parquet IS correctly written but is absent from `CurrentReconciledPaths` because
+  `IsCurrent` said no. Fix the validity-map-vs-artifact disagreement; do NOT restore a Stage 4
+  substitution.
+* **F5 - HTML half done.** `Osprey-workflow.html`'s three `--input-scores` labels are corrected.
+  `README.md` (8 hits) and the four live `ai/scripts` still pass the retired flag.
+* **F1 remains the next blocker**, and is unaffected by the above.
 
 Run at the cap, so read this as "the 15 most severe", not "all of them". **Verify each before
 acting** - the tool is confidently wrong sometimes, and two of its candidates were already

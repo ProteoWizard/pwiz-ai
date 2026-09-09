@@ -40,10 +40,13 @@
       Stage      CLI extras                                         Exit hook
       ---------  -------------------------------------------------  -----------------------------
       stage1to4  --task PerFileScoring                              (exits after Stage 4)
-      stage5     --input-scores <frozen.parquet>                    OSPREY_PERCOLATOR_ONLY=1
-      stage6     --input-scores <frozen.parquet>                    OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      stage7     --task SecondPassFDR --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      blib       --task SecondPassFDR --input-scores <frozen.parquet>   (none — Stages 7-8 from reconciled)
+      stage5     -i <stem>.mzML                                     OSPREY_PERCOLATOR_ONLY=1
+      stage6     -i <stem>.mzML                                     OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
+      stage7     --task SecondPassFDR -i <stem>.mzML                OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
+      blib       --task SecondPassFDR -i <stem>.mzML                (none — Stages 7-8 from reconciled)
+
+    (C# names the RUN; the task decides which parquet it reads. Rust osprey still
+    takes --input-scores.)
 
     Comparators (tightened relative to Test-Regression.ps1 because
     same-impl removes the documented Rust<->C# xcorr / sg_weighted_xcorr
@@ -737,8 +740,8 @@ function Run-PostStage4 {
     $useJP2 = $stageConfig[$Stage].useJoinAtPass2
     # Osprey: pass-2 entry (Stages 7-8 from reconciled parquets) is
     # --task SecondPassFDR; pass-1 entry (Stages 5-8 from scores) is the default
-    # pipeline driven purely by --input-scores (no --task). Rust osprey keeps
-    # the retired --join-at-pass flags.
+    # pipeline with no --task, driven by -i. Rust osprey keeps the retired
+    # --join-at-pass flags and --input-scores.
     # Type-constrain to [string[]] so the empty-CSharp-pass-1 case stays an
     # array. A bare `$cliArgs = if (...) { ... } else { @() }` would make the
     # else-branch's empty array collapse to $null (scriptblock output drops
@@ -751,16 +754,19 @@ function Run-PostStage4 {
     } else {
         if ($useJP2) { $cliArgs += '--join-at-pass=2' } else { $cliArgs += '--join-at-pass=1' }
     }
-    # The C# --task SecondPassFDR stages (stage7, blib) consume the Stage-6
-    # reconciled parquets, not the raw Stage-4 scores: SecondPassFDR rejects a
-    # parquet whose osprey.reconciled metadata is 'false'. Before #4261 Stage 6
-    # overwrote the raw .scores.parquet in place so the same name carried
-    # reconciled data; now the reconciled output is a distinct sibling. Rust's
-    # --join-at-pass=2 path is unchanged (it still keys off .scores.parquet).
-    $inputScoresSuffix = if ($useJP2 -and $Tool -eq 'CSharp') { '.scores-reconciled.parquet' } else { '.scores.parquet' }
+    # The two tools name their runs DIFFERENTLY now, and it is not cosmetic.
+    # C# retired --input-scores: every task takes -i (the data file) and derives its
+    # parquet from the stem, with WHICH parquet decided by the task -- SecondPassFDR
+    # reads <stem>.scores-reconciled.parquet, everything before it <stem>.scores.parquet.
+    # So the C# arm no longer names a parquet at all, and the suffix choice that used to
+    # live here is now ScoringTaskShared.ReadsReconciledScores. Rust osprey is unchanged
+    # and still keys off .scores.parquet via --input-scores.
     foreach ($stem in $selectedStems) {
-        $cliArgs += '--input-scores'
-        $cliArgs += ($stem + $inputScoresSuffix)
+        if ($Tool -eq 'CSharp') {
+            $cliArgs += @('-i', ($stem + '.mzML'))
+        } else {
+            $cliArgs += @('--input-scores', ($stem + '.scores.parquet'))
+        }
     }
     $cliArgs += @('-l', $libraryName, '-o', 'output.blib',
                   '--resolution', $resolution,
