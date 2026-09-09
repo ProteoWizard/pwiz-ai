@@ -118,6 +118,24 @@ Write-Host "Source: $projDir" -ForegroundColor Gray
 
 $sdkProj = Join-Path $projDir 'DigitalRune.Windows.Docking.Generated.csproj'
 $useWinForms = 'true'
+
+# The .resx files embed images, and building an SDK-style project for .NET Framework refuses
+# non-string resources unless the preserialized-resource path is switched on and
+# System.Resources.Extensions is referenced. Both are no-ops for the net10 build.
+$net472Resources = ''
+if ($TargetFramework -eq 'net472') {
+    $net472Resources = @'
+    <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
+'@
+}
+$net472Package = ''
+if ($TargetFramework -eq 'net472') {
+    $net472Package = @'
+  <ItemGroup>
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+  </ItemGroup>
+'@
+}
 $projectXml = @"
 <Project Sdk="Microsoft.NET.Sdk">
 
@@ -138,9 +156,10 @@ $projectXml = @"
     <Platforms>AnyCPU</Platforms>
     <!-- Third-party source that predates these analyzers. This build compares behaviour against
          the shipped binary; it is not a cleanup of someone else's library. -->
-    <NoWarn>`$(NoWarn);CS0618;CS0414;CS0169;CS1591;WFO1000;WFO5001;SYSLIB0003;SYSLIB0011;CA1416</NoWarn>
+$net472Resources    <NoWarn>`$(NoWarn);CS0618;CS0414;CS0169;CS1591;WFO1000;WFO5001;SYSLIB0003;SYSLIB0011;CA1416</NoWarn>
   </PropertyGroup>
 
+$net472Package
   <ItemGroup>
     <!-- Dead files: not among the legacy project's Compile items, and they reference a
          DockPanelColors type that does not exist in the source. Only SDK globbing finds them. -->

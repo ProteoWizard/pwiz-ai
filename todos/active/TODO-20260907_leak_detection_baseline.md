@@ -415,25 +415,84 @@ Nothing reads `Form.Region` in the docking path; the only other readers are `Doc
 same way**, but only per user drag rather than per docked form - worth the same treatment, not
 urgent.
 
-### Validation so far
+### All five sites, one helper
 
-- `TestGroupedStudies1Tutorial` passed 4 consecutive iterations with its normal layout restores.
-- `TestFilesTreeForm`, `TestTreeRestoration`, `TestLogScaleAxis`, `TestRetentionTimeManager`,
-  `TestFindNodeCancel` - all pass, 0 failures.
-- **Not yet done**: a full functional pass, and a look at real (non-offscreen) docking for flicker.
-  The flicker risk is much smaller than for "do not clip at all", since the clipping still happens
-  through the same underlying call, but every measurement here ran offscreen.
+`DrawHelper.SetWindowRegion` / `SetEmptyWindowRegion` / `ClearWindowRegion` now serve every
+`Control.Region` assignment in the library — `DockingHandler.FlagClipWindow`, both
+`DockOutline.SetDragForm` overloads, `SplitterOutline.SetDragForm`, and `DockIndicator`. None
+remain. It lives in the existing `Helpers/DrawHelper.cs` so the legacy non-SDK project stays valid
+without adding a file to it.
+
+The leak is content-independent, so one helper genuinely covers both shapes the library uses
+(empty clips and path-derived regions):
+
+| assignment, x100 forms, .NET 10 | through `Control.Region` | through the helper |
+|---|---|---|
+| empty region | 978 B/form | **0** |
+| rectangle region | 978 B/form | **0** |
+| path-derived region | 999 B/form | **0** |
+
+GDI object count is 0 in every helper case, so it is not trading a GDI+ leak for a handle leak.
+
+**The drag sites do leak, measured.** One real dock drag (`BeginDragDisplay`/`EndDragDisplay`, which
+drives the actual `DockDragHandler`): **14,352 bytes before, 13,376 after — exactly 976**, one region
+assignment. Small next to docking (976 per drag vs ~44 assignments per layout load) but real, and now
+covered by the same helper. The residual ~13 KB is not region-related and does not accumulate.
+
+### The .NET Framework guard is necessary, and that is measured too
+
+The native path is **not** behaviour-neutral on .NET Framework. Forcing it there (legacy build with
+`NETCOREAPP` defined) fails 4 of 6 tests with `NullReferenceException` in
+`FilesTree.OnDocumentChanged`. Mechanism not investigated - there is nothing to gain on net472, which
+has no leak, so the helper is guarded:
+
+```csharp
+#if NETCOREAPP      // not !NETFRAMEWORK: the legacy non-SDK project defines neither symbol,
+                    // so the safe path has to be the default
+```
+
+### Validation
+
+| | result |
+|---|---|
+| .NET 10, `TestGroupedStudies1Tutorial` unmodified, 4 iterations | **2.12 -> 0.017 MB/run** |
+| .NET 10, five docking/layout tests | all pass |
+| **net472, six tests, fixed DLL** | **all pass, 111.8 s** |
+| net472, same six, original DLL (control) | all pass, 113.9 s |
+
+So updating the net472 binary would be harmless, even though it is not needed there.
+
+### A false alarm worth recording
+
+An earlier round concluded "the fix hangs `TestFilesTreeForm` on net472". That was wrong, and the
+mistake is instructive: the hang came from **how the DLL was built**, not from the change. Building
+this assembly for net472 through an SDK-style project requires
+`GenerateResourceUsePreserializedResources`, which writes the embedded images in a format needing
+`System.Resources.Extensions` at run time - which Skyline's net472 app does not reference. The proof
+was building **pristine source** through the same SDK project: it hung identically. Three hypotheses
+(`redraw`, handle creation, the `IsHandleCreated` guard) were chased before that control was run;
+running it first would have saved all three.
+
+**So: build net472 with the legacy `DigitalRune.Windows.Docking.csproj` via MSBuild**, which is how
+the shipped binary was made and which produces a byte-identical 270,336-byte DLL. The
+`-TargetFramework net472` path in `Build-DigitalRune.ps1` produces a binary that loads but hangs, and
+should be removed or switched to MSBuild.
 
 ### Shipping notes
 
 `pwiz_tools/Shared/Lib/DigitalRune.Windows.Docking.dll` is a **tracked binary**, so the fix ships as
 a rebuilt DLL + PDB, the way the Jan 2026 `DockPaneStrip` fix did (see
-`ai/todos/completed/2026/01/TODO-20260128_DockPaneStrip_race_condition.md`). The source change has to
-land in `uw-maccosslab/developers` alongside it or the next rebuild silently loses it.
+`ai/todos/completed/2026/01/TODO-20260128_DockPaneStrip_race_condition.md`). The source change must
+land in `uw-maccosslab/developers` alongside it or the next rebuild loses it. `pwiz-work1` currently
+carries the rebuilt net10 binary; `daily` is untouched.
 
-Worth reporting upstream regardless: `Control.Region` leaks ~976 bytes of GDI+ heap per assignment on
-.NET 10 and nothing reclaims it, where .NET Framework released it on `Control.Dispose`. The probe in
-`ai/.tmp/leak-tools/` is a self-contained reproduction.
+Still unverified: on-screen flicker. Every measurement ran offscreen. The risk is lower than for
+"do not clip at all" - the clipping still happens, through the call `Control.Region` itself makes -
+but it has not been watched with a real window.
+
+Worth reporting upstream regardless: `Control.Region` leaks ~976 bytes of GDI+ heap per non-null
+assignment on .NET 10 and nothing reclaims it, where .NET Framework released it on
+`Control.Dispose`. The probe in `ai/.tmp/leak-tools/` is a self-contained reproduction.
 
 ## Method notes
 
