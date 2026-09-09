@@ -494,6 +494,84 @@ Worth reporting upstream regardless: `Control.Region` leaks ~976 bytes of GDI+ h
 assignment on .NET 10 and nothing reclaims it, where .NET Framework released it on
 `Control.Dispose`. The probe in `ai/.tmp/leak-tools/` is a self-contained reproduction.
 
+## 2026-09-09: two more leaks fixed, and the estimator design settled by measurement
+
+### The 2026-09-08 nightly
+
+8h51m, both passes, zero failures. Log: `SkylineTester-20260908-net10-9hr-COMPLETE-0failures-8leaks-gdiplusfix.log`.
+**The GDI+ fix held** - `TestGroupedStudies1Tutorial`, 1.9-2.1 MB/run for three consecutive nights, is
+gone from the leak list entirely and sits flat at 93-95 MB in pass 2.
+
+Four nights make the axis split unambiguous. The **same five managed tests report every night**, to
+within a few percent. Of the twelve heap entries across four nights, **eleven appeared in only one or
+two nights** and the twelfth was `TestGroupedStudies1Tutorial`, the one real one, now fixed.
+
+### Four of the five were one root cause, now excluded from leak checking
+
+`Wiff2ResultsTest`, `FileTypeTest` (`TestData/Results/SmallWiffTest.cs`), `TestInstrumentInfo`,
+`TestInstrumentSerialNumbers` (`TestData/PwizFileInfoTest.cs`) - all four read `.wiff2`, all four leak
+the known `SampleDataProviderServer` at ~17 KB per file open.
+
+`AbstractUnitTest.IsAbWiff2Safe` (and `ExtAbWiff2Safe`, which must move with it or the filename
+becomes `swath.api-sample-centroid.wiff2`, which does not exist) returns
+`CanImportAbWiff2 && TestPass != LEAK_CHECK_PASS`. In the leak pass the four tests read the
+equivalent mzML instead - they still run and still assert - and full `.wiff2` coverage stays in
+pass 2. Verified: all four report **0 leaked bytes** in pass 1 and still pass in pass 2 reading real
+`.wiff2`.
+
+One case loses coverage rather than substituting: `TestInstrumentSerialNumbers` checks `CI231606PT`,
+an empty-serial-number case that exists only in the `.wiff2` file. Commented at the site.
+
+`TestInstrumentInfo` has **no residual leak** behind the wiff2 one - 40 iterations with wiff2 off is
+flat (11.25 -> 11.27, one step at iteration 8), against 34.6 KB/run at R2 = 0.9999 with it on.
+
+### TestKoinaConnection: an undisposed GrpcChannel, fixed
+
+The fifth. `KoinaConfig.CallWithClient` created a channel per call and only awaited
+`ShutdownAsync()`. `GrpcChannel` owns an `HttpClient` and its connection pool and **is**
+`IDisposable`, where the legacy `Grpc.Core` `ChannelBase` it replaced was not - so this is a
+port-introduced regression from the Grpc.Core -> Grpc.Net.Client migration. Adding
+`(channel as IDisposable)?.Dispose()` is a no-op on any non-disposable channel.
+
+| 30 iterations, drop 10 warm-up | slope | R2 |
+|---|---|---|
+| before | 17.64 KB/run | 0.998 |
+| after | 0.93 KB/run | 0.425 |
+
+It also corrects the record: the old note that this was "only 3.5 KB in isolation" was measuring
+through the warm-up. In isolation it is 16.4-17.6 KB/run, matching the nightly's 16.9 exactly.
+
+### The estimator: what the data says to build
+
+Brendan's point on why the sliding window exists is right - it is doing **warm-up rejection**, and
+the downward bias is a side effect of the mechanism, not its purpose. His proposal (drop a fixed
+warm-up, then fit) tested against last night's leak pass, 41 tests with >= 14 iterations:
+
+- **Warm-up choice barely moves a real leak.** The four wiff2 leakers read 35.5 / 35.4 / 30.7 / 30.7
+  KB/run at R2 = 1.00 whether 0, 5, 8 or 10 iterations are dropped.
+- **But dropping hurts short series.** `FullScanFilterTestCentroided` (N=14) goes -21.9 -> -51.9 ->
+  -111.2 -> -233.5 KB/run as more are dropped, R2 = 0.43. Six points left is not a fit. Warm-up
+  exclusion and long fixed-length runs are a package; under today's early exit, a test that looks
+  clean stops at 12-16 iterations.
+- **Shape is what makes a low threshold safe.** A gate of `R2 > 0.9 AND slope > 1 KB/run` produces
+  **zero false positives** across every leak-checked test in the run, at either warm-up setting.
+  Noise tests sit at R2 0.27-0.75; every real leak is >= 0.99. The two hand-found leaks that the
+  8 KB gate hid (4.40 and 5.89 KB/run) are both far above 1 KB and both at R2 = 1.00.
+- The Koina series is the cleanest illustration: raw fit over 30 iterations gives 28.45 KB/run at
+  R2 = 0.836; dropping 10 gives 17.64 at R2 = 0.998.
+
+**Cost math for a leak-only night**: pass 1 was ~5h of the 8h51m at ~25 iterations, so 50 iterations
+is roughly 10h for the sweep alone and 100 is roughly 20h. Dropping pass 2 buys back ~3.9h. So 50
+without pass 2 is about a 10h night; 100 is not, without shrinking or parallelising the set. A middle
+option: keep early exit but require a **minimum** of ~20 iterations before a test may exit, which
+removes the short-series instability while letting most clean tests still exit early.
+
+Note if pass 2 is dropped: it is now the only place `.wiff2` is read, and the only run that exercises
+each test in all four languages.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260907_leak_detection_baseline.md` before starting work.
+
 ## Method notes
 
 - **A real leak is near-perfectly linear.** R² ≈ 1.00 with a large t-statistic separates a leak from
