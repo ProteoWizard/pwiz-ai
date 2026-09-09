@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260824_webclient_prohibition`
 - **Base**: `master`
 - **Created**: 2026-08-24
-- **Status**: In Progress
+- **Status**: In Review
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4648](https://github.com/ProteoWizard/pwiz/pull/4648)
 
 ## Objective
 
@@ -65,9 +65,11 @@ Cleanup" below for what that extraction got wrong and how it was fixed.
 
 Added to `pwiz_tools/Skyline/Test/CodeInspectionTest.cs`:
 
-- Pattern is `new\s+WebClient\s*\(` - **construction**, not the identifier. A
-  good deal of code holds other download clients in a variable named
-  `webClient`, and those are not what this is about.
+- Pattern is `new\s+(System\.Net\.)?WebClient\s*[({]` - **construction**, not the
+  identifier. A good deal of code holds other download clients in a variable named
+  `webClient`, and those are not what this is about. It covers the fully-qualified
+  name and the object-initializer form because this migration removed
+  `using System.Net;` from the files it touched (see Code Review Triage).
 - `ignoredDirectories` is `null`, so it applies everywhere the inspection scans.
   `NonSkylineDirectories()` would have exempted `Executables`, which is precisely
   where the migration was missed.
@@ -78,7 +80,8 @@ Added to `pwiz_tools/Skyline/Test/CodeInspectionTest.cs`:
   left behind. An exception requires editing the test, which puts it in front of
   a reviewer.
 - **Tolerance is 3**, the count of known remaining uses inside the scan root
-  (`pwiz_tools/Skyline`, per `GetCodeBaseRoot`). The tolerance mechanism warns
+  (`pwiz_tools/Skyline` per `GetCodeBaseRoot`, plus `Shared/Common` and
+  `Shared/CommonUtil`). The tolerance mechanism warns
   when *fewer* than the tolerated number are found, so the number cannot silently
   drift upward, and it is the only thing tracking the remaining three.
 
@@ -106,7 +109,7 @@ inspection's scan root).
 ## Extraction Cleanup
 
 The 2026-08-24 extraction moved the WebClient work onto a master base but carried
-along four `CodeInspectionTest.cs` changes that only make sense on the .NET port
+along five `CodeInspectionTest.cs` changes that only make sense on the .NET port
 branch, where `CommonUtil` has been split into `CommonUtil` + `CommonBaseUI` (PR
 [#4587](https://github.com/ProteoWizard/pwiz/pull/4587), merged to
 `Skyline/work/20260612_net8_port`, **not** to master). On master these would have
@@ -126,14 +129,86 @@ They should be re-applied on the port branch, where they are correct and needed.
 
 ## Verification
 
-- [x] Rule logic checked against the tree by hand: `new\s+WebClient\s*\(` matches
-      exactly 3 files inside `pwiz_tools/Skyline` (Installer, SkylineNightly,
-      SkylineNightlyShim), matching the tolerance
 - [x] `CodeInspectionTest.cs` diff against master reviewed - WebClient rule only
-- [ ] `CodeInspection` test run locally (blocked: the `pwiz` checkout has no
-      native C++/CLI bindings built; a `quickbuild.bat` run is required first)
+- [x] Native build completed in this checkout (`quickbuild.bat address-model=64
+      --i-agree-to-the-vendor-licenses --no-tests`; `bs.bat` is the .NET-port entry
+      point and does not apply on master)
+- [x] `CodeInspection` passes; tolerated count of 3 matches the tree
+- [x] `Skyline.sln`, `SkylineBatch.sln`, `AutoQC.sln` all build clean
+- [x] `/code-review max` run and findings triaged (below)
+- [ ] SkylineBatch / AutoQC functional suites - not run locally, TeamCity is the gate
 - [ ] TeamCity green
-- [ ] `/code-review max` findings triaged
+- [ ] Copilot review addressed
+
+## Code Review Triage (2026-09-09)
+
+`/code-review max` returned 15 findings. Four were fixed; the rest were judged not
+worth changing in this PR, with reasons.
+
+### Fixed
+
+1. **Prohibition regex was evadable.** `new\s+WebClient\s*\(` missed
+   `new System.Net.WebClient()` and `new WebClient { ... }`. This went to the heart
+   of the PR - the rule advertises no opt-out, and left two silent ones open - and it
+   is sharpest here because this migration *removed* `using System.Net;` from the
+   files it touched, making the qualified form the natural next reach. Now
+   `new\s+(System\.Net\.)?WebClient\s*[({]`. Verified the tolerated count stays 3.
+2. **`DownloadDlg` passed the -1 sentinel to `ProgressBar.Value`.**
+   `HttpClientWithProgress` reports -1 when it cannot know the total size
+   (`ChangePercentComplete(-1)`, line 445); `Math.Min(percent, 99)` let it through to a
+   control that rejects negatives, once per 10 ms timer tick. Now
+   `Math.Max(0, Math.Min(percent, 99))`.
+3. **File-header spacing.** All three new files omitted the blank ` *` line between
+   `AI assistance:` and `Copyright`. Measured: 356 of the 359 files carrying that line
+   have it; these three were the only deviations.
+4. **Overstated comment.** "Applies everywhere" reworded - the inspection walks only
+   `pwiz_tools/Skyline` plus `Shared/Common` and `Shared/CommonUtil`.
+
+### Deferred - worth doing, not here
+
+These are all real, but they change download or test-seam semantics that this PR only
+touches incidentally. Each would be better as its own change with the batch-tool suites
+actually run.
+
+- **`Server.cs` writes straight to the final path** with no `FileSaver`, and the new
+  `catch` suppresses every exception once the token is cancelled, so a cancelled or
+  failed download can leave a truncated file at the real destination while the log
+  says 100%. Verified behaviour-preserving against master, but every other
+  `HttpClientWithProgress` download in the tree targets a temp/`FileSaver` path.
+  Testing `e is OperationCanceledException` rather than the token state is the
+  narrower fix.
+- **Test seam only fills `SkylineAdminCmdPath`**, but `SkylineSettings` consults
+  `SkylineRunnerPath` first, so on any machine with a Skyline ClickOnce shortcut the
+  seam is inert - i.e. on exactly the developer machines its doc comment describes.
+- **Mock R versions are installed assembly-wide and never cleared**, so the three
+  tests that genuinely execute R now launch a non-existent relative `Rscript.exe`
+  instead of failing with "No R installation found".
+  `TestUtils.ClearMockRInstallations` still has no caller.
+- **`GetSkylineDir` prefers Release unconditionally** while the AutoQC sibling added in
+  the same commit prefers the newer build - two policies for one decision.
+- **`ConfigValidationReport` is built eagerly** as an `Assert` message, so all 53
+  `CheckConfigs` call sites pay for two full re-validations on the UI thread even when
+  passing; it also re-validates at assert time while `InvalidConfigCount` reads flags
+  recorded at import, so the diagnostic can contradict the assertion.
+- **`HttpClientWithProgress` `RequestUri` guard is asymmetric** - added on the
+  `GetCookies` path, but the two `SetCookies` paths pass the same possibly-null URI.
+  Guard all three or assert the invariant once.
+- **`DiannSearchLFQbenchTest`** now inherits a 15 s per-chunk read timeout on a large
+  unattended download that has no retry.
+- **`SkylineTypeControl` `?? string.Empty`** turns a null `CmdPath` from a loud
+  `ArgumentNullException` into an empty box that resolves to the CWD-relative
+  `SkylineCmd.exe`, which `Validate()` then accepts.
+- **AutoQC `instrumentType`** saves as `""` rather than throwing when the stored value
+  matches no combo item; `GetFileFilter("")` then yields `*.*`. No in-app path produces
+  it - needs a hand-edited or foreign config.
+
+### Rejected
+
+- **"The Skyline fallback makes `PanoramaWebFunctionalTest`'s guard unreachable, so it
+  runs against panoramaweb.org."** The guard asserts a usable Skyline exists; the seam
+  makes one exist, which is its purpose. The test additionally requires
+  `AllowInternetAccess` and a password environment variable (`Assert.Fail` otherwise),
+  so it cannot run unattended by accident.
 
 ## References
 
