@@ -250,3 +250,11 @@ would have been a real defect if the expansion had run after validation.
 **Pending doc edit** (held while `/code-review max` runs on the branch): lead
 `15-hpc-scoring-split.md`'s "Why the flag went" with the basename argument rather than the
 input-kind one.
+
+### `/code-review max` findings live in the OTHER TODO
+
+All fifteen are recorded in `TODO-20260908_osprey_stage7_straightthrough_stream.md` (the two
+share a branch and a PR, so they are in one place rather than split). The retirement's own
+blockers there are **F1** (`--task FirstPassFDR` trains on zero entries on a re-run),
+**F2** (`ScoresPathsForInputs` feeds FirstPassFDR the survivor subset), **F5** (README.md,
+Osprey-workflow.html and four live ai/scripts still pass the retired flag), **F6** and **F12**.

@@ -292,3 +292,222 @@ parquet-derived fallback is now UNREACHABLE - every task requires `--input`, and
 keys are derived from those same inputs, so the first loop always matches. Marked in place rather
 than deleted, because removing it is a behaviour change and does not belong inside a
 review-response commit. Decide before merge: delete it, or keep it defensive and say so.
+
+---
+
+## `/code-review max 4646` findings, 2026-09-08 - ALL FIFTEEN, none fixed yet
+
+Run at the cap, so read this as "the 15 most severe", not "all of them". **Verify each before
+acting** - the tool is confidently wrong sometimes, and two of its candidates were already
+REFUTED by its own verifier (below). Two were verified by hand in-session and are marked.
+
+The branch is stable and green as it stands (`-Dataset All`: 95 legs, 0 failures) - these are
+findings against a passing gate, which is the point: most of them are shapes the gate does not
+reach.
+
+### BLOCKERS - correctness, must fix before merge
+
+**F1. `--task FirstPassFDR` can train on ZERO entries and exit 0.**
+`PerFileScoringTask.cs:1391`. `perRunJoin = !perRunRescore && CanStreamStage7Join(config)`.
+For `--task FirstPassFDR`, `CanHydratePerRun` is false (it admits only `SelectedTask` null or
+`PerFileRescore`), so `perRunJoin` decides - and with `ExpectReconciledInput` gone every
+remaining term is TRUE on a **re-run over a completed directory**: stage7Stream on,
+NeedsResidentPool false, Pass2ProteinCompact true, the retained_base_ids sidecar present from
+the earlier pass, and `AllReconciledParquetsCurrent` true because Stage 6 already wrote every
+reconciled parquet. `LoadJoinOnlyPerRunNames` then adds N EMPTY lists and returns null, and
+`FirstPassFdrTask.Run` computes first-pass FDR/Percolator over nothing, **rewriting both
+boundary sidecars and the retained base_id summary as empty**, exit 0.
+`HydrateRescoreBundleIfPresent` (:1895) short-circuits on the same widened predicate.
+*Before this branch the `ExpectReconciledInput` term made it unreachable for anything but
+`--task SecondPassFDR`.* I checked the COLD case when I widened the predicate and concluded it
+was safe; I never checked the re-run case.
+
+**F2. `ScoresPathsForInputs` feeds FirstPassFDR the survivor SUBSET.**
+`ScoringTaskShared.cs:490`. It applies `EffectiveScoresPathFromScoresPath` ("reconciled wins
+per stem") to EVERY task. That rule belonged to `--input-scores <dir>`, i.e. the SecondPassFDR
+case; FirstPassFDR and PerFileRescoring need the **Stage 4** file. Nothing rejects the
+substitution: the strict `osprey.reconciled` gate is armed only under `ExpectReconciledInput`
+(`ParquetScoreCache.cs:2078`), and version/search/library hashes all match. First-pass
+Percolator would train on ~1/52 of the rows and write cohort-wide boundary artifacts from it,
+exit 0. A retried `--task PerFileRescoring` would likewise hydrate from its own previous
+reconciled output. **The effective path has to depend on the TASK.** The chain used to name
+`--input-scores $s.scores.parquet` explicitly (regression.ps1 phase 2 did); there is now no way
+to ask for the Stage 4 file.
+
+**F3. The new fold arm refuses runs the resident arm handles.** `PerFileRescoreTask.cs:2794`.
+My guard tests `plan.RescoredFiles != null` - a run-WIDE flag assigned unconditionally at :981 -
+rather than "this run was rescored", so any run missing from `plan.ReconciledPaths` aborts
+Stage 7 mid-fold. Three triggers, all with the parquet correctly written: a non-fatal
+`PerFileResumeDriver.Stamp` failure (documented non-fatal) leaves the file correct but not
+`IsCurrent`; a run whose file_name has no `input_files` stem (`WriteUnchangedReconciled`
+returns silently at :1928, a state :3014 documents as SUPPORTED); and
+`WriteReconciledAndStamp`'s silent `return false` at :1873. The throw fires on the FIRST
+`StreamFiles` pass, which sets `_streamed` before calling the source, so earlier runs are
+already dropped and any later `.Value` read throws too - exit 1 after the whole rescore has been
+paid for. **The message is also wrong for two of the three**: it asserts Stage 6 logged a
+warning, but Stage 6 DID persist the run (case 1) or logged nothing (case 3). Under
+`--model-diagnostics` the first occurrence is swallowed by `WritePass2DiagnosticsStreamed`'s
+blanket catch (`SecondPassFdrTask.cs:782`) and the run dies later at an uncaught fold.
+**Do NOT "just remove the throw"** - see REFUTED (1).
+
+**F4. VERIFIED BY HAND. My `ForTask` test helper builds a config the CLI cannot produce.**
+`PipelineMembershipTest.cs:59`. It sets `StopAfterStage5` for ModelDiagnostics;
+`Program.cs:132` is `config.StopAfterStage5 = selectedTask == HpcTask.FirstPassFdr;` and is the
+only assignment in the tree. So the PR's headline new truth-table row asserts fiction: a real
+`--task ModelDiagnostics` reaches `AnalysisPipeline` with all three flags false, giving
+`{true,true,TRUE,TRUE}`, not the `{true,true,false,false}` the row claims.
+`ProgramTests.cs:433` pins the REAL flags and its comment at :422 states the opposite design -
+**two tests in one assembly now assert incompatible things**. The same false claim is repeated
+in `docs/15-hpc-scoring-split.md`'s truth-table row and in the comments on
+`PerFileRescoreTask.IsIncluded` and `SecondPassFdrTask.IsIncluded`.
+`LibraryFragmentReleaseTest.cs:285` carries the identical helper (latent).
+
+**F5. VERIFIED BY HAND. `--input-scores` is still live outside the diff.**
+`README.md` 8 hits - :132/:136/:140 are copy-pasteable command lines the parser now REJECTS,
+and :112/:114/:154/:156/:174 describe the flag as the input mechanism, including "ordering is
+significant. A directory argument is globbed and sorted internally", a guarantee
+`ScoresPathsForInputs` no longer provides. `Osprey-workflow.html` :398/:465/:509 label the
+three join tasks' inputs as arriving "via --input-scores". Outside the repo, four LIVE scripts
+(archive/ ones do not matter): `Compare/Compare-Stage7-Rehydration-Strict-CSharp.ps1`,
+`Test-Snapshot.ps1`, `SEA-AD/Measure-Stage6Rescore.ps1`, `Profile-Stage5.sh`. Each exits
+non-zero before doing any work, and reads as a phase failure rather than a CLI incompatibility.
+
+**F6. The scores-parquet stand-in is applied to tasks that must read raw spectra.**
+`Program.cs:226`. My new "an absent input is fine when its scores parquet is on disk"
+acceptance is not gated on `StartsAfterPerFileScoring`, so `--task SpectraCache` or
+`--task PerFileScoring` with a moved or mistyped input silently proceeds when a leftover
+`.scores.parquet` happens to sit there - and logs "reading those from their scores parquet,
+which is what a task after Stage 4 needs", which is FALSE for SpectraCache, whose only product
+is the `.spectra.bin` it must decode from the raw file. The old `if (!fromInputScores)` wrapper
+structurally could not reach the pre-Stage-4 tasks; nothing re-establishes that scoping, and
+`ValidateArgs` no longer catches it because the input-KIND crosses were deleted.
+
+### The verifiers I added, which can lie
+
+**F7. The streamed-join marker proves the wrong thing.** `PerFileRescoreTask.cs:2773`. It is
+logged when the SOURCE IS BUILT, not when anything folds through it. Two consequences: a run
+that dies later in Stage 6 has already claimed the streamed join in its log; and any Stage 7
+consumer reading `RescoredEntries.Value` routes to `MaterializeAllFromSource`, which builds
+every run at once - the exact 91.1 GB peak - while `Streams` stays true, so
+`WarnResidentStage7Join` stays SILENT and `regression.ps1:2711` reports PASS on a resident run.
+`MaterializeAllFromSource` logs its own warning (:2090) but nothing asserts its absence.
+**Asserting on the fold's own ProgressReporter line would fix this.**
+
+**F8. `$cannotStreamJoin` omits `OSPREY_STAGE6_STREAM_SURVIVORS=0`.** `regression.ps1:1775`,
+documented as "CanStreamStage7Join's OWN terms". Under that switch `BuildRunPerRunSource`
+returns null (no loader, and the lists are never cleared), no marker reaches straight.log, and
+the new mode1 leg FAILs a run behaving exactly as instructed - while mode2/mode5 PASS, because
+`BuildResumePerRunSource` reads the loader through `PublishedSurvivorLoader`, which
+deliberately bypasses the Stage-6 switch. The red is mode1-only and reads like a genuine
+regression. Separately the predicate reads only env vars while two of the three
+`NeedsResidentPool` triggers are CLI/config (`--fdrbench-pass 1`, a non-Percolator
+`--fdr-method`), so a dataset spec setting either would red all three legs.
+
+**F9. A `--task PerFileRescoring` worker emits the marker the gate greps for.**
+`PerFileRescoreTask.cs:2752`. Nothing excludes the worker from `BuildRunPerRunSource`, and
+regression.ps1 stages `output.1st-pass.retained_base_ids.bin` into every phase-3 dir (:1551,
+deliberately unguarded), so `phase3_<stem>.log` receives the marker VERBATIM in a process whose
+pipeline contains only `PerFileRescoreTask`. Any leg that widens its log set to the per-stem
+logs is told a join folded when none ran. The worker also pays a retained-sidecar read that
+#4597's "entering PerFileRescoring must cost the same for 1 run as for 446" contract forbids.
+
+### Correctness, lower reachability
+
+**F10. `BuildResumePerRunSource` omits the `entries.Clear()` its sibling adds.**
+`PerFileRescoreTask.cs:2159` vs `:2808`. `MaterializeFileSurvivors` returns early when
+`entries.Count > 0`, but `OverlayReconciledIntoFile` is unconditional and appends gap-fill.
+`RescoredEntries.MaterializeFile` (`PipelineByproducts.cs:739`) invokes the source WITHOUT
+clearing and leaves dropping to its caller, whose doc names "merely finished one of several
+passes over it" as legitimate. Any path where a run is begun but `ApplyFileRunQ` does not run
+duplicates that run's gap-fill precursors in the pool Stage 7 writes the `.blib` from -
+silently, exit 0. This is the same duplication `BuildRunPerRunSource`'s own comment says once
+exited a straight-through Stellar run 1 on `AssertSidecarDescribesPool`.
+
+**F11. `IsCurrentReconciledSurvivorSubset` throws where it is documented to answer false.**
+`ParquetScoreCache.cs:280`. `LoadFooterMetadata` is called with no try/catch, so ONE
+zero-length, partially-written or foreign-build reconciled parquet turns a boolean predicate
+into an unhandled stack trace at five call sites - pre-empting
+`SecondPassFdrTask.StaleReconciledParquets`, which is the named, file-listing refusal the
+operator is supposed to get. `ValidateScoresParquetGroup` (:2053) wraps the identical call in
+try/catch, so the convention exists and I did not follow it. **Secondary**: my doc says "in one
+open" but `LoadFooterMetadata` and `HasColumn` each construct their own reader - 892 opens at
+446 runs, uncached across five call sites, ~4,460 parquet opens per process before any work,
+typically on a network artifact directory.
+
+**F12. Duplicate basenames across directories.** `PerFileRescoreTask.cs:2922`. Every join keys
+runs on `Path.GetFileNameWithoutExtension`, and nothing rejects two inputs in different
+directories sharing a stem - a shape `--input-list` makes routine at cohort scale.
+`LoadJoinOnlyPerRunNames` appends TWO rows keyed `"x"` while `perFileParquetPaths["x"]` keeps
+only the second; `CurrentReconciledPaths` then throws `ArgumentException: An item with the same
+key has already been added` mid-Stage-6/7. **With `--output-dir` it is worse**: both stems
+resolve into the same directory, so the two runs share one `.scores.parquet` and one
+`.scores-reconciled.parquet` with no error at all. The `--input-scores <dir>` form made stems
+unique by construction.
+
+**F13. `Stage7ResidentGuardError`'s throw is newly reachable, and late.**
+`SecondPassFdrTask.cs:290`. (a) An operator with `OSPREY_STAGE7_STREAM=0` exported and no token
+runs an ordinary `-i` job: Stages 1-6 run for HOURS, Stage 6 writes the reconciled parquets,
+`AllReconciledParquetsCurrent` flips true, and Run throws before writing the blib - an
+invocation that completed on the previous build. `ValidateArgs` holds both env facts and could
+refuse in milliseconds. (b) With `OSPREY_STAGE6_STREAM_SURVIVORS=0` too, `couldStream` is still
+true but `BuildRunPerRunSource` returns null regardless, so the message "unset
+OSPREY_STAGE7_STREAM to take the streamed join" is unachievable. (c) `couldStream` is computed
+unconditionally although the guard's first line short-circuits - the full O(files) footer sweep
+is discarded on the default path.
+
+### Retention / performance
+
+**F14. The resume arm forces the deferred gap-fill read and captures O(files) state.**
+`PerFileRescoreTask.cs:2148`. `PerFileGapFillForRescore` is published DEFERRED
+(`FirstPassFdrTask.cs:1153`) and its header records the cost: "dotTrace 69.7s total in
+ReadGapFillAndCalibrations ... an in-code probe at 92.7s; and a night run's log gap at 111s" -
+order 10 GB of envelope JSON at 446 runs. I pull `.Value` unconditionally inside a method whose
+surrounding comment claims "LAZY ... there is no reason to do the work before the consumer that
+folds asks for it", then capture the whole-run map for all of Stage 7 though the fold needs one
+run's list. The sibling `BuildRunPerRunSource`'s lambda calls instance members, so it captures
+`this` and pins `_poolPlan.ResetEntryIds` (a `HashSet<uint>` per file) across all 7+
+`StreamFiles` passes - **a residual O(files) term invisible to the `_perFileEntries` accounting
+this PR measures.**
+
+### Cleanup
+
+**F15.** (a) `ProgramTests.cs:842` `NewTempDir()` is dead - its five callers were the deleted
+`TestResolve*` tests - and lines 844-846 are the file's only `Path.`/`Directory.` uses, so
+`using System.IO;` at :27 is redundant too. Both are ReSharper inspections on a file this diff
+touches, against CRITICAL-RULES' "ReSharper must show green". *(Note: the local inspection ran
+CLEAN, so confirm before acting.)* (b) `PerFileRescoreTask.cs:2705-2720` is
+`BuildRescoredPool`'s original `<summary>` - describing the deferred whole-run build and its
+`[STAGE-WALL]` line - left attached to the new `BuildRunPerRunSource` at :2752, which carries a
+second `<summary>` and does neither; `BuildRescoredPool` at :2832 is now undocumented.
+(c) `IOTest.cs:2855` hand-feeds `{"osprey.reconciled", RECONCILED_SURVIVORS}` into
+`StreamReconciledScoresParquet`, which writes the caller's map verbatim - **so if
+`ReconciledParquetWriter` ever stops stamping that marker the test still passes while
+`AllReconciledParquetsCurrent` returns false for every real run and the whole cohort silently
+falls back to the 91.1 GB resident join.**
+
+### REFUTED by the review's own verifier - do NOT re-raise
+
+1. "`ExecuteRescore`'s keep-condition and the fold's refusal ask different questions" - they are
+   the SAME `PerFileResumeDriver.IsCurrent` call with the same arguments
+   (`PerFileRescoreTask.cs:2594` vs `:2919`), and the throw is what keeps the two arms
+   byte-identical. **A naive "just skip the throw" fix for F3 would INTRODUCE an
+   overlay/gap-fill divergence.**
+2. "The resume fold's overlay map diverges from the resident arm's" - both call
+   `CurrentReconciledPaths` and both canonicalize.
+
+### Suggested order for the next session
+
+1. **F1 and F2 together** - both are `--task FirstPassFDR` over a completed directory, and both
+   want a real reproduction before and after, not just reasoning. They are also the two that
+   can corrupt a cohort's artifacts while exiting 0.
+2. **F4 + the doc/comment repeats**, then **F5** (the doc/script sweep) - cheap, and F4 is a
+   test currently asserting a falsehood.
+3. **F6, F11, F10, F8** - small, local, each with a clear fix.
+4. **F3, F13** - design decisions about failure behaviour; read REFUTED (1) first.
+5. **F7, F9** - the marker's meaning. Worth doing together, since both are "the gate cannot
+   distinguish a source being offered from a fold running".
+6. **F12, F14, F15** - judgement calls and cleanup.
+
+Re-run `regression-parallel.ps1 -Dataset All` (NOT the serial entry point) and re-trigger
+TeamCity Perf/Regression on `pull/4646` once the code findings are in. **Ask before triggering
+TeamCity** - standing rule.
