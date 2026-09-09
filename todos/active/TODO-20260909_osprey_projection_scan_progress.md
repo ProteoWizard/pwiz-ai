@@ -1,37 +1,68 @@
-# TODO-20260909_osprey_projection_scan_progress.md - the deferred first-pass row scan reports nothing
+# TODO-20260909_osprey_projection_scan_progress.md - the counts-only projection scanned 1.34 B rows to learn 446 numbers
 
 **Module**: `osprey`
 **Status**: In Progress
 **Branch**: `Skyline/work/20260909_osprey_projection_scan_progress` in `C:\proj\pwiz-work1`,
 cut from `origin/master` (`ade29fa42d`). NOT stacked on #4646 - the defect is master's.
 
-## What
+## What it was
 
-`PerFileScoringTask` publishes `FdrProjections` as a deferred factory. Its one consumer,
-`FirstPassFdrTask.Run`, pulls `.Value` about seventy lines after entry, and the factory then
-reads every scored row of every file with **nothing reporting**. At 446 runs that is a
-**618-second silent window** - the longest unexplained pause in a 6.5 h job and the only
-reporting gap over 30 s in it.
+`PerFileScoringTask` publishes `FdrProjections` as a deferred factory whose body streamed every
+row of every `.scores.parquet` through `FdrProjectionSet.Builder(countsOnly: true)`. In that
+mode `AddRow` **discards all five fields and increments a counter**:
 
-Fix: a `ProgressReporter` inside the factory. The deferral is correct and stays.
+```csharp
+public void AddRow(uint entryId, byte charge, bool isDecoy, double coelutionSum,
+    string modifiedSequence)
+{
+    if (_countsOnly)
+    {
+        _curFileCount++;
+        return;            // every value thrown away
+    }
+```
 
-## Why it is NOT a regression, and why it appeared now
+| | |
+|---|---|
+| read | 1,342,686,095 rows across 446 files - `entry_id`, `charge`, `is_decoy`, `coelution_sum` and a STRING `modified_sequence`, decoded row group by row group |
+| produced | **446 file names + 446 row counts** |
+| cost | **618 s** and ~5.7 GB of allocation (446-run CHS, 2026-09-09) |
 
-Introduced by `c4921f3d6c` (#4633, 2026-09-06) - already on master. Before it, the scan ran
-eagerly inside `PerFileScoringTask`'s own per-file loop, which HAD a progress bar
-(`Loading scored entries`). Deferring the work moved it out of that loop; the reporting did
-not follow it.
+And the phase immediately after it - `Streaming first-pass ingest from 446 file(s)` - re-reads
+the same columns from the same files to do the actual work. The counts-only branch's own comment
+says so: *"the counts-only producer read the same parquet to count its rows"*.
 
-**The deferral made nothing slower - it made the work CONDITIONAL.** Its own comment says why:
-the only consumer is `FirstPassFdrTask.Run`, and a resume whose 1st-pass outputs are valid
-SKIPS that Run, so the scan was "built and discarded, every time". `TODO-20260901_osprey_stage5_reload_materialization.md`
-measures the win as `Loading scored entries` **9m46s -> 10s**, part of resume startup
-26m23s -> 2m53s. A `--task PerFileRescoring` worker is exactly such a run: it is excluded from
-FirstPassFDR's membership, so it was paying a ten-minute all-files join-shaped scan as dead
-lead-in before touching its one file - which is what #4597's contract forbids.
+## The fix: delete the scan, not report it
 
-My run is the case where the condition is TRUE. FirstPassFDR did run, the factory fired, and
-the same 9m46s came back - now unreported. **9m46s and 618s are the same scan.**
+The count was always free. Parquet's footer declares `NumRows`;
+`ParquetScoreCache.ProbeResumeSchemaAndRows` returns it from the open the load loop **already
+performs** for the PIN-schema check, and that loop already did `leanRowCount += probe.RowCount`
+under a comment reading *"the count comes from the footer, not a scan"*. A counts-only
+projection is nothing but those counts paired with their file names, so the factory is now
+`FdrProjectionSet.CountsOnly(names, counts)` and no path scans at all.
+
+~10 minutes -> ~0, and the only full read left is the ingest that was always going to happen.
+
+**A progress bar was the wrong fix and was reverted before push.** It would have made ten
+minutes of pointless work *look legitimate*, which is worse than the silence that exposed it.
+It only became the right question when the developer asked what the ten minutes actually
+produced - "Is it truly a join? Could PerFileScoring also write a sidecar optimized for this
+task?" The answers are no and no-sidecar-needed: nothing crosses a file boundary in counts-only
+mode (every `FdrProjectionSet.Builder` in this task is `countsOnly: true`), and Parquet's footer
+already IS the optimised sidecar.
+
+## Why it appeared only now
+
+Introduced by `c4921f3d6c` (#4633, 2026-09-06), already on master. Before it the scan ran
+eagerly inside the per-file loop, which had a progress bar (`Loading scored entries`).
+Deferring made the cost CONDITIONAL - a `--task PerFileRescoring` worker is excluded from
+FirstPassFDR's membership, skips its `Run`, and so never pulls the factory. That is the win
+`TODO-20260901_osprey_stage5_reload_materialization.md` measures as `Loading scored entries`
+**9m46s -> 10s** (resume startup 26m23s -> 2m53s).
+
+**9m46s and 618 s are the same scan, seen from the two sides of that condition.** The deferral
+removed it for runs that skip FirstPassFDR; it stayed, and lost its progress reporting, for
+runs that do not. #4633 was right to defer; it just deferred work that should not exist.
 
 ## Evidence (three runs, same 446-run CHS cohort, same -LinkFrom shape)
 
@@ -42,37 +73,41 @@ the same 9m46s came back - now unreported. **9m46s and 618s are the same scan.**
 | `stages567-n4646`, 2026-09-09 | post-#4633 | 1 | **618 s** |
 
 Memory is unchanged across them (managed peak 32.5 -> 33.5 GB; `PerFileRescoring`
-10.0/12.0/24.5 -> 10.0/12.1/24.5 GB), so this is observability only, not behaviour.
+10.0/12.0/24.5 -> 10.0/12.1/24.5 GB). On the Sep-3 log `stage5-start-live` and
+`projection counts-only` are in the SAME SECOND; on 2026-09-09 they are 618 s apart with
+working set growing 14.6 -> 20.3 GB. **That two-line signature is the acceptance test** - it
+needs a cohort big enough to make the scan measurable, not 446 files.
 
-On the Sep-3 log `stage5-start-live` and `projection counts-only` are in the SAME SECOND; on
-2026-09-09 they are 618 s apart with working set growing 14.6 -> 20.3 GB between them. That
-two-line signature is the regression test if one is ever wanted - it needs a cohort large
-enough to make the scan measurable, not 446 files.
+## Guards added
 
-## The label
-
-The bar reads `Reading scored rows from N file(s) for first-pass FDR`, NOT "building the
-first-pass projection". Developer, 2026-09-09: *"What is the 'first-pass projection'? This is
-not inherently a meaningful phrase to me."* It was the type's name (`FdrProjectionSet`), which
-describes the implementation rather than the work. Name a progress bar for what a person
-watching the run is waiting for.
+* `TestFooterRowCountMatchesScan` pins the invariant the whole change rests on: the footer's
+  declared `NumRows` is the same number a full scan reaches. Multiple row groups on purpose
+  (cap 2 over 5 rows) - a single-group file cannot tell a footer count and a per-group append
+  loop apart. `ReadFdrStubScalars` reads every row group with no filter, so they cannot
+  legitimately differ.
+* `RowCountAsInt` REFUSES rather than casting. The cohort total already outgrew `int`
+  (1,342,686,095 at 446 files, which is why the running total is a `long`), so the per-file
+  value is the next one to watch; an unchecked cast would wrap a large run's count negative and
+  size first-pass FDR from it silently.
 
 ## The wider point (developer, 2026-09-09)
 
 > Using a 446 file dataset as a regression test can allow issues to survive and last for days
-> before they are detected... Each testing mode has its cycle-time, and we really can't make a
-> full 446 file test on a 64 GB computer much faster. So, we need to be sure we make the most of
-> any issues we find regardless of the stage of development we may be in at the time we find an
-> issue in a multi-day test cycle.
+> before they are detected... we need to be sure we make the most of any issues we find
+> regardless of the stage of development we may be in at the time we find an issue in a
+> multi-day test cycle.
 
-This defect lived three days because it is invisible below cohort scale: at Stellar size the
-same pull is milliseconds, so no gate would show it. Two things still owed on the 446-run
-cohort and NOT covered by this branch: a run that executes **Stages 1-4** rather than linking
-them, and a **straight-through run with `--model-diagnostics`** (the per-task vs straight-through
-concern). The 2026-09-09 run deliberately had neither.
+This lived three days because it is invisible below cohort scale: at Stellar size the same pull
+is milliseconds. Still owed on the 446-run cohort and NOT covered here: a run that executes
+**Stages 1-4** rather than linking them, and a **straight-through run with
+`--model-diagnostics`**. The 2026-09-09 run deliberately had neither.
+
+See also the backlog item this raised: `TODO-osprey_log_lines_are_user_facing_prose.md`.
 
 ## Gates
 
-* `Build-Osprey.ps1 -SourceRoot C:/proj/pwiz-work1 -RunTests -RunInspection`: 604 tests,
-  603 passed, 1 pre-existing skip, 0 warnings.
-* Still owed: `regression.ps1 -Dataset Stellar`, then `/code-review` before opening the PR.
+* `Build-Osprey.ps1 -SourceRoot C:/proj/pwiz-work1 -RunTests -RunInspection`: **605 tests, 604
+  passed, 1 pre-existing skip, 0 warnings**.
+* `regression.ps1 -Dataset Stellar`: RUNNING. This is the real check - the change alters what
+  first-pass FDR is sized from, so `mode1 (vs golden)` is what proves the counts are identical.
+* Then `/code-review`, then the PR.
