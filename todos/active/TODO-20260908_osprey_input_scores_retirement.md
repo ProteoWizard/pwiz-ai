@@ -182,3 +182,44 @@ tolerance `--input-scores` expressed by naming a different input kind, said once
 * `regression.ps1`'s four chain-phase argument lines: the gate was RUNNING, and a running
   script must not be edited. They are the first thing to do next, and mode 3 is the leg that
   proves the derivation.
+
+### `-Dataset All` GREEN on both halves (2026-09-08)
+
+95 legs, 0 failures, `Tokens REQUIRED by this gate: 0`, exit 0, 6,873.8s across 56 phases.
+The legs that carry the claims, on all four datasets:
+
+| leg | what it proves |
+|---|---|
+| `mode1 (vs golden)` | NO golden moved - by the streaming change or by the retirement |
+| `mode3 (HPC chain==straight)` | the derived parquet paths resolve to the files `--input-scores` used to name |
+| `mode3 (per-run hydrate)` | the rescore workers took the per-run hydrate |
+| `mode1 / mode2 / mode5 (streamed join)` | cold run and both resumes fold run by run |
+
+The streamed arm is now exercised on StellarLibDecoy, StellarGenDecoyEntrap and Astral, which
+closes item 1 of #4642's STILL OPEN list: those three carry library decoys, entrapment and hram
+data, and before this the streamed Stage-7 join was only ever reached on plain Stellar.
+
+**Use `regression-parallel.ps1` for `-Dataset All`.** Serial is 2h04m30s (Astral alone is 51.8%
+of it); two lanes is ~70-75 min for identical coverage. This session ran the serial entry point
+twice by habit - once for a full 1h54m - which is why the osprey-development skill now names the
+parallel runner at the gate bullet rather than leaving it to be discovered by listing the folder.
+
+### Copilot review round (commit `1a120903fe`)
+
+ONE inline comment, and it was correct: `PipelineContext`'s mutation contract cited
+`--input-list` as a field "written once at pipeline entry", but that is expanded during CLI
+parsing. The carve-out existed for the `--input-scores` synthesis in `AnalysisPipeline.Run`, and
+when that mechanism was deleted the example was SWAPPED rather than the carve-out removed.
+
+Re-checking the file for the same claim found three more comments the retirement had left stale
+and Copilot had not flagged - `BuildFileNameToIndex` ("synthesized from --input-scores parquet
+stems by Program.Main"), `ResolveSidecarBasePath` ("where InputFiles is empty"), and
+`BlibOutputWriter` ("the acquisition itself is not among the inputs"). **The lesson is the
+generalisable one: a single reviewer finding about a stale claim is worth grepping for, because
+the mechanism that made it stale usually made several.**
+
+**Left as a follow-up, deliberately**: `ScoringTaskShared.ResolveSidecarBasePath`'s
+parquet-derived fallback is now UNREACHABLE - every task requires `--input`, and the `fileName`
+keys are derived from those same inputs, so the first loop always matches. Marked in place rather
+than deleted, because removing it is a behaviour change and does not belong inside a
+review-response commit. Decide before merge: delete it, or keep it defensive and say so.
