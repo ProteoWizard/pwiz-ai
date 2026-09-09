@@ -186,6 +186,17 @@ and `README.md` are the authoritative gate references.
     `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`
     (`-Dataset All` before a behavior/perf-sensitive merge). Also the overnight
     TeamCity gate.
+    - **For `-Dataset All`, use `regression-parallel.ps1`, not `regression.ps1`.**
+      Same coverage - every dataset, every mode - in two concurrent lanes, because
+      Astral alone is 51.8% of the serial wall and almost exactly equals the other
+      three combined. Measured: **serial 2h04m30s vs ~70-75 min parallel**.
+      `regression.ps1 -Dataset All` is not wrong, it is just twice the wall clock,
+      and the serial entry point is the one you reach for by habit - burned twice
+      in one session on 2026-09-08, once for a full 1h54m run.
+      Threads default to logical processors / lanes, which is right on this box
+      (32 = 2 x 16) and on the TeamCity agent (16 = 2 x 8); do not hardcode.
+      A single `-Dataset` runs serially either way, so the fast local loop is
+      unchanged.
   - **Performance** (speed not degraded): a same-session A/B of the branch vs the
     pinned `pwiz-perfbase` baseline worktree (3-rep median, fails only on a real
     regression with non-overlapping bands):
