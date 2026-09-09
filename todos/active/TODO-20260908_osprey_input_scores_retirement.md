@@ -258,3 +258,6 @@ share a branch and a PR, so they are in one place rather than split). The retire
 blockers there are **F1** (`--task FirstPassFDR` trains on zero entries on a re-run),
 **F2** (`ScoresPathsForInputs` feeds FirstPassFDR the survivor subset), **F5** (README.md,
 Osprey-workflow.html and four live ai/scripts still pass the retired flag), **F6** and **F12**.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260908_osprey_stage7_stream_and_scores_retirement.md` before starting work.

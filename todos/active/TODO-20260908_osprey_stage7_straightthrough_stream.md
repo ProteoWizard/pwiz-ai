@@ -511,3 +511,6 @@ falls back to the 91.1 GB resident join.**
 Re-run `regression-parallel.ps1 -Dataset All` (NOT the serial entry point) and re-trigger
 TeamCity Perf/Regression on `pull/4646` once the code findings are in. **Ask before triggering
 TeamCity** - standing rule.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260908_osprey_stage7_stream_and_scores_retirement.md` before starting work.
