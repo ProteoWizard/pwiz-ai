@@ -223,3 +223,30 @@ parquet-derived fallback is now UNREACHABLE - every task requires `--input`, and
 keys are derived from those same inputs, so the first loop always matches. Marked in place rather
 than deleted, because removing it is a behaviour change and does not belong inside a
 review-response commit. Decide before merge: delete it, or keep it defensive and say so.
+
+### The developer's framing, which is better than the one in the docs (2026-09-08)
+
+> *"All can use --input-list to point to a file with the full list. The --input-scores was just
+> another way to specify the same list of basenames with a different extension. If the set did
+> not match to the --input files it would also be invalid. The pipeline is for a set of
+> basenames with naming as outlined in Osprey-workflow.html"*
+
+This is the argument to lead with, and it is stronger than "the input KIND was a second seam
+saying what `--task` already said". That framing is true but downstream. The flag was
+**redundant by construction**: the pipeline is defined over a SET OF BASENAMES, every per-run
+artifact is `<stem>.<suffix>` (`Osprey-workflow.html`: `.spectra.bin`, `.scores.parquet`,
+`.scores-reconciled.parquet`, `.calibration.json`, `.reconciliation.json`, `.1st-pass.*`,
+`.2nd-pass.*`), and `--input-scores` named that same set with a different suffix. It could never
+express a valid set `-i` could not, because a parquet set not corresponding to the `-i`
+basenames would be invalid anyway. `SyntheticInputFromParquet` was the visible symptom of
+naming the set the long way round, not the disease.
+
+**Verified while confirming this**: `--input-list` is expanded inside `OspreyCommandArgs.ToConfig`,
+which runs during `ParseArgs` and therefore BEFORE `ValidateArgs`. So `--task FirstPassFDR
+--input-list runs.txt` populates `InputFiles` before validation reads it, and the "2+ files"
+check counts the expanded list. Worth having checked: making every task require `InputFiles`
+would have been a real defect if the expansion had run after validation.
+
+**Pending doc edit** (held while `/code-review max` runs on the branch): lead
+`15-hpc-scoring-split.md`'s "Why the flag went" with the basename argument rather than the
+input-kind one.
