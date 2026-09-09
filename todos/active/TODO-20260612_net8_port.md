@@ -7200,5 +7200,27 @@ tracking was prototyped and **abandoned** for exactly that reason - it would hav
 - **`git reset --hard` discards uncommitted work in the tree, not just commits.** It silently took a
   developer's `PauseTest` mid-investigation.
 
+## 2026-09-08: #4634 merged into the branch - IDE builds now pick the matching pwiz-sharp configuration
+
+[#4634](https://github.com/ProteoWizard/pwiz/pull/4634) (stacked on this branch) squash-merged as
+`a4081f73ac`. Approved by Matt and Brendan; TeamCity green on all five configurations.
+
+**What shipped**: an `AssignOutOfSolutionProjectReferenceConfiguration` target in
+`pwiz_tools/Directory.Build.targets`. Skyline.csproj references the pwiz-sharp projects and
+SkylineProcessRunner, none of which are in Skyline.sln, so MSBuild's AssignProjectConfiguration
+found no solution configuration for them and stripped Configuration/Platform from the reference -
+the referenced project then fell back to Debug/AnyCPU regardless of what the IDE had selected. The
+target runs after AssignProjectConfiguration, gives every unassigned reference the solution's
+Configuration plus Platform=AnyCPU, and passes `ShouldUnsetParentConfigurationAndPlatform=false` as
+a global property so the fix flows down the whole out-of-solution subtree (fixing only the first
+level built BlibBuild Release on top of a Debug BiblioSpec and broke the msparser.dll copy with
+MSB3030). Conditioned on `CurrentSolutionConfigurationContents`, so command-line csproj builds are
+untouched.
+
+**Not shipped**: the first two commits on the branch added the pwiz projects to Skyline.sln
+directly; that approach was replaced by the targets file before merge, and Copilot's two threads
+about it (BOM on the first line, duplicate "BiblioSpec" project name) are outdated rather than
+addressed. Work branch `Skyline/work/20260902_net10_sln_pwiz_projects` deleted local and remote.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
