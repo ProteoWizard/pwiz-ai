@@ -1,7 +1,7 @@
 # TODO-20260908_osprey_stage7_straightthrough_stream.md - Stage 7 streams only on `--task SecondPassFDR`; the straight-through run still builds the pool
 
 **Module**: `osprey`
-**Status**: In Progress. Successor to
+**Status**: Completed 2026-09-09 (PR #4646, merged as 794cb6a5d8). Successor to
 `todos/active/TODO-20260906_osprey_stage7_lean_row.md` ([#4642](https://github.com/ProteoWizard/pwiz/pull/4642)),
 which made the streamed Stage-7 join exist and proved it at 446 files.
 **Branch**: `Skyline/work/20260908_osprey_stage7_stream_and_scores_retirement` in
@@ -766,3 +766,52 @@ TeamCity** - standing rule.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260908_osprey_stage7_stream_and_scores_retirement.md` before starting work.
+
+### 2026-09-09 - Merged
+
+PR #4646 merged as `794cb6a5d8`. TeamCity Perf/Regression 4169631 green on the merge candidate:
+**95 PASS / 0 FAIL / 1 SKIP in 01:16:34**, first attempt.
+
+**What shipped**: the streamed Stage-7 join on every route (cold `Run`, both resumes, and the
+`--task SecondPassFDR` merge); `--input-scores` retired in favour of `-i` / `--input-list`; and
+the `.scores.parquet` fallback deleted, so which parquet a task reads is decided by the TASK
+(`ScoringTaskShared.ReadsReconciledScores`) rather than by probing disk. 14 of the 15
+`/code-review max` findings closed, with three new tests.
+
+**446-file acceptance, and it is the result this branch existed for.** Run directory
+`D:\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-stages567-n4646`,
+13h26m, exe snapshot `_bin\251-n4646`:
+
+* `Second-pass join: folding over 446 run(s), each rebuilt from its own artifacts and dropped
+  (no all-runs survivor pool)` - the marker fired.
+* ZERO occurrences of `Rebuilding first-pass survivors from 446` (the resident landmark) and
+  ZERO of `a consumer asked for the whole-run survivor pool` (the assertion added in this PR
+  for exactly this).
+* `[MEM stage7-inherited] 4.69 GB` and `[MEM stage7-pool] 4.69 GB` - flat, i.e. no pool built.
+* Whole-run private peak **40.8 GB against the 91.1 GB** the resident join measured on this same
+  cohort and shape. The peak now falls in `FirstPassFDR` (~04:00), not Stage 7: the bottleneck
+  moved to the known Stage-5 wall.
+* `PerFileRescoring` held a ~24 GB band with a hard ~9.5 GB post-GC floor across 446 files for
+  eight hours; whole-run drift LEVEL (-0.36 GB managed, -1.78 GB private).
+
+**Deferred deliberately, both recorded above rather than dropped**:
+
+* **F3** - and its direction is INVERTED by this PR's own contract change. It called the fold
+  arm's throw a defect for refusing runs the resident arm handles; under the contract the fold
+  arm was right and the resident arm's silence was the defect, so both now fail. Its substance
+  survives: runs whose reconciled parquet IS correctly written but is absent from
+  `CurrentReconciledPaths` because `IsCurrent` said no. Fix the validity-map-vs-artifact
+  disagreement; do NOT restore a Stage 4 substitution.
+* **F13(a)** - refuse `OSPREY_STAGE7_STREAM=0` without a token in `ValidateArgs` rather than
+  hours later. Real, but an env-var-only A/B path, and not worth CLI-validation risk.
+
+**Follow-ups filed**:
+
+* [#4650](https://github.com/ProteoWizard/pwiz/issues/4650) - library retention, rehydration and
+  spectrum dropping need an end-to-end review. Evidence from this same run: Stage 7 spends 11
+  minutes and peaks at 41.5 GB rebuilding all 446 runs to recompute a retained set Stage 5
+  already computed, then releases 0 of 6,175,389 entries.
+* `TODO-20260909_osprey_projection_scan_progress.md` - the deferred `FdrProjections` factory
+  scanned 1.34 B rows to learn 446 footer counts. Separate branch, off master.
+* `TODO-osprey_log_lines_are_user_facing_prose.md` (backlog) - audit logged lines for
+  user-facing prose rather than class names.

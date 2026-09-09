@@ -1,7 +1,7 @@
 # TODO-20260908_osprey_input_scores_retirement.md - retire `--input-scores`, a Rust-era seam the C# port already replaced
 
 **Module**: `osprey`
-**Status**: In Progress. Proposed by the developer 2026-09-04 and written up in
+**Status**: Completed 2026-09-09 (PR #4646, merged as 794cb6a5d8). Proposed by the developer 2026-09-04 and written up in
 `todos/completed/TODO-20260901_osprey_stage5_reload_materialization.md:3563` ("PROPOSAL: retire
 `--input-scores`"); re-raised 2026-09-08. **That section is the design - read it first.** This
 file carries what has been learned since and the one constraint it must not miss.
@@ -261,3 +261,13 @@ Osprey-workflow.html and four live ai/scripts still pass the retired flag), **F6
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260908_osprey_stage7_stream_and_scores_retirement.md` before starting work.
+
+### 2026-09-09 - Merged
+
+PR #4646 merged as `794cb6a5d8`, together with `TODO-20260908_osprey_stage7_straightthrough_stream.md`
+(one branch, one PR, by the developer's choice). The retirement half shipped complete: every task
+takes `-i` / `--input-list`, the per-run artifacts are derived from the input stem, and
+`EffectiveScoresPathFromScoresPath` is DELETED - which resolved finding F2, because the parquet a
+task reads is now decided by task membership rather than by probing disk.
+
+See that TODO's merge entry for the 446-file acceptance numbers and the deferred findings.
