@@ -537,5 +537,47 @@ Also unfixed: the shallow-clone pin version (CI collapses every vendor pin to th
 a pre-existing `Analysis.Tests`/`Waters.Tests` race over `ATEHLSTLSEK_profile.raw` — the suites
 run as concurrent jobs and the Waters SDK writes `lmgt.inf` inside the `.raw`.
 
+### 2026-09-09 — the wine base was never published, and Agilent never worked from an installer
+
+**`proteowizard/wine` does not exist on Docker Hub** — a 404 on the repository itself, not a
+missing tag; only `proteowizard/wine-dotnet:winestaging10.6-net4.8-x64` is published (pushed
+2025-06-17). The net10 container config already selects
+`PB=RB=proteowizard/wine:stable11.0-x64` as soon as an installer EXE is in the artifacts, and
+runs `docker system prune --all --force` immediately before building, so the pull must succeed
+from the registry with no local cache to fall back on. No TeamCity config builds or publishes
+the base; it is a manual push. Rebuilt, verified 7/7 (wine-11.0, UTF-8 locale, 31 corefonts
+incl. Arial, `WINEDLLOVERRIDES` not persisted, `users/root/Temp`, winetricks cache removed) and
+handed over for `docker push`.
+
+**Worth recording as a process failure of mine:** `docker buildx build --check` passed for both
+flavors and could never have caught this — it resolved the base from the LOCAL image cache. A
+lint check against a machine that already has the answer is not evidence the base exists.
+
+**CI build 4170133 (pull/4640) — Agilent failed from an installer-based install.** Both
+`Installer.Tests` failed, 1 of 9 fixtures: `Agilent/Neg_MS_002_1scan.d`, with
+`Could not load ... BaseTof.dll. The specified module could not be found.` That is
+ERROR_MOD_NOT_FOUND — a missing DEPENDENCY. `BaseTof.dll` is the only mixed-mode Agilent
+assembly and imports MSVCR120/MSVCP120, and the cache directory held it with no CRT at all.
+
+App-local VC120 (which `Agilent.csproj` already deploys) does not help: a cache DLL is loaded
+**by full path**, which puts the DLL's own directory where the application directory would sit
+in the native search order. Needs three conditions at once to reproduce — installer-based
+install, a machine without the redistributable, and the Windows loader — which is why no dev
+box, no CI build and not even the wine container (43/43 including Agilent) had ever shown it.
+See [[reference_net8_agilent_basetof_vcruntime]], updated with this.
+
+Fixed in `VendorSdkLoader.StageNativeCrt` (copy the app-local `msvc*`/`vcruntime*`/`concrt*`/
+`mfc*` into the cache at extraction, before the `.ok` marker) plus the same set in
+`build.ps1`'s bundled cache — otherwise the default installer works and the offline one does
+not, which is the hardest direction to notice. **Staging all of them for every vendor costs
+0.6 MB on the installer**, since the eight identical copies compress away, so the per-vendor
+lists the Shimadzu fix started were never worth keeping.
+
+**Disk**: `C:\ProgramData\SCIEX\logs` held **57.5 GB** — SCIEX SDK `DefaultLogManager` output
+accumulated since 2023-02-15 because OFX could not load `OFX.Logging`. `Sciex.csproj` ships a
+no-op stub precisely to prevent this, so pwiz-sharp is clean; the 45.5 GB
+`defaultlog_msconvert.log` came from the C++ msconvert, which still has no stub and will start
+the file over. Deleted 40 of 41 files, C: 7.6 GB -> 65.0 GB free.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260901_net10_wine_container.md` before starting work.
