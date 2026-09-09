@@ -138,7 +138,7 @@ They should be re-applied on the port branch, where they are correct and needed.
 - [x] `/code-review max` run and findings triaged (below)
 - [ ] SkylineBatch / AutoQC functional suites - not run locally, TeamCity is the gate
 - [ ] TeamCity green
-- [ ] Copilot review addressed
+- [x] Copilot review addressed (one comment, pushed back with rationale, left unresolved)
 
 ## Code Review Triage (2026-09-09)
 
@@ -209,6 +209,44 @@ actually run.
   makes one exist, which is its purpose. The test additionally requires
   `AllowInternetAccess` and a password environment variable (`Assert.Fail` otherwise),
   so it cannot run unattended by accident.
+
+## Copilot Review (2026-09-09) - Pushed Back, Not Fixed
+
+Copilot left one inline comment: the prohibition regex can be bypassed with
+`new global::System.Net.WebClient()`. It is correct, and the gap is wider than
+reported - `new Net.WebClient()` (partial qualification under `using System;`)
+slips through too.
+
+**Decision: leave the regex alone.** Not because the gap is imaginary, but
+because the rule has a short life and the threat model does not include
+deliberate evasion.
+
+- On the .NET port branch every project that can construct a `WebClient` is on
+  `net10.0-windows` - Skyline, and **SkylineBatch/AutoQC too** - so the compiler
+  raises SYSLIB0014 on every build. That is a stronger backstop than a regex.
+- Caveat worth knowing: SYSLIB0014 is a **warning, not an error**. It is not in
+  `NoWarn` (only SYSLIB0011 is) and there is no `TreatWarningsAsErrors`, so what
+  makes it bite is the team's zero-warnings convention, not the toolchain.
+- This inspection therefore covers the net472 window between now and the port.
+  In that window the realistic failure is someone typing `new WebClient()`
+  without thinking, which the current pattern catches.
+
+Counter-evidence recorded honestly on the thread: `CodeInspectionTest.cs:216`
+*does* match the `global::` form in the ResourceManager inspection. That one has
+to - it matches generated Designer code, which is where `global::` actually
+lives (381 occurrences in generated code under the scan root; exactly **1** in
+hand-written code, and that one is the line 216 regex itself).
+
+Thread left **unresolved** so a human reviewer can overrule.
+
+### When this rule can be deleted
+
+The tolerated count of 3 is the part worth keeping - it is the only record of the
+three remaining uses, and the mechanism warns when the count *drops*. That makes
+it a progress tracker: when the count reaches 0, or when every remaining project
+has moved to net10.0-windows and the compiler covers it, the inspection can be
+removed outright. Removing it before then would delete the only tracking of the
+three survivors.
 
 ## References
 
