@@ -487,6 +487,49 @@ unchanged - absence of an enforcement being why this survived. Worth a mode; not
   back to a probe.
 * `regression.ps1 -Dataset Stellar -KeepOutput`: running, and the retained straight-through
   directory is the bed for the F2 re-run reproduction.
+### Night session 2026-09-08 -> 09: 14 of 15 findings closed
+
+Commit `c0da9e5af8` (plus an F15(b) doc move after it). Gates at the time of writing:
+`Build-Osprey.ps1 -RunTests -RunInspection` = **593 tests, 592 passed, 1 pre-existing skip,
+0 warnings**; `regression.ps1 -Dataset Stellar` PASSED twice with every blib at
+23,662,592 bytes and `Tokens REQUIRED: 0`.
+
+Three new tests, each pinning a defect that the existing suite could not see:
+
+* `TestOnlyStage7JoinTasksAdmitTheStreamedJoin` - asserts with the switch forced ON, so it
+  cannot pass merely because streaming happens to be off in the environment.
+* `TestScoresPathsDependOnTaskNotDisk` - asserts with BOTH parquets on disk, which is the
+  state a completed run leaves. A test writing only one file passes against the old probe too.
+* `TestValidateRejectsDuplicateInputStems` - asserts with the stems in DIFFERENT directories,
+  the case `--input-list` makes routine and cruder checks miss.
+
+| finding | disposition |
+|---|---|
+| F1 | FIXED. `RunsStage7Join` term, FIRST in `Stage7StreamAdmittedBeforeRescore` and free. Names the admitted set (straight-through, SecondPassFDR, ModelDiagnostics) so it fails closed. |
+| F2 | FIXED, as the fallback-retirement work above. |
+| F3 | **OPEN. The review's direction is INVERTED** - see the retirement section. |
+| F4 | FIXED. Both `ForTask` copies, the truth-table row, `PerFileRescoreTask.IsIncluded`'s comment, `docs/15-hpc-scoring-split.md`. |
+| F5 | FIXED. README's HPC section (its three command lines were being REJECTED), `Osprey-workflow.html`, and all four live scripts. |
+| F6 | FIXED. The stand-in is gated on `StartsAfterPerFileScoring`, restoring the scoping the deleted `if (!fromInputScores)` wrapper used to give structurally. |
+| F7 | FIXED. `regression.ps1` now also asserts the ABSENCE of `MaterializeAllFromSource`'s warning: the marker says a source was offered, this says nothing pulled the whole pool anyway. |
+| F8 | FIXED. `$cannotStreamJoin` gained `OSPREY_STAGE6_STREAM_SURVIVORS`. The residual CLI-side gap (`--fdrbench-pass 1`, non-Percolator `--fdr-method`) is documented AT the predicate, with what to do if a spec ever sets one. |
+| F9 | FIXED by F1. A `--task PerFileRescoring` worker no longer builds a Stage-7 source at all, so it neither pays the retained-sidecar read #4597 forbids nor emits the marker. |
+| F10 | FIXED. `entries.Clear()` in the resume source, GUARDED ON THE LOADER - clearing unconditionally would have destroyed the `OSPREY_STAGE6_STREAM_SURVIVORS=0` oracle, whose entries are the only copy. |
+| F11 | FIXED. One `ProbeReconciledSurvivorShape` open behind both predicates, wrapped, so an unreadable parquet ANSWERS false instead of throwing past the named refusal. Halves the opens: ~4,460 -> ~2,230 on a 446-run cohort. |
+| F12 | FIXED. `ValidateArgs` refuses duplicate input stems, naming the stem and every colliding path. |
+| F13 | PARTIAL. (b) the guard no longer demands a token for a choice the operator does not have; (c) `couldStream`'s O(files) footer sweep is no longer computed to be discarded. **(a) NOT done** - see below. |
+| F14 | FIXED. The gap-fill map is `Lazy` and the load branch never reads it - order 10 GB of envelope JSON at 446 runs, previously pulled unconditionally inside a method documented as lazy. |
+| F15 | FIXED. (a) dead `NewTempDir` + its now-unused `using System.IO`; (b) `BuildRescoredPool`'s summary moved back off `BuildRunPerRunSource`; (c) `IOTest` takes its metadata from `ReconciledParquetWriter.BuildReconciliationMetadata` instead of hand-feeding the marker. |
+
+#### Deliberately not done, with the reason
+
+**F13(a)** - refuse `OSPREY_STAGE7_STREAM=0` without a token in `ValidateArgs` rather than
+hours later in Stage 7. The saving is real, but it is an env-var-only A/B path a user never
+takes, and moving a refusal into CLI validation is more risk than that reward. Backlogged.
+
+**F3** - a design decision about failure behaviour that needs the validity map and the artifact
+reconciled, not a substitution restored. Left with the direction corrected in writing so the
+next session does not "fix" it the wrong way.
 ## `/code-review max 4646` findings, 2026-09-08 - 12 of 15 open
 
 **Status after the fallback-retirement work above** (read that section before acting on any of
