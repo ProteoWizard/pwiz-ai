@@ -4,6 +4,26 @@
 > read [long-running-jobs-guide.md](long-running-jobs-guide.md): how to detach it so
 > it survives, how to keep its log readable, and why not to wrap it in `cmd.exe /c`.
 
+> **Launch with `--timestamp --memstamp`, and judge the run with `perfviz`.** The flags cost
+> nothing and **cannot be added afterwards**: a six-hour run without them leaves no memory
+> series to read, and the only remedy is to run it again. The sanctioned runners in
+> `ai/scripts/Osprey/<DATASET>/` pass both already (`OspreyDatasetRun.psm1`), which is one more
+> reason to use them rather than a hand-rolled command line.
+>
+> Then read the result with **`ai/scripts/perfviz.py <log> --png <out>.png`** (a terminal, or an
+> agent that cannot open a browser - it prints peak, floor drift, sustained level and every
+> reporting gap) or **`ai/scripts/perfviz.html`** (a human eye, same three series,
+> interactive). Details in [memory-band-guide.md](memory-band-guide.md).
+
+**Do not judge a long run by tailing its `[MEM ...]` lines.** They look like progress and
+answer none of the questions that matter: they cannot show floor DRIFT across a phase, and by
+construction they cannot show a REPORTING GAP - a gap is the absence of lines, so the thing you
+are watching for is the thing that stops appearing. Worked example, 2026-09-09: a 446-run CHS
+job was watched through `[MEM]` probes for six hours and read as healthy the whole time;
+`perfviz.py` over the same log named the problem in one line - a single **618-second unreported
+window** entering first-pass FDR, where the Stage-5 projection pass walks all 446 parquets
+silently. The probes could not have shown it. Run the tool, look at the PNG.
+
 Datasets bigger than the 82-file SEA-AD Pilot set, for scaling and cross-sample validation
 work. SEA-AD is the current standard >3-file set (see
 `ai/scripts/Osprey/SEA-AD/README.md`); this is the shortlist for what comes after it.
@@ -15,9 +35,14 @@ a mistake costs a day, not a coffee break:
   `D:\test\osprey-runs\_bin\<tag>` and run from the copy (otherwise the build tree is locked for
   the whole run), plus the `OSPREY_VERSION_OVERRIDE` trap that makes a `-LinkFrom` resume
   silently re-run Stage 1-4.
-* `ai/docs/memory-band-guide.md` - run with `--timestamp --memstamp`, then `ai/scripts/perfviz.py
-  <log> --files N` for peak / floor-drift / reporting gaps. Judge floor drift WITHIN a per-file
-  phase; across phase boundaries a rising floor is expected, not an O(files) leak.
+* `ai/docs/memory-band-guide.md` - how to READ what the callout above told you to capture.
+  `perfviz.py` reports peak, floor drift, the sustained level and every reporting gap; its
+  per-phase table is the one to look at, because averaging the phases hides the one that hurts.
+  Judge floor drift WITHIN a per-file phase; across phase boundaries a rising floor is expected,
+  not an O(files) leak. Two numbers that are easy to misread: a managed PEAK is often mostly
+  reclaimable garbage, and a high PRIVATE level is often Server-GC committed-but-free rather
+  than live - the post-GC probe is what separates them, so quote the SUSTAINED level, not the
+  peak.
 * Which resident paths are still O(files), and so will refuse to run at scale without naming a
   token: `OSPREY_ALLOW_UNFIXED_RESIDENT` and `ResidentPaths.KNOWN_UNFIXED` in the code.
 
