@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260824_webclient_prohibition`
 - **Base**: `master`
 - **Created**: 2026-08-24
-- **Status**: In Review
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#4648](https://github.com/ProteoWizard/pwiz/pull/4648)
+- **PR**: [#4648](https://github.com/ProteoWizard/pwiz/pull/4648) (merged 2026-09-10)
 
 ## Objective
 
@@ -136,7 +136,7 @@ They should be re-applied on the port branch, where they are correct and needed.
 - [x] `CodeInspection` passes; tolerated count of 3 matches the tree
 - [x] `Skyline.sln`, `SkylineBatch.sln`, `AutoQC.sln` all build clean
 - [x] `/code-review max` run and findings triaged (below)
-- [ ] SkylineBatch / AutoQC functional suites - not run locally, TeamCity is the gate
+- [ ] SkylineBatch / AutoQC functional suites - never run, locally or in CI (see below)
 - [x] TeamCity green - all 19 checks SUCCESS on 90ec03cf, ready_to_merge
 
 ### CI notes (2026-09-09)
@@ -280,3 +280,37 @@ three survivors.
   coverage for the batch tools)
 - `HttpClientWithProgress.cs` - the project standard wrapper
 - `HttpClientTestHelper.cs` - test infrastructure from Phase 1
+
+## Progress Log
+
+### 2026-09-10 - Merged
+
+PR #4648 merged as commit 085c0c99, squash-merged with --admin. What shipped:
+the batch tools (SkylineBatch, AutoQC, SharedBatch) migrated off WebClient onto
+HttpClientWithProgress via a shared DownloadProgressMonitor; the DIA-NN test
+download that had regressed in July 2026; the CodeInspectionTest prohibition
+with no inline opt-out and a tolerated count of 3; and the fix for both batch
+functional suites hanging on a machine with no Skyline installation.
+
+Deferred, NOT shipped: Phases 3 and 4 of the original backlog TODO
+(SkylineNightly, SkylineNightlyShim, Executables/Installer). Those are the three
+uses the tolerance of 3 tracks, and the reasons for deferring each are in the
+comment above the rule.
+
+Also deferred: the nine code-review findings listed under Code Review Triage.
+The two worth doing first are Server.cs writing downloads straight to the final
+path with no FileSaver, and the test seam being inert on machines that have a
+Skyline ClickOnce shortcut (it fills SkylineAdminCmdPath, but SkylineSettings
+consults SkylineRunnerPath first).
+
+Carried forward unresolved: the Copilot thread on the global:: regex bypass,
+left open deliberately - the decision was that the rule covers only the net472
+window, since on the port branch every project that can construct a WebClient
+is net10.0-windows and gets SYSLIB0014.
+
+Verification gap worth naming: the SkylineBatch and AutoQC functional suites
+were never run, locally or in CI. Skyline TeamCity does not build them (see
+TODO-batch_tools_ci_integration.md in the backlog), and the second commit of
+this PR exists specifically to fix those suites. That is the least-verified part
+of what merged.
+
