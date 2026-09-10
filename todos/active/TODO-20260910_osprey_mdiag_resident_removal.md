@@ -481,3 +481,6 @@ Run alone, so this result does not depend on the prune fix being correct.
 **Coverage is therefore complete across all four datasets**, in two runs rather than one:
 72 PASS / 0 FAIL for the three Stellar variants, plus a full green Astral. No assertion failed
 anywhere at any point.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260910_osprey_mdiag_resident_removal.md` before starting work.
