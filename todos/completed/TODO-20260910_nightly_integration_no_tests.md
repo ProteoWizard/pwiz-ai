@@ -1,6 +1,6 @@
 # TODO: Integration-branch nightly builds successfully but runs no tests
 
-**Status**: Active
+**Status**: Completed
 **Priority**: Blocking — the .NET 10 port cannot be nightly-tested, which gates its merge to master
 
 ## Branch Information
@@ -10,6 +10,7 @@
 - **PR target**: `Skyline/work/20260612_net8_port` — this is Matt's branch; a PR into it, not a
   direct push, unless Brendan says otherwise
 - **Module**: `skyline`
+- **PR**: [#4653](https://github.com/ProteoWizard/pwiz/pull/4653) (merged 2026-09-10 as `2e93333683`)
 
 ## The failure
 
@@ -97,6 +98,41 @@ side effect.
 - No modal dialog in an unattended run.
 
 ## Progress Log
+
+### 2026-09-10 - Merged
+
+PR #4653 merged as commit `2e93333683` into `Skyline/work/20260612_net8_port`.
+
+What shipped: the Nightly build slots (BOTH 32- and 64-bit) now resolve to the staged directory
+inside the checkout the nightly cloned and built, named before it exists because the slot is read
+at queue time; `TabBuild.BUILD_CONFIGURATION` ties the slot to the configuration the build command
+actually produces; `build.bat` gained `--build-only` so `--no-tests` can mean what it says and stage;
+`PreferredConfiguration` no longer answers Debug for a staged or distro run; and the unattended
+failure paths report to the run log instead of a modal that blocked the pass.
+
+Verified by three nightly runs against the Integration branch - two of 3h (6,167 and 6,263 tests,
+passes 0-1 across en/fr/ja/tr/zh) and one against the merged head with the staged directory deleted
+first so staging could not be masked. In that last run `Staged tests to:` appears BEFORE
+`# Build done.` for the first time, which is `build.bat` staging during the nightly build - the
+behaviour Matt intended on 2026-08-21 that the flag collision had been suppressing.
+
+**Deferred, not shipped** (flagged on the PR): `AddTestRunner` returns void, so with the modal gone
+a nightly that genuinely cannot find a build now finishes GREEN with zero tests rather than hanging
+visibly - better than the hang, but a silent-success path in the component whose job is to catch
+failure; fixing it means deciding whether the nightly aborts or posts a failure.
+`HasBuildPrerequisites` still shows two raw modals and is the first statement of `TabNightly.Run`,
+with Git probed at a hardcoded `%ProgramFiles%\Git\cmd\git.exe`, so a winget/scoop install hangs a
+nightly. 25 raw `MessageBox.Show` calls remain in SkylineTester against the 5 converted.
+
+**Still to prove**: the real 21:58 scheduled run. Everything verified here drove SkylineTester with
+a locally built zip; SkylineNightly's TeamCity download and branch-stamp resolution (PR #4649, already
+merged) are the two links not exercised end to end. The oracle is unchanged - grep the run log for the
+queued runner path: under `...\pwiz\pwiz_tools\Skyline\bin\staging\Release\` is the fix working;
+under `...\SkylineTester Files\` is the trap.
+
+Related: PR #4654 (`5092c9c4d4`) removed 14 UTF-8 BOMs from Osprey and pwiz-sharp, and a warn-only
+`Deny-BomInCommit` hook now gates staged files in pwiz-ai. Two Sciex vendor-archive configs remain
+on the approved list pending their own test round.
 
 ### 2026-09-10 - PR #4653 open and green; build.bat root cause found and split
 
