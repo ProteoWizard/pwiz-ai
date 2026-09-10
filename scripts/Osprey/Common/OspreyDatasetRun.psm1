@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Shared engine behind the per-dataset Osprey large-run wrappers.
 

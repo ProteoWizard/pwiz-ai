@@ -35,6 +35,9 @@ $approvedBomFiles = @{
     "pwiz/data/vendor_readers/Agilent/Reader_Agilent_Test.data/TOFsulfasMS4GHzDualMode+DADSpectra+UVSignal272-NoProfile.d/AcqData/acqmethod.xml" = "Agilent vendor data format"
     "pwiz_tools/Bumbershoot/bumberdash/Tests/Data/AgilentTest.d/AcqData/Devices.xml" = "Agilent vendor data format"
     "pwiz_tools/Bumbershoot/bumberdash/Tests/Data/AgilentTest.d/AcqData/acqmethod.xml" = "Agilent vendor data format"
+    "pwiz/data/vendor_readers/Agilent/Reader_Agilent_Test.data/Neg_MS_002_1scan.d/AcqData/acqmethod.xml" = "Agilent vendor data format"
+    "pwiz-sharp/vendor-archives/Sciex/DataServiceComponent.config" = "Sciex vendor archive, shipped with BOM; provisional pending Matt"
+    "pwiz-sharp/vendor-archives/Sciex/DataServiceInternalComponent.config" = "Sciex vendor archive, shipped with BOM; provisional pending Matt"
 }
 
 # Resolve a checkout to validate, failing loudly rather than validating nothing.
