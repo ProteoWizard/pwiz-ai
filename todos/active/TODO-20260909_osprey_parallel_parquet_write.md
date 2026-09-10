@@ -121,6 +121,16 @@ pwiz:
   parquet - goldens capture decoded values, which never changed.
 * **No byte assertions in Skyline's parquet tests** (`ParquetReportExporterTest`,
   `ExportHugeParquetReportTest`, `CommandLineReportTest`) - checked.
+* **But Skyline IS affected, and its coverage is a merge prerequisite.**
+  `Skyline.csproj` references the same `Shared/Lib/Parquet/ParquetNet.dll`
+  directly, so the bool fix changes Skyline's parquet report bytes too (a
+  trailing garbage byte disappears from every bool page whose row count is a
+  multiple of 8). The tests above are EXPECTED to pass - that is a code
+  inspection, not a test run. This must not merge on Osprey's gates alone; it
+  needs a Skyline nightly/CI run. Do not try the Skyline suite locally in a
+  night session - TestFunctional needs a UI session and runs for hours.
+  Keep the module label `osprey` (intent), but say the blast radius in the PR
+  body so reviewers know a shared binary moved.
 * **No version upgrade required** - this is all on the 4.25.0 fork.
 * Still to do: `regression.ps1 -Dataset Astral` to confirm the gate passes and
   to measure the benefit there (published Astral `stage1to4` is 8:12; if the
