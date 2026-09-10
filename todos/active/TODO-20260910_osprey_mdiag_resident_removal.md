@@ -20,7 +20,8 @@ file ~310 of 446. Killed deliberately at 00:07 rather than page until morning.
 | i | `FirstPassFdrTask.Rehydrate` -> `RescoreHydration.HydrateCompactedStreaming` | 0.10-0.22 GB/file | `CanHydratePerRun` declines on `SelectedTask` |
 | ii | `SecondPassFdrTask.FoldPass2DiagnosticsOnly` -> resident survivor pool | 0.197 GB/file, 91.1 GB @ 446 | no per-run source published by (i) |
 
-(i) is what walled; (ii) is next in line. Both must go.
+(i) is what walled; (ii) is next in line. (i) is fixed; (ii) is blocked - see the scope
+correction below, which is why this TODO does not close with the branch.
 
 ### Mechanism
 
@@ -63,9 +64,11 @@ assertions are FILE-level (exactly one artifact changed) and VALUE-level (report
 golden). Neither can see *which arm ran*, and at 3 files an O(files) bundle is free. The gate
 covering this task is structurally blind to this defect class.
 
-## Status (2026-09-10 09:40)
+## Status (2026-09-10 10:35)
 
-Commit `a197f68cf7` on the branch carries steps 2 and 5. Steps 1, 3 and 4 are owed.
+Two commits on the branch: `a197f68cf7` (steps 2 and 5) and `5c69a1b641` (step 4).
+Step 1 is banked. Step 3 is blocked and may stay blocked for a while - see the scope
+correction below.
 
 | step | state |
 |---|---|
@@ -107,10 +110,11 @@ on disk, so `OnlyDiagnosticsProductOutstanding` sees the file, declines the fold
 task only RE-RENDERS - it hydrates nothing, correctly. Mode 7 therefore gets the negative half
 only; the positive half belongs to mode 11, which deletes the products and forces the fold.
 
-**Still owed before this is a merge candidate**: steps 1/3/4, `regression-parallel.ps1
--Dataset All`, and the real oracle - a 446-file `--task ModelDiagnostics` re-run, which walls
-within ~1 h if the fix did not take. The oracle needs the box free, so it queues behind the
-in-flight 446-file phase-5 run.
+**Still owed before this is a merge candidate**: the confirming `-Dataset StellarLibDecoy`
+gate after the removal, then `regression-parallel.ps1 -Dataset All`; `/code-review max` on the
+branch BEFORE opening the PR; and the real oracle - a 446-file `--task ModelDiagnostics`
+re-run, which walls within ~1 h if the fix did not take. The oracle needs the box free, so it
+queues behind the in-flight 446-file phase-5 run.
 
 ## Step 1 result - the Stage-7 A/B, banked 2026-09-10
 
