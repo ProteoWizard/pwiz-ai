@@ -6,9 +6,9 @@
   `parquet-parallel-compression`
 - **Base**: `master`
 - **Created**: 2026-09-09
-- **Status**: Working and deterministic; measured; not yet turned into a PR
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: none yet (Brendan: hold off, still testing)
+- **PR**: [#4652](https://github.com/ProteoWizard/pwiz/pull/4652) (merged 2026-09-10)
 
 ## Result
 
@@ -325,3 +325,46 @@ confirming the write change is well-scoped AND that the read cost is untouched.
 * **TO FILE: par4 at 82 files does not fit a 64 GB box** (66.1 GB private vs the
   recorded goal of 82 files inside 52.1 GB). A property of the CONFIGURATION, not
   of this PR - the PR is intra-file and needs no extra headroom.
+
+### 2026-09-10 - Merged
+
+PR #4652 merged as commit 56bae869. All 20 TeamCity/GitHub checks passed,
+including the Osprey Windows .NET Perf/Regression config (build 4170745, the
+manual `regression.ps1 -TeamCity -Dataset All` gate), Osprey Windows .NET
+(593 tests) and Skyline master and PRs (1,740 tests) - the last of which
+converts the earlier code inspection of the three Skyline parquet tests into
+an actual passing run, which mattered because this PR changes a binary Skyline
+ships.
+
+What shipped: `WriteColumnsAsync` on the Parquet.Net fork with the Prepare/Emit
+split; the bool-encoder fix that was the real cause of non-reproducible bytes;
+the `Osprey.IO.csproj` direct `<Reference>` + `ExcludeAssets="compile"` needed
+because the fork now adds public API; and documentation of the fork deltas in
+`Directory.Build.targets`.
+
+Reverted before merge: the `ThreadLocal<Iron>` change, which had been recorded
+as the determinism fix but fixed nothing (its own commit 915984a says so, and a
+40-buffer test found 0 mismatches sharing one `Iron` under `Parallel.For`). It
+also rewrote `Decompress`, altering the read path Skyline uses. `Compressor.cs`
+is back at the pristine 4.25.0 import, so the fork carries three deltas, not
+four.
+
+Deferred, not shipped:
+* Read-side pipeline (Job 3) - branch
+  `Skyline/work/20260909_osprey_parallel_parquet_read`, commit `0401012ede`,
+  gate green, benchmarked at 3.0-4.7x decode for +0.3 GB working set. Worth
+  ~3-4% of a run. Needs its own PR; it touches the same file so it was kept out
+  of #4652.
+* Fork source PR on `uw-maccosslab/developers` (branch
+  `parquet-parallel-compression`) - posted separately, review requested from
+  Copilot and Nick.
+
+To file (per the SEA-AD README, while the logs are on disk):
+* par4 at 82 files needs 66.1 GB private, over the recorded "82 files inside
+  52.1 GB on a 64 GB box" goal. A property of `--parallel-files 4` (three extra
+  concurrent files at 5-15 GB each), NOT of this PR, which is intra-file and
+  measured +2.8 GB.
+* The perfviz `gaps >= 30s` gate was ALREADY failing on the sequential baseline
+  (3 gaps); par4 has 4, with the same three Stage-7 gaps each shorter.
+
+Nightly will additionally exercise TestPerf, which was not run on TeamCity here.
