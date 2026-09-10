@@ -137,7 +137,26 @@ They should be re-applied on the port branch, where they are correct and needed.
 - [x] `Skyline.sln`, `SkylineBatch.sln`, `AutoQC.sln` all build clean
 - [x] `/code-review max` run and findings triaged (below)
 - [ ] SkylineBatch / AutoQC functional suites - not run locally, TeamCity is the gate
-- [ ] TeamCity green
+- [x] TeamCity green - all 19 checks SUCCESS on 90ec03cf, ready_to_merge
+
+### CI notes (2026-09-09)
+
+Two red checks along the way, both traced before touching anything:
+
+1. **Skyline code inspection ERROR on 5f2c1afa** - ours, and fixed. Adding
+   `using pwiz.Common.SystemUtil;` to DiannSearchLFQbenchTest.cs for
+   HttpClientWithProgress made the pre-existing fully-qualified
+   `pwiz.Common.SystemUtil.SilentProgressMonitor` on the next line redundant
+   (RedundantNameQualifier, line 271). Fixed in 90ec03cf. Worth remembering: a
+   migration that consolidates onto a shared type will do this anywhere the old
+   code hand-qualified that namespace, in lines the diff never touches.
+2. **TestNativeMessageBox, then the Wine container** - both agent flakes, both
+   passed on re-run. The Wine one looked alarming (a Unicode filename mangled to
+   `e -mix`, next to this branch changing ProcessEx.CanConvertUnicodePathsInDirectory)
+   but was disproved: the Wine build PASSED on 5f2c1afa which already contains
+   that ProcessEx change, the whole diff between the two commits is one C# name
+   qualifier in a TestPerf file, and both builds reported the same ProteoWizard
+   revision dbb642a8, so the native code under test was identical.
 - [x] Copilot review addressed (one comment, pushed back with rationale, left unresolved)
 
 ## Code Review Triage (2026-09-09)
