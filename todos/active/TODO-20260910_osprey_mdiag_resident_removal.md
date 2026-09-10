@@ -575,11 +575,32 @@ Per the standing rule that a review's leftovers are fixed or dropped, never relo
 ### Gates after the fixes
 
 * Local pre-commit: build 0 errors / 0 warnings, inspection zero warnings, 593/593.
-* `regression.ps1 -Dataset StellarLibDecoy` launched 14:33 detached (it carries
-  `--model-diagnostics`, so modes 7 and 11 run - the legs that exercise the rewritten route
-  assertion). Log: `ai/.tmp/sessions/20260910-01Qwgkv/gate-stellarlibdecoy.log`.
-* `regression-parallel.ps1 -Dataset All` next, then `/code-review max` again, then the
-  446-file oracle.
+* `regression.ps1 -Dataset StellarLibDecoy` 14:34 -> 15:03: **mode 7 FAIL, every other leg
+  PASS** - see below. Log kept at
+  `ai/.tmp/sessions/20260910-01Qwgkv/gate-stellarlibdecoy-20260910_150300.log`.
+* Re-run launched 16:53 after the fix (`5959964200`), with
+  `regression-parallel.ps1 -Dataset All` chained behind it as a waiter that only fires on
+  exit 0. Then `/code-review max` again, then the 446-file oracle.
+
+### The liveness anchor failed mode 7 for being itself (`5959964200`)
+
+The gate's only red was **my own new assertion**, and it is the same lesson as F6+F13 in a
+new costume: I added a check to close a blind spot and gave the check a blind spot.
+
+`Test-NoAllRunsBundle`'s liveness anchor was "the log contains a `[TASK]` banner". Mode 7
+re-renders a report whose products are all present, and `Program.cs` settles that case in
+`RunModelDiagnosticsTask` and returns **before** `new AnalysisPipeline()` is reached - so it
+emits no task banner at all. Mode 11, which deletes the products, falls through to the
+pipeline and emits several. An anchor only one of the two routes reaches fails the other for
+being itself. I had verified `[TASK]` appears in *a* run log, not in *this leg's* log.
+
+Now anchored on the startup banner (`Threads:`), which every invocation emits after argument
+parsing and before any route is chosen. Also fixed a PowerShell `-f` precedence bug in the
+same message - `("a" + "b" -f $x)` binds `-f` to the last string only, so it printed `{0}`
+and `{1}` literally; the sibling assertion three lines down had the parentheses right.
+
+Worth keeping: **the check worked.** It refused to certify a log that could not prove
+anything, which is exactly what it was added to do - it just refused the wrong leg.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260910_osprey_mdiag_resident_removal.md` before starting work.
