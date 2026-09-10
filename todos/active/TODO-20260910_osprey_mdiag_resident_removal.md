@@ -1,6 +1,7 @@
 # Remove the O(files x entries) resident paths reachable from `--task ModelDiagnostics`
 
-**Branch**: `Skyline/work/20260910_osprey_mdiag_resident_removal` (not yet created)
+**Branch**: `Skyline/work/20260910_osprey_mdiag_resident_removal` (in `C:\proj\pwiz-work1`)
+**Module**: `osprey`
 **Found**: 446-file night run, 2026-09-09 -> 10. Evidence:
 `ai/.tmp/sessions/20260910-night/FINDINGS.md`, handoff
 `ai/.tmp/handoff-20260910_osprey_446_diagnostics_results.md`.
