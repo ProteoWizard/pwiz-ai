@@ -60,6 +60,20 @@
             ]
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Deny-BomInCommit.ps1"
+            ]
+          }
+        ]
       }
     ],
     "SessionStart": [
