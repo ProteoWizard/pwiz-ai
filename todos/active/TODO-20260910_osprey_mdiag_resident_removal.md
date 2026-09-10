@@ -582,6 +582,21 @@ Per the standing rule that a review's leftovers are fixed or dropped, never relo
   `regression-parallel.ps1 -Dataset All` chained behind it as a waiter that only fires on
   exit 0. Then `/code-review max` again, then the 446-file oracle.
 
+### The second `/code-review max` is REPORT-ONLY (Brendan, 2026-09-10)
+
+**Triage it and stop. Do not implement anything from it without his call.** The command
+returns ~15 findings because 15 is its cap, so a second pass over already-fixed code returns
+another ~15 by construction, and working them has repeatedly cost more than it bought:
+*"fixing a lot of unimportant code introduces new important bugs that need to be addressed."*
+
+This branch is the evidence. Cycle 1's F6+F13 was a real finding, correctly fixed - and the
+liveness check that fix added anchored on a marker only one route emits, turning a green
+mode 7 into a red one. A worthwhile fix that introduced a new defect, in one step.
+
+**If a second cycle happens, its bar is higher than the first's**: a real defect in shipped
+behavior only. Not a comment, a doc, a name, or a "could be clearer". Re-applying cycle 1's
+threshold is what produces cycle 3.
+
 ### The liveness anchor failed mode 7 for being itself (`5959964200`)
 
 The gate's only red was **my own new assertion**, and it is the same lesson as F6+F13 in a
