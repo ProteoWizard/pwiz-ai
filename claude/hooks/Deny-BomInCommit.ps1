@@ -15,9 +15,21 @@
 # Wired up by .claude/settings.json -> hooks -> PreToolUse -> matcher "Bash|PowerShell".
 # PowerShell matters: commits issued through the PowerShell tool never reach a Bash-only hook.
 #
-# Exits 0 on every path except a confirmed BOM, so a broken hook can never block git.
+# ROLLOUT: warn-only for now. The message is printed but the commit is allowed, so the
+# convention is socialized before it is enforced and nobody is blocked mid-task while the
+# tree still has known BOMs in it. Flip $Enforce to $true once
+# 'validate-bom-compliance.ps1' comes back green for the whole tree.
+$Enforce = $false
+
+# Escape hatch for a legitimate case that has not reached the approved list yet, so this can
+# never become a hard stop nobody can get past: set SKYLINE_ALLOW_BOM=1 for the one command.
+#
+# Exits 0 on every path except a confirmed BOM while enforcing, so a broken hook can never
+# block git.
 
 $ErrorActionPreference = 'SilentlyContinue'
+
+if ($env:SKYLINE_ALLOW_BOM -eq '1') { exit 0 }
 
 try {
     $stdin = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput()).ReadToEnd()
@@ -71,8 +83,9 @@ foreach ($rel in $staged) {
 if ($offenders.Count -eq 0) { exit 0 }
 
 $list = ($offenders | ForEach-Object { "  - $_" }) -join "`n"
+$lead = if ($Enforce) { "Refusing to commit:" } else { "WARNING (not blocking yet):" }
 $reason = @"
-Refusing to commit: $($offenders.Count) staged file(s) begin with a UTF-8 BOM.
+$lead $($offenders.Count) staged file(s) begin with a UTF-8 BOM.
 
 $list
 
@@ -91,8 +104,10 @@ If one of these genuinely must keep its BOM (vendor data, a generated type libra
 add it to `$approvedBomFiles in ai/scripts/validate-bom-compliance.ps1 with the reason,
 rather than working around this hook.
 
-Blocked by: .claude/hooks/Deny-BomInCommit.ps1
+$(if ($Enforce) { "Blocked by" } else { "Reported by" }): .claude/hooks/Deny-BomInCommit.ps1
+$(if (-not $Enforce) { "This will become an error once the whole-tree audit is green." })
 "@
 
 Write-Host $reason
-exit 2
+if ($Enforce) { exit 2 }
+exit 0
