@@ -273,3 +273,55 @@ read prize is roughly ONE THIRD of the write prize.
 129s) and extracted minutes before the run, so 24.6 GB of mzML was read cold.
 The published 8:12 had a warm page cache. Re-run the Astral leg warm if a wall
 comparison is wanted.
+
+## RESULT: the 82-file par4 run (2026-09-10 03:38)
+
+`Osprey exited 0 after 04:29:06`. **4h29m vs the 7h48m sequential baseline = 1.74x**
+(projection was 1.79x / ~4h21m, so within 3%).
+
+| stage | sequential | par4 | speedup |
+|---|---|---|---|
+| PerFileScoring | 15,340.1 s | 7,223.1 s | **2.12x** |
+| FirstPassFDR | 4,173.7 s | 4,086.3 s | 1.02x |
+| PerFileRescoring | 7,905.4 s | 4,163.3 s | **1.90x** |
+| SecondPassFDR | 689.7 s | 662.5 s | 1.04x |
+| **total** | **28,109 s** | **16,135 s** | **1.74x** |
+
+### Correctness at production scale
+* Scored entries: **353,085,961** - exactly the baseline count.
+* `pass1_fdp.py` on both runs: **identical to every digit**, both passes, both
+  scopes, including the matched-true-FDP counts (pass-1 experiment 44,609 /
+  45,943 / 48,166 at <=0.650% / <=0.750% / <=1.000%).
+* The FDRBench entrapment oracle is INDEPENDENT of parity and the skill says it
+  wins over parity. It does not merely agree here - it is bit-identical.
+
+### Where the remaining headroom is
+The two per-file stages scaled (2.12x, 1.90x); the two FDR stages did not
+(1.02x, 1.04x) because `--parallel-files` does not touch them. Those two now cost
+4,748.8 s = **29.4% of the par4 run, up from 17.3% of the sequential run**.
+Amdahl has moved the bottleneck onto FirstPassFDR - which is exactly where
+parquet READING dominates. That is the follow-up branch
+`Skyline/work/20260909_osprey_parallel_parquet_read`.
+
+The par4 read phases were unchanged from baseline within ~3% (ingest 80->79 s,
+training vectors 229->226 s, scoring 353M 1,037->1,010 s, q-values 1,260->1,225 s),
+confirming the write change is well-scoped AND that the read cost is untouched.
+
+### Harvest (perfviz)
+| | baseline | par4 |
+|---|---|---|
+| gaps >= 30s | 3 (OVER) | 4 (OVER) |
+| managed peak | 44.2 GB | 50.5 GB |
+| private peak | 58.4 GB | 66.1 GB |
+| managed floor drift | -2.95 GB FALLING | -11.02 GB FALLING |
+
+* **The gap gate was ALREADY failing on the baseline.** The same three Stage-7
+  gaps appear in both and each is SHORTER in par4 (87->80 s, 43->41 s, 33->31 s).
+  Par4 adds one new marginal 30 s gap at the very end of SecondPassFDR.
+* **The memory rise is `--parallel-files 4`, not the parallel write.**
+  PerFileScoring private peak 42.2 -> 66.1 GB (+23.9 GB); three extra concurrent
+  files at this TODO's own "5-15 GB per extra file" predicts ~24 GB. The parallel
+  write itself measured +2.8 GB. Floor drift FALLING in both - no O(files) growth.
+* **TO FILE: par4 at 82 files does not fit a 64 GB box** (66.1 GB private vs the
+  recorded goal of 82 files inside 52.1 GB). A property of the CONFIGURATION, not
+  of this PR - the PR is intra-file and needs no extra headroom.
