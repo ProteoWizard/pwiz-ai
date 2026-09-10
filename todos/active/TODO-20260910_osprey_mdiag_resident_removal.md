@@ -63,6 +63,35 @@ assertions are FILE-level (exactly one artifact changed) and VALUE-level (report
 golden). Neither can see *which arm ran*, and at 3 files an O(files) bundle is free. The gate
 covering this task is structurally blind to this defect class.
 
+## Status (2026-09-10 09:40)
+
+Commit `a197f68cf7` on the branch carries steps 2 and 5. Steps 1, 3 and 4 are owed.
+
+| step | state |
+|---|---|
+| 1 bank the Stage-7 A/B | **running** (`ab-stage7-resident.log`) |
+| 2 route ModelDiagnostics to the per-run arm | **DONE** |
+| 3 delete the fold's resident arm | owed |
+| 4 retire `OSPREY_STAGE7_STREAM` / shrink `KNOWN_UNFIXED` | owed |
+| 5 route assertions in modes 7 and 11 | **DONE** |
+
+**Verified so far**: 593/593 unit tests + zero-warning inspection; full
+`regression.ps1 -Dataset StellarLibDecoy` **PASSED** (`GATE EXIT 0`), every mode green
+including mode 3 (HPC chain blib byte-identical), mode 5 (the rehydrate arm changed here) and
+mode 11 (pass-2 byte-exact). `Tokens REQUIRED by this gate: 0 (target: 0)` - unchanged, and the
+new guard fired on no leg, so nothing in the gate depends on the all-runs bundle.
+
+**One correction worth keeping**: the route assertion was first put in mode 7 and failed there
+(`regeneration wall 0.2s`, no per-run marker). Mode 7 re-enters a run whose products are still
+on disk, so `OnlyDiagnosticsProductOutstanding` sees the file, declines the fold arm, and the
+task only RE-RENDERS - it hydrates nothing, correctly. Mode 7 therefore gets the negative half
+only; the positive half belongs to mode 11, which deletes the products and forces the fold.
+
+**Still owed before this is a merge candidate**: steps 1/3/4, `regression-parallel.ps1
+-Dataset All`, and the real oracle - a 446-file `--task ModelDiagnostics` re-run, which walls
+within ~1 h if the fix did not take. The oracle needs the box free, so it queues behind the
+in-flight 446-file phase-5 run.
+
 ## Plan
 
 1. **Bank the A/B oracle before deleting it.** `OSPREY_STAGE7_STREAM=0` vs default on Stellar +
