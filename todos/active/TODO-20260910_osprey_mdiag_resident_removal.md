@@ -237,3 +237,50 @@ From the night run, all at 446 files - the report is route- and build-invariant:
 `FdrProjectionSet.Builder` is confirmed dead production code (zero call sites; only
 `FdrTest.cs:3257` instantiates it). Its parity test certifies a live implementation against an
 unreachable one. Delete both - separate commit.
+
+## Phase-5 run: stopped deliberately, resume is now part of the test plan (2026-09-10 11:40)
+
+The 446-file straight-through-with-diagnostics run was killed at **11:40:27** after 11h32m, at
+file **344/446** of the Stage 6 rescore. Not a failure - a decision: finishing it would have
+spent ~4 more hours testing a STALE exe (the master snapshot, v26.1.1.252) while the branch sat
+unreviewed. Front-loading the PR work and resuming later on the FIXED exe tests more, not less.
+
+**Anchor at the kill**, so the resume can be verified rather than trusted: 344 reconciled
+parquets, 344 `.2nd-pass.fdr_scores.bin`, 1032 `PerFileRescoring` stamps (3 per file).
+
+**Part 1 banked**: `phase5-part1-00h08-11h40.log` (1,422,659 bytes) and
+`phase5-part1-perfviz.png`.
+
+```
+duration : 11:31:40, 0 gaps >= 30s
+managed  : peak 36.6 GB  floor 9.2 -> 9.7 GB  +1 MB/file  LEVEL
+total    : peak 41.7 GB
+  FirstPassFDR      p10 7.3 / p50 14.5 / peak 36.6 GB   priv 41.7 GB   311 min
+  PerFileRescoring  p10 10.2 / p50 12.4 / peak 24.8 GB  priv 40.4 GB   380 min
+```
+
+Private already peaked at **41.7 GB** in FirstPassFDR, and Stage 7 - where the source run peaked
+at 41.5 GB *without* diagnostics - has not run yet. Stage-7 headroom against the 63.7 GB box is
+the open question the resumed leg answers.
+
+**The resume is itself a test.** `phase5-resume.ps1` re-enters the same directory on the fixed
+exe, which exercises stop/crash tolerance on a real 446-run cohort **across builds** - the state
+a user is in who loses a long run and upgrades before resuming. Regression modes 8 and 9 cover
+this on 3 files. The script asserts the claim rather than assuming it: it counts `Re-scoring
+file` lines and expects ~102, not ~446.
+
+`-LinkFrom` is kept, and it does the version pinning itself (26.1.1.243 off the source run's
+markers). The fixed exe stamps 26.1.1.253, so without that pin all 344 completed files would
+read as a version mismatch and Stages 1-4 would re-run for hours - Finding 0 again.
+
+## Log preservation - one real gap, in this session's own scripts
+
+`OspreyDatasetRun.psm1:921-941` already rotates `run.log` correctly (`Move-Item` to
+`run-<stamp>.log`, stamped with the OLD log's last-write time, same-second collisions
+disambiguated). Its comment records why: *"one -Resume into the wrong directory silently
+destroyed an 18-hour run's 1.8 MB log this way."*
+
+The gap was in **this session's launcher**, not the runner: `phase5-launch.ps1` opened its
+capture log with a plain `Out-File`, a truncating write, so a resume would have destroyed part
+1's 11.5 hours of `[MEM]` probes. Rolled before anything relaunched, and both
+`phase5-launch.ps1` and `phase5-resume.ps1` now rotate the same way the runner does.
