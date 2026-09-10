@@ -389,3 +389,74 @@ documented purpose) are **consequences of F1** and dissolve when F1 is fixed. No
 
 Unusually for a max review, every finding checked out. The ones I am deferring are deferred on
 scope, not on correctness.
+
+## Latent bug found and fixed while gating: the prune deletes live run dirs (`b7bf3867ed`)
+
+Not related to this branch's subject - found because it killed the `-Dataset All` run - but
+fixed here rather than inherited, because it is **active on this machine right now**.
+
+**Symptom.** The Astral lane aborted mid-mode-3: `Invoke-HpcChain` (regression.ps1:1497) could
+not write `...\Astral\chain\logs\phase1_<stem>.log`. `$chainLogDir` is created with `-Force` at
+:1455, at the top of that same function, so it existed and then vanished.
+
+**Cause.** The Stellar lane runs `regression.ps1` once per dataset, and each invocation runs the
+startup prune. Its log shows the prune targeting the LIVE Astral run:
+
+```
+Osprey regression PASSED                       <- Stellar dataset 1 done
+==> Pruning 1 stale TestResults run dir(s), keeping the most recent 0
+  WARN: failed to prune ...\regression-20260910_114226_21248: The process cannot access ...
+==> Dataset StellarLibDecoy                    <- dataset 2
+```
+
+`Test-RunDirLive` returned false for pid 21248 while it was running. Not the regex - `-notmatch`
+does populate `$Matches` (verified: group 1 = 21248). The check was
+`$p.ProcessName -eq 'pwsh'`, and **`Get-Process().ProcessName` reports the running image's
+on-disk name**. Something replaced `pwsh.exe` (a PowerShell update; `.rbf` is a Windows
+Installer rollback file), so live processes report the rollback name:
+
+```
+  Pid  Win32Name  GetProcessName
+37796  pwsh.exe   5cc84f5d.rbf
+32240  pwsh.exe   5cc84f5d.rbf
+15580  pwsh.exe   5cc84f5d.rbf
+ 3104  pwsh.exe   5cc84f5d.rbf
+26128  pwsh.exe   pwsh
+24620  pwsh.exe   pwsh
+```
+
+Four of six live pwsh processes read as dead. **Any regression run started on this box today was
+one sibling invocation away from being destroyed.**
+
+**Why it was destructive despite "failing".** `Remove-Item -Recurse` deletes depth-first, so it
+had already destroyed `chain\logs` before it reached a locked file. The prune then reported a
+WARN and continued; the run was already wrecked.
+
+**Fix.** Identify the image via `Win32_Process.Name` (which correctly reports `pwsh.exe`), and
+**fail toward "live"** on any uncertainty - an unprunable orphan costs disk until the next run,
+a wrongly-pruned live gate costs the run. Verified against the real failure mode:
+
+```
+live pwsh with rbf ProcessName: 37796
+OLD check would say live: False      <- would prune a running gate
+NEW check says live      : True
+dead pid 21248 -> False              <- genuine orphan, still prunable
+legacy name    -> False              <- pre-PID name, still prunable
+```
+
+**Worth considering as follow-up** (not done): the prune's destructive-then-warn shape. Even
+with a correct liveness check, a half-completed recursive delete of someone else's scratch is a
+bad failure mode. Deleting to a staging name first, or checking writability before recursing,
+would make a mistaken prune recoverable instead of fatal.
+
+## Gate status at handoff
+
+`-Dataset All` via `regression-parallel.ps1`: **TOTAL 76 PASS / 0 FAIL / 0 SKIP**, 01:14:26.
+
+* Stellar + StellarLibDecoy + StellarGenDecoyEntrap lane: **exit 0, 72 PASS / 0 FAIL / 0 SKIP** -
+  every mode including 3, 5, 6, 7, 11, 8, 9.
+* Astral lane: **exit 1, 4 PASS / 0 FAIL / 0 SKIP** - ABORTED by the prune above after modes 1,
+  1c, 1b. **No assertion failed anywhere in either lane.**
+
+Astral re-run SERIALLY and alone is in flight (`gate-astral.log`), which is the only coverage
+gap. Running it alone means the result does not depend on the prune fix being correct.
