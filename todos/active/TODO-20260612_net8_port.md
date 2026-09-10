@@ -7224,3 +7224,54 @@ addressed. Work branch `Skyline/work/20260902_net10_sln_pwiz_projects` deleted l
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
+
+
+## 2026-09-09: Integration-branch nightly cannot find the tests it just built
+
+SkylineNightly can now drive this branch - PR #4649 taught it to read the branch from
+SkylineTester's assembly stamp, since the port has no `Version.cpp`, and the log confirms it:
+`Branch Skyline/work/20260612_net8_port identified from SkylineTester.dll`. The run then clones the
+branch, builds it successfully (`0 Error(s)`, `Build succeeded; skipping tests (--no-tests)`), and
+**ends without running a single test**. SkylineTester puts up "No test assemblies were found" and
+SkylineNightly logs "No tests run in 8 minutes."
+
+### Root cause: the Nightly build-directory slots are null
+
+`SkylineTesterWindow.GetPossibleBuildDirs()` returns eight slots matching the build radio buttons.
+net472 fills the Nightly pair from the freshly cloned checkout:
+
+    Path.Combine(GetNightlyBuildRoot(), @"pwiz\pwiz_tools\Skyline\bin\x86\Release"),
+    Path.Combine(GetNightlyBuildRoot(), @"pwiz\pwiz_tools\Skyline\bin\x64\Release"),
+
+The port replaced all eight with staging lookups derived from `ExeDir` and left both Nightly slots
+`null`. In a nightly run `SelectedBuild` is a Nightly slot, so `GetSelectedBuildDir()` returns null
+and there is nowhere to look. `GetNightlyBuildRoot()` still exists (`Main.cs:280`) and still
+recognises a `SkylineTesterForNightly*` root, so the concept survived - only its use did not.
+
+### Two things the fix must handle, and one trap
+
+1. **Point the Nightly 64-bit slot at the nightly checkout**, not at `ExeDir`. Both
+   `GetNet8StagingDir` and `GetStagingTargetDir` derive their base from `SkylineDirectory()`, which
+   walks up from `ExeDir` for a folder named exactly "Skyline" and is null under
+   `E:\Nightly\SkylineTesterForNightly_integration`. They need to accept an explicit Skyline
+   directory so the nightly checkout at `<nightlyBuildRoot>\pwiz\pwiz_tools\Skyline` can be passed in.
+2. **The configuration is wrong in a distro.** `PreferredConfiguration()` reads the parent folder of
+   `ExeDir`; in a distro that is the unzip folder, so it answers "Debug" while the nightly builds
+   Release. `nightlyBuildType` is 32/64-bit, not a configuration, and the port has no `_buildDebug`,
+   so Release is the answer for a nightly.
+3. **Trap - do NOT fall back to `ExeDir`.** That was tried and reverted here. It "works": the zip's
+   `SkylineTester Files` holds a full set of TeamCity-built test DLLs, so tests run and pass - against
+   the artifact instead of the branch that was just cloned and built, with nothing in the log saying
+   so. Also do not relax `SkylineDirectory()`'s exact "Skyline" match; that is Matt's deliberate
+   `Skyline` vs `SkylineTester` distinction from `7e97746fa2`, and `RootDir`'s `StartsWith("Skyline")`
+   walk is the separate, distro-facing one.
+
+### Related drift, not blocking
+
+The port moved SkylineTester's output from `pwiz_tools\Skyline\bin\x64\Release` to
+`pwiz_tools\Skyline\SkylineTester\bin\x64\Release\net10.0-windows`, so `RootDir`'s
+`StartsWith("Skyline")` walk now stops at `SkylineTester` instead of `Skyline`. `SkylineTester.log`,
+`SkylineTester Results` and `GetZipPath`'s probe moved with it.
+
+**Verification needs a distro repro** - unzip a SkylineTester.zip outside any checkout and run it -
+because every path here behaves differently in a developer tree.
