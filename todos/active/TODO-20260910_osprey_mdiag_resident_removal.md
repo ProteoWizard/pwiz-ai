@@ -482,5 +482,38 @@ Run alone, so this result does not depend on the prune fix being correct.
 72 PASS / 0 FAIL for the three Stellar variants, plus a full green Astral. No assertion failed
 anywhere at any point.
 
+## Follow-up: stop cleaning up after a run (`-KeepRunDirs` default 0 -> 1)
+
+Brendan, 2026-09-10: *"Many sessions have wasted time rerunning tests because the existing test
+cleans up so aggressively by default. Leaving files by default is probably the right decision as
+long as there is only one set at any time."*
+
+**Rule**: clean **BEFORE** a run; do not clean after, on either outcome. Bound disk by keeping
+only the most recent set.
+
+This retires the earlier "clean before, clean after SUCCESS, never after failure" formulation.
+The success half did not survive contact - measured twice:
+
+* 2026-09-03: two ~30-minute re-runs to recover a `partial-resume.log` a FAILING run had already
+  written (which "keep on failure" would have covered).
+* 2026-09-10, **this session**: the Stage-7 A/B needed the STREAMED diagnostics HTML. It had
+  existed and been self-cleaned, so a second full ~40-minute gate ran solely to regenerate an
+  input that had already been produced; the comparison itself took minutes.
+
+The second case is what rules out verdict-gated cleanup: **that run PASSED.** Nothing about its
+verdict predicted its output would be wanted an hour later for a comparison that did not exist
+when it ran.
+
+**Change**: `regression.ps1`'s `-KeepRunDirs` default `0` -> `1`. The startup prune already runs
+unconditionally, so this keeps exactly one set and bounds disk by construction - no dev/CI
+distinction needed, which was the weakness of the older "make `-KeepOutput` the default on dev
+machines" idea.
+
+**Sequence it AFTER `b7bf3867ed`** (this branch's prune fix). "Keep the last set" is only safe if
+the prune can be trusted not to delete a LIVE set, which it could not until that commit.
+
+Deliberately NOT folded into this branch: unrelated to its subject, and the branch is green at a
+clean handoff point. Its own small change, or fold into the next session's work if convenient.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260910_osprey_mdiag_resident_removal.md` before starting work.
