@@ -98,6 +98,63 @@ side effect.
 
 ## Progress Log
 
+### 2026-09-10 - PR #4653 open and green; build.bat root cause found and split
+
+**PR #4653** -> `Skyline/work/20260612_net8_port`, 6 files, +160/-40, `MERGEABLE / CLEAN`.
+Branch `Skyline/work/20260910_nightly_integration_no_tests`, merged with the port tip
+`5d27353235` so it lands current.
+
+**The second half of the root cause was in `build.bat`, not SkylineTester.** `--no-tests` had
+been added TWICE within three days with opposite meanings - brendanx67 2026-08-18 "compile
+only, skip staging", Matt 2026-08-21 "build and stage (and produce any requested distro zips)".
+Both survived the merge, in three places (doc entry, parse arm, exit) plus a duplicated
+`set NOTESTS=0`. The compile-only exit came FIRST and shadowed the other, so:
+  * the nightly build never staged, which is why the Nightly slot had nothing to point at, and
+  * `build.bat Release SkylineTester.zip --no-tests` silently produced no zip at all.
+Split into `--no-tests` (stages + zips, skips only the test run) and `--build-only` (compile
+only, what `b.bat` injects). Osprey `build.bat` accepts `--build-only` too, keeping the shared
+`b.bat` routing contract. Matt's Aug 21 intent now actually executes.
+
+**`PreferredConfiguration` was reading the parent of `ExeDir`**, so a Release *staged* run and
+every nightly distro described themselves as **Debug** - the "Build the solution in Debug"
+message Brendan saw. Now leaf -> parent -> `BUILD_CONFIGURATION`, with no Debug fallback:
+`SkylineDirectory()` matches ANY ancestor named "Skyline", so a nightly rooted under one
+(`D:\Skyline\Nightly\...`) would silently have answered Debug again.
+
+**Code review (max) - 5 findings verified and fixed**, two by reproduction:
+  * `nightly32` was still null while the UI default selects it (designer default "32 bit",
+    TabNightly forces index 0 when unset) - the original bug survived for the DEFAULT
+    selection; only a .skytr saying `nightlyBuildType=1` hid it. Most consequential finding.
+  * `GetNightlyStagingDir` read `Control.Text` off the BackgroundWorker thread.
+  * `commandShell.IsUnattended` latches true on any nuke build and never resets, so an
+    attended developer lost every dialog for the session. Dropped from the predicate.
+  * Osprey `build.bat` emitted `-NoTests` twice when both spellings arrived (PowerShell
+    refuses a switch specified more than once - reproduced, exit 1).
+  * `--build-only` + a .zip argument exited 0 having built no zip - reproduced; now exits 2.
+
+**Deliberately NOT fixed** (design calls, flagged on the PR): `AddTestRunner` returns void, so
+with the modal gone a nightly that cannot find a build finishes GREEN with zero tests;
+`HasBuildPrerequisites` still shows two raw modals and is the first statement of
+`TabNightly.Run` (Git is probed at a hardcoded `%ProgramFiles%\Git\cmd\git.exe`).
+
+**BOM fallout.** The editing scripts used here wrote `utf-8-sig`, adding a BOM to four
+SkylineTester files; CodeInspection caught it and Matt saw it in review. Fixed, and it exposed
+that CodeInspection only inspects `pwiz_tools/Skyline`, so Osprey and pwiz-sharp had no gate at
+all - 18 unexpected BOMs tree-wide. **PR #4654 merged** (`5092c9c4d4`), stripping 14; the audit
+at that tip is green. New `Deny-BomInCommit` hook in pwiz-ai checks staged files on both the
+Bash and PowerShell matchers (every pre-existing hook is Bash-only, which is why none fired on
+the commits that introduced the BOMs). Currently WARN-ONLY by request, to let the cleanup
+propagate before enforcing. Two Sciex vendor-archive configs are on the approved list pending a
+separate test round Matt asked for.
+
+**CI note, not this PR**: `ProteoWizard_SkylineWindowsNet` fails on some AWS agents with
+`MSB3030` - MSVC redistributables missing under the pwiz-sharp tool output dirs. Same commit
+`3e226c00` FAILS on `pwiz-windows-i-0529059f` and SUCCEEDS on MacCoss TeamCity Agent 1, and
+`b73b8170` passed on a third AWS agent with the same build.bat. Agent provisioning, not code.
+`build.bat`'s build loop does not stop on first failure, so the log reads `0 Error(s)` then
+`dotnet build Skyline.csproj failed` four minutes and six successful builds apart - worth
+fixing separately, it cost real diagnosis time.
+
 ### 2026-09-09 (night) - Fixed and VERIFIED
 
 Commit `a187e20154`. The diagnosis in this TODO held up in full; the missing piece was in
