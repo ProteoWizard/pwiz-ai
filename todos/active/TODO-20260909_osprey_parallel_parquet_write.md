@@ -1,8 +1,9 @@
 # TODO: Parallel parquet column compression (and the bool-encoder bug behind it)
 
 ## Branch Information
-- **Branch**: pwiz side not yet branched; fork work on
-  `maccoss-developers` branch `parquet-parallel-compression`
+- **Branch**: `Skyline/work/20260909_osprey_parallel_parquet_write` (pwiz), branched
+  from master 2026-09-09 22:12; fork work on `maccoss-developers` branch
+  `parquet-parallel-compression`
 - **Base**: `master`
 - **Created**: 2026-09-09
 - **Status**: Working and deterministic; measured; not yet turned into a PR
@@ -214,3 +215,61 @@ total, and untouched by file parallelism.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260909_parallel_parquet.md` before starting work.
+
+## Night session 2026-09-09 22:09 -> (in progress)
+
+### Landed
+* Branch `Skyline/work/20260909_osprey_parallel_parquet_write`, cut from master
+  (the cache-sizing fix stays on its own branch and PRs separately).
+  * `a9ee510ada` Made parquet column compression run in parallel
+  * `2f1824e594` Moved ResolveParquetWriteThreads below the methods that use it
+    (CRITICAL-RULES: helpers go after the public methods that use them; it was
+    sitting ahead of the whole public surface. Pure move, no behavior change.)
+* Fork repo `maccoss-developers` branch `parquet-parallel-compression`:
+  * `f0cedf7` Updated PATCH-NOTES for the parallel-write divergence. The old
+    text claimed the fork diverged "by exactly two files" - it is now five,
+    in two independent groups, and the new API forces a csproj change.
+
+### Gates
+* `regression.ps1 -Dataset Astral`: **PASSED**, all 19 modes, 3,407.2s.
+  This was the outstanding gate - the one thing the parquet change had not
+  passed. Modes 1/1b/1c vs golden, mode 3 HPC chain (14,413,584 records),
+  modes 4-9 resume/rehydrate legs.
+* `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`:
+  602 passed / 1 skipped / 0 warnings, before AND after the style move.
+
+### Measured from the baseline run.log (NOT projections)
+Parquet write cost in the 7h48m sequential baseline, by pairing phase markers:
+
+| stage | phase | seconds | share of stage |
+|---|---|---|---|
+| PerFileScoring (15,340s) | scoring, pre-write | 9,603 | 62.8% |
+| PerFileScoring | **parquet write** | **5,694** | **37.2%** |
+| PerFileRescoring (7,905s) | rescore work | 4,726 | 59.8% |
+| PerFileRescoring | **reconciled parquet write** | **2,017** | **25.5%** |
+| PerFileRescoring | inter-file artifact load | 1,144 | 14.5% |
+
+**Total parquet WRITE: 7,711s = 2h08m of the 28,109s run (27.4%)**, all
+single-threaded. Agrees with this TODO's earlier 6152s/40% figure to within
+the difference in phase-pairing rule; both say the same thing.
+
+Parquet READ (the Job 3 target) is ~2,490s (~41 min, 8.9% of the run), and
+part of that is SVM scoring the log does not separate from the read. So the
+read prize is roughly ONE THIRD of the write prize.
+
+### The 82-file par4 run
+* Launched 23:09 from snapshot `_bin\26.1.1.249-parqpar`, `Parquet.dll`
+  asserted 751,616 bytes (patched fork).
+* Out: `...\seaad-82files-libdecoy-r1.0-protein-compactpar4`
+* `OSPREY_VERSION_OVERRIDE` unset (fresh run), `OSPREY_PARQUET_WRITE_THREADS`
+  unset (0 = core count).
+* ATTRIBUTION: the exe self-reports `26.1.1.249 (c4921f3d6c-dirty)` because it
+  was built at 22:13, before the commit. Its contents ARE `a9ee510ada`.
+
+### Caveat on tonight's Astral wall time
+13:56 vs the published 8:12, which the handoff expected to BEAT by ~110s.
+**Not a regression.** The regression bundle was missing from
+`D:\Shared\SkylineDownloadPath\Perftests` and was re-downloaded (14.3 GB in
+129s) and extracted minutes before the run, so 24.6 GB of mzML was read cold.
+The published 8:12 had a warm page cache. Re-run the Astral leg warm if a wall
+comparison is wanted.
