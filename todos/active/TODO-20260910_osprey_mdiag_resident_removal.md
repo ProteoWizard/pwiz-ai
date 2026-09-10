@@ -458,5 +458,26 @@ would make a mistaken prune recoverable instead of fatal.
 * Astral lane: **exit 1, 4 PASS / 0 FAIL / 0 SKIP** - ABORTED by the prune above after modes 1,
   1c, 1b. **No assertion failed anywhere in either lane.**
 
-Astral re-run SERIALLY and alone is in flight (`gate-astral.log`), which is the only coverage
-gap. Running it alone means the result does not depend on the prune fix being correct.
+**Astral re-run SERIALLY and alone: `Osprey regression PASSED`, `ASTRAL GATE EXIT 0`**
+(13:00 -> 14:00), `Tokens REQUIRED by this gate: 0 (target: 0)`. Every mode green, including the
+one that aborted:
+
+```
+Astral mode3 (per-file FDR sidecars==straight): PASS (14,413,584 records)
+Astral mode3 (shipped fold):    PASS (worker answer folded for every file)
+Astral mode3 (streamed join):   PASS (per-run fold, no all-runs pool)
+Astral mode3 (verifier split):  PASS (straight verified, chain shipped-path)
+Astral mode3 (per-run hydrate): PASS (3 worker(s))
+Astral mode3 (HPC chain==straight):     PASS
+Astral mode3 (chain report is two-pass): PASS
+Astral mode7  (diagnostics regeneration: report only, vs golden): PASS
+Astral mode11 (pay-later diagnostics: folded, no analysis, same report): PASS (pass-2 byte-exact)
+Astral mode4/5/6/8/9: PASS
+Astral mode2 (streamed join): SKIP (leg not run - mode 2 is not run for Astral by suite design)
+```
+
+Run alone, so this result does not depend on the prune fix being correct.
+
+**Coverage is therefore complete across all four datasets**, in two runs rather than one:
+72 PASS / 0 FAIL for the three Stellar variants, plus a full green Astral. No assertion failed
+anywhere at any point.
