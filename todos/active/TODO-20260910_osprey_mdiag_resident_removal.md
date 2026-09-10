@@ -284,3 +284,108 @@ The gap was in **this session's launcher**, not the runner: `phase5-launch.ps1` 
 capture log with a plain `Out-File`, a truncating write, so a resume would have destroyed part
 1's 11.5 hours of `[MEM]` probes. Rolled before anything relaunched, and both
 `phase5-launch.ps1` and `phase5-resume.ps1` now rotate the same way the runner does.
+
+## Code review triage (`/code-review max`, 2026-09-10 ~12:10)
+
+15 findings, 10 finder angles, 275k subagent tokens. **Verdict: NOT mergeable as-is.** Three
+findings are real defects introduced by this branch, verified against source, and two of them
+are regressions against master. Recorded here rather than fixed immediately so the decision is
+reviewable.
+
+### BLOCKING - defects this branch introduced
+
+**F1 - `AllRunsBundleGuardError` is an unconditional refusal keyed on the wrong predicate.**
+VERIFIED. The method ends in an unconditional `return string.Format(...)`, so `if (bundleError
+!= null)` at `FirstPassFdrTask.cs:824` is always true. It fires on `!CanHydratePerRun`, whose
+false branch ends:
+
+```csharp
+string path = RetainedBaseIdSidecar.PathFor(config.OutputBlib, ArtifactSiblingPath(config));
+return !string.IsNullOrEmpty(path) && RetainedBaseIdSidecar.IsCurrentFormat(path);
+```
+
+- those are **disk-state** conditions - missing or stale-format `retained_base_ids.bin`, or no
+  `-o` blib - not "an operator chose a resident route";
+- master completed those runs via `LoadOwnReconciliationBundle`, so this is a **regression**;
+- the message directs the operator to the per-run survivor loader, which is built **from the
+  very file whose absence triggered the refusal** - a remedy that cannot exist where the
+  refusal fires;
+- it contradicts `WarnPreCompactionPool`'s stated policy that failing these configurations
+  "would be a regression, not a guard".
+
+I deleted `Stage7ResidentGuardError` precisely because it only refused the CHOSEN case - and
+then wrote a guard that refuses every case. **Fix**: restore that distinction. Fire only where
+the bounded alternative genuinely exists (retained sidecar present and current, and the run
+declined the per-run arm for a reason other than disk state).
+
+**F2 - admitting ModelDiagnostics to `CanHydratePerRun` disarms an unrelated hard-fail.**
+VERIFIED. `PerFileRescoreTask.cs:450`:
+
+```csharp
+bool noRescorePossible = rescoreBundle == null && !perRunPlanAvailable;
+```
+
+`perRunPlanAvailable` is now true for `--task ModelDiagnostics`, so the abort at 451 can no
+longer fire for it. That abort's own comment names the incident it exists for: *"measured
+2026-09-03 on Astral, where --model-diagnostics makes perRunPlanAvailable false and the bundle
+is null, so this arm fired for a cohort with 1 of 3 runs still to re-score."* Consequence: on a
+cohort with an interrupted Stage 6, a command documented at `OspreyConfig.cs:435-441` as
+suppressing every artifact write except the report can now fall through into a real rescore and
+write parquets and sidecars. **Fix**: the abort must key on whether this task will actually
+rescore, not on whether a per-run plan is available.
+
+**F6 + F13 - the route assertion cannot detect what it claims.** VERIFIED.
+`ProgressReporter.LOG_WAIT_SECONDS = 0.5` / `MIN_PERCENT_SECONDS = 1.0` defer the heading, so a
+3-file hydrate never prints `Hydrating reconciliation bundle`; and that heading is emitted
+**identically** by the bounded `HydrateCompactedStreaming` (RescoreHydration.cs:578) and the
+resident `HydrateReconciliationOverlay` (:348). The secondary marker is guard prose that my own
+test comment says appears on zero legs. So `Test-NoAllRunsBundle` finds neither marker whether
+or not the bundle was built, and its only liveness check is `Test-Path` - it passes on an empty
+or unflushed log. **Fix**: give the resident overlay a distinct marker (`nameof(
+HydrateReconciliationOverlay)` is already threaded through it) and add a liveness assertion.
+
+This is the sharpest lesson of the review: I added an assertion to close a gate blind spot, and
+the assertion has the same blind spot. It went green for the same reason the original defect
+did - 3 files is too small for the shape to appear.
+
+### CHEAP AND CLEARLY RIGHT - fold into the same change
+
+* **F11** stacked `<summary>` blocks in `ScoringTaskShared.cs` (my insertion orphaned
+  `ReadRetainedBaseIdsOrFail`'s doc) - the identical defect this diff *fixes* in
+  `ResidentPoolGuardTest.cs`. Embarrassing, trivial.
+* **F12** the deleted `Stage7Stream`'s 24-line doc block left attached to nothing, written with
+  `///` where every sibling tombstone in this changeset uses `//`. Also strands the measurement
+  that justifies the streamed-join architecture - move it to `CanStreamStage7Join`.
+* **F7** my new `ResidentPaths` / `SecondPassFdrTask` comments assert the resident arm is
+  reachable "never by choice". False: `Stage7StreamAdmittedBeforeRescore` still declines for
+  `!Pass2ProteinCompact`, i.e. `OSPREY_PASS2_QVALUE=transfer` - operator-chosen, no token.
+  Deleting `Stage7ResidentGuardError` also erased the only code-level record of that exemption.
+* **F8** no startup refusal for the removed `OSPREY_STAGE7_STREAM`.
+  `ai/docs/osprey-development-guide.md:929` requires it: *"Fail loudly on the removed spelling."*
+  Precedent both ways in `Program.cs:335-373`.
+* **F10** `docs/00-pipeline-architecture.md` still documents three deleted symbols as live
+  (:1123, :1131, :1148). Same guide, `:934`: *"Fix the docs in the same change."*
+* **F15** stale references to the deleted switch in four touched files - notably
+  `PerFileRescoreTask.cs:2651`, where it is the entire stated justification for
+  `PublishedSurvivorLoader` existing separately.
+
+### FOLLOW-UP - real, but not this PR
+
+* **F3** the guard sits at the consumer, not the producer, and misses two other doors into the
+  bundle (`PerFileScoringTask.cs:1967`, `:1486`). The right home is beside the
+  `perRunRescore`/`perRunJoin` branch at `:1440`. Bigger change; file an issue.
+* **F4** `retained_base_ids.bin` appears in neither `Outputs` nor `ValidityKey`, so a future
+  `FormatVersion` bump hard-fails every field resume with no regeneration path. Pre-existing,
+  but F1's guard makes it essential. Own issue.
+* **F14** `HpcTask` routing is a hand-maintained enum list across four predicates in three
+  styles; this is the second task added by hand, each at the cost of an OOM. Wants an
+  `HpcTaskProfile` table with an exhaustive switch. Architectural; own issue.
+
+**F5** (guard predicate wider than the builder's) and **F9** (~400 lines unreachable behind the
+guard, including `LoadOwnReconciliationBundle`, and mode 5 permanently unable to reach its
+documented purpose) are **consequences of F1** and dissolve when F1 is fixed. Not separate work.
+
+### Nothing dropped as invalid
+
+Unusually for a max review, every finding checked out. The ones I am deferring are deferred on
+scope, not on correctness.
