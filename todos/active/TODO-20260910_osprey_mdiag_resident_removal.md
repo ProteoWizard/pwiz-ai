@@ -515,5 +515,71 @@ the prune can be trusted not to delete a LIVE set, which it could not until that
 Deliberately NOT folded into this branch: unrelated to its subject, and the branch is green at a
 clean handoff point. Its own small change, or fold into the next session's work if convenient.
 
+## Code review fixes - all three blocking findings closed (2026-09-10 14:30)
+
+Two commits, both green (build 0 errors, inspection zero warnings, 593/593):
+
+| commit | |
+|---|---|
+| `b689ee8c45` | Fixed the all-runs bundle guard refusing runs it had no remedy for (F1, F2, F6+F13) |
+| `1fe93f8996` | Refused the removed `OSPREY_STAGE7_STREAM` spelling at startup (F7, F8, F10, F11, F12, F15) |
+
+**F1.** `CanHydratePerRun` split into the ROUTE half and the DISK half
+(`PerRunSurvivorLoaderAvailable`, which also DRYs `CanStreamStage7Join`'s copy of the same
+probe). `AllRunsBundleGuardError` now takes the config and returns null when the loader
+cannot exist - no `-o` blib, or a summary this build cannot read - so those runs warn and
+take the bundle exactly as master does. What survives is the case the review asked for: the
+loader is on disk and this route declined it, which is unreachable once F1 itself is fixed
+and is precisely the `--task ModelDiagnostics` shape. `ResidentPoolGuardTest` now pins BOTH
+halves; the null half is the one that would otherwise regress in silence.
+
+**F2.** The rescore-resume abort is re-keyed from "a plan is available" to
+`willRescoreHere = !DiagnosticsOnly && (didPlan || !noRescorePossible)`. Admitting
+ModelDiagnostics to `CanHydratePerRun` had made `perRunPlanAvailable` true for the one task
+that never rescores, so an interrupted cohort would have fallen through into a real Stage 6
+rescore - hours of work and reconciled-parquet writes on an analysis the command is
+documented not to disturb. Modes 7 and 11 are unaffected: both leave every analysis artifact
+current and only delete the diagnostics products, so `pass2Present == pass2Expected`.
+
+**F6+F13.** The marker moved to the PRODUCER: `HydrateReconciliationOverlay` logs
+`Hydrating the ALL-RUNS reconciliation bundle: N run(s) held at once` unconditionally,
+through a new optional `logInfo` (the shape `FoldPreCompactionPerRun` already uses), so every
+door into the bundle is visible rather than one caller. `Test-NoAllRunsBundle` drops the
+`Hydrating reconciliation bundle` heading - deferred past `LOG_WAIT_SECONDS` at 3 files and
+emitted identically by the BOUNDED route when slow, so it could not fire at gate scale and
+would have fired wrongly at cohort scale - and gains a liveness check: no `[TASK]` banner
+means the log proves nothing and the leg fails.
+
+### Deferred findings: dropped, not filed
+
+Per the standing rule that a review's leftovers are fixed or dropped, never relocated:
+
+* **F3** (guard at the consumer, not the producer) - the DETECTION half is now at the
+  producer and covers every door, which is what the finding was really about. Its second
+  citation, `PerFileScoringTask.cs:1486`, is the STREAMED twin `HydrateCompactedStreaming`,
+  not a door into the bundle; the real second door (`:1967`) already discloses through
+  `WarnPreCompactionPool` and now emits the marker too. The refusal stays where the bounded
+  alternative is decided.
+* **F4** (`retained_base_ids.bin` in neither `Outputs` nor `ValidityKey`) - tried and backed
+  out. Stamping is per-writer, not generic, so declaring an output that has never been
+  stamped makes `OnlyDiagnosticsProductOutstanding` read every completed analysis on disk as
+  owing a first pass: `--task ModelDiagnostics` on the 446-run bed would re-run Stage 1-5 for
+  hours instead of folding in seconds, which would also destroy this branch's own oracle.
+  Left as a located instruction on `RetainedBaseIdSidecar.FormatVersion` naming all three
+  edits a bump owes, to be paid WITH the bump that makes those directories stale anyway.
+  The F1 warning was reworded in the same pass - it had named "re-run the FirstPassFDR phase"
+  as the remedy, which does nothing on a complete analysis for exactly this reason.
+* **F14** (`HpcTask` routing as a hand-maintained list across four predicates) - a scope
+  decision rather than a defect; see the question raised with Brendan.
+
+### Gates after the fixes
+
+* Local pre-commit: build 0 errors / 0 warnings, inspection zero warnings, 593/593.
+* `regression.ps1 -Dataset StellarLibDecoy` launched 14:33 detached (it carries
+  `--model-diagnostics`, so modes 7 and 11 run - the legs that exercise the rewritten route
+  assertion). Log: `ai/.tmp/sessions/20260910-01Qwgkv/gate-stellarlibdecoy.log`.
+* `regression-parallel.ps1 -Dataset All` next, then `/code-review max` again, then the
+  446-file oracle.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260910_osprey_mdiag_resident_removal.md` before starting work.
