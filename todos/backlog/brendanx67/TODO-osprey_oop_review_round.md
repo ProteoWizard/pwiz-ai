@@ -2,10 +2,10 @@
 
 ## Summary
 Run a fresh **blind `/pw-oop-review` round over the Osprey codebase** and work the slate it
-returns. The last round was 2026-06-18/19 (the debt-paydown arc, PRs 3-9); **83 Osprey PRs
-have merged since**, all of them feature-cycle work, and none of them structural. The
-cadence this codebase is supposed to run at is a review every ~3-4 PRs. We are roughly 20
-rounds overdue.
+returns. The last review was **2026-06-18**; **83 Osprey PRs have merged since**, all of them
+feature-cycle work, none structural. The cadence this codebase is supposed to run at is a
+review every ~3-4 PRs. We are roughly 20 rounds overdue - and the last arc's own closeout
+step was never taken (below).
 
 **Status**: Backlog (not started). **Type**: Architecture / structural debt (Osprey).
 **Origin**: Brendan, 2026-09-10, prompted by a `/code-review max` finding on
@@ -25,27 +25,71 @@ loaders, streamed joins, the model-diagnostics report and its accumulator, pass-
 per-file competition, and the resident-path ratchet. Those are exactly the kind of changes
 that add cross-cutting predicates and quiet coupling.
 
-Current inventory, as a starting point for the review's own survey (excludes `Osprey.Test`):
+## The last review period, and what has happened since
+
+**The arc (2026-05-29 -> 2026-06-20).** Seeded by the 2026-05-29 OOP review, worked as the
+OspreySharp debt-paydown arc: PR 1 (#4302, merged 06-15) through PR 9 (#4319, merged 06-20),
+with blind re-reviews interleaved on 06-16, 06-17 and 06-18. The two later reports are still
+on disk: `ai/.tmp/20260617-oop-review-report.txt`, `ai/.tmp/20260618-oop-review-report.txt`.
+Their headline: *"well-architected code... the debt is not in the bones, it's in the flesh of
+the Tasks layer. Four task files exceed 1,000 LOC, and inside them sit orchestration methods
+of 250-350 lines."*
+
+**The arc was never formally closed.** `TODO-20260619_ospreysharp_debt_paydown_pr9.md` ends
+with an explicit outstanding item - *"run the FINAL confirmatory blind `/pw-oop-review`; if
+clean, declare the OOP debt-paydown arc complete."* No review report exists after 2026-06-18
+and no TODO since mentions one, so that confirmation never happened. This round subsumes it:
+the first thing the review answers is whether the 06-18 findings stayed fixed.
+
+**Growth since (measured 2026-09-10).** Same metric both sides - raw lines of non-test `.cs`
+under the Osprey tree, at the arc-close commit `a0065b3efa` vs today:
+
+| | 2026-06-20 (arc close) | 2026-09-10 | change |
+|---|---:|---:|---:|
+| non-test `.cs` files | 131 | 196 | 1.50x |
+| non-test lines | 42,562 | 85,203 | **2.00x** |
+
+**The production tree has doubled in twelve weeks**, with no structural pass in that window.
+
+The four largest files then and now - the same metric that defined the last review's dominant
+finding:
 
 ```
-196 files, 85,203 LOC
-  3,941  Osprey.Tasks/FirstPassFdrTask.cs
-  3,607  Osprey.Tasks/PerFileRescoreTask.cs
-  3,599  Osprey.Tasks/Pass2FdrSidecar.cs
-  3,237  Osprey.Tasks/PerFileScoringTask.cs
-  2,346  Osprey.Tasks/Calibrator.cs
-  2,139  Osprey.IO/ParquetScoreCache.cs
-  2,126  Osprey/OspreyFileDiagnostics.cs
-  2,102  Osprey.FDR/ModelDiagnostics/ModelDiagnosticsData.cs
-  1,781  Osprey.FDR/ModelDiagnostics/ModelDiagnosticsData.CoAssignment.cs
-  1,515  Osprey.Tasks/SecondPassFdrTask.cs
-  1,461  Osprey.FDR/StreamingFdr.cs
-  1,378  Osprey.FDR/PercolatorTrainer.cs
-  1,367  Osprey.FDR/PercolatorScorer.cs
+2026-06-20                                    2026-09-10
+2,401  PercolatorFdr.cs                       3,941  Osprey.Tasks/FirstPassFdrTask.cs
+2,126  OspreyFileDiagnostics.cs               3,607  Osprey.Tasks/PerFileRescoreTask.cs
+1,630  Tasks/PerFileScoringTask.cs            3,599  Osprey.Tasks/Pass2FdrSidecar.cs
+1,504  Tasks/PerFileRescoreTask.cs            3,237  Osprey.Tasks/PerFileScoringTask.cs
+1,311  Tasks/Calibrator.cs                    2,346  Osprey.Tasks/Calibrator.cs
+1,211  IO/ParquetScoreCache.cs                2,139  Osprey.IO/ParquetScoreCache.cs
 ```
 
-Nine files over 1,000 LOC, four of them over 3,000 - and the four largest are the four
-pipeline tasks, i.e. the code every one of those 83 PRs touched.
+"Four task files exceed 1,000 LOC" was the dominant issue in June. Those same files are now
+3,237-3,941, and thirteen files exceed 1,000. `PerFileScoringTask` and `PerFileRescoreTask`
+have each roughly doubled since being decomposed.
+
+**`Audit-Loc.ps1`, run 2026-09-10** (`ai/.tmp/osprey-loc-audit-20260910-1648.md`) - cloc
+executable lines, so smaller than the raw counts above and directly comparable to Rust:
+
+```
+Measure                      C#         Rust    C#/Rust
+Production code          44,766       29,221      1.53x
+Test code                18,203       13,435      1.35x
+Comment lines            41,549       12,463      3.33x
+Files                       245           60      4.08x
+
+Per-module (C# code):
+  Osprey.Tasks     13,901   (no Rust counterpart - the pipeline layer is ours)
+  Osprey.FDR        9,992   vs osprey-fdr 5,169     1.93x
+  Osprey.IO         6,695   vs osprey-io  5,368     1.25x
+  Osprey.Scoring    5,234   vs osprey-scoring 7,944 0.66x
+  Osprey.Core       2,895   vs osprey-core 2,539    1.14x
+```
+
+`Osprey.Tasks` is the largest project, has no reference implementation to be measured
+against, and is where all four of the big files live. `Osprey.FDR` at 1.93x its Rust
+counterpart is the next thing worth a look - some of that is the diagnostics report, which
+Rust does not have, but not all of it.
 
 **Run it BLIND.** The value of the last round came from an independent review re-finding the
 dominant issue without being told where to look, and then converging with a second blind
@@ -96,13 +140,17 @@ while doing unrelated work, which is precisely why none of them has been address
 * **Diagnostics bleed.** Extracting a shared scoring core is already blocked by exe-only
   `OspreyDiagnostics` statics reaching into task code - a known boundary violation with a
   standing consequence, not a hypothetical one.
-* **The four pipeline tasks are where every feature lands.** 12,400 LOC across four files
+* **The four pipeline tasks are where every feature lands.** 14,400 lines across four files
   that every PR touches is the classic monolith-by-accretion signature, and it is what the
-  review's file-size heuristic will flag first.
+  review's file-size heuristic will flag first. Note the June review explicitly cleared the
+  big ALGORITHM files (`PercolatorFdr`, `CoelutionScorer`) as "large cohesive algorithm" and
+  faulted only the orchestration bodies - the same distinction should be drawn again rather
+  than assumed.
 
 ## Definition of done
 
-1. Blind `/pw-oop-review` over `pwiz_tools/Osprey`, report banked in `ai/.tmp/`.
+1. Blind `/pw-oop-review` over `pwiz_tools/Osprey`, report banked in `ai/.tmp/`. It also
+   discharges PR 9's unfinished closeout: say whether the 2026-06-18 findings stayed fixed.
 2. Slate triaged with Brendan into a prioritized order - dominant issue first.
 3. The dominant issue fixed in its own PR, gated the usual way
    (`regression-parallel.ps1 -Dataset All`, output byte-identical).
