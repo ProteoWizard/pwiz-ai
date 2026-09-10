@@ -69,11 +69,31 @@ Commit `a197f68cf7` on the branch carries steps 2 and 5. Steps 1, 3 and 4 are ow
 
 | step | state |
 |---|---|
-| 1 bank the Stage-7 A/B | **value half DONE**; HTML half running |
-| 2 route ModelDiagnostics to the per-run arm | **DONE** |
-| 3 delete the fold's resident arm | owed |
-| 4 retire `OSPREY_STAGE7_STREAM` / shrink `KNOWN_UNFIXED` | owed |
-| 5 route assertions in modes 7 and 11 | **DONE** |
+| 1 bank the Stage-7 A/B | **DONE** - both halves, see below |
+| 2 route ModelDiagnostics to the per-run arm | **DONE** (`a197f68cf7`) |
+| 3 delete the fold's resident arm | **BLOCKED** - see the scope correction; it keeps live subjects |
+| 4 retire `OSPREY_STAGE7_STREAM` / shrink `KNOWN_UNFIXED` | **DONE** (`5c69a1b641`), 5 -> 4 |
+| 5 route assertions in modes 7 and 11 | **DONE** (`a197f68cf7`) |
+
+### What `5c69a1b641` removed
+
+`OSPREY_STAGE7_STREAM` / `OspreyEnvironment.Stage7Stream`; `Stage7StreamValidityKeySuffix()`
+(empty on the default, so no existing output directory is invalidated by its removal);
+`ResidentPaths.STAGE7_STREAM_OFF`; `ScoringTaskShared.Stage7ResidentGuardError`; the two-argument
+`CanStreamStage7Join` overload and `Stage7StreamAdmittedBeforeRescore`'s `stage7Stream`
+parameter; `AssertStage7JoinGuard`; and regression.ps1's `$abSwitchSet` term.
+
+**`WarnResidentStage7Join` was deliberately KEPT.** It keys on the MILESTONE
+(`rescored.Streams`), not on the switch, and cites #4486 - so `NeedsResidentPool` still gives it
+a subject. It is now the disclosure for a resident join reachable only by declaration, which
+makes it more useful after this change rather than less.
+
+Also tidied, because the removal exposed them: an orphaned doc comment that documented
+`AssertStage6HandoffGuard` while sitting above a different method, and regression.ps1's note at
+~:2054 which had PREDICTED this removal ("a leg built on that switch would be built to be
+deleted") - updated to record that the call held.
+
+Green after removal: build 0 errors / 0 warnings, code inspection zero warnings, 593/593 tests.
 
 **Verified so far**: 593/593 unit tests + zero-warning inspection; full
 `regression.ps1 -Dataset StellarLibDecoy` **PASSED** (`GATE EXIT 0`), every mode green
@@ -107,6 +127,22 @@ mode1/2/3/5 (streamed join): SKIP (this configuration cannot stream the join)
 
 (`Tokens REQUIRED by this gate: 0` on that run is accounting, not a contradiction: it counts
 tokens the GATE requires, and no leg sets the switch - the operator did, externally.)
+
+**HTML half - RESULT.** Byte-identical apart from the clock. Parsing the embedded
+`<script id="osprey-data">` payload from both pages:
+
+```
+keys only in resident: none
+keys only in streamed: none
+differing keys: ['generatedUtc']
+  resident = "2026-09-10 16:44:10 UTC"
+  streamed = "2026-09-10 17:21:10 UTC"    (37 min apart - the gap between the two runs)
+```
+
+Both files 431,757 bytes (the timestamp is fixed-width). All 30 top-level views - `cal`,
+`model`, `featureHistEdges`, `featureCount`, `modelComposite`, `coAssignment`, `fdpViews` and
+the rest - are identical between the resident and streamed Stage-7 joins. That is the permanent
+record; the mechanism to reproduce it is gone with the switch.
 
 **Why a second, HTML-only comparison was needed.** `Compare-DiagnosticsGolden` is value-level;
 regression.ps1 does not store the whole page as a golden master, so a green gate under the
