@@ -137,3 +137,70 @@ still serialises one write phase per file. Closing it entirely needs file N's
 write overlapped with file N+1's scoring, i.e. a pipeline, which is what
 `--parallel-files` already supplies. The two stack; the residual value of
 `--parallel-files` on a 64 GB box is now small.
+
+## Progress (2026-09-09, end of session)
+
+**Resolved and measured.** Parallel parquet write is deterministic and ~2.3x
+faster; the bool-encoder garbage byte was the whole cause of the earlier
+non-reproducibility.
+
+Verification (one SEA-AD file, 4,324,599 rows): sequential and two parallel
+runs all produced `sha 87E505583C14 / 1721755392`. Separately, sequential
+through the NEW Prepare/Emit path reproduced the pre-change golden
+(`7393EAF1A79F`) EXACTLY, which is what proved the refactor byte-faithful and
+isolated the defect to the encoder.
+
+### Full measurement set (8 files, D:, --threads 72, write threads 72/N)
+
+PerFileScoring:
+
+| config | wall | vs pre-fix sequential |
+|---|---|---|
+| sequential-1 (pre-fix) | 1115s | 1.00x |
+| parallel-1 (write fix only) | 763s | 1.46x |
+| parallel-2 | 582s | 1.91x |
+| **parallel-4** | **518s** | **2.15x** |
+| parallel-8 | 649s | 1.72x |
+
+PerFileRescoring (LinkFrom the 82-file baseline, OSPREY_VERSION_OVERRIDE=26.1.1.249):
+
+| config | wall | vs pre-fix sequential |
+|---|---|---|
+| sequential-1 (pre-fix) | 453.7s | 1.00x |
+| parallel-1 (write fix only) | 359.5s | 1.26x |
+| parallel-2 | 247.2s | 1.84x |
+| **parallel-4** | **208.8s** | **2.17x** |
+| parallel-8 | 411.5s | 1.10x |
+
+**N=8 is a trap on this box** - worse than sequential for rescoring and worse
+than N=2 for scoring. Both sweeps agree. Hypothesis (untested): read
+contention, 8 concurrent .spectra.bin streams on D: at 417 MB/s.
+
+Memory cost of parallel WRITE is small - managed peak unchanged (23.6 GB both),
+private peak +2.8 GB - against 5-15 GB per extra concurrent FILE. That is why
+the write fix suits the 64 GB dev boxes and --parallel-files does not.
+
+### Projection for the 82-file SEA-AD run at N=4
+
+| stage | sequential | factor | projected |
+|---|---|---|---|
+| PerFileScoring | 15340s | 2.15x | 7135s |
+| PerFileRescoring | 7905s | 2.17x | 3643s |
+| FirstPassFDR | 4174s | 1.00x (join) | 4174s |
+| SecondPassFDR | 690s | 1.00x (join) | 690s |
+| **total** | **28109s = 7h48m** | **1.79x** | **~15642s = 4h21m** |
+
+Write fix alone, no --parallel-files (the dev-box case): ~21100s = 5h52m, 1.33x.
+
+After this, the JOIN stages are the next bottleneck - ~31% of the projected
+total, and untouched by file parallelism.
+
+### Caveats
+* Single measurement per arm, no replicates; no measured noise floor.
+* The 8-file rescoring arms hard-link an 82-file reconciliation plan, so
+  per-file work may not be perfectly representative of a true 82-file run.
+* `regression.ps1 -Dataset Astral` has NOT been run against the parquet change.
+  It is the one outstanding gate.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260909_parallel_parquet.md` before starting work.
