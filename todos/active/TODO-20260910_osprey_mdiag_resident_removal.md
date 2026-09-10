@@ -69,7 +69,7 @@ Commit `a197f68cf7` on the branch carries steps 2 and 5. Steps 1, 3 and 4 are ow
 
 | step | state |
 |---|---|
-| 1 bank the Stage-7 A/B | **running** (`ab-stage7-resident.log`) |
+| 1 bank the Stage-7 A/B | **value half DONE**; HTML half running |
 | 2 route ModelDiagnostics to the per-run arm | **DONE** |
 | 3 delete the fold's resident arm | owed |
 | 4 retire `OSPREY_STAGE7_STREAM` / shrink `KNOWN_UNFIXED` | owed |
@@ -91,6 +91,58 @@ only; the positive half belongs to mode 11, which deletes the products and force
 -Dataset All`, and the real oracle - a 446-file `--task ModelDiagnostics` re-run, which walls
 within ~1 h if the fix did not take. The oracle needs the box free, so it queues behind the
 in-flight 446-file phase-5 run.
+
+## Step 1 result - the Stage-7 A/B, banked 2026-09-10
+
+Run with `OSPREY_STAGE7_STREAM=0` + `OSPREY_ALLOW_UNFIXED_RESIDENT=stage7-stream-off` on
+StellarLibDecoy: **`Osprey regression PASSED`, `A/B EXIT 0`**, every mode green including
+`mode1 (vs golden)` at 1e-9.
+
+The resident arm really ran - the streamed-join assertions **skipped**, which is the direct
+evidence:
+
+```
+mode1/2/3/5 (streamed join): SKIP (this configuration cannot stream the join)
+```
+
+(`Tokens REQUIRED by this gate: 0` on that run is accounting, not a contradiction: it counts
+tokens the GATE requires, and no leg sets the switch - the operator did, externally.)
+
+**Why a second, HTML-only comparison was needed.** `Compare-DiagnosticsGolden` is value-level;
+regression.ps1 does not store the whole page as a golden master, so a green gate under the
+resident arm proves the VALUES match, not the HTML. `ab-html-compare.ps1` supplies the missing
+half: the straight-through `output.model-diagnostics.html` from both arms, SHA-256 compared.
+Captured before mode 7 rewrites the report, from each run's own timestamped `TestResults` root.
+
+Resident page banked at `ai/.tmp/sessions/20260910-night/ab-html/resident-straight.html`
+(431,757 bytes, md5 `ad4d537cdfbd00d2b32a3d737abf5cb4`).
+
+## Scope correction - "remove the fat path entirely" is only PARTLY reachable today
+
+`RescoredEntries.Streams` is false whenever `BuildStage7PerRunSource` returns null, i.e. when
+`!CanStreamStage7Join`. Deleting `OSPREY_STAGE7_STREAM` makes `stage7Stream` constantly true,
+but `Stage7StreamAdmittedBeforeRescore` still declines on `NeedsResidentPool`, which is true
+for three paths that are still live and still tokened:
+
+```csharp
+return !useFdrProjection ||                                   // PROJECTION_OFF
+       !config.FdrMethod.UsesPercolatorFramework() ||         // NON_PERCOLATOR_FDR
+       (!string.IsNullOrEmpty(config.OutputFdrBench) && config.FdrBenchPass == 1);  // FDRBENCH_PASS1
+```
+
+So the fold's resident arm keeps a live subject after the switch goes.
+
+| removable now | must stay until PROJECTION_OFF / NON_PERCOLATOR_FDR / FDRBENCH_PASS1 go |
+|---|---|
+| `OSPREY_STAGE7_STREAM` switch | `FoldPass2DiagnosticsOnly`'s resident `else` arm |
+| `ResidentPaths.STAGE7_STREAM_OFF` (KNOWN_UNFIXED **5 -> 4**) | `Pass2FdrSidecar.OverlayPass2OntoResidentPool` |
+| `ScoringTaskShared.Stage7ResidentGuardError` | resident `ModelDiagnosticsReport.WritePass2AndFinalize` overload |
+| `SecondPassFdrTask.WarnResidentStage7Join` | |
+| the `stage7Stream` parameter threading | |
+| `regression.ps1`'s `$abSwitchSet` STAGE7_STREAM terms | |
+
+`PROJECTION_OFF` is documented as leaving the list last (it needs #4507, FDRBench pass 1,
+first), so that is the gating dependency for finishing the removal.
 
 ## Plan
 
