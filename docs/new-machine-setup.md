@@ -961,8 +961,13 @@ script TeamCity runs through `tcbuild.bat`, so a local build is the CI build.
 
 ```cmd
 cd <checkout>\pwiz_tools\Skyline
-build.bat Release --i-agree-to-the-vendor-licenses --no-tests
+build.bat Release --i-agree-to-the-vendor-licenses --build-only
 ```
+
+`--build-only` compiles and stops. Its sibling `--no-tests` goes further - it stages the test
+binaries and produces any requested distro zips, and skips only the test *run*. That is the one
+SkylineTester's build step passes, because it runs the staged tests itself afterwards under its
+own duration budget.
 
 **The root `b.bat` / `bo.bat` / `bs.bat` are per-developer files.** They are gitignored, so
 each developer creates their own - a fresh checkout has none, and nothing in the repository
@@ -972,7 +977,7 @@ create them before opening the solution. Three single-line files in the checkout
 
 **b.bat**
 ```batch
-@call "%~dp0pwiz_tools\%~1\build.bat" --no-tests --i-agree-to-the-vendor-licenses %2 %3 %4 %5 %6 %7 %8 %9
+@call "%~dp0pwiz_tools\%~1\build.bat" --build-only --i-agree-to-the-vendor-licenses %2 %3 %4 %5 %6 %7 %8 %9
 ```
 
 **bs.bat** - Skyline
@@ -985,10 +990,10 @@ create them before opening the solution. Three single-line files in the checkout
 @call "%~dp0b.bat" Osprey %*
 ```
 
-Note what `b.bat` bakes in: `--no-tests` and `--i-agree-to-the-vendor-licenses`. So
-`.\bs.bat` builds Release without running the hour of tests that `build.bat` otherwise
-runs after a build, and it accepts the vendor SDK EULAs on your behalf - the same
-agreement Phase 4.1 asks for. Pass a configuration through as an argument:
+Note what `b.bat` bakes in: `--build-only` and `--i-agree-to-the-vendor-licenses`. So
+`.\bs.bat` compiles Release - no staging, no distro zips, and none of the hour of tests that
+`build.bat` otherwise runs after a build - and it accepts the vendor SDK EULAs on your behalf,
+the same agreement Phase 4.1 asks for. Pass a configuration through as an argument:
 
 ```cmd
 .\bs.bat            REM Release, build only
@@ -998,6 +1003,14 @@ agreement Phase 4.1 asks for. Pass a configuration through as an argument:
 
 > Use `.\bs.bat` with the leading `.\` in both PowerShell and Command Prompt, for the
 > reasons given under 4.3.
+
+> **If your `b.bat` predates 2026-09-10, it passes `--no-tests`, which now means something
+> different.** `--no-tests` had been added twice within three days with two meanings - "compile
+> only" and "build, stage and zip but do not run tests" - and the compile-only reading won,
+> which is why a `--no-tests` build silently produced neither a staged directory nor a
+> requested zip. The two are now separate flags. An old `b.bat` still works, but `.\bs.bat`
+> will start staging on every build; change it to `--build-only` for the previous behaviour.
+> These files are gitignored, so nothing updates them for you.
 
 #### Iterating in Visual Studio
 
@@ -1054,8 +1067,8 @@ Skip it and the IDE has no restored packages, no Hardklor, and - unless you ran
 > depend on anything being listed in `Skyline.sln`.
 
 
-To run tests, call `build.bat` directly without `--no-tests`, or use the SkylineTester and
-`ai/scripts/Skyline/Run-Tests.ps1` paths described in
+To run tests, call `build.bat` directly with neither `--build-only` nor `--no-tests`, or use
+the SkylineTester and `ai/scripts/Skyline/Run-Tests.ps1` paths described in
 [build-and-test-guide.md](build-and-test-guide.md). `TestPerf` and `TestTutorial` are
 deliberately excluded from `build.bat`'s standard scope; run those separately.
 
