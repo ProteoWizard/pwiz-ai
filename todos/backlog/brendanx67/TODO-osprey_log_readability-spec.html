@@ -1,0 +1,781 @@
+<title>Osprey Log Readability Review</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #F4F7F6;
+    --surface: #FFFFFF;
+    --surface-2: #EAF0EE;
+    --ink: #1A2321;
+    --muted: #5B6965;
+    --rule: #D3DCD8;
+    --accent: #0E6F74;
+    --accent-ink: #0A5559;
+    --accent-wash: #DFF0EF;
+    --high: #B4432C;
+    --high-wash: #F7E7E2;
+    --medium: #A2701A;
+    --medium-wash: #F8EFDC;
+    --low: #4B7C43;
+    --low-wash: #E6F0E3;
+    --log-bg: #F0F3F2;
+    --log-ink: #2A3431;
+    --stamp: #8B9894;
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #111817;
+      --surface: #182120;
+      --surface-2: #1F2B29;
+      --ink: #E3EAE7;
+      --muted: #97A6A1;
+      --rule: #2C3A38;
+      --accent: #63C3C5;
+      --accent-ink: #8FD7D8;
+      --accent-wash: #173537;
+      --high: #E4785F;
+      --high-wash: #3A2320;
+      --medium: #D9A54B;
+      --medium-wash: #35301C;
+      --low: #82B978;
+      --low-wash: #1F3020;
+      --log-bg: #131B1A;
+      --log-ink: #D4DDDA;
+      --stamp: #6E7D79;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #111817;
+    --surface: #182120;
+    --surface-2: #1F2B29;
+    --ink: #E3EAE7;
+    --muted: #97A6A1;
+    --rule: #2C3A38;
+    --accent: #63C3C5;
+    --accent-ink: #8FD7D8;
+    --accent-wash: #173537;
+    --high: #E4785F;
+    --high-wash: #3A2320;
+    --medium: #D9A54B;
+    --medium-wash: #35301C;
+    --low: #82B978;
+    --low-wash: #1F3020;
+    --log-bg: #131B1A;
+    --log-ink: #D4DDDA;
+    --stamp: #6E7D79;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  a { color: var(--accent-ink); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 40px 28px 96px; }
+  .prose { max-width: 68ch; }
+
+  header.masthead { display: grid; grid-template-columns: 1fr; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+  .eyebrow { font-family: var(--font-body); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-family: var(--font-display); font-weight: 500; font-size: 44px; line-height: 1.08; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+  h2 { font-family: var(--font-display); font-weight: 500; font-size: 28px; line-height: 1.2; margin: 0 0 8px; text-wrap: balance; }
+  h3 { font-family: var(--font-body); font-weight: 600; font-size: 17px; margin: 0 0 6px; }
+  p { margin: 0 0 12px; }
+  .lede { font-size: 19px; line-height: 1.45; color: var(--ink); }
+  .meta { color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .meta code { font-family: var(--font-mono); font-size: 13px; }
+
+  nav.toc { position: sticky; top: 0; z-index: 3; background: var(--ground); border-bottom: 1px solid var(--rule); margin: 0 -28px; padding: 10px 28px; display: flex; gap: 4px 22px; flex-wrap: wrap; font-size: 14px; }
+  nav.toc a { text-decoration: none; color: var(--muted); font-weight: 600; padding: 2px 0; border-bottom: 2px solid transparent; }
+  nav.toc a:hover { color: var(--accent-ink); border-bottom-color: var(--accent); }
+
+  section { padding: 40px 0 8px; }
+  section + section { border-top: 1px solid var(--rule); }
+
+  /* Tier bar */
+  .tierbar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; margin: 18px 0 10px; border: 1px solid var(--rule); }
+  .tierbar span { display: block; height: 100%; }
+  .tierlegend { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 22px; font-size: 14px; margin: 0 0 6px; }
+  .tierlegend div { display: flex; align-items: baseline; gap: 8px; }
+  .swatch { width: 12px; height: 12px; border-radius: 2px; flex: none; position: relative; top: 1px; }
+  .tierlegend b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tierlegend small { color: var(--muted); }
+
+  /* Log line styling */
+  .log {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+    background: var(--log-bg);
+    color: var(--log-ink);
+    border-left: 3px solid var(--rule);
+    padding: 6px 10px;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border-radius: 0 3px 3px 0;
+  }
+  .log .stamp { color: var(--stamp); }
+  .log .warn { color: var(--medium); font-weight: 500; }
+  .log .err { color: var(--high); font-weight: 500; }
+  .log.better { border-left-color: var(--accent); background: var(--accent-wash); color: var(--ink); }
+  .log.better::before { content: "suggested"; display: block; font-family: var(--font-body); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); font-weight: 600; margin-bottom: 2px; }
+  .log.demote { border-left-color: var(--muted); }
+  .log.demote::before { content: "action"; display: block; font-family: var(--font-body); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+  .where { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); margin-top: 4px; display: block; overflow-wrap: anywhere; }
+  .jargon { background: var(--high-wash); color: var(--high); border-radius: 2px; padding: 0 2px; }
+  .jargon.m { background: var(--medium-wash); color: var(--medium); }
+
+  /* Tables */
+  .tablewrap { overflow-x: auto; margin: 14px 0 22px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; table-layout: fixed; }
+  thead th { text-align: left; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--rule); background: var(--surface-2); }
+  tbody td { padding: 12px 12px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  td.pri { padding-left: 0; }
+  .stripe { display: inline-block; width: 4px; height: 100%; min-height: 40px; border-radius: 2px; vertical-align: top; margin-right: 8px; }
+  .pill { display: inline-block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+  .pill.high { background: var(--high-wash); color: var(--high); }
+  .pill.medium { background: var(--medium-wash); color: var(--medium); }
+  .pill.low { background: var(--low-wash); color: var(--low); }
+  .pill.gate { background: var(--surface-2); color: var(--muted); font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-size: 11.5px; }
+  .pill.ok { background: var(--low-wash); color: var(--low); }
+  .pill.leak { background: var(--high-wash); color: var(--high); }
+  td .log + .log { margin-top: 8px; }
+  td.why { color: var(--ink); }
+  td.why p { margin: 0 0 6px; }
+  .count { font-variant-numeric: tabular-nums; }
+
+  /* Priority group headers */
+  .group { display: flex; align-items: baseline; gap: 12px; margin: 26px 0 4px; }
+  .group h3 { font-family: var(--font-display); font-weight: 600; font-size: 21px; margin: 0; }
+  .group .def { color: var(--muted); font-size: 14px; }
+
+  /* Glossary */
+  .gloss td:first-child { font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+  .gloss td.cnt { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .gloss td.plain { color: var(--accent-ink); font-weight: 600; }
+  .gloss td.dec { font-size: 13.5px; }
+  .gloss td.dec .pill { margin-right: 4px; }
+
+  /* Callouts */
+  .note { background: var(--surface-2); border-left: 3px solid var(--accent); padding: 10px 14px; margin: 14px 0 18px; font-size: 15px; max-width: 78ch; border-radius: 0 3px 3px 0; }
+  .note b { font-weight: 600; }
+
+  ol.steps { padding-left: 22px; max-width: 78ch; }
+  ol.steps li { margin: 0 0 10px; }
+  ol.steps li b { font-weight: 600; }
+
+  .small { font-size: 13.5px; color: var(--muted); }
+
+  @media (max-width: 760px) {
+    h1 { font-size: 32px; }
+    .page { padding: 24px 16px 64px; }
+    nav.toc { margin: 0 -16px; padding: 10px 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <div class="eyebrow">pwiz_tools/Osprey &middot; branch Skyline/work/20260909_osprey_projection_scan_progress</div>
+    <h1>Osprey Log Readability Review</h1>
+    <p class="lede prose">Every line Osprey can write to its console log, read as a mass spectrometrist would read it. The user-facing lines are ranked by how likely they are to confuse; the developer-facing and diagnostic lines are inventoried separately, with the flag that exposes each one.</p>
+    <div class="meta">
+      <span>Source: <code>C:\proj\pwiz-work1\pwiz_tools\Osprey</code></span>
+      <span>Evidence logs: <code>D:\test\osprey-runs\defectb2-stellar.log</code> (3-file Stellar), <code>D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-s7offB-20260831_115149\run.log</code> (82-file Astral)</span>
+      <span>2026-09-09</span>
+      <span>Spec status: term decisions from Brendan's CSV review applied; open terms marked in the glossary</span>
+      <span>Tree: master <code>794cb6a5d8</code> (#4646) merged into the branch; line numbers remapped from the morning inventory (7 lines removed, 8 added)</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#summary">Summary</a>
+    <a href="#glossary">Internal vocabulary</a>
+    <a href="#user">A &middot; User-facing lines</a>
+    <a href="#leaks">B1 &middot; Developer lines in the default log</a>
+    <a href="#gated">B2 &middot; Gated diagnostics</a>
+    <a href="#devwarn">C &middot; Warnings written for developers</a>
+    <a href="#fix">What to change</a>
+  </nav>
+
+  <section id="summary">
+    <h2>Summary</h2>
+    <p class="prose">Osprey has one output path (a <code>CommandStatusWriter</code> behind <code>OspreyOutput.Out</code>), so every line can be traced to a call site. There are <b class="count">583</b> emitting call sites outside the tests, counted on master at <code>794cb6a5d8</code> (PR #4646, which retired <code>--input-scores</code>) as merged into this branch. Only the first tier below reaches a user who runs Osprey with no diagnostic flags.</p>
+    <div class="tierbar" role="img" aria-label="583 call sites by the flag that exposes them: 399 default, 83 perf-stats, 35 model-diagnostics, 31 diagnostic dumps, 20 verbose, 12 FDRBench, 3 memory">
+      <span style="width:68.4%; background: var(--accent)"></span>
+      <span style="width:14.3%; background: var(--muted)"></span>
+      <span style="width:6.0%; background: var(--medium)"></span>
+      <span style="width:5.3%; background: var(--high)"></span>
+      <span style="width:3.4%; background: var(--low)"></span>
+      <span style="width:2.1%; background: var(--stamp)"></span>
+      <span style="width:0.5%; background: var(--ink)"></span>
+    </div>
+    <div class="tierlegend">
+      <div><span class="swatch" style="background: var(--accent)"></span><span><b>399</b> default log <small>(every run)</small></span></div>
+      <div><span class="swatch" style="background: var(--muted)"></span><span><b>83</b> <code>--perf-stats</code> <small>[COUNT] [TIMING] [BENCH] [STAGE-WALL]</small></span></div>
+      <div><span class="swatch" style="background: var(--medium)"></span><span><b>35</b> <code>--model-diagnostics</code></span></div>
+      <div><span class="swatch" style="background: var(--high)"></span><span><b>31</b> <code>-d</code> / <code>OSPREY_DUMP_*</code> bisection dumps</span></div>
+      <div><span class="swatch" style="background: var(--low)"></span><span><b>20</b> <code>--verbose</code></span></div>
+      <div><span class="swatch" style="background: var(--stamp)"></span><span><b>12</b> <code>--fdrbench</code> / entrapment</span></div>
+      <div><span class="swatch" style="background: var(--ink)"></span><span><b>3</b> <code>OSPREY_LOG_MEMORY</code></span></div>
+    </div>
+    <p class="prose">The gating itself is in good shape: timing, count, memory and bisection lines are already kept out of the default log. The problem is inside the default tier. Of its 399 lines, <b class="count">47</b> contain a C# method, class, task or variable name, <b class="count">53</b> say "sidecar", <b class="count">15</b> name an <code>OSPREY_*</code> environment variable, and roughly <b class="count">120</b> use at least one term that exists only inside the codebase (compaction, survivors, hydrate, stratum, base_id, fold, bundle, stubs, projection). Two of the worst lines print in every default run, and one of them announces the <em>default</em> second-pass mode by its environment-variable name.</p>
+    <p class="prose">This page is the developing spec. Brendan's term-level decisions from the CSV review of 2026-09-09 are applied to the glossary and to the rewrites below; the glossary's Decision column marks the terms still open.</p>
+    <div class="note"><b>Two findings from the real logs.</b> In the 82-file SEA-AD run, 82 of the 369 log lines are the same developer note repeated once per file ("Loaded N FDR stubs (features not loaded - not read on this path)"). In the Stellar run, the first-pass FDR section opens with a method name: "[PATH] First-pass streaming ingest (RunStreamingFirstPass): 1448698 rows".</div>
+  </section>
+
+  <section id="glossary">
+    <h2>Internal vocabulary that reaches the default log</h2>
+    <p class="prose">These words come from class, struct and design-document names, not from proteomics. Counts are default-tier call sites containing the term. "Say instead" is the rename map for the lines in Table A; the Decision column carries Brendan's notes from the CSV review, with the terms nobody has ruled on marked open.</p>
+    <div class="tablewrap">
+      <table class="gloss">
+        <colgroup><col style="width:14%"><col style="width:5%"><col style="width:36%"><col style="width:22%"><col style="width:23%"></colgroup>
+        <thead><tr><th>Term in log</th><th>Sites</th><th>What it means inside Osprey</th><th>Say instead</th><th>Decision (2026-09-09)</th></tr></thead>
+        <tbody>
+          <tr><td>sidecar</td><td class="cnt">53</td><td>Any derived file written beside an input or the output: <code>.calibration.json</code>, <code>.1st-pass.fdr_scores.bin</code>, <code>.reconciliation.json</code>, <code>.2nd-pass.fdr_scores.bin</code>, <code>.osprey.task</code>. A code-architecture term (docs/00, docs/14) that entered the project's vocabulary during development.</td><td class="plain">intermediate file (or intermediate results file)</td><td class="dec"><span class="pill ok">decided</span> "intermediate" is the key word: a researcher reads it as "not the end result".</td></tr>
+          <tr><td>entry / entries</td><td class="cnt">61</td><td>One library precursor (target or decoy) scored in one run. "1448698 entries" is the count of scored candidates across all files. A development shorthand for a library row, coined for assertions such as "no O(files x entries)".</td><td class="plain">precursor candidates (targets + decoys)</td><td class="dec"><span class="pill ok">decided</span> "candidates" replaces "entries" and "library entries" throughout.</td></tr>
+          <tr><td>counts without thousands separators</td><td class="cnt">~all</td><td>Only 3 of the 582 call sites format a count with <code>N0</code>. Five- to seven-digit counts (1448698 entries, 2110341 observations) are common and their magnitude is hard to read.</td><td class="plain"><code>{0:N0}</code> for every count</td><td class="dec"><span class="pill ok">decided</span> Global rule, not a per-line fix.</td></tr>
+          <tr><td>compaction / compact</td><td class="cnt">21</td><td>Discarding scored candidates that nothing downstream needs, so memory is bounded. The gate keeps a candidate whose run-level peptide q is within the reconciliation-compaction FDR (default 1%), or whose protein q passes protein FDR, or whose protein has 2 or more detected peptides.</td><td class="plain">say what was kept: "kept N of M precursor candidates for cross-run reconciliation"</td><td class="dec"><span class="pill ok">decided</span> Developer term only.</td></tr>
+          <tr><td>reconciliation / cross-run reconciliation</td><td class="cnt">25</td><td>Cross-run alignment of peak boundaries plus gap-filling (docs/10). Not a standard term; the nearest published concept is TRIC (transfer of identification confidence, Rost et al. 2016), which solves the same problem differently.</td><td class="plain">keep; "cross-run reconciliation" on first use</td><td class="dec"><span class="pill ok">decided</span> "cross-run" carries the meaning; probably the best term available.</td></tr>
+          <tr><td>stratum (protein-compact stratum)</td><td class="cnt">7</td><td>The precursor candidates (targets and paired decoys) of every protein with 2 or more distinct peptides detected in the first pass. Compaction first keeps candidates detected at the run-level cutoff, then adds back every candidate of these proteins; in the second pass only these candidates get new q-values, the rest keep their first-pass q.</td><td class="plain">"precursor candidates from proteins with 2 or more detections"; where the flag itself is named, "protein-compact subset"</td><td class="dec"><span class="pill ok">decided</span> The long q-value explanation is too long for a log line. "Detections" is the general word for passing the current cutoff (run-level q &lt; 1% today, which has its own issues) without saying which cutoff. "Set" alone is as opaque as "stratum".</td></tr>
+          <tr><td>survivors / survivor pool / retained set</td><td class="cnt">24</td><td>The candidates that pass compaction and are carried into reconciliation and the second pass.</td><td class="plain">precursor candidates carried forward / kept for cross-run reconciliation</td><td class="dec"><span class="pill medium">open</span> No objection recorded.</td></tr>
+          <tr><td>base_id / base ids</td><td class="cnt">15</td><td>The library entry id shared by a target and its paired decoy (decoy bit stripped).</td><td class="plain">precursor candidates</td><td class="dec"><span class="pill ok">decided</span> Same word as for "entries", for consistency.</td></tr>
+          <tr><td>hydrate / rehydrate / hydration</td><td class="cnt">14</td><td>Reload a stage's in-memory state from files on disk instead of recomputing it (resume and HPC paths).</td><td class="plain">load / reload from intermediate files</td><td class="dec"><span class="pill medium">open</span> No objection recorded.</td></tr>
+          <tr><td>fold (verb), folding</td><td class="cnt">13</td><td>Process one run at a time and drop it before the next, so memory does not grow with file count. Unrelated to the cross-validation "fold" in the same log.</td><td class="plain">one run at a time</td><td class="dec"><span class="pill ok">decided</span> Not liked even as a developer term.</td></tr>
+          <tr><td>projection</td><td class="cnt">2</td><td>The 32-byte slice of each scored row (id, score, drive fields) that first-pass FDR loads instead of the whole record (<code>FdrProjection</code>).</td><td class="plain">"reading scored candidates from N files for FDR"</td><td class="dec"><span class="pill ok">decided</span> Meaningless to a user.</td></tr>
+          <tr><td>bundle / envelope</td><td class="cnt">9</td><td>The collection of per-file intermediate files the rescore stage needs: peak re-picks, boundary imputations, missing-peak imputations and refined RT calibrations from cross-run reconciliation.</td><td class="plain">cross-run reconciliation files</td><td class="dec"><span class="pill ok">decided</span> "Reconciliation plan" was opaque even to the developer, and "results" was rejected because to a user it means end results, not files they will never open. "Reconciliation files" already says intermediate, so that word is redundant here.</td></tr>
+          <tr><td>stubs (FDR stubs)</td><td class="cnt">6</td><td>Lightweight <code>FdrEntry</code> records loaded without their feature columns.</td><td class="plain">"Loading FDR values from intermediate files"</td><td class="dec"><span class="pill ok">decided</span> One progress heading in this wording replaces the per-file lines.</td></tr>
+          <tr><td>scalars (pass-1 scalars)</td><td class="cnt">5</td><td>The per-candidate first-pass values (Score, PEP, experiment aggregate score) restored from an intermediate file.</td><td class="plain">first-pass scores</td><td class="dec"><span class="pill medium">open</span> No objection recorded.</td></tr>
+          <tr><td>frozen model</td><td class="cnt">7</td><td>The first-pass SVM applied unchanged in the second pass. The phrase exists to record that the code no longer retrains, which was wrong and never released.</td><td class="plain">drop from user text</td><td class="dec"><span class="pill ok">decided</span> If a test needs it, it goes to a diagnostic or <code>--verbose</code> channel.</td></tr>
+          <tr><td>competition</td><td class="cnt">10</td><td>Target-decoy competition. Recognizable to a Percolator user once spelled out; on its own ("streaming the competition") it is not.</td><td class="plain">target-decoy competition</td><td class="dec"><span class="pill medium">open</span> No objection recorded.</td></tr>
+          <tr><td>use_cwt / forced / gap-fill / action(s)</td><td class="cnt">14</td><td>The three kinds of reconciliation change planned per (file, peptide): re-pick the peak with the CWT peak finder, force the boundaries from the cross-run consensus, integrate a peptide not detected in this run.</td><td class="plain">peaks re-picked / peak boundaries imputed / peak boundaries imputed for missing peaks</td><td class="dec"><span class="pill ok">decided</span> Skyline's "peak boundary imputation" vocabulary.</td></tr>
+          <tr><td>Stage 1-4 / 5 / 6 / 7</td><td class="cnt">12</td><td>Internal numbering: 1-4 per-file scoring, 5 first-pass FDR, 6 reconciliation + rescore, 7 second-pass FDR, protein FDR and blib.</td><td class="plain">never a stage number; the <code>--task</code> names are fine because the command-line help covers them</td><td class="dec"><span class="pill ok">decided</span> Stages are not expected to be understood by users.</td></tr>
+          <tr><td>resident</td><td class="cnt">5</td><td>Held in memory.</td><td class="plain">in memory, or move the line to diagnostic output</td><td class="dec"><span class="pill ok">decided</span> Assess each line: if it serves testing rather than the user, it is diagnostic output.</td></tr>
+          <tr><td>worker / fan-out / join</td><td class="cnt">5</td><td>HPC vocabulary: a per-file task leg versus the merge leg that combines them.</td><td class="plain">per-file run / merge</td><td class="dec"><span class="pill medium">open</span> No objection recorded.</td></tr>
+          <tr><td>byproduct, interned, parquet index</td><td class="cnt">4</td><td>Memory-management internals: in-process products passed between tasks, string de-duplication, row positions in the <code>.scores.parquet</code> file.</td><td class="plain">move the lines to diagnostic output</td><td class="dec"><span class="pill ok">decided</span> Same rule as "resident".</td></tr>
+          <tr><td>boundary file pair</td><td class="cnt">3</td><td>The <code>.reconciliation.json</code> + <code>.1st-pass.fdr_scores.bin</code> pair that hands work from the first-pass leg to a rescore leg.</td><td class="plain">intermediate files</td><td class="dec"><span class="pill ok">decided</span> That the next task needs them is too internal a detail to state.</td></tr>
+          <tr><td>coelution analysis / coelution results</td><td class="cnt">6</td><td>The Stage 1-4 fragment co-elution scoring.</td><td class="plain">keep</td><td class="dec"><span class="pill ok">decided</span> A known mass-spec term, especially for DIA; it says the XIC shapes match, and Skyline has a "coelution score".</td></tr>
+          <tr><td>enum ToString (UnitResolution, DiannTsv, Reverse, percolator)</td><td class="cnt">4</td><td>Enum names printed as-is in the startup banner and decoy line.</td><td class="plain">Skyline's <code>GetLocalizedString(this Enum)</code> extension over a <code>LOCALIZED_VALUES</code> array of resource strings</td><td class="dec"><span class="pill ok">decided</span> Keeps the door open to moving Osprey text to RESX for Chinese and Japanese, likely after the initial release.</td></tr>
+          <tr><td>[TASK] Name:status</td><td class="cnt">3</td><td>Task markers used as section headers; parsed by <code>ai/scripts/perfviz.py</code> and asserted by <code>regression.ps1</code>.</td><td class="plain">keep as is</td><td class="dec"><span class="pill ok">decided</span> The names are the <code>--task</code> argument values and have real value to a user learning the HPC split.</td></tr>
+          <tr><td>OSPREY_* env var named on a default path</td><td class="cnt">15</td><td>A1 names <code>OSPREY_PASS2_QVALUE=protein-compact</code> although it is the default.</td><td class="plain">name a variable only when the user set it</td><td class="dec"><span class="pill ok">decided</span> Environment variables are developer-facing; a default path gives no sign the user knew the variable existed.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="user">
+    <h2>A &middot; User-facing lines, by likelihood of confusion</h2>
+    <p class="prose">Lines a researcher sees in an ordinary run (no <code>--verbose</code>, <code>--perf-stats</code>, <code>-d</code> or environment variables). <b>High</b> means the line prints in every default run and uses vocabulary the reader cannot map to anything they know, or identifies itself by a code or environment-variable name. <b>Medium</b> means the reader can guess, but the phrasing is internal or reads like a code comment. <b>Low</b> means resume, error or HPC-task paths, or a mild wording issue. Jargon is <span class="jargon">marked</span>; a suggested rewrite follows each line. Paths are checkout-relative under <code>pwiz_tools/Osprey</code>.</p>
+
+    <div class="group"><h3>High</h3><span class="def">every default run, no plain-language reading available</span></div>
+    <div class="tablewrap">
+      <table>
+        <colgroup><col style="width:4%"><col style="width:52%"><col style="width:44%"></colgroup>
+        <thead><tr><th>#</th><th>Current line and suggested rewrite</th><th>Why it confuses</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="n">A1</td>
+            <td>
+              <pre class="log"><span class="jargon">OSPREY_PASS2_QVALUE=protein-compact</span>: recomputing q/PEP by <span class="jargon">streaming</span> 82 file(s), <span class="jargon">frozen-model</span> scores swapped in for up to 2110341 <span class="jargon">reconciled survivor observations</span> - no retrain, one file <span class="jargon">resident</span> at a time, <span class="jargon">competition CONSTRAINED to the 165339-base_id protein stratum</span>.</pre>
+              <span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:1866</span>
+              <pre class="log better">Second-pass FDR over 82 files: recomputing q-values for 165,339 precursor candidates from proteins with 2 or more detections; other candidates keep their first-pass q-values.</pre>
+            </td>
+            <td class="why"><p>This is the <em>default</em> mode, yet the line leads with an environment-variable assignment the user never made. Six internal terms in one sentence. Printed once per run in the second pass.</p><p>The mode name should only appear when the user actually set <code>OSPREY_PASS2_QVALUE</code>. And "competition CONSTRAINED to the stratum" has to become a statement about q-values, because that is the only part a user can act on: which precursors were re-tested and which were not.</p><p>Decided: never name an environment variable on a default path; "frozen model / no retrain" is dropped from user text; "detections" is the general word for candidates that passed the current cutoff without committing to which cutoff.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A2</td>
+            <td>
+              <pre class="log"><span class="jargon">protein-compact</span>: 4177 proteins with &gt;=2 detected peptides -&gt; <span class="jargon">stratum</span> of 165339 <span class="jargon">base_ids</span> (from 30846 detected peptides).</pre>
+              <span class="where">Osprey.Tasks/FirstPassFdrTask.cs:2768</span>
+              <pre class="log better">4,177 proteins have 2 or more detections (30,846 detected peptides); their 165,339 precursor candidates go to second-pass FDR.</pre>
+            </td>
+            <td class="why"><p>Prints in every default run right after protein FDR. "stratum" and "base_ids" are struct-level names; the arrow is a code idiom. What the line is actually announcing is a decision about the results: which precursors get new q-values in the second pass. Say that, and the count of 4,177 proteins becomes meaningful.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A3</td>
+            <td>
+              <pre class="log">[PATH] First-pass <span class="jargon">streaming ingest (RunStreamingFirstPass)</span>: 1448698 rows</pre>
+              <span class="where">Osprey.FDR/PercolatorScorer.cs:777 &middot; twin: Osprey.FDR/PercolatorEngine.cs:818 "[PATH] {0} projection streaming ingest (RunStreamingIntoProjection): {1} rows"</span>
+              <pre class="log demote">Move behind --verbose (it is a code-path assertion for the regression gate). "Running First-pass Percolator on 1448698 entries..." already tells the user what is happening.</pre>
+            </td>
+            <td class="why"><p>A C# method name in the log, with a tag ([PATH]) nothing documents. It is the first line of the FDR section in the Stellar log, so it is the line a user reads when they want to know FDR has started.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A4</td>
+            <td>
+              <pre class="log"><span class="jargon">Streaming projection</span> from 3 file(s)...</pre>
+              <span class="where">was Osprey.Tasks/PerFileScoringTask.cs:454; removed on master by #4646 together with its sibling "Reading scored rows from N file(s) for first-pass FDR"</span>
+              <pre class="log demote">Resolved on master. The only remaining "projection" in the default log is the [PATH] line in A3, which goes behind --perf-stats.</pre>
+            </td>
+            <td class="why"><p>"Projection" is the <code>FdrProjection</code> struct, the compact per-row slice loaded for FDR. To a user it suggests a geometric or statistical projection. Kept in the table because it was the example that prompted this review, and so the word is on the do-not-use list for new lines.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A5</td>
+            <td>
+              <pre class="log"><span class="jargon">Interned library strings</span>: 229534 distinct / 805275 total (71.5% <span class="jargon">collapsed</span>)</pre>
+              <span class="where">Osprey.Core/LibraryStringInterner.cs:170 &middot; twin: Osprey.IO/DecoyPairingManifest.cs:358 "Library-decoy mode: interned manifest protein accessions (...)"</span>
+              <pre class="log demote">Move behind --verbose. Prints twice per library load (once for targets, once after decoys), in every leg of every run.</pre>
+            </td>
+            <td class="why"><p>String interning is a memory technique. There is nothing a user can do with this number, and it appears in the first ten lines of every run, before any result.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A6</td>
+            <td>
+              <pre class="log">First-pass <span class="jargon">compaction</span>: 1448698 -&gt; 996439 entries (166724 passing <span class="jargon">base_ids</span>)</pre>
+              <span class="where">Osprey.Tasks/FirstPassFdrTask.cs:1793, :1854, :3498 &middot; Osprey.Tasks/PerFileRescoreTask.cs:822 ("--task SecondPassFDR compaction: ... ({3} action(s) dropped)")</span>
+              <pre class="log better">Kept 996,439 of 1,448,698 precursor candidates for cross-run reconciliation.</pre>
+            </td>
+            <td class="why"><p>"Compaction" is a memory-bounding step; the user cares that a subset is carried forward. The arrow and "base_ids" are code idioms. The base_id count mixes three admission rules (run-level peptide q within the compaction FDR, protein q within protein FDR, or a protein with 2 or more detections), so it belongs behind <code>--verbose</code> rather than in a one-line summary.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A7</td>
+            <td>
+              <pre class="log">Wrote reconciliation.json for Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20 (23509 <span class="jargon">use_cwt</span> + 13416 <span class="jargon">forced</span> + 131 gap-fill)</pre>
+              <span class="where">Osprey.Tasks/FirstPassFdrTask.cs:2262</span>
+              <pre class="log better">Cross-run reconciliation for Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20: 23,509 peaks to re-pick, 13,416 peak boundaries to impute, 131 missing peaks.</pre>
+            </td>
+            <td class="why"><p>"use_cwt" is the JSON action-type identifier. Once per file, so it dominates the reconciliation section of a large run. Decided: use Skyline's "peak boundary imputation" vocabulary for the forced and gap-fill actions.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A8</td>
+            <td>
+              <pre class="log">Reconciliation: 110111 <span class="jargon">per-(file, entry) actions</span> planned</pre>
+              <span class="where">Osprey.Tasks/Stage6Planner.cs:460</span>
+              <pre class="log better">Cross-run reconciliation: 110,111 peak re-picks and boundary imputations planned across 3 files.</pre>
+            </td>
+            <td class="why"><p>Tuple notation from the planner's data model.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A9</td>
+            <td>
+              <pre class="log">Loaded 483102 <span class="jargon">FDR stubs</span> (features not loaded - <span class="jargon">not read on this path</span>)</pre>
+              <span class="where">Osprey.Tasks/PerFileScoringTask.cs:1604, :1767 &middot; sibling :1571 "Loaded {0} FDR stubs + features"</span>
+              <pre class="log better">Loading FDR values from intermediate files for 82 files...</pre>
+            </td>
+            <td class="why"><p>Printed once per file. In the 82-file SEA-AD run it is 82 of 369 lines. "Stubs" and "path" are code words; the parenthetical is a comment to a future developer. Decided: one progress heading in this wording replaces the per-file lines; per-file detail goes behind <code>--verbose</code>.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A10</td>
+            <td>
+              <pre class="log"><span class="jargon">Hydrating reconciliation bundle</span>...
+<span class="jargon">Hydrated rescore bundle</span> for 82 file(s) (2049133 reconciliation <span class="jargon">actions</span>, 82 refined RT calibration(s), 18237 gap-fill target(s))</pre>
+              <span class="where">Osprey.Tasks/RescoreHydration.cs:347, :577 &middot; Osprey.Tasks/PerFileScoringTask.cs:2003</span>
+              <pre class="log better">Loading cross-run reconciliation files...
+Loaded cross-run reconciliation files for 82 runs: 2,049,133 peak re-picks and boundary imputations, 18,237 missing peaks, 82 refined RT calibrations.</pre>
+            </td>
+            <td class="why"><p>"Hydrate" and "bundle" are both internal. Prints in every second-pass run. Decided: "cross-run reconciliation files". "Reconciliation plan" was opaque, and "results" reads as end results to a user; "reconciliation files" already conveys intermediate.</p><p><b>Who writes and who loads.</b> The files are written by FirstPassFDR (<code>.reconciliation.json</code>, <code>.1st-pass.fdr_scores.bin</code>). The "Hydrating reconciliation bundle" heading is printed by whichever task rebuilds the first-pass-to-rescore state from disk in a <em>later process</em>: PerFileScoringTask's <code>HydrateRescoreBundleIfPresent</code> (PerFileScoringTask.cs:604, :1966) when a <code>--task</code> leg finds those files already beside its inputs, and FirstPassFdrTask's resume (FirstPassFdrTask.cs:1213, :1339). PerFileRescoreTask itself loads one run at a time through <code>HydrateOneRun</code> and prints the A22 line instead. That the scoring task knows about a file a later task writes is a leftover of the pre-#4646 route; #4646 makes the per-run and streamed-join routes skip it, so the heading now appears only on the remaining resident route.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A11</td>
+            <td>
+              <pre class="log">Seeding <span class="jargon">pass-1 scalars</span> from 82 file(s)...
+Collecting <span class="jargon">pass-2 survivors</span> from 82 file(s)...
+protein-compact: <span class="jargon">streaming the competition</span> over 82 file(s)...
+protein-compact: writing experiment q to 82 file(s)...
+Patching pass-2 protein q into 82 <span class="jargon">sidecar(s)</span>...
+Reloading 2nd-pass FDR scores (<span class="jargon">post-write</span>) for 82 file(s)...</pre>
+              <span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:749, :1747, :1965, :2212, :1456, :567 (ProgressReporter headings)</span>
+              <pre class="log better">Restoring first-pass scores for 82 files...
+Collecting second-pass precursor candidates from 82 files...
+Recomputing q-values for precursor candidates from proteins with 2 or more detections across 82 files...
+Writing experiment-level q-values for 82 files...
+Writing protein q-values for 82 files...
+Checking second-pass intermediate files for 82 files...</pre>
+            </td>
+            <td class="why"><p>The six progress headings of the second pass, in order. Together they narrate the code structure (seed, collect, stream, patch, reload) rather than what the user is waiting for. "protein-compact:" as a prefix reads as a file or protein name.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A12</td>
+            <td>
+              <pre class="log">Applying the <span class="jargon">retained set</span> across 82 file(s)...</pre>
+              <span class="where">Osprey.Tasks/RescoreCompaction.cs:226</span>
+              <pre class="log better">Trimming each file to the precursor candidates kept for cross-run reconciliation...</pre>
+            </td>
+            <td class="why"><p>Design-document term.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A13</td>
+            <td>
+              <pre class="log">Resolution: <span class="jargon">UnitResolution</span>
+Library: hela-filtered-SkylineAI_spectral_library.tsv (<span class="jargon">DiannTsv</span>)
+Generating decoys using <span class="jargon">Reverse</span> method...</pre>
+              <span class="where">Osprey/Program.cs:309, :281 &middot; Osprey.Scoring/DecoyGenerator.cs:229</span>
+              <pre class="log better">Resolution: unit
+Library: hela-filtered-SkylineAI_spectral_library.tsv (DIA-NN TSV)
+Generating reverse-sequence decoys...</pre>
+            </td>
+            <td class="why"><p>Enum <code>ToString()</code> leaking into the startup banner. The CLI accepts <code>--resolution unit|hram|auto</code>, so the banner should echo the same words. "HRAM" already prints correctly on the Astral run, which makes "UnitResolution" look like a different concept.</p><p>Decided: follow Skyline's pattern, a <code>GetLocalizedString(this Enum)</code> extension over a <code>LOCALIZED_VALUES</code> array of resource strings (see <code>Skyline/Model/Export.cs</code>), so a later move of Osprey text to RESX for Chinese and Japanese finds these already in place.</p></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="group"><h3>Medium</h3><span class="def">default run, guessable, but phrased from inside the code</span></div>
+    <div class="tablewrap">
+      <table>
+        <colgroup><col style="width:4%"><col style="width:52%"><col style="width:44%"></colgroup>
+        <thead><tr><th>#</th><th>Current line and suggested rewrite</th><th>Why it confuses</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="n">A14</td>
+            <td>
+              <pre class="log">[TASK] <span class="jargon m">PerFileScoring</span>:starting
+[TASK] <span class="jargon m">FirstPassFDR</span>:done (90.3s)
+[TASK] <span class="jargon m">SecondPassFDR</span>:skipping (outputs valid)</pre>
+              <span class="where">Osprey/AnalysisPipeline.cs:183, :191, :99</span>
+              <pre class="log demote">Keep as is (decided 2026-09-09).</pre>
+            </td>
+            <td class="why"><p>The names are the <code>--task</code> argument values, which the command-line help documents, and they have real value to a user learning the HPC task split. Kept in the table only to record the decision.</p><p><code>ai/scripts/perfviz.py</code> splits on <code>[TASK]</code> and <code>regression.ps1</code> asserts the exact <code>[TASK] Name:skipping</code> text, so leaving them alone also avoids a tool change.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A15</td>
+            <td>
+              <pre class="log">First-pass: 3 of 3 file(s) had their <span class="jargon m">sidecar</span> written during pass 1, so pass 2 read those scores back instead of reloading features.</pre>
+              <span class="where">Osprey.Tasks/FirstPassFdrTask.cs:3252</span>
+              <pre class="log demote">Move behind --verbose. Nothing here changes the result; it describes which of two code paths ran.</pre>
+            </td>
+            <td class="why"><p>"pass 1 / pass 2" here are the two internal score passes of first-pass FDR, not the first and second pass of the pipeline. A reader who has just seen "First-pass Percolator results" cannot tell them apart.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A16</td>
+            <td>
+              <pre class="log">Persisted the trained 1st-pass model (3 file <span class="jargon m">sidecar(s)</span>); a run interrupted after this point resumes without retraining.
+Persisted the <span class="jargon m">protein-compact stratum</span> (3 file sidecar(s)).
+Wrote experiment-scope FDR <span class="jargon m">sidecar</span>: D:\...\out.1st-pass.fdr_experiment.bin (484747 distinct <span class="jargon m">entry ids</span>)
+Wrote analysis-wide <span class="jargon m">retained base_id</span> summary: 166724 base_id(s) across 3 run(s)</pre>
+              <span class="where">Osprey.Tasks/FirstPassFdrTask.cs:3446, :2822, :2152, :2347 &middot; Osprey.Tasks/Pass2FdrSidecar.cs:1556</span>
+              <pre class="log better">Saved the first-pass model beside each input; an interrupted run resumes from here without retraining.
+(the other three: move behind --verbose)</pre>
+            </td>
+            <td class="why"><p>Four "we saved an internal file" lines in a row after protein FDR. The first one carries a fact the user benefits from (resume point). The others name files the user is not expected to open.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A17</td>
+            <td>
+              <pre class="log">Double-counting deduplication: removed 2081 entries (1167 targets, 914 decoys; 482891 remaining)</pre>
+              <span class="where">Osprey.Scoring/ScoringPipeline.cs:485</span>
+              <pre class="log better">Removed 2,081 duplicate candidates picked at the same retention time in overlapping isolation windows (1,167 targets, 914 decoys); 482,891 remain.</pre>
+            </td>
+            <td class="why"><p>"Double-counting" describes the bug the step prevents, not what was removed. Once per file.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A18</td>
+            <td>
+              <pre class="log">Reconciliation multi-charge consensus: 22037 entries need re-scoring across 3 files
+Reconciliation consensus: 30846 target peptides, 30832 decoy peptides</pre>
+              <span class="where">Osprey.Tasks/Stage6Planner.cs:263, :312</span>
+              <pre class="log better">Cross-run consensus: peak boundaries agreed for 30,846 target and 30,832 decoy peptides; 22,037 additional charge states will be re-scored.</pre>
+            </td>
+            <td class="why"><p>Two lines that say what was computed but not what for. "Consensus" needs the words "cross-run" and "peak boundaries" to land.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A19</td>
+            <td>
+              <pre class="log">Released library fragments for 318904 of 485628 entries (166724 <span class="jargon m">base_ids retained</span> for rescore + gap-fill)
+[DROP] Released 3 <span class="jargon m">byproduct(s)</span> at the task boundary; the library stays <span class="jargon m">resident</span>.
+Sequence pool: 30846 distinct seeded from the library, 0 <span class="jargon m">sidecar</span> lookup(s) missed it</pre>
+              <span class="where">Osprey.Tasks/FirstPassFdrTask.cs:2723 &middot; Osprey.Tasks/SecondPassFdrTask.cs:971 &middot; Osprey.Tasks/PipelineContext.cs:371 &middot; Osprey.Tasks/PipelineByproducts.cs:126</span>
+              <pre class="log demote">Move all three behind --verbose (or OSPREY_LOG_MEMORY for the first two). They are memory bookkeeping.</pre>
+            </td>
+            <td class="why"><p>Each describes freeing memory. None affects the result.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A20</td>
+            <td>
+              <pre class="log">82/82 file(s) have no precomputed second-pass FDR scores - computing them here from the reconciled features <span class="jargon m">(reused distributed-run code path)</span>.
+Second-pass <span class="jargon m">fold</span> reading the <span class="jargon m">worker's written answer</span> for all 82 file(s); no 1st-pass sidecar is opened.
+Second-pass fold has a worker answer for {0} of {1} file(s); the remaining {2} are RECOMPUTED from their 1st-pass sidecars. A node given complete worker output would open none.</pre>
+              <span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:213, :2139, :2145</span>
+              <pre class="log better">Computing second-pass FDR scores for 82 files.
+(the other two: move behind --verbose)</pre>
+            </td>
+            <td class="why"><p>The first line is the normal case for a straight-through run, yet it is phrased as a fallback with a parenthetical aimed at a code reviewer. The other two are HPC provenance notes.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A21</td>
+            <td>
+              <pre class="log">Reloaded persisted 1st-pass model <span class="jargon m">sidecar</span> for <span class="jargon m">frozen</span> 2nd-pass (pass-1 experiment aggregation: max).
+Reloaded the persisted <span class="jargon m">protein-compact stratum</span> (165339 base ids).
+Reusing the persisted first-pass model; no training subset is loaded and no SVM is trained.</pre>
+              <span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:470, :479 &middot; Osprey.FDR/PercolatorScorer.cs:896</span>
+              <pre class="log better">Reusing the saved first-pass model.</pre>
+            </td>
+            <td class="why"><p>Three variants of the same fact. "Frozen" and "no retraining" describe what the code no longer does (a retrain that was wrong and never released); dropped from user text, <code>--verbose</code> only if a test needs it.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A22</td>
+            <td>
+              <pre class="log">Per-run rescore: <span class="jargon m">hydrating</span> each of 82 run(s) from its own artifacts (no all-runs pre-load; 165339 retained base_id(s) read once).
+Second-pass join: <span class="jargon m">folding</span> over 82 run(s), each rebuilt from its own artifacts and dropped (no all-runs survivor pool; ...). {2} of {0} run(s) carry a current 2nd-pass sidecar and are rebuilt without opening any 1st-pass file.
+Per-run rescore: FirstPassFDR publishes the <span class="jargon m">survivor loader</span> only; no experiment-wide <span class="jargon m">bundle</span> is built for {0} run(s).
+{0} run(s) will be <span class="jargon m">hydrated</span> one at a time by {1}; no all-runs pre-load.</pre>
+              <span class="where">Osprey.Tasks/PerFileRescoreTask.cs:2042, :2172, :2781 &middot; Osprey.Tasks/FirstPassFdrTask.cs:1074 &middot; Osprey.Tasks/PerFileScoringTask.cs:1808</span>
+              <pre class="log better">Re-scoring 82 runs one at a time.
+(the rest: move behind --verbose)</pre>
+            </td>
+            <td class="why"><p>These record the memory strategy (one run at a time) in the vocabulary of the design doc. The last one prints a consumer type name in <code>{1}</code>. #4646 dropped the "--input-scores:" prefix from that line and added a second "Second-pass join: folding over N run(s)" variant at PerFileRescoreTask.cs:2781; the wording issue is unchanged.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A23</td>
+            <td>
+              <pre class="log">Coelution analysis complete. 1448698 total scored entries across 3 files
+Running percolator FDR control on coelution results...</pre>
+              <span class="where">Osprey.Tasks/PerFileScoringTask.cs:485, :580, :878 &middot; Osprey.Tasks/FirstPassFdrTask.cs:508 (prints config.FdrMethod enum)</span>
+              <pre class="log better">Coelution scoring complete: 1,448,698 precursor candidates (targets + decoys) scored across 3 files.
+Running Percolator FDR control on the scored candidates...</pre>
+            </td>
+            <td class="why"><p>"Coelution" stays: it is a known DIA term and Skyline has a "coelution score" (decided). "entries" is never defined, and this is the line where "precursor candidates" would land. The second line prints an enum value in lower case.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A24</td>
+            <td>
+              <pre class="log">Refined calibration is a linear fit over {0} points that fails the <span class="jargon m">span/plausibility guards</span>, keeping original calibration
+Refinement pass skipped: pass 1 used a linear fit ({0} points); narrowing the window from it would be <span class="jargon m">self-confirming</span>.</pre>
+              <span class="where">Osprey.Tasks/Calibrator.cs:636, :586</span>
+              <pre class="log better">Refined RT calibration rejected: a linear fit over N points spans too little of the gradient. Keeping the first calibration.
+RT calibration refinement skipped: the first pass was a linear fit over N points, so a narrower window would only re-find the same points.</pre>
+            </td>
+            <td class="why"><p>The reasoning is right; "guards" is code vocabulary and "self-confirming" is a design note.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A25</td>
+            <td>
+              <pre class="log">--task PerFileScoring: <span class="jargon m">Stage 1-4</span> complete. 1448698 entries scored across 3 file(s). Per-file `.scores.parquet` written next to each input mzML. Skipping FDR and blib output.
+--task FirstPassFDR: <span class="jargon m">Stage 5</span> + reconciliation planning complete; wrote 3 reconciliation.json + matching fdr_scores.bin <span class="jargon m">sidecar pair(s)</span>. Exiting before <span class="jargon m">Stage 6</span> rescore.</pre>
+              <span class="where">Osprey.Tasks/PerFileScoringTask.cs:963 &middot; Osprey.Tasks/FirstPassFdrTask.cs:2000</span>
+              <pre class="log better">--task PerFileScoring complete: 1,448,698 candidates scored across 3 files; .scores.parquet written beside each input. FDR and .blib output are left to the next task.
+--task FirstPassFDR complete: first-pass FDR and reconciliation planning done for 3 files; the next task (PerFileRescoring) reads the .reconciliation.json and .1st-pass.fdr_scores.bin files written beside each input.</pre>
+            </td>
+            <td class="why"><p>HPC operators read these, so task names are fine, but the stage numbers are not documented anywhere the operator sees. Name the next task instead.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A31</td>
+            <td>
+              <pre class="log">{0} of {1} input(s) are absent and have no spectra cache; reading those from their <span class="jargon m">scores parquet</span>, which is what a task after <span class="jargon m">Stage 4</span> needs.
+<span class="err">[ERROR]</span> Input file not found, and it has neither a spectra cache nor a scores parquet to stand in for it: {0}</pre>
+              <span class="where">Osprey/Program.cs:266, :251 (new in #4646, replacing "Input file not found: {0}")</span>
+              <pre class="log better">{0} of {1} input file(s) are not present; using the intermediate scores file written beside each one.
+[ERROR] Input file not found, and no intermediate file exists to stand in for it: {0}</pre>
+            </td>
+            <td class="why"><p>New with #4646: the mechanism that replaced <code>--input-scores</code>. "Stage 4" is the internal numbering ruled out above, and "scores parquet" names the file format rather than what the file holds.</p></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="group"><h3>Low</h3><span class="def">resume, error or opt-in paths; mild wording</span></div>
+    <div class="tablewrap">
+      <table>
+        <colgroup><col style="width:4%"><col style="width:52%"><col style="width:44%"></colgroup>
+        <thead><tr><th>#</th><th>Current line and suggested rewrite</th><th>Why it confuses</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="n">A26</td>
+            <td>
+              <pre class="log">Resume: all {0} sidecars and the experiment sidecar are current - skipping the score passes, protein FDR and model diagnostics, and entering at the <span class="jargon m">compaction gate</span>.
+Resume rehydrate: streaming the first-pass bundle from {0} file(s) (one file's <span class="jargon m">pre-compaction pool resident</span> at a time).
+Rescore resume: {0} of {1} run(s) already carry a current 2nd-pass sidecar; re-scoring the remaining {2}.</pre>
+              <span class="where">Osprey.Tasks/FirstPassFdrTask.cs:3094, :1294 &middot; Osprey.Tasks/PerFileRescoreTask.cs:419</span>
+              <pre class="log better">Resuming: first-pass intermediate files for all N files are up to date; skipping first-pass scoring and protein FDR.
+Resuming: reloading first-pass intermediate files for N files.
+Resuming: N of M runs already have second-pass intermediate files; re-scoring the remaining K.</pre>
+            </td>
+            <td class="why"><p>Resume messages are where a user most wants reassurance that nothing was skipped wrongly. The third one is already good; the first two need the same shape.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A27</td>
+            <td>
+              <pre class="log"><span class="jargon m">OSPREY_PASS2_QVALUE=transfer</span>: pass-2 carries the pass-1 q through and re-maps ONLY the per-run q of reconciliation-moved peaks (frozen 1st-pass model + each file's own score-&gt;run-q table); experiment q is frozen by the best-peak anchor, no retrain.
+OSPREY_PASS2_QVALUE=transfer: per-run q transfer over {0} file(s) -- {1} unchanged (pass-1 q carried), {2} moved (run q re-mapped, experiment q carried), {3} gap-fill (new run q + carried experiment q)...</pre>
+              <span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:96, :2967</span>
+              <pre class="log better">Second-pass FDR (transfer mode): first-pass q-values are kept; only peaks moved by cross-run reconciliation get a new run-level q-value.</pre>
+            </td>
+            <td class="why"><p>Opt-in via environment variable, so naming it is right. The sentence is a design rationale; keep the one clause a user needs.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A28</td>
+            <td>
+              <pre class="log">--task ModelDiagnostics: a diagnostics <span class="jargon m">product</span> is missing for this analysis; <span class="jargon m">folding</span> it from the completed <span class="jargon m">artifacts</span>. No analysis is re-run - each pass produces its own report from its own sidecars, and every other output is left as it stands.</pre>
+              <span class="where">Osprey/Program.cs:454 &middot; similar: Osprey.Tasks/FirstPassFdrTask.cs:311, :362, :481 &middot; Osprey.Tasks/SecondPassFdrTask.cs:324, :640, :746</span>
+              <pre class="log better">--task ModelDiagnostics: building the report from the completed analysis. Nothing is re-run and no other output changes.</pre>
+            </td>
+            <td class="why"><p>Seven variants of "the report is being built from saved results" across three files, each in different words.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A29</td>
+            <td>
+              <pre class="log">{0} peptides had no charge state passing precursor-level FDR; best charge state kept as fallback</pre>
+              <span class="where">Osprey.Tasks/SecondPassFdrTask.cs:1187</span>
+              <pre class="log better">N peptides passed peptide-level FDR with no single charge state passing precursor FDR; their best charge state is reported.</pre>
+            </td>
+            <td class="why"><p>Good line; "fallback" makes a deliberate rule sound like an error.</p></td>
+          </tr>
+          <tr>
+            <td class="n">A30</td>
+            <td>
+              <pre class="log">Loaded {0} MS1 and {1} MS/MS spectra with {2} unique isolation windows ({3} had unsorted peaks, re-sorted; use --verbose for detail)
+{0}: {1} spectra had unsorted centroids (sorted before caching).</pre>
+              <span class="where">Osprey.Tasks/PerFileScoringTask.cs:2600 &middot; Osprey.Tasks/SpectraCacheTask.cs:107</span>
+              <pre class="log better">Already fine. Listed so the pair stays consistent: pick "peaks" or "centroids" for both.</pre>
+            </td>
+            <td class="why"><p>Same event, two nouns.</p></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="leaks">
+    <h2>B1 &middot; Developer-facing lines that print in the default log</h2>
+    <p class="prose">These are not wording problems. They are lines whose audience is a developer or the regression gate, and they are not behind any flag today. The fix is a gate, not a rewrite. Ordered by how many times each prints in a run.</p>
+    <div class="tablewrap">
+      <table>
+        <colgroup><col style="width:50%"><col style="width:18%"><col style="width:32%"></colgroup>
+        <thead><tr><th>Line</th><th>Prints</th><th>Recommended gate</th></tr></thead>
+        <tbody>
+          <tr><td><pre class="log">Loaded {0} FDR stubs (features not loaded - not read on this path)</pre><span class="where">Osprey.Tasks/PerFileScoringTask.cs:1604, :1767</span></td><td>once per file (82 in the SEA-AD run)</td><td><span class="pill gate">--verbose</span></td></tr>
+          <tr><td><pre class="log">Interned library strings: {0} distinct / {1} total ({2:F1}% collapsed)</pre><span class="where">Osprey.Core/LibraryStringInterner.cs:170</span></td><td>twice per library load, every leg</td><td><span class="pill gate">--verbose</span></td></tr>
+          <tr><td><pre class="log">[PATH] First-pass streaming ingest (RunStreamingFirstPass): {1} rows
+[PATH] {0} projection streaming ingest (RunStreamingIntoProjection): {1} rows</pre><span class="where">Osprey.FDR/PercolatorScorer.cs:777 &middot; Osprey.FDR/PercolatorEngine.cs:818</span></td><td>once per FDR pass</td><td><span class="pill gate">--perf-stats</span> and add <code>[PATH]</code> to <code>OspreyOutput.IsStatLine</code>, since this line exists for the regression gate</td></tr>
+          <tr><td><pre class="log">First-pass: {0} of {1} file(s) had their sidecar written during pass 1, so pass 2 read those scores back instead of reloading features.</pre><span class="where">Osprey.Tasks/FirstPassFdrTask.cs:3252</span></td><td>once per run</td><td><span class="pill gate">--verbose</span></td></tr>
+          <tr><td><pre class="log">[DROP] Released {0} byproduct(s) at the task boundary; the library stays resident.</pre><span class="where">Osprey.Tasks/PipelineContext.cs:371</span></td><td>once per task boundary</td><td><span class="pill gate">OSPREY_LOG_MEMORY</span></td></tr>
+          <tr><td><pre class="log">Released library fragments for {0} of {1} entries ({2} base_ids retained for ...)</pre><span class="where">Osprey.Tasks/FirstPassFdrTask.cs:2723 &middot; Osprey.Tasks/SecondPassFdrTask.cs:971</span></td><td>once per pass</td><td><span class="pill gate">OSPREY_LOG_MEMORY</span></td></tr>
+          <tr><td><pre class="log">Sequence pool: {0} distinct seeded from the library, {1} sidecar lookup(s) missed it</pre><span class="where">Osprey.Tasks/PipelineByproducts.cs:126</span></td><td>once per run</td><td><span class="pill gate">--verbose</span></td></tr>
+          <tr><td><pre class="log">Persisted the protein-compact stratum ({0} file sidecar(s)).
+Wrote experiment-scope FDR sidecar: {0} ({1} distinct entry ids)
+Wrote analysis-wide retained base_id summary: {0} base_id(s) across {1} run(s)
+Reloaded the persisted protein-compact stratum ({0} base ids).
+Reloaded persisted 1st-pass model sidecar for frozen 2nd-pass (pass-1 experiment aggregation: {0}).</pre><span class="where">Osprey.Tasks/FirstPassFdrTask.cs:2822, :2152, :2347 &middot; Osprey.Tasks/Pass2FdrSidecar.cs:1556, :479, :470</span></td><td>once each per run</td><td><span class="pill gate">--verbose</span></td></tr>
+          <tr><td><pre class="log">Second-pass fold reading the worker's written answer for all {0} file(s); no 1st-pass sidecar is opened.
+Second-pass fold has a worker answer for {0} of {1} file(s); the remaining {2} are RECOMPUTED ...
+Second-pass worker verification ACTIVE (OSPREY_PASS2_VERIFY_WORKER): ...</pre><span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:2139, :2145, :2130</span></td><td>once per second pass</td><td><span class="pill gate">--verbose</span> (the third is env-gated already)</td></tr>
+          <tr><td><pre class="log">Per-run rescore: hydrating each of {0} run(s) from its own artifacts (no all-runs pre-load; {1} retained base_id(s) read once).
+Second-pass join: folding over {0} run(s), each rebuilt from its own artifacts and dropped ...
+Per-run rescore: FirstPassFDR publishes the survivor loader only; no experiment-wide bundle is built for {0} run(s).
+--input-scores: {0} run(s) will be hydrated one at a time by {1}; no all-runs pre-load.
+Resume rehydrate: streaming the first-pass bundle from {0} file(s) (one file's pre-compaction pool resident at a time).</pre><span class="where">Osprey.Tasks/PerFileRescoreTask.cs:2042, :2172 &middot; Osprey.Tasks/FirstPassFdrTask.cs:1074, :1294 &middot; Osprey.Tasks/PerFileScoringTask.cs:1808</span></td><td>once each per run</td><td><span class="pill gate">--verbose</span>, leaving one plain line ("Re-scoring N runs one at a time.")</td></tr>
+          <tr><td><pre class="log">Bundle hydration: skipping first-pass Percolator (sidecar provides q-values).
+Read gap-fill and refined calibrations from {0} run envelope(s) in {1:F1}s</pre><span class="where">Osprey.Tasks/FirstPassFdrTask.cs:837, :1110</span></td><td>HPC legs</td><td><span class="pill gate">--verbose</span></td></tr>
+          <tr><td><pre class="log">{0} of {1} input(s) are absent but have a spectra cache; reading those from the cache.
+File parallelism: {0} (auto: {1:F1} GB free x {2:P0} / ~{3:F1} GB est per file -&gt; {4} by RAM, capped to {5} cores / {6} files)</pre><span class="where">Osprey/Program.cs:260 &middot; Osprey.Core/FileParallelism.cs:217</span></td><td>startup</td><td><span class="pill ok">keep</span>. Both are user-relevant; the second could drop the arithmetic ("File parallelism: 4 of 82 files at once, limited by 62 GB free RAM").</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="gated">
+    <h2>B2 &middot; Diagnostic text already behind a flag</h2>
+    <p class="prose">Inventory of the developer tiers. These are correctly separated from the user log today; no rewrite is proposed for them. Listed so the review is complete and so the gates can be checked when new lines are added.</p>
+    <div class="tablewrap">
+      <table>
+        <colgroup><col style="width:16%"><col style="width:7%"><col style="width:47%"><col style="width:30%"></colgroup>
+        <thead><tr><th>Gate</th><th>Sites</th><th>Examples</th><th>Assessment</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="pill gate">--perf-stats</span></td><td class="cnt">83</td>
+            <td><pre class="log">[COUNT] Coelution scored [{0}]: {1} entries ({2} targets, {3} decoys)
+[TIMING] Percolator fold {0}/{1}: {2:F1}s ({3} iterations)
+[BENCH] Per-file thread cap: {0} ({1} total / {2} files in parallel)
+[STAGE-WALL] second-pass-fdr: {0:F1}s</pre><span class="where">Filtered by StatFilteringTextWriter (Osprey.Core/OspreyOutput.cs:152-155); read by Test-PerfGate.ps1, Measure-Pipeline.ps1, Osprey-workflow.html</span></td>
+            <td><span class="pill ok">correct</span> Machine-parseable; each has a plain twin in the default log. <code>[PATH]</code> and <code>[TRAIN]</code> are the same kind of line but are not in the filter list (see B1).</td>
+          </tr>
+          <tr>
+            <td><span class="pill gate">--verbose</span></td><td class="cnt">20</td>
+            <td><pre class="log">First-pass RT tolerance: {0:F2} min (MAD={1:F3}, robust_SD={2:F3}, residual_SD={3:F3}, {4} points, R^2={5:F4}, min tolerance {6:F2})
+MS2 calibration (pass {0}): mean={1:F4} {2}, SD={3:F4} {2}, 3*SD={4:F4} {2} (n={5} fragment matches)
+  Percolator fold {0}/{1}: iteration {2} of {3} ({4} of {5} targets, {6:F1}% at {7:P0} FDR)
+[unsorted-spectrum] spectrum_index={0} n_peaks={1}
+Restored 1st-pass Score/Pep/ExperimentAggregateScore onto {0} survivor(s) across {1} file(s).</pre><span class="where">Osprey.Tasks/Calibrator.cs (11 sites) &middot; Osprey.FDR/PercolatorTrainer.cs:697 &middot; Osprey.IO/SpectrumBuilder.cs:115 &middot; Osprey.Tasks/Pass2FdrSidecar.cs (6 sites)</span></td>
+            <td><span class="pill ok">correct</span> Calibration statistics are exactly what a careful user asks for with <code>--verbose</code>. The Pass2FdrSidecar tallies use property names (Score/Pep/ExperimentAggregateScore) but the tier tolerates it.</td>
+          </tr>
+          <tr>
+            <td><span class="pill gate">--model-diagnostics</span></td><td class="cnt">35</td>
+            <td><pre class="log">[MODEL-DIAGNOSTICS] wrote model diagnostics report: {0}
+[MODEL-DIAGNOSTICS] peak co-assignment boundary (pass 1): experiment {0:F4} from {1} accepted precursor(s); {2} decoy + {3} non-decoy precursor(s) clear it
+[MODEL-DIAGNOSTICS] pass-1 data sidecar not found; pass-2 enrichment skipped (pass-1 page stands).
+Classifying {0} library entries for model diagnostics...</pre><span class="where">Osprey.Tasks/ModelDiagnostics/ModelDiagnosticsReport.cs (15) &middot; PeakCoAssignmentSource.cs (15) &middot; Osprey.Tasks/SecondPassFdrTask.cs:803, :889</span></td>
+            <td><span class="pill ok">acceptable</span> Opt-in, and the report is the deliverable. The user-relevant line is the one giving the report path; the boundary and co-assignment tallies could move to <code>--verbose</code> within the option.</td>
+          </tr>
+          <tr>
+            <td><span class="pill gate">-d / OSPREY_DUMP_* / OSPREY_DIAG_*</span></td><td class="cnt">31</td>
+            <td><pre class="log">[COUNT] Wrote calibration windows dump (pass {0}): cs_cal_windows.txt ({1} rows)
+[BISECT] OSPREY_DUMP_CWT_PATH active: writing CWT path summary to cs_stage6_cwt_path.tsv
+Wrote Stage 5 Percolator input dump: {0} ({1} rows)
+[BISECT] Percolator diagnostic-only dump complete - aborting run</pre><span class="where">Osprey/OspreyFileDiagnostics.cs (26) &middot; Osprey.FDR/PercolatorDiagnosticsDump.cs (4) &middot; Osprey.Diagnostics/OspreyDiagnosticsLog.cs:62 &middot; Osprey.Tasks/FirstPassFdrTask.cs:2568, :2604, :3269 &middot; Osprey.Scoring/ScoringPipeline.cs:188, :205</span></td>
+            <td><span class="pill ok">correct</span> Cross-implementation bisection tooling; the audience is the person who set the variable.</td>
+          </tr>
+          <tr>
+            <td><span class="pill gate">OSPREY_LOG_MEMORY</span></td><td class="cnt">3</td>
+            <td><pre class="log">[MEM {0}] working_set={1:F2} GB (peak={2:F2} GB), managed_heap={3:F2} GB, peak_paged={4:F2} GB, gen2_count={5}, loh_count={6}, gc_committed_last_gc=...
+[MEM library-resident] managed_heap={0:F2} GB ({1} entries)</pre><span class="where">Osprey.Tasks/ProfilerHooks.cs:206, :261 &middot; Osprey.Tasks/PerFileScoringTask.cs:1159</span></td>
+            <td><span class="pill ok">correct</span> Read by ai/scripts/perfviz.py.</td>
+          </tr>
+          <tr>
+            <td><span class="pill gate">--fdrbench</span> / entrapment</td><td class="cnt">12</td>
+            <td><pre class="log">Wrote FDRBench input (pass 1, per-precursor) to {1}: {2} rows
+[ENTRAPMENT] Dropped {0} unmatched entrapment peptides (N-terminal-Met-clip artifacts with no target pair); excluded from the FDRBench manifest, input, and diagnostics
+{0} FDRBench rows had oversize protein-ID lists; truncated with ';...+N_more'</pre><span class="where">Osprey.Tasks/FirstPassFdrTask.cs:1736-1751 &middot; Osprey.Tasks/SecondPassFdrTask.cs:543-564 &middot; Osprey.Tasks/EntrapmentPairing.cs:85, :93</span></td>
+            <td><span class="pill ok">correct</span> Opt-in benchmarking output; the audience knows FDRBench.</td>
+          </tr>
+          <tr>
+            <td><span class="pill gate">env-var modes</span></td><td class="cnt">9</td>
+            <td><pre class="log">[TRAIN] OSPREY_TRAIN_PICK_RUN=0: each precursor's training row is its BEST observation across runs, not a uniform sample of them (pre-26.1 behaviour)
+File parallelism: 1 (OSPREY_MAX_PARALLEL_FILES=1)
+[BENCH] OSPREY_EXIT_AFTER_CALIBRATION set - exiting after Stage 3 (calibration done)</pre><span class="where">Osprey.FDR/PercolatorScorer.cs:689 &middot; Osprey.Core/FileParallelism.cs:155, :161 &middot; Osprey.Tasks/PerFileScoringTask.cs:2655</span></td>
+            <td><span class="pill ok">correct</span> Only print when the variable is set, so naming it is the right provenance. Contrast with A1, which names the variable in the default case.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="devwarn">
+    <h2>C &middot; Warnings and errors written for a developer</h2>
+    <p class="prose">Warnings and errors are the lines a user reads most carefully, and several of these address the person who wrote the code rather than the person running it: they cite issue numbers, big-O costs, method names and variable names, or offer a remedy only a developer can apply. Each already carries the one sentence a user needs; the suggestion is to keep that sentence and move the rest into a code comment or behind <code>--verbose</code>.</p>
+    <div class="tablewrap">
+      <table>
+        <colgroup><col style="width:56%"><col style="width:44%"></colgroup>
+        <thead><tr><th>Current line</th><th>Keep for the user</th></tr></thead>
+        <tbody>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> Stage 7 is taking the RESIDENT join: every run's survivors are rebuilt at once and held for the whole stage, which is O(files) (issue #4486). Measured cost is ~4.4 GB plus ~0.197 GB per file, so {0} file(s) needs ~{1:F0} GB. The streamed join is admitted only for --task SecondPassFDR today; this run does not qualify, so there is nothing to switch on.</pre><span class="where">Osprey.Tasks/SecondPassFdrTask.cs:676</span></td><td><pre class="log better">[WARN] Second-pass FDR will hold all {0} runs in memory at once (about {1:F0} GB). For large cohorts, run the second pass as --task SecondPassFDR to stream one run at a time.</pre></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> Second-pass join: a consumer asked for the whole-run survivor pool, so all {0} run(s) are being materialized at once. This is the O(runs x entries) peak the per-run fold exists to avoid.</pre><span class="where">Osprey.Tasks/PerFileRescoreTask.cs:2102</span></td><td><pre class="log demote">Developer assertion. Move behind --verbose, or make it a Debug.Assert if the situation is not supposed to occur.</pre></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> {0} requires the RESIDENT pre-compaction first-pass pool: every --input-scores file's full stub list is held in memory at once, so memory here grows O(files) and can exhaust RAM at large file counts. The bounded per-file streaming hydrate cannot serve that consumer.</pre><span class="where">Osprey.Tasks/PerFileScoringTask.cs:1674</span></td><td><pre class="log better">[WARN] {0} needs every file's first-pass candidates in memory at once; memory grows with file count and may exhaust RAM on large cohorts.</pre></td></tr>
+          <tr><td><pre class="log"><span class="err">[ERROR]</span> Resume rehydrate: the first-pass compaction published no retained base_id set for {0} joined file(s), so the Stage 6 survivor handoff cannot be streamed. RescoreCompaction.Apply must run whenever any file is joined.</pre><span class="where">Osprey.Tasks/FirstPassFdrTask.cs:1002</span></td><td><pre class="log better">[ERROR] Cannot resume: the first-pass intermediate files for {0} file(s) are missing the list of precursors kept for reconciliation. Delete the .1st-pass.* files beside those inputs and re-run.</pre><span class="where">The method-name sentence belongs in a code comment.</span></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> --task SecondPassFDR: {0} perFileEntries key(s) have no matching config.InputFiles entry and will be skipped: [{1}]. This usually indicates an input-file rename or path drift between Stage 5 and Stage 7; the skipped files will not get a 2nd-pass sidecar.</pre><span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:167 &middot; twin :333</span></td><td><pre class="log better">[WARN] --task SecondPassFDR: {0} file(s) from the first pass are not among this run's inputs and will be skipped: [{1}]. This usually means an input was renamed or moved between the first-pass and second-pass tasks.</pre></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> Second-pass FDR: file '{0}' reconciled parquet has {1} feature rows but {2} FDR entries reference it; {3} entries will run with stale/null features. Stub/parquet mismatch - check reconciled-parquet output integrity.</pre><span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:2419</span></td><td><pre class="log better">[WARN] Second-pass FDR: the re-scored intermediate file for '{0}' does not match its first-pass intermediate file ({1} rows vs {2} expected); {3} candidates will be scored without features. Delete '{0}.scores-reconciled.parquet' and re-run the rescore.</pre></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> 1st-pass Score/Pep/ExperimentAggregateScore could not be restored for {0} file(s) (no readable 1st-pass sidecar): [{1}]. Peaks Stage 6 changed in those files keep reset defaults, so their 2nd-pass sidecars are wrong AND a Score of 0 enters the second-pass protein FDR null unfiltered. Treat this run's protein-level numbers as unreliable.</pre><span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:1307 &middot; Osprey.Tasks/Pass2PerFileWorker.cs:356</span></td><td><pre class="log better">[WARN] First-pass scores could not be read for {0} file(s): [{1}]. Treat this run's protein-level results as unreliable; delete the .1st-pass.fdr_scores.bin files beside those inputs and re-run.</pre><span class="where">The last sentence of the original is exactly right. The mechanism belongs in a comment.</span></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> Could not patch the second-pass protein q-value into the 2nd-pass FDR sidecar for {0} file(s): [{1}]. Those files carry no pass-2 protein q-value: each record keeps what it held when the sidecar was written, which is the reset default for every entry Stage 6 rescored or gap-filled and a pass-1 value only for entries Stage 6 left alone. Any consumer joining on that column is reading the wrong pass.</pre><span class="where">Osprey.Tasks/Pass2FdrSidecar.cs:1528</span></td><td><pre class="log better">[WARN] Protein q-values could not be written for {0} file(s): [{1}]. The second-pass intermediate files for those files carry no valid protein q-value.</pre></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> Second-pass per-file competition: no readable 1st-pass model sidecar, so the per-file half stays in SecondPassFDR for this run.
+<span class="warn">[WARN]</span> Second-pass per-file competition: the frozen 1st-pass model has no usable model/standardizer, so the per-file half stays in SecondPassFDR for this run.</pre><span class="where">Osprey.Tasks/PerFileRescoreTask.cs:1055, :1063</span></td><td><pre class="log demote">Both describe a work-placement decision with no effect on results. Move behind --verbose.</pre></td></tr>
+          <tr><td><pre class="log"><span class="err">[ERROR]</span> --task FirstPassFDR: {0}/{1} 1st-pass fdr_scores.bin sidecar writes failed; boundary file pair is incomplete. See warnings above.</pre><span class="where">Osprey.Tasks/FirstPassFdrTask.cs:655, :1993, :3362</span></td><td><pre class="log better">[ERROR] --task FirstPassFDR: {0} of {1} first-pass result files could not be written, so the next task cannot run. See the warnings above for each file.</pre></td></tr>
+          <tr><td><pre class="log"><span class="err">[ERROR]</span> OSPREY_PASS2_QVALUE is not a recognized mode. Recognized: '{0}', '{1}'. Unset it for the default ('{1}'). 'percolator' was REMOVED: it retrained the 2nd-pass SVM on a compaction-depleted decoy pool, which reports anti-conservative q-values. 'transfer-compete' was REMOVED for a related reason: ... 1.96% true FDP at a nominal 1% on 82-file SEA-AD, against 1.53% for the default, and with FEWER ids.
+<span class="warn">[WARN]</span> OSPREY_ALLOW_UNFIXED_RESIDENT contains unrecognized token(s) that grant nothing: {0}. Recognized: {1}. ('hpc-merge' was retired - the --task SecondPassFDR reconciled-input load streams and needs no allowance.) ...</pre><span class="where">Osprey/Program.cs:336, :366</span></td><td><pre class="log better">[ERROR] OSPREY_PASS2_QVALUE='{2}' is not recognized. Use '{0}' or '{1}', or unset it for the default ('{1}').</pre><span class="where">The removal history and SEA-AD numbers belong in docs/12-second-pass-fdr.md, not in an error message.</span></td></tr>
+          <tr><td><pre class="log"><span class="warn">[WARN]</span> Spectral library protein accessions carry Carafe's per-peptide '_pepNNNNN' suffix: {0:N0} distinct accessions on {1:N0} entries collapse to {2:N0} real proteins (e.g. '{3}' -&gt; '{4}'). Stripping it - left in place every peptide is its own protein, which breaks protein parsimony and picked-protein FDR, and leaves OSPREY_PASS2_QVALUE=protein-compact with an empty stratum because no protein can reach 2 detected peptides.</pre><span class="where">Osprey.IO/CarafeProteinIdNormalizer.cs:178</span></td><td><pre class="log better">[WARN] Library protein accessions carry Carafe's per-peptide '_pepNNNNN' suffix (e.g. '{3}'); stripping it so that {0:N0} accessions map to {2:N0} proteins. Without this, every peptide would count as its own protein.</pre></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="fix">
+    <h2>What to change</h2>
+    <ol class="steps">
+      <li><b>Gate before rewriting.</b> Moving the B1 lines behind <code>--verbose</code> or <code>OSPREY_LOG_MEMORY</code> removes about a third of the default-tier jargon with no wording decisions. It also cuts the 82-file log by roughly a quarter. Add <code>[PATH]</code> and <code>[TRAIN]</code> to <code>OspreyOutput.IsStatLine</code> so the regression gate keeps its assertions under <code>--perf-stats</code>.</li>
+      <li><b>Rewrite the thirteen High rows.</b> A1, A2 and A11 are the ones a new user hits in the first run that reaches the second pass; A3, A4, A5 are in every run. Use the glossary's right-hand column as the rename map so the same internal word always becomes the same plain phrase. Where the word names a data structure (stratum, retained set, survivor pool, projection), a one-word substitute is not enough: the rewrite must state the effect on the results, such as which precursors get new q-values and which keep their first-pass values.</li>
+      <li><b>Fix the three enum leaks in the banner</b> (A13) with Skyline's <code>GetLocalizedString</code> extension pattern over resource strings, so the strings are ready for a later RESX translation pass.</li>
+      <li><b>Leave the <code>[TASK]</code> section markers alone</b> (A14, decided). Their names are the <code>--task</code> values from the command-line help, and <code>ai/scripts/perfviz.py</code> and <code>regression.ps1</code> depend on the exact text.</li>
+      <li><b>Trim the Table C warnings</b> to the user sentence each already contains, and move mechanism, issue numbers and method names into code comments beside the call.</li>
+      <li><b>Adopt three rules for new lines</b>, checkable in review: no C# identifier, task name or environment variable appears in a default-tier line unless the user typed it; no "Stage N" at all, only the <code>--task</code> names the help documents; every count carries a thousands separator; "detections" is the word for candidates that passed the current cutoff; and a line that only records what the code no longer does or how memory is managed (frozen model, no retrain, resident, byproduct, interned) is diagnostic output behind <code>--verbose</code>, <code>--perf-stats</code> or <code>OSPREY_LOG_MEMORY</code>, never user text.</li>
+    </ol>
+    <p class="small prose">Method: every emitting call site under <code>pwiz_tools/Osprey</code> (excluding <code>Osprey.Test</code>) was extracted mechanically, 582 in all, then classified by the flag that exposes it using the gates in <code>OspreyOutput.cs</code>, <code>PipelineContext.LogVerbose</code>, <code>ProfilerHooks.MemoryLoggingEnabled</code> and the diagnostics sinks. Term counts are regular-expression matches over the default tier. Priorities are judged against the two evidence logs named in the header; example numbers in the rewrites are taken from those logs.</p>
+  </section>
+</div>
