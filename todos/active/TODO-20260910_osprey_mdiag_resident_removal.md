@@ -679,6 +679,24 @@ Dropped, per the raised bar: 3, 4 (both pre-existing on master), 6, 7, 9, 10, 11
   verified - not a master fallback), MacCoss agent. Perf/Regression green; every test-plan box
   on PR #4656 is ticked. **Ready for human review.**
 
+### Copilot review round 1 (`870e50f5e3`, 2026-09-11 ~08:00)
+
+Three inline threads, all addressed and resolved; 13 suppressed notes dispositioned in a PR
+comment (two taken, eleven declined with reasons - seven are `.resx` asks that do not apply to
+Osprey, one is a wrong claim about the `stage7stream` key term).
+
+* `int residentStubs` -> `long` in the per-run arm guard (it could wrap past ~505 runs).
+* The rescore no-op arm now honors `DiagnosticsOnly` - `(!didPlan || DiagnosticsOnly)` -
+  so a diagnostics run whose first-pass key drifted folds instead of rewriting parquets.
+  This is cycle-2 finding #4, which I had dropped as pre-existing; Copilot raised it again and
+  Brendan chose to take it. Gate: StellarLibDecoy PASSED on the commit.
+* Startup-error and architecture-doc wording: the retired switch "can no longer select the
+  resident arm", not "every route folds one run at a time".
+
+**Follow-up filed as #4657**: the co-assignment panel's ~30 GB/min allocation churn (the
+41.7 GB transient) - the largest consumer left in `--task ModelDiagnostics`, with the full
+analysis and a scoped plan.
+
 ### Recorded from the 446 runs (measurement, not a finding to file)
 
 The **peak co-assignment panel** is now the largest single memory consumer in
