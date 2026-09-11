@@ -2,6 +2,7 @@
 
 **Branch**: `Skyline/work/20260910_osprey_mdiag_resident_removal` (in `C:\proj\pwiz-work1`)
 **Module**: `osprey`
+**PR**: [#4656](https://github.com/ProteoWizard/pwiz/pull/4656) (opened 2026-09-11 00:20; TeamCity Perf/Regression build 4172019 on `pull/4656`)
 **Found**: 446-file night run, 2026-09-09 -> 10. Evidence:
 `ai/.tmp/sessions/20260910-night/FINDINGS.md`, handoff
 `ai/.tmp/handoff-20260910_osprey_446_diagnostics_results.md`.
@@ -645,6 +646,30 @@ Dropped, per the raised bar: 3, 4 (both pre-existing on master), 6, 7, 9, 10, 11
 3. `paylater-446-resume.ps1` - the original straight-through command with the products
    deleted again, after the gate; asserts no re-processing (PerFileScoring skipped, zero
    re-scores, fold-arm marker) and strict product identity with the oracle's.
+
+### Night results (2026-09-11)
+
+* **Oracle (22:56)**: exit 0, wall 1:52:01. Route clean on both halves (per-run marker x1,
+  all-runs bundle x0; streamed join x1, resident join x0, whole-run pool x0). Products:
+  pass-1 233,498 B, pass-2 218,074 B, HTML 606,569 B. **perfviz
+  (`ai/.tmp/sessions/20260910-01Qwgkv/oracle-446-perfviz.png`)**: pass-1 fold FLAT at
+  ~10.5 GB private / 7.5 GB managed for 55 min; pass-2 fold FLAT at ~20 GB private for 42
+  min; max gap 16 s. One transient to **41.7 GB private** between the folds - the report's
+  **peak co-assignment panel** ("scanning 1st-pass sidecars over 446 file(s)" 10 -> 35 GB,
+  "joining apex RT over 446 file(s)" -> 41.7 GB, again for pass 2) - which returns to the
+  floor and is the same 41.7 GB phase 5's flag-up-front FirstPassFDR peaked at. Pre-existing,
+  in the diagnostics code, the largest single consumer left in this command; not the route.
+  The incident's rising 0.10 GB/file floor is gone.
+* **Products vs p16proof**: pass-1 identical apart from `ospreyVersion` (the pinned
+  override). Pass-2 differs by small count shifts and run ORDER - and that is the wrong
+  reference: p16proof is a different Stage 6/7 realization (39 of 446 reconciled parquets and
+  3 of 446 pass-2 sidecars differ, experiment sidecar differs from byte 69), folded by build
+  .251's RESIDENT join (pre-#4642/#4646) in `--input-scores` order. The same-build,
+  same-analysis pass-2 reference is leg 3.
+* **`-Dataset All` (00:16)**: 95 PASS / 0 FAIL / 1 SKIP in 1:18:21, both lanes exit 0.
+* **PR #4656** opened 00:20; TeamCity 4172019 triggered on `pull/4656` (authorized for the
+  night by Brendan).
+* **Leg 3** (straight-through pay-later resume): running from 00:16.
 
 ### The second `/code-review max` is REPORT-ONLY (Brendan, 2026-09-10)
 
