@@ -6,11 +6,11 @@
 - **Branch**: `Skyline/work/20260902_wine11_net10` (container) / `msconvert-parity` (pwiz)
 - **Base**: `master` for the container repo; pwiz-sharp work sits on `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-01
-- **Status**: container built and green offline. The pwiz payload is now the vendor-bundled
-  installer (Skyline stays as the second payload) and the 43-pair sweep re-ran against it with
-  `--network none` — 43/43, 40/43 count-match, the staged-tree result. pwiz-sharp side is up
-  as a stack: **#4640** and **#4641** against #4619. Container changes verified but not yet
-  pushed to PR #35.
+- **Status**: container builds and validates again. `msdiff` is ported, so the sweep's msconvert
+  failures went 45 -> 6, and the 6 are explained (4 index-limited references, 1 ABI reference
+  naming, 1 pre-existing Bruker). Reference mzMLs now record their index range. pwiz-sharp work
+  is one PR, **#4640** onto #4619 (#4641 was merged into it). Container work is PR **#35**,
+  pushed. Blocking for master: the six required status checks are cpp contexts nobody posts.
 - **pwiz-sharp PRs**: [#4640](https://github.com/ProteoWizard/pwiz/pull/4640)
   (`Skyline/work/20260904_vendor_resolution_fixes`) ->
   [#4641](https://github.com/ProteoWizard/pwiz/pull/4641)
@@ -228,8 +228,20 @@ echo "SWEEP done: converted=$ok failed=$fail"
 - [x] Commit the 13 pwiz-sharp files — done as a two-PR stack against #4619:
       **#4640** (vendor-resolution fixes) and **#4641** (vendor-bundled installer variant,
       based on #4640). Full build + test suite green before committing.
-- [ ] Push the container changes to PR #35 (Dockerfile two-payload rewrite, `.gitattributes`,
-      `.gitignore`) and update its description. Verified locally, not yet pushed.
+- [x] Push the container changes to PR #35 (Dockerfile two-payload rewrite, `.gitattributes`,
+      `.gitignore`) and update its description — pushed as `1247387`.
+- [x] Port `msdiff` — `Tools/Commandline/MsDiff`, 13 tests. Container msconvert failures 45 -> 6.
+- [x] Record the index range in reference mzMLs and regenerate the 12 affected files.
+- [x] Add reference generation to pwiz-sharp (`PWIZ_GENERATE_REFERENCE_MZML=1`).
+- [ ] **Teach the container sweep to use the recorded index filter.** Nothing reads the userParam
+      yet, so those fixtures still fail. The step must parse the range out of the reference and
+      apply the matching `--filter "index [a,b]"` to the conversion before diffing.
+- [ ] **Anchor the sweep's grep on `"(0 spectra)"`.** Without it the check stays near-vacuous for
+      the other ~40 fixtures. Both edits are in the TeamCity step script, not the repo.
+- [ ] **Swap master's six required status checks for the .NET contexts** — GitHub settings, and
+      it blocks #4619 merging to master.
+- [ ] Bruker `Sample_1-A,1_01_985.d` fails in BOTH cpp and net10 ("Expected output file does not
+      exist"). Pre-existing, never diagnosed.
 - [ ] Consider extending `Installer.Tests` beyond the per-user variant, and to the
       `-WithVendorSdks` artifact specifically — nothing currently gates that variant.
 
@@ -579,5 +591,92 @@ no-op stub precisely to prevent this, so pwiz-sharp is clean; the 45.5 GB
 `defaultlog_msconvert.log` came from the C++ msconvert, which still has no stub and will start
 the file over. Deleted 40 of 41 files, C: 7.6 GB -> 65.0 GB free.
 
+### 2026-09-10/11 — msdiff ported, container validating again, references made self-describing
+
+**The container's msconvert sweep was reporting 45 failures because msdiff did not exist.** The
+TeamCity step validates every conversion with `mywine msdiff ... > $fn.diff` and pwiz-sharp had
+only `MsConvert` and `MsBenchmark`. The `>` still created the file, so `[ -e ]` passed,
+`grep -q "0 spectra"` failed on an empty file, and every fixture failed via a bare `testFailed`
+with no message — which is why all 45 had empty failure details. **After porting it: 45 -> 6.**
+
+`Tools/Commandline/MsDiff` carries cpp's CLI surface and exit codes; the diff engine
+(`MSDataDiff`) was already ported, so the missing piece was the tool and its summary rendering.
+`MSDataDiff.Compare` now returns per-list difference counts so callers do not parse locator
+paths back out of the report.
+
+**Two defects the port surfaced, both of which would have let bad output pass:**
+
+- A list-length mismatch reported **0** differing spectra — `DiffSpectrumList` returns early on a
+  count mismatch, so 101-vs-19570 rendered as `(0 spectra)`. The count is now the longer list.
+- **`grep -q "0 spectra"` is unanchored and matches the tail of `"19570 spectra"`.** Verified by
+  simulating the harness against real files: the Mobilion pair came back PASS when it must fail.
+  **cpp msdiff has the same latent bug** — same wording. msdiff-sharp emits `(N differing
+  spectra)` when non-zero so only a real zero can match; that is its one deliberate departure
+  from cpp's wording.
+
+**Why cpp "passed" four fixtures it should not have.** `diff_std.hpp` prints `a_b` and `b_a`
+separately. On a count mismatch only `a_b` gets the dummy spectrum; `b_a`'s list stays empty and
+`TextWriter` renders it as literally `spectrumList (0 spectra)`. Reference-vs-fresh-conversion
+always differs in metadata, so `b_a` essentially always prints — meaning **the cpp container's
+spectra check has been close to vacuous for every fixture, not just these four.** Expect more
+failures once the grep is anchored; that is the check starting to work.
+
+**Reference mzMLs are now self-describing.** `resultFilename` has a suffix for every config
+variant except `indexRange`, and `SpectrumList_Filter` emits no processingMethod, so a reference
+holding 101 of 19570 spectra was written under the plain filename with nothing to say so. Now:
+
+```xml
+<processingMethod order="1" softwareRef="pwiz_Reader_Mobilion">
+  <cvParam accession="MS:1001486" name="data filtering" value="" />
+  <userParam name="index filter" value="0-100" />
+</processingMethod>
+```
+
+`MS:1001486 "data filtering"` is the nearest standard term; there is no accession for an index
+subset, so the range rides in a userParam.
+
+**pwiz-sharp can now generate references at all** — `PWIZ_GENERATE_REFERENCE_MZML=1`, the
+equivalent of cpp's `--generate-mzML`, which pwiz-sharp never had. Four traps, each invisible to
+the tests because values decode identically either way:
+
+1. **Hook position.** Writing after the mangling bakes the diff scaffolding into the data —
+   `<software id="current_x0020_pwiz">` instead of `pwiz_Reader_Mobilion`. cpp writes after
+   `calculateSourceFileChecksums` and `wrap`, before anything else.
+2. **Indexed.** `MzmlWriter.Indexed` defaults true; references are not (+111 lines/file).
+3. **Compression.** Writer defaults to none; references are zlib.
+4. **Precision.** cpp's `generate()` uses ONE precision for every array
+   (`doublePrecision ? 64 : 32`), NOT msconvert's 64-bit-m/z-32-bit-intensity scheme.
+
+With all four right, a regenerated reference is +1% in size with 204/205 binary arrays identical
+in values and precision. Regeneration rewrote 67 files; 55 were reverted as having no index
+range, leaving **12**: ABI x3, Agilent x1, Mobilion x3, Shimadzu x1, Waters x4, ranges `0-0`,
+`0-9`, `0-20`, `0-100`, `0-200` and Shimadzu's mid-file `1240-1260`.
+
+**The mid-file `1240-1260` matters**: it rules out inferring a range from a reference's spectrum
+count, which would otherwise have been the obvious shortcut.
+
+**Rejected: subset-by-native-id.** msdiff could pair on native IDs (they survive the filter —
+verified 101/101 present and prefix-aligned) and compare only shared spectra. Turned down
+because it cannot distinguish spectra missing by intent from spectra missing through a bug: any
+number of extra spectra in the conversion would pass.
+
+**Trigger config**: the net10 container is now triggered by changed paths rather than by hand
+(it was named nowhere in `vcs_trigger_and_paths_config.py`, so all seven prior runs were manual),
+and `bt209` — the last cpp config reachable on master — is commented out. Every config reachable
+on master is now a .NET one. Native shims are unaffected: `MobilionShim` and `MascotShim` live
+under `pwiz-sharp/` and build inside Core Windows .NET.
+
+**Blocking, and not fixable from the repo**: `master` branch protection requires six cpp
+contexts (`teamcity - Core Windows x86_64`, `... Skyline master and PRs (Windows x86_64)`,
+`... Core Linux x86_64`, both Bumbershoot, and the cpp container). **All six map to commented-out
+configs, and none is posted on #4619.** Required checks are branch-protection settings, not repo
+files — swapping them for the .NET contexts is a GitHub settings change someone has to make
+before the port can merge to master.
+
+**The `Analysis.Tests`/`Waters.Tests` race hit twice more**, once as `MassLynx combineScan failed
+(code 5)` and once as a `DirectoryNotFoundException` on an `ATEHLSTLSEK_profile.raw` that plainly
+exists. Both passed in isolation. Two suites, one `.raw`, concurrent jobs, and an SDK that writes
+`lmgt.inf` inside the directory.
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260901_net10_wine_container.md` before starting work.
+`ai/.tmp/handoff-20260904_vendor_resolution_fixes.md` before starting work.
