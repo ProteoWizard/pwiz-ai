@@ -595,6 +595,117 @@ each test in all four languages.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260907_leak_detection_baseline.md` before starting work.
 
+## 2026-09-10: the estimator switch, scored offline, and the first slopes run
+
+No nightly ran on 09-09 - that night went to getting SkylineNightly running on the port branch as
+the Integration branch, and it held `pwiz-work1`.
+
+### Work item 1 is in, as a switch rather than a replacement
+
+`1dc987b855`. Both estimators live behind one `ILeakEstimate` interface, so the pass-1 loop exists
+once and choosing an estimator cannot change anything else about how the pass runs - which is what
+makes the two comparable on the same night. `deltas` remains the default and is unchanged, verified
+by running the same test both ways.
+
+| arg | default | |
+|---|---|---|
+| `leakestimator` | `deltas` | `slopes` fits a least-squares line and reports R2 with the slope |
+| `leakiterations` | 24 | maximum iterations |
+| `leakwarmup` | 5 | dropped before fitting |
+| `leakminiterations` | 20 | floor before a clean reading may end a test |
+| `leakrsquared` | 0.9 | linearity a rising axis must show |
+
+Slope-mode thresholds are their own set (`SlopeLeakThresholds`): managed and heap at **1 KB**,
+private bytes left at 150 KB, handles unchanged. Same knobs on `Run-Tests.ps1` as `-LeakEstimator`,
+`-LeakIterations`, `-LeakWarmup`, `-LeakMinIterations`, `-LeakRSquared`.
+
+Two details that were not obvious:
+
+- **The per-test iteration overrides had to become multipliers.** `LeakCheckIterationsOverrideByTestName`
+  baked `LeakCheckIterations * 4` at static-init time, so raising the base on the command line would
+  have left them at the old absolute count.
+- **`ArgAsDouble` was culture-sensitive.** `leakrsquared=0.9` would parse as 9 on a machine with a
+  comma decimal separator, and this runner exists to run French and Turkish. Now invariant.
+
+Reporting keeps the delta estimator's line shape with the R2 appended *after* the word `bytes`, so
+`SkylineNightly`'s three regexes and SkylineTester's `parts[2]` split both still match.
+
+### Scored against all four archived nights before spending a night
+
+`ai/.tmp/leak-tools/Score-Estimators.ps1`. The delta simulation reproduces 09-08 exactly - same
+7 tests, 8 lines, values within the log's print precision - which is what makes the rest credible.
+
+**The managed axis separates cleanly.** Across four nights, tests slope mode reports sit at
+R2 0.999-1.00; tests it does not report top out at 0.70-0.75. Nothing lands between, so the 0.9 gate
+is in a wide gap rather than on a boundary.
+
+**It catches the two leaks the 8 KB gate hid**, on the 09-04 night, before either was found by hand:
+`TestAddIrtStandards` 6.27 KB/run at R2 = 0.97 and `IrtRedundantDbFunctionalTest` 4.41 at R2 = 0.93.
+
+**It drops the heap set that changed identity every night.** 09-08's two heap reports
+(`AgilentMseChromatogramTestAsSmallMolecules` 20.5, `ConsoleAddAnnotationsFromArgumentsTest` 24.9)
+fail the shape gate at R2 = 0.86 and 0.79.
+
+**Positive control**: `TestGroupedStudies1Tutorial` heap on the three nights before the GDI+ fix
+reads 2166-2194 KB/run at R2 = 0.99-1.00 under slopes, against 1880-2007 under deltas. The slope
+recovers the true 2.153 MB/run least-squares value; the old estimator's ~14% under-report is exactly
+as predicted.
+
+The heap threshold barely matters once shape is gating - moving it 1 -> 50 KB changes the
+long-series count by at most one test per night. The extra reports at 1 KB are all 8-sample series,
+which the 20-iteration floor removes by construction.
+
+### The cost is the floor, not the maximum
+
+Pass 1 on 09-08 was 4.4h over 6,251 iterations, because **41% of tests exit at 8 iterations and 86%
+at 11 or fewer**. Projected from that log's per-test timings:
+
+| floor | pass 1 |
+|---|---|
+| today (none) | 4.4 h |
+| 20 | 9.4 h |
+| 24 | 11.3 h |
+| 50 | 23.5 h |
+
+`leakiterations` is nearly free by comparison - only tests that stay above threshold ever reach it,
+so raising the maximum to 50 adds ~1h even if 50 tests run the full count. **Raise the maximum for
+resolution, not the floor.**
+
+### The first slopes run
+
+Started 2026-09-10 18:37 on `pwiz-work1`, pass 1 only, full 1133-test list:
+
+```
+pwsh -File ./ai/scripts/Skyline/Run-Tests.ps1 -UseTestList -Pass 1 -Quality `
+  -Configuration Release -SourceRoot 'C:\proj\pwiz-work1' `
+  -LeakEstimator slopes -LeakIterations 50 -LeakMinIterations 20 -ReportHeaps
+```
+
+Log lands at `bin\staging\Release\SkylineTester test list.log`; archive it to
+`D:\test\nightly-logs\` when it finishes. Expect ~9.4-10.5h. This is deliberately an exhaustive
+sweep rather than a cheap one - the point is to catch what the biased estimator has been missing,
+so the managed threshold is at 1 KB and every test gets at least 20 iterations.
+
+**What to check when it lands**: the managed axis should be near-empty, since the five tests that
+reported every night are all now fixed or excluded. Anything it does report at R2 >= 0.99 is new and
+real. The heap axis is the open question - the archived logs cannot predict it, because every test
+that would now run 20+ iterations stopped at 8 under the old early exit.
+
+### Also fixed
+
+`9b9a93499c` - `PwizFileInfoTest.cs` and `SmallWiffTest.cs` picked up UTF-8 BOMs in `d82108870e`
+(the wiff2 commit). `CodeInspection` strips them on every run and then fails, so this was a standing
+nightly failure.
+
+### Worth a look later, not urgent
+
+- `TestTargetResolver` shows user+GDI handles rising **0.9/run at R2 = 0.99** over 20 iterations.
+  Under the 1-handle threshold, so neither estimator reports it, but that shape is not settling.
+- `TestFilesTreeForm` fit 3.33 KB/run managed at R2 = 0.93 on the 09-04 night. Never investigated.
+- `TestInternationalFilenames` (86-89 KB/run heap, R2 = 0.97-0.98) and `TestLogScaleAxis` (49-54,
+  R2 = 0.99) appear on two of the four nights with nearly identical slope and R2 both times. Under
+  the delta estimator they looked like part of the random heap set; under shape they do not.
+
 ## Method notes
 
 - **A real leak is near-perfectly linear.** R² ≈ 1.00 with a large t-statistic separates a leak from

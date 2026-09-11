@@ -120,6 +120,27 @@ param(
     [switch]$ReportHeaps = $false,  # Enable heap count diagnostics (only useful when handles aren't leaking)
 
     [Parameter(Mandatory=$false)]
+    [ValidateSet("", "deltas", "slopes")]
+    [string]$LeakEstimator = "",  # How pass 1 reduces per-iteration memory samples to a leak number.
+                                  # "deltas" is TestRunner's long-standing trailing-window mean,
+                                  # minimized over windows - a two-point estimate that biases low.
+                                  # "slopes" drops a warm-up and fits a least-squares line, reporting
+                                  # only when the line is also straight (see -LeakRSquared).
+                                  # Empty leaves TestRunner's own default (deltas).
+
+    [Parameter(Mandatory=$false)]
+    [int]$LeakIterations = 0,  # Max pass-1 iterations per test (0 = TestRunner's default of 24)
+
+    [Parameter(Mandatory=$false)]
+    [int]$LeakWarmup = -1,  # Iterations dropped before fitting, for -LeakEstimator slopes (-1 = default 5)
+
+    [Parameter(Mandatory=$false)]
+    [int]$LeakMinIterations = -1,  # Iterations before a clean reading may end a test early (-1 = default 20)
+
+    [Parameter(Mandatory=$false)]
+    [double]$LeakRSquared = -1,  # Linearity a rising axis must show to be reported (-1 = default 0.9)
+
+    [Parameter(Mandatory=$false)]
     [switch]$Coverage = $false,  # Run with dotCover code coverage and export to JSON
 
     [Parameter(Mandatory=$false)]
@@ -786,6 +807,26 @@ try {
 
         if ($ReportHeaps) {
             $runnerArgs += "reportheaps=on"
+        }
+
+        # Pass-1 leak estimator knobs. Each is only sent when asked for, so TestRunner's own
+        # defaults stay the single source of truth for what "unspecified" means.
+        if ($LeakEstimator) {
+            $runnerArgs += "leakestimator=$LeakEstimator"
+        }
+        if ($LeakIterations -gt 0) {
+            $runnerArgs += "leakiterations=$LeakIterations"
+        }
+        if ($LeakWarmup -ge 0) {
+            $runnerArgs += "leakwarmup=$LeakWarmup"
+        }
+        if ($LeakMinIterations -ge 0) {
+            $runnerArgs += "leakminiterations=$LeakMinIterations"
+        }
+        if ($LeakRSquared -ge 0) {
+            # Invariant formatting: TestRunner parses this as an invariant double, and a machine
+            # with a comma decimal separator would otherwise send "0,9".
+            $runnerArgs += "leakrsquared=" + $LeakRSquared.ToString([System.Globalization.CultureInfo]::InvariantCulture)
         }
         
         if ($TeamCityCleanup) {
