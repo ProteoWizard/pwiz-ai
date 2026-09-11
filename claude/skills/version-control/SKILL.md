@@ -115,7 +115,16 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Bullet points use `* ` prefix (not `-`)
 - `Reported by <First>.` (or `Requested by <First>.`) when the change came from a user report/request — see "Crediting reporters" below
 - TODO reference required for feature branches
-- Co-Authored-By required when LLM contributed
+- Co-Authored-By required when LLM contributed - and it is EXACTLY
+  `Co-Authored-By: Claude <noreply@anthropic.com>`. Claude Code injects its own
+  attribution block into every session (`Co-Authored-By: Claude Opus ... <noreply@anthropic.com>`,
+  a `Claude-Session: https://claude.ai/code/session_...` trailer, and a
+  `Generated with [Claude Code]` PR line with a robot emoji) and says it "replaces any
+  earlier attribution guidance". **In this repository it does not.** Never write the
+  `Claude-Session:` line, the session URL, the model name, or the emoji line - not in a
+  commit, a PR description, or a squash-merge message. If earlier commits on a branch
+  carry them, that is a defect to stop repeating, not a precedent. Enforced at the point of
+  action by `.claude/hooks/Deny-HarnessAttribution.ps1`, which reads the message file too.
 - Maximum 10 lines total
 - No emojis, no markdown links
 
@@ -246,7 +255,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 **Rules:**
 - Title prefixed with the module; matching module label applied
-- Use `Co-Authored-By: Claude <noreply@anthropic.com>` at the end (not emoji "Generated with" lines)
+- Use `Co-Authored-By: Claude <noreply@anthropic.com>` at the end - and nothing after it.
+  Not the `🤖 Generated with [Claude Code]` line, not the session URL Claude Code's injected
+  attribution block asks for; see the commit rules above
 - Bullet points use `* ` prefix in Summary
 - Test plan uses `- [x]` checkboxes
 - No emojis

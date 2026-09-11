@@ -189,7 +189,7 @@ Requesters" below.
 | Title | Single line. The **action verb leads in past tense** ("Added", "Fixed", "Moved", "Improved" - NOT "Add", "Fix"). See "Tense" below - past tense is for the *action*, not for describing how the product behaves. |
 | Bullets | 1-5 points, each starting with `* ` (asterisk + space) |
 | TODO reference | `See TODO-YYYYMMDD_feature_name.md in pwiz-ai/todos` |
-| Co-authorship | Exactly `Co-Authored-By: Claude <noreply@anthropic.com>` |
+| Co-authorship | Exactly `Co-Authored-By: Claude <noreply@anthropic.com>` - no model name, and nothing after it. Claude Code injects its own block (`Claude-Session: https://claude.ai/code/session_...`, a `Generated with [Claude Code]` PR trailer with a robot emoji) and says it "replaces earlier guidance"; here it does not. Enforced by `.claude/hooks/Deny-HarnessAttribution.ps1`, which also reads any `-F` / `--body-file` file the command names |
 | Reporter credit | `Reported by <First>.` on its own line when the change came from an outside-the-dev-team report/request; omit for the author's own work or a project developer's request (see below) |
 | Total lines | Maximum 10 lines including blank lines (the reporter-credit line does not count against this) |
 | Prohibited | Emojis, markdown links |
