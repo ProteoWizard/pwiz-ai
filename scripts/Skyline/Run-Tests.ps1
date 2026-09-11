@@ -120,6 +120,11 @@ param(
     [switch]$ReportHeaps = $false,  # Enable heap count diagnostics (only useful when handles aren't leaking)
 
     [Parameter(Mandatory=$false)]
+    [switch]$AllowConcurrent = $false,  # Run even though another test process is active. Only for runs
+                                        # whose memory numbers do not matter - two test processes
+                                        # contend and corrupt each other's measurements.
+
+    [Parameter(Mandatory=$false)]
     [ValidateSet("", "deltas", "slopes")]
     [string]$LeakEstimator = "",  # How pass 1 reduces per-iteration memory samples to a leak number.
                                   # "deltas" is TestRunner's long-standing trailing-window mean,
@@ -347,6 +352,59 @@ elseif (-not $TestName) {
     Write-Host "  .\Run-Tests.ps1 -TestName CodeInspection" -ForegroundColor Cyan
     Write-Host "  .\Run-Tests.ps1 -UseTestList" -ForegroundColor Cyan
     exit 1
+}
+
+# Refuse to start a second test process while one is already running - ANYWHERE on the machine.
+#
+# This is deliberately NOT scoped to this checkout, and that is the whole point. Build-Skyline.ps1
+# has a similar-looking check that IS scoped to its build directory, because what a build has to
+# protect is its own output files from being locked, and a run out of D:\Nightly cannot lock those.
+# What a test run has to protect is its MEASUREMENTS, and memory, heap and handle numbers are
+# properties of the machine, not of a directory. A nightly on another checkout cannot corrupt these
+# binaries but it absolutely corrupts these numbers, in both directions.
+#
+# Measured 2026-09-10, the day this was added: a leak sweep launched against a running
+# SkylineNightly read AaantivirusTestExclusion at 13.9 KB/run heap, R2 = 0.78. Relaunched on a quiet
+# machine minutes later, the same test read 8.5 KB/run at R2 = 0.52 - a false signal produced purely
+# by the other run. Nothing warned, because the build guard had looked only at this checkout and
+# found it idle, and its silence read as "the machine is idle".
+#
+# So: do not "fix" this to match Build-Skyline.ps1. The scopes differ on purpose.
+$otherTestProcesses = @(Get-Process -Name 'TestRunner', 'SkylineTester' -ErrorAction SilentlyContinue)
+if ($otherTestProcesses.Count -gt 0) {
+    # A run that repeats a test is measuring something; a single functional run is just spending
+    # wall-clock. Only the first produces silently wrong data, so only the first is a hard stop.
+    $measuresMemory = $Quality -or $MemoryProfile -or ($Loop -gt 1) -or ($Pass -match '1')
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host "⚠️  Another test process is already running" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Yellow
+    foreach ($proc in $otherTestProcesses) {
+        $procPath = try { $proc.MainModule.FileName } catch { '(path unavailable)' }
+        Write-Host ("  - {0} (PID {1}), started {2}" -f $proc.Name, $proc.Id, $proc.StartTime) -ForegroundColor Gray
+        Write-Host ("    {0}" -f $procPath) -ForegroundColor DarkGray
+    }
+    Write-Host ""
+
+    if ($measuresMemory) {
+        Write-Host "This run measures memory, and two test processes contend and corrupt each" -ForegroundColor Red
+        Write-Host "other's numbers. Both this run and the one above would produce bad data." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "[LLM-AGENT-ACTION-REQUIRED]" -ForegroundColor Cyan
+        Write-Host "Ask the developer whether to stop the run above - do NOT kill it unasked." -ForegroundColor Cyan
+        Write-Host "Pass -AllowConcurrent only if they say the numbers do not matter." -ForegroundColor Cyan
+        Write-Host ""
+        if (-not $AllowConcurrent) {
+            exit 2  # Same code Build-Skyline.ps1 uses for a process block, not a failure
+        }
+        Write-Host "-AllowConcurrent given; proceeding with untrustworthy memory numbers." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "Proceeding: this run does not measure memory, so contention costs time," -ForegroundColor Yellow
+        Write-Host "not correctness. Results stay valid; the run will just be slower." -ForegroundColor Yellow
+    }
+    Write-Host ""
 }
 
 # Determine output directory

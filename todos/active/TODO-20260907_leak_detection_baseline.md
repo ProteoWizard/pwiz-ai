@@ -715,3 +715,20 @@ nightly failure.
   conclusions in one session. `TestRunner.exe` run directly out of `bin\staging\Release` does not pick
   up a build — only `Run-Tests.ps1` stages.
 - **Never run two test processes at once** — they contend and corrupt each other's memory numbers.
+  Now enforced: `Run-Tests.ps1` refuses to start a memory-measuring run (`-Quality`, `-Pass 1`,
+  `-Loop > 1`, `-MemoryProfile`) while any `TestRunner` or `SkylineTester` is alive **anywhere on the
+  machine**, exiting 2 before it stages anything. `-AllowConcurrent` overrides; a single functional
+  run only warns, since there contention costs wall-clock rather than correctness.
+
+  **The check is deliberately machine-wide, unlike the one in `Build-Skyline.ps1`**, and the
+  difference is the lesson. A build protects its own output files from being locked, so scoping to
+  its checkout is right and a run out of `D:\Nightly` is correctly ignored. A test run protects its
+  *measurements*, and memory, heap and handle counts belong to the machine, not a directory.
+
+  Learned by doing it: on 2026-09-10 a slope sweep was launched against a running SkylineNightly
+  (`D:\Nightly\SkylineTesterForNightly_integration`) and ran 28 minutes alongside it. No binaries
+  were harmed — separate checkouts — but the numbers were. `AaantivirusTestExclusion` read
+  **13.9 KB/run heap at R² = 0.78** under contention and **8.5 at R² = 0.52** on the quiet relaunch
+  minutes later: a false rising signal manufactured entirely by the other run, on the very axis this
+  branch exists to make trustworthy. The build guard had looked at the checkout, found it idle, and
+  its silence was read as "the machine is idle".
