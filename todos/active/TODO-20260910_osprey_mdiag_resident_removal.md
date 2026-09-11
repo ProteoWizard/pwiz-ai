@@ -599,6 +599,53 @@ run rather than two, with no prune warning.
 **Remaining before the PR**: `/code-review max` (report-only, see below), then the 446-file
 oracle.
 
+### Cycle 2: five findings approved and done (`1b9dc83cf7`, night of 2026-09-10)
+
+The second `/code-review max` returned 15 (its cap). Reported, not acted on; Brendan approved
+exactly five - **8, 2, 12, 5, 1** - and no more. All in one commit, green (build 0 warnings,
+inspection clean, 593/593).
+
+Two of them corrected cycle-1 calls of mine:
+
+* **#5 - the F3 drop was wrong.** `HydrateCompactedStreaming` streams the READING but
+  accumulates the RESULT (`perFileEntries.Add` per run, its own NOTE says "this loop is the
+  ALL-RUNS builder"), and it is the twin the 446-run incident took. The cycle-1 marker was on
+  the FAT twin only; door (a) was caught by the guard/warning text containing the same
+  substring, not by the builder. Now: `RescoreHydration.ALL_RUNS_BUNDLE_MARKER` is one
+  constant, both twins log it when they start building, the guard and the resume warning
+  format it in, and the gate hoists `$allRunsBundleMarker` beside its other markers (mode 11
+  reuses `$firstPassFdrPerRunMarker` instead of retyping it).
+* **#2 - "master completes these" was half wrong.** On the default lean load the streamed
+  bundle needs the same summary and throws one call later with its own remedy; only under a
+  resident token does the overlay complete without it. The F1 warning promised a route the
+  default path cannot take. Moved onto the `!leanStubs` arm that actually builds the bundle;
+  guard doc and test comment corrected.
+* **#1** - a `NeedsResidentPool` load leaves every list full and `CanHydratePerRun` has no
+  token term, so the per-run arm would publish pre-compaction stubs as `CompactedEntries` and
+  pass 2 would fold over the wrong pool. Chosen fix: a loud refusal at the top of
+  `RehydrateForPerRunRescore` when any list is non-empty (fires only under a token; the gate
+  sets none, and every untokened route - modes 3, 5, 7, 11 - leaves the lists empty). The
+  routing fix waits on a gate that exercises a token.
+* **#8** `IsSet`, not `!= null` - an empty exported value is unset everywhere else.
+* **#12** three BOMs stripped (`ResidentPaths.cs`, `ResidentPoolGuardTest.cs`,
+  `regression.ps1`); the test-file one was my own `utf-8-sig` write.
+
+Dropped, per the raised bar: 3, 4 (both pre-existing on master), 6, 7, 9, 10, 11, 13, 14
+(absorbed), 15.
+
+### Night run plan (chained, detached; logs in `ai/.tmp/sessions/20260910-01Qwgkv/`)
+
+1. `oracle-446-mdiag.ps1` - exe snapshot `_bin\mdiagfix-1b9dc8`; deletes the products from
+   `chs446-mdiagtest-copy`, runs 446-file `--task ModelDiagnostics`, asserts the route on
+   BOTH halves, compares pass-1 (model views excused) and pass-2 (strict) JSON against the
+   flag-up-front reference `chs-446files-libdecoy-r1.0-protein-compact-p16proof`, and runs
+   `perfviz.py` -> `oracle-446-perfviz.png`. Launched 21:04.
+2. `gate-all-after-oracle.ps1` - `regression-parallel.ps1 -Dataset All` once the oracle logs
+   `ORACLE DONE`.
+3. `paylater-446-resume.ps1` - the original straight-through command with the products
+   deleted again, after the gate; asserts no re-processing (PerFileScoring skipped, zero
+   re-scores, fold-arm marker) and strict product identity with the oracle's.
+
 ### The second `/code-review max` is REPORT-ONLY (Brendan, 2026-09-10)
 
 **Triage it and stop. Do not implement anything from it without his call.** The command
