@@ -2,7 +2,8 @@
 
 **Branch**: `Skyline/work/20260910_osprey_mdiag_resident_removal` (in `C:\proj\pwiz-work1`)
 **Module**: `osprey`
-**PR**: [#4656](https://github.com/ProteoWizard/pwiz/pull/4656) (opened 2026-09-11 00:20; TeamCity Perf/Regression build 4172019 on `pull/4656`)
+**PR**: [#4656](https://github.com/ProteoWizard/pwiz/pull/4656) (merged 2026-09-11 as `7af9eb0ea5`)
+**Status**: Completed
 **Found**: 446-file night run, 2026-09-09 -> 10. Evidence:
 `ai/.tmp/sessions/20260910-night/FINDINGS.md`, handoff
 `ai/.tmp/handoff-20260910_osprey_446_diagnostics_results.md`.
@@ -743,3 +744,25 @@ anything, which is exactly what it was added to do - it just refused the wrong l
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260910_osprey_mdiag_resident_removal.md` before starting work.
+
+### 2026-09-11 - Merged
+
+PR #4656 merged as commit `7af9eb0ea5` (squash of 10 commits; TeamCity Perf/Regression #243 on
+`1b9dc83cf7` and #244 on the master-merged head `575d7df02c`, both SUCCESS on the MacCoss
+agent). Shipped: `--task ModelDiagnostics` routed to the per-run survivor loader; the all-runs
+bundle marked on both hydrate twins and asserted absent in regression modes 7 and 11 (with a
+liveness anchor); the bundle guard refusing only where the bounded alternative exists; the
+per-run arm refusing a resident load; `OSPREY_STAGE7_STREAM` removed after its A/B was banked
+(`KNOWN_UNFIXED` 5 -> 4, the spelling refused at startup); the regression gate's live-run-dir
+prune fixed. Proven on the 446-run CHS cohort in both routes: bounded memory (two flat folds),
+identical products, no re-processing on the pay-later resume.
+
+Deferred, by design and recorded above: step 3 (deleting the fold's resident arm) stays
+blocked behind PROJECTION_OFF / NON_PERCOLATOR_FDR / FDRBENCH_PASS1; `retained_base_ids.bin`
+stays undeclared in Outputs/ValidityKey until a format bump pays for it; `-KeepRunDirs`
+0 -> 1 is its own small change. Filed: #4657, the co-assignment panel's ~30 GB/min allocation
+churn (the 41.7 GB transient), now the largest consumer left in this command. Also this
+branch's fallout, done in pwiz-ai: the attribution deny hook and the once-per-session
+version-control reminder, after every commit on this branch had carried the harness's
+session trailer instead of the team format.
+
