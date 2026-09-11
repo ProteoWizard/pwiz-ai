@@ -675,8 +675,9 @@ Dropped, per the raised bar: 3, 4 (both pre-existing on master), 6, 7, 9, 10, 11
   **IDENTICAL** to the `--task` route's (modulo `generatedUtc`); all three products byte-equal
   in size. perfviz (`paylater-446-perfviz.png`): same shape, peak 37.0 GB (the same
   co-assignment transient), max gap 14 s. Posted to the PR as a comment.
-* **TeamCity 4172019**: still QUEUED at 02:10 behind the overnight pipeline on the MacCoss
-  agent; the config's last master run (#241) was green there.
+* **TeamCity #243 (4172019)**: **SUCCESS** at ~04:10 on commit `1b9dc83cf7` (the branch HEAD,
+  verified - not a master fallback), MacCoss agent. Perf/Regression green; every test-plan box
+  on PR #4656 is ticked. **Ready for human review.**
 
 ### Recorded from the 446 runs (measurement, not a finding to file)
 
