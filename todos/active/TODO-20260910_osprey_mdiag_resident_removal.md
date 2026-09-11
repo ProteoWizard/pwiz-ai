@@ -578,9 +578,26 @@ Per the standing rule that a review's leftovers are fixed or dropped, never relo
 * `regression.ps1 -Dataset StellarLibDecoy` 14:34 -> 15:03: **mode 7 FAIL, every other leg
   PASS** - see below. Log kept at
   `ai/.tmp/sessions/20260910-01Qwgkv/gate-stellarlibdecoy-20260910_150300.log`.
-* Re-run launched 16:53 after the fix (`5959964200`), with
-  `regression-parallel.ps1 -Dataset All` chained behind it as a waiter that only fires on
-  exit 0. Then `/code-review max` again, then the 446-file oracle.
+* Re-run after the fix (`5959964200`), 16:53 -> 17:21: **`Osprey regression PASSED`,
+  `GATE EXIT 0`**, every leg green including `mode7 (diagnostics regeneration: report only,
+  vs golden): PASS` - the leg that was red - and `mode11 ... PASS (pass-2 byte-exact)` with
+  both route assertions holding. `Tokens REQUIRED by this gate: 0 (target: 0)`, unchanged.
+  The new producer-side marker fired on NO leg, which is the expected result: every route the
+  gate exercises takes the bounded per-run loader.
+* `regression-parallel.ps1 -Dataset All` fired automatically off that exit 0, 17:22 -> 18:39:
+  **TOTAL 95 PASS / 0 FAIL / 1 SKIP in 01:16:56**, both lanes exit 0 (Astral 23 PASS / 0 FAIL
+  / 1 SKIP; Stellar+StellarLibDecoy+StellarGenDecoyEntrap 72 PASS / 0 FAIL / 0 SKIP). The one
+  SKIP is `Astral mode2 (streamed join)` - not run for Astral by suite design.
+  Log: `ai/.tmp/sessions/20260910-01Qwgkv/gate-all.log`.
+
+**This also validated the prune fix (`b7bf3867ed`) in the shape that broke it.** The previous
+`-Dataset All` attempt aborted mid-Astral when a sibling invocation's startup prune deleted
+the live lane's `chain\logs`, and it finished 76 PASS with Astral incomplete. This run had
+the same two concurrent lanes and completed clean at 95 PASS - full Astral coverage in ONE
+run rather than two, with no prune warning.
+
+**Remaining before the PR**: `/code-review max` (report-only, see below), then the 446-file
+oracle.
 
 ### The second `/code-review max` is REPORT-ONLY (Brendan, 2026-09-10)
 
