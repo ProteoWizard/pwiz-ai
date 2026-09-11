@@ -669,7 +669,23 @@ Dropped, per the raised bar: 3, 4 (both pre-existing on master), 6, 7, 9, 10, 11
 * **`-Dataset All` (00:16)**: 95 PASS / 0 FAIL / 1 SKIP in 1:18:21, both lanes exit 0.
 * **PR #4656** opened 00:20; TeamCity 4172019 triggered on `pull/4656` (authorized for the
   night by Brendan).
-* **Leg 3** (straight-through pay-later resume): running from 00:16.
+* **Leg 3 (02:09)** - the original straight-through command, `--model-diagnostics -Resume`,
+  products deleted again: exit 0, wall 1:51:53; `PerFileScoring` skipping x1 / starting x0;
+  `Re-scoring file` x0; fold arm x1; route clean on both halves; pass-1 AND pass-2 JSON
+  **IDENTICAL** to the `--task` route's (modulo `generatedUtc`); all three products byte-equal
+  in size. perfviz (`paylater-446-perfviz.png`): same shape, peak 37.0 GB (the same
+  co-assignment transient), max gap 14 s. Posted to the PR as a comment.
+* **TeamCity 4172019**: still QUEUED at 02:10 behind the overnight pipeline on the MacCoss
+  agent; the config's last master run (#241) was green there.
+
+### Recorded from the 446 runs (measurement, not a finding to file)
+
+The **peak co-assignment panel** is now the largest single memory consumer in
+`--task ModelDiagnostics` at 446 runs: a transient to 41.7 GB private (37.0 GB on the second
+run), once per pass - "scanning 1st-pass sidecars over 446 file(s)" 10 -> 35 GB, then "joining
+apex RT over 446 file(s)" to the peak - returning to the ~20 GB floor each time. O(files x
+precursors), in the diagnostics code, pre-existing (phase 5's flag-up-front FirstPassFDR peaked
+at the identical 41.7 GB). Everything else in the command is flat.
 
 ### The second `/code-review max` is REPORT-ONLY (Brendan, 2026-09-10)
 
