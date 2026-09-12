@@ -3,6 +3,7 @@
 ## Branch Information
 
 - **Branch (PR)**: `Skyline/work/20260911_net10_leak_fixes` - the leak fixes
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4659
 - **Branch (parked)**: `Skyline/work/20260911_leak_estimator` - estimator and diagnostics tooling
 - **Branch (original)**: `Skyline/work/20260907_leak_detection_baseline` (off `Skyline/work/20260612_net8_port`)
 - **Checkout**: `C:\proj\pwiz-work1`
@@ -817,6 +818,52 @@ cross-flavour dependency rather than a within-run one.
   `GcHeapHistogram` still has not closed a case unaided.
 
 The original branch still holds the full history until the split is confirmed.
+
+### The review caught a build break in the binary, and the layout that fixed it
+
+`/code-review max` on the fixes branch found that the rebuilt `DigitalRune.Windows.Docking.dll` had
+been retargeted from `.NETFramework,Version=v4.7.2` to `NETCoreApp,Version=v10.0` - verified from the
+binaries' `TargetFrameworkAttribute` strings - while three net472 projects (`SeeMS`, `IDPicker`,
+`IDPicker\Test`) still referenced that exact file by HintPath, and SeeMS is in the standard Windows
+install target. The fix is `#if NETCOREAPP`, so it only exists in a net10 build, and a net10 build
+cannot be referenced from net472: one binary cannot serve both.
+
+So `pwiz_tools/Shared/Lib/DigitalRune/` now holds `net472/` (the untouched original, verified
+byte-identical to the port branch by blob hash, with its `ja` and `zh-CHS` satellites and XML doc)
+and `net10/` (the rebuilt one, with the same satellites and a copy of the XML). Every consumer
+chooses: the seven Skyline projects and the pwiz-sharp SeeMS port take net10; SeeMS and IDPicker
+stay on net472. A reference that has not been updated fails to resolve, on purpose, so the build
+reports what has not been ported. The installer templates reference build output, not `Shared\Lib`,
+and needed nothing.
+
+Two things the move nearly cost, both caught by measuring rather than assuming:
+
+- **The satellites.** The build resolves a HintPath reference's satellites relative to the HintPath
+  directory. With the DLL moved and `ja/` left behind, `DigitalRune.Windows.Docking.resources.dll`
+  silently stopped being deployed - missing satellites fall back to neutral English. Populating
+  `net10/ja/` and rebuilding brought it back. (`zh-CHS` is not copied under either layout: .NET Core
+  treats it as a deprecated alias for `zh-Hans`, so DigitalRune's Chinese strings are not deployed
+  on net10 at all. Pre-existing; not addressed here.)
+- **The XML doc.** The SDK-style project that built net10 has `GenerateDocumentationFile = false`,
+  so the net10 build never produced one, and Skyline would have lost docking IntelliSense. The
+  net472 XML is copied beside net10 for now; the proper fix is flipping that property in the
+  developers repo so the next rebuild generates its own.
+
+Also confirmed from the decompiled binary: the `Control.Region` conversion covers 8 of 14 sites.
+The 6 that remain include `AutoHideStripBase.SetRegion`, on the layout path. This TODO's earlier
+"none remain" was wrong. The measured test does not reach those paths; a full 1101-test pass 1
+reported nothing.
+
+Review findings deliberately not acted on, for follow-up:
+
+- `KoinaTestUtil.FakeKoina.Dispose` still does `ShutdownAsync().Wait()` with no `Dispose`, and it IS
+  exercised by three pass-1 tests; `CallWithClient`, where the fix went, has one caller that
+  early-returns without a Koina server. An additional site, not a contradiction - needs measuring.
+- `PwizFileInfoTest`'s comment says the empty-serial-number case "only exists in the .wiff2 file";
+  the fallback mzML carries `CI231606PT`, so the assertion could have kept running. And the CI build
+  check runs `pass1=on pass2=off`, so "coverage stays in pass 2" does not hold for that job.
+- Six findings on the uncommitted `ReaderSciexTests.cs`, including that it will not compile without
+  vendor licenses (a Linux CI break) - relevant when those tests find a home.
 
 ## Method notes
 
