@@ -185,6 +185,29 @@ These are leaks to fix, not detection problems. Listed so they are not confused 
   identical to the decimal, so deterministic given the test sequence — yet only 3.5 KB in isolation.
 - **`TestGroupedStudies1Tutorial`** (~1.9 MB/run native) — root-caused 2026-09-08, see below.
 
+### Folded in 2026-09-12: the per-cycle managed growth measured 2026-08-27
+
+From `TODO-20260827_net8_managed_memory_leak.md` (now completed), the one leak observation on
+the port line that no per-test check can see. Two full-suite overnight runs, 657 tests x 5
+languages, 8 workers, a cycle being one pass through the list (3,285 results):
+
+| | cycle 4 | last cycle | rate |
+|---|---|---|---|
+| net472 managed | 62.9 MB | 64.0 MB (cycle 13) | **+0.12 MB/cycle** — plateaus |
+| net8 managed | 101.7 MB | 136.4 MB (cycle 10) | **+5.8 MB/cycle** — straight line |
+
+~48x the managed growth rate, ~6 KB per test execution, so invisible at per-test granularity;
+it exists only as a slope across cycles. That is exactly the estimator problem work item 1
+addresses — a fitted slope with R² over the cycle series would report it directly. Not
+blocking (9-hour throughput +5%, far from the container limit), but unexplained linear growth
+in managed memory is a retained object graph, and master does not have it.
+
+Candidates to eliminate first, all new on the net8 line: the `Wiff2LoadContext` side-by-side
+`AssemblyLoadContext` (never unloaded), the staged portable runtime loaded per worker, and the
+WinForms/SystemEvents hook changes made during the port. The shape (flat per-cycle, tiny
+per-test) says something retained once per test class or per language switch rather than per
+test, so do not expect pass-1 attribution to name a single test.
+
 ## `TestGroupedStudies1Tutorial`: a .NET 10 GDI+ regression in layout loading
 
 Not a detection problem and not an old Skyline bug — a **port blocker**. Every claim below is a

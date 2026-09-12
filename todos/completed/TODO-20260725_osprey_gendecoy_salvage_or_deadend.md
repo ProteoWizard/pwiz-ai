@@ -4,10 +4,12 @@
 - **Branch**: `Skyline/work/20260725_osprey_gendecoy_decision`
 - **Base**: `master`
 - **Created**: 2026-07-25
-- **Status**: In Progress
+- **Status**: Completed - both PRs merged (2026-07-26, 2026-07-27); closed out 2026-09-12
 - **GitHub Issue**: [#4465](https://github.com/ProteoWizard/pwiz/issues/4465)
 - **PR**: PR 1 [#4478](https://github.com/ProteoWizard/pwiz/pull/4478) (merged 2026-07-26);
-  PR 2 (b<->y swap removal) pending
+  PR 2 shipped as [#4480](https://github.com/ProteoWizard/pwiz/pull/4480) (merged 2026-07-27 as
+  `55cedad25b` from `Skyline/work/20260726_osprey_regression_redesign`, see
+  [[TODO-20260726_osprey_regression_redesign]]) - not from this TODO's branch
 - **Requester/Reporter**: none (raised internally by the Osprey developers; no credit line)
 
 ## Objective
@@ -1335,3 +1337,31 @@ Found while reading that path: `Pass2FdrSidecar.cs:84` warns
 `"Recognized modes: '{0}', '{1}'."` naming only `percolator` and `transfer` -- but C# accepts
 FOUR (`NormalizePass2QValue`, `OspreyEnvironment.cs:358-372`). The one message meant to catch a
 typo lists half the valid values. Fold into the registry PR.
+
+### 2026-09-12 - Closed out: PR 2 had already shipped as #4480
+
+The "decided change, not yet written" under Next above was written and merged the day after
+this TODO's last entry: PR #4480 ("Removed the Osprey decoy b<->y intensity swap and expanded
+the regression to cover both decoy paths") merged to master 2026-07-27 as `55cedad25b`, from
+the regression-redesign branch rather than this one. `DecoyGenerator.cs` on master now carries
+the comment explaining what the swap was and why no other tool does it. The two commits staged
+on `Skyline/work/20260725_osprey_gendecoy_decision` (`0d52a921fa`, `166007fb05`) are superseded
+and the branch is deleted from origin.
+
+## Resolution
+
+**Status**: Completed. PR [#4478](https://github.com/ProteoWizard/pwiz/pull/4478) (calibration
+progress reporting, 2026-07-26) and PR [#4480](https://github.com/ProteoWizard/pwiz/pull/4480)
+(b<->y swap removal + both-decoy-path regression, 2026-07-27 as `55cedad25b`).
+
+The generated-decoy FDR failure was one line of construction: `RecalculateFragments` relabelled
+target b_k as decoy y_{n-k} while carrying the target fragment's intensity, inverting the
+decoy's intensity structure relative to any real peptide. Removing the swap took generated
+decoys from 10.9% / 7.6% true FDP (Stellar / Astral, at claimed 1%) to 1.47% / 2.03% - parity
+with Carafe library decoys on Astral. The similarity gates and the precursor m/z shift were
+measured and rejected (no benefit; the shift is a net negative). Mirrored in Rust.
+
+Research leads recorded above and not pursued here: within-pair target/decoy RT correlation as
+the residual mechanism, and a SpectraST-style check of the decoy spectrum against OTHER library
+entries. Issue #4465 stays open for those; the regression's move onto the libdecoy path was
+delivered by the regression redesign.

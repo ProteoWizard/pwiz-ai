@@ -3,7 +3,9 @@
 ## Branch Information
 - **Branch**: none - measurement run, no code change
 - **Created**: 2026-08-21
-- **Status**: Active (result recorded; ONE decision open)
+- **Status**: Active - **decision taken 2026-09-12 (Brendan): run the A/B split** (baseline's
+  DELIVERED library on pickrun3, ~19 h, a full run since `-LinkFrom` cannot cross a library
+  change). Queue for a night session. Result recorded below stands as-is until then
 - **Module**: `osprey`
 - **Companion**: `TODO-20260821_tdp43_pickrun3_ourlib-stats.html` (the tables, formatted)
 
@@ -59,7 +61,7 @@ spending another ~19 h on the split (baseline's DELIVERED library on pickrun3, i
 sampler from library). `-LinkFrom` does not help across a library change - Stage 1-4 artifacts
 are library-specific - so it is a full run.
 
-**Brendan's call. Not started.**
+**Decided 2026-09-12: run it.** Brendan chose the ~19 h split - the baseline's delivered library on pickrun3 - so the sampler's contribution on TDP-43 is measured, not inferred from SEA-AD. Not yet launched; queue as a night-session job.
 
 ## Two harvest gates FAILED
 
@@ -114,5 +116,5 @@ both) does confirm the mechanism is acting - it just does not scale the way I as
   numbers
 - `ai/todos/active/TODO-20260821_osprey_pipeline_error_detail.md` - the `BlibWriter` crash was
   unattributable because the terminal handlers logged `ex.Message`; fixed on a branch
-- `ai/todos/active/TODO-20260821_osprey_fdrbench_pass_bitmask.md` - `--fdrbench-pass both`
+- `ai/todos/backlog/brendanx67/TODO-osprey_fdrbench_pass_bitmask.md` - `--fdrbench-pass both`
   silently emits pass 2 only

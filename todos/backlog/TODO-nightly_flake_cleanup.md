@@ -5,7 +5,7 @@
 - **Branch**: not created yet; branch off `master` at or after `79e50e83a6`
 - **Base**: `master`
 - **Created**: 2026-08-26
-- **Status**: Not started
+- **Status**: Backlog - measured and scoped, not started; parked 2026-09-12. Two of the original three were fixed elsewhere (see the Postscript); the remaining targets are `ConsoleImportNonSRMFile` and the `IsGraphUpdatePending` site in the Progress Log
 - **Module**: `skyline`
 - **PR**: (pending)
 - **Related**: `todos/completed/TODO-20260822_test_stability.md` (PR #4610, the work that

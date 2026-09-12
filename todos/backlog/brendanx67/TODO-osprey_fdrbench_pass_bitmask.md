@@ -1,10 +1,13 @@
 # --fdrbench-pass is a bitmask tested with ==, so `both` silently emits only pass 2
 
 ## Branch Information
-- **Branch**: none yet - backlog, needs a decision before code
+- **Branch**: none yet
 - **Base**: `master`
 - **Created**: 2026-08-21
-- **Status**: Active (analysis complete, implementation blocked on a product decision)
+- **Status**: Backlog - **decided 2026-09-12 (Brendan): option (1), the streamed pass-1
+  emitter.** Not the hard-fail stopgap (2) and not document-only (3). Parked until it is worth
+  building; substantial, per the "per-file compute -> O(entries) aggregate -> per-file emit"
+  rule. Re-date and move to `active/` when started
 - **Module**: `osprey`
 - **Requester/Reporter**: none - found while preparing the TDP-43 pickrun3 comparison
 
@@ -81,11 +84,12 @@ type confusion as documented behaviour.
 
 ## Tasks
 
-- [ ] Decide between the options above
-- [ ] If (2): reject `both` in `ParseFdrBenchPass` with a message naming the resident-pool
-      reason, AND set `DefaultFdrBenchPass = '2'` for SEA-AD in the same change
-- [ ] If (1): streamed pass-1 emitter, then restore `both` and make all four consumers test
-      the mask rather than `==`
+- [x] Decide between the options above - **(1), Brendan 2026-09-12**. The recommendation for
+      (2)-then-(1) was not taken: the stopgap would have to be undone by the real fix.
+- [ ] ~~If (2): reject `both` in `ParseFdrBenchPass`...~~ not chosen
+- [ ] Streamed pass-1 emitter, then restore `both` and make all four consumers test the mask
+      rather than `==`. Until it lands, `both` still means pass 2 and the SEA-AD runner default
+      still asks for it - a known silent gap, not a fixed one
 - [ ] Either way, delete the "or `both`" claim from `WriteFdrBenchPass1IfRequested`'s
       doc-comment - it is what would lure the next reader into the unsafe fix
 

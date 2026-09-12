@@ -6,11 +6,18 @@ Get ReSharper green again for Skyline, SkylineBatch and AutoQC on the net8 line.
 - **Checkout**: `C:\proj\pwiz`
 - **Branch**: `Skyline/work/20260823_resharper_cleanup` - branched off
   `Skyline/work/20260818_commonutil_winforms_split` @ `2cb66ee39d`, NOT master.
-- **Base**: `Skyline/work/20260818_commonutil_winforms_split`
+- **Base**: `Skyline/work/20260818_commonutil_winforms_split` - **merged into
+  `Skyline/work/20260612_net8_port` on 2026-08-31 (#4587)**, so this branch now needs
+  rebasing/merging onto the port branch before a PR
 - **Created**: 2026-08-23
-- **Status**: In Progress (Phase 0 not started)
+- **Status**: In Progress - 12 commits on origin (build fixes, test fixes, ReSharper cleanup on
+  the net8 line, last 2026-08-24). The framework-neutral half shipped separately as
+  [#4648](https://github.com/ProteoWizard/pwiz/pull/4648) (WebClient migration + prohibition,
+  merged to master 2026-09-10). Next: move onto the port branch, re-run the inspection
+  baseline there, open a PR stacked on #4619. (Status corrected 2026-09-12; it had read
+  "Phase 0 not started" since the 24th.)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: (pending, stacked on [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Related**: [#4587](https://github.com/ProteoWizard/pwiz/pull/4587) (CommonUtil WinForms split,
   the immediate base), `TODO-20260818_commonutil_winforms_split.md`,
   `TODO-20260612_net8_port.md`

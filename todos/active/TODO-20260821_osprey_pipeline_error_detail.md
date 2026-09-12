@@ -4,8 +4,12 @@
 - **Branch**: `Skyline/work/20260821_osprey_pipeline_error_detail`
 - **Base**: `master`
 - **Created**: 2026-08-21
-- **Status**: Active
+- **Status**: Active - code complete, gate green, **one commit `36af2e70df` that exists only
+  as a local branch in `C:\proj\pwiz`** (not pushed; noted 2026-09-12 after three weeks). Next:
+  rebase onto current master, `/code-review`, push, open the PR. The one unchecked task
+  (confirm on a real failure that the new line names a type) can be done on the PR
 - **Module**: `osprey`
+- **PR**: (pending)
 - **Worktree**: `C:\proj\pwiz`
 - **Requester/Reporter**: none - found while auditing the TDP-43 163-file baseline run
 

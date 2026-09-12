@@ -4,7 +4,7 @@
 - **Branch**: `master` (pwiz-ai - commits directly, no feature branch)
 - **Base**: `master`
 - **Created**: 2026-07-28
-- **Status**: In Progress
+- **Status**: Backlog - 7 of 20 work items applied 2026-07-28 (WI-1..7, all P0); the 13 remaining (P1-P4) untouched since. Parked in `backlog/brendanx67/` 2026-09-12; re-date and move to `active/` when resumed
 - **PR**: (none - pwiz-ai commits directly to master)
 
 ## Objective

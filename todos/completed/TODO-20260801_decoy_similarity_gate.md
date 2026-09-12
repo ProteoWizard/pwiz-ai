@@ -4,10 +4,16 @@
 - **Branch**: `Skyline/work/20260801_decoy_similarity_gate` (not yet created)
 - **Base**: `master`
 - **Created**: 2026-08-01
-- **Status**: In Progress
-- **GitHub Issue**: [#4515](https://github.com/ProteoWizard/pwiz/issues/4515)
+- **Status**: Completed - the gate shipped in Carafe and the I/L gate in pwiz (2026-08-04/05);
+  closed out 2026-09-12 with the Skyline half and the 82-file test carried by #4516
+- **GitHub Issue**: [#4515](https://github.com/ProteoWizard/pwiz/issues/4515) (closed 2026-08-04 by
+  #4528); Skyline half [#4516](https://github.com/ProteoWizard/pwiz/issues/4516) (open)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: no pwiz branch of its own. Shipped as
+  [maccoss/Carafe#9](https://github.com/maccoss/Carafe/pull/9) (fragment-overlap gate, I/L
+  collision rejection, configurable entrapment source and ratio - merged 2026-08-05) and pwiz
+  [#4528](https://github.com/ProteoWizard/pwiz/pull/4528) (Osprey I/L gate, merged 2026-08-04 as
+  `e7b5a917ba`, tracked in [[TODO-20260802_osprey_default_flip]])
 
 Most of the work lands in **maccoss/Carafe** (Java), which is where the affected libraries are
 built. The Skyline half has moved out to
@@ -3034,3 +3040,36 @@ pool-composition swing. That swing was a symptom of the training-selection defec
 [pwiz#4593](https://github.com/ProteoWizard/pwiz/pull/4593), so the objection has expired - but the
 experiment has not been done, and no gate conclusion at scale should rest on anything else until it
 is.
+
+### 2026-09-12 - Closed out
+
+Both code halves have been on their respective mains since the first week of August; this file
+kept going as the research log for the library-replacement and training-selection questions,
+which resolved into their own PRs (#4593 training selection, `stellar-libdecoy-v3`). Nothing
+here is waiting on a branch that does not exist.
+
+## Resolution
+
+**Status**: Completed. Carafe gate shipped as
+[maccoss/Carafe#9](https://github.com/maccoss/Carafe/pull/9) (2026-08-05); Osprey I/L gate as
+pwiz [#4528](https://github.com/ProteoWizard/pwiz/pull/4528) (2026-08-04, `e7b5a917ba`), which
+closed #4515.
+
+What shipped: a fragment-overlap gate on generated entrapment and decoy sequences (bounded
+retry, seed-derived so a rebuilt library is a clean differential), I/L-normalised collision
+rejection against the target set in both Carafe and Osprey (C# and Rust), and a configurable
+entrapment source and ratio. Measured: the gate removes the cross-group contamination and
+leaves the within-group phenomenon intact; the set-wise isobaric gate was measured and
+reverted (Brendan, 2026-08-03); the I/L fix reverses the Arabidopsis-entrapment surprise.
+
+Carried forward, not done here:
+- The Skyline half (apply the same findings to `SequenceMods.Shuffle`, Fisher-Yates, drop the
+  m/z shift and ADD_RANDOM) is [#4516](https://github.com/ProteoWizard/pwiz/issues/4516), open
+  and unassigned.
+- **The gate has never been tested at 82 files.** The reason for skipping it (pool-composition
+  swing) expired with #4593; the experiment itself has not been run. Noted on #4516.
+- Converging Carafe and Osprey on one decoy sequence set, and the library-part decomposition
+  (provenance vs overlap gate vs I/L), remain research items with no owner.
+
+Companion files: `-carafe-spec.html`, `-library-comparison.html`, `-pr-description.md` (the
+Carafe#9 PR text).

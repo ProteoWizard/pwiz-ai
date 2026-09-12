@@ -1,7 +1,7 @@
 # TODO-osprey_confidence_axes_overlap.md -- Reproducibility frontier vs protein-compact: do the two confidence axes overlap?
 
 ## Status
-**Backlog / not started.** Design spec ready; needs a night-session-scale run. No branch yet.
+**Backlog / not started** (moved to `backlog/brendanx67/` 2026-09-12 after 7 weeks in `active/`). Design spec ready; needs a night-session-scale run. No branch yet.
 Grew out of the PR #4446 / maccoss/osprey#57 review discussion with Brendan (2026-07-23).
 
 ## The question

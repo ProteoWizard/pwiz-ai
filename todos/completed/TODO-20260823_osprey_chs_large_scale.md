@@ -4,7 +4,9 @@
 - **Branch**: none yet - staging and measurement so far, no code change
 - **Base**: `master`
 - **Created**: 2026-08-23
-- **Status**: Active - cohort staged, first run not yet launched
+- **Status**: Completed 2026-09-12 - 257 files measured to fit; the 446-file continuation
+  ran under [[TODO-20260901_osprey_stage5_reload_materialization]] and
+  [[TODO-20260901_osprey_firstpassfdr_resume]] (PR #4633)
 - **Module**: `osprey`
 - **Machine**: BRENDANX-UW8, 63.7 GB RAM, D: single spindle
 
@@ -395,3 +397,35 @@ measured at 375 GB/h single-stream on this box - about 5 h for the cohort. Do NO
 
 **The caches are data now, not intermediates.** `docs/14-intermediate-files.md` and
 `15-hpc-scoring-split.md` were corrected on the same PR because both said the opposite.
+
+
+## 2026-09-12 - Closed out
+
+The staged-plan legs ran to completion here (three plates, then the 257-file linked run on
+2026-08-24). The continuation - the full 446-file cohort and the memory work it forced - moved
+into [[TODO-20260901_osprey_stage5_reload_materialization]] and
+[[TODO-20260901_osprey_firstpassfdr_resume]], both merged as PR
+[#4633](https://github.com/ProteoWizard/pwiz/pull/4633) (`c4921f3d6c`, 2026-09-06). Nothing
+remains that this TODO owns.
+
+## Resolution
+
+**Status**: Completed. No code change of its own; the one it forced shipped as PR
+[#4616](https://github.com/ProteoWizard/pwiz/pull/4616) (cache-only runs, `bd94e8a375`).
+
+Measured here: **257 CHS files fit on 64 GB** - exit 0 in 10.25 h, FirstPassFDR 53.7 GB peak
+(predicted 56), PerFileRescoring flat at 16.5 GB (#4600 holds), SecondPassFDR 69.0 GB, paged
+past the box and completed anyway at no throughput cost. Stage 6 reconciliation held on
+heterogeneous samples (47.4 K actions/file vs TDP-43's 59.9 K), so the composition worry that
+picked this cohort did not materialise. Two findings that changed the projection: survivor
+observations are NOT additive across plates (0.410 M/file at 86 -> 0.533 M/file at 257,
+because reconciliation transfers detections into files where they were not found), and memory
+grows sublinearly in observations (0.224 GB per M obs + 33.6 GB fixed), putting the ceiling
+with that code at ~250-300 files and 500 at ~83 GB. The 446-file run in #4633 then finished at
+41.0 GB peak after Stage 6 planning stopped materialising the survivor buffer.
+
+Also delivered: the staged and fingerprint-verified cohort (256/256 raw, 256/256 caches, 0
+failures); `Run-Chs.ps1`, `-IncludePattern`, `phase_mem_shape.py` and the run-layout standard;
+the "caches are data, not intermediates" correction to docs 14/15; and the recovery procedure
+(PanoramaWeb re-download at 375 GB/h single-stream, never parallel), on the strength of which
+1,774 GB of `.raw` was deleted 2026-08-26. The measurement doctrine section stands on its own.

@@ -187,3 +187,28 @@ worth noting it costs a NAMESPACE DECISION: claiming `OSPREY_*` means a user can
 scratch variables under that prefix without being warned at them. Decide that deliberately - a
 warning rather than an error is probably the right severity, since the cost of being wrong is
 noise rather than a failed run.
+
+## Merged in 2026-09-12: the earlier registry proposal (2026-07-23)
+
+`TODO-20260723_osprey_env_settings_registry.md` (now in `completed/`) raised the same idea a
+month earlier, during the #4446 review - "a backdoor to command-line argument parsing" that
+lacks the rigor CommandArgs provides. Its shape (a declared `OspreySetting<T>` per switch, a
+`--help-settings` table, the two surfaces kept deliberately distinct) is the design above. Three
+things it adds that are not yet written here:
+
+1. **Hard-fail on an out-of-set enum VALUE, not just an unknown name.** The concrete symptom:
+   `OSPREY_PASS2_QVALUE=transfer-complete` (a natural mistype of `transfer-compete`, which Mike
+   made in email) **silently** falls back to the anti-conservative `percolator` retrain on Rust,
+   and C# only warns. Brendan: *"I would hard fail on transfer-complete or anything that doesn't
+   match the 3 possibilities."* The name-typo warning at the end of this file covers the
+   namespace; a value typo on a BEHAVIOR switch changes reported numbers and should be an error.
+   Apply on both implementations (Rust `pass2_mode()` is `_ => Percolator`). Cross-check first
+   that no test or script relies on the silent fallback.
+2. **A graduation lifecycle.** Mark each switch `experimental | promoted`. When a lever becomes
+   a default (protein-compact, the LDA pick, the frozen model), it either graduates to a real
+   CommandArg or demotes to an escape-hatch override. The catalog makes that explicit; today it
+   is ad hoc.
+3. **A known-wrong message to fix on the way.** `Pass2FdrSidecar.cs` warns
+   `"Recognized modes: '{0}', '{1}'."` naming only `percolator` and `transfer`, while
+   `NormalizePass2QValue` accepts four. The one message meant to catch a typo lists half the
+   valid values (found 2026-07-26 in the gendecoy work).

@@ -4,7 +4,11 @@
 - **Branch**: `Skyline/work/20260908_osprey_parallel_files_cache_sizing`
 - **Base**: `master`
 - **Created**: 2026-09-08
-- **Status**: Code complete, gate green; PR not opened
+- **Status**: Code complete, gate green; PR not opened. **The code cannot be found (checked
+  2026-09-12):** the branch is not on origin, not in any `C:\proj\pwiz*` or `C:\Dev\*` checkout
+  or worktree, not stashed, not in any reflog, and master has no `AssertCacheOnlySizing`. Either
+  it lives on another machine or the working tree was reset before a commit. If it cannot be
+  located, redo it from the Fix section below - it is small
 - **Module**: `osprey`
 - **PR**: none yet
 

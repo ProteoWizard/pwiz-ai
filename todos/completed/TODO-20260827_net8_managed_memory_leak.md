@@ -5,9 +5,11 @@
 - **Branch**: not created yet
 - **Base**: `Skyline/work/20260818_commonutil_winforms_split` (PR #4587)
 - **Created**: 2026-08-27
-- **Status**: Measured, not diagnosed
+- **Status**: Completed 2026-09-12 - folded into [[TODO-20260907_leak_detection_baseline]]
+  (the port line's active leak-detection effort), which now carries this measurement and the
+  candidate list. Not diagnosed here.
 - **Module**: `skyline`
-- **Related**: `TODO-20260826_nightly_flake_cleanup.md`, PR #4587, PR #4619
+- **Related**: [[TODO-20260907_leak_detection_baseline]], PR #4587, PR #4619
 
 ## What was measured
 
@@ -69,3 +71,11 @@ Candidates worth eliminating first, since all three are new on the net8 line:
 The 9-hour throughput result is good (~46,000 results vs net472's 43,794, about +5%) and
 memory stays far from the container limit. This belongs in the port's follow-up work, not
 in the merge gate for #4587.
+
+## Resolution
+
+**Status**: Completed (folded). No branch, no PR. The measurement - net8 managed memory growing
++5.8 MB per test cycle in a straight line where net472 plateaus at +0.12 - and the three
+candidates to eliminate first now live in [[TODO-20260907_leak_detection_baseline]], whose
+work item 1 (a fitted slope with R² instead of the two-point delta) is the estimator that can
+report this class of leak at all. The diagnosis itself has not been done.

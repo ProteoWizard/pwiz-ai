@@ -1,9 +1,15 @@
 # TODO-osprey_env_settings_registry.md -- Formalize OSPREY_* env settings: validated registry + --help-settings
 
 ## Status
-**Backlog / not started.** No branch yet. Raised by Brendan during the PR #4446 review
-(2026-07-23): the growing `OSPREY_*` env-var surface is "a backdoor to command-line argument
-parsing" that lacks the rigor CommandArgs already provides.
+**Completed 2026-09-12 - merged into [[TODO-osprey_env_var_cataloging]]** (`todos/backlog/`),
+which raised the same idea on 2026-08-29 with the `CommandArg`-derived `EnvVar` shape and the
+self-enforcing verifier. The three points unique to this file (hard-fail on an out-of-set
+VALUE, the graduation lifecycle, the half-complete "Recognized modes" message) were appended
+there. Never started here; no branch.
+
+Originally: raised by Brendan during the PR #4446 review (2026-07-23): the growing `OSPREY_*`
+env-var surface is "a backdoor to command-line argument parsing" that lacks the rigor
+CommandArgs already provides.
 
 ## Problem
 Osprey has two config surfaces with very different rigor:

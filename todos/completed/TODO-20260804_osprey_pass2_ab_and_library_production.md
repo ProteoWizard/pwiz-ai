@@ -4,9 +4,12 @@
 - **Branch**: none in pwiz (measurement work on `master` at `e7b5a917ba`); Carafe work on
   `fix/nocut-met-clip` in `C:\proj\Carafe-mm`
 - **Created**: 2026-08-04
-- **Status**: In Progress
+- **Status**: Completed - all three arms run and the library question answered; Carafe#10 and
+  #4534 merged 2026-08-05/06; closed out 2026-09-12
 - **Module**: `osprey`
-- **PRs**: [maccoss/Carafe#10](https://github.com/maccoss/Carafe/pull/10) (OPEN, stacked on #9)
+- **PRs**: [maccoss/Carafe#10](https://github.com/maccoss/Carafe/pull/10) (merged 2026-08-05);
+  pwiz [#4534](https://github.com/ProteoWizard/pwiz/pull/4534) (library-fragment release, split
+  out 2026-08-06, merged 2026-08-06)
 - **Follows**: [TODO-20260802_osprey_default_flip.md](../completed/TODO-20260802_osprey_default_flip.md)
   (#4484, merged as `e7b5a917ba`)
 
@@ -674,3 +677,26 @@ measures it, and I still put 38,773 next to 44,581 before checking which library
 night plan (one arm: protein-compact + mean-best-6 + QualifyBy experiment), the launch and
 verification protocol, and the gotchas. The older
 `ai/.tmp/handoff-20260804_osprey_pass2_ab.md` is superseded.
+
+### 2026-09-12 - Closed out
+
+The three follow-up arms designed at the end of the 2026-08-05 session (library-part
+decomposition on the `-ungated`/`-gated` rebuilds, the mb6 + `-QualifyBy experiment` arm,
+the Astral regeneration once `-itol` settled) were never launched, and nothing since has
+depended on them: the pass-2 defaults were settled by #4484/#4528, the training-selection
+lever by #4593, and the library by Mike's delivered build. Recorded as not pursued.
+
+## Resolution
+
+**Status**: Completed. [maccoss/Carafe#10](https://github.com/maccoss/Carafe/pull/10) (NoCut
+N-terminal methionine clip + pairing validator, 2026-08-05) and pwiz
+[#4534](https://github.com/ProteoWizard/pwiz/pull/4534) (release library fragments nothing can
+score after Stage 5, 2026-08-06).
+
+The A/B at 82 files answered the question it was built for: arm C (protein-compact +
+qualification) took true FDP at 1% reported q from 1.139% to 0.426% with MORE discoveries
+(38,477 vs 37,056), and the -13.0% deficit against the historical figure was the LIBRARY, not
+the pipeline - Mike's delivered library closes it to -1.9% at a slightly better FDP. Along the
+way: Carafe's NoCut pass-through was clipping N-terminal methionine (root-caused and fixed),
+`-ExperimentAgg` had to be declared on `Run-SeaAd.ps1` or the env var silently did nothing,
+and the Osprey exe is now snapshotted per run so a long run stops locking the build tree.

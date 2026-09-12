@@ -2,18 +2,26 @@
 
 ## Status
 
-**Active.** Spun off 2026-07-23 from the PR #4313 connector work
-(`TODO-20260609_native_file_dialog_automation`, being completed to
-`todos/completed/`) so this testing effort continues as its own TODO across
-multiple sprints, independent of that PR's lifecycle. The connector foundation is
-in place; this effort drives the Skyline tutorials end-to-end through it, catalogs
-what works and what's still missing, and feeds implementation sprints — each its
-own TODO (e.g. the backlog
-[`../backlog/TODO-mcp_tutorial_view_layout.md`](../backlog/TODO-mcp_tutorial_view_layout.md)).
+**Backlog (parked 2026-09-12).** Round 1 ran 2026-07-23: seven tutorials tested
+(MethodEdit, MethodRefine, CustomReports, DDASearch, ExistingQuant, GroupedStudies,
+SmallMolecule - results in the sibling folder). Nothing since. The verbs round 1
+found missing (graph-point click, tree pick-lists) shipped under
+[#4449](https://github.com/ProteoWizard/pwiz/issues/4449), closed 2026-08-21, so the
+next round starts from a connector that can do what the first one could not;
+[#4448](https://github.com/ProteoWizard/pwiz/issues/4448) (connector hardening) is
+still open. The `TODO-mcp_tutorial_view_layout.md` backlog item this used to point
+at no longer exists. When resumed, move back to `active/` with a new date.
+
+Originally spun off 2026-07-23 from the PR #4313 connector work
+(`TODO-20260609_native_file_dialog_automation`, completed) so this testing effort
+continues as its own TODO across multiple sprints, independent of that PR's
+lifecycle. The connector foundation is in place; this effort drives the Skyline
+tutorials end-to-end through it, catalogs what works and what's still missing, and
+feeds implementation sprints, each its own TODO.
 
 **Layout:** this file is the **runbook**. The per-tutorial result files
 (`TEST-<Name>.md`) live in the sibling
-**[`TODO-20260722_mcp_tutorial_testing/`](TODO-20260722_mcp_tutorial_testing/)**
+**[`TODO-mcp_tutorial_testing/`](TODO-mcp_tutorial_testing/)**
 folder — their presence there is also the cross-machine claim (§2.1). Where the
 sections below say "this folder" for `TEST-*.md` files, they mean that folder.
 
@@ -40,7 +48,7 @@ high-signal list of where it can't (yet).
 Launch on any set-up machine:
 
 ```
-/night-session C:\proj\ai\todos\active\TODO-20260722_mcp_tutorial_testing.md
+/night-session C:\proj\ai\todos\backlog\brendanx67\TODO-mcp_tutorial_testing.md
 ```
 
 The session becomes the **orchestrator**: it claims one unclaimed tutorial, runs
@@ -306,9 +314,9 @@ tool calls and observations that matter)
 
 > You are a per-tutorial test agent. Test whether Claude can drive the Skyline
 > tutorial **"<Title>"** (`<Name>`) end-to-end through the Skyline MCP. The runbook
-> is `ai/todos/active/TODO-20260722_mcp_tutorial_testing.md` — read it and follow §3
+> is `ai/todos/backlog/brendanx67/TODO-mcp_tutorial_testing.md` — read it and follow §3
 > prerequisites and §4 methodology **exactly**. Every `TEST-<Name>.md` (including
-> the one you create) lives in `ai/todos/active/TODO-20260722_mcp_tutorial_testing/`.
+> the one you create) lives in `ai/todos/backlog/brendanx67/TODO-mcp_tutorial_testing/`.
 >
 > 1. **Load tools.** The `mcp__skyline__*` tools are deferred — load what you need
 >    via ToolSearch (README §4 names the verbs).
