@@ -3,7 +3,7 @@
 ## Branch Information
 
 - **Branch (PR)**: `Skyline/work/20260911_net10_leak_fixes` - the leak fixes
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4659
+- **PR**: [#4659](https://github.com/ProteoWizard/pwiz/pull/4659) (merged 2026-09-12 into the port branch)
 - **Branch (parked)**: `Skyline/work/20260911_leak_estimator` - estimator and diagnostics tooling
 - **Branch (original)**: `Skyline/work/20260907_leak_detection_baseline` (off `Skyline/work/20260612_net8_port`)
 - **Checkout**: `C:\proj\pwiz-work1`
@@ -864,6 +864,25 @@ Review findings deliberately not acted on, for follow-up:
   check runs `pass1=on pass2=off`, so "coverage stays in pass 2" does not hold for that job.
 - Six findings on the uncommitted `ReaderSciexTests.cs`, including that it will not compile without
   vendor licenses (a Linux CI break) - relevant when those tests find a home.
+
+### 2026-09-12 - #4659 merged; this TODO stays active
+
+PR #4659 merged as commit `6ef677076e` into `Skyline/work/20260612_net8_port`, all six checks
+green after a port-branch merge brought its `.teamcity/` current (the three "failed to load build
+settings from VCS" failures were exactly the three configs TeamCity had moved into its Versioned
+Configs project after the branch forked - not a code problem). What shipped: the DigitalRune GDI+
+fix as a separate net10 binary under `Shared\Lib\DigitalRune\{net472,net10}`, the Koina
+`GrpcChannel` dispose, the wiff2 leak-pass exclusion, and the BOM removals.
+
+**Not moved to completed.** This TODO tracks the whole leak-detection effort and most of it is
+still open: the estimator work is parked on `Skyline/work/20260911_leak_estimator`, work items
+2-5 are untouched, and the third-nightly-flavour proposal with its 35 `NoLeakTesting` exclusions
+is the direction Brendan wants to come back to. The fixes half is banked; the tooling half is not.
+
+Deferred from the review, still to do: `KoinaTestUtil.FakeKoina.Dispose` (an additional
+undisposed channel exercised by three pass-1 tests), the false `PwizFileInfoTest` comment, and the
+six `ReaderSciexTests.cs` findings when those tests find a home. The DigitalRune source fix is on
+`uw-maccosslab/developers` PR #5, mergeable and awaiting review.
 
 ## Method notes
 
