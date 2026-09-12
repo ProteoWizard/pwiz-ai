@@ -2,7 +2,9 @@
 
 ## Branch Information
 
-- **Branch**: `Skyline/work/20260907_leak_detection_baseline` (off `Skyline/work/20260612_net8_port`)
+- **Branch (PR)**: `Skyline/work/20260911_net10_leak_fixes` - the leak fixes
+- **Branch (parked)**: `Skyline/work/20260911_leak_estimator` - estimator and diagnostics tooling
+- **Branch (original)**: `Skyline/work/20260907_leak_detection_baseline` (off `Skyline/work/20260612_net8_port`)
 - **Checkout**: `C:\proj\pwiz-work1`
 - **PR target**: `Skyline/work/20260612_net8_port` (the port branch), not master
 - **Module**: `skyline`
@@ -705,6 +707,116 @@ nightly failure.
 - `TestInternationalFilenames` (86-89 KB/run heap, R2 = 0.97-0.98) and `TestLogScaleAxis` (49-54,
   R2 = 0.99) appear on two of the four nights with nearly identical slope and R2 both times. Under
   the delta estimator they looked like part of the random heap set; under shape they do not.
+
+## 2026-09-11: the first slopes run found nothing, and the branch split
+
+### The run
+
+10.8h, 1101 tests, pass 1 only, zero failures, **zero leaks reported**. Log archived as
+`SkylineTester-20260910-net10-slopes-1101tests-0failures-0leaks.log`.
+
+Nothing was near the gate either. Every heap axis with R2 >= 0.9 is 0-0.3 KB/run or negative; the
+largest managed slope is `TestMSstatsTutorialLegacy` at 5.0 KB/run, but at R2 = 0.59 it is not
+linear and would not be reported at any threshold worth trusting.
+
+### Three findings from this branch were wrong, all the same way
+
+Each was inferred from the archived nightly logs and each dissolved when measured directly:
+
+| claimed | measured directly |
+|---|---|
+| `TestFilesTreeForm` leaks 3.33 KB/run managed (R2 = 0.93, 09-04) | 0.1 KB/run at R2 = 0.87 - the sample-buffer artifact below, not a leak |
+| `TestInternationalFilenames` heap 86-89 KB/run at R2 = 0.97-0.98, two nights | **-79.8 KB/run at R2 = 0.08** |
+| `TestLogScaleAxis` heap 49-54 KB/run at R2 = 0.99, two nights | **-0.7 KB/run at R2 = 0.02** |
+
+**The archived logs are not a fit instrument for small-signal questions.** They print managed and
+heap memory at 0.01 MB, i.e. 10.24 KB granularity, and the old early exit leaves series of 8-12
+samples. A 4.4 KB/run leak rises ~31 KB across an 8-sample window - three quantisation steps, whose
+R2 computes to 0.89 and reads as "borderline" when the true value is 1.00. Reconstruction
+systematically understates small real leaks and overstates short noisy ones. **Reproduce in
+isolation before adjudicating any report**; it takes minutes and it is the only thing that settled
+any of these.
+
+### Precision by axis, four nights - the waste is all on one axis
+
+| axis | reports | real | precision |
+|---|---|---|---|
+| managed | 21 | 21 | **100%** |
+| heap | 17 | 3 (all `TestGroupedStudies1Tutorial`) | **18%** |
+
+The managed axis is why the existing check has earned trust: every one of its 21 reports was a real
+leak. The 14 non-actionable heap reports - ~3.5 a night - are the measured waste, and the TODO
+already records that five of six reproduced in isolation went strongly negative. Any future change
+should be judged on whether it removes those 14, not on whether it catches more.
+
+### Two false positives this branch created, and what they taught
+
+`AgilentGCEIChromatogramTest` and `TestTargetResolver` were flagged as handle leaks. Both are
+**bounded ramps**: over 50 iterations in isolation they climb exactly one handle per run for 18 runs
+and then sit flat forever (91 -> 109, then 109 for 32 more; 50 -> 68, then 68 for 32 more).
+
+They were false positives only because the estimator had been changed to fit the whole run. The
+existing design does not have this failure mode, and that is not an accident:
+
+- the window is **trailing**, so a ramp stops being visible once it flattens;
+- `Min` across windows rejects the warm-up, since the early windows are the steep ones;
+- eight samples is one whole window, which is why a clearly-clean test can stop after eight runs.
+
+Fitting the entire run discards all three and costs 2.1x the runtime. The estimator now fits the
+trailing window instead - the change originally specified, and the one the loop comment has claimed
+all along - leaving everything around it alone.
+
+### Coverage gap: 35 tests are never leak-checked
+
+`TestGroupedStudiesTutorialDraft` carries `NoLeakTesting(EXCESSIVE_TIME)`, so it only ever runs in
+pass 2. It exercises the same `LoadLayout` path that made `TestGroupedStudies1Tutorial` leak 2 MB/run,
+and would never have shown it. Its entries in `LeakCheckIterationsOverrideByTestName` (4x iterations)
+and `MutedTotalMemoryLeakTestNames` are **dead code** - both can only take effect in pass 1.
+
+It is not alone. **35 tests carry `NoLeakTesting`, every one of them `EXCESSIVE_TIME`** - none because
+leak-checking them is meaningless, all because they do not fit the window. Mean duration 23s, so one
+pass over all 35 is 10.6 minutes and **leak-checking the whole excluded set at the 8-iteration
+minimum costs ~1.4 hours**.
+
+### A third nightly flavour, and the numbers that justify it
+
+Brendan's proposal: split nightly into (1) normal, (2) perf, (3) leak detection, letting 1 and 2 run
+pass 0 and then cycle pass 2 immediately, while some machines run pass 1 only.
+
+| | |
+|---|---|
+| last night, 1101 tests, 20-iteration floor | 10.8 h |
+| same set at the 8-minimum, trailing-window estimator | ~5.3 h (est., +-20%) |
+| plus the 35 currently-excluded tests | **~6.7 h** |
+
+So a leak-only flavour covers **more than the suite covers today**, including everything now excluded
+for time, and still fits a 9-hour window. Flavour 1 gets back the ~4.4h pass 1 was consuming.
+
+The under-appreciated benefit is comparability. Today pass 1 runs after pass 0 on a machine that then
+runs pass 2, and memory measurement is load-sensitive - measured 2026-09-10, the same test read
+13.9 KB/run heap under contention and 8.5 on a quiet machine. A machine doing only pass 1 has the
+same load profile every night, which is the precondition for both stable thresholds and "consistent
+detection".
+
+Watch two things: one leak machine means one failure leaves no leak coverage that night, where today
+it degrades gracefully; and `IsAbWiff2Safe` keys off `TestPass != LEAK_CHECK_PASS`, so on a leak-only
+machine `.wiff2` is never read at all - fine while flavour 1 still runs pass 2, but it becomes a
+cross-flavour dependency rather than a within-run one.
+
+### The branch split
+
+`Skyline/work/20260907_leak_detection_baseline` mixed proven fixes with unproven tooling. Split:
+
+- **`Skyline/work/20260911_net10_leak_fixes`** (PR) - the DigitalRune GDI+ binary, the Koina
+  `GrpcChannel` dispose, the wiff2 leak-pass exclusion, and the BOM removals. These fix leaks that
+  show up in nightly testing.
+- **`Skyline/work/20260911_leak_estimator`** - the estimator work, plus `27bccc4009` (heap growth
+  reporting, `GcRootReporter` field names and `GcHeapHistogram`). Parked, not abandoned:
+  `GcRootReporter` and per-heap attribution earned their place - per-heap attribution is what cut the
+  GDI+ oracle from 25 iterations to 4 - and can be PR'd separately on their own evidence.
+  `GcHeapHistogram` still has not closed a case unaided.
+
+The original branch still holds the full history until the split is confirmed.
 
 ## Method notes
 
