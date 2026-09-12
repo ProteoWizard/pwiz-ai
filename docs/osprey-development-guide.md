@@ -1824,8 +1824,11 @@ Leg parity across datasets is **not** a goal, and the asymmetries are deliberate
 are listed together here because a partial accounting is worse than none: it implies the
 one thing it names is the only omission.
 
-Measured leg counts from a green `-Dataset All`: **Stellar 15, StellarLibDecoy 21,
-StellarGenDecoyEntrap 21, Astral 19.**
+Measured leg counts from a green `-Dataset All` (2026-09-12, with modes 1c, 6, 7, 8, 9, 11 and
+12 in): **Stellar 21, StellarLibDecoy 29, StellarGenDecoyEntrap 28, Astral 25.** Mode 12
+(FDRBench both files + resume identity) is 2 of those everywhere but Astral, which runs no
+mode 2 and so has only its first half. The split below predates those modes (its totals are
+the older 15 / 19) but its shape - Stellar leads on detection, Astral on reporting - still holds.
 
 **Do not read those totals as coverage depth** - they sum two different things, and the
 comparison inverts depending on which you mean:

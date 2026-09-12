@@ -218,3 +218,89 @@ Noticed on the way, not changed: the emitter reads each file's sidecar into a
 `Dictionary<uint, FdrScoreRecord>` (`StreamFirstPassFileScores`), the same per-file
 allocation shape #4657 describes for the co-assignment panel. At 3 files it is nothing; at
 446 it is the same ~230 MB of LOH garbage per file. Fixing it belongs with #4657.
+
+### 2026-09-12 - A/B: byte-identical on every comparison
+
+`D:\test\osprey-runs\_scratch\fdrbench-ab-20260912\run.log`, exe snapshot
+`_bin\fdrbench-ab-20260912` (branch @ `1675b07cc2` minus the regression.ps1 edit):
+
+| comparison | bytes | result |
+|---|---|---|
+| StellarLibDecoy pass 1, streamed vs resident (`OSPREY_FDR_PROJECTION=0`) | 50,337,230 (483,020 rows) | SAME |
+| ... its pairing manifest | 23,502,379 | SAME |
+| `both` -> `.pass1` vs the pass-1-only file | 50,337,230 | SAME |
+| `both` -> `.pass2` vs the pass-2-only file | 14,803,657 | SAME |
+| StellarLibDecoy pass 1 per-run, streamed vs resident | 207,372,645 | SAME |
+| Stellar (generated decoys) pass 1, streamed vs resident | 22,931,442 | SAME |
+
+SHA-256 on all of them. Wall per leg 3-5 min; the streamed legs are within noise of the
+resident ones at 3 files (the saving is memory, and only visible at cohort scale). The
+blib byte-hash differed between two streamed runs with identical settings, as expected of
+SQLite output and why the gate compares table dumps; it is not part of the claim.
+
+Also added **mode 12** to `regression.ps1`: the straight-through, warm and resume legs now
+pass `--fdrbench bench.tsv --fdrbench-pass both`; after the cold run both files must exist
+with rows, beside their manifests, with pass 1 strictly larger than pass 2; after mode 2's
+resume (which re-runs both emitters) the files must be byte-identical to the cold copies.
+The resident-vs-streamed A/B itself is NOT in the gate (a full resident run per dataset);
+this table is its record.
+
+### 2026-09-12 - `/code-review max`: 15 findings, 11 applied, 4 dropped
+
+Applied (uncommitted on `pwiz-work1` until the All gate finishes and the build tree is free):
+
+* **Mode 12's resume half was vacuous** - the cold bench files stayed in place, so an emitter
+  that silently did nothing on the resume hashed equal against itself. The cold copies are now
+  MOVED aside (manifests deleted), so the resume must write both files again.
+* **An unguarded `Copy-Item` would have aborted the whole gate** on exactly the failure mode 12
+  exists to catch (no pass-1 file), because the script runs under `ErrorActionPreference =
+  Stop`. Guarded.
+* `Test-FdrBenchResumeIdentity` uses the harness's `CompareBytes` (first differing offset, which
+  on a sorted fixed-width TSV names the row) instead of two SHA-256s and a byte count.
+* **Wrong claim corrected in three places**: "nothing but the projection-off oracle reaches the
+  legacy path" - a non-Percolator `FdrMethod` (Simple / Mokapot) has no projection path and
+  still takes it, and the resident emitter is its production pass-1 path. `ResidentPaths`,
+  `OspreyEnvironment` and both emitter docs now say so; deleting the legacy path means porting
+  or retiring those methods first.
+* An operator-facing `LogError` (the per-run rescore arm's resident-stubs refusal) and eleven
+  comments still named `--fdrbench-pass 1` as a resident-pool consumer; all corrected, plus the
+  `hpc-merge` retired-token warning in `Program.cs` now names `fdrbench-pass1` too.
+* `PeptideInputSink`: ctor disposes the `FileSaver` if opening the writer throws; `Dispose`
+  disposes the saver in a `finally` so a writer whose last flush fails cannot leave the temp.
+* `BestRow` deleted - the row already carried both comparison keys; `Dictionary<string, Row>`.
+* The three-way duplicated prologue/epilogue (pass gate, pairing, sink lifetime, manifest, log
+  lines) is one `EmitFdrBenchPass1(config, ctx, produce)` helper; the two emitters are now
+  only their producers. Braces on the two multi-line `if`s came with it.
+* The compaction-gate resume loaded the experiment sidecar for the emitter and then
+  `ComputeFirstPassBaseIds` loaded it again: the map is threaded through (optional parameter,
+  null on the cold arm, which keeps its read-back of the file it just wrote as the round trip).
+  `LoadFirstPassExperimentRecords` takes a caller prefix so the FDRBench step's read failure
+  is not reported as "First-pass compaction".
+* The resume-arm comment over-claimed "a resumed run owes what a cold one writes": a COMPLETED
+  run re-asked for `--fdrbench` never reaches the task (the TSVs are not declared outputs),
+  which is a pre-existing gap for pass 2 as much as pass 1. The comment now says exactly which
+  re-entry writes the file (killed after the sidecars landed, before the task finished).
+* `Row.FromSidecar(modseq, charge, in record, in experiment, level)` is the production factory,
+  and the test feeds the sink through it (entries split into the sidecar and experiment records
+  they would have been persisted as), so the level ternaries pinned against `FromEntry` are the
+  emitter's, not a copy.
+* `FirstPassFdrTask`'s projection gate calls `PerFileScoringTask.NeedsResidentPool` instead of
+  re-deriving the two-term test - the copy-drift that produced the `== 1` bug in the first
+  place.
+
+Dropped, with the reason:
+
+* **Fold the emitter into the protein-FDR reduce loop** (saves one sidecar + scalar walk per
+  file, ~13-17 min at 446 files on a `both` run). Real, but paid only when pass 1 is asked for,
+  and keeping the oracle file's producer independent of the reduce is worth that on an opt-in
+  path. Noted in the emitter's doc as the trade.
+* **Make `ComputeFirstPassBaseIds` throw on a missing experiment record** the way the emitter
+  does, instead of defaulting protein q to 1.0. Consistent and hard-fail-over-proceed, but it
+  changes the mainline compaction predicate's behaviour on a by-construction-impossible case;
+  not this PR.
+* A `NeedsResidentPool = ResidentPoolTrigger(...) != null` restructuring inside
+  `PerFileScoringTask` - the three predicates there answer slightly different questions
+  (`PreCompactionPoolReason` includes the diagnostics dump); the drift risk was the
+  cross-class copy, which is what was fixed.
+* `Get-Content | Measure-Object -Line` in `Test-FdrBenchBothFiles` (~6 s per Astral file) -
+  correct and only in the gate; not worth touching.
