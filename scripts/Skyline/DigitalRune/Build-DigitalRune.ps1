@@ -150,7 +150,15 @@ $projectXml = @"
     <AssemblyName>DigitalRune.Windows.Docking</AssemblyName>
     <RootNamespace>DigitalRune.Windows.Docking</RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- The legacy csproj sets DocumentationFile, and pwiz ships the XML beside the DLL under
+         pwiz_tools/Shared/Lib/DigitalRune/<tfm>/. With this off, the 2026-09-11 net10 build had
+         to ship a copy of the net472 XML. CS1591 is already suppressed below.
+         The ja / zh-CHS satellites beside the DLL in pwiz are NOT a product of this build, or of
+         any DigitalRune build: no localized .resx exists in this source tree. They came from
+         Skyline's 2014 localization pass (pwiz 4751933f44) and are copied forward beside each
+         target's binary by hand. Resource-only satellites load against the unchanged assembly
+         identity, so the same files serve both targets. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <Platforms>AnyCPU</Platforms>
