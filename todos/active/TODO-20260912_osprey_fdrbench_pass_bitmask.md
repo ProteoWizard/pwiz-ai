@@ -5,13 +5,13 @@
   master `7af9eb0ea5`)
 - **Base**: `master`
 - **Created**: 2026-08-21 (analysis); started 2026-09-12
-- **Status**: In Progress - **decided 2026-09-12 (Brendan): option (1), the streamed pass-1
+- **Status**: PR open, all local gates green - **decided 2026-09-12 (Brendan): option (1), the streamed pass-1
   emitter.** Not the hard-fail stopgap (2) and not document-only (3). Design below.
 - **GitHub Issue**: [#4507](https://github.com/ProteoWizard/pwiz/issues/4507) - the same
   fix seen from the memory side: `--fdrbench-pass 1` is the last first-pass consumer forcing
   the O(files) resident pool, and the `fdrbench-pass1` ratchet token exists for it
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4661](https://github.com/ProteoWizard/pwiz/pull/4661) (opened 2026-09-12, closes #4507)
 - **Requester/Reporter**: none - found while preparing the TDP-43 pickrun3 comparison
 
 ## The defect, in one sentence
@@ -95,8 +95,9 @@ type confusion as documented behaviour.
       mask, and the resident-pool question is answered without it
 - [x] ~~Delete the "or `both`" claim from `WriteFdrBenchPass1IfRequested`'s doc-comment~~ -
       moot, the claim is true now
-- [ ] Stellar A/B byte-identical (running); `regression.ps1 -Dataset Stellar`;
-      `regression-parallel.ps1 -Dataset All`; `/code-review max`; PR closing #4507
+- [x] Stellar A/B byte-identical (six comparisons); `regression.ps1 -Dataset Stellar`;
+      `regression-parallel.ps1 -Dataset All` (102/0/1, twice); `/code-review max` (11 of 15 applied); PR #4661
+- [ ] TeamCity Osprey Windows .NET Perf/Regression on `pull/4661` (ask first), then human review
 
 ## Notes
 
@@ -304,3 +305,12 @@ Dropped, with the reason:
   cross-class copy, which is what was fixed.
 * `Get-Content | Measure-Object -Line` in `Test-FdrBenchBothFiles` (~6 s per Astral file) -
   correct and only in the gate; not worth touching.
+
+### 2026-09-12 - PR #4661 opened
+
+Review fixes committed as `44edb531bb` on top of `1675b07cc2`; the full parallel gate re-run
+on that tip: 102 PASS / 0 FAIL / 1 SKIP in 1:04:44, mode 12 green on all four datasets with the
+cold bench files moved aside (so the resume half is no longer vacuous). Pass-1 / pass-2 rows
+per dataset: Astral 1,312,686 / 748,733; Stellar 242,330 / 166,724; StellarLibDecoy 483,020 /
+156,832; StellarGenDecoyEntrap 483,007 / 161,868. Remaining: the TeamCity Perf/Regression gate
+on `pull/4661`, then human review.
