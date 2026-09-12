@@ -4,10 +4,13 @@
 - **Checkout**: `C:\proj\pwiz-work1` (the team's Integration checkout)
 - **Branch**: `Skyline/work/20260821_net8_test_reliability` - rebased 2026-08-22 onto
   `Skyline/work/20260818_commonutil_winforms_split` @ `2cb66ee39d` (PR #4587, all green).
-  10 commits, not pushed, no PR yet.
 - **Created**: 2026-08-21
-- **Status**: rebased and building; working through /code-review max findings
+- **Status**: Completed - merged 2026-08-26 into #4587, which landed on the net8 port branch
+  2026-08-31
 - **Module**: `skyline`
+- **PR**: [#4605](https://github.com/ProteoWizard/pwiz/pull/4605) - merged 2026-08-26 as
+  `1c2271067e` into `Skyline/work/20260818_commonutil_winforms_split` (#4587, merged 2026-08-31
+  as `fc02f6d68e` into `Skyline/work/20260612_net8_port`, the .NET 10 port PR #4619)
 - **Backup of the pre-rebase branch**: `backup/20260821_net8_test_reliability-prerebase`
   @ `e1f207b1a9`, local only
 
@@ -194,3 +197,26 @@ things worth carrying forward:
   `CodeInspection` run here silently tested pre-change code until the tree was re-staged.
   Build then stage then test, or the result is about the wrong bits.
 
+
+### 2026-08-26 - Merged
+
+PR #4605 ("skyline: Removed the net472 targets and fixed the net8 suite's container-only
+failures") squash-merged as `1c2271067e` into `Skyline/work/20260818_commonutil_winforms_split`.
+That branch (#4587) merged 2026-08-31 as `fc02f6d68e` into `Skyline/work/20260612_net8_port`,
+so this work now rides the .NET 10 port PR #4619 to master.
+
+## Resolution
+
+**Status**: Completed - PR [#4605](https://github.com/ProteoWizard/pwiz/pull/4605) merged
+2026-08-26 as `1c2271067e` (into #4587 -> net8 port branch, `fc02f6d68e`, 2026-08-31).
+
+Removed the net472 targets from the Skyline test projects and the seven tool projects, and gave
+each of the mixed-together container failures its own diagnosis and fix: the container-only
+staging layout bug, the net472-specific float rendering that `ImmediateWindowWarnings` expected
+in zh/ja, the WinForms `SystemEvents` hook misreported as a Skyline GC leak, and the genuine
+library load race (`IExplainDiff` / `EqualityExplainer` now name what differs). GC root chains
+are reported via ClrMD 3.1.
+
+Carried forward, not fixed here: `SKYLINE_FORCE_SYSEVENTS_LEAK` produced no output through
+`Run-Tests.ps1`, so the GC-LEAK truth table in the PR test plan is the earlier session's
+verification; and `Run-Tests.ps1` executes STAGED binaries, so build, stage, then test.

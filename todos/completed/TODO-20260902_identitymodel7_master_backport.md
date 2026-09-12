@@ -5,10 +5,11 @@
 - **Worktree**: `C:\dev\pwiz-im7` (separate from the main `C:\dev\pwiz-net8` checkout)
 - **Base**: `origin/master` (currently `08a02b9e2e`)
 - **Created**: 2026-09-02
-- **Status**: In progress - core port done and verified against real servers; two open test
-  failures under active investigation; not yet compiled into a commit or pushed
+- **Status**: Completed - merged 2026-09-09
 - **Module**: `skyline`
-- **PR**: none yet
+- **PR**: [#4637](https://github.com/ProteoWizard/pwiz/pull/4637) - merged 2026-09-09 as `79454aac83`
+  (the competing #4632 was closed unmerged; its `RemoteApi` VCS-trigger path fix was
+  cherry-picked into #4637)
 - **Related**: [#4619](https://github.com/ProteoWizard/pwiz/pull/4619) (the net10 port PR this
   removes a recurring conflict for), [#4613](https://github.com/ProteoWizard/pwiz/pull/4613)
   (HttpClientWithProgress, already on master, this backport builds on top of it),
@@ -270,3 +271,34 @@ build reported success.** Fixed by deleting `obj/x64/Debug`, `obj/x64/Release`,
 `obj/x64/Release/net10.0*`, and `bin/x64` (keeping only the top-level `obj/x64/*.dll`/`*.exe`
 native artifacts) and rebuilding - master's `ProteowizardWrapper` does compile cleanly from its
 own source once forced to actually try.
+
+## Progress Log
+
+### 2026-09-09 - Merged
+
+PR #4637 ("skyline: Port the native waters_connect/UNIFI readers to IdentityModel 7")
+squash-merged to master as `79454aac83`. The open question above resolved itself: #4632 was
+closed unmerged, and its stale `RemoteApi` path fix for the VCS trigger config was cherry-picked
+into this PR (`48dff2020d`) so changes to these files trigger the TestConnected/Container CI.
+
+Of the two open test failures, `TestWatersConnect` is fixed (per-replicate `GraphChromatogram`
+lookup by name, graphs tiled first, explicit per-dataset curve count). `TestUnifi` still fails
+before and after - it reaches the curve check while the live import is still running - and was
+left as a separate, pre-existing issue.
+
+## Resolution
+
+**Status**: Completed - PR [#4637](https://github.com/ProteoWizard/pwiz/pull/4637) merged to
+master 2026-09-09 as `79454aac83`.
+
+IdentityModel 7 is on master. Beyond the managed port this TODO covered, the PR also fixed the
+native build the DLL update had broken: `UnifiData.cpp` and `WatersConnectData.ipp` still built
+their token request the 3.9 way, so `pwiz_vendor_api_unifi` and everything linking it
+(`pwiz_data_cli.dll`, `msconvert.exe`, `BlibBuild.exe`) failed to compile.
+`OAuthPasswordGrantClient` moved from `CommonMsData` down into `CommonUtil` so both native
+readers share one request/error-classification path; `pwiz.CommonUtil.dll` is now a Jamfile
+target referenced by ID (built with MSBuild, not `dotnet build`, because of the `zh-CHS`
+satellite culture); `System.Text.Json.dll` joined the vendored assemblies; and `msvc.jam`'s
+`<assembly>` feature now declares the compile-time dependency edge it always implied. Verified by
+a full native build from this branch's own source and `TestWatersConnect` passing repeatedly
+against the live server.

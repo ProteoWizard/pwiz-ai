@@ -4,9 +4,11 @@
 - **Branch**: `Skyline/work/20260625_watersConnectNewFolder` (pwiz1)
 - **Base**: `master`
 - **Created**: 2026-06-25
-- **Status**: In Progress
-- **GitHub Issue**: [#4329](https://github.com/ProteoWizard/pwiz/issues/4329)
-- **PR**: (pending)
+- **Status**: Completed - merged 2026-08-19 (feature) and 2026-08-24 (nightly follow-up)
+- **GitHub Issue**: [#4329](https://github.com/ProteoWizard/pwiz/issues/4329) (closed 2026-08-19)
+- **PR**: [#4331](https://github.com/ProteoWizard/pwiz/pull/4331) - merged 2026-08-19 as `43b5aaf064`;
+  follow-up [#4603](https://github.com/ProteoWizard/pwiz/pull/4603) (second-run test failure) -
+  merged 2026-08-24 as `ecf53f8859`
 - **Requester/Reporter**: Waters feature request (INFMTD-312); Stephen (Waters) supplied the Folders API details. Confirm credit line at PR time (vendor request, no support-thread rowId).
 
 ## Objective
@@ -200,6 +202,12 @@ TeamCity green, Copilot/human review.
 developer's own instances from another task, not test leftovers - always ask
 before stopping Skyline* processes.)
 
+### 2026-08-24 - Merged
+
+Follow-up PR #4603 ("skyline: Fixed TestWatersConnectExportMethodDlg failing on the second
+in-process run") squash-merged to master as `ecf53f8859`, closing out the nightly failure
+above. The feature itself, PR #4331, merged 2026-08-19 as `43b5aaf064` and closed #4329.
+
 ### 2026-06-30 - Fixed code-inspection failure after master merge
 
 TeamCity ReSharper build #18696 failed with 2 LocalizableElement warnings: the 'NewTestFolder'
@@ -208,3 +216,15 @@ literal in VerifyNewFolder was compared against ListViewItem.Text ([Localizable(
 call sites - removes the literal from the localizable position and de-duplicates. Verified locally:
 build green, TestWatersConnectExportMethodDlg passes (10.5s), QuickInspection clean (0/0). Merged
 origin master (GitHub Update-branch) into local, rebased the fix on top, pushed (de4fa4e839).
+
+## Resolution
+
+**Status**: Completed. PR [#4331](https://github.com/ProteoWizard/pwiz/pull/4331) merged to
+master 2026-08-19 as `43b5aaf064` (closed #4329); follow-up PR
+[#4603](https://github.com/ProteoWizard/pwiz/pull/4603) merged 2026-08-24 as `ecf53f8859`.
+
+Added a "New Folder" action (and a Refresh button, requested by Stephen at Waters) to the
+waters_connect method export dialog, backed by the Folders API. #4603 then fixed the nightly
+failure that #4331 exposed: the pooled `HttpClient` handler leaked mock state across in-process
+test runs, so the second (fr) pass of `TestWatersConnectExportMethodDlg` saw an unpopulated
+template dialog. Requested by Stephen (Waters, INFMTD-312).

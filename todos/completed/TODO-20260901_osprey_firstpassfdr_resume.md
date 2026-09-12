@@ -2,6 +2,10 @@
 
 **Branch**: `Skyline/work/20260901_osprey_firstpass_resume` (in `C:\proj\pwiz-work1`)
 **Found**: 2026-09-01, while making FirstPassFDR's outputs resumable at all.
+**Status**: Completed - merged 2026-09-06
+**Module**: `osprey`
+**PR**: [#4633](https://github.com/ProteoWizard/pwiz/pull/4633) - merged 2026-09-06 as `c4921f3d6c`
+(shared with [[TODO-20260901_osprey_stage5_reload_materialization]], completed on the same merge)
 
 ## Two separate defects, and the second is the blocker
 
@@ -592,3 +596,42 @@ first; the second needs the self-built bundle to be a legitimate rescore input.
 Not attempted at 03:00 on a 22%-context night session: it is a Stage 6 behaviour change that
 `-Dataset All` alone would not fully cover. The `--task PerFileRescoring` route is unaffected and
 is what the HPC chain proves.
+
+## Progress log - 2026-09-06 - Merged
+
+PR #4633 ("osprey: Made first-pass artifacts land per phase and Stage 6 planning bounded")
+squash-merged to master as `c4921f3d6c`. The branch went on after the 2026-09-02 03:00 entry
+above, and the later commits are what closed defect (b):
+
+* `238ef88560` - `--task PerFileRescoring` hydrates each run from its own artifacts
+* `f8dc08289c` - a partial rescore resumes and finishes: every input for the pass-2 sidecar is
+  counted instead of breaking on the first (a cohort killed at 141 of 446 had come back,
+  rescored NOTHING, and would have written a blib carrying 1st-pass q-values for 305 runs); the
+  per-file resume check is hoisted above the per-run hydrate (141 skips: 11m14s -> 5s)
+* `dae8fe9719` - the no-rescore gate now separates "no rescore NEEDED because the outputs
+  exist" from "no rescore POSSIBLE because nobody supplied a bundle"; the second, with work
+  outstanding, is a non-zero exit naming the runs, not a silent drop
+* `2a587cb490`/`6bb9b16f61` - a file is done only when BOTH rescore products are; regression
+  mode 9 asserts that a crash-shaped half-done file is re-scored
+* `8c38a75649` - kill-at-any-time is a stated guarantee: stop whenever, lose at most the file
+  in flight
+
+Still open after the merge, by design: the `--model-diagnostics` partial-resume path has no
+plan source (mode 8 reports the gap as a FAIL, `9bd6673e0a`), and the experiment-scope split
+(moving protein q into what file protein FDR writes) was sequenced after this branch because it
+needs a `FirstPassFdrTask.ValidityKey` format change.
+
+## Resolution
+
+**Status**: Completed - PR [#4633](https://github.com/ProteoWizard/pwiz/pull/4633) merged to
+master 2026-09-06 as `c4921f3d6c`.
+
+Both defects fixed. (a) Every phase's product is now durable when that phase ends - the trained
+1st-pass model, the protein-compact stratum (`.1st-pass.stratum.json`), and the per-file
+`.1st-pass.fdr_scores.bin` written from pass 1 - so a run killed anywhere after training keeps
+what it computed and re-enters at the compaction gate. (b) A resumed run no longer skips
+FirstPassFDR into a Stage 6 that produces nothing: the rescore gate distinguishes outputs that
+exist from a bundle that is missing, a partial rescore finishes, and a resume that cannot finish
+says so and exits non-zero. Measured on the 446-file CHS cohort: exit 0 at 5h13m and 41.0 GB
+peak working set where the previous attempt was killed thrashing at 102 GB, with the 86-file
+compaction boundary reproduced exactly.

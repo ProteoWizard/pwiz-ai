@@ -5,9 +5,9 @@
 - **Base**: `master`
 - **Repo**: `pwiz1`
 - **Created**: 2026-04-16
-- **Status**: In Progress
+- **Status**: Completed - merged 2026-08-25
 - **GitHub Issue**: (pending)
-- **PR**: ProteoWizard/pwiz#4158
+- **PR**: [#4158](https://github.com/ProteoWizard/pwiz/pull/4158) - merged 2026-08-25 as `55ba11f8e7`
 
 ## Objective
 
@@ -83,6 +83,11 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
 
 ## Session Log
 
+### 2026-08-25 - Merged
+
+PR #4158 ("Added amino acid sequence ruler to library spectrum viewer") squash-merged to
+master as `55ba11f8e7`.
+
 ### 2026-06-09 — Added master Enable/Disable rulers toggle (oral UI review)
 
 Added a single context-menu toggle ("Disable Rulers" when on, "Enable Rulers"
@@ -123,3 +128,13 @@ to tracked backlog TODOs. Final HEAD: `c4b2aca511`.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260416_spectrumSequenceRuler.md` before starting work.
 - **Drop-line X uses the theoretical (predicted) ion m/z, not the observed peak m/z** — the ruler is a theoretical ladder, so anchoring drop lines to predicted positions is the intended semantic. At very high zoom (a few m/z visible), peaks with non-trivial mass error appear visually offset from their drop lines. This is accepted behavior, not a bug.
+
+## Resolution
+
+**Status**: Completed - PR [#4158](https://github.com/ProteoWizard/pwiz/pull/4158) merged to
+master 2026-08-25 as `55ba11f8e7`.
+
+Shipped the amino-acid sequence ruler (b/y ion ladder with drop lines and hover) in the library
+spectrum viewer, with a persisted, global Enable/Disable rulers toggle that clears pinned state
+when turned off. Drop-line X anchors to the theoretical ion m/z by design (see Notes). All new
+decision logic covered by tests; the GUI-only draw/menu code is exercised manually.

@@ -3,11 +3,15 @@
 ## Branch Information
 - **Checkout**: `C:\proj\pwiz-work1` (the net8 work tree - fully provisioned for it)
 - **Branch**: `Skyline/work/20260818_commonutil_winforms_split` (PR #4587)
-- **Base**: `chambem2/pwiz-sharp` (PR #4178)
+- **Base**: `Skyline/work/20260612_net8_port` (PR #4619; was `chambem2/pwiz-sharp` #4178 until
+  Matt re-opened the port from the shared integration branch on 2026-08-26)
 - **Created**: 2026-08-26
-- **Status**: In progress - #4587 is CLEAN and waiting on TeamCity
+- **Status**: Completed - chain collapsed; #4587 merged 2026-08-31. The final step, the port
+  branch into master, is [#4619](https://github.com/ProteoWizard/pwiz/pull/4619) and is tracked
+  by [[TODO-20260612_net8_port]]
 - **Module**: `skyline`
-- **PR**: [#4587](https://github.com/ProteoWizard/pwiz/pull/4587)
+- **PR**: [#4587](https://github.com/ProteoWizard/pwiz/pull/4587) - merged 2026-08-31 as
+  `fc02f6d68e` into `Skyline/work/20260612_net8_port`
 
 ## Goal, in Brendan's words
 
@@ -35,11 +39,12 @@ master
 
 ## What remains before the squash-merge
 
-- [ ] **TeamCity on #4587.** It reports *no checks* - work branches do not auto-trigger it.
+- [x] **TeamCity on #4587.** It reports *no checks* - work branches do not auto-trigger it.
       This is the only thing between here and the merge. Everything below is verified on
       one machine only.
-- [ ] Squash-merge #4587 into `chambem2/pwiz-sharp`
-- [ ] Then #4178 into master
+- [x] Squash-merge #4587 into ~~`chambem2/pwiz-sharp`~~ `Skyline/work/20260612_net8_port` -
+      done 2026-08-31 as `fc02f6d68e`
+- [ ] Then ~~#4178~~ #4619 into master - still open; owned by [[TODO-20260612_net8_port]]
 
 ## The real gate is nightly, not one machine
 
@@ -141,3 +146,37 @@ it was checking the wrong directory. The guard was sound; the path it guarded wa
 | `pwiz` | other work - `Skyline/work/20260824_webclient_prohibition` |
 
 Do not try to build the net8 line in `daily`, or master's native path in `pwiz-work1`.
+
+## Progress Log
+
+### 2026-08-26 - The chain re-based on one integration branch
+
+Minutes after this TODO was written, Matt closed #4178 (`chambem2/pwiz-sharp`) and re-opened the
+port as #4619 from `Skyline/work/20260612_net8_port` - the same content at the same head
+(`14e8820ac5`), so the port and every PR stacked on it share one integration branch. #4587's base
+moved with it. The "deleted" row for `20260612_net8_port` in the table above is therefore stale:
+the branch came back as the integration branch.
+
+### 2026-08-31 - Merged
+
+PR #4587 ("skyline: Split CommonUtil's WinForms half so ProteowizardWrapper can be plain
+net8.0") squash-merged as `fc02f6d68e` into `Skyline/work/20260612_net8_port`. It carried #4605
+(net8 test reliability) with it, and #4629 followed on 2026-09-02 (`5c046bdb7a`) with the net10
+nightly fixes and the pass-1 NHibernate leak. #4588 (Osprey on the pwiz-sharp reader) remains
+stacked on the port branch.
+
+## Resolution
+
+**Status**: Completed. Goals 1 and 2 were done when this TODO was opened; goal 3's first half,
+squash-merging #4587 into the port branch, landed 2026-08-31 as `fc02f6d68e`. The .NET 8 chain
+now has one integration branch (`Skyline/work/20260612_net8_port`, PR
+[#4619](https://github.com/ProteoWizard/pwiz/pull/4619)) instead of three stacked ones, and the
+only remaining hop - that branch into master - is the port PR itself, tracked by
+[[TODO-20260612_net8_port]]. The nightly gate this TODO argued for ("the real gate is nightly,
+not one machine") is the SkylineNightly run against the port branch, which #4629 then fixed.
+
+Not closed here: the OPEN QUESTION above. #4618 merged to master 2026-08-26 and reached the port
+branch through a later master merge (per [[TODO-20260612_net8_port]], which records it widening
+exposure to the same GDI+ failures). Whether its three `HangDetection` fixes were re-measured
+against ClrMD 3.1, as this TODO asked, is not recorded anywhere - anyone touching `HangDetection`
+on the port line should treat that as still owed.
