@@ -2,13 +2,13 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260817_osprey_net8_pwiz_sharp`
-- **Base**: `chambem2/pwiz-sharp` (STACKED PR - not master; pattern per #4311)
+- **Base**: `Skyline/work/20260612_net8_port` - the .NET 10 port branch, PR #4619 to master
 - **Created**: 2026-08-17
 - **Status**: In Progress
 - **GitHub Issue**: [#4497](https://github.com/ProteoWizard/pwiz/issues/4497)
 - **Module**: `osprey`
 - **Other labels**: `enhancement`
-- **PR**: (pending, base `chambem2/pwiz-sharp`)
+- **PR**: [#4588](https://github.com/ProteoWizard/pwiz/pull/4588), into the port branch
 - **Depends on**: [#4178](https://github.com/ProteoWizard/pwiz/pull/4178) (draft, `chambem2/pwiz-sharp`)
 - **Builds on**: [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) (merged; issue #4496 - net472 vendor raw reading, already present in this base)
 
@@ -1410,3 +1410,46 @@ repeat 1 is the SMALLEST for stage6.
 4. **Once the cache exists Osprey needs no source file.** Verified by renaming the mzML away
    and watching a full pipeline complete, exit 0, 482,891 scored entries (#4616's promise,
    end to end).
+
+## Session 2026-09-12 - brought current with the port branch, folding into #4619
+
+Brendan's direction: #4619 (the port branch -> master) has become the team's prospective
+.NET 10 -> master and is targeting merge within weeks. Maintaining stacked PRs against it is a
+cost, so #4588 is to be updated, re-tested, and merged into it rather than kept separate.
+
+### The merge
+
+`d7571b236f` - `origin/Skyline/work/20260612_net8_port` (39 commits) merged in. One real
+conflict, the argument-mapping comment block in `build.bat`: kept the port branch's new
+`--build-only` and appended-once notes, kept this branch's `--i-agree-to-the-vendor-licenses ->
+-IAgreeToVendorLicenses` line, since on this branch the flag is real (pwiz-sharp gates the vendor
+readers on it) rather than the port branch's warning.
+
+**A trap on the way there.** The local `pwiz-osprey` checkout was 23 commits behind its own
+origin, and `git pull --ff-only --quiet` failed silently behind a reftables warning. The first
+merge attempt therefore ran against a stale base and produced a second, entirely manufactured
+conflict in `regression.ps1` - the `-Source mzML|raw` support colliding with the port branch's
+`$ph1Dirs` layout. The tell: the origin tip already contained the "resolution". Aborted,
+fast-forwarded with an explicit `git merge --ff-only origin/...`, re-merged; `regression.ps1`
+then merged clean. **Check `git rev-list --left-right --count HEAD...@{u}` after any pull before
+merging on top of it.**
+
+### The gates
+
+| gate | result |
+|---|---|
+| `Build-Osprey.ps1 -Configuration Debug -TargetFramework net10.0 -RunTests -RunInspection` | build green, **594/594**, inspection green after one fix |
+| `regression.ps1 -Dataset Stellar` | **PASSED** - modes 1, 1c, 2, 3, 4, 5, 6, 8, 9; golden at 1e-9; 13 min |
+
+The one inspection fix (`f2b76e171c`): `PipelineMembershipTest.cs` had `using System.Linq;`
+that .NET 10 makes redundant - its array `Contains` binds to `MemoryExtensions` through C# 14
+first-class spans. The file is byte-identical to the port branch tip, so this is a pre-existing
+port-branch inspection failure that only reads red here because this branch is net10-only and
+runs the gate.
+
+Note `-TargetFramework net10.0` is required: `Build-Osprey.ps1` defaults to net472, which this
+branch deletes.
+
+Pushed. #4588 reads MERGEABLE / CLEAN, 12 commits. The TeamCity Perf/Regression gate has not
+been triggered - it is manual, must be asked for, and runs once when the branch is a genuine
+merge candidate, which it now is.
