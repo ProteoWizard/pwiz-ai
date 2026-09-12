@@ -602,14 +602,13 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  qualify  : {0}" -f $(if ($QualifyBy -eq 'experiment') {
                 'EXPERIMENT-wide q (OSPREY_PROTEIN_COMPACT_QUALIFY) - shrinks the protein-compact stratum' }
                 else { 'per-run q (default, the union over runs)' }))
-    if ($FdrBenchPass -eq '1') {
-        Write-Host "  WARNING: --fdrbench-pass 1 forces the RESIDENT first-pass pool, which grows" -ForegroundColor Yellow
-        Write-Host "           O(files) and does not scale to a large cohort. See the README." -ForegroundColor Yellow
-    } elseif ($FdrBenchPass -ne 'none') {
-        Write-Host ("  NOTE: --fdrbench-pass {0} currently yields only the pass-2 TSV; the pass-1" -f $FdrBenchPass) -ForegroundColor Yellow
-        Write-Host "        pool is not emitted off the projection path. Pass-1 FDP comes from the" -ForegroundColor Yellow
-        Write-Host "        --model-diagnostics report instead." -ForegroundColor Yellow
-    }
+    # Since pwiz #4507 (2026-09-12) every pass selection streams: pass 1 is emitted off the
+    # per-file 1st-pass sidecars, so `1` no longer forces the resident pool and `both` really
+    # writes .pass1 and .pass2. The two yellow banners that stood here - a resident-pool
+    # WARNING for `1`, and a NOTE that `both` yielded only pass 2 - described the defect and
+    # are gone with it; the "pass 2" banner line above already names the selection. An exe
+    # older than that fix still has both behaviours; the run dir's bench file set (one .tsv
+    # vs .pass1/.pass2) says which you got.
     if ($Pass2Mode -eq 'transfer') {
         Write-Host "  WARNING: OSPREY_PASS2_QVALUE=transfer forces the RESIDENT first-pass pool" -ForegroundColor Yellow
         Write-Host "           (O(files)). The other frozen-model modes do not." -ForegroundColor Yellow

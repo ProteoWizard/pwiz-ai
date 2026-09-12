@@ -287,7 +287,9 @@ scored with search_hash=dd85be27... but current config hashes to 661d98d9...
 
 That is the guard working - it fails in about two minutes rather than describing a
 different search - but the message names hashes, not the argument that differs, so it does
-not tell you what to change.
+not tell you what to change. (Since the 2026-09-12 fix to the terminal error sinks the line
+also carries the exception type ahead of the message and is followed by the stack frames;
+the `search_hash mismatch` text is what to look for.)
 
 The trap is that the lib root holds more than one library and the runner picks one by
 convention. `chs-446files-libdecoy-r1.0-protein-compact-s7mdiag` was scored against

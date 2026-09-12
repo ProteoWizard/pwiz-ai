@@ -181,16 +181,16 @@ by a tool expecting the other.
 **Quote Pass 1, not Pass 2.** Pass-2 recalibration inflates FDP; that is a known open
 issue, not a property of your run.
 
-**Pass-1 FDP comes from the `--model-diagnostics` HTML, not from FDRBench.** Despite what
-`--fdrbench-pass both` promises, no pass-1 TSV is written on the normal (projection) path:
-Osprey gates the pre-compaction pool on `FdrBenchPass == 1` exactly, so the `both` bitmask
-(3) misses the test and only pass 2 is emitted, silently. Verified on three runs including
-one with `--model-diagnostics`, so it is not an mdiag interaction - see
-`PerFileScoringTask.NeedsResidentPool` and `FirstPassFdrTask.WriteFdrBenchPass1IfRequested`.
-This is a product bug, reported separately; until it is fixed, keep `--model-diagnostics`
-on if you want pass-1 numbers, and read them from the report's `fdpViews` (which carry an
-explicit `pass` field - select on it) via `fdp_at_count.py` / `runcount_fdp.py`.
-`--fdrbench-pass 1` alone does emit the pass-1 TSV, but only by forcing the resident pool.
+**Pass-1 FDP: two sources, and they were not always both available.** Runs from before
+pwiz #4507 (fixed 2026-09-12) have NO pass-1 TSV even though the runner asked for `both`:
+Osprey gated the pre-compaction pool on `FdrBenchPass == 1` exactly, so the `both` bitmask
+(3) missed the test and only pass 2 was emitted, silently (verified on three runs including
+one with `--model-diagnostics`). For those runs the pass-1 numbers come from the
+`--model-diagnostics` report's `fdpViews` (they carry an explicit `pass` field - select on
+it) via `fdp_at_count.py` / `runcount_fdp.py`, and that is what every SEA-AD comparison to
+date was read on. Runs from a fixed exe write `fdrbench.pass1.tsv` too, streamed off the
+per-file 1st-pass sidecars with no resident pool, so the external oracle covers pass 1 at
+cohort scale for the first time; the file set in the run dir says which kind of run you have.
 
 ## Harvest every long run - it is too expensive not to
 

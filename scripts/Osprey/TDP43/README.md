@@ -141,18 +141,24 @@ new defect. Rebuilding costs ~10 h and is fully scripted.
 
 ## FDRBench at this scale
 
-`-FdrBenchPass` defaults to **`none`** here, unlike SEA-AD. The reasoning:
+`-FdrBenchPass` defaults to **`none`** here, unlike SEA-AD. The reasoning as of the
+2026-08-16 baseline, now history:
 
-* `--fdrbench-pass 1` forces the RESIDENT first-pass pool, which grows O(files) - the exact
-  growth #4488 was written to bound. Confirmed in source: `NeedsResidentPool` gates on
-  `config.FdrBenchPass == 1` (`PerFileScoringTask.cs`). Do not reach for it at this scale.
-* `2` and `both` are memory-safe - the `both` bitmask (3) never matches that `== 1` test -
-  but they emit only the **pass-2** TSV, and pass-2 FDP is inflated by recalibration.
+* `--fdrbench-pass 1` forced the RESIDENT first-pass pool, which grows O(files) - the exact
+  growth #4488 was written to bound - so it was unusable at this scale.
+* `2` and `both` were memory-safe only because the `both` bitmask (3) never matched the
+  `== 1` test that forced the pool, and for the same reason they emitted only the **pass-2**
+  TSV - a silently missing file, not a feature.
 
-So the baseline uses `--model-diagnostics` alone, which gives the pass-1 paired-FDP estimate
-and the diagnostics HTML with no resident-pool exposure. Run the external FDRBench oracle
-later on a SMALL subset, where pass 1's resident pool is affordable and the opt-in env var is
-a deliberate act rather than a workaround. Read the results with `../SEA-AD/tools/`.
+**Both are fixed by pwiz #4507 (2026-09-12).** The pass-1 emitter streams off the per-file
+`.1st-pass.fdr_scores.bin` sidecars and the experiment-scope map, one file at a time, so no
+pass selection forces the resident pool and `both` writes `fdrbench.pass1.tsv` and
+`fdrbench.pass2.tsv` as its help always claimed. An exe older than that fix still has the old
+behaviour; the bench file set in the run dir (one `.tsv` vs `.pass1`/`.pass2`) says which you
+got. The default stays `none` because the baseline runs were recorded without it and the
+pass-1 paired-FDP estimate from `--model-diagnostics` is what every TDP-43 comparison so far
+has been read on; pass `-FdrBenchPass both` deliberately when the external oracle is wanted,
+and read the results with `../SEA-AD/tools/`.
 
 ## The recommended configuration
 
