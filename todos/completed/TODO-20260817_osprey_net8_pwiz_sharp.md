@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20260817_osprey_net8_pwiz_sharp`
 - **Base**: `Skyline/work/20260612_net8_port` - the .NET 10 port branch, PR #4619 to master
 - **Created**: 2026-08-17
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4497](https://github.com/ProteoWizard/pwiz/issues/4497)
 - **Module**: `osprey`
 - **Other labels**: `enhancement`
-- **PR**: [#4588](https://github.com/ProteoWizard/pwiz/pull/4588), into the port branch
+- **PR**: [#4588](https://github.com/ProteoWizard/pwiz/pull/4588) (merged 2026-09-12 into the port branch)
 - **Depends on**: [#4178](https://github.com/ProteoWizard/pwiz/pull/4178) (draft, `chambem2/pwiz-sharp`)
 - **Builds on**: [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) (merged; issue #4496 - net472 vendor raw reading, already present in this base)
 
@@ -1453,3 +1453,19 @@ branch deletes.
 Pushed. #4588 reads MERGEABLE / CLEAN, 12 commits. The TeamCity Perf/Regression gate has not
 been triggered - it is manual, must be asked for, and runs once when the branch is a genuine
 merge candidate, which it now is.
+
+### 2026-09-12 - Merged
+
+PR #4588 merged as commit `3114ac1049` into `Skyline/work/20260612_net8_port`, the port
+branch that #4619 carries to master. All six checks green, including the manual TeamCity
+Perf/Regression gate (build 4174145, ~87 min, every mode on all four datasets plus the perf
+leg). What shipped: ProteoWizard as Osprey's only spectrum reader through
+`ProteowizardWrapper`, the net472 target and its Jamfile plumbing removed, `MzmlReader` /
+`VendorRawReader` / `NativeStrtod` deleted, `TestRawVsMzmlSpectraParity` added. Also
+carried: the pre-existing port-branch `using System.Linq` inspection failure in
+`PipelineMembershipTest.cs`, which this merge removes from #4619.
+
+Deferred, deliberately: issue #4497 stays open. `Fixes #4497` in the PR body does not
+auto-close on a merge into a non-default branch, and the work is not on master until #4619
+lands - close it then. The "Deliberately NOT done" and "Follow-up when this merges" sections
+above still stand; nothing in them was picked up here.
