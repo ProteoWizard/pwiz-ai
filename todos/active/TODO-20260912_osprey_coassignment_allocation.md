@@ -240,3 +240,14 @@ removed "most of" it.
 
 Gates: `regression-parallel.ps1 -Dataset All` on the stack 70 PASS / 0 FAIL / 0 SKIP in 55:27;
 unit gate 593/593 with zero inspection warnings. TeamCity on `pull/4662` queued (build 4174297).
+
+### 2026-09-13 - One unexplained unit-test failure, under the same memory pressure
+
+`TestStreamReconciledTransferMatchesLoadAllOverlay` failed once - `Assert.AreEqual failed.
+Expected:<2>. Actual:<0>` on `result.NReplaced` - in the full-suite run made while the 446-run
+cohort and the two-lane gate were both on the box. It passed in isolation immediately afterwards
+and in a full 593/593 re-run, and it passes on the stashed (pre-change) tree as well, so it is
+not this branch. No theory that survives inspection: the suite runs sequentially
+(`vstest.console.exe`, one assembly, no `/Parallel`, no `[assembly: Parallelize]`), so the shared
+`ParquetScoreCache.RowGroupRowCapForTest` static that six IOTest methods set is not being raced.
+Recorded rather than explained; if it recurs outside a memory-starved box it deserves a real look.
