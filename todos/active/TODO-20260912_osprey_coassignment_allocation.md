@@ -292,3 +292,42 @@ the panel this PR is about - written up as item 1 of #4664.
 **This PR now is**: the co-assignment working set (flat arrays + reusable parquet buffers), the
 geometric growth fix, the code-review findings, and the reusable pass-2 join index. Peak
 `FirstPassFDR` 41.7/37.0 -> 30.2 GB with products unchanged.
+
+### 2026-09-13 - Regeneration validity: two defects found by bisection (NOT filed as issues)
+
+Brendan's bisection, five cells on the 446-file CHS bed, each a fresh hard-linked mirror of a
+completed run (scripts in `ai/.tmp/sessions/20260912-e12121ed/novalidwork-446*.ps1`):
+
+| # | invocation | `--model-diagnostics` | diagnostics products | result |
+|---|---|---|---|---|
+| 1 | full pipeline | no | absent | all four tasks skip - **4 s** |
+| 2 | full pipeline | yes | present | first three skip; **SecondPassFDR re-runs** ("Loading scored entries...", ~19 GB climbing) |
+| 3 | `--task FirstPassFDR` | no | absent | skip - 0 s |
+| 4 | `--task FirstPassFDR` | yes | present | skip - 0 s |
+| 0 | `--task FirstPassFDR` | yes | **absent** | **full re-run incl. Percolator retrain** -> resident pre-compaction pool, 109 GB at file 165/446 |
+
+Validity detection itself is sound and nearly free: 8,037 artifacts, four tasks, four seconds.
+`--task` is not the variable either (3 and 4 are instant). The variable is **the diagnostics
+product being absent while `--model-diagnostics` is requested**.
+
+**Defect A - `FirstPassFDR` re-runs the whole first pass instead of folding the report.**
+`FirstPassFdrTask.cs:470` gates the pay-later fold on
+`config.ModelDiagnostics && OnlyDiagnosticsProductOutstanding(ctx)`, which is NOT
+`--task ModelDiagnostics`-only, so row 0 should have folded. It did not, and the predicate's
+own "not folding diagnostics from completed work - {0} is {1}" line never appears - leaving the
+one branch that returns false SILENTLY (`FirstPassFdrTask.cs:359`):
+`if (string.IsNullOrEmpty(diagnosticsPath) || File.Exists(diagnosticsPath)) return false;`
+So either `ModelDiagnosticsReport.Pass1SidecarPath(config)` resolved empty for this invocation,
+or the file was judged present. Start there. This is the blocker for the intended workflow -
+add `--model-diagnostics`, re-run, do only the diagnostics work - and the only path that
+produces the complete report (with the Model tab) is the one that cannot finish at 446 files.
+
+**Defect B - `SecondPassFDR` re-runs with nothing missing.** Row 2: every product present,
+including `out.2nd-pass.model-diagnostics.json` and the HTML with their
+`...SecondPassFDR.osprey.task` stamps, and it still loads the scored pool. Likely the same
+shape as A: the validity key an ordinary `--model-diagnostics` run computes differs from the key
+those stamps were written under ("present but not current"), rather than anything being absent.
+
+Related, from the same runs: `--task ModelDiagnostics` logs *"first-pass model not retrained on
+this run (resumed/rehydrated); the Model tab's feature table and per-feature distributions are
+unavailable"*. So the bounded path and the complete-report path are not the same report today.
