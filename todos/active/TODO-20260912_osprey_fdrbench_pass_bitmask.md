@@ -345,3 +345,26 @@ summariser in this session dir):
 Folding the emitter into the protein-FDR reduce walk (the review's item) is therefore not a
 gate matter any more; it remains a product-side saving for cohort-scale `--fdrbench` users
 (~13-17 min at 446 runs) and is deferred as such.
+
+### 2026-09-12 - Scoped gate green; regression.html + a sparser-matrix proposal
+
+`regression.ps1 -Dataset StellarGenDecoyEntrap` on the scoped script: PASSED, 28 summary
+lines, both mode-12 halves green, 1,616 s across 17 phases (log:
+`ai/.tmp/sessions/20260912-e12121ed/regression-4661-gendecoy-scoped.log`).
+
+Committed on the branch (de944a1fda, pushed; PR body updated):
+`Regression\Write-RegressionMatrix.ps1` + the page it renders, `pwiz_tools/Osprey/regression.html`
+(mode x dataset, gate, seconds per leg from the last full parallel run), verified against the
+scoped log with `-VerifyAgainst`: 0 mismatches. The generator also takes `-SkipModesOverride`
+and `-Lanes`, which is how the proposal page below was rendered without touching the script.
+
+**Sparser matrix, awaiting Brendan's sign-off** (gate-loosening; lands as its own PR with the
+lane rebalance in `regression-parallel.ps1`). Side-by-side pages:
+`pwiz_tools/Osprey/regression.html` (today) and
+`ai/.tmp/sessions/20260912-e12121ed/regression-proposal.html` (proposed). Cuts: Astral loses
+modes 5, 7, 8, 9, 11 (keeps 3 for the gap-fill rows); StellarGenDecoyEntrap loses 3, 5, 7, 8,
+9, 11 (KEEPS mode 2 - it is the only leg that gates the FDRBench resume emitter, +162 s);
+Stellar loses 8, 9. StellarLibDecoy keeps everything. Lanes become Astral+GenDecoyEntrap
+(2,646 s) | Stellar+LibDecoy (2,593 s): wall 44 min against 65 today on this machine's
+numbers; the agent's disk-bound ratio should carry over. Summary lines would be Stellar 17,
+StellarLibDecoy 27, StellarGenDecoyEntrap 12, Astral 15.

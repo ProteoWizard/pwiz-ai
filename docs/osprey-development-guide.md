@@ -1824,6 +1824,8 @@ Leg parity across datasets is **not** a goal, and the asymmetries are deliberate
 are listed together here because a partial accounting is worse than none: it implies the
 one thing it names is the only omission.
 
+**Which assertion runs on which dataset is a generated page**: `pwiz_tools/Osprey/regression.html`, written by `pwiz_tools/Osprey/Regression/Write-RegressionMatrix.ps1` from the script's own dataset specs plus a mode table the generator carries, and verified against a run's summary lines with `-VerifyAgainst`. Read it BEFORE adding an assertion: the recurring mistake is adding a check to every dataset when one covers its property, a 4x wall-time multiplier for no coverage. Regenerate and re-verify whenever a mode or a spec key changes.
+
 Measured leg counts from a green `-Dataset All` (2026-09-12, with modes 1c, 6, 7, 8, 9, 11 and
 12 in): **Stellar 19, StellarLibDecoy 27, StellarGenDecoyEntrap 28, Astral 24.** Mode 12
 (FDRBench both files + resume identity) runs on StellarGenDecoyEntrap only - the one dataset
