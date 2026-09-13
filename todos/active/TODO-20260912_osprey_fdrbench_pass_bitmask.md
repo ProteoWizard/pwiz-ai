@@ -368,3 +368,24 @@ Stellar loses 8, 9. StellarLibDecoy keeps everything. Lanes become Astral+GenDec
 (2,646 s) | Stellar+LibDecoy (2,593 s): wall 44 min against 65 today on this machine's
 numbers; the agent's disk-bound ratio should carry over. Summary lines would be Stellar 17,
 StellarLibDecoy 27, StellarGenDecoyEntrap 12, Astral 15.
+
+### 2026-09-12 - Sparse matrix implemented (Brendan signed off in the night-session brief)
+
+`7c595218e6` on the branch. `SkipModes` now gates every mode through `Test-ModeCut`, and a cut
+mode emits NO summary line (SKIP is reserved for the `-Skip*` switches, so a SKIP in a full run
+always means a switch was passed - including mode 2's streamed-join line, which used to print
+SKIP on Astral).
+
+| dataset | runs | cut |
+|---|---|---|
+| StellarLibDecoy | everything | - |
+| Stellar | 1, 1c, 2, 3, 4, 5, 6 | 8, 9 |
+| StellarGenDecoyEntrap | 1, 1b, 1c, 2, 4, 6, 12 | 3, 5, 7, 8, 9, 11 |
+| Astral | 1, 1b, 1c, 3, 4, 6 | 2, 5, 7, 8, 9, 11 |
+
+Summary lines: Stellar 17, StellarLibDecoy 27, StellarGenDecoyEntrap 12, Astral 14.
+
+`regression-parallel.ps1` lanes rebalanced to Astral+StellarGenDecoyEntrap (2,646 s) |
+Stellar+StellarLibDecoy (2,593 s) - wall 44 min projected against 65 measured. The two lanes no
+longer share a first-time extraction: `regression.ps1 -StageOnly` acquires and derives, and the
+runner calls it once per dataset before launching, the same way it builds once.

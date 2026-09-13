@@ -129,3 +129,33 @@ Three files, +130/-48, on `pwiz-work2`:
 its golden) running; then the 446-run bed via `oracle-446-4657.ps1` (this session dir), strict
 against the banked current-build products, with perfviz; then `regression-parallel.ps1
 -Dataset All`.
+
+### 2026-09-12 - The flat arrays were O(n^2) without a reserve; fixed and pinned
+
+The StellarLibDecoy gate passed but was 30-60% slower everywhere a pass-2 diagnostics report is
+built. Per-leg, against the same dataset's legs on the fdrbench branch's `-Dataset All` run
+earlier the same day:
+
+| leg | fdrbench branch | #4657 branch |
+|---|---|---|
+| pay-later diagnostics fold (mode 11) | 15.7 s | 492.2 s |
+| HPC 4-task chain (mode 3) | 557.6 s | 846.5 s |
+| resume (mode 2) | 172.7 s | 470.2 s |
+| Stage-5 rehydrate (mode 5) | 93.0 s | 422.8 s |
+
+Root cause: `EnsureRunScopeCapacity` grew to exactly `baseId + 1`. Rows reach `ObserveCutoff`
+in parquet row order, which is ASCENDING entry id, so an unreserved builder saw a new maximum on
+almost every row and copied all three arrays each time - O(n^2) per file. `ReserveRunScope` hides
+it on the phase-1 path (`PeakCoAssignmentSource`), which is why the 446-run bed's first phase
+looked fine; the PASS-2 builder in `SecondPassFdrTask` is constructed bare and never reserved, so
+every pass-2 fold paid it. The 446-run oracle launched at 18:36 was still inside that fold at
+21:22 (it had reached the pass-1 boundary at 19:46), which is what exposed it.
+
+Fix: geometric growth (`max(baseId + 1, 2 * old)`), so a reserve from empty still lands exactly
+on `maxBaseId + 1` and an unreserved ascending stream grows O(log n) times.
+`TestCoAssignmentRunScopeGrowsGeometrically` pins both halves and is red on the exact-growth
+version (verified: "grew the run scope 100000 times; geometric growth allows at most 18").
+
+Commits `997ed8d94b` + `e23ffdd616`, now REBASED onto the #4661 branch
+(`Skyline/work/20260912_osprey_fdrbench_pass_bitmask` @ `7c595218e6`) so one TeamCity run
+validates both, per Brendan's night-session instruction. #4661 merges first.
