@@ -222,21 +222,28 @@ when Parquet.Net's string decoder asked for its next buffer. Filed as issue #466
 (it is a hard process kill, not an `OutOfMemoryException` a caller could catch), but it is not
 this branch's to fix and nothing in the branch reaches that decoder.
 
-**Private bytes across the two co-assignment phases** (same bed and command as the issue's
-measurement, computed from the run's own memstamps):
+**Private bytes** - CORRECTED on 2026-09-13 after Brendan asked whether perfviz had been run
+against the bed's prior logs and PNGs rather than against the numbers quoted in the issue. It had
+not: the first write-up compared my windows to the issue's recorded figures and reported
+"41.7 -> 29.7 GB overall", which is not a process peak. The like-for-like comparison, with the two
+pre-fix runs being the SAME build:
 
-| phase | before | after |
-|---|---|---|
-| phase 1: scan 1st-pass sidecars over 446 files | 10 -> 35 GB | **11.3 -> 12.2 GB** (flat) |
-| phase 2: apex-RT join over 446 files | 35 -> 41.7 GB | 12.2 -> **29.7 GB** |
-| `FirstPassFDR` overall private peak | 41.7 GB | 29.7 GB |
+| run | build | `FirstPassFDR` peak (the panel) | `SecondPassFDR` peak | process peak |
+|---|---|---|---|---|
+| 09-10 22:56 | `mdiagfix-1b9dc8` | 41.7 GB | 39.2 GB | 41.7 GB |
+| 09-11 02:09 | `mdiagfix-1b9dc8` | 37.0 GB | 32.9 GB | 37.0 GB |
+| 09-13 01:17 | this branch | **30.2 GB** | 38.2 GB | 38.2 GB |
 
-Phase 1's excursion is gone outright - that was the per-file dictionary and there is no per-file
-allocation left on that path. Phase 2 still climbs because roughly half its per-file large-object
-churn is inside Parquet.Net's own per-row-group column arrays, which a caller reusing buffers
-cannot touch; the read's doc comment now says so and names the shape that would remove it
-(`ReadFdrStubScalars`-style row-group callbacks), rather than claiming the caller-side reuse
-removed "most of" it.
+Same build, two runs, 4.7 GB and 6.3 GB apart - so single numbers here are a band, not a point.
+The panel's phase is below both unfixed runs (30.2 against 37.0-41.7), and inside it phase 1 is
+flat at 11.3 -> 12.2 GB where it climbed 10 -> 35 GB. That part of the goal is met.
+
+The PROCESS peak is not: it moved to `ReclampExperimentQToBestRun` ("Folding experiment-q floors
+over 446 run(s)"), 28.3 -> 38.2 GB here against 27.8 -> 32.9 GB on the baseline - inside the same
+band, on code this branch does not touch. The two pass-2 co-assignment windows are 20.4-21.0 GB in
+both runs. Filed as #4664: that fold materializes every file's full `FdrEntry` list, modified-
+sequence strings included, to compute two minima - the shape #4657 just removed, one phase over -
+and it is also where #4663's AccessViolation hit.
 
 Gates: `regression-parallel.ps1 -Dataset All` on the stack 70 PASS / 0 FAIL / 0 SKIP in 55:27;
 unit gate 593/593 with zero inspection warnings. TeamCity on `pull/4662` queued (build 4174297).
