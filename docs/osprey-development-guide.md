@@ -1798,12 +1798,13 @@ triggered on every commit or push, so opening or pushing a PR does **not** start
 it. When a PR is otherwise ready (review findings settled, the
 `Osprey Windows .NET` unit build green), it must run before human review / merge.
 
-**Every mode, all four datasets.** No `-Skip*` switch is passed
-(`-SkipResume`, `-SkipWarmRerun`, `-SkipRehydrate`, `-SkipHpcChain` all default
-false), so the config runs whatever `regression.ps1` currently defines - modes 1,
-1b, 2, 3, 4, 5 and 6 as of 2026-08-07. Do not maintain a mode list here: this
-sentence read "mode1/2/3" for months after modes 4-6 were added, and was quoted
-back as fact. `tctest.bat` is one line and is the authority.
+**Every dataset, and on each one the modes its SkipModes leaves.** No `-Skip*`
+switch is passed (`-SkipResume`, `-SkipWarmRerun`, `-SkipRehydrate`,
+`-SkipHpcChain` all default false), so the config runs whatever `regression.ps1`
+currently defines per dataset - which since 2026-09-12 is deliberately NOT every
+mode everywhere. Do not maintain a mode list here: this sentence read "mode1/2/3"
+for months after modes 4-6 were added, and was quoted back as fact.
+`pwiz_tools/Osprey/regression.html` is generated from the script and is the map.
 
 **"Four datasets" is two acquisitions searched four ways**, not four separate
 acquisitions. There are 6 distinct mzML files: `stellar` (3, unit resolution) and
@@ -1826,12 +1827,30 @@ one thing it names is the only omission.
 
 **Which assertion runs on which dataset is a generated page**: `pwiz_tools/Osprey/regression.html`, written by `pwiz_tools/Osprey/Regression/Write-RegressionMatrix.ps1` from the script's own dataset specs plus a mode table the generator carries, and verified against a run's summary lines with `-VerifyAgainst`. Read it BEFORE adding an assertion: the recurring mistake is adding a check to every dataset when one covers its property, a 4x wall-time multiplier for no coverage. Regenerate and re-verify whenever a mode or a spec key changes.
 
-Measured leg counts from a green `-Dataset All` (2026-09-12, with modes 1c, 6, 7, 8, 9, 11 and
-12 in): **Stellar 19, StellarLibDecoy 27, StellarGenDecoyEntrap 28, Astral 24.** Mode 12
-(FDRBench both files + resume identity) runs on StellarGenDecoyEntrap only - the one dataset
-with generated decoys, entrapment and a pairing manifest, so every writer branch runs once
-and nowhere else. The split below predates those modes (its totals are
-the older 15 / 19) but its shape - Stellar leads on detection, Astral on reporting - still holds.
+**The rule, since 2026-09-12: one dataset per property.** The four datasets are two
+acquisitions searched four ways, so a leg added to all of them inherits a 4x wall-time
+multiplier and buys coverage only where the property actually differs by dataset. Each
+dataset's `SkipModes` now carries that decision for every mode, not just mode 2, and a cut
+mode emits NO summary line - a designed omission is not a SKIP. **SKIP now means a `-Skip*`
+switch was passed**, i.e. the run was not a full one.
+
+| dataset | what it is FOR | runs | cut |
+|---|---|---|---|
+| `StellarLibDecoy` | the recommended product path, and the cheapest full-coverage config | everything | - |
+| `Stellar` | the default product path (generated decoys, unit, no diagnostics) | 1, 1c, 2, 3, 4, 5, 6 | 8, 9 |
+| `StellarGenDecoyEntrap` | the decoy-construction oracle | 1, 1b, 1c, 2, 4, 6, 12 | 3, 5, 7, 8, 9, 11 |
+| `Astral` | hram scoring and the gap-fill rows only hram produces | 1, 1b, 1c, 3, 4, 6 | 2, 5, 7, 8, 9, 11 |
+
+Summary-line counts on a green `-Dataset All`: **Stellar 17, StellarLibDecoy 27,
+StellarGenDecoyEntrap 12, Astral 14.** A short count is what distinguishes an aborted run.
+Mode 2 stays on `StellarGenDecoyEntrap` because it carries the second half of mode 12 (the
+FDRBench resume identity); mode 3 stays on Astral because it is the only leg that ships hram's
+gap-fill rows across a process boundary. Wall time went from 65 min to ~44 min on the dev box,
+with the lanes rebalanced to Astral+StellarGenDecoyEntrap | Stellar+StellarLibDecoy.
+
+The accounting below predates the cut and is kept for the asymmetries that are about the
+DATASETS rather than the mode list - which library each is searched against, which tier-2
+bound applies, and what reads a leg's log.
 
 **Do not read those totals as coverage depth** - they sum two different things, and the
 comparison inverts depending on which you mean:
@@ -1859,11 +1878,11 @@ time.
 it: it is gated on `MaxAbsTilt` (null-alignment tilt) where the entrapment datasets are
 gated on `MaxPass1Fdp` and the paired-win coin.
 
-**Astral omits mode 2** (`SkipModes = @(2)`), the resume-vs-straight-through leg. It is a
-workflow-DETECTION test - delete the FirstPassFDR stamp, re-run, assert the answer is
-unchanged - and detection plus resume is Stellar's job. Astral's job is proving it
-reproduces the same answer one task at a time, which is mode 3's HPC chain parity, and
-that stays. Costs ~20 min on TCA1, which is what brought the gate back inside its budget.
+**Astral omits mode 2** (the resume-vs-straight-through leg) and, since 2026-09-12, modes 5,
+7, 8, 9 and 11 with it. It is a workflow-DETECTION test - delete the FirstPassFDR stamp,
+re-run, assert the answer is unchanged - and detection plus resume is Stellar's job. Astral's
+job is proving it reproduces the same answer one task at a time, which is mode 3's HPC chain
+parity, and that stays. Mode 2 alone cost ~20 min on TCA1.
 
 **Only `StellarGenDecoyEntrap` can catch a decoy-construction regression** - it is the
 sole configuration where `DecoyGenerator` runs AND an entrapment true-FDP oracle exists
@@ -1874,9 +1893,11 @@ release fired on every leg that HOLDS the library, and it inspects **eight** leg
 four KINDS its header lists - the `--task PerFileRescoring` kind expands to one check per
 file stem (three of them), and `resume.log` (mode 2) and `rehydrate.log` (mode 5) are
 among the rest. Its check list is gated on `SkipModes` for exactly this reason, and it
-reports its leg count on PASS so a shrinking set is visible: a green
-`-Dataset All` shows `PASS (8 leg(s))` on the three Stellar datasets and
-`PASS (7 leg(s))` on Astral, the missing one being the resume leg.
+reports its leg count on PASS so a shrinking set is visible. Under the sparse matrix a green
+`-Dataset All` shows `PASS (8 leg(s))` on Stellar and StellarLibDecoy, `PASS (6 leg(s))` on
+Astral (no resume, no rehydrate) and `PASS (2 leg(s))` on StellarGenDecoyEntrap (straight and
+resume only - it runs no HPC chain and no rehydrate). Cutting a mode therefore silently
+shrinks mode 6's evidence too; that count is how you see it.
 
 `StellarGenDecoyEntrap` is the only leg that can catch a decoy-construction
 regression: it is the sole configuration where `DecoyGenerator` runs AND an

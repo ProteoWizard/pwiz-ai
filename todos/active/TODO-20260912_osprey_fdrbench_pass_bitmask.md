@@ -389,3 +389,20 @@ Summary lines: Stellar 17, StellarLibDecoy 27, StellarGenDecoyEntrap 12, Astral 
 Stellar+StellarLibDecoy (2,593 s) - wall 44 min projected against 65 measured. The two lanes no
 longer share a first-time extraction: `regression.ps1 -StageOnly` acquires and derives, and the
 runner calls it once per dataset before launching, the same way it builds once.
+
+### 2026-09-12 - Sparse matrix green locally AND on TeamCity
+
+| run | result | wall |
+|---|---|---|
+| local `regression-parallel.ps1 -Dataset All` (contended with a 446-run cohort) | 70 PASS / 0 FAIL / 0 SKIP | 1:00:56 |
+| **TeamCity #248, `pull/4661`** | **70 PASS / 0 FAIL / 0 SKIP** | **56:05** |
+
+Against the same agent's recent history: #246 (mode 12 on all four datasets) 1:38:18, #241 1:22, #243 (night, before mode 12) 1:06. So the cut plus the lane rebalance took the gate BELOW where it sat before mode 12 was added, on a box whose disk is the ceiling.
+
+Per-dataset summary lines 17 / 27 / 12 / 14 = 70, exactly what `regression.html` predicts, and
+`Write-RegressionMatrix.ps1 -VerifyAgainst` on the green log reports 0 mismatches on all four
+datasets - so the page and the script are in step, and the page is now the thing to read before
+adding a leg.
+
+`tctest.bat` also corrected (`ce38bf425a`): it promised "every mode on all four datasets", which
+is no longer true, and now points at regression.html instead of naming a mode list that goes stale.
