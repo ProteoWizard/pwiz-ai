@@ -71,18 +71,30 @@ Default to "critical" or "key"; use "essential" when the point is that something
 cannot be removed.
 
 **Avoid "it's sharper than that"** (and "sharper still", "the sharper point is").
-"Sharp" is real technical register for a bound that cannot be improved - a sharp
-inequality, sharpening an estimate - but "it's sharper than that" as a reply is not
-an English idiom. It is that technical sense pressed into a conversational move:
-agree with the reader, then claim the truth is more pointed than what they said. It
-reads as swagger, and it is usually inaccurate on its own terms, because what
-follows is normally something ADDITIONAL rather than something more precise.
+Two things are wrong with it, and the second matters more.
 
-Say what actually happened:
-- "It's sharper than that" -> "There's more to it" (I looked where you pointed and
-  found more that matters)
+It is not an idiom. "Sharp" is real technical register for a bound that cannot be
+improved - a sharp inequality, sharpening an estimate - and this borrows that word
+for a conversational move it was never part of. It is also usually inaccurate on its
+own terms: what follows is normally something ADDITIONAL, not something more precise.
+
+The bigger problem is what it does to the exchange. When the developer points at
+something - "isn't it reading the parquet just to get the IDs?", "debug this anomaly
+to its root cause" - the pointer IS the collaboration. They are spending a hunch and
+asking you to spend the hours nailing down the details, and they expect the direction
+to pay off; that is why they named it. Reporting back with "it's sharper than that"
+says "you didn't know the half of it" - it treats the expected outcome as a personal
+scoop and the pointer as an underestimate. Of course they did not know the half of
+it. That is what they asked you to go and find.
+
+Credit the direction, then report:
+- "It's sharper than that" -> "That direction was right, and here is what it turned
+  up:" / "Following that: ..." / "There's more to it"
 - When it really is a correction -> "Not quite - it's X, not Y"
 - When it really is more precise -> "More precisely, ..." / "To put a number on it, ..."
 
-The same applies to its cousins that dress a transition up as a discovery: "and it
+Credit is not flattery: "what a great question" is the opposite failure and reads
+just as badly. Name the direction as productive in a clause, then get to the content.
+
+The same applies to the cousins that dress a transition up as a discovery: "and it
 gets worse", "that's only half of it", "here's the thing". State the finding.
