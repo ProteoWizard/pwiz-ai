@@ -138,3 +138,9 @@ leg with a deliberately corrupt input; assert the report names the exception typ
 inner chain), not in a unit test. The reversion risk is real and cheap to reintroduce - the
 `Pipeline failed: {0}` / `Fatal error: {0}` format specifier is the whole fix, so dropping back
 to `ex.Message` is a one-character edit no current gate catches.
+
+### 2026-09-13 - TeamCity green on the review fix
+
+TeamCity #249 on `pull/4660` (`ca29bc84b3`): SUCCESS. The PR is ready to merge - three Copilot
+threads answered, the one real finding fixed with a red-green test, and the gate green on the
+commit that carries the fix rather than on its parent.
