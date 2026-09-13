@@ -264,3 +264,31 @@ Recorded rather than explained; if it recurs outside a memory-starved box it des
 TeamCity #250 on `pull/4662` (`1276737f35`): **SUCCESS, 70 PASS / 0 FAIL / 0 SKIP in 1:01:47**.
 It ran the whole stack, so it covers #4661's sparse matrix as well. Ready for `/pw-complete`
 after #4661 merges and this retargets to master.
+
+### 2026-09-13 - Scope re-cut: the floor fold moves to #4664
+
+The experiment-q floor fold was implemented here, proven CORRECT (446-run products strictly
+identical, Stellar golden-identical at 1e-9, the route asserted in the log by a new mode 13) and
+3.5x faster (13 min -> 3m46s) - and then **reverted out of this PR** (`9a85f68a8b`), because it
+made the thing it was meant to fix worse: the 446-run committed peak went 38.2 -> 44.4 GB.
+
+Why, and it is the useful part: the fold still decodes ~366 M modified-sequence strings from the
+parquet identity columns. The pool path allocated MORE in total but spread it over 13 minutes of
+heavy GC pressure that kept the heap trimmed; the artifact path allocates less, in a short window,
+with nothing forcing a collection - managed climbs 5.2 -> 18.7 GB inside the window and falls back
+to 9.3 GB in the next phase, and Server GC commits to match. Less allocation, higher peak.
+
+The work is preserved on `Skyline/work/20260913_osprey_expq_floor_fold` (commits `35c7b1e917`
+floor fold, `54df126669` mode 13) and #4664 now owns it, together with the blocking question:
+the sequences must come from a cohort-wide source rather than a per-file parquet read, and
+`libraryById` is not guaranteed to carry decoy entry ids, whose sequences are not their targets'.
+
+Brendan's correction that prompted this: `FirstPassFDR` was not finished. Its co-assignment
+apex-RT join still climbs 13.0 -> 30.8 GB over ~9 minutes, about half live and half garbage, and
+the live half includes 13.95 M retained rows each carrying a `Key` string that duplicates two
+fields already in the same struct (~1.4 GB). That, not the pass-2 fold, is the next thing inside
+the panel this PR is about - written up as item 1 of #4664.
+
+**This PR now is**: the co-assignment working set (flat arrays + reusable parquet buffers), the
+geometric growth fix, the code-review findings, and the reusable pass-2 join index. Peak
+`FirstPassFDR` 41.7/37.0 -> 30.2 GB with products unchanged.
