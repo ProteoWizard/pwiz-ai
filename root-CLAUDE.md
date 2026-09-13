@@ -69,3 +69,20 @@ important. Prefer plain words:
 - "X was load-bearing" (cannot be removed without breaking things) -> "X was essential"
 Default to "critical" or "key"; use "essential" when the point is that something
 cannot be removed.
+
+**Avoid "it's sharper than that"** (and "sharper still", "the sharper point is").
+"Sharp" is real technical register for a bound that cannot be improved - a sharp
+inequality, sharpening an estimate - but "it's sharper than that" as a reply is not
+an English idiom. It is that technical sense pressed into a conversational move:
+agree with the reader, then claim the truth is more pointed than what they said. It
+reads as swagger, and it is usually inaccurate on its own terms, because what
+follows is normally something ADDITIONAL rather than something more precise.
+
+Say what actually happened:
+- "It's sharper than that" -> "There's more to it" (I looked where you pointed and
+  found more that matters)
+- When it really is a correction -> "Not quite - it's X, not Y"
+- When it really is more precise -> "More precisely, ..." / "To put a number on it, ..."
+
+The same applies to its cousins that dress a transition up as a discovery: "and it
+gets worse", "that's only half of it", "here's the thing". State the finding.
