@@ -8,7 +8,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4657](https://github.com/ProteoWizard/pwiz/issues/4657)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4662](https://github.com/ProteoWizard/pwiz/pull/4662) - STACKED on #4661
 - **Labels to carry**: `performance`
 
 ## Objective
@@ -159,3 +159,50 @@ version (verified: "grew the run scope 100000 times; geometric growth allows at 
 Commits `997ed8d94b` + `e23ffdd616`, now REBASED onto the #4661 branch
 (`Skyline/work/20260912_osprey_fdrbench_pass_bitmask` @ `7c595218e6`) so one TeamCity run
 validates both, per Brendan's night-session instruction. #4661 merges first.
+
+### 2026-09-12 - Code review applied; PR #4662 opened; the 446-run oracle CRASHED
+
+`/code-review max` on the two commits alone (a review branch off master, so the #4661 commits
+underneath were not re-reviewed) returned 15 findings. The verifier refuted three mechanisms
+outright. Applied (`d8b273410d`):
+
+* **The accepted set goes back to a HashSet of FULL entry ids.** It is the ~1% FDR population -
+  thousands per file - so a dense `bool[6.2M]` was the wrong shape, and indexing it by BASE id
+  quietly changed the keying: the score is filed by the entry id's DECOY BIT while the accepted
+  flag was set on the CLASS, so a row whose class and bit disagree would have had its score read
+  off the other side as NaN and dropped out of the minimum. The full id restores the dictionary's
+  exact behaviour and makes the seal's minimum O(accepted) instead of O(capacity).
+* **The arrays are released at `SealCutoffs`**, beside the existing `_experimentAccepted.Clear()`.
+  Both writers throw after the seal, so 105-210 MB was provably dead and still rooted through the
+  phase-2 join, the build and serialization - in a PR about committed memory.
+* **The per-file reset is fused into the sweep the decoy side already makes**, so a file costs one
+  pass over the dense arrays rather than five.
+* **The other two builders reserve** (`SecondPassFdrTask`, `BuildCoAssignmentCore`); only the
+  1st-pass panel did, and the pass-2 builder is the one whose 15.7s -> 492s regression this branch
+  had to fix. **Parquet buffers grow geometrically** for the same reason the run scope does - an
+  ascending-size cohort reallocated on every file otherwise.
+* **Two tests, both verified red**: the seal must forget the file it sealed, and "not seen" must be
+  NaN rather than 0.0 (zero-fill admitted the entire reserved capacity - 65 of 65 - as decoys).
+* Dropped: the `int.MaxValue` clamp complaint (a 31-bit id space would need a 17 GB array long
+  before the clamp matters) and the ref-buffer ownership refactor (real future hazard, but a
+  signature change across two assemblies is not this PR).
+
+Unit gate after: 593/593, zero inspection warnings.
+
+**The 446-run oracle crashed** at 23:19 after 1h50, 94% through "Folding experiment-q floors over
+446 run(s)":
+
+```
+Fatal error. System.AccessViolationException: Attempted to read or write protected memory.
+   at Parquet.Encodings.ParquetPlainEncoder.Decode(Span<Byte>, Span<String>, SchemaElement)
+```
+
+Pass-1 products were written and compare STRICT-identical to the banked current-build products
+(`pass-1 compare exit 0`); the pass-2 product was never written. What this is NOT: the crash is in
+Parquet.Net's string decoder on the experiment-q fold, a reader path this branch does not touch
+(the branch's parquet change reads the `entry_id` and `apex_rt` columns). None of the five earlier
+446-run logs on this bed carries an AccessViolation. What it probably IS: the box was
+over-subscribed - the stacked regression gate's two lanes were running against the same 64 GB
+while the cohort held ~20 GB, and the harness had already killed background tasks for low memory.
+Being re-run ALONE on the final build to settle it; a crash inside a memory PR cannot be left as
+"probably the neighbours".
