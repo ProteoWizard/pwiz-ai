@@ -116,3 +116,25 @@ comment says they were INDISTINGUISHABLE, which is the point); merging the two s
 one helper. The reviewer also refuted its own OOM-ordering candidate.
 
 Gate on the amended commit: both TFMs build, 593/593, inspection 0 warnings.
+
+### 2026-09-12 - Copilot review addressed (`ca29bc84b3`)
+
+TeamCity #247 on `pull/4660` was SUCCESS before this commit. Copilot left three threads; one was
+a real defect and two were the same coverage point:
+
+* **The parse sink's filter was wrong in both directions.** `--threads bad` reached `int.Parse`
+  and threw `FormatException`, which the filter does not name, so a typo printed "Input string
+  was not in a correct format." over a stack through the parser. Added `ParseInt` beside the
+  existing `ParseDouble` at both numeric sites; it throws `ArgumentException` naming the flag.
+  And `IOException` narrowed to `FileNotFoundException` - the one `ReadInputList` raises on
+  purpose - so a sharing or device failure inside `File.ReadAllLines` keeps its type, inner
+  exception and stack instead of being flattened to a message.
+* **`TestBadOptionValuesAreUsageErrors`** pins the contract the filter reads and is red on the
+  old code (`Actual exception type:<System.FormatException>`). Unit gate: 594/594, 0 warnings.
+
+**Follow-up, not done here**: neither terminal sink's OUTPUT is asserted anywhere. Doing it means
+running the process and failing it on purpose, which belongs in `regression.ps1` as a mode (one
+leg with a deliberately corrupt input; assert the report names the exception type and carries an
+inner chain), not in a unit test. The reversion risk is real and cheap to reintroduce - the
+`Pipeline failed: {0}` / `Fatal error: {0}` format specifier is the whole fix, so dropping back
+to `ex.Message` is a one-character edit no current gate catches.
