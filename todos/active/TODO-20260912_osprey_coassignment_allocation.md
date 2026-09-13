@@ -206,3 +206,37 @@ over-subscribed - the stacked regression gate's two lanes were running against t
 while the cohort held ~20 GB, and the harness had already killed background tasks for low memory.
 Being re-run ALONE on the final build to settle it; a crash inside a memory PR cannot be left as
 "probably the neighbours".
+
+### 2026-09-13 - Oracle re-run alone: PASS, and the crash does not reproduce
+
+`ORACLE VERDICT: PASS - exit 0, route clean, products strictly identical to the current build`,
+wall 1:50:37 on the final build (`coassign-4657-v3`), running with nothing else on the box. Both
+products written this time: pass-1 233,498 bytes and pass-2 218,074 bytes, each byte-compared
+strict against the banked current-build products.
+
+The crash therefore does not reproduce on the same bed, the same command and a SUPERSET of the
+code (the review fixes landed in between). Same wall to the second - 1:50:36 crashed, 1:50:37
+clean - so contention was not slowing the run down; what differed was how much memory was left
+when Parquet.Net's string decoder asked for its next buffer. Filed here rather than fixed: an
+`AccessViolationException` out of a managed library under memory pressure is worth knowing about
+(it is a hard process kill, not an `OutOfMemoryException` a caller could catch), but it is not
+this branch's to fix and nothing in the branch reaches that decoder.
+
+**Private bytes across the two co-assignment phases** (same bed and command as the issue's
+measurement, computed from the run's own memstamps):
+
+| phase | before | after |
+|---|---|---|
+| phase 1: scan 1st-pass sidecars over 446 files | 10 -> 35 GB | **11.3 -> 12.2 GB** (flat) |
+| phase 2: apex-RT join over 446 files | 35 -> 41.7 GB | 12.2 -> **29.7 GB** |
+| `FirstPassFDR` overall private peak | 41.7 GB | 29.7 GB |
+
+Phase 1's excursion is gone outright - that was the per-file dictionary and there is no per-file
+allocation left on that path. Phase 2 still climbs because roughly half its per-file large-object
+churn is inside Parquet.Net's own per-row-group column arrays, which a caller reusing buffers
+cannot touch; the read's doc comment now says so and names the shape that would remove it
+(`ReadFdrStubScalars`-style row-group callbacks), rather than claiming the caller-side reuse
+removed "most of" it.
+
+Gates: `regression-parallel.ps1 -Dataset All` on the stack 70 PASS / 0 FAIL / 0 SKIP in 55:27;
+unit gate 593/593 with zero inspection warnings. TeamCity on `pull/4662` queued (build 4174297).
