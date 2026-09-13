@@ -1825,9 +1825,10 @@ are listed together here because a partial accounting is worse than none: it imp
 one thing it names is the only omission.
 
 Measured leg counts from a green `-Dataset All` (2026-09-12, with modes 1c, 6, 7, 8, 9, 11 and
-12 in): **Stellar 21, StellarLibDecoy 29, StellarGenDecoyEntrap 28, Astral 25.** Mode 12
-(FDRBench both files + resume identity) is 2 of those everywhere but Astral, which runs no
-mode 2 and so has only its first half. The split below predates those modes (its totals are
+12 in): **Stellar 19, StellarLibDecoy 27, StellarGenDecoyEntrap 28, Astral 24.** Mode 12
+(FDRBench both files + resume identity) runs on StellarGenDecoyEntrap only - the one dataset
+with generated decoys, entrapment and a pairing manifest, so every writer branch runs once
+and nowhere else. The split below predates those modes (its totals are
 the older 15 / 19) but its shape - Stellar leads on detection, Astral on reporting - still holds.
 
 **Do not read those totals as coverage depth** - they sum two different things, and the

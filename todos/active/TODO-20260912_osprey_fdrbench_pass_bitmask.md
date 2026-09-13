@@ -314,3 +314,34 @@ cold bench files moved aside (so the resume half is no longer vacuous). Pass-1 /
 per dataset: Astral 1,312,686 / 748,733; Stellar 242,330 / 166,724; StellarLibDecoy 483,020 /
 156,832; StellarGenDecoyEntrap 483,007 / 161,868. Remaining: the TeamCity Perf/Regression gate
 on `pull/4661`, then human review.
+
+### 2026-09-12 - TeamCity #246 took 1:38; mode 12 scoped to ONE dataset
+
+TC #246 (`pull/4661`) took 1:38:18 against 1:06 (#243, night) and 1:22 (#241, day). Two
+findings from the agent's own `perfmon.csv` (fetched via the REST API with the MCP's token;
+summariser in this session dir):
+
+| build | wall | CPU mean / median | % Disk Time mean | RAM peak |
+|---|---|---|---|---|
+| #243 night, no mode 12 | 1:06 | 48% / 55% | 95% | 32 GB |
+| #241 day, no mode 12 | 1:22 | 37% / 28% | 424% | 35 GB |
+| #246 day, mode 12 | 1:38 | 35% / 22% | 510% | 38 GB |
+
+1. **Agent 1 is disk-bound, not CPU-bound.** Daytime runs sit at 22-28% median CPU with the
+   disk queue 4-5x oversubscribed; the night run was 30% faster on disk alone. The two
+   8-thread lanes do not get the parallel gain this machine's NVMe gives them (here: 1:05-1:09
+   with mode 12 in, 1:17 before it). That ceiling is the agent's disk, not any mode.
+2. **Mode 12 was inflated 4x.** It ran on all four datasets (both halves on three), and the
+   emitter's extra sidecar + parquet-scalar walk is pure I/O - invisible here, real on a
+   saturated disk. Brendan's standing principle: a new assertion runs on the ONE dataset that
+   covers its property, not on every config. The property here needs generated decoys +
+   entrapment + a pairing manifest so every writer branch (orphan-entrapment exclusion
+   included) runs once, and StellarGenDecoyEntrap is that dataset. `FdrBench = $true` on its
+   spec; `-FdrBench:([bool]$cfg.FdrBench)` on the three legs; both mode-12 checks gated on it;
+   no line on the other datasets (the designed-omission rule). Leg counts become Stellar 19,
+   StellarLibDecoy 27, StellarGenDecoyEntrap 28, Astral 24. `Test-FdrBenchBothFiles` counts
+   rows with `File.ReadLines` instead of `Get-Content | Measure-Object`.
+
+Folding the emitter into the protein-FDR reduce walk (the review's item) is therefore not a
+gate matter any more; it remains a product-side saving for cohort-scale `--fdrbench` users
+(~13-17 min at 446 runs) and is deferred as such.

@@ -96,3 +96,36 @@ O(accepted precursors x runs), ~16.5 M rows, ~2-3 GB: the genuine live growth. T
 Branch created off master `7af9eb0ea5` in `pwiz-work2` (the other two checkouts hold open PRs
 #4660 and #4661). Origin: PR #4656's 446-run oracle and
 `TODO-20260910_osprey_mdiag_resident_removal.md` ("Recorded from the 446 runs").
+
+### 2026-09-12 - Implemented; unit gate green; StellarLibDecoy gate running
+
+Three files, +130/-48, on `pwiz-work2`:
+
+* **Phase 1** (`CoAssignmentPassBuilder`): `_fileBest` (`Dictionary<uint, double>` by entry id,
+  rebuilt per file) and `_fileAccepted` (`HashSet<uint>`) are two `double[]` by BASE id (target
+  and decoy sides) plus a `bool[]`, allocated once via `ReserveRunScope(maxBaseId)` - the
+  caller takes the bound from the experiment-scope map, since every record phase 1 folds is
+  gated on having one - and reset by a fill between files. NaN = not seen this file, which is
+  what the dictionary's missing key meant, so `ObserveCutoff`'s store rule and
+  `SealRunCutoff`'s two reductions are the same expressions over a different container.
+  `_admittedRunDecoys[f]` is still the per-file `HashSet` (only ever probed with `Contains`,
+  never enumerated, so no ordering reaches the report). Grows on demand if unreserved, so the
+  unit tests that build a builder bare still work.
+* **Phase 2** (`ParquetScoreCache.TryReadEntryIdsAndApexRts`): fills caller-owned `ref` arrays
+  and reports `count`, growing them only when a file is larger than any before it;
+  `PeakCoAssignmentSource.BuildCore` holds them across the loop. Parquet.Net's own per-row-group
+  column arrays are out of reach.
+* **Not done, and why**: "read each sidecar once" (the issue's second phase-2 item). Phase 2
+  keeps the best-scoring row per (precursor, file) among rows that clear a gate the DECOY side
+  of which is only known after every file is sealed (`SealCutoffs`), and pass 1 is
+  pre-compaction, so a precursor has many candidate rows per file. Carrying "the rows phase 2
+  will keep" from phase 1 therefore means buffering candidate rows for every file across the
+  cohort - the O(files x rows) shape this panel was rebuilt to avoid. The second sidecar stream
+  is IO (117 MB/file) with no per-record allocation (`in FdrScoreRecord`), so it is not what
+  drives the committed-memory excursion; the column arrays and the per-file dictionary were.
+
+`Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`: 593/593, 0 warnings.
+`regression.ps1 -Dataset StellarLibDecoy` (modes 7 and 11 compare the diagnostics report to
+its golden) running; then the 446-run bed via `oracle-446-4657.ps1` (this session dir), strict
+against the banked current-build products, with perfviz; then `regression-parallel.ps1
+-Dataset All`.
