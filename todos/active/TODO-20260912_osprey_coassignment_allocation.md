@@ -331,3 +331,28 @@ those stamps were written under ("present but not current"), rather than anythin
 Related, from the same runs: `--task ModelDiagnostics` logs *"first-pass model not retrained on
 this run (resumed/rehydrated); the Model tab's feature table and per-feature distributions are
 unavailable"*. So the bounded path and the complete-report path are not the same report today.
+
+### 2026-09-13 - Session end: where #4662 stands
+
+**#4662 is ready to merge except for one TeamCity run.** Locally green on all four datasets
+(`regression-parallel.ps1 -Dataset All`: 70 PASS / 0 FAIL / 0 SKIP in 51:49), unit gate 593/593
+with zero inspection warnings, 446-run oracle products byte-identical, `FirstPassFDR` private
+peak 41.7/37.0 -> 30.2 GB. Branch `Skyline/work/20260912_osprey_coassignment_allocation` at
+`9a85f68a8b`, pushed, base `master` (retargeted when #4661 merged). TeamCity #250 is STALE - it
+was green on `1276737f35`, before the floor fold was added and reverted - so `pull/4662` needs one
+more run before merge. ASK before triggering.
+
+What the PR contains, after the re-cut: the co-assignment working set (flat arrays by base id +
+caller-owned parquet buffers), the geometric-growth fix, the `/code-review max` findings, and the
+reusable pass-2 overlay join index. Nothing else.
+
+**Not in it, deliberately**: the experiment-q floor fold lives on
+`Skyline/work/20260913_osprey_expq_floor_fold` (pushed, no PR). Correct and 3.5x faster but it
+raises the committed peak 38.2 -> 44.4 GB until its ~366 M per-file string decodes are removed.
+
+**Still open on the pwiz side**: #4660 is OPEN and BEHIND master (needs an update-branch merge;
+TeamCity #249 was green on `ca29bc84b3`). Its branch is in `C:\proj\pwiz`, which also has an
+untracked `pwiz-sharp/` directory that is not this work's.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260912_osprey_coassignment_allocation.md` before starting work.
