@@ -340,13 +340,74 @@ reimplementation would be needed.
 
 ## Task list
 
-- [ ] Blocker 1 - emit the ProteoWizard version banner from the port build
+- [x] Blocker 1 - emit the ProteoWizard version banner from the port build
 - [ ] Blocker 1 - Re-Post All the queued XMLs, confirm they land
-- [ ] Blocker 2 - guard the null per-block heap lists in `RunTests.cs`
-- [ ] Blocker 3 - `--with-tutorial-perf` flag + `TabBuild.cs` + TeamCity config
+- [x] Blocker 2 - guard the null per-block heap lists in `RunTests.cs`
+- [x] Blocker 3 - `--with-tutorial-perf` flag + `TabBuild.cs`
+- [ ] Blocker 3 - pass the flag from the perf/tutorial TeamCity configuration
 - [ ] Blocker 3 - make the stager's skip loud
 - [ ] Confirm one full Integration nightly: posts, runs 540 min, ~1,128 tests
 - [ ] Then re-baseline Integration vs Trunk from posted data and revisit 4-6
+
+## Progress
+
+### 2026-09-13 - first pass, commit `ee2581d8be`
+
+All three code fixes are in and pushed. What is verified, and what is not:
+
+**Blocker 1 - verified mechanically, not yet in a nightly.**
+`SkylineVersion.targets` gains a `PrintPwizVersionBanner` target that reuses the
+existing `ComputePwizBuildVersion` pieces, so the banner cannot drift from the
+version the assembly is stamped with. `build.bat` runs it standalone (no restore,
+no ProjectReference graph - about a second) and emits the line.
+
+Two traps found while building it, both now handled:
+- MSBuild indents `Message` output by two spaces, and the scrape regex anchors on
+  a newline immediately followed by `ProteoWizard`. The target writes the line to
+  `obj\pwiz-version-banner.txt` (gitignored) and `build.bat` emits it with `type`,
+  which lands at column 0.
+- The revision must parse as an int on the LabKey side.
+
+Checked against the real `Nightly.cs` regex:
+
+```
+ProteoWizard 3.0.26255.6ef677076e Skyline/work/20260913_net8_nightly_reporting x64 AMD64 NT
+  match -> revision '26255' (parses int), git_hash '6ef677076e'
+```
+
+**Blocker 2 - fixed, not yet exercised.** The two `AddRange` calls are guarded and
+the absence now logs `# HEAP DETAIL unavailable - per-block heap walking is
+net472-only` instead of throwing. Still needs a run that actually reaches leak
+checking to confirm the run survives it.
+
+**Blocker 3 - flag works, TeamCity side outstanding.** `--with-tutorial-perf`
+appends both projects; `TabBuild.cs` passes it unconditionally so every
+SkylineTester-driven run stages both and selects at run time, as Trunk does.
+Verified the chained `if ... else ^` parser still rejects unknown arguments after
+the insertion, and that both projects build clean on the port branch.
+
+**Gates run:** `Build-Skyline.ps1 -Summary` (solution, 186 s) and
+`-RunTests -TestName CodeInspection` - both green. Once `TestTutorial`/`TestPerf`
+output existed, the stager picked them up on its own, which confirms the stager's
+default set already includes them and only the build was missing.
+
+**Not yet done:** no nightly has run with these changes. The real gate is still a
+clean Integration nightly - posts, 540 minutes, tutorial tests in pass 0.
+
+### Incidental finding - stale `AssemblyInfo.cs` blocks a SkylineTester build
+
+`SkylineTester.csproj` sets `GenerateAssemblyInfo=true` and comments that the
+project "has no hand-written AssemblyInfo.cs, so there is nothing for the
+generated attributes to collide with". That holds on a clean clone (which is why
+the nightly is unaffected), but `SkylineTester\Properties\AssemblyInfo.cs` is
+gitignored, so a checkout where the old net472/Jam build ever ran still has one -
+and the build then dies with six `CS0579: Duplicate ... attribute` errors. Hit on
+BRENDANX-UW6 with a file dated 2026-04-02.
+
+`Skyline.csproj` already solves exactly this with
+`<Compile Remove="Properties\AssemblyInfo.cs" />` on the net10 pass. Not a merge
+blocker and out of scope here, but it will bite any developer with a pre-port
+checkout. Worth a separate one-line fix.
 
 ## Verification
 
