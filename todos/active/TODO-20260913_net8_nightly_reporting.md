@@ -7,7 +7,7 @@
 - **Created**: 2026-09-13
 - **Status**: In Progress
 - **GitHub Issue**: (pending - not yet created)
-- **PR**: (pending - targets `Skyline/work/20260612_net8_port`, not `master`)
+- **PR**: [#4666](https://github.com/ProteoWizard/pwiz/pull/4666) (targets `Skyline/work/20260612_net8_port`, not `master`)
 
 ## Objective
 
@@ -393,6 +393,51 @@ default set already includes them and only the build was missing.
 
 **Not yet done:** no nightly has run with these changes. The real gate is still a
 clean Integration nightly - posts, 540 minutes, tutorial tests in pass 0.
+
+### 2026-09-13 - review pass, commit `4a4d4fb8b8`, PR [#4666](https://github.com/ProteoWizard/pwiz/pull/4666)
+
+`/code-review max` returned 15 findings against commit `ee2581d8be`. Acted on 8, skipped 7.
+
+**Acted on:**
+
+1. **Stale banner emitted as this run's** (critical, same failure class this work removes).
+   `build.bat` never deleted `obj\pwiz-version-banner.txt` before generating it and never
+   checked the msbuild exit code. A run killed between write and delete leaves the file; a
+   later run whose msbuild failed would `type` the previous commit's banner and post that
+   revision and hash as its own. Now deletes first, checks `!ERRORLEVEL!`, and warns on
+   both failure paths. Verified: with a stale file present and the target failing, the
+   stale banner is not emitted.
+2. **`--with-tutorial-perf` applied to the developer Build tab too.** `CreateBuildCommands`
+   has two callers - `TabNightly.cs:376` and `TabBuild.Run` - so "run build verification
+   tests" would have started running the 26 tutorial tests. Now a defaulted parameter,
+   passed `true` only from the nightly.
+3. **Branch field could hold git stderr / `HEAD` / a `';'`.** `Exec`'s `ConsoleToMSBuild`
+   captures stderr, and MSBuild still gathers `ConsoleOutput` when the command fails under
+   `ContinueOnError`, so `'' -> unknown` never fired; multi-line output joins with `';'`,
+   and `WriteLinesToFile` takes `ITaskItem[]`, so a `';'` splits the banner across lines.
+   Detached HEAD (every CI agent) gave the literal `HEAD`. Now resolves detached HEAD with
+   `git name-rev` as `SkylineTester.csproj` does, then shape-guards to `^[A-Za-z0-9._/+-]+$`.
+   Verified against all six cases including the real "dubious ownership" stderr text.
+4. Banner step skipped for `--build-only` - a developer compile is never scraped.
+5. Corrected two comments that were wrong: the day-of-year must stay **zero-padded** (the
+   comment said "unpadded", which would have produced `3.0.265` in early January), and the
+   `Message` is invisible at the `-v:q` build.bat passes.
+6. Usage synopsis and the contradicting scope note in `tcbuild.bat`.
+
+**Skipped deliberately**, with reasons, so they are not re-litigated:
+
+- *The heap guard's else branch is unreachable* - `CommittedSizes`/`StringCounts` are
+  assigned nowhere in this net10-only assembly. True, but it is defensive code that costs
+  nothing; deleting the branch would remove the path a restored net472 leg needs.
+- *Read revision/hash from SkylineTester.dll instead of scraping the log* - genuinely the
+  better design: `Nightly.cs:582` already reads the branch back out of the assembly's
+  `AssemblyInformationalVersion`, which carries all three. But it changes SkylineNightly,
+  which is deployed separately to every nightly machine, and the goal was to land before
+  the next cycle. Filed as follow-up.
+- Hardcoded `3.0.` / `x64 AMD64 NT` in the banner tail (the scrape ignores it); redundant
+  `mkdir obj`; `--with-tutorial-perf` growing distro zips if someone adds it to a
+  zip-producing TeamCity command line (the `tcbuild.bat` note now warns against exactly
+  that).
 
 ### Incidental finding - stale `AssemblyInfo.cs` blocks a SkylineTester build
 
