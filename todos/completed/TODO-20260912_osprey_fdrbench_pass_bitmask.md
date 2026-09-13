@@ -5,13 +5,13 @@
   master `7af9eb0ea5`)
 - **Base**: `master`
 - **Created**: 2026-08-21 (analysis); started 2026-09-12
-- **Status**: PR open, all local gates green - **decided 2026-09-12 (Brendan): option (1), the streamed pass-1
+- **Status**: Completed
   emitter.** Not the hard-fail stopgap (2) and not document-only (3). Design below.
 - **GitHub Issue**: [#4507](https://github.com/ProteoWizard/pwiz/issues/4507) - the same
   fix seen from the memory side: `--fdrbench-pass 1` is the last first-pass consumer forcing
   the O(files) resident pool, and the `fdrbench-pass1` ratchet token exists for it
 - **Module**: `osprey`
-- **PR**: [#4661](https://github.com/ProteoWizard/pwiz/pull/4661) (opened 2026-09-12, closes #4507)
+- **PR**: [#4661](https://github.com/ProteoWizard/pwiz/pull/4661) (merged 2026-09-13 as `4518f9a9fd`, closes #4507)
 - **Requester/Reporter**: none - found while preparing the TDP-43 pickrun3 comparison
 
 ## The defect, in one sentence
@@ -406,3 +406,21 @@ adding a leg.
 
 `tctest.bat` also corrected (`ce38bf425a`): it promised "every mode on all four datasets", which
 is no longer true, and now points at regression.html instead of naming a mode list that goes stale.
+
+### 2026-09-13 - Merged
+
+PR #4661 merged as `4518f9a9fd`. What shipped: the streamed pass-1 FDRBench emitter, so
+`--fdrbench-pass both` writes both files and the last first-pass consumer of the O(files) resident
+pool is retired (`ResidentPaths.KNOWN_UNFIXED` shrinks a fifth time); mode 12 on
+StellarGenDecoyEntrap alone; the sparse mode x dataset matrix with `Test-ModeCut`; the rebalanced
+lanes plus `regression.ps1 -StageOnly`; `regression.html` and its generator; and the corrected
+`tctest.bat` header. TeamCity #248 on the sparse matrix: 70 PASS / 0 FAIL / 0 SKIP in 56:05,
+against 1:38:18 with the new mode on all four datasets and 1:06 before the mode existed.
+
+Deferred, deliberately: folding the FDRBench emitter into the protein-FDR reduce walk (a
+product-side saving of ~13-17 min at 446 runs for `--fdrbench` users, not a gate matter now that
+mode 12 runs on one dataset), and the resident-vs-streamed A/B stays banked rather than gated -
+repeating it would cost a full resident run per dataset.
+
+The branch was the base of the stacked PR #4662 until that was retargeted to `master` at merge
+time; #4662 carries the co-assignment work and merges next.
