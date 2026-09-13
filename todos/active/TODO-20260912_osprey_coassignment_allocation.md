@@ -217,7 +217,7 @@ strict against the banked current-build products.
 The crash therefore does not reproduce on the same bed, the same command and a SUPERSET of the
 code (the review fixes landed in between). Same wall to the second - 1:50:36 crashed, 1:50:37
 clean - so contention was not slowing the run down; what differed was how much memory was left
-when Parquet.Net's string decoder asked for its next buffer. Filed here rather than fixed: an
+when Parquet.Net's string decoder asked for its next buffer. Filed as issue #4663 rather than fixed here: an
 `AccessViolationException` out of a managed library under memory pressure is worth knowing about
 (it is a hard process kill, not an `OutOfMemoryException` a caller could catch), but it is not
 this branch's to fix and nothing in the branch reaches that decoder.
