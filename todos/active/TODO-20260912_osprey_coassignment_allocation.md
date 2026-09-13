@@ -251,3 +251,9 @@ not this branch. No theory that survives inspection: the suite runs sequentially
 (`vstest.console.exe`, one assembly, no `/Parallel`, no `[assembly: Parallelize]`), so the shared
 `ParquetScoreCache.RowGroupRowCapForTest` static that six IOTest methods set is not being raced.
 Recorded rather than explained; if it recurs outside a memory-starved box it deserves a real look.
+
+### 2026-09-13 - TeamCity green
+
+TeamCity #250 on `pull/4662` (`1276737f35`): **SUCCESS, 70 PASS / 0 FAIL / 0 SKIP in 1:01:47**.
+It ran the whole stack, so it covers #4661's sparse matrix as well. Ready for `/pw-complete`
+after #4661 merges and this retargets to master.
