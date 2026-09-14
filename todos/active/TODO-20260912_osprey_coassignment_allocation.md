@@ -746,3 +746,22 @@ AND makes every future column cost a quarter as much, which is what turns this f
 tune into the general answer. Widen now ONLY if there is a concrete near-term statistic wanting
 bounds, since each format bump costs ~5 h of regen per bed and two bumps are much worse than
 one. That question is Brendan's to answer.
+
+### Gate (2026-09-14): green after teaching the comparison harness v7
+
+Run 1 (05:00, 30m52s): 24 of 26 checks, exit 1. The only failure was
+`mode3 (per-file FDR sidecars==straight)`, and it was GATE-SIDE:
+`pwiz_tools/Osprey/Regression/FdrSidecars.ps1` hard-coded the v6 28-byte layout and REFUSED to
+decode v7 rather than mis-decoding it, naming its own fix in the message. Mode 1 vs the
+committed C# golden was green, so the change is output-neutral.
+
+Run 2 (05:31, 28m32s): **25 of 25, exit 0**, including
+`mode3 (per-file FDR sidecars==straight): PASS`. Fix committed as `48f4307297`: `RecordLen`
+28 -> 36, `ExpectedVersion` 6 -> 7, and `apex_rt` added to the compared-fields table. That last
+part earns its place - the straight route and the HPC per-file route obtain apex RT from
+different sources (streaming row source vs `FdrEntry.ApexRt` on the resident reported pool), so
+it is one of the few columns a shared defect could not produce identically by accident. They
+agree.
+
+Still owed before this is a merge candidate: `regression-parallel.ps1 -Dataset All`, and
+`/code-review max` from `C:\proj\pwiz-work2`.
