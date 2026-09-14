@@ -34,14 +34,37 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
 - [x] Both args use `HasValueChecking = true` + `ParseFragmentFinderName` helper throwing `ValueInvalidException`
 - [x] Test still covers localized labels (later command uses `ION_3.Label` / `IONS_4.Label`)
 - [x] `ConsoleNewDocumentTest` passes in en + zh; CodeInspection passes
-- [ ] Commit and push branch
-- [ ] Code review, PR
+- [x] Commit and push branch (84c67c4ee2)
+- [x] Audit other args with localized value lists (see "Settings-list arguments" below)
+- [x] Failing tests for settings-list args (red in zh), fix, green in en + zh
+- [x] Commit settings-list fix
+- [x] All-language run (en, fr, tr, ja, zh): ConsoleNewDocumentTest, ConsoleChangePredictTranSettingsTest,
+      ConsoleArgumentInvalidValuesTest, CommandLineUsageTest, CommandLineUsageDescriptionsTest,
+      ConsoleArgumentValidationTest, ConsoleSettingsArgumentsTest, TestSkylineCmd, TestJsonToolServer
+- [ ] Code review, Copilot review ([#4669](https://github.com/ProteoWizard/pwiz/pull/4669))
 - [ ] Reply to support thread once fix ships
+
+## Settings-list arguments
+
+Same class of bug in `--tran-predict-ce`, `--tran-predict-dp`, `--tran-predict-cov`,
+`--tran-predict-optdb` and `--full-scan-precursor-isotope-enrichment`:
+
+- Value lists came from `GetDisplayNames`, which localizes the None / Default items
+  (`无`, `默认`), while `CommandLine` looks items up by invariant key (`None`, `Default`).
+- `--tran-predict-ce=None` was rejected in zh; `ConsoleChangePredictTranSettingsTest` built
+  its values from the localized display name, so it passed in every language.
+- `IsotopeEnrichmentsList.GetDisplayText` localizes only when `ReferenceEquals(item, DEFAULT)`,
+  so a reloaded list shows `Default` and the localized `默认` was rejected; with a never-reloaded
+  list the invariant form would be rejected and the localized one silently set no enrichments.
+- Fix: `GetDisplayNamesAndKeys` adds invariant keys and default display names to the value list,
+  and `ParseSettingsListKey` maps either form to the key.
+- Tried first: `HasValueChecking` + honoring it in `ArgumentBase.GetArgumentTextWithValue` - reverted,
+  because `ConsoleArgumentInvalidValuesTest` relies on that method rejecting values outside `Values`.
 
 ## Follow-up (not in this PR unless decided otherwise)
 
-- Consider listing invariant names in `--help`
-- Audit other command-line args whose value lists are localized labels
+- Fragment-finder args still list only localized labels in `--help`
+- `NameValuePair`/`ArgumentBase` value checks use `CurrentCultureIgnoreCase` (possible Turkish-I mismatch; unverified)
 
 ## Files Modified
 
