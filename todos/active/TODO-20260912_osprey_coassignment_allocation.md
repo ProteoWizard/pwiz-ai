@@ -721,6 +721,14 @@ observation - carrying different subsets of it, and nothing justifies the differ
 Stage 5 (~20 min on the 446 cohort). Adding start_rt and end_rt is roughly 3x that, about an
 hour per Stage 5 run, paid by every run forever. So "carry the peak as insurance" is not cheap.
 
+That 3x is a LINEAR EXTRAPOLATION from a single column, not a measurement, and it should be
+labelled as one whenever it is quoted. What supports linearity is the mechanism (per-row-group
+column decode, and all three columns are f64) plus one corroborating point from 2026-09-13:
+narrowing the panel's own two-column read to roughly two-thirds of its bytes took its
+allocation 29 -> 22 MB/file, close to proportional. What is NOT established is that DECODE TIME
+scales the same way as allocated bytes - per-column fixed overhead would make 3 columns cost
+less than 3x. If the decision turns on this number, measure it rather than trusting it.
+
 **Why it is expensive is the useful part.** Not the file's width - that is sequential IO, the
 cheap half. It is that each column is decoded out of the parquet on FOUR passes of the score
 pass (subsample, pass 1, pass 2, protein-q resolve) and THREE never use it. The ingest pass,
