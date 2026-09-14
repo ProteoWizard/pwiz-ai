@@ -544,3 +544,90 @@ StellarLibDecoy` green (three separate runs across the three changes).
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260913_osprey_coassign_parquet.md` before starting work.
 
+
+---
+
+## 2026-09-14 (overnight): apex_rt moved into the sidecar at format v7
+
+Committed as `247e351940` on `Skyline/work/20260912_osprey_coassignment_allocation`.
+
+### What landed
+
+`FdrScoreRecord` gains `double ApexRt`; `FdrScoresSidecar.FormatVersion` 6 -> 7 and
+`RecordLength` 28 -> 36. The panel's parquet read, its positional join and the `entry_id`
+alignment assertion are all deleted, and `ParquetScoreCache.TryReadEntryIdsAndApexRts` with
+them - including the first-row-group `entry_id` narrowing from 2026-09-13, which was the
+partial fix this replaces rather than preserves.
+
+Where the column comes from, per path:
+
+| path | source | cost |
+|---|---|---|
+| streaming 1st pass (`IsCountsOnly`, the 446-run path) | a sixth scalar on `ReadFdrStubScalars`, which already walks five | one more column on an existing read |
+| resident 1st pass (the flag-off `FdrEntry` oracle) and the 2nd pass | `ParquetScoreCache.ReadApexRtsByParquetIndex`, indexed by `FdrProjection.ParquetIndex` | one per-file read on a path that already holds the fat pool |
+| `Pass2PerFileWorker` | `FdrEntry.ApexRt`, already populated on the resident reported pool | nothing |
+
+`ReadApexRtsByParquetIndex` reads THROUGH `ReadFdrStubScalars` rather than opening the column
+itself, so the ordinal the array is keyed by and the ordinal the projection rows carry come
+from one walk and one row-group skip rule. `ScoreProjectionAndComputeFdrInPlace` now THROWS on
+a null apex loader, the way it already did for a null feature loader: a defaulted RT would be
+a fabricated number in a persisted artifact that no reader could tell from a measured one.
+
+Also folded in (it removed real allocation and its ordering needed the same unit test):
+`PrecursorKey` replaces the composite string key, with `CompareTo` reproducing that string's
+order so no golden moves.
+
+### Evidence, 3-file StellarLibDecoy, before the 446 run
+
+* `OSPREY_LOG_COASSIGN_ALLOC=1` on the replayed cell A:
+  `peak co-assignment fold allocated 0.0 GB over 3 file(s): sidecar stream 0.0 GB (4 MB/file),
+  no parquet column read` - against `parquet columns 29 MB/file, sidecar stream 4 MB/file`
+  on 2026-09-13. The 7:1 is gone, not reduced.
+* The written sidecar, read back byte-wise: v7, pass 1, 958,241 records, **0 NaN and 0
+  exactly-0.0** apex RTs, range 1.2905 - 20.6235 min over a ~21-minute gradient, 63,685
+  distinct values. That check exists because a run that wrote a default everywhere would look
+  identical from the outside - the panel would still build and the memory curve would still
+  flatten - while reporting perfect co-elution between every pair of precursors.
+* `out.1st-pass.model-diagnostics.json` vs the banked pre-change product: the `coAssignment`
+  subtree is IDENTICAL (NaN-aware compare). The only differences in the whole document are
+  `generatedUtc` and the model section, which is present because the v7 bump forced a retrain
+  that the banked run had adopted from disk.
+* 594/594 unit tests, ReSharper 0 warnings.
+
+The two parity tests now compare apex RT as well. That is the point of adding it there: the
+resident path resolves it by `ParquetIndex` against a column and the streaming path takes it
+off the row stream, so it is the one output a shared defect could not produce identically by
+accident. The fixture gives every row a distinct RT, scrambled against the row ordinal, so an
+off-by-one cannot land on a matching value.
+
+### Verified before mirroring the bed
+
+`chs446-mdiagtest-copy`'s 1st-pass sidecars are hard-linked into EIGHT other run dirs. A
+delete-then-move (what `FileSaver.Commit` does) replaces the directory entry and leaves the
+other links on the old inode - confirmed on this machine with a two-link probe before any
+mirror was made. So the regen rewrites only its own copy.
+
+### In flight overnight
+
+`ai/.tmp/sessions/20260914-apexrt/run-446-apexrt.ps1`, one detached driver chaining both
+phases so phase 2 starts when phase 1 VERIFIES rather than when someone notices it finished:
+
+1. regen `chs446-apexrt-base` - `--task FirstPassFDR -NoModelDiagnostics`, ~5h11m
+2. gate: 446 sidecars AND every header v7/pass-1 (count alone would accept 446 untouched v6
+   files; presence alone would accept a partly-rewritten bed)
+3. measure `chs446-apexrt-paylater` - the pay-later fold, ~58m, comparable to
+   paylater-446-v5/v6/v7 of 2026-09-13
+4. perfviz
+
+Success is the last ten minutes FLAT and the private floor drift collapsing from +25 MB/file
+toward zero. If it does not go flat the LOH model is wrong, and that is the finding - the idea
+does not get extended to a second pass on the strength of a hope.
+
+### Still owed
+
+* `regression.ps1 -Dataset StellarLibDecoy` on the committed tree. Deferred behind the 446 run
+  deliberately: 64 GB of RAM against a 39 GB peak leaves no room for a second Osprey, and the
+  paths it would newly cover (pass 2, resume, HPC modes) are not the ones tonight's runs
+  exercise. Cell A already ran `--task FirstPassFDR --model-diagnostics` end to end on a real
+  cohort at v7.
+* `-Dataset All` before the PR is a merge candidate.
