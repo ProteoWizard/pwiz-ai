@@ -157,7 +157,8 @@ daily builds through ClickOnce URLs.
 - [x] `pwiz_tools/Skyline/installer/Setup.iss` + `build.ps1` cloned from pwiz-sharp (unversioned AppId, file associations, icons, Start Menu, launch) - 2026-09-14, see "Installer as built" below
 - [ ] `build.bat --installer` step + `tcbuild.bat` artifact (call `pwiz-sharp/installer/Ensure-InnoSetup.ps1` first, warn and skip when ISCC is missing, like pwiz-sharp)
 - [ ] Installer test (silent per-user install, SkylineCmd --version, uninstall, association hand-back) on the pattern of `pwiz-sharp/pwiz/test/Installer.Tests`
-- [ ] Version manifest format + server location; `UpgradeManager` replacement (manifest, download, verify, silent Inno launch, exit)
+- [x] Version manifest format; `UpgradeManager` replacement (manifest, download, verify, silent Inno launch, exit) - 2026-09-14, `Util/InstallerDeployment.cs`, see "Update check as built" below. Nick tests manually; no automated test by request
+- [ ] Server location for the manifest + installers (placeholder constants in `InstallerDeployment.CHANNELS`); signing so the download can also be checked for a signature
 - [ ] LaunchBatch / SkylineNightly / SkylineTester off the ClickOnce URLs
 - [ ] Signing + TeamCity artifact wiring
 - [ ] End-to-end: per-user install over a ClickOnce 26.1 (settings and tools inherited); per-machine install with admin-seeded config and tools reaching a non-admin user; upgrade through the in-app check
@@ -200,6 +201,30 @@ pwsh -File pwiz_tools/Skyline/installer/build.ps1 -SkipBuild
   reads), installed `SkylineCmd.exe --version` and `Skyline-daily.exe` (Start Page) run on the
   machine's .NET 10, silent uninstall leaves no key, ProgId or shortcut.
 - Not done: signing, TeamCity wiring, an installer test, per-machine run (needs elevation).
+
+## Update check as built (2026-09-14)
+
+`UpgradeManager` is unchanged except that its default `IDeployment` is now
+`Util/InstallerDeployment.cs` (the `NullDeployment` stub is gone), so the existing startup check
+under `UpdateCheckAtStartup`, the Help > Check for Updates item (visible again when
+`IsNetworkDeployed`), `UpgradeDlg` and the `UpgradeTest` fakes all still apply.
+
+- **Deployed?** The exe folder equals the `InstallLocation` of one of our two Inno Uninstall keys
+  (HKCU = per-user, HKLM = per-machine, 64-bit view). Developer bins are never deployed.
+- **Manifest** `<Product>.json`, written by `installer/build.ps1` beside the installers:
+  `{ "version", "url" (relative to the manifest or absolute), "size", "sha256" }`. Channel URL
+  from the matching AppId; placeholders `https://skyline.ms/installer/Skyline[-daily].json` until
+  the server is chosen. `SKYLINE_UPDATE_MANIFEST_URL` overrides it for testing.
+- **Check**: manifest version > assembly version. **Update**: download to `%TEMP%` through
+  `HttpClientWithProgress` (progress and cancel flow through `UpgradeManager`'s LongWaitDlg),
+  verify size + SHA-256. **Restart**: run the installer with
+  `/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RELAUNCH=1` plus `/CURRENTUSER` or
+  `/ALLUSERS` (runas verb, one UAC prompt), then `Application.Exit()`. Setup.iss has a `[Run]`
+  entry gated on `{param:RELAUNCH}` with `runasoriginaluser` that starts Skyline again.
+- **Fallback link** on failure opens the installer URL in the browser.
+- Manual test recipe: install a build, serve `installer/build/` over HTTP (e.g. a Python
+  `http.server`), edit the served `Skyline-daily.json` to a higher version, set
+  `SKYLINE_UPDATE_MANIFEST_URL` to its URL and start the installed Skyline.
 
 ## Open questions
 
