@@ -1091,3 +1091,89 @@ them - which is what prompted putting the question in the harness instead, where
   construction, but the two arms should key identically - switch it to
   `DerivePeptideFloorsFromLibrary` so fold key and lookup key have one source.
 * `/code-review max` from `C:\proj\pwiz-work2`
+
+### 2026-09-14 (late): Stellar caught a route-dependent identity source, and the format grew a pass split
+
+Two changes after the first green StellarLibDecoy gate, both prompted by Brendan.
+
+#### The peptide floor must not come from the library
+
+`-Dataset Stellar` went red on `mode3 (per-file FDR sidecars==straight)` - specifically the
+experiment-sidecar byte compare inside it. Decoded record by record:
+
+| | |
+|---|---|
+| records | 333,404 |
+| entry-floor differences | **0** |
+| peptide-floor differences | **166,680** - every one a decoy |
+| straight route | real floors (e.g. entry_id 2147483651 -> 0.3348) |
+| chain `--task SecondPassFDR` | **NaN** |
+
+Root cause: the first cut derived the peptide identity for an entry_id from
+`LibraryById`. A `--task SecondPassFDR` node loads a library with **no GENERATED decoys in
+it**, so a decoy entry_id resolves on the straight route and resolves to nothing on the
+distributed one. Exactly half the records, which is the target/decoy split.
+
+**StellarLibDecoy could not have caught this** - there the decoys come from the library FILE
+and are present on both routes. Only a generated-decoy leg exposes it, which is the argument
+for the dataset matrix and for not deferring `-Dataset All`.
+
+Fixed by taking the identity from the SURVIVOR WALK that `ComputePass2TransferCompeteFull`
+already performs (`ExperimentQFloors.ObserveIdentities`), which is route-independent because
+both routes build the pool from the same artifacts. The floors still come from the per-file
+second-pass records; the two halves meet in `DerivePeptideFloors`, which is exact rather than
+approximate because `min` is associative. No library, no parquet column, no extra walk.
+
+The transfer arm's `BuildExperimentScope` now uses the same `DerivePeptideFloors`, which also
+closes the fold-key vs lookup-key inconsistency noted as owed in the previous entry.
+
+#### The experiment record width follows the PASS, not the version
+
+Raised by Brendan: re-running `--task FirstPassFDR` at 446 files is **5 h 01 m** (measured, in
+`chs446-apexrt-base/run.log`: `[TASK] FirstPassFDR:done (18101.9s)`), and it was being forced by
+`;expsidecar=` in FirstPassFDR's and PerFileRescoring's validity keys - to regenerate a
+first-pass file whose two new columns are NaN on every record.
+
+The asymmetry has a principle behind it, which is now in `07-fdr-control.md` and on
+`FdrExperimentSidecar.FormatVersion`:
+
+> the floor can be omitted from a file exactly when the value and the run q it floors against
+> were produced together and neither moved afterwards
+
+* PASS 1 satisfies it. `PercolatorScorer` computes both floor maps and applies them in the same
+  emit pass, over the same arrays; `FirstPassFdrTask.cs:2385` accumulates straight off those
+  entries. Re-applying is `max(floored, floor)` - a no-op.
+* PASS 2 breaks it in both branches of `FinishRecord`, as the previous entry records.
+
+So: `RecordLengthFor(pass)` - 60 bytes second pass, **44 first**; `VersionReadable` accepts v2
+or v3 for a first-pass file (identical layouts) and v3 only for second-pass; `;expsidecar=`
+removed from FirstPassFDR and PerFileRescoring, kept on SecondPassFDR alone.
+
+**Consequence: `chs446-apexrt-base` and `chs446-apexrt-paylater` stay valid through Stage 5**,
+so a cohort measurement is `--task SecondPassFDR` (~20 min) rather than 5 h + Stage 6 + Stage 7.
+Confirmed from the bed's own stamps: `PerFileScoring` keys on
+`search=...;library=...;pick=lda;pickmodel=none` with no sidecar terms at all, so Stages 1-4
+were never at risk - apex_rt was always a `.scores.parquet` column and v7 only carries it
+forward.
+
+The regression harness learned the same split (`ExperimentRecordLenFor(pass)` in
+`FdrSidecars.ps1`, used by `CheckPass2ProteinQ` and `LoadExperimentMap`, and by
+`regression.ps1`'s compared-record count).
+
+#### Slip worth not repeating
+
+`ExperimentQFloors.cs` was created with the Write tool and landed **LF** in a CRLF repo. It
+passed build and inspection (CodeInspectionTest only catches MIXED endings, so an all-LF file
+is invisible to it) and surfaced only because `cat -A` showed no `^M` while a patch script kept
+missing its `\r\n` patterns. Any NEW file written into pwiz needs its endings checked, not
+assumed - `fix-crlf.ps1` did not catch it either, since the file was still untracked.
+
+#### Gate status
+
+* StellarLibDecoy, streaming floors, exit 0 - all checks including `mode1 (vs golden)`,
+  `mode3 (HPC chain==straight)`, `mode7`, `mode11`
+* Sidecars decoded directly: 313,537 records, both floors on every one, identical across routes;
+  the deleted whole-run fold appears in no log on any route
+* Stellar, streaming floors: red as above - now fixed
+* Unit gate 594/594, inspection zero warnings on the current cut
+* `regression-parallel.ps1 -Dataset All` in flight
