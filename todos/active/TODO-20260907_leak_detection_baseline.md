@@ -884,6 +884,23 @@ undisposed channel exercised by three pass-1 tests), the false `PwizFileInfoTest
 six `ReaderSciexTests.cs` findings when those tests find a home. The DigitalRune source fix is on
 `uw-maccosslab/developers` PR #5, mergeable and awaiting review.
 
+### 2026-09-14 - ThermoCancelImportTest, failing reliably in the Integration nightly (PR #4667)
+
+Not a leak, but the same nightly and the same checkout. A race in the test that the port made
+deterministic: it polled every 10 ms for the loader's cache file and then cancelled with a
+compare-and-swap that fails once the loader has swapped in its finished document. Instrumenting
+the loader from inside (an `IProgressMonitor` on the container, logging every report): the temp
+cache file exists **before the first progress report**, and the import then reports **51 more
+times and finishes within a few ms** - inside one poll. Cold, JIT let the poll win; warm (test
+#1065 of pass 0, or after four mzML imports in one process) the import won all five retries in
+4 of 6 runs. The bare `Assert.IsTrue` sat above the retry written for exactly that outcome.
+
+Fix: cancel from inside the loader's own progress report, on its thread, where it cannot lose.
+6/6 warm from 1/6; `.raw` pass 2 and cold both still pass; cancelled status now asserted on the
+success path. Reproduce with `AgilentMseChromatogramTest,TestSrmSmallMoleculeChromatograms,
+FullScanFilterTest,TestMs1Tutorial,ThermoCancelImportTest -Pass 0 -Quality` - it never fails
+alone. Branch `Skyline/work/20260914_thermo_cancel_import_race`, into the port branch.
+
 ## Method notes
 
 - **A real leak is near-perfectly linear.** R² ≈ 1.00 with a large t-statistic separates a leak from
