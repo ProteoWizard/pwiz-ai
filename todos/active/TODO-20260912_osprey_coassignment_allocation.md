@@ -631,3 +631,74 @@ does not get extended to a second pass on the strength of a hope.
   exercise. Cell A already ran `--task FirstPassFDR --model-diagnostics` end to end on a real
   cohort at v7.
 * `-Dataset All` before the PR is a merge candidate.
+
+### RESULT (2026-09-14 04:58): the 446-run panel went flat
+
+Both phases of `run-446-apexrt.ps1` completed unattended and the gate between them passed
+(446 sidecars, 0 not v7/pass-1).
+
+| | pre-fix `paylater-446-v7` | `chs446-apexrt-paylater` |
+|---|---|---|
+| private peak | **25.3 GB** | **11.7 GB** |
+| private floor | 13.1 -> 24.0 GB, +25 MB/file | 6.5 -> 9.2 GB, **+6 MB/file** |
+| sustained 300 s | 23.1 GB (91% of peak) | 9.2 GB (79% of peak) |
+| managed peak | 15.1 GB | 10.2 GB |
+| duration | 1:04:15 | 1:02:55 |
+| gaps >= 30 s | 0 | 0 |
+| pass-1 panel product | — | **identical but for `generatedUtc`**, 233,498 bytes both |
+
+Plots in `ai/.tmp/sessions/20260914-apexrt/apexrt-{before,after}.png`, and they are the thing
+to read: before is flat at ~7 GB for fifty minutes then a steep ramp to 25.5 GB with the
+managed heap sawtoothing 6 -> 15 GB under it; after is flat at ~7 GB for fifty-five then a
+gentle rise to 10.4 GB with managed level at 4.7 GB and no sawtooth.
+
+Panel internals: 13,954,867 detected rows over 446 files in 492.7 s; boundary experiment 2.8571
+from 37,139 accepted precursors; decoys admitted 369, tallied 369.
+
+**The approach is proven for FirstPassFDR**, which was Brendan's precondition for carrying the
+idea further. The pass-2 panel still needs nothing done to it - it builds from the resident
+reported pool, where `FdrEntry.ApexRt` is already populated.
+
+#### What the prediction got wrong, and it matters
+
+`ai/.tmp/sessions/20260914-apexrt/prediction.md` was written BEFORE the run. Peak, flatness,
+unchanged numbers and wall time all came in at or better than predicted. The miss: it predicted
+the floor drift would collapse "toward zero" and it collapsed to **+6 MB/file**, still RISING -
+2.78 GB across the cohort that is NOT the parquet read.
+
+Its nature is undetermined and should not be guessed at. The pre-fix drift was +25 MB/file
+private against +2 MB/file managed, i.e. almost entirely committed-but-free LOH; tonight it is
++6 against +4, so proportionally much more managed - but `--memstamp` counts uncollected
+garbage, and removing LOH pressure gives the GC less reason to run, which inflates an apparent
+floor by itself. **Next measurement: one pay-later run with `OSPREY_LOG_MEMORY=1` against
+`chs446-apexrt-base`** (~63 min, no regen) to separate live from uncollected. Unmeasured
+candidate: the panel's own `_byPrecursor` / `_offendersByPair`, which grow with DISTINCT
+precursors rather than with files.
+
+#### The cost this change adds to Stage 5: +7.1%, measured
+
+Phase 1 was `--task FirstPassFDR` on the same cohort as the 2026-09-08 baseline run, so it is
+a real A/B for the extra column:
+
+| phase | baseline | tonight | delta |
+|---|---|---|---|
+| stub load (counts-only projection; NOT this change) | 10m25s | 9s | -616 s |
+| ingest (subsample) | 33m24s | 36m01s | +157 s |
+| scoring (pass 1, writes the sidecar) | 1h06m31s | 1h10m48s | +257 s |
+| rest (pass 2 + protein FDR + writes) | 3h00m46s | 3h14m09s | +803 s |
+| total | 17,516.9 s | 18,101.9 s | +585 s raw |
+| peak working set | 40.8 GB | **39.2 GB** | -1.6 GB |
+
+The raw +3.3% understates it: an unrelated saving on this branch returns 616 s at the front.
+Against a comparable base it is **+1,201 s, +7.1%** - ~20 min on a 5-hour Stage 5 - and the
+three phase deltas sum to 1,217 s against the 1,201 s the correction predicts. Memory did not
+regress.
+
+Two costs are mixed and this run cannot separate them: the extra READ (one column on four
+passes, three of which never use it - avoidable with an opt-in on `ReadFdrStubScalars`) and
+the FORMAT (29% wider sidecar, ~48 GB of bed instead of ~37 GB, written once and read back by
+protein FDR, compaction and every later consumer - not avoidable). The ingest pass isolates the
+read alone at +157 s; if that holds across all four the avoidable share is ~470 s, about 8
+minutes. **Left as Brendan's decision, not landed overnight** - it is one bool threaded through
+the `streamFileRows` delegate, and whether ~2.6% earns a parameter on a five-call-site method
+is a judgement, not a measurement.
