@@ -912,3 +912,74 @@ size. Two gotchas already paid for: the bed must be RESTAGED (the probed run con
 withheld product, so a re-run would profile an early return), and the app args need `--` to
 escape them or dotMemory parses Osprey's `-i`/`-l` as its own and exits 1024 instantly.
 dotMemory has no text interface - Brendan opens the `.dmw`.
+
+## 2026-09-14: the experiment sidecar persists a q-value the pipeline then overrides
+
+Found by the floor counter added in `19708cccdb`. This is a sidecar DEFICIENCY, not a
+diagnostics problem, and it is the kind this validation phase exists to catch.
+
+### The measurement
+
+`--task SecondPassFDR --model-diagnostics` on the 446-run cohort, counting what the pass-2
+re-apply of the best-of-runs clamp actually RAISES:
+
+| | |
+|---|---|
+| applications | 892 (= 2 per run x 446 - every run is materialised and re-floored TWICE) |
+| values raised | 1,125,526 of 593,865,660 |
+| overall rate | 0.1895% |
+| per application | min 1,169, median 1,259, max 1,392 (0.158% - 0.248%) |
+| corr(raised, rows) | 0.976 |
+
+Uniform, systematic, ~1 row in 530. NOT a few pathological entries.
+
+### Why it happens - documented, and the docs are right
+
+`docs/07-fdr-control.md` section 3j: experiment-level FDR competes each precursor's single
+best observation against a thinner de-duplicated decoy null, so the raw experiment q can fall
+BELOW every per-run q, "producing reported peptides with no run-level ID line". The clamp
+floors experiment q up to the entry's own min-over-runs combined run q. And the re-apply
+exists because "reconciliation resets the run q-values of moved and gap-filled peaks (issue
+#4390)" - step 5 of the doc's list is the clamp, step 8 is "Re-apply the best-of-runs clamp".
+
+`SecondPassFdrTask.cs:500-506` says the same in its own words: Stage 6 "zeroes the run q of
+moved peaks AFTER that clamp", and the re-clamp runs "against the run q's actually written to
+the blib", restoring "reported => some run genuinely passed" for the final output.
+
+So the clamp is correct and necessary. The counter proves it is not redundant - an earlier
+hypothesis that it was is DISPROVED, and deleting it would change 1.1 M user-visible q-values.
+
+### The deficiency
+
+`ReclampExperimentQToBestRun` mutates the ENTRIES (which feed the blib). The
+`FdrExperimentAccumulator` behind `out.2nd-pass.fdr_experiment.bin` keeps the PRE-clamp value.
+Ordering is not the problem - `WritePass2ExperimentSidecar` runs inside `RunProteinFdr`, well
+after the re-clamp at `:506` - the accumulator simply is not the thing the clamp updates.
+
+**Consequence: the experiment sidecar holds a q-value the pipeline itself considers wrong, and
+the corrected value exists only inside the .blib.** Anything rebuilding from the sidecar - the
+mdiag pass-2 fold, any future consumer - must re-derive the floor by re-materialising every run,
+or silently report the un-floored number. That is the 8-minute traversal and the ~4.3 GB of live
+growth measured in the profile above, twice over.
+
+### The fix (Brendan, 2026-09-14): store both at experiment level
+
+`FdrExperimentRecord` gains the two floors - they key differently, so both are needed:
+
+* `MinRunQByEntry` - the min-over-runs combined run q for this entry_id
+* `MinRunQByPeptide` - the same for this entry's `(ModifiedSequence, IsDecoy)`
+
+44 B -> 60 B; the 446-run pass-2 sidecar goes 54.5 MB -> ~74 MB. The raw competed q is KEPT,
+so both numbers are on disk: a consumer applies `max(raw, floor)` to get what the user saw, and
+an analyst can still see the un-floored competition result. It also makes an invariant checkable
+that is not today - `floored >= raw`, and the blib agrees with the floored value.
+
+**No bed invalidation.** `FdrExperimentSidecar.FormatVersion` is in NO validity key (unlike
+`FdrScoresSidecar.FormatVersion`, which cost a 5h11m regen for apex_rt). But that also means a
+naive bump is WORSE than that one: a v2 file would look current to its owning task and then fail
+the version check on read. So the reader must accept v2 AND v3 - v2 yielding NaN floors, meaning
+"unknown, recompute" - which is the graceful-growth shape discussed against Skyline's
+`StructSerializer.ItemSizeOnDisk` earlier today, and degrades exactly to today's behaviour.
+
+Payoff: the mdiag pass-2 fold reads two numbers per entry instead of materialising 446 runs
+twice, which removes the traversal AND whatever `StreamFiles` retains during it.
