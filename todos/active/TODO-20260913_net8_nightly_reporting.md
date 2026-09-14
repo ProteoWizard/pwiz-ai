@@ -485,6 +485,81 @@ Consequences:
   longer leaks.
 * Section 4's leak table is historical. Re-baseline from posted data once reporting works.
 
+### 2026-09-13 evening - first verification run, and a blocked question for Matt
+
+**UW6, the run that finished at 8:13 PM** (built at `6ef677076e`, before the #4666 merge):
+
+```
+duration="540" testsrun="11534" failures="1" leaks="0"
+revision="unknownDate.6ef677076" git_hash=""
+```
+
+Full window for the first time (was 290-304 min), 11,534 tests - about 18% more than
+Trunk's 9,775 on the same machine, consistent with the port's higher throughput. It still
+failed to post, correctly: this build predates the banner fix. One failure,
+`TestReportErrorDlg` (`ReportErrorDlgTest.cs:41`, fr), a different test from each earlier
+night - the intermittent pattern, not a regression.
+
+**UW8, started ~8:30 PM** from the merged branch. Banner confirmed live in its log, at
+column 0 and carrying the merge commit:
+
+```
+ProteoWizard 3.0.26256.ea391bde4 Skyline/work/20260612_net8_port x64 AMD64 NT
+```
+
+`26256` parses as an int, so posting should work. Expected to finish ~5:30 AM and land
+inside the 8:01-8:00 report window for the 9/14 email. **2 of 3 fixes verified end to
+end** - banner/posting and the heap guard. Tutorials are not in this run.
+
+### The open question: which TeamCity config is authoritative for Integration?
+
+Tutorials did not build on UW8, and the cause is not the code. Its `build.bat` line was:
+
+```
+build.bat Release --i-agree-to-the-vendor-licenses --no-tests
+```
+
+- no `--with-tutorial-perf`. That argument is added by `TabBuild.cs`, which lives inside
+**SkylineTester** - and SkylineNightly runs the SkylineTester it downloads from TeamCity,
+not one built from the clone. So the flag only takes effect once a *new* `SkylineTester.zip`
+is published.
+
+The blocker is which config publishes it:
+
+| | |
+|---|---|
+| What SkylineNightly downloads | `ProteoWizard_SkylineIntegrationBranchX8664`, hardcoded at `Nightly.cs:55`, used at `:612` |
+| That config's latest build | **#236, 9/11**, commit `dd946015` - nothing since, nothing queued or running |
+| Where the port branch actually builds now | `ProteoWizard_SkylineWindowsNet` #250, SUCCESS at `ea391bde4e`, branch `pull/4619` |
+
+The Integration config's last build is dated the same day matt.chambers42 moved several
+configurations into "ProteoWizard / Versioned Configs" (`0ba116ab`, `8b12969a`, `d6c52e16`,
+`79ea7211`, `dd946015`). So the likely story is that Integration builds moved and
+SkylineNightly is still pointed at the old, now-idle config - but that is inference, not
+established.
+
+**Ask Matt:** is `ProteoWizard_SkylineIntegrationBranchX8664` still meant to build the
+integration branch, or has that moved to `ProteoWizard_SkylineWindowsNet`? If it moved,
+SkylineNightly's hardcoded build-type constant needs to follow - and that is a code change
+deployed separately to every nightly machine, so it wants planning rather than a quick fix.
+
+Note `Nightly.cs:52-53` says the integration *branch* is admin-configurable through the
+TeamCity VCS root; only the *config ID* is compiled in.
+
+**Two ways forward, once that is answered:**
+
+1. Trigger `ProteoWizard_SkylineIntegrationBranchX8664` on the port branch - its VCS root
+   already targets `Skyline/work/20260612_net8_port` (#236 built exactly that), so one run
+   republishes `.lastFinished` with the new SkylineTester. No code change. Works tonight if
+   the config is still valid.
+2. Repoint SkylineNightly at the canonical config. Correct if Integration is orphaned, but
+   needs a redeploy everywhere.
+
+Also worth knowing: `.lastFinished` (not `.lastSuccessful`) is what SkylineNightly asks
+for, and #236 published `SkylineTester.zip` even though its overall status was FAILURE -
+the Skyline build and tests succeeded there, and only a post-build `.gitignore` hygiene
+check failed it. So a green build is not required to get a usable zip.
+
 ### Incidental finding - stale `AssemblyInfo.cs` blocks a SkylineTester build
 
 `SkylineTester.csproj` sets `GenerateAssemblyInfo=true` and comments that the
