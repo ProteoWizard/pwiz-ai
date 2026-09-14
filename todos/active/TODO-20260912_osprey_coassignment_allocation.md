@@ -356,3 +356,83 @@ untracked `pwiz-sharp/` directory that is not this work's.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260912_osprey_coassignment_allocation.md` before starting work.
+
+### 2026-09-13 - Scope widened: the regeneration path had to work before #4662 can be finished
+
+**This branch is NOT ready to merge, and the previous entry saying so is superseded.** The
+pay-later regeneration path is how the memory work on this branch gets measured at cohort
+scale, and two of its four entry points were broken. Fixing them here rather than in a
+follow-up, per Brendan: "these issues came up as blocking the necessary testing to reach
+closure on #4662 ... the PR cycle itself has a cost and small PRs can soak up a lot of time
+getting to a goal. We are not there yet."
+
+#### The gate now covers every entry point, not one
+
+Mode 11 asserted exactly one way of asking for a pay-later report - `--task ModelDiagnostics`.
+Four more reach the same state and none was covered. They share mode 11's setup (completed
+cohort, both products deleted), so the whole section costs **48.2 s**:
+
+| cell | entry point | products | expected |
+|---|---|---|---|
+| C | whole pipeline `--model-diagnostics` | present | all four tasks skip |
+| D | whole pipeline `--model-diagnostics` | absent | both folds, PerFile interrogated and skipped |
+| A | `--task FirstPassFDR --model-diagnostics` | absent | pass-1 fold, no analysis |
+| B | `--task SecondPassFDR --model-diagnostics` | absent | **refuse** - see below |
+| B2 | `--task SecondPassFDR --model-diagnostics` | pass-2 only | pass-2 fold |
+
+Asserted from the LOG, like the rest of mode 11: a re-analysis produces the RIGHT artifact, so
+no byte comparison can separate it from a fold. `ALL-RUNS reconciliation bundle` is in the
+forbidden set alongside the pool and rescore markers - it is what caught the second link below
+after the first fix looked complete.
+
+#### Defect A - `--task FirstPassFDR --model-diagnostics`, two links
+
+Measured at 3 files, cell A, both links visible in its own log ordering:
+
+1. `PerFileScoringTask.PreCompactionPoolReason` forced the RESIDENT pre-compaction pool on
+   `FirstPassFdrTask.IsIncludedFor(config)` - task MEMBERSHIP standing in for "will it train".
+   False in exactly this case: the task is present and trains nothing, because its only
+   outstanding output is a report it folds one run at a time. `Run` materializes `ScoredEntries`
+   before it can reach the arm that would say so, which is why the 446-run cohort hit 109 GB at
+   file 165 and never got there at all.
+2. Removing that left the leg on the disk-load path, still building the **ALL-RUNS
+   reconciliation bundle**, O(files x entries), to render a page that reads none of it - the
+   structure that put an earlier fold past a 63.7 GB box at file ~310.
+
+Fix: `FirstPassFdrTask.WillOnlyFoldDiagnostics(ctx)`, the predicate `Run`'s arm already used,
+now also gates the pool decision AND the `Rehydrate` fork, so a fold-only leg takes
+`RehydrateFromOwnOutputs` - the lean streaming load the in-pipeline route takes. One predicate,
+three call sites, so the hydrate decision and the fold decision cannot drift.
+
+Cell A: RESIDENT pool + bundle -> **neither**, 11.7 s -> 9.1 s, product still produced, route
+now identical to cell D's.
+
+#### Defect B - `--task SecondPassFDR --model-diagnostics` reported success for nothing
+
+With both products absent it logged "folding the pass-2 report from the completed second pass",
+ran 5.2 s, logged `SecondPassFDR:done` and **exited 0 having written no product**. Its own log
+said why: `[MODEL-DIAGNOSTICS] pass-1 data sidecar not found; pass-2 enrichment skipped`. The
+pass-2 page is an ENRICHMENT of the pass-1 page.
+
+`ReadPass1ForEnrichment`'s degrade is deliberately left alone - pass 1's page is a complete
+statement on its own, and a run merely carrying `--model-diagnostics` should not die for a view
+it did not ask for. The arm is the only place it is wrong, because there producing that product
+is the whole request. It now throws, naming the absent file and the command that produces it,
+and refuses in **0.2 s** instead of doing 5.2 s of work to write nothing.
+
+#### Gates
+
+* Unit 593/593, ReSharper **0 warnings** (101 s).
+* `regression.ps1 -Dataset StellarLibDecoy`, **no -Skip switches** - deliberately, because the
+  fix changes the fork at the top of `PerFileScoringTask.Rehydrate` and modes 2/3/5 are the legs
+  that drive it hardest. All 27 legs PASS, exit 0.
+
+#### Still open
+
+* **Row 2 is unexplained.** The 446-run observation (SecondPassFDR re-running with every product
+  present, in a hard-linked mirror) does NOT reproduce at 3 files: cell C is 0.1 s and green, and
+  mode 4 is green in place. Cell C runs IN the straight dir, so relocation is still untested, and
+  the hand-restored stamps on `chs446-mdiagtest-copy` remain the leading candidate.
+* The 446-run re-measurement of cells A and B with these fixes.
+* `-Dataset All` before this branch is considered done.
+
