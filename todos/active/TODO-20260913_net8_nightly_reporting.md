@@ -346,7 +346,8 @@ reimplementation would be needed.
 - [x] Blocker 3 - `--with-tutorial-perf` flag + `TabBuild.cs`
 - [ ] Blocker 3 - pass the flag from the perf/tutorial TeamCity configuration
 - [ ] Blocker 3 - make the stager's skip loud
-- [ ] Confirm one full Integration nightly: posts, runs 540 min, ~1,128 tests
+- [x] Confirm one full Integration nightly posts and runs 540 min (run 85442, 2026-09-14)
+- [ ] Confirm a run that also includes the tutorial tests
 - [ ] Then re-baseline Integration vs Trunk from posted data and revisit 4-6
 
 ## Progress
@@ -559,6 +560,53 @@ Also worth knowing: `.lastFinished` (not `.lastSuccessful`) is what SkylineNight
 for, and #236 published `SkylineTester.zip` even though its overall status was FAILURE -
 the Skyline build and tests succeeded there, and only a post-build `.gitignore` hygiene
 check failed it. So a green build is not required to get a usable zip.
+
+### 2026-09-14 - Blocker 1 confirmed fixed end to end
+
+Run **85442** (BRENDANX-UW8) posted to `/home/development/Integration`:
+
+```
+posttime 2026-09-14 05:37    duration 540    revision 26256    githash ea391bde4
+passed 17227    failed 1    leaked 0    averagemem 287 MB
+```
+
+`revision` is the integer the banner emitted and `githash` is populated - both were
+`unknownDate.<hash>` and empty on every attempt since 2025-12-15. Posttime is inside the
+8:01/8:00 window, so it reaches the 9/14 email. **First Integration run on skyline.ms in
+nine months.**
+
+Blocker 2 is also implicitly clear: 540 minutes with no crash, though with 0 leaks the
+heap-detail path is never reached, so the guard remains untested in anger.
+
+Matt has since fixed "Skyline Integration Branch x86_64"
+(`ProteoWizard_SkylineIntegrationBranchX8664`), which answers the config question from
+last night - the config is still authoritative, it was simply broken, so SkylineNightly's
+hardcoded constant at `Nightly.cs:55` does NOT need to change. Once that build publishes a
+fresh `SkylineTester.zip`, the next Integration run gets `--with-tutorial-perf` and
+Blocker 3 can be confirmed.
+
+**What to check on that run:**
+
+```
+grep -nE "Staging TestTutorial|Skipping TestTutorial" <log>   # must say Staging
+grep -cE "  0\.[0-9]+ (TestMs1Tutorial|TestIrtTutorial|TestDiaTutorial)" <log>
+```
+
+Do not grep for "Tutorial" alone - `TestLocalizedTutorialHtml`,
+`TestTutorialCatalogFormat` and `TestTutorialCatalogResources` live in TestFunctional and
+match even when TestTutorial.dll is absent. That produced 27 false hits on 9/13.
+
+### Memory: the port may erase the trend that started this work
+
+Run 85442 reports **averagemem 287 MB**, against ~415 for Nightly x64 and ~362 for Release
+Branch. That is consistent with the per-test XML comparison on 9/12 (port pass-1 median
+total 283 MB vs Trunk 461 MB), and with the port's higher throughput.
+
+Caveat before anyone celebrates: this is one machine, `averagemem` is not comparable
+across machines, and the port's *peak* was much higher (899 MB vs 502 MB), with individual
+tests spiking 250-525 MB above Trunk. Re-run the paired same-machine, same-night analysis
+once several Integration nights have accumulated - the method is in the 2026-09-12 session
+notes, and the scripted version is `ai/mcp/LabKeyMcp/scripts/analyze-run-metrics.R`.
 
 ### Incidental finding - stale `AssemblyInfo.cs` blocks a SkylineTester build
 
