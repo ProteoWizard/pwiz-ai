@@ -901,6 +901,14 @@ success path. Reproduce with `AgilentMseChromatogramTest,TestSrmSmallMoleculeChr
 FullScanFilterTest,TestMs1Tutorial,ThermoCancelImportTest -Pass 0 -Quality` - it never fails
 alone. Branch `Skyline/work/20260914_thermo_cancel_import_race`, into the port branch.
 
+`/code-review max` was NOT run before the PR was opened - a process miss. Brendan wants #4667
+merged before tonight's nightly on this machine; the next session runs the review, then
+`/pw-complete 4667`, and leaves this TODO active (it tracks the parked estimator, work items 2-5
+and the third-flavour proposal, not just this fix).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260914_thermo_cancel_import_race.md` before starting work.
+
 ## Method notes
 
 - **A real leak is near-perfectly linear.** R² ≈ 1.00 with a large t-statistic separates a leak from
