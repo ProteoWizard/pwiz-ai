@@ -1,7 +1,7 @@
 # TODO-20260903_Net10Installer.md
 
 ## Branch Information
-- **Checkout**: `C:\git\sky_netinstaller`
+- **Checkout**: `I:\git_i\sky_netinstaller`
 - **Branch**: `Skyline/work/20260903_Net10Installer`
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619)
 - **Created**: 2026-09-03
@@ -154,16 +154,56 @@ daily builds through ClickOnce URLs.
 - [ ] Point `MigrateSettingsFromClickOnceInstallation` at the data folder; define precedence over an admin-seeded file
 - [ ] Two Tools folders; `ToolDescription` records which root a tool lives in; tool install goes to the user folder
 - [ ] Stale ClickOnce HKCU ProgId cleanup at startup
-- [ ] `pwiz_tools/Skyline/installer/Setup.iss` + `build.ps1` cloned from pwiz-sharp (unversioned AppId, file associations, icons, Start Menu, launch)
+- [x] `pwiz_tools/Skyline/installer/Setup.iss` + `build.ps1` cloned from pwiz-sharp (unversioned AppId, file associations, icons, Start Menu, launch) - 2026-09-14, see "Installer as built" below
+- [ ] `build.bat --installer` step + `tcbuild.bat` artifact (call `pwiz-sharp/installer/Ensure-InnoSetup.ps1` first, warn and skip when ISCC is missing, like pwiz-sharp)
+- [ ] Installer test (silent per-user install, SkylineCmd --version, uninstall, association hand-back) on the pattern of `pwiz-sharp/pwiz/test/Installer.Tests`
 - [ ] Version manifest format + server location; `UpgradeManager` replacement (manifest, download, verify, silent Inno launch, exit)
 - [ ] LaunchBatch / SkylineNightly / SkylineTester off the ClickOnce URLs
 - [ ] Signing + TeamCity artifact wiring
 - [ ] End-to-end: per-user install over a ClickOnce 26.1 (settings and tools inherited); per-machine install with admin-seeded config and tools reaching a non-admin user; upgrade through the in-app check
 - [ ] Retire `Executables/Installer` (WiX) and the ClickOnce publish properties
 
+## Installer as built (2026-09-14)
+
+`pwiz_tools/Skyline/installer/`: `Setup.iss`, `build.ps1`; `build/` and `cache/` are gitignored.
+Inno Setup 6.7.3 installed per-user with `pwiz-sharp/installer/Ensure-InnoSetup.ps1` (shared, not copied).
+
+```
+pwsh -File ai/scripts/Skyline/Build-Skyline.ps1 -SourceRoot I:/git_i/sky_netinstaller -Target Skyline -Configuration Release -VendorLicenses
+pwsh -File pwiz_tools/Skyline/installer/build.ps1 -SkipBuild
+```
+
+- Product from the exe in the payload (`Skyline.exe` or `Skyline-daily.exe`), version from its
+  file version (26.1.1.256). Payload `bin\x64\Release\net10.0-windows` (or `bin\Release\...` from
+  build.bat): 540 files / 226 MB staged, 84 files / 41 MB skipped (.pdb, XML doc beside an
+  assembly, non-Windows `runtimes\`, user.config/SkylineLog.txt/Tools left by a developer run).
+  Vendor DLLs stay in: Skyline ships them, unlike pwiz-sharp's on-demand loader.
+- Output `Skyline-daily-Setup-26.1.1.256.exe` 106 MB (bundles the 57 MB .NET 10 desktop
+  runtime) and `Skyline-daily-NoNetRuntime-Setup-26.1.1.256.exe` 49 MB. lzma2/ultra64, about
+  90 s per ISCC pass on this machine.
+- **Side by side decided**: one unversioned AppId per product (`Skyline`
+  {DEDB22EA-0120-4DB3-A373-B86854418B5B}, `Skyline-daily` {2CE750B9-F9DC-40A5-B3C3-7FCC822DCD1D}),
+  `{autopf}\<Product>`, Start Menu group "MacCoss Lab, UW" (the ClickOnce group, so shortcuts
+  of both kinds sit together).
+- ProgIds are per product: `Skyline.Document.0`/`.Data.0`/`.Pointer.0` for the release (what
+  ClickOnce registers today), `SkylineDaily.*` for the daily, so neither uninstall removes the
+  other's file types. Command `"<exe>" --opendoc "%1"`. The extension's default value is
+  written without an uninsdelete flag; `[Code]` saves the previous ProgId under ours
+  (`PreviousAssociation`) at `ssInstall` and puts it back at `usUninstall` if the extension
+  still names ours. Verified: install over ClickOnce took `.sky` to `SkylineDaily.Document.0`,
+  uninstall returned it to `Skyline.Document.0`.
+- No license page (Skyline shows its own on first run), settings and installed tools are not
+  removed on uninstall (only an empty `Tools` folder, which Skyline creates at startup and
+  which otherwise keeps `{app}` alive).
+- Verified by a silent per-user install: 545 files, Uninstall key
+  `{2CE750B9-...}_is1` with `InstallLocation` ending in `\` (what `RegisteredInstallations`
+  reads), installed `SkylineCmd.exe --version` and `Skyline-daily.exe` (Start Page) run on the
+  machine's .NET 10, silent uninstall leaves no key, ProgId or shortcut.
+- Not done: signing, TeamCity wiring, an installer test, per-machine run (needs elevation).
+
 ## Open questions
 
-- Product name and data folder name for release vs daily (`Skyline` vs `Skyline-daily`), and whether they may be installed side by side (different AppIds).
+- ~~Product name and data folder name for release vs daily (`Skyline` vs `Skyline-daily`), and whether they may be installed side by side (different AppIds).~~ Side by side, per-product AppIds and ProgIds (above).
 - Where the version manifest lives and who publishes it (release process).
 - Whether the merge should also cover the admin Tools folder contents changing (new tool dropped in by the admin) or only `user.config`.
 
