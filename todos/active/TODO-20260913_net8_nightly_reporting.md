@@ -7,7 +7,7 @@
 - **Created**: 2026-09-13
 - **Status**: In Progress
 - **GitHub Issue**: (pending - not yet created)
-- **PR**: [#4666](https://github.com/ProteoWizard/pwiz/pull/4666) (targets `Skyline/work/20260612_net8_port`, not `master`)
+- **PR**: [#4666](https://github.com/ProteoWizard/pwiz/pull/4666) (merged 2026-09-13 as `ea391bde4e` into `Skyline/work/20260612_net8_port`, not `master`)
 
 ## Objective
 
@@ -438,6 +438,52 @@ clean Integration nightly - posts, 540 minutes, tutorial tests in pass 0.
   `mkdir obj`; `--with-tutorial-perf` growing distro zips if someone adds it to a
   zip-producing TeamCity command line (the `tcbuild.bat` note now warns against exactly
   that).
+
+### 2026-09-13 - Merged (TODO stays active)
+
+PR #4666 merged as `ea391bde4e` into `Skyline/work/20260612_net8_port`. All three
+reporting blockers shipped: the version banner, the heap-detail null guard, and
+`--with-tutorial-perf` scoped to the nightly.
+
+**Left in `active/` deliberately.** The central gate - one Integration nightly that
+posts, runs 540 minutes and shows tutorial tests in pass 0 - has not happened yet, and
+the TeamCity flag, the loud stager skip, the queued XML re-post and sections 4-6 are all
+still open. This TODO is the evidence baseline for the rest of that work.
+
+**Dependency worth remembering for the first verification run.** The three fixes do not
+all take effect at the same time. SkylineNightly downloads `SkylineTester.zip` from
+TeamCity and runs *that* SkylineTester, which then clones the branch and builds locally.
+So:
+
+* banner (`build.bat`, `SkylineVersion.targets`) and heap guard (`RunTests.cs`) come from
+  the fresh clone - they work on the next run, whatever zip is in use
+* `--with-tutorial-perf` is passed by `TabBuild.cs`/`TabNightly.cs`, which live in
+  SkylineTester itself - it only takes effect once TeamCity has produced a **new
+  SkylineTester.zip** from the port branch
+
+A run started against an older zip would therefore post correctly and still have no
+tutorials. Check `Staging TestTutorial` in the log before concluding anything.
+
+### 2026-09-13 - #4659 cleared the leaks, and the run got past 5 hours
+
+The first Integration run built at or after `6ef677076e` (#4659) reached **7:53 elapsed
+with 1 failure and 0 leaks**, versus 4-5 leaks and a hard stop at ~5h04 on 9/10-9/12.
+
+This settles the question the earlier analysis could not: all of the leak data in section
+4 came from builds one commit *before* #4659, and the wiff2 leak-pass substitution
+(`IsAbWiff2Safe`, mzML instead of `.wiff2` during pass 1) removed them. Confirmed
+individually - `TestArrangeGraphs` (was 146,192 B), `FileTypeTest` (was 31,025 B) and
+`TestExplicitAnalyteConcentration` (was 60,209 B) all ran clean.
+
+Consequences:
+
+* The `runTestForever` park never triggered, so the ~4 hours previously lost were a
+  *symptom of the leaks*, not of the crash. The heap guard from #4666 is now insurance
+  against the next `reportLeakEarly` leak rather than the thing that restores the window.
+* An earlier proposal to drop `reportLeakEarly` from `TestInstrumentInfo` is **withdrawn** -
+  it was based on pre-#4659 data and would have removed leak reporting from a test that no
+  longer leaks.
+* Section 4's leak table is historical. Re-baseline from posted data once reporting works.
 
 ### Incidental finding - stale `AssemblyInfo.cs` blocks a SkylineTester build
 
