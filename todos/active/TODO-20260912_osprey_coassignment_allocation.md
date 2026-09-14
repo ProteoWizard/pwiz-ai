@@ -765,3 +765,150 @@ agree.
 
 Still owed before this is a merge candidate: `regression-parallel.ps1 -Dataset All`, and
 `/code-review max` from `C:\proj\pwiz-work2`.
+
+## 2026-09-14 (morning): SecondPassFDR diagnostics - first profile, and where its memory goes
+
+Brendan asked for an isolated look at the pass-2 half of `--task ModelDiagnostics`. Run:
+`--task SecondPassFDR --model-diagnostics` pay-later fold, 446 runs, on the ORIGINAL v6 bed
+with a pre-v7 binary, so the apex_rt work cannot confound it (the pass-2 co-assignment panel
+never joined a parquet - it builds from the resident reported pool - so nothing is lost by
+measuring before the change).
+
+### Staging traps, both hit and both caught early
+
+* `out.model-diagnostics.html` is ALSO a declared output of SecondPassFDR
+  (`ModelDiagnosticsReport.ReportPath`). Withholding it makes a declared output missing and the
+  task runs a GENUINE second pass (~2 h) instead of folding the report. Withhold ONLY
+  `out.2nd-pass.model-diagnostics*`. Caught at 3 minutes by reading the route marker, not at
+  2 hours by reading the clock.
+* `;fdrsidecar=` is in SecondPassFDR's validity key too, so a v7 binary against a v6 bed
+  abandons the pay-later arm. The probe binary was therefore built by cherry-picking the probe
+  commit onto `4a715d004c` (pre-v7) - `SecondPassFdrTask.cs` is untouched by the v7 work, so it
+  applies clean. Snapshot: `D:\test\osprey-runs\_bin\pass2probe-v6`.
+
+### The profile
+
+21m42s unprobed / 17m37s probed, exit 0, products identical. Peak 22.6 GB, sustained
+20.5 GB at 91% of peak. Phases, and only ONE of them grows:
+
+| phase | floor (p10) | end | duration |
+|---|---|---|---|
+| startup + library | - | 11.7 GB | 30 s |
+| the overlays | 12.5 GB | 20.7 GB | ~8 m |
+| mdiag fold | 19.6 GB | 20.7 GB | 7m22s |
+| co-assignment panel | 19.7 GB | 20.7 GB | 5m11s |
+
+The pass-2 co-assignment panel is NOT the story, unlike pass 1's - it is 5 of 22 minutes and it
+runs ON the plateau rather than creating it. There is no apex_rt-shaped fix to carry over here,
+because there is nothing of that shape.
+
+### The +19 MB/file "drift" does NOT scale - correcting an earlier claim
+
+perfviz reported `+19 MB/file RISING`, which reads as O(files). Windowing by run index:
+
+| runs | growth | per run |
+|---|---|---|
+| 0-112 | +7.71 GB | +70.8 MB/run |
+| 112-223 | -0.36 GB | -3.3 MB/run |
+| 223-334 | +1.08 GB | +9.9 MB/run |
+
+86% arrives in the first quarter and one window is NEGATIVE. It is an accumulator filling
+toward a bound, ~86% saturated by run 112 - a linear fit across a saturating curve. Read the
+plot before quoting a drift number, which is what `feedback_read_the_perfviz_png_not_the_probes`
+already says. Residual risk: the last window is +9.9 MB/run, not zero, so a small genuinely
+linear term may hide under the noise; an 86-file comparison would settle it.
+
+### Probes added (commit `2a30b1196d`) and what they show
+
+Three `ProfilerHooks.LogMemoryStats` calls bracketing the join in `FoldPass2DiagnosticsOnly`,
+plus dotMemory snapshots at the same points.
+
+| probe | working set | managed | committed | LIVE (gc_heap_last_gc) |
+|---|---|---|---|---|
+| before the join | 0.04 GB | 0.00 | 0.00 | 0.00 |
+| after `RescoredEntries` | 11.37 GB | 5.29 | 10.09 | 4.19 |
+| after the overlays | 21.31 GB | 8.63 | 20.98 | 8.33 |
+
+So the ~9.9 GB the overlays add is 4.14 GB LIVE + ~5.8 GB committed-but-free (18 gen2/LOH
+collections across the phase, fragmentation 0.02 GB). Neither "all churn" nor "all retention" -
+42/58, and the two halves have opposite fixes.
+
+Note `ctx.Get<RescoredEntries>()` completes in 33 s at 11.37 GB: it is the library load and
+setup, NOT the 446-run fold. The `Second-pass join: folding over 446 run(s)` line is logged at
+the Stage-6 DECISION point and returns a lazy fold; the folding happens under the overlays.
+
+### Library-vs-cohort: the ratio, and what is already built
+
+625,620 retained base_ids against 6,175,389 library entries - the cohort needs ~10%.
+
+Confirmed instance: `SecondPassFdrTask.cs:868` sizes the co-assignment run-scope arrays from
+`MaxBaseId(classByBaseId)` - the LIBRARY - where pass 1 sizes them from `experimentRecords.Keys`.
+Two `double[]` of maxBaseId+1 = ~99 MB. Real, free to fix, and ~1% of what we are chasing.
+
+`LibraryLoadOptions` ALREADY HAS `RetainFragmentsFor { get; set; }` (a `HashSet<uint>`),
+threaded through `LibraryLoader.Load` -> `LibraryCache.LoadCache(..., options.RetainFragmentsFor)`.
+It was proposed in TODO-20260717 ("Proposed lever (candidate, not yet built):
+`LibraryLoadOptions { OmitFragments }`") and BUILT. It has no production setter - the only
+construction in the tree is `PerFileScoringTask.cs:1031`, which sets `OmitFragments` alone. And
+`SecondPassFdrTask.cs:983` documents the consequence: this leg "loads the library
+fragment-laden (`OmitFragments` is gated on `StopAfterStage5`, false here)".
+
+Meanwhile `out.1st-pass.retained_base_ids.bin` is a persisted 2.5 MB artifact of exactly those
+625,620 ids, read from CONFIG ALONE by `ScoringTaskShared.ReadRetainedBaseIds` - and
+`PerFileRescoreTask.cs:2218` already reads it on this very leg ("625620 retained base_id(s)
+read once"). So this is not "introduce a capability"; it is an ORDERING problem between two
+things that already exist and already meet on this code path.
+
+Worth 2.83 GB (the 4.19 GB library here against 1.36 GB for the identical library on the
+pass-1 fold - confirmed across BOTH binaries, so not code drift). On this leg
+`LibraryFragmentRelease` never runs at all: it lives at `SecondPassFdrTask.cs:981-989` and needs
+`rescored.StreamFiles(...)`, which the pay-later fold has no pool for. Load-then-drop does not
+just cost time here - the drop never happens.
+
+### What the 4.14 GB LIVE is - UNRESOLVED
+
+Named from code, all experiment-wide and all keyed at library scale:
+
+| structure | shape | est. |
+|---|---|---|
+| `experimentRecords` | `Dictionary<uint, FdrExperimentRecord>`, 6,044,771 | ~400 MB (code says so) |
+| `minRunBothByEntryId` | `Dictionary<uint, double>` | ~240 MB |
+| `minRunBothByPeptide` | `Dictionary<(string, bool), double>` | ~270 MB |
+
+~0.9 GB of 4.14. The obvious suspect was RULED OUT: `byEntryId`
+(`Dictionary<uint, FdrEntry>`, hoisted outside the per-file closure, ~274 B/entry) is a reused
+scratch buffer cleared per file at `Pass2FdrSidecar.cs:637`. Same at :573 and
+`Pass2SidecarWriter._byEntryId` :1212. Correctly written; not it.
+
+~3.2 GB unaccounted. Further code reading is guesswork; dotMemory is the tool, and the
+snapshots are already wired. Arithmetic that motivates the retained-set question: 4.14 GB over
+6,044,771 experiment records is ~685 B each (plausible); over 625,620 retained base_ids it is
+~6.6 KB each (not plausible). So the live pass-2 state is shaped like the library, not the
+cohort - inferred from a ratio, NOT identified, and that distinction matters.
+
+### Opportunity on a 22.6 GB peak
+
+| | size | status |
+|---|---|---|
+| library fragments never released on this leg | 2.83 GB | machinery exists, unwired |
+| live pass-2 state, if cohort-sized | up to ~3.7 GB | shape inferred, structures unidentified |
+| committed-but-free churn | ~5.8 GB | separate, allocation-shape |
+| run-scope arrays sized from the library | 99 MB | one-line fix |
+
+Per Brendan: the systematic sweep of library loading and retention belongs to issue #4650 -
+pass-2 rehydrate should avoid LOADING spectra it will not need rather than load and drop. The
+risk to carry into that work: filtering the library makes lookups for non-retained ids MISS
+where they used to hit, and the co-assignment panel does exactly that lookup with a base-id
+fallback. The code comment there records what happened last time a lookup silently thinned -
+the decoy class 30x under-reported, "19 counted against 598", nothing in the output to say so.
+A filtered load needs a proof that every consumer only asks about retained ids, and a hard
+failure rather than a miss when one does not.
+
+### dotMemory run in flight
+
+`ai/.tmp/sessions/20260914-apexrt/run-pass2-dotmemory.ps1`. `--use-api`, so snapshots are taken
+only at `pass2-join-start` / `pass2-join-end`; the DIFF is the 4.14 GB by type and retained
+size. Two gotchas already paid for: the bed must be RESTAGED (the probed run consumed the
+withheld product, so a re-run would profile an early return), and the app args need `--` to
+escape them or dotMemory parses Osprey's `-i`/`-l` as its own and exits 1024 instantly.
+dotMemory has no text interface - Brendan opens the `.dmw`.
