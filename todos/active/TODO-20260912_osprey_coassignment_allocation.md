@@ -702,3 +702,39 @@ read alone at +157 s; if that holds across all four the avoidable share is ~470 
 minutes. **Left as Brendan's decision, not landed overnight** - it is one bool threaded through
 the `streamFileRows` delegate, and whether ~2.6% earns a parameter on a five-call-site method
 is a judgement, not a measurement.
+
+### Open design question (Brendan, 2026-09-14): is the sidecar being fitted to today's consumer?
+
+Raised after the result: the blib `RetentionTimes` row is `retentionTime, startTime, endTime,
+score`, so the natural per-run observation record includes the peak BOUNDS. v7 carries apex
+only. If a future statistic wants bounds - and a peak-INTERVAL-overlap co-assignment measure is
+more natural than the |dRT|-between-apexes one the panel computes today - we are back to a
+panel reading a parquet column per file, and back to this memory profile.
+
+**One premise needs correcting.** The blib does not read the sidecar. `BlibOutputWriter` builds
+each RetentionTimes row from the resident reported pool at pass 2, where `FdrEntry.ApexRt` /
+`StartRt` / `EndRt` (Osprey.Core\FdrEntry.cs:132-134) are all in hand. So there is no broken
+supply chain. What is real is that we now keep TWO records of the same entity - one per-run peak
+observation - carrying different subsets of it, and nothing justifies the difference.
+
+**What it would cost to carry the whole peak.** Measured tonight: one column is +7.1% of
+Stage 5 (~20 min on the 446 cohort). Adding start_rt and end_rt is roughly 3x that, about an
+hour per Stage 5 run, paid by every run forever. So "carry the peak as insurance" is not cheap.
+
+**Why it is expensive is the useful part.** Not the file's width - that is sequential IO, the
+cheap half. It is that each column is decoded out of the parquet on FOUR passes of the score
+pass (subsample, pass 1, pass 2, protein-q resolve) and THREE never use it. The ingest pass,
+which neither writes nor reads back a sidecar, still slowed 7.8% on one column. So the
+diagnosis is not over-tuned file, it is wrong courier.
+
+**Hard constraint either way.** The sidecar reader walks 2,048 records per buffer to stay under
+the 85,000-byte LOH threshold, capping RecordLength at **41 bytes**. v7 at 36 fits; apex +
+start + end at 52 does not and forces `RECORDS_PER_CHUNK` down. Not a blocker; it does say the
+format is near a natural size.
+
+**Recommendation**: keep v7 (proven 2x, and reverting costs another regen per bed); do not
+widen speculatively; land the opt-in on `ReadFdrStubScalars` - it recovers most of the +7.1%
+AND makes every future column cost a quarter as much, which is what turns this from a one-off
+tune into the general answer. Widen now ONLY if there is a concrete near-term statistic wanting
+bounds, since each format bump costs ~5 h of regen per bed and two bumps are much worse than
+one. That question is Brendan's to answer.
