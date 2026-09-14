@@ -436,3 +436,111 @@ and refuses in **0.2 s** instead of doing 5.2 s of work to write nothing.
 * The 446-run re-measurement of cells A and B with these fixes.
 * `-Dataset All` before this branch is considered done.
 
+
+### 2026-09-13 (evening) - The panel's memory is the PARQUET READ, not anything we guessed
+
+`--task FirstPassFDR --model-diagnostics` now works (committed `4a715d004c`), so for the first
+time the 446-run co-assignment panel could be MEASURED rather than reasoned about. Two fixes
+aimed at it produced no change, and the third measurement found the actual cost.
+
+#### The acceptance measurement, and what it says
+
+446-run CHS, `--task FirstPassFDR --model-diagnostics`, products withheld, exe snapshots in
+`D:\test\osprey-runs\_bin\coassign-4657-v5` and `-v7`:
+
+| metric | v5 (string key) | v7 (PrecursorKey struct) |
+|---|---|---|
+| process peak | 25.5 GB | 25.3 GB |
+| private floor drift | +10.85 GB, **+25 MB/file**, RISING | +10.99 GB, **+25 MB/file**, RISING |
+| managed floor | 8.0 -> 7.1 GB, falling | 7.6 -> 8.3 GB, level |
+| phase-2 wall | 713.0 s | 692.7 s |
+| pass-1 product | 233,498 B | 233,498 B |
+
+The fold is FLAT for 48 of the 58 minutes at ~8 GB private. The entire excursion is the
+co-assignment panel in the last ~10 minutes: phase 1 (sidecar scan) is flat at 9.4 -> 9.9 GB -
+that half of #4662 is a clean win against the 10 -> 35 GB it used to cost - and phase 2 (the
+apex-RT join) goes 10 -> 26 GB and stays there.
+
+**Brendan's bar is not met**: lower than the 41.7 GB it was, but not flat.
+
+#### Two fixes that did nothing, kept for their own sake
+
+Both are byte-identical (mode 1b/7/11 green) and both removed real allocation, and NEITHER moved
+the 446-run numbers by more than noise:
+
+* Caching the co-assignment key string per entry id (13.9 M rebuilds -> ~37 K).
+* Replacing it with `PrecursorKey`, a `readonly struct : IEquatable<>, IComparable<>`. Brendan's
+  point, and correct: a concatenated `sequence + "|" + charge` key is a scripting idiom, not C#.
+  The struct removes the per-row allocation entirely, folds `ModifiedSequence`/`Charge` into one
+  value instead of duplicating them beside the key, and replaces the `\u0001` pair-key
+  concatenation (which existed because two composite strings can collide) with a tuple.
+
+`CompareTo` REPRODUCES the old composite-string order rather than the obvious
+`(sequence, charge, decoy)` one, so no golden moves. The two disagree wherever one sequence is a
+prefix of another - the shorter key's string continued with `'|'` (0x7C) and the longer with a
+residue, so `ABCD|2` sorts BEFORE `ABC|2`. `TestPrecursorKeyOrderMatchesCompositeString` pins
+the equivalence and is verified RED on the natural order. That matters: the natural order passed
+the entire 3-file matrix, because no prefix-pair m/z tie occurs at that scale. The gate is blind
+to this class of change and the unit test is the only thing that is not.
+
+#### Where the memory actually goes (measured, not inferred)
+
+New env-gated probe `OSPREY_LOG_COASSIGN_ALLOC` tallies allocated bytes per call site in the
+join. On 3 Stellar files:
+
+```
+peak co-assignment join allocated 0.1 GB over 3 file(s):
+    parquet columns 29 MB/file, sidecar stream 4 MB/file
+```
+
+**7:1.** `TryReadEntryIdsAndApexRts` reads two FULL columns per file - `entry_id` 4 B/row and
+`apex_rt` 8 B/row - at ~16 B/row measured, which extrapolates to ~68 MB/file and ~30 GB across
+446 files. Parquet.Net hands back a fresh array per column per row group (100,000 rows), so at
+800 KB per array these are ~42 LARGE-OBJECT allocations per file, ~19,000 across the cohort, on
+a heap that is not compacted by default. That fits a floor rising a steady +25 MB/file far
+better than an allocation-rate story does, and it is why 13.9 M short-lived key strings moved
+nothing.
+
+Reading `entry_id` only for the first row group (it is not data - it exists to assert that the
+sidecar and the parquet are in the same row order, and that drift is systematic) takes 29 ->
+22 MB/file. Byte-identical, goldens green. It is a 24% cut and it is NOT enough.
+
+#### The fix, and the constraint that shapes it
+
+The join already streams the 1st-pass sidecar for every row to get score and q-values. If the
+sidecar carried `apex_rt` too, the parquet read leaves this phase entirely - all 22 MB/file of
+it, the alignment assertion it exists to support, and the `entry_id` change above. Brendan:
+that also matches the output blib's `RetentionTimes` table, which carries apex RT, composite
+score and per-run q together.
+
+**The constraint**: `FdrScoresSidecar.FormatVersion` (currently 6, record 28 B) is part of
+FirstPassFDR's validity key, so bumping it invalidates every bed on disk. Regeneration costs,
+measured from this machine's own logs:
+
+| | 446 files |
+|---|---|
+| `--task FirstPassFDR` (genuine, from parquets) | **5h11m** (18,674 s and 18,796 s on two runs), peak ~39 GB |
+| `--task PerFileRescoring` | 8h01m (28,869 s) |
+| `--task SecondPassFDR` | 18m |
+| full Stages 5-7 | ~13h30m |
+| a FRESH 86-file cohort | 8h20m, of which PerFileScoring alone is 5h04m |
+
+So a fresh bed is out, and only Stage 5 needs re-running - 5h11m, not 13.5h. That fits one
+night, with the ~58-minute pay-later measurement after it.
+
+#### Uncommitted in `pwiz-work2`
+
+| file | change |
+|---|---|
+| `ModelDiagnosticsData.CoAssignment.cs` | `PrecursorKey` value type; row carries it; tuple pair key; `\u0001` separator deleted |
+| `PeakCoAssignmentSource.cs` | builds `PrecursorKey`; allocation tally; dotMemory checkpoints |
+| `ParquetScoreCache.cs` | `entry_id` read for the first row group only; `verifiedRows` out-param |
+| `OspreyEnvironment.cs` | `OSPREY_LOG_COASSIGN_ALLOC` |
+| `ModelDiagnosticsDataTest.cs` | `TestPrecursorKeyOrderMatchesCompositeString` (594 total) |
+
+Gates on the working tree: 594/594 unit, ReSharper 0 warnings, `regression.ps1 -Dataset
+StellarLibDecoy` green (three separate runs across the three changes).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260913_osprey_coassign_parquet.md` before starting work.
+
