@@ -983,3 +983,111 @@ the version check on read. So the reader must accept v2 AND v3 - v2 yielding NaN
 
 Payoff: the mdiag pass-2 fold reads two numbers per entry instead of materialising 446 runs
 twice, which removes the traversal AND whatever `StreamFiles` retains during it.
+
+## 2026-09-14 (afternoon): root cause of the 0.19%, and the re-clamp's fold is gone
+
+The floors work from the morning was built the wrong way round and has been re-cut. What
+follows is the finding first, because it changes what the fix IS.
+
+### Root cause: the second pass never floors the experiment q it computes
+
+`Pass2FdrSidecar.FinishRecord` - the sweep that builds the analysis-wide experiment records
+inside the protein-compact competition, which is the SHIPPED DEFAULT - produces
+`new FdrExperimentRecord(rec.EntryId, eq, eq, ...)` with no best-of-runs floor applied.
+`ClampExperimentQToBestRunFlat` is called from `StreamingFdr.cs:128` and
+`PercolatorTrainer.cs:364` only, both FIRST pass. So:
+
+* pass-1 experiment q is floored in-pass, before it is written
+* pass-2 experiment q is **not floored when it is computed**
+* the only thing that floored it was `ReclampExperimentQToBestRun`, afterwards, onto the
+  ENTRIES - never onto the record the sidecar is written from
+
+That is the whole of the 1,125,526 values / 0.19% measurement, and why the file disagreed with
+the .blib.
+
+**Both strata, by two different routes** (Brendan's hypothesis, confirmed):
+
+| stratum | what it gets | why it can fall below its own best run |
+|---|---|---|
+| on-stratum | a fresh second-pass competition q | never clamped at all |
+| off-stratum | its pass-1 q, carried | that q WAS clamped - against pass-1 run q - while pass 2 refreshed run q underneath it, a run that did not compete taking 1.0 |
+
+One rule applied to every record closes both. The earlier "is the re-clamp redundant?"
+hypothesis stays DISPROVED, and now for a reason rather than a measurement.
+
+### The fix: fold where the records already stream, apply where the pool already materialises
+
+The sweep at `Pass2FdrSidecar.cs:2383` reads every file's `.2nd-pass.fdr_scores.bin` to build
+the experiment records, and each record carries `RunPrecursorQvalue` / `RunPeptideQvalue`. So
+the per-entry min-over-runs costs **one comparison per record and no IO of its own**.
+
+The PEPTIDE floor is derived from the entry floors by grouping through the library's own
+`(ModifiedSequence, IsDecoy)` - exact, not an approximation, because `min` is associative:
+min over a peptide's rows == min over its entries of each entry's min over rows. The library is
+a legitimate identity source here because a generated decoy is a full `LibraryEntry` of its own
+(`DecoyGenerator.cs:134`: `Id = target.Id | 0x80000000`, `"DECOY_" + target.ModifiedSequence`)
+and `PerFileScoringTask.cs:1120` puts them in `fullLibrary`, so a target can never inherit its
+paired decoy's bucket.
+
+Both floors are stamped onto the records before anything reads them, so the FILE is final.
+The pre-blib step is now an APPLY only (`Pass2FdrSidecar.ApplyExperimentQFloors`), riding the
+per-run materialisation the blib gates already do.
+
+**What went away: a full extra traversal of every run.** `ReclampExperimentQToBestRun`'s fold
+half (`rescored.StreamFiles(@"Folding experiment-q floors")`) is deleted. That was 8 minutes
+and a multi-GB working set at 446 runs, paid by EVERY analysis whether or not anything asked
+for diagnostics. So the ordinary no-diagnostics path gets faster, not slower - which was
+Brendan's question about the morning's cut, and the morning's cut had the wrong answer to it.
+
+A record reaching the apply without floors is now a **hard throw**, not a silent re-derivation:
+it means some pass-2 path computed an experiment q and did not floor it, which is precisely the
+defect above, and falling back quietly would let the next such path stay green.
+
+### Discarded from the morning's cut
+
+* the fold moved ahead of `RunProteinFdr` and threaded through it - gone
+* the peptide floor denormalized through the reconciled parquet's `modified_sequence` column,
+  one tuple-keyed string lookup per ROW (~297 M at 446 runs) - gone, replaced by one lookup per
+  distinct entry against the library
+* a `Pass2ExperimentQFloors` byproduct - unnecessary once the records themselves carry the
+  floors, since they resolve the same way on both arms (in-memory scope, or the sidecar)
+
+### Gate
+
+`regression.ps1 -Dataset StellarLibDecoy` PASSED, exit 0, on the morning's cut (all checks,
+including `mode1 (vs golden)`, `mode3 (HPC chain==straight)` - which byte-compares the
+experiment sidecars, so both routes agree on the floors - `mode7`, and `mode11` pass-2
+byte-exact). Re-running on the re-cut.
+
+**`mode1 (vs golden)` is the equivalence oracle for the re-cut**: if the streamed floors differ
+by one ULP from the ones the deleted fold produced, the blib's experiment q moves and mode 1
+goes red against the committed golden.
+
+New standing assertions in `regression.ps1` mode 11, because modes 7 and 11 pass whether the
+floors were applied from the records or re-derived by a traversal - the report is identical
+either way, so only the log can tell:
+
+* marker: `experiment-q floors: applying`
+* forbidden: `Folding experiment-q floors` (the deleted traversal's own progress heading)
+
+Also fixed there: the experiment-sidecar compared-record count divided by 36 where the record
+is 60 bytes (count only, never pass/fail).
+
+### Trap paid
+
+`-KeepRunDirs` is a STARTUP prune of ORPHANS; a run still deletes its own directory as it goes.
+`-KeepOutput` is the flag that retains it. The first gate run was launched with the former, so
+its Osprey logs were gone and the "did it read or re-fold?" question could not be answered from
+them - which is what prompted putting the question in the harness instead, where it belongs.
+
+### Still owed
+
+* `regression-parallel.ps1 -Dataset All`
+* the 446-run cohort with the re-clamp counter still in place: the counter must read ZERO. It
+  is instrumentation that already exists (`19708cccdb`), and zero is what retires the apply's
+  remaining justification with evidence rather than argument.
+* `BuildExperimentScope` (the transfer arm) folds its peptide map from the entries' own
+  `ModifiedSequence` but looks it up per entry through the library. Same string by
+  construction, but the two arms should key identically - switch it to
+  `DerivePeptideFloorsFromLibrary` so fold key and lookup key have one source.
+* `/code-review max` from `C:\proj\pwiz-work2`
