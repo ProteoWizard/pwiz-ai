@@ -9,8 +9,11 @@ resumed 2026-09-15 against a Skyline built from master `bc2c55ef05` (2026-08-26)
 which includes the verbs round 1 found missing (graph-point click, tree pick-lists,
 shipped under [#4449](https://github.com/ProteoWizard/pwiz/issues/4449), closed
 2026-08-21). [#4448](https://github.com/ProteoWizard/pwiz/issues/4448) (connector
-hardening) is still open. Round 2 continues the orchestrator loop below over the
-21 tutorials not yet claimed.
+hardening) is still open. Round 2 re-ran MethodEdit first (21/28 screenshots match,
+completed end-to-end; gaps filed as
+[#4671](https://github.com/ProteoWizard/pwiz/issues/4671) for Nick) and continues
+tutorial by tutorial through the introductory SRM set (MethodRefine next, then
+GroupedStudies, ExistingQuant), filing one gaps issue per tutorial so they stay small.
 
 Originally spun off 2026-07-23 from the PR #4313 connector work
 (`TODO-20260609_native_file_dialog_automation`, completed) so this testing effort
