@@ -61,10 +61,24 @@ Same class of bug in `--tran-predict-ce`, `--tran-predict-dp`, `--tran-predict-c
 - Tried first: `HasValueChecking` + honoring it in `ArgumentBase.GetArgumentTextWithValue` - reverted,
   because `ConsoleArgumentInvalidValuesTest` relies on that method rejecting values outside `Values`.
 
+## Code review round (uncommitted, awaiting developer review)
+
+- `/code-review max` (two runs) findings verified; redesign: `ArgumentBase.AcceptedValues` + `IsValidValue`
+  (help/errors stay localized, invariant names accepted), single `ParseKey` resolver in `CommandArgs`
+  (exact key > exact display > ci key > ci display; only defaults still in the user's list),
+  `TransitionSettings` label methods back to exact-label.
+- Tests forced to ja via `CallWithCulture`; verified red in en against origin/master (ION 3, None) and
+  against d9882f2d4f (deleted SCIEX accepted, ja help diff), green with redesign.
+- Copilot thread on #4669 (tests only red in ja/zh): addressed by the ja-culture tests - reply + resolve after commit.
+
 ## Follow-up (not in this PR unless decided otherwise)
 
-- Fragment-finder args still list only localized labels in `--help`
-- `NameValuePair`/`ArgumentBase` value checks use `CurrentCultureIgnoreCase` (possible Turkish-I mismatch; unverified)
+- Fragment-finder args list only localized labels in `--help` / errors (invariant names accepted but unlisted)
+- `--reintegrate-model-name`: built-in model key is localized (`LegacyScoringModel.DEFAULT_NAME`), so
+  `--reintegrate-model-name=Default` fails in ja/zh; error also prints `{0}` literally (CommandLine.cs ~2868)
+- `--full-scan-isolation-scheme`: `IsolationSchemeList.GetDefaults` stores localized names as keys
+  (e.g. `結果のみ`), so `Results only` is rejected for lists first created in a ja/zh UI
+- Legacy fragment names (`y3`, `last y-ion`) not accepted on the command line (never were; nit)
 
 ## Files Modified
 
