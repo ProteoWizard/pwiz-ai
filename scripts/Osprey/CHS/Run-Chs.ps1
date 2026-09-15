@@ -83,7 +83,18 @@ Import-Module (Join-Path $PSScriptRoot '..\Common\OspreyDatasetRun.psm1') -Force
 # Splitting on both separators means the documented dot-invoked form still works unchanged.
 if ($Plates) {
     $Plates = @($Plates | ForEach-Object { $_ -split '[,;]' } |
-                ForEach-Object { $_.Trim() } | Where-Object { $_ })
+                ForEach-Object { $_.Trim() } | Where-Object { $_ } |
+                ForEach-Object {
+                    # Re-pad to the 4 digits the file name carries (2025us0059a). Unquoted
+                    # `-Plates 0059,0060` inside a .ps1 is parsed by PowerShell as INTEGERS,
+                    # which drops the leading zero before [string[]] ever sees it and composes
+                    # 'us(59|60)' - a pattern matching none of the 446 files. That is the same
+                    # class as the -File trap above and it fails the same way, except a chained
+                    # overnight job hits it an hour in: the runner exits the host, so a
+                    # launcher script sequencing this behind a gate dies with it and the run
+                    # that was supposed to start overnight simply does not.
+                    if ($_ -match '^\d+$') { $_.PadLeft(4, '0') } else { $_ }
+                })
 }
 if ($Plates -and -not $IncludePattern) {
     $IncludePattern = 'us(' + ($Plates -join '|') + ')'
