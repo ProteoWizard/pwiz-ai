@@ -35,6 +35,11 @@
 .PARAMETER VendorLicenses
     Pass -p:IAgreeToVendorLicenses=true even without Directory.Build.user.props
 
+.PARAMETER NoVendorLicenses
+    Pass -p:IAgreeToVendorLicenses=false, overriding Directory.Build.user.props, to build the
+    way the Linux CI leg does: NativeVendorsAvailable false, vendor readers and their tests
+    compiled out. This is the local check for "does it still build without the SDKs".
+
 .PARAMETER SourceRoot
     Path to the pwiz checkout root (auto-detected if not specified)
 
@@ -65,6 +70,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$VendorLicenses = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$NoVendorLicenses = $false,
 
     [Parameter(Mandatory=$false)]
     [string]$SourceRoot = $null,
@@ -109,9 +117,11 @@ if ($RunTests -and -not $TestProject) {
 }
 
 $userProps = Join-Path $sharpRoot 'Directory.Build.user.props'
-$vendorAgreed = $VendorLicenses -or (Test-Path -LiteralPath $userProps)
+$vendorAgreed = -not $NoVendorLicenses -and ($VendorLicenses -or (Test-Path -LiteralPath $userProps))
 $props = @("-p:Configuration=$Configuration")
-if ($VendorLicenses) {
+if ($NoVendorLicenses) {
+    $props += '-p:IAgreeToVendorLicenses=false'
+} elseif ($VendorLicenses) {
     $props += '-p:IAgreeToVendorLicenses=true'
 }
 

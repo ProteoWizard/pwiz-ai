@@ -6,11 +6,11 @@
 - **Checkout**: `C:\proj\pwiz-work1` (now on the branch above)
 - **Module**: `pwiz` (pwiz-sharp vendor reader tests; nothing under `pwiz_tools/Skyline`)
 - **Created**: 2026-09-15
-- **Status**: In Progress - tests committed, review and PR pending
+- **Status**: PR open, awaiting CI and review
 - **GitHub Issue**: none. Related filed issues: #4638 (retry latch blames AddFramingZeros for
   any SDK failure), #4639 (profile data stamped MS_centroid_spectrum after the centroid latch
   trips) - both pre-existing wiff2 defects found during the same investigation, not fixed here
-- **PR**: (pending)
+- **PR**: [#4670](https://github.com/ProteoWizard/pwiz/pull/4670) into `Skyline/work/20260612_net8_port`
 
 ## Objective
 
@@ -88,12 +88,12 @@ native-assembly gating the tests need. No `IsAbWiff2Safe` change. Record the dec
 ### 2. The six review findings from 2026-09-11 (`/code-review max` on #4659's tree)
 
 Only the headline survived in the record: "will not compile without vendor licenses (a Linux CI
-break)". On inspection that looks wrong - everything the tests use (`AbstractWiffFile.Open`,
-`GetExperiment`, `CycleCount`, `GetTic`, `GetSpectrum`, `XValues`) is in `Sciex.csproj`, which
-`Sciex.Tests` references unconditionally; only `Sciex.Wiff2` and the OFX stub are gated on
-`IAgreeToVendorLicenses`. The Linux CI check on the PR will settle it (it passes
-`IAgreeToVendorLicenses=true` with no native vendors). The other five findings are lost; run
-`/code-review max` on the branch again before opening the PR and treat that as the review.
+break)". **It was right, and my first reading of it was wrong**: `Sciex.csproj` does reference
+unconditionally, but it `<Compile Remove>`s `AbstractWiffFile.cs` itself whenever
+`NativeVendorsAvailable != true`, which is `IAgreeToVendorLicenses AND PwizTargetIsWindows` -
+false on Linux with the licences agreed. The 2026-09-15 `/code-review max` reproduced it
+(12 `CS0103`s with `-p:IAgreeToVendorLicenses=false`). Fixed by moving the tests to their own
+file, removed under the same condition, as `Agilent.Tests.csproj` does.
 
 ### 3. Fixture availability
 
@@ -112,15 +112,13 @@ Windows check the fixture IS found so the tests actually execute somewhere.
       (`-Project pwiz/test/Sciex.Tests/Sciex.Tests.csproj -RunTests -Filter "Name~wiff2"`) -
       there was no wrapper for building one pwiz-sharp project and running one test project;
       `build.bat` builds and tests everything, `Run-Tests-Parallel.ps1` assumes a prior build
-- [ ] Confirm the churn test still FAILS against the shared-api change, if that diff can be
-      recovered from the port branch's reflog or reconstructed from `WiffFile2.ipp:64` - the
-      test is only worth shipping if it is red on the thing it guards. If it cannot be recovered
-      cheaply, say so in the PR and rely on the recorded 2026-09-04 result
-- [ ] `/code-review max` from `C:\proj\pwiz-work1`; fix what is real
-- [ ] Open the PR: `pwiz: Added .wiff2 concurrent-reader regression tests for the shared
-      SampleDataApi hazard`, label `pwiz`, base `Skyline/work/20260612_net8_port`, body carrying
-      the background above in short form and the run-location decision
-- [ ] Watch the Linux and Windows .NET checks for the compile and fixture questions above
+- [x] Confirm the churn test FAILS against the shared-api change: `stash@{0}` in `pwiz-work1`
+      holds it (with per-path refcounting). Bare shared api (refcount disabled): original test
+      6/6 red, reworked test 8/8 red. Refcounted: 8/8 green. See the 2026-09-15 entry
+- [x] `/code-review max`: 15 findings, the real ones folded into `b5e25403b8`
+- [x] PR #4670 opened
+- [ ] Watch the Linux and Windows .NET checks (the no-vendor build passes locally; TeamCity
+      confirms the fixture is found on the Windows agent so the tests execute, not Inconclusive)
 - [ ] Leave the leak itself alone. If a session wants to attempt the shared-api fix again, the
       ownership arbitration it needs (per-path reference counting so `CloseFile` runs only when
       the last reader on that path closes, or one reader per FILE as in cpp) is the design
@@ -138,4 +136,52 @@ finding is not supported by the project references; and that the other five find
 review were never recorded.
 
 Branch created off `ea391bde4e` (port branch tip), tests committed as `22dbcc68b4` and pushed.
-`Sciex.Tests` 10/10 locally with vendor licenses. Next: `/code-review max`, then the PR.
+`Sciex.Tests` 10/10 locally with vendor licenses.
+
+### 2026-09-15 (later) - review, the guard measured against the thing it guards, PR #4670
+
+`/code-review max` on `22dbcc68b4` returned 15 findings. The ones that changed the code:
+
+- **Linux break, reproduced** (see decision 2 above) - own file, `<Compile Remove>` gated.
+- **`addZeros:true` blinds the oracle**: `FetchSpectrumWithRetry` swallows the first SDK
+  failure through a process-wide latch and retries. Measured on the bare shared api: with
+  `addZeros:true` one of three readers reported; with `false`, all three.
+- **The dispose test cannot observe the purge**: the SDK re-creates a purged storage location
+  on the next request, so only an in-flight request sees it. Measured: the dispose test stayed
+  green on the bare shared api every run while the churn test went red. Its doc now says so.
+- No hang guard (`[Timeout(60_000)]` added), `first` not disposed on a failure path (`using`),
+  `TargetInvocationException` hiding the real error (`GetBaseException`), `CycleCount`
+  memoized so the post-dispose assertion was dead (baseline comparison on TIC and spectrum),
+  duplicated health checks and fixture preamble (helpers), single-line ifs, a 5 s clock with
+  no proof any churn happened (fixed 150 opens with counters).
+- `GetTic` is also memoized (the review said it was fresh; `Wiff2File.cs` `_ticCache` says
+  otherwise), so the spectrum is the only read that re-enters the SDK each iteration.
+
+**Measuring the guard.** `git stash list` in `pwiz-work1` turned up the shared-api attempt
+(`stash@{0}`, "WIP on Skyline/work/20260612_net8_port: 5c046bdb7a"): a static
+`Lazy<ISampleDataApi>`, a per-path `_openCounts` dictionary so only the last reader on a path
+calls `CloseFile`, and `SKY_WIFF2_NOCLOSE` diagnostics. Checked out over `Wiff2File.cs`:
+
+| Wiff2File.cs variant | original churn test | reworked churn test | dispose test |
+|---|---|---|---|
+| current (api per reader) | green | green (8 s) | green |
+| stash as written (shared + refcount) | green 5/5 | green 8/8 (1 s) | green |
+| stash with refcount disabled (bare shared) | **red 6/6** | **red 8/8** | green |
+
+Two things the rework had to get right to keep the reworked test at 8/8: the churn thread must
+touch only the cycle count (a spectrum read of its own, whose SDK enumerator is never disposed,
+halved the rate - presumably `CloseFile` failing or deferring with a statement still open, and
+`Dispose` swallows that), and the churn needs ~150 opens (100 gave 3/6, 20 gave 2/5). A
+readiness barrier that held the churn until every reader was open made no difference.
+
+**For Brendan - the refcounted shared api passes its acceptance test.** The record says the
+shared-api fix was reverted because the churn test proved it caused silent data loss; the
+stash shows a later iteration with per-path reference counting that this test does not fail,
+8/8. That is the arbitration the 2026-09-03 entry said was needed. Not acted on ("do not reopen
+without asking"); whether the stash also removes the leak in pass 1 (it should - one
+`SampleDataProviderServer` per process instead of per open) has not been measured. If it does,
+`IsAbWiff2Safe` and the four mzML fallbacks can go, and `Wiff2ResultsTest` etc. read real
+`.wiff2` in the leak pass again. That would be its own PR, gated by #4670's tests.
+
+PR #4670 opened into the port branch, label `pwiz`. `ai/scripts/PwizSharp/Build-PwizSharp.ps1`
+gained `-NoVendorLicenses` for the Linux-shaped build check.
