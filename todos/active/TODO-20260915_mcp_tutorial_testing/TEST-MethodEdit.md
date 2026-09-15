@@ -37,3 +37,24 @@ Round 2 - re-run of TEST-MethodEdit-round1.md against master bc2c55ef05.
   (`Yeast.protdb`); Add File → native Open (`sgd_yeast.fasta`) → "61 repeated
   sequences" MessageDlg → OK → "5801 proteins". s-02 differs only in the path
   (install location); s-03 exact. No cyan captures this time.
+- **Pasting FASTA (s-04)** — PASS, pixel-level match after layout import. `Set-Clipboard`
+  (Fasta.txt) + `Edit > Paste` → `EmptyProteinsDlg` ("added 30 new proteins with no
+  peptides… remove?") → **Keep** → 35/25/25/75. (The tutorial text never mentions this
+  prompt; captured as `s-04a-emptyproteins.png`.) "Press the down arrow until the first
+  peptide is selected": `send_key_stroke SequenceTree Home`/`Down` were accepted but did
+  **not** move the selection (as the verb's own doc warns: default TreeView key handling
+  is not a KeyDown handler). Used `get_locations molecule` + `set_selection
+  Molecule:/YAL005C/VDIIANDQGNR` instead. Then `File > Import > Window Layout` →
+  `p07.view` (see "Window layout files"). Window size 1035x511 had to be set **outside
+  the MCP** (Win32 `SetWindowPos` from PowerShell; there is no verb for it). With both,
+  the capture matches s-04 essentially pixel for pixel (tree, expansion, spectrum,
+  status bar `4/35 prot 1/25 pep 1/25 prec 1/75 tran`, Files tab present in both).
+- **b-ions + rank-1 transition (s-05)** — PARTIAL (same as round 1). `View > Libraries >
+  Ion Types > B` still "Menu item not found" via `click_main_menu_item` and
+  `click_control_menu_item(control="")`; `get_children` on `Ion Types` returns `[]`
+  even after clicking the item; the graph reports "msGraphExtension has no context
+  menu". **Root cause (source, `Menus/ViewMenu.cs` `UpdateIonTypeMenu`):** the submenu's
+  only child is a `MenuControl<IonTypeSelectionPanel>` — a ToolStripControlHost hosting
+  a checkbox panel — so there is no `ToolStripMenuItem` "B" to match. Selected y7 via
+  `get_locations transition` + `set_selection`; tree, red y7 highlight, `2/75 tran` all
+  match; purple b3/b5/b6/b7/b8 labels absent.
