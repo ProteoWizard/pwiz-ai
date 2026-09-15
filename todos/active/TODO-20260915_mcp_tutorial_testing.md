@@ -196,9 +196,11 @@ A run is only valid if the environment is set up correctly. Check each:
       "permission required" — a human must grant it once. **For an autonomous
       night run this must be pre-granted** (see the finding in §5 of
       `TEST-MethodEdit.md`; a pre-authorization path is a known gap).
-- [ ] **Chrome / editors kept OFF the Skyline window.** Non-Skyline content
-      overlapping a Skyline form is redacted to solid **cyan** in captures. Park
-      the tutorial browser on another monitor / behind Skyline.
+- [ ] **Chrome / editors / the Claude Code window kept OFF the Skyline window.**
+      Non-Skyline content overlapping a Skyline form is redacted to solid **cyan**
+      in captures. The most likely overlapper is the Claude Code terminal itself
+      (it was, on 2026-09-15). Park it and the tutorial browser on another
+      monitor / behind Skyline before launching.
 - [ ] **Default settings + correct UI mode.** Follow the tutorial's "Getting
       Started": `Settings > Default` (answer **No** to "save current settings"),
       and set the UI mode (`skyline_set_ui_mode` → `proteomic` /
