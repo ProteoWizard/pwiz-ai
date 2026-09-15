@@ -1177,3 +1177,137 @@ assumed - `fix-crlf.ps1` did not catch it either, since the file was still untra
 * Stellar, streaming floors: red as above - now fixed
 * Unit gate 594/594, inspection zero warnings on the current cut
 * `regression-parallel.ps1 -Dataset All` in flight
+
+### 2026-09-14 (evening): the format change is OUT; the floor is applied at the source
+
+Brendan retracted the format-change direction, and the reasoning is worth keeping because it
+generalises: the experiment sidecar holds DERIVED values - the model q-values cannot be
+reconstructed from it in any case - so storing the raw competed q beside the floor, to make the
+correction re-derivable later, preserved only WHICH ~0.1% of entries the floor moved. That is not
+worth a wider record and a format version. It was a BUG that the second pass wrote an unfloored
+q, and the fix belongs where both the value and its floor are in hand.
+
+**Net effect: NO format change at all.** `FdrExperimentSidecar` is back at v2 / 44-byte records
+for both passes, `FdrExperimentRecord` back to its six fields, and `;expsidecar=` is gone from
+all three validity keys - so nothing invalidates any bed. Commits `7cf1ef2db6` and `21d3394490`
+are fully reverted in the working tree; the squash-merge collapses that cleanly.
+
+#### What the change is now
+
+* the pass-2 sweep that builds the experiment records folds each entry's best-of-runs floor out
+  of the per-file `.2nd-pass.fdr_scores.bin` records **it is already reading** - one comparison
+  per record, no IO of its own
+* the peptide floor is derived from those entry floors, grouped through identities recorded on
+  the survivor walk that sweep already performs (`ExperimentQFloors.ObserveIdentities` /
+  `DerivePeptideFloors`); exact because `min` is associative
+* `FdrExperimentAccumulator.ApplyRunQFloors` raises both q-values before the records are written
+* `ReclampExperimentQToBestRun` is **deleted entirely** - both the whole-run fold and the apply
+
+**`mode1 (vs golden)` is the proof and no separate validation run is needed**: the committed
+golden .blib was produced WITH the old re-clamp, so flooring at the source has to reproduce it
+byte for byte.
+
+#### Scope: #4662 will carry "Fixes #4664"
+
+Today's fold re-derived what `9a85f68a8b` deliberately reverted to issue #4664 - I did not know
+that branch existed until Brendan's 2026-09-13 perfviz log showed a floors line no code on this
+branch could emit. Per Brendan: #4664 was created early, when stopping after FirstPassFDR looked
+possible; the possibility of further sidecar format changes (now avoided) convinced him to treat
+this whole area as one PR. So #4662 gains `Fixes #4664` rather than the work moving.
+
+Worth carrying forward from that revert, because only ONE of its two causes is addressed:
+
+| revert cause (`9a85f68a8b`) | status here |
+|---|---|
+| "still decodes ~366 M sequence strings" | **gone** - identity comes from the survivor walk, not the parquet column |
+| "with the pool materialization gone nothing forces a collection inside the window, so the heap drifts" | **untested** - the pre-blib traversal is deleted here too; only the 446-run number can say |
+
+That second row is what the overnight bed exists to answer. The earlier measurement was
+38.2 -> 44.4 GB committed peak.
+
+#### What the dotMemory workspace actually showed
+
+Read with Brendan at a machine. The probes did NOT bracket what the handoff assumed:
+
+| snapshot | total | .NET used | live objects |
+|---|---|---|---|
+| `pass2-join-start` | 81.63 MB | **573.5 KB** | **4.8 K** |
+| `pass2-join-end` | 13.57 GB | 4.70 GB | 28.05 M |
+
+573 KB / 4.8 K objects is a process that has loaded nothing - `CaptureRetentionSnapshot` fired
+before `ctx.Get<RescoredEntries>()`. The comparison confirms it: 4.70 GB **New**, 477.6 KB
+survived. So the delta was the whole stage's working set measured against an empty process, not
+"what the overlays retain".
+
+The type breakdown settles the attribution. Of 5,047,750,287 New bytes:
+
+| type | new objects | new bytes |
+|---|---|---|
+| `LibraryFragment[]` | 6,175,390 | **3.04 GB (60%)** |
+| `LibraryEntry` | 6,175,389 | 543 MB |
+| `String` / `String[]` | ~5.7 M / 6.18 M | 310 MB / 200 MB |
+| `Dictionary+Entry<UInt32, LibraryEntry>[]` | 1 | 173 MB |
+| `Modification` / `Modification[]` / `LibraryEntry[]` | - | 184 MB |
+| **library subtotal** | | **~4.59 GB, 91%** |
+| `FdrEntry` (the survivor pool) | 628,645 | 131 MB |
+| `Dictionary+Entry<UInt32, FdrExperimentRecord>[]` | 1 | 89 MB |
+
+**So the entire pass-2 experiment-scope machinery, floors included, is ~300 MB against 4.59 GB of
+library.** The "~4 GB unaccounted in a loop whose only product is 90 MB" was a probe-placement
+artifact. There is no retention bug in that loop. FIXED: `pass2-join-start` now fires after the
+lazy byproducts resolve, so the pair brackets the overlays.
+
+Brendan's reading of the managed-heap plot also holds: total used sawtooths to a ~7 GB post-GC
+floor that does NOT drift across 27 minutes, with `Allocated in LOH since GC` cycling 0 -> 4-5 GB.
+20-30 GB private bytes is Server GC committed expansion under allocation pressure, not held
+memory.
+
+And on the original perfviz plot: the ~45 GB apex is at 09:31-09:35, while
+`SecondPassFDR: folding the second pass` logs at 09:39:34 on the DESCENDING side (19,127 MB
+managed at 09:39:52 -> 7,148 MB seven seconds later). Pass 2 inherited the apex rather than
+causing it.
+
+#### #4650 (spectra at rehydrate): still unwired, and NOT applicable yet
+
+Verified rather than taken from the handoff: `RetainFragmentsFor` has exactly two references -
+its declaration (`LibraryLoadOptions.cs:77`) and the pass-through at `LibraryLoader.cs:111`.
+**Nothing assigns it.** The one production construction site, `PerFileScoringTask.cs:1031`, sets
+only `OmitFragments`. Everything around it is finished: the artifact is written
+(`FirstPassFdrTask.cs:2598`), the reader exists and is already called on the right legs
+(`ScoringTaskShared.ReadRetainedBaseIds`), and the cache loader honours the set once given it.
+
+A gap to close WITH it: the skip path in `LibraryCache.cs:335` assigns
+`Array.Empty<LibraryFragment>()`, which is the READABLE empty spectrum. `ReleaseSpectrum`'s
+`RELEASED_SPECTRUM` singleton throws on every access including `.Count`, turning the universal
+`Fragments == null || Fragments.Count == 0` guard into a tripwire. A never-allocated entry should
+take the loud state, not the quiet one - otherwise a wrong retain-set writes a thin .blib
+silently instead of throwing.
+
+Per Brendan this waits until a fully valid Stage 5-7 bed exists.
+
+#### Night run prepared
+
+`ai/.tmp/sessions/20260914-3753ea36/run-chs446-floors.ps1`, `-WhatIf` verified: 446/446 files,
+1784 Stage 1-4 artifacts hard-linked from `chs446-apexrt-base` (0 missing), version pinned to
+26.1.1.243 by `-LinkFrom`, `--timestamp --memstamp`, `--model-diagnostics` ON.
+
+**The `-WhatIf` caught a full-re-run mistake**: the runner's default library resolution picks
+`target+decoy+entrapment` (13.09 GB, June) where the bed used `...-20260817` (12.39 GB, August).
+A different library changes the `library=` validity term and invalidates every linked artifact.
+`-LibraryDir` now pins it.
+
+`--model-diagnostics` stays ON by agreement: the bed then carries a flag-up-front report as the
+byte-comparison oracle for tomorrow's pay-later fold at cohort scale, and a run without
+diagnostics is imitated by deleting the JSON + HTML afterwards.
+
+#### Process mistakes, so they are not repeated
+
+* **`git checkout master -- <file>` where `HEAD` was meant, twice.** It cost `IOTest.cs`'s
+  apex_rt updates (caught by the build in seconds) and `FdrSidecars.ps1`'s v7 layout knowledge
+  (caught an hour later, as Astral mode 3 red on a HARNESS artifact). Audit first:
+  `git log --oneline master..HEAD -- <file>` says whether a full revert is right.
+  `FdrSidecars.ps1` is touched by TWO branch commits and only one was being undone.
+* **A Monitor liveness check that greps for `Osprey.exe`** reports "process gone" between gate
+  phases, when no Osprey is running. Key on the launcher's parent PID instead.
+* **`-KeepRunDirs` is a STARTUP prune of ORPHANS**; a run still deletes its own directory.
+  `-KeepOutput` is the flag that retains it.
