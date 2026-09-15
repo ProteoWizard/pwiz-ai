@@ -906,11 +906,67 @@ merged before tonight's nightly on this machine; the next session runs the revie
 `/pw-complete 4667`, and leaves this TODO active (it tracks the parked estimator, work items 2-5
 and the third-flavour proposal, not just this fix).
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260914_thermo_cancel_import_race.md` before starting work.
+**Handoff (superseded)**: `ai/.tmp/handoff-20260914_thermo_cancel_import_race.md` described
+the review-then-merge plan; the 2026-09-15 entry below is what actually happened.
+
+### 2026-09-15 - "never fails alone" was one cold run; looped, the #4667 fix failed at iteration 87
+
+The nightly failed again on 09-14 (the PR was unmerged, so expected). Brendan asked whether
+"doesn't reproduce in isolation" meant a loop or a single run. The staging logs answered: one
+pass-0 run, 0 seconds. Looping the **fixed** test alone under pass-0 conditions (French,
+`vendors=off`, mzML) failed at iteration 87 of 300, then again at 96 - a different mode from the
+nightly's: all five tries ended with the *final* `Site20_Study9p.skyd` on disk while the loader
+reported `cancelled`. `/code-review max 4667` (finally run) independently named the same cause
+as its top finding.
+
+**Root cause, proven with probes:** `SingleFileLoadMonitor.IsCanceled` throttles the real check
+to once per 10 ms. Fully warm the entire mzML import runs inside that window: after the cancel was
+issued at the 50% report, 53 consecutive `IsCanceled` calls returned the stale `false` (real
+answer `true`), the last being `ChromCacheWriter`'s commit gate at 5.5 ms since the last real
+check. The cache is built straight to the final path for a single file with no partials, so it
+committed; `FinishLoadSynch` then saw a document with no results and posted `cancelled`, and
+nothing deletes a committed cache. Every one of the 88 passing iterations in that run was saved by
+the commit gate itself catching the cancel - the one check that must never be stale.
+
+**Fix (product, on the same branch):** `BackgroundLoader` counts document changes in
+`OnDocumentChanged` (after the container swapped the document, so a reader that sees the new count
+sees the new document); `SingleFileLoadMonitor.IsCanceled` re-checks for real whenever the count
+moved since its last check, keeping the 10 ms throttle only for the steady state. One volatile
+read on the hot path. Deterministic when the cancel is issued on the loader's thread (the test),
+and a 10 ms -> microseconds window for a UI cancel.
+
+**Fix (test):** comments made accurate (issuing the cancel cannot lose; observing it could),
+`cancelOccurred` re-checked after the cache wait (review finding: a late cancelled status made
+the new success-path assert a false failure), `DescribeLoadState` (now public on
+`ResultsTestDocumentContainer`, includes the loader trace) in every failure message, pending wait
+30 s since it now also covers opening a vendor file, `LastProgress` snapshotted, the two
+`FileEx.SafeDelete(docPath)` lines that deleted the `.sky` removed (the loop top clears caches).
+
+**Tooling (ai/):** `Run-Tests.ps1 -NoVendorReaders` passes `vendors=off`, so a pass-0 condition
+can be looped - pass 0 itself runs each test exactly once. Brendan's direction: put the flags in
+the script, not in a temp script or a direct `TestRunner.exe` call, so the next session finds them.
+
+**Verification (all with the fix, Release):** alone under pass-0 conditions 2,000/2,000 (2.5 min),
+12,000/12,000 (13 min 55 s) and 15,000/15,000 (17 min 51 s, a single run); the 5-test pass-0 combo that
+reproduced the nightly, passed; pass 2 with `.raw`, 20/20; `CodeInspection` passed. Before the
+fix the same isolated loop failed at iteration 87 and 96.
+
+**Master decision:** master carries the same latent throttle bug (a cancel in an import's last
+10 ms leaves a stale `.skyd`; harmless, and its nightly has never failed this test). Brendan
+and I agreed to leave the fix on the port branch, which is expected to become master within
+weeks. Fallback if that slips or master's nightly starts failing: cherry-pick `720b621adf`.
+Pushed as the second commit on #4667; PR title and body updated (no longer "test-only").
+
+**Lesson, for the method notes:** "does not reproduce in isolation" means a loop that ran for at
+least 15 minutes without failing, not a single run. A 0-second test loops thousands of times in
+that budget; the previous session had the recipe (`-Loop`) and did not use it.
 
 ## Method notes
 
+- **"Does not reproduce in isolation" means a loop, not a run.** At least 15 minutes of
+  iterations alone with no failure; a single cold run says nothing about a warm race. A
+  0-second test loops ~10,000 times in that budget. Pass 0 never loops, so loop its
+  conditions with `Run-Tests.ps1 -NoVendorReaders -Language fr -Loop N` instead.
 - **A real leak is near-perfectly linear.** R² ≈ 1.00 with a large t-statistic separates a leak from
   a filling cache from chance alignment. The 24-iteration gate cannot. `ai/.tmp/leak-tools/Shape-Leaks.ps1`
   does this and classifies `UNBOUNDED` / `DECAYING` / `BOUNDED` / `NOISE`.

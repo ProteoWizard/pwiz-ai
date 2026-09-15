@@ -35,6 +35,12 @@
 .PARAMETER Configuration
     Debug or Release (default: Debug)
 
+.PARAMETER NoVendorReaders
+    Run with vendor readers disabled (vendors=off), so tests take the same mzML/mzXML
+    path they take in pass 0. Combine with -Loop and -Language fr to soak a pass-0-only
+    failure: pass 0 never loops, so a test that fails there once per nightly has no other
+    way to be run warm, hundreds of times, in one process.
+
 .EXAMPLE
     .\Run-Tests.ps1 -TestName CodeInspection
     Run CodeInspection test in English (default)
@@ -58,6 +64,10 @@
 .EXAMPLE
     .\Run-Tests.ps1 -TestName Test.dll
     Run all tests in Test.dll (fast unit tests) in English
+
+.EXAMPLE
+    .\Run-Tests.ps1 -TestName ThermoCancelImportTest -Language fr -NoVendorReaders -Loop 500 -Configuration Release
+    Soak a pass-0 failure: 500 warm iterations under pass-0 conditions (French, no vendor readers)
 
 .EXAMPLE
     .\Run-Tests.ps1 -UseTestList
@@ -98,6 +108,12 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$EnableInternet = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$NoVendorReaders = $false,  # vendors=off: read data through the pwiz mzML/mzXML path
+                                        # instead of vendor readers, as pass 0 does. Pass 0 itself
+                                        # runs each test exactly once, so this is how a pass-0
+                                        # condition gets looped (-Loop N) to measure a failure rate.
 
     [Parameter(Mandatory=$false)]
     [switch]$TeamCityCleanup = $false,  # Use TeamCity-style cleanup (DesiredCleanupLevel=all) for local testing/debugging
@@ -663,6 +679,7 @@ Write-Host "  Language(s): $languageParam" -ForegroundColor Gray
 Write-Host "  UI Mode: $(if ($ShowUI) { 'On-screen (visible)' } else { 'Offscreen (hidden)' })" -ForegroundColor Gray
 Write-Host "  Screenshots: $(if ($TakeScreenshots) { 'Auto-capture (pause=-3)' } else { 'Off' })" -ForegroundColor Gray
 Write-Host "  Internet: $(if ($EnableInternet) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
+Write-Host "  Vendor readers: $(if ($NoVendorReaders) { 'Off (vendors=off, pass-0 data path)' } else { 'On' })" -ForegroundColor Gray
 Write-Host "  Loop: $(if ($Loop -le 1) { 'Once' } else { "$Loop iterations" })" -ForegroundColor Gray
 Write-Host "  Diagnostics: Handles=$(if ($ReportHandles) { 'on' } else { 'off' }), Heaps=$(if ($ReportHeaps) { 'on' } else { 'off' })" -ForegroundColor Gray
 Write-Host "  Coverage: $(if ($Coverage) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
@@ -853,6 +870,10 @@ try {
 
         if ($EnableInternet) {
             $runnerArgs += "internet=on"
+        }
+
+        if ($NoVendorReaders) {
+            $runnerArgs += "vendors=off"
         }
         
         if ($ReportHandles) {
