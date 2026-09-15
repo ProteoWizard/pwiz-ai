@@ -58,3 +58,23 @@ Round 2 - re-run of TEST-MethodEdit-round1.md against master bc2c55ef05.
   a checkbox panel — so there is no `ToolStripMenuItem` "B" to match. Selected y7 via
   `get_locations transition` + `set_selection`; tree, red y7 highlight, `2/75 tran` all
   match; purple b3/b5/b6/b7/b8 labels absent.
+- **Transition Settings (s-06, s-07, s-08)** — PASS all three, exact. Filter tab:
+  `set_form_value "Precursor charges" "2, 3"`, `get_form_value "Ion charges"` = 1,
+  `"Ion types" "y, b"`. Library tab: `"product ions" 5`. OK → 35/28/31/155; tree shows
+  the new charge-3 AVGIDLGTTYSCVAHFANDR first peptide and b5 (rank 4)/y5 (rank 5).
+- **GPM library (s-09)** — PASS, exact. Edit list → Add → Name → **Browse** (native
+  `Dialog:Open`, `yeast_cmp_20.hlf`) → OK → OK → `check_item "Yeast (GPM)"`. OK →
+  35/182/219/1058.
+- **Limit peptides per protein** — PASS. `uncheck_item "Yeast (Atlas)"`, `Rank peptides
+  by = Expect`, `Limit peptides per protein = true`. The caption-less count box still
+  rejects `set_form_value` by label ("Peptides") **and** by name (`textPeptideCount`):
+  "No control matching … supports the action 'set_value'". `perform_action set_value
+  type=TextBox value=3` worked (round-1 #6 persists). OK → 35/47/47/223; `Refine >
+  Remove Empty Proteins` → 19/47/47/223.
+- **Insert Protein List (s-10)** — DIVERGENCE (cosmetic). `set_selection /Insert`;
+  `Edit > Insert > Proteins`; **`send_key_stroke gridViewProteins Ctrl+V`** (new verb)
+  ran the grid's real paste handler: 17 rows with Description + Sequence resolved from
+  the background proteome. Accession/Preferred Name/Gene/Species populated from UniProt
+  (round-1 #3, stale tutorial text). The reference has the Sequence column widened via
+  header double-click/drag — no MCP verb for column sizing, so the live grid shows all
+  seven narrow columns. Insert → 36/58/58/278; Remove Empty Proteins → 24/58/58/278.
