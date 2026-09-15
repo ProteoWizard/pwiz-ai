@@ -1311,3 +1311,40 @@ diagnostics is imitated by deleting the JSON + HTML afterwards.
   phases, when no Osprey is running. Key on the launcher's parent PID instead.
 * **`-KeepRunDirs` is a STARTUP prune of ORPHANS**; a run still deletes its own directory.
   `-KeepOutput` is the flag that retains it.
+
+### 2026-09-14 (handoff): golden rebaseline in flight, signed off
+
+`mode1 (vs golden)` failed on all four datasets on the settled design, and the cause is the one
+constraint written into the morning's `FoldExperimentQFloors` doc and then lost in the re-cut:
+flooring at the source puts the floored experiment q in front of **protein FDR**, which used to
+see the raw value. The only place experiment q enters protein FDR is the detected-peptide gate
+(`ProteinFdr.cs:883`), so raising it shrinks parsimony's input.
+
+| dataset | protein groups only in golden | group q-values differing |
+|---|---|---|
+| Stellar | 236 | 1614 / 4245 (max 1.9e-3) |
+| StellarLibDecoy | 189 | - |
+| StellarGenDecoyEntrap | 239 | 362 / 4429 |
+| Astral | 527 | 717 / 8926 |
+
+**Brendan signed off on the direction**: accepting a protein whose best-scoring peptide is below
+the cut-off is the inverse of the case the run-level floor was created for, and a one-"detection"
+protein whose detection would not survive review is the worst case to be permissive about. The
+change is conservative - groups drop, never rise - which is the safe direction for an FDR
+correction. `regression.ps1 -Dataset All -CreateGolden` is running (PID 41884).
+
+Also recorded from the code review (all verified against the source, not taken on trust):
+`SealRunCutoff` indexed the dense array raw for an id whose capacity was never ensured - real but
+latent, not the "kills --model-diagnostics outright" the review claimed, since every mdiag run on
+this branch has completed; fixed with a bounds guard that preserves the deliberate
+sizing-under-NaN property. `PerFileScoringTask.cs` had lost its UTF-8 BOM on an earlier branch
+commit while keeping a `U+2014`; restored and de-dashed.
+
+Three open threads for tomorrow, all confirmed in code: mean-best-N never reaches protein q
+because the group score rolls up `entry.Score` rather than the experiment aggregate;
+`tps.BestQvalue <= qvalueGate` gates contribution but does not bound the resulting protein q; and
+the protein-compact stratum inherits the first pass's per-run PEPTIDE q gate
+(`FirstPassFdrTask.cs:3028` over `:1023`), which inflates with run count.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260914_osprey_expq_floor_at_source.md` before starting work.
