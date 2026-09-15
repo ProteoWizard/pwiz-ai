@@ -78,3 +78,28 @@ Round 2 - re-run of TEST-MethodEdit-round1.md against master bc2c55ef05.
   (round-1 #3, stale tutorial text). The reference has the Sequence column widened via
   header double-click/drag — no MCP verb for column sizing, so the live grid shows all
   seven narrow columns. Insert → 36/58/58/278; Remove Empty Proteins → 24/58/58/278.
+- **Insert Peptide List (s-11, s-12)** — PASS both. s-11: `set_selection
+  MoleculeGroup:/YAL003W` (first protein) + `Edit > Paste` → `peptides1` with 70
+  peptides (25/70/70/338); `perform_action rename_node "Primary Peptides"`; selected
+  TLTAQSMQNSTQSAPNK by locator → capture matches s-11 (spectrum, `1/25 prot 6/70 pep
+  6/70 prec 26/338 tran`). s-12 — **round-1 blocker #1 FIXED**: `Edit > Undo` ×2
+  (`get_undo_redo` confirms), `Edit > Insert > Peptides`, then **`send_key_stroke
+  gridViewPeptides Ctrl+V`** ran the form's real paste handler and resolved all 12
+  peptides to their proteins (YIL075C … YML057W) with descriptions — grid content
+  identical to s-12 (the reference form is shorter; the test resizes it). Insert →
+  35/70/70/338, peptides under their own proteins (inserted above YAL003W, where the
+  selection was).
+- **Simple Refinement (s-13, s-14)** — PASS both, exact. `Edit > Find` → "IPEE" → Find
+  Next → `Molecule:/YAL034W-A/IPEEYLDANVFR`; `get_graph_image` of Library Match is
+  pixel-identical to s-13 (y6 rank 1 / b4 rank 2). `Refine > Advanced` → `Min
+  transitions per precursor = 5` → 64 peptides; status bar `29/35 prot 50/64 pep 50/64
+  prec 246/320 tran` = s-14 exactly.
+- **Peptide Uniqueness (s-15)** — PASS (content). Last protein YDL245C → `Edit > Unique
+  Peptides`: SASWVPPSR × 5 other proteins, same as the reference. Divergence: column
+  headers show UniProt-resolved `P39004 / HXT7_YEAST / HXT7 YDR342C…` and Details shows
+  resolved metadata, where the reference has bare `YDR342C…` and "Searched:
+  Uniprot:S000002404" (internet-dependent metadata again). Cancel; **`send_key_stroke
+  SequenceTree Delete` did nothing** (Delete is a menu shortcut, not a control handler)
+  → `Edit > Delete` removed YDL245C → 34/63/63/315. New last protein YDL244W → Unique
+  Peptides shows GSGITEDFQSLK in 4 THI5/11/12/13 proteins (tutorial: "in this case 4").
+  Cancel.
