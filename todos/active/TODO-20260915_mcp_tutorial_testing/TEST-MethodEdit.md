@@ -103,3 +103,43 @@ Round 2 - re-run of TEST-MethodEdit-round1.md against master bc2c55ef05.
   → `Edit > Delete` removed YDL245C → 34/63/63/315. New last protein YDL244W → Unique
   Peptides shows GSGITEDFQSLK in 4 THI5/11/12/13 proteins (tutorial: "in this case 4").
   Cancel.
+- **Direct Document Editing — auto-completion (s-16, s-17, s-18)** — s-16/s-17
+  **BLOCKED** (popup not reproducible), s-18 PASS on content.
+  - Probe 1: Skyline brought to the foreground (Win32 `SetForegroundWindow`), then
+    `send_text SequenceTree "ybl087"` → the edit box showed **"bl087y"** (out of
+    order, exactly as the verb's doc warns), no completion popup; `send_key_stroke
+    SequenceTree Esc` did nothing; `perform_action send_key_stroke type=TextBox Esc`
+    cancelled the edit.
+  - Probe 2: `send_text SequenceTree "y"` (begins the edit) then `perform_action
+    send_text type=TextBox "bl087"`. Two `StatementCompletionForm`s opened and
+    `get_form_image` of one showed a single **YBL087C** row (with UniProt names
+    `P0CX41 RL23A_YEAST RPL23A…` prepended, wider than the reference's plain
+    `YBL087C  RPL23A SGDID…`). But `get_controls` on the Targets form listed **six
+    nameless TextBoxes**: each forwarded character reached the tree (not the edit
+    box) and `SequenceTree.BeginEditNode` created a **new** TextBox per keystroke,
+    orphaning the previous ones. `type=TextBox` addressed the first orphan, so
+    `Enter` committed the visible box's "y" → "Added peptide group y". Undone.
+    Five orphan TextBoxes and one orphan completion popup remained;
+    `dismiss_with_cancel_button` closed the popup, but an empty white edit box is
+    still painted at the blank node (cosmetic corruption for the rest of the run).
+  - Document-equivalent path that works: `set_selection /Insert` + `perform_action
+    rename_node` with the completed text — `"YBL087C"` → "Added peptide group
+    YBL087C from background proteome" (3 peptides); `"YDR385W"`; and
+    `"IQGPNYVPGK::YDR385W"` (the `::` PEPTIDE_SEQUENCE_SEPARATOR the completion
+    itself emits) → "Added peptides to peptide group YDR385W". 36/70/70/350.
+  - `File > Import > Window Layout` → `p21.view`: the Targets pane visibly widened
+    (0.28 → 0.38 of the window) — definitive proof the import applies. s-18 (tree
+    crop): YBL087C (ISLGLP… rank 2, ECADLWPR rank 1, VASNSGVVV rank 3) and YDR385W
+    (4 peptides ending AYLPVNESFGFTGELR) identical to the reference.
+- **Pop-up Pick-Lists (s-19, s-20)** — PASS both (round-1 #7 pick-list half FIXED).
+  The tree's node menu is enumerable (`get_children` on `{SequenceTree, ContextMenu}`
+  lists Cut/Copy/Paste/Delete/Expand Selection/**Pick Children**/…).
+  `click_control_menu_item SequenceTree "Pick Children"` opened `PopupPickList`; its
+  toolbar enumerates as OK/Cancel/Filter/Auto-select/Find; `click_control_menu_item
+  ToolStrip "Filter"` = the funnel; `get_options`/`check_item`/`uncheck_item` on the
+  CheckedListBox work; `Find (Ctrl + F)` shows the search TextBox and `send_text
+  TextBox "b ++"` filters. s-19: checked `K.VMPAIVVR.Q [73, 80] (rank 6)` → capture
+  identical to the reference except the row highlight. OK → **36/71/71/355** (the
+  tutorial's 355). s-20: precursor `light+++` → unchecked y9/y6, Find "b ++", checked
+  b5++/b7++ → capture identical except the row highlight; OK → transitions
+  b5+/b9+/b10+/b5++/b7++, still 355.
