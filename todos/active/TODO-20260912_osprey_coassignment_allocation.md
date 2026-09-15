@@ -1397,5 +1397,52 @@ Stage 5 at 446 files peaks above 30 GB and the gate alone took free RAM from 47.
 this 63.7 GB box. Overlapping risked an OOM five hours into a thirteen-hour job to save 56
 minutes.
 
+### 2026-09-15: Stage 7 rebuilds a retained set Stage 5 already wrote (filed on #4650)
+
+Found while reading the 446-run Stage 5-7 profile. **Not folded into #4662** - that PR is green
+and pushed and should land; this is separate work. Full write-up with the numbers is on
+[#4650](https://github.com/ProteoWizard/pwiz/issues/4650).
+
+`SecondPassFdrTask.cs:996` rebuilds the retained base_id set by walking all 446 per-file pools
+(36,308,041 entries) to read one `uint` each, when Stage 5 has already written
+`out.1st-pass.retained_base_ids.bin` - 2,502,512 bytes = 625,620 x 4 + a 32-byte header - and
+`ScoringTaskShared.ReadRetainedBaseIds` already reads it from four call sites in three other
+tasks. Tonight's run proves the redundancy: both stages log `625620 base_ids retained`, and
+Stage 7 releases `0 of 6175389` because Stage 5 already released 4,924,513.
+
+Cost: managed 6.4 -> 36.2 GB across the first 22% of that loop with NO collection, then one GC
+to 5.4 GB; live is 5.15 GB, so the peak is ~86% garbage. Private 39.80 GB against the run's
+39.94 GB max - this loop ties Stage 5 as the peak-setting phase, and unlike Stage 5's its cost
+is linear in file count.
+
+**It belongs to #4650 rather than being a bare memory fix** (Brendan's framing): the sidecar is
+readable BEFORE the library load, so a `--task SecondPassFDR` leg can know its retained set up
+front and hand it to `RetainFragmentsFor` - the hook #4650 notes nothing assigns - instead of
+loading 6.18 M library spectra and immediately dropping 4.92 M of them.
+
+**Design decision, so it is not re-litigated**: replace the walk with
+`ReadRetainedBaseIdsOrFail` and DELETE the pool-walk overload (its only other reference is a
+unit test). **Fail loudly when the sidecar is absent - no fallback.** Pre-release, so no
+back-compat burden; absence means Stage 5 corruption and the user should re-run at least
+`--task FirstPassFDR`. A recovery path is code needing tests for a case that should not happen.
+The same decision is already documented one function away, on `ReadRetainedBaseIds`, for the
+`reconciliation.json` sibling case - this call site was missed.
+
+Also corrected here: **#4664 section 1 is largely DONE on this branch**, contrary to what the
+earlier entry said. `247e351940` replaced the composite `CoAssignmentRow.Key` string with a
+`PrecursorKey` struct (master still has `public readonly string Key;`), and the "O(runs)"
+retained set is not O(runs) - `_fileRows` is cleared per file and `_byPrecursor` holds one
+4-field struct per DISTINCT precursor. The earlier claim came from diffing `HEAD` (uncommitted
+only) instead of `master...HEAD`. Still open in section 1: Parquet.Net's own per-row-group
+arrays in the apex-RT join.
+
+**Scaling, measured rather than extrapolated.** Distinct passing base_ids on nested subsets of
+the same cohort: 85-86 files -> ~382,700 mean; 257 -> 501,247; 446 -> 625,620. That is N^0.25 to
+N^0.40, i.e. roughly a cube root, and it must saturate at the library's 6,175,389 entries.
+Projecting from the nearest pair: **~864,000 at 1000 files and ~1,016,000 at 1500** - +62% of
+distinct state for 3.4x the runs. What grows linearly is rows STREAMED (1.34 B at 446), which is
+wall time. Retire the earlier "6.7 billion entries at 1500" figure: it extrapolated a
+materialisation `FirstPassSurvivorLoader` already removed.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260915_osprey_night_gate_green_bed_running.md` before starting work.
