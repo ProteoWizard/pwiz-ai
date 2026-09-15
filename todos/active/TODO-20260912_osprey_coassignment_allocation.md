@@ -1346,5 +1346,56 @@ because the group score rolls up `entry.Score` rather than the experiment aggreg
 the protein-compact stratum inherits the first pass's per-run PEPTIDE q gate
 (`FirstPassFdrTask.cs:3028` over `:1023`), which inflates with run count.
 
+### 2026-09-14/15 (night session): gate green, committed, pushed; 446-file bed running
+
+**Local gate GREEN against the recaptured goldens.** `regression-parallel.ps1 -Dataset All`:
+**70 PASS / 0 FAIL / 0 SKIP**, exit 0, 55m31s. The pre-rebaseline run of the same gate read
+66 PASS / 8 FAIL, and the clean total is 70 rather than 74 because each of the 4 failing legs
+was tallied twice - worth knowing before writing another count assertion against this driver.
+Debug gate first: 594/594 tests, zero inspection warnings.
+
+Committed code and goldens together as `1fff978b2f` and pushed to #4662. The PR description
+now carries the floors change, the protein-FDR consequence table and the sign-off.
+
+**`Fixes #4664` was NOT written, deliberately.** The handoff said the PR would gain it. #4664
+is a five-part memory-bounding goal whose acceptance is a 500-file and a 1000-file
+`--task ModelDiagnostics` regeneration on 64 GB. This work is **section 2 only**. Section 1 -
+the co-assignment apex-RT join, 13.0 -> 30.8 GB, the largest remaining climb - is untouched:
+the branch's only edit to `ModelDiagnosticsData.CoAssignment.cs` is the `SealRunCutoff` bounds
+guard, and the redundant `CoAssignmentRow.Key` string the issue names is still there. Sections
+3-5 are #4577 / #4665 / #4663. The PR says **`Addresses #4664`**, which does not auto-close.
+
+**The open question #4664 recorded as blocking section 2 is answered, and answered by
+measurement.** The reverted attempt took peptide sequences from the library, and `libraryById`
+is not guaranteed to hold decoy entry ids. `ExperimentQFloors.ObserveIdentities` takes them
+from the survivor walk instead, and the comment records the check: resolving through
+`LibraryById` differed on 166,680 of 333,404 Stellar experiment records, every one a decoy,
+entry floors agreeing exactly. Only a generated-decoy leg can expose this.
+
+**Checked and clean:** the split-source design folds entry floors from the per-file records but
+peptide identities from the survivor walk, where the old `ReclampExperimentQToBestRun` folded
+both from one walk - so the two could in principle disagree in coverage and silently
+under-floor. The goldens show the `.blib` q-values byte-identical to the old re-clamp on all
+four datasets, which is exactly the comparison that would redden if they did. No finding.
+
+**TeamCity #250 is STALE and the PR now says so.** It was SUCCESS (70 PASS / 0 FAIL / 0 SKIP,
+1:01:47) but it built `1276737f`, **15 commits behind** HEAD - it predates the floors work, the
+v7 apex_rt sidecar and the rebaseline. A new Perf/Regression run on `pull/4662` is needed and
+is the one thing this session could not do alone (ask-before-trigger).
+
+**Run-Chs.ps1 had a real defect, now fixed and pushed to pwiz-ai (`a4da166`).** Unquoted
+`-Plates 0059,0060,...` inside a .ps1 is parsed by PowerShell as INTEGERS, so the leading zeros
+were gone before `[string[]]` saw them and the include pattern composed to `us(59|60|...)`,
+matching none of the 446 files named `us0059`. The runner `exit`s the host on no match, which
+killed the launcher sequencing it behind the gate - so the overnight bed did not start on the
+first attempt. Numeric plates are now re-padded to 4 digits; `-WhatIf` re-verified 446 of 446.
+The handoff's claim that `-WhatIf` had verified 446/446 cannot have been made against this
+invocation form.
+
+**The gate and the bed were sequenced, not overlapped**, against the handoff's suggestion:
+Stage 5 at 446 files peaks above 30 GB and the gate alone took free RAM from 47.3 to 24.3 GB on
+this 63.7 GB box. Overlapping risked an OOM five hours into a thirteen-hour job to save 56
+minutes.
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260914_osprey_expq_floor_at_source.md` before starting work.
+`ai/.tmp/handoff-20260915_osprey_night_gate_green_bed_running.md` before starting work.
