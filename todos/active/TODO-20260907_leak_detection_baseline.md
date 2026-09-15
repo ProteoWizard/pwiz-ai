@@ -961,6 +961,20 @@ Pushed as the second commit on #4667; PR title and body updated (no longer "test
 least 15 minutes without failing, not a single run. A 0-second test loops thousands of times in
 that budget; the previous session had the recipe (`-Loop`) and did not use it.
 
+### 2026-09-15 - #4667 merged into the port branch; this TODO stays active
+
+PR #4667 merged as `f2b35a60d9` into `Skyline/work/20260612_net8_port`, 7/7 checks green (the
+one red `Skyline Windows .NET` run was `MacCoss TeamCity Agent 1` missing VC++ runtime DLLs in
+the `BlibBuild`/`MsConvert`/`BullseyeSharp` output - agent state, green on retrigger). Shipped:
+the cancel-from-progress-report test fix, the `SingleFileLoadMonitor` document-change re-check
+with `BackgroundLoader.DocumentChangeCount`, `DescribeLoadState` in the test's failure messages,
+and `Run-Tests.ps1 -NoVendorReaders` on the ai side. Master carries the same latent throttle
+bug; the fix arrives there with the port (cherry-pick `f2b35a60d9` if that slips).
+
+**Still active**: the parked estimator (`Skyline/work/20260911_leak_estimator`), work items 2-5,
+the third-nightly-flavour proposal, and the wiff2 shared-api question now recorded in
+`TODO-20260915_wiff2_concurrency_tests.md` (the refcounted stash passes #4670's guard).
+
 ## Method notes
 
 - **"Does not reproduce in isolation" means a loop, not a run.** At least 15 minutes of
