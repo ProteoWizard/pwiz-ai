@@ -158,7 +158,7 @@ daily builds through ClickOnce URLs.
 - [ ] `build.bat --installer` step + `tcbuild.bat` artifact (call `pwiz-sharp/installer/Ensure-InnoSetup.ps1` first, warn and skip when ISCC is missing, like pwiz-sharp)
 - [ ] Installer test (silent per-user install, SkylineCmd --version, uninstall, association hand-back) on the pattern of `pwiz-sharp/pwiz/test/Installer.Tests`
 - [x] Version manifest format; `UpgradeManager` replacement (manifest, download, verify, silent Inno launch, exit) - 2026-09-14, `Util/InstallerDeployment.cs`, see "Update check as built" below. Nick tests manually; no automated test by request
-- [ ] Server location for the manifest + installers (placeholder constants in `InstallerDeployment.CHANNELS`); signing so the download can also be checked for a signature
+- [ ] Final server location for the manifest + installers (`Settings.InstallUrl`, now Nick's test folder); signing so the download can also be checked for a signature
 - [ ] LaunchBatch / SkylineNightly / SkylineTester off the ClickOnce URLs
 - [ ] Signing + TeamCity artifact wiring
 - [ ] End-to-end: per-user install over a ClickOnce 26.1 (settings and tools inherited); per-machine install with admin-seeded config and tools reaching a non-admin user; upgrade through the in-app check
@@ -212,9 +212,12 @@ under `UpdateCheckAtStartup`, the Help > Check for Updates item (visible again w
 - **Deployed?** The exe folder equals the `InstallLocation` of one of our two Inno Uninstall keys
   (HKCU = per-user, HKLM = per-machine, 64-bit view). Developer bins are never deployed.
 - **Manifest** `<Product>.json`, written by `installer/build.ps1` beside the installers:
-  `{ "version", "url" (relative to the manifest or absolute), "size", "sha256" }`. Channel URL
-  from the matching AppId; placeholders `https://skyline.ms/installer/Skyline[-daily].json` until
-  the server is chosen. `SKYLINE_UPDATE_MANIFEST_URL` overrides it for testing.
+  `{ "version", "url" (relative to the manifest or absolute), "size", "sha256" }`. Its folder is
+  the application-scoped setting `Settings.InstallUrl` (Nick's choice, 2026-09-14), default
+  `https://proteome.gs.washington.edu/~nicksh/InstallTest/` for now; the product name from the
+  matching AppId picks `Skyline.json` or `Skyline-daily.json` under it. Application-scoped means
+  an installed copy is redirected by editing `<Product>.dll.config` beside the exe; no env var.
+  To publish: copy `<Product>.json` and the bundled `<Product>-Setup-<ver>.exe` into that folder.
 - **Check**: manifest version > assembly version. **Update**: download to `%TEMP%` through
   `HttpClientWithProgress` (progress and cancel flow through `UpgradeManager`'s LongWaitDlg),
   verify size + SHA-256. **Restart**: run the installer with
@@ -222,9 +225,9 @@ under `UpdateCheckAtStartup`, the Help > Check for Updates item (visible again w
   `/ALLUSERS` (runas verb, one UAC prompt), then `Application.Exit()`. Setup.iss has a `[Run]`
   entry gated on `{param:RELAUNCH}` with `runasoriginaluser` that starts Skyline again.
 - **Fallback link** on failure opens the installer URL in the browser.
-- Manual test recipe: install a build, serve `installer/build/` over HTTP (e.g. a Python
-  `http.server`), edit the served `Skyline-daily.json` to a higher version, set
-  `SKYLINE_UPDATE_MANIFEST_URL` to its URL and start the installed Skyline.
+- Manual test recipe: install a build, upload `Skyline-daily.json` + the bundled installer to the
+  InstallUrl folder, edit the uploaded manifest's `version` upward (leave url/size/sha256), and
+  start the installed Skyline; it downloads the same installer and reinstalls over itself.
 
 ## Open questions
 
