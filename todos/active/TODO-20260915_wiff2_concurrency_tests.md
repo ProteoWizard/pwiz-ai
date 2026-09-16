@@ -7,7 +7,8 @@
 - **Module**: `pwiz` (pwiz-sharp vendor reader tests; nothing under `pwiz_tools/Skyline`)
 - **Created**: 2026-09-15
 - **Status**: PR open, awaiting CI and review
-- **GitHub Issue**: none. Related filed issues: #4638 (retry latch blames AddFramingZeros for
+- **GitHub Issue**: [#4674](https://github.com/ProteoWizard/pwiz/issues/4674) - the leak fix itself, filed
+  2026-09-15 and assigned to Matt (the wiff2 reader is his). Related filed issues: #4638 (retry latch blames AddFramingZeros for
   any SDK failure), #4639 (profile data stamped MS_centroid_spectrum after the centroid latch
   trips) - both pre-existing wiff2 defects found during the same investigation, not fixed here
 - **PR**: [#4670](https://github.com/ProteoWizard/pwiz/pull/4670) into `Skyline/work/20260612_net8_port`
@@ -119,10 +120,8 @@ Windows check the fixture IS found so the tests actually execute somewhere.
 - [x] PR #4670 opened
 - [ ] Watch the Linux and Windows .NET checks (the no-vendor build passes locally; TeamCity
       confirms the fixture is found on the Windows agent so the tests execute, not Inconclusive)
-- [ ] Leave the leak itself alone. If a session wants to attempt the shared-api fix again, the
-      ownership arbitration it needs (per-path reference counting so `CloseFile` runs only when
-      the last reader on that path closes, or one reader per FILE as in cpp) is the design
-      question, and these tests are its acceptance test
+- [x] Leave the leak itself alone here: handed to Matt as #4674 with the refcounted fix, the
+      measurements, and the multi-sample gap; #4670's churn test is its acceptance test
 
 ## Progress Log
 
@@ -185,3 +184,25 @@ without asking"); whether the stash also removes the leak in pass 1 (it should -
 
 PR #4670 opened into the port branch, label `pwiz`. `ai/scripts/PwizSharp/Build-PwizSharp.ps1`
 gained `-NoVendorLicenses` for the Linux-shaped build check.
+
+### 2026-09-15 (evening) - the refcounted fix measured; handed to Matt as #4674
+
+Brendan: the wiff2 reader is Matt's, and the port has only *hidden* the leak for its baseline.
+Measured before filing, all on the stash's refcounted shared api vs current code:
+
+- **Leak**: `TestInstrumentInfo` pass 1 with the mzML fallback disabled. Current: LEAKED
+  34.4 KB/run, linear over 9,951 iterations (22.65 -> 364.8 MB - TestRunner's leak hanger ran
+  it for 3 h; see the method note). Refcounted: flat at 22.77 MB, no leak.
+- **Two different files concurrently**, 2 readers each, churn alternating both paths:
+  refcount 4/4 green, bare shared api 3/3 red.
+- **Three threads open/read/dispose on one path**, no long-lived reader (the stash's
+  increment-at-end-of-constructor window): refcount 5/5 green, bare 2/3 red - one failure
+  as `cycles 0` with a spectrum, silently.
+- **Skyline's four wiff2 tests**, pass 2 x3: green.
+- **Not measurable here: multiple samples of one multi-sample `.wiff2`.** No such fixture on
+  this machine or in test data (`OnyxTOFMS.wiff2` in `SmallWiff.zip` is legacy format). This is
+  the case Brendan recalls the 09-03 session hitting; the record does not name it. Stated as the
+  open gap in #4674.
+
+Also checked: Matt's #4640 is the `.wiff` (Clearcore2) side and does not touch `Wiff2File.cs`;
+#4670 merged onto it locally is 10/10. Replied to his comment on #4670 accordingly.

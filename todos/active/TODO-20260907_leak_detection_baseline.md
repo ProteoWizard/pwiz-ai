@@ -987,6 +987,11 @@ the third-nightly-flavour proposal, and the wiff2 shared-api question now record
 - **Verify the staged binary before trusting any measurement.** Stale binaries produced four wrong
   conclusions in one session. `TestRunner.exe` run directly out of `bin\staging\Release` does not pick
   up a build — only `Run-Tests.ps1` stages.
+- **A LEAKED test in pass 1 runs forever outside TeamCity.** TestRunner's leak hanger
+  (`Program.cs`, `runTestForever = true` after the LEAKED line) keeps re-running the test so a
+  developer can attach dotMemory. `Run-Tests.ps1 -Pass 1 -Quality` on a leaking test therefore
+  never exits; watch for `!!! <test> LEAKED` and stop that PID. Cost me 3 h and 9,951 iterations
+  on 2026-09-15 (which did at least confirm the wiff2 leak at 34.4 KB/run, dead linear).
 - **Never run two test processes at once** — they contend and corrupt each other's memory numbers.
   Now enforced: `Run-Tests.ps1` refuses to start a memory-measuring run (`-Quality`, `-Pass 1`,
   `-Loop > 1`, `-MemoryProfile`) while any `TestRunner` or `SkylineTester` is alive **anywhere on the

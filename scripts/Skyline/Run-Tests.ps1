@@ -124,7 +124,10 @@ param(
                      # outlast the run and stop it when done.
 
     [Parameter(Mandatory=$false)]
-    [switch]$Quality = $false,  # SkylineTester's Quality tab: passes 0, 1 and 2, with the pass-1 leak check
+    [switch]$Quality = $false,  # SkylineTester's Quality tab: passes 0, 1 and 2, with the pass-1 leak check.
+                                # A test that pass 1 reports as LEAKED then runs FOREVER outside TeamCity
+                                # (TestRunner's leak hanger, for attaching dotMemory) - watch for the
+                                # "!!! ... LEAKED" line and stop the process; it will not exit on its own.
 
     [Parameter(Mandatory=$false)]
     [switch]$ReportHandles = $false,  # Enable handle count diagnostics
