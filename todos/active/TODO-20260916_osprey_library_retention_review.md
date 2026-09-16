@@ -199,10 +199,14 @@ reconciled parquet to read one `uint` per entry. Deleting that pass removes the 
 - [x] Replace the Stage 7 pool walk with `ReadRetainedBaseIdsOrFail`
 - [x] Delete the `BuildRetainedBaseIds(IEnumerable<KeyValuePair<...>>)` overload
 - [x] Extend the `InvalidDataException` message with the re-run remedy
-- [ ] ~~Wire `RetainFragmentsFor` on the `--task SecondPassFDR` leg~~ - NOT done, and not an
-      omission: it would trade the throwing released-spectrum tripwire for a silent
-      `Array.Empty`, and three other things need settling with it. See review question 4;
-      drafted as a follow-up issue.
+- [x] Fix the load-time skip to produce the RELEASED state, both load arms, with a
+      red-checked equivalence test (Brendan's call - it was written wrong, not merely
+      unwired)
+- [ ] ~~ASSIGN `RetainFragmentsFor` at the library load~~ - still deferred, now for two
+      concrete blockers rather than four: `DecoyGenerator`'s fragment-count gate on the
+      `--task PerFileRescore` leg, and mode 6's `-RequireFreed` needing a skipped-at-load
+      fact once nothing is allocated
+- [x] Triage `/code-review max` - 15 findings, 3 confirmed defects in this change, fixed
 - [x] Add the summary-equality assertion to `regression.ps1` mode 6
 - [x] Document `retained_base_ids.bin` in `docs/14-intermediate-files.md` (it was in neither table)
 - [x] Build + inspection + tests (`Build-Osprey.ps1 -RunInspection -RunTests`) - 595 pass, zero warnings
@@ -304,3 +308,120 @@ Gates: `Build-Osprey.ps1 -RunTests -RunInspection` green (595 tests, zero warnin
 `RetainFragmentsFor` would trade the throwing `RELEASED_SPECTRUM` tripwire for a silent
 `Array.Empty`, and three other things need settling with it. Drafted as a follow-up issue
 rather than left as a declared-and-unassigned hook.
+
+### 2026-09-16 - Q4 reopened on Brendan's call: the load-time skip was written wrong
+
+Brendan's direction, which changed the answer to review question 4: *"The load time skip
+should be changed to set to released state ... The goal is a direct swap for load all and
+then release for simply loading only the spectra needed. Therefore, the load of only spectra
+needed should produce exactly the same state as load and release."*
+
+That is right, and it turns the blocker into a defect with a fix rather than a reason to
+defer. **`RetainFragmentsFor` has no other use** - two references, a declaration and a
+pass-through, nothing assigns it - so the behaviour could be corrected with no risk to
+anything in production.
+
+* `LibraryCache.LoadCache` now calls `entry.ReleaseSpectrum()` on an entry skipped by the
+  retain set, instead of leaving it holding `Array.Empty`. `OmitFragments` is deliberately
+  NOT included: that arm has no load-and-release counterpart to match, since
+  `LibraryFragmentRelease` refuses the `StopAfterStage5` leg outright.
+* `LibraryLoader`'s SOURCE-parse arm honoured the retain set **not at all** - it read
+  `OmitFragments` only. The same options object therefore produced a lean library from a
+  cache and a fat one from source, i.e. the presence of a `.libcache` decided which
+  expressions throw. It now releases after the cache save, reaching the same state.
+* `IOTest.TestLibraryCacheRetainMatchesRelease` pins the equivalence entry by entry:
+  identity fields, `IsSpectrumReleased`, the fragment arrays on retained entries, and an
+  explicit assertion that a skipped spectrum THROWS rather than reading as empty (equality
+  alone would also hold if both sides had quietly become readable-empty).
+
+**Red-checked, not just green.** Disabling the single `ReleaseSpectrum()` line fails the new
+test at `entry 2 (id 11)`; restoring it passes. 596 tests, inspection zero warnings.
+
+Still NOT wired at `PerFileScoringTask.LoadLibraryAndDecoys`. The hook is now correct and
+tested, but assigning it is a separate change with two live blockers: `DecoyGenerator`'s
+fragment-count gate excludes a 0-fragment target and is skipped only under `omitFragments`,
+so `--task PerFileRescore` (which takes the same disk-load path and DOES generate decoys)
+would be wrong; and mode 6's `-RequireFreed` on the HPC SecondPassFDR node legitimately goes
+to 0 once nothing is allocated, which needs a new log fact rather than a loosened assertion.
+
+### 2026-09-16 - /code-review max: three confirmed defects in this branch's own change
+
+15 findings at the cap. Triaged, verified against the code, fixed or dropped - none filed.
+
+**Confirmed and fixed:**
+
+1. **`ReadRetainedBaseIdsOrFail` was unconditional.** The summary is written only when
+   `Reconciliation.Enabled` (the `PlanStage6` gate) AND an output blib names it. Neither
+   term is in `RunsOnThisLeg`, so a straight-through run with reconciliation off would now
+   ABORT at the last stage where it previously completed, after all the scoring work. Fixed
+   with `LibraryFragmentRelease.SummaryCanExist`, checked at the Stage 7 call site - NOT
+   folded into `LegAdmitsRelease`, which would also switch off Stage 5's release, the one
+   that needs no file. Costs nothing: a leg reaching Stage 7 without a summary is
+   straight-through by construction (`--task FirstPassFDR` is refused outright when
+   reconciliation is off), and there Stage 5 already released the same set in process.
+2. **A zero-count summary read back as success.** `RetainedBaseIdSidecar.Read` returns an
+   empty `HashSet` rather than null for a zero count, and `ReleaseFragments` has no
+   empty-set guard - so an empty summary releases the spectra of the ENTIRE library, and the
+   blib write then trips the tripwire. Reachable from disk state, not only from a bug: this
+   class already documents a re-run-over-a-completed-directory shape that "rewrites both
+   boundary sidecars and the retained base_id summary as empty, exit 0". Empty is now a
+   failure in the `OrFail` reader, which covers all three of its callers.
+3. **The remedy in the recorded design call does not work.** The issue asked for the message
+   to say "re-run at least `--task FirstPassFDR`". It cannot: that task declares the summary
+   in neither `Outputs` nor its `ValidityKey` - deliberate, with its own rationale, so that
+   `--task ModelDiagnostics` on a finished cohort does not re-run Stage 1-5 for hours - and
+   `FirstPassFdrTask.cs:947-950` says so outright: *"re-run FirstPassFDR over a complete
+   analysis reports its outputs valid and writes nothing."* An operator following it would
+   loop forever. The message now names the `<output>.FirstPassFDR.osprey.task` stamp
+   deletion that actually forces the phase to re-run.
+
+**Also fixed:** the summary declared in `SecondPassFdrTask.Inputs` (an HPC orchestrator
+building a node's shipping list from `Inputs` would omit it and fail at the top of Stage 7);
+the shared throw text no longer asserting the streamed join's consequence for both callers;
+two surviving copies of the retracted gap-fill claim (`FirstPassFdrTask`'s own release doc
+and the unit test's); the `CanStreamStage7Join` comments that cited the fragment release as
+the concrete first-streamer, which it no longer is; `Regression/README.md`'s mode-6 contract;
+and the doc row's over-promise ("FATAL at every one of them" is false for
+`PerFileRescoreTask.BuildPerRunHydrate`, which takes the null-returning reader).
+
+**Gate hardening, all from review findings:**
+
+* The oracle was armed only on the two legs where the release is a guaranteed no-op, and
+  silently absent from the HPC SecondPassFDR node - the leg where the 11 minutes / 41.5 GB
+  was actually measured - because an omitted hashtable key binds to `''` rather than
+  erroring. Now armed on every leg that runs Stage 7's release, taking the producer count
+  from `phase2.log` where the producer is a different process.
+* It failed OPEN when the scope was missing (`elseif ($scoped.Count -gt 0)`): delete Stage
+  7's release and the check simply was not reached. Missing scope is now its own issue.
+* `Select-String -Path` globs, unlike every other file access in the function; a run dir
+  holding a PowerShell metacharacter would have reported a harness quoting bug as a C#
+  wording drift. Now `-LiteralPath`.
+* The equality alone was nearly vacuous - Stage 7 logs the `Count` of the set it just read
+  from the file just written. Two more assertions now carry the real claims: Stage 5's
+  retained count must equal the summary's (the same-set claim the whole change rests on),
+  and Stage 7 must release 0 wherever Stage 5 released in the same process (the issue's own
+  quoted oracle). Not asserted on the HPC node, where the release is real.
+* Both gate regexes accepted separator-free counts only, so the log-readability sprint's
+  `{0:N0}` would have reddened mode 6 blaming C# drift. Both now take `[\d,]+`.
+* Mode 6's PASS line reports how many legs the oracle actually evaluated on, and a run where
+  it evaluated on none is a failure. A gate that cannot say it asserted something is how an
+  oracle wired to the wrong key goes unnoticed.
+
+**Dropped, with the reason:** the finding that the rewritten log line should adopt the
+decided user-facing vocabulary (`{0:N0}`, "precursor candidates" for "base_id(s)", no
+"entries", no "fold"). Applying it to this one line while its Stage 5 sibling keeps the old
+wording is worse than applying it to neither, and it would move the gate token a second
+time. The actionable half - the regexes that would have collided with `{0:N0}` - is fixed
+above, so the sprint can do the whole vocabulary in one pass without a collision.
+
+### Observed and fixed on Brendan's call
+
+`docs/14-intermediate-files.md:36` said the protein-compact stratum rides in
+`.1st-pass.model.json`, contradicting `00-pipeline-architecture.md`. Brendan: *"Likely
+00-pipeline is correct. It is the newer document. I think the split you are describing
+happened when it was discovered that 50% of the original file was highly redundant
+experiment-wide values."* Confirmed in `FirstPassModelIO.cs:56-64` - the stratum moved to
+its own file because a different PHASE produces it, and writing one file meant holding the
+model in memory for the whole first pass, which made a run killed in the score passes
+unrecoverable. Doc 14 corrected, and `.1st-pass.stratum.json` given its own row: it was
+missing from both of that document's tables, as was the retained-base_id summary.
