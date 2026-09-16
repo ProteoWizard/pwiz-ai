@@ -1444,5 +1444,54 @@ distinct state for 3.4x the runs. What grows linearly is rows STREAMED (1.34 B a
 wall time. Retire the earlier "6.7 billion entries at 1500" figure: it extrapolated a
 materialisation `FirstPassSurvivorLoader` already removed.
 
+### 2026-09-15: diagnostics regeneration validated at 446 files - all four tests PASS
+
+Bed: `chs-446files-libdecoy-r1.0-protein-compactfloors4662` (the 15 h 16 m run, exit 0).
+Oracle banked at `_oracle-floors4662` with sha256 recorded before any test ran.
+
+| test | invocation | result |
+|---|---|---|
+| 1 | same command, same directory | **PASS** - all four tasks `:skipping (outputs valid)` in 1.675 s, and every product mtime unchanged (exit 0 alone would not have shown that). SecondPassFDR skipped, which is the one that entered on an earlier attempt |
+| 2 | `--task ModelDiagnostics`, diagnostics absent | **PASS** - 1 h 33 m (pass-1 fold 3,938.0 s + pass-2 fold 1,670.8 s). HTML payload MATCH vs oracle; 2nd-pass JSON byte-identical; 1st-pass JSON differs only in `model` / `featureCount` / `modelComposite` / `featureHistEdges` |
+| 3 | `--task FirstPassFDR`, diagnostics absent | **PASS** - 57 m 48 s, only that task ran, pass-1-only HTML (388,668 B). Its 1st-pass JSON differs from test 2's by **one leaf, `generatedUtc`** |
+| 4 | `--task SecondPassFDR` on top of test 3 | **PASS** - 887.7 s. 2nd-pass JSON byte-identical to oracle AND test 2; final HTML payload **MATCH vs test 2 with zero differences** |
+
+**The headline**: one-shot `--task ModelDiagnostics` and the split
+`--task FirstPassFDR` + `--task SecondPassFDR` produce a payload-identical final report at 446
+files. That is mode 11's "same report from every entry point" at cohort scale, across split task
+invocations. The HTML's 606,569 vs the oracle's 625,092 is exactly the 18,523-byte
+untrained-model payload - the same delta as the 1st-pass JSON.
+
+Staging used the sanctioned runner, not a hand-built link farm: `-LinkThroughTask` /
+`-LinkUpTo ModelDiagnostics` stages 8,028 files (446 x 18) plus 7 analysis-wide artifacts, and
+the diagnostics PRODUCTS are in no stage's artifact list, so "everything but the diagnostics" is
+the staging's shape by construction. Tests 3 and 4 shared one bed via `-LinkUpTo` (exposed on
+`Run-Chs.ps1` in pwiz-ai `cd503eb`); test 4 used `-Resume`, because a second `-LinkFrom` pass
+deletes each destination before relinking and would have destroyed test 3's 1st-pass JSON.
+
+**OSPREY_LOG_MEMORY gate defect found and fixed - see #4673.** The runner writes
+`OSPREY_LOG_MEMORY=0` for OFF and the old `!IsNullOrEmpty` gate read `"0"` as ON, so every
+runner-launched run had the forced-GC probes enabled while its banner said
+`memprobe : off ... no forced GCs`. In the diagnostics fold that is one blocking gen2 collection
+per file - 446 of them. Fixed via `OspreyEnvironment.LogMemory = IsSetAndNotZero`; 451 -> 0 probe
+lines confirms it. **Held OUT of #4662** (green, and TeamCity #252 SUCCESS on `1fff978b2f`);
+patch banked at `ai/.tmp/sessions/20260915-night/logmemory-gate-4673.patch`, which applies
+cleanly to post-merge master by construction since it was cut against `1fff978b2f`.
+
+**The A/B on that fix is n=1 and the control I set up FAILED.** Pass-1 fold 3,938.0 s (probes on)
+-> 3,465.8 s (off), ~1.06 s per collection. I predicted test 4's pass-2 fold would show no
+saving, since both pass-2 folds had ~3 probes rather than 446 - it came in 47% faster
+(1,670.8 -> 887.7 s), because test 2 folded pass 2 in a process that had just completed the
+pass-1 fold while test 4 started fresh with the pass-1 JSON already on disk. Different starting
+state, so it is not a control. **Do not cite the 12% as established.** Firm it up cheaply with
+the panel-only harness (`OSPREY_MDIAG_COASSIGN_ONLY=1`, 9 min at 446 files) run twice on each
+arm, as part of the #4673 PR.
+
+Also filed from this session: **#4672** (446 per-run co-assignment boundary log lines belong in
+the diagnostics report as a line plot, not the log - max is 2.45x the median and invisible in a
+wall of 446), and the **#4650** comment (Stage 7 rebuilds a retained base_id set Stage 5 already
+wrote to `out.1st-pass.retained_base_ids.bin`; the sidecar is readable BEFORE the library load,
+which is what `RetainFragmentsFor` needs).
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260915_osprey_night_gate_green_bed_running.md` before starting work.
