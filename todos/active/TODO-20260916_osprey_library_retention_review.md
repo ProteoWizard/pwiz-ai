@@ -516,3 +516,104 @@ leg, because `_perFileGapFillForRescore` is null there - Stage 5's set is `_firs
 alone on that path. The claim still stands on the code-reading argument
 (`GapFillTargetIdentifier` draws its keys from post-compaction entries) and on the rehydrate
 leg, where the field is set from the bundle. The evidence was overstated.
+
+### 2026-09-16 - The title decides the scope: Load&Pair&Write folded in
+
+Brendan, asked whether to split the cache redesign out: *"What does the title of #4650 tell us
+about the scope of the issue?"* It is **"Library retention, rehydration and spectrum dropping
+need an end-to-end review"**, and the body says outright it is *"an ask for an end-to-end
+review of that area, not a request to fix the one symptom."*
+
+A library cache that stores a half-built library - no pairing, incomplete `IsDecoy`,
+non-final ids - IS a library-retention design defect, and it is the reason spectrum dropping
+could not address half the rows. Deferring it would have scoped the issue down to the symptom
+it explicitly says not to scope down to. Folded in.
+
+**Brendan's framing, which was better than the one it replaced.** Mine was "stamp final ids
+into the cache", which treats the symptom. His: *"poor design to make the library cache not
+include the decoy pairing information ... the library cache not being updated to make it truly
+a cache of everything that is considered 'the library', which it should be ... one that
+included, inside the encapsulation, Load&Pair&Write instead of having Load&Write...Pair where
+the caller is responsible for applying the pairing."* Likely history: pairing arrived with
+Carafe-predicted decoys, after the cache's contract was set, and was bolted onto the caller.
+
+#### What moved
+
+* `MarkSuppliedDecoys` and `TryPairSuppliedDecoys` moved out of `PerFileScoringTask` into
+  `LibraryLoader`, ahead of `SaveCache`. No new project reference: `LibraryDecoyPairing` is in
+  `Osprey.Core` and `DecoyPairingManifest` was already in `Osprey.IO`.
+* Only PAIRING moved, not GENERATION. `DecoyGenerator` is in `Osprey.Scoring`, which
+  `Osprey.IO` cannot see - and does not need to: for generated decoys the cache holds targets
+  only, whose ids are already final, so the retain filter was correct there all along. It is
+  exactly the supplied-decoy case that was broken and exactly the half that can move cleanly.
+* **Cache key widened to a composition hash**: library identity + decoy mode + prefixes +
+  MANIFEST identity (name/size/mtime). Required, not tidiness - the cached bytes now carry the
+  manifest's accessions, so a cache built under one manifest would otherwise be reused under
+  another and silently feed the first manifest's accessions to protein parsimony and FDR.
+* **`LibraryCache.VERSION` 2 -> 3.** A v2 file is not a stale v3, it is a different thing;
+  read as v3 it would hand every consumer parse-order decoy ids.
+* **A real failure channel.** The two pairing faults (no decoys matched; paired fraction under
+  threshold) set `ExitCode = 1` at the caller; they now return as `error` and the caller
+  reports them with the same messages and the same exit code.
+* A cached load recovers and logs the pairing fraction from the finished library, so a cached
+  run is not silent about it.
+* **`RetainFragmentsFor` wired for `--task SecondPassFDR`** - correct at last, because cached
+  ids are now final and a target's paired decoy shares its base_id.
+
+#### Does this invalidate existing pipeline results? No - verified
+
+Brendan: *"How do the tasks decide whether the library is the one their existing results are
+from? ... e.g. it always stored a pointer to the true library and pairing manifest instead of a
+pointer to the library cache."* That is exactly what it does. `LibraryIdentityHash()` is the
+SOURCE library's name/size/mtime, and its three consumers are the task validity key
+(`OspreyTask.cs:181-182`) and the parquet footer stamps (`PerFileScoringTask.cs:247-248`,
+`ReconciledParquetWriter.cs:199-200`), checked by `ParquetScoreCache.cs:2074-2075`. Nothing
+anywhere points at the `.libcache`. The new `LibraryCompositionHash` has ONE consumer: the
+libcache header.
+
+So no override is needed. The first run rebuilds the `.libcache` once and every parquet,
+sidecar, blib and task stamp stays valid.
+
+Two notes that fell out of checking:
+
+* **Operational**: the `.libcache` lives in `--cache-dir` and is shared across every run on
+  this machine, including other branches' exes. An old exe rejects a v3 file and rebuilds v2,
+  and vice versa, so an A/B across binaries thrashes it and each side pays a reparse. Warm the
+  cache before timing anything.
+* **Pre-existing gap, now half-covered**: `SearchParameterHash()` includes the pairing
+  manifest's PATH, not its contents (`SearchIdentity.cs:107-109`). Editing a manifest in place
+  changes no search hash, so already-scored parquets stay "valid" against it. The composition
+  hash catches it for the library; the parquets are still exposed. Same shape as the defect
+  just fixed - an input that decides the answer not being in the key that admits the reuse.
+
+#### The gate caught a real defect in the wiring
+
+`-Dataset All`: 69 PASS / 2 FAIL. Both failures one defect, in the `RetainFragmentsFor`
+wiring rather than the move - **mode 11 cell B2** (`--task SecondPassFDR`, pass-2 diagnostics
+product absent) exited 1 in 2.2 s. Reproduced with `-KeepOutput` rather than guessed:
+
+```
+Skipped library fragments for 654744 of 968394 entries at load (156832 base_ids retained...)
+[ERROR] Pipeline failed: These library fragments were released after Stage 5 ...
+   at LibraryEntry.ReleasedFragmentList.get_Count()
+   at PerFileScoringTask.LoadLibraryAndDecoys(...)
+```
+
+`LoadLibraryAndDecoys` runs a sub-3-fragment diagnostic over the WHOLE library, guarded only
+by `!omitFragments` - the same all-or-nothing assumption `DecoyGenerator`'s fragment-count gate
+makes, and true only while `OmitFragments` was the single lean mode. Guard widened to
+`!omitFragments && loadOptions.RetainFragmentsFor == null`. Swept for other sites: only
+`DecoyGenerator`, which is mutually exclusive with the retain set by construction
+(`RetainFragmentsFor` is set only under `ExpectReconciledInput`, whose arm skips generation).
+
+**The tripwire is why this was a stack trace and not a wrong number.** It exists only because
+of Brendan's earlier call to make the load-time skip install `RELEASED_SPECTRUM` rather than
+`Array.Empty`; with the empty state this site would have counted 654,744 entries as
+zero-fragment and reported a nonsense distribution instead of failing.
+
+**And mode 11 is why it was caught at 3 files instead of on the 446-run bed.** It is the only
+leg presenting `--task SecondPassFDR` re-entering a completed run with one product withheld;
+modes 1, 2, 3, 5 and 7 all pass straight through the defect.
+
+Byte parity of the move itself is clean: `mode1 (vs golden)` PASS on all four datasets, plus
+mode 3 (HPC chain == straight-through) and the `mode1b` diagnostics goldens.
