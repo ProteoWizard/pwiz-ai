@@ -108,3 +108,34 @@ Each verb gets its own `McpConnectorTest` subclass in TestFunctional, the patter
   starts with the AI Connector tool installed (from the checkout's SkylineAiConnector.zip) or
   auto-connect on. Item 3's live reproduction is parked on that; a test-based reproduction is
   the fallback.
+
+### 2026-09-16 - Live MethodEdit run (Release build, Nick's connector rebuild, auto-started service)
+
+Driven end to end through the MCP from a blank document: `MethodEditTutorial.sky` with
+36/71/71/355 and five `Yeast_list_000N.csv` (75+75+75+75+55 = 355 rows). Every document count
+matched the tutorial at every checkpoint (35/25/25/75, 35/28/31/155, 35/182/219/1058, 19/47/47/223,
+24/58/58/278, 25/70/70/338, 35/70/70/338, 64 peptides, 34/63/63/315, 36/70/70/350, 355). New verbs
+that carried steps Brendan could not drive: window placement (main window 1049x518 centered, docked
+pane widths 415/280), Home/Down/Up/Delete on the Targets tree, typing into the tree with the
+completion popup (s-16/s-17/s-18), "Peptides"/"product ions" trailing labels, show_node_tip
+(s-21/s-22 rendered), reorder_elements for the drag step, shared tutorial images.
+
+Findings, fixed in the same session (uncommitted until built and tested):
+1. **Ion Types submenu empty until an ion-type settings change (item 3 root cause).**
+   `ViewMenu.ProteomicsEnabled` starts false and is only set by `EnableProteomicIons`, which
+   `SkylineGraphs` calls only when the transition filter's ion types change. Before Transition
+   Settings changed y -> y,b the walker saw `[]` under Ion Types and "B" was not found; after,
+   `View > Libraries > Ion Types > B` worked. Charges never had the problem (fixed 1-4 panel).
+   Fix: `ViewMenuDropDownOpening` derives both flags from the document.
+2. **perform_action by label did not fall back to the internal Name** (get_value on `tbxStatus`
+   failed): the path walk (`GetChild`) matched visible text only. Now it falls back to Name.
+3. **Toolbar item "Find" only matched as "Find (Ctrl + F)"**: `TextMatches` now also compares
+   with a trailing parenthesized hint stripped.
+4. **show_node_tip threw "has no data tip" for custom-drawn tips** although the tip was shown
+   (document node tips draw themselves; only text/table tips have text). Now it refuses only a
+   node with no tip provider, returns the text or empty, and hiding takes no value or an empty one.
+Notes, not code: `get_document_status` can read stale counts right after a settings change
+(background document update; re-read); Enter on the completion popup right after typing can commit
+the raw text if the popup's first population has not focused a row yet (Down first, or re-read
+the popup, makes it deterministic); protein order after typed additions can differ from the
+tutorial (reorder_elements fixes it).
