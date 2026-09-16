@@ -33,7 +33,7 @@ Ordered by the issue's value-for-effort.
       2026-08-21 branch, `TODO-20260821_mcp_set_window_bounds.md`) and generalized at Nick's
       direction before commit; MCP tool `skyline_set_window_placement` merges partial edges by
       reading first.
-- [ ] **2. Targets tree auto-completion** - (a) `begin_edit` action on `SequenceTree` that calls
+- [x] **2. Targets tree auto-completion** - (a) `begin_edit` action on `SequenceTree` that calls
       `BeginEdit(false)` and exposes the edit box as a TextBox element so `send_text`/`set_value`
       raise `TextChanged` and the `StatementCompletionForm` shows; (b) `send_text` on the tree
       routes through that path or refuses; (c) `SequenceTree.BeginEditNode` commits/removes an
@@ -42,14 +42,14 @@ Ordered by the issue's value-for-effort.
       clicks the hosted "B" through `ClickMainMenuItem` and passes nightly, yet Brendan's run got
       "Menu item not found" and an empty `get_children`. Reproduce live against a debug Skyline
       before changing the walker; the same shape applies to `Charges`.
-- [ ] **4. `send_key_stroke` on the Targets tree** - fall back to the form's
+- [x] **4. `send_key_stroke` on the Targets tree** - fall back to the form's
       `ProcessCmdKey`/`ProcessDialogKey` when the control did not handle the key, so `Delete`
       (Edit > Delete shortcut) and arrow navigation work.
-- [ ] **5. Caption-less controls** - `set_form_value` accepts the internal Name that
+- [x] **5. Caption-less controls** - `set_form_value` accepts the internal Name that
       `get_controls` prints, and picks up a trailing label ("3 Peptides") as the caption.
 - [ ] **6. Hover tip and drag verbs** - `show_node_tip(nodeText)` and `move_node(locator,
       beforeLocator)`; lowest priority, look-only steps.
-- [ ] **7. `get_tutorial_image` shared images** - resolve the `src` path from the tutorial HTML
+- [x] **7. `get_tutorial_image` shared images** - resolve the `src` path from the tutorial HTML
       (or fall back to `shared/<lang>/` and `shared/`) so `../../shared/en/...` images fetch.
 
 ## Regression Tests
@@ -89,6 +89,15 @@ Each verb gets its own `McpConnectorTest` subclass in TestFunctional, the patter
   passes (main window + Document Grid floating/docked/split/tabbed), as do CodeInspection,
   TestGetControlsMcpConnector, TestNativeFileDialog, TestIonTypeMenuMcpConnector and
   TestPrmMcpConnector. The net8 SkylineMcpServer builds with 0 warnings. Committed locally.
+- Items 7, 5, 2 and 4 committed locally, one commit each (7 and 5 separately, 2 and 4 together
+  since they share TreeEditMcpConnectorTest). Verified: JsonTutorialCatalogTest (offline),
+  SetFormValueMcpConnectorTest (Name + trailing label on the Library tab), TreeEditMcpConnectorTest
+  (Down, Delete via Edit > Delete through Control.PreProcessMessage, begin_edit, typing into the
+  tree, Enter, Esc, refusal on a peptide), plus TestJsonToolServer, TestGetControlsMcpConnector,
+  TestPerformActionMcpConnector, TestPickChildrenMcpConnector, TestGridCellMcpConnector,
+  TestClickControlMcpConnector and CodeInspection. The completion popup itself needs a background
+  proteome, so the test pins the edit-box mechanics, not the suggestion list.
+- Item 6 (hover tip, drag) not started. Item 3 still needs its live reproduction (see below).
 - Live driving of a Debug Skyline from this checkout is not yet possible: the JSON service only
   starts with the AI Connector tool installed (from the checkout's SkylineAiConnector.zip) or
   auto-connect on. Item 3's live reproduction is parked on that; a test-based reproduction is
