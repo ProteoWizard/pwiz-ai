@@ -22,11 +22,17 @@ was #4449, closed by PR #4452.
 
 Ordered by the issue's value-for-effort.
 
-- [ ] **1. Window bounds verb** - `skyline_set_window_bounds(left, top, width, height, placement)`
-      on `SkylineStandaloneForm`, reusing the tool service's `Rectangle`; no-argument call reads
-      without un-maximizing; "maximize" fills the screen without `FormWindowState.Maximized`.
-      This was built and tested on 2026-08-21 (`TODO-20260821_mcp_set_window_bounds.md`) but the
-      branch was never pushed and its checkout is gone, so it is rebuilt here from that design.
+- [x] **1. Window placement verb** - `SetWindowPlacement(formId, WindowPlacement)`, one verb for
+      every window: the main window (formId null), a dockable form, a plain dialog, a native dialog.
+      `WindowPlacement` is request and reply: Bounds (outer, screen px), WindowState, DockState,
+      RelativeTo + Alignment (Left/Right/Top/Bottom/tab) + Proportion, Placement (maximize/center),
+      Screen (reply). Empty request reads without un-maximizing; "maximize" fills the screen without
+      `FormWindowState.Maximized`. Implemented per kind: `StandaloneForm.SetPlacementNow` (bounds,
+      state, placement), `DockableStandaloneForm` (Show/FloatAt/portions), `NativeDialog`
+      (SetWindowPos). Started as a main-window-only `set_window_bounds` (rebuilt from the lost
+      2026-08-21 branch, `TODO-20260821_mcp_set_window_bounds.md`) and generalized at Nick's
+      direction before commit; MCP tool `skyline_set_window_placement` merges partial edges by
+      reading first.
 - [ ] **2. Targets tree auto-completion** - (a) `begin_edit` action on `SequenceTree` that calls
       `BeginEdit(false)` and exposes the edit box as a TextBox element so `send_text`/`set_value`
       raise `TextChanged` and the `StatementCompletionForm` shows; (b) `send_text` on the tree
@@ -78,3 +84,12 @@ Each verb gets its own `McpConnectorTest` subclass in TestFunctional, the patter
   `sky_exportlayout` was deleted before a push); only its TODO survives.
 - Found that item 3 contradicts a passing master test; scheduled a live reproduction first.
 - Branch created; starting with item 1.
+- Item 1 built as `set_window_bounds` (main window only), passed its test, then generalized to
+  `SetWindowPlacement` at Nick's direction before committing. `WindowPlacementMcpConnectorTest`
+  passes (main window + Document Grid floating/docked/split/tabbed), as do CodeInspection,
+  TestGetControlsMcpConnector, TestNativeFileDialog, TestIonTypeMenuMcpConnector and
+  TestPrmMcpConnector. The net8 SkylineMcpServer builds with 0 warnings. Committed locally.
+- Live driving of a Debug Skyline from this checkout is not yet possible: the JSON service only
+  starts with the AI Connector tool installed (from the checkout's SkylineAiConnector.zip) or
+  auto-connect on. Item 3's live reproduction is parked on that; a test-based reproduction is
+  the fallback.
