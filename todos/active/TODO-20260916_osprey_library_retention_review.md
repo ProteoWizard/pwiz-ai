@@ -425,3 +425,94 @@ its own file because a different PHASE produces it, and writing one file meant h
 model in memory for the whole first pass, which made a run killed in the score passes
 unrecoverable. Doc 14 corrected, and `.1st-pass.stratum.json` given its own row: it was
 missing from both of that document's tables, as was the retained-base_id summary.
+
+### 2026-09-16 - Full gate green, then a SECOND review round at a higher triage bar
+
+`regression-parallel.ps1 -Dataset All`: **70 PASS / 0 FAIL / 0 SKIP in 00:49:21**, all four
+datasets. Mode 6 green everywhere, and the #4650 count oracle provably fired rather than
+being silently skipped - Stellar and StellarLibDecoy `PASS (8 leg(s), oracle on 4)`, Astral
+`(6 leg(s), oracle on 2)`, StellarGenDecoyEntrap `(2 leg(s), oracle on 2)`.
+
+Brendan then called for a second review round with a raised bar: *"The cycle has proven that
+addressing everything pays a penalty in introducing new defects. To ever get out of this
+cycle, the implementing session needs to pay attention to risk:benefit and not just is the
+finding true."*
+
+**The result is the evidence for that.** Round 2 returned 15 findings again - the reviewer's
+cap - and SIX of them trace directly to round-1 fixes. Truth was never the filter: a `max`
+review verifies before reporting, so "is it true" excludes almost nothing. The filter has to
+be expected cost of leaving it against expected cost of the fix, and the second term is
+largest for exactly the findings that look most actionable - new predicates and changes to
+SHARED readers. Both of round 1's cheapest-looking fixes were its worst trades.
+
+#### The bar applied
+
+* **Fix - serious**: wrong answer, silent loss of a guarantee, or an abort on a path that
+  previously worked, AND the fix is local and provable.
+* **Fix - free**: comment or doc only, no executable change, and the text would actively
+  mislead someone changing that code.
+* **Revert**: the change is not carrying its risk. Preferred over patching it.
+* **Drop**: true but minor, or the fix buys less than it risks. Recorded, never filed.
+
+#### Fix - serious
+
+* **`SummaryCanExist` does not fix what it was added for, and still aborts working runs.**
+  `Reconciliation.Enabled` defaults true and Stage 7 always has an output blib, so the
+  predicate is ALWAYS true on the legs that matter - it excludes only configurations that
+  could not reach Stage 7 anyway. Meanwhile a straight-through resume over a directory whose
+  summary is absent or a stale `FormatVersion` now dies at the last stage, where the fold it
+  replaced needed no file. Fix is SMALLER than what it replaces: delete `SummaryCanExist`,
+  use the existing disk-aware `ScoringTaskShared.PerRunSurvivorLoaderAvailable`, hard-fail
+  only on `ExpectReconciledInput` (where Stage 7's release is the only one) and skip with a
+  warning elsewhere. Resolves the ValidityKeySuffix divergence too - the suffix stays
+  accurate exactly where the skip can happen - and moots the null-deref finding. Three
+  findings, one deletion.
+* **Revert the empty-summary guard.** It traded a rare catastrophe for a rare legitimate
+  case: zero survivors genuinely writes an empty summary, and the pipeline already handles
+  that gracefully ("No entries pass FDR threshold. Creating empty blib.") ~800 lines AFTER
+  the release now made to throw - and the remedy the message prescribes regenerates the
+  identical zero-count file. In the only reachable empty case, releasing everything is
+  CORRECT, which is also why the related finding about Stage 5 guarding on null only is not
+  a defect.
+* **`Select-String -LiteralPath` on the summary log is unguarded.** Under the script's
+  `$ErrorActionPreference='Stop'` a missing log is a terminating error, so it kills the whole
+  regression run rather than failing mode 6. One `Test-Path`.
+
+#### Revert - the highest-value call of the round
+
+**Drop the `LibraryLoader` source-parse arm; keep the cache arm and its test.** Brendan asked
+for the load-time skip to produce the released state - that is the cache arm, it is correct,
+and `IOTest.TestLibraryCacheRetainMatchesRelease` covers it. The source arm was added beyond
+that ask and is WRONG: it masks `entry.Id` before `LibraryDecoyPairing` reassigns those ids,
+so under `--decoys-in-library` it releases the wrong entries. It is also unreachable and
+untested. Removing it deletes three findings and a doc contradiction without a line of new
+logic.
+
+#### Fix - free
+
+Gate assertion direction (`-le`, not `-ne`) with a corrected message, since the C# documents
+the relation as asymmetric and the current form reds in the SAFE direction while describing
+the opposite failure; attributing the 625,620 figure to its run rather than implying it
+supersedes the pre-existing 744,943; naming the `LibraryDeduplicator` grouping-key dependency
+the gap-fill subset claim rests on; correcting this branch's own gate comment about what the
+oracle catches; the vacuous `-gt 0` term.
+
+#### Dropped, with reasons
+
+* `_perFileGapFillForRescore = null` one line before the release reads it (verified, and
+  pre-existing) - harmless under the subset invariant, and loud rather than silent if that
+  invariant is ever violated.
+* Declaring the summary in three more tasks' `Inputs` - verified that `Inputs` is provenance
+  only (`TaskValiditySidecar.IsValid` keys on `validity_key` alone, inputs are recorded but
+  never compared), so this buys nothing and is scope creep.
+* Duplicate failure messages for one defect - cosmetic.
+* An empty-set guard on the cache retain arm - unreachable while nothing assigns the option.
+* Em-dash style, `{0:N0}` culture, and the sub-cap list.
+
+#### Correction to an earlier claim in this TODO
+
+The Stellar measurement does NOT evidence the gap-fill subset claim on the straight-through
+leg, because `_perFileGapFillForRescore` is null there - Stage 5's set is `_firstPassBaseIds`
+alone on that path. The claim still stands on the code-reading argument
+(`GapFillTargetIdentifier` draws its keys from post-compaction entries) and on the rehydrate
+leg, where the field is set from the bundle. The evidence was overstated.
