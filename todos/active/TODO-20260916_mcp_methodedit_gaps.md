@@ -134,6 +134,10 @@ Findings, fixed in the same session (uncommitted until built and tested):
 4. **show_node_tip threw "has no data tip" for custom-drawn tips** although the tip was shown
    (document node tips draw themselves; only text/table tips have text). Now it refuses only a
    node with no tip provider, returns the text or empty, and hiding takes no value or an empty one.
+Design note for the PR: Name matching (item 5 and finding 2) is kept only because the issue asked
+for it. Nick's preference is that verbs address controls by what the user can see (caption, label
+beside the field, kind); the trailing-label rule alone drives the tutorial's count boxes. Do not
+extend Name matching further.
 Notes, not code: `get_document_status` can read stale counts right after a settings change
 (background document update; re-read); Enter on the completion popup right after typing can commit
 the raw text if the popup's first population has not focused a row yet (Down first, or re-read
