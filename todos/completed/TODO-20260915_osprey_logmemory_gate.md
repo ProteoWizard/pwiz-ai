@@ -5,10 +5,10 @@
   `06ae566254`)
 - **Base**: `master`
 - **Created**: 2026-09-15
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4673](https://github.com/ProteoWizard/pwiz/issues/4673)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4675](https://github.com/ProteoWizard/pwiz/pull/4675) (merged 2026-09-15 as `7993a4ef55`)
 
 ## Objective
 
@@ -34,7 +34,7 @@ flatness is the claim.**
 - [x] Route both gate sites through `OspreyEnvironment.IsSetAndNotZero`
 - [x] Unit gate: 595/595, zero inspection warnings
 - [x] Verify the fix on a real run (451 -> 0 probe lines on an identical 446-file fold)
-- [ ] Open the PR
+- [x] Open the PR
 
 ## Regression Test
 
@@ -80,3 +80,31 @@ Also worth recording: every wall time previously taken through a dataset runner 
 collections, and reported peaks are LOWER than an uninstrumented run would show. Run-to-run
 comparisons stay valid because both sides had them; comparisons to anything not launched through
 a runner do not.
+
+### 2026-09-15 - Merged
+
+PR #4675 merged as commit `7993a4ef55`. Gate was 17/17 SUCCESS and Copilot's auto-review
+recommended approval with 0 comments across all 4 files.
+
+**What shipped.** `OspreyEnvironment.LogMemory = IsSetAndNotZero(@"OSPREY_LOG_MEMORY")`, with
+`ProfilerHooks.MemoryLoggingEnabled` and the `PerFileScoringTask` library-resident probe both
+routed through it, plus `TestEnvFlagZeroCountsAsOff`. `IsSetAndNotZero` widened from `private`
+to `internal` so the test can reach it.
+
+**What was deliberately NOT done.** `LogMemory` and `MemoryLoggingEnabled` remain
+`static readonly`, so the WIRING is still not unit-testable - a test cannot vary the environment
+under a flag evaluated once at type load. Converting them to per-access properties would fix
+that and was considered and rejected as a behavioural change beyond the fix. Recorded here
+rather than left implicit, because the next person to look will see a test that does not cover
+the thing that broke.
+
+**Not gated on TeamCity.** Perf/Regression was not run on `pull/4675`; the 17 green checks are
+the automatic ones. The argument for skipping it is that this change cannot move output - it
+gates diagnostic probes, and the probes only observe - and the 446-file 451 -> 0 verification
+covers the behaviour. Brendan approved the merge on that basis. Noted so the gap is visible if
+anything downstream ever looks surprising.
+
+**Follow-up worth doing, not urgent.** The wall-time figure (3,938.0 s -> 3,465.8 s, ~1.06 s per
+forced collection) is a single pair whose intended control did not hold. Re-measure with the
+panel-only harness (`OSPREY_MDIAG_COASSIGN_ONLY=1`, 9 min at 446 files) twice per arm before
+anyone quotes a percentage.
