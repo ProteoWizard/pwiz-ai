@@ -47,8 +47,10 @@ Ordered by the issue's value-for-effort.
       (Edit > Delete shortcut) and arrow navigation work.
 - [x] **5. Caption-less controls** - `set_form_value` accepts the internal Name that
       `get_controls` prints, and picks up a trailing label ("3 Peptides") as the caption.
-- [ ] **6. Hover tip and drag verbs** - `show_node_tip(nodeText)` and `move_node(locator,
-      beforeLocator)`; lowest priority, look-only steps.
+- [x] **6. Hover tip and drag verbs** - `show_node_tip` action on the SequenceTree (simulated hover
+      with IgnoreFocus, returns the tip text via `SequenceTree.NodeTipText`) and
+      `skyline_reorder_elements` (the existing `ReorderElements` service, now an MCP tool) in place
+      of a drag verb. No tests, at Nick's direction: verified by driving the tutorial live.
 - [x] **7. `get_tutorial_image` shared images** - resolve the `src` path from the tutorial HTML
       (or fall back to `shared/<lang>/` and `shared/`) so `../../shared/en/...` images fetch.
 
@@ -97,7 +99,11 @@ Each verb gets its own `McpConnectorTest` subclass in TestFunctional, the patter
   TestPerformActionMcpConnector, TestPickChildrenMcpConnector, TestGridCellMcpConnector,
   TestClickControlMcpConnector and CodeInspection. The completion popup itself needs a background
   proteome, so the test pins the edit-box mechanics, not the suggestion list.
-- Item 6 (hover tip, drag) not started. Item 3 still needs its live reproduction (see below).
+- Item 6 committed without tests (Nick: test by driving the tutorial). Work switched to the Release
+  configuration: `Build-Skyline.ps1 -Configuration Release` and `dotnet build -c Release` for the
+  MCP server both clean. Next: Nick rebuilds the connector and turns on auto-start of the tool
+  service, then the MethodEdit tutorial is driven end-to-end through the MCP against
+  `bin\x64\Release\Skyline-daily.exe`, which also settles item 3.
 - Live driving of a Debug Skyline from this checkout is not yet possible: the JSON service only
   starts with the AI Connector tool installed (from the checkout's SkylineAiConnector.zip) or
   auto-connect on. Item 3's live reproduction is parked on that; a test-based reproduction is
