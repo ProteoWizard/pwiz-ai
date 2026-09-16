@@ -57,6 +57,15 @@ param(
                  'SecondPassFDR', 'ModelDiagnostics')]
     [string]$Task,
     [switch]$LinkThroughTask,
+    # Stage the link farm up to a boundary OTHER than the one -Task implies. The module has
+    # always supported this; this wrapper simply never exposed it, so the only reachable beds
+    # were "everything before -Task" and "everything through -Task". Needed whenever several
+    # -Task runs share one directory: -Task FirstPassFDR -LinkUpTo ModelDiagnostics stages the
+    # whole pipeline's artifacts (diagnostics products are in no stage's list) so a later
+    # -Task SecondPassFDR can run in the same bed rather than needing a second staging pass.
+    [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
+                 'SecondPassFDR', 'ModelDiagnostics')]
+    [string]$LinkUpTo,
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
