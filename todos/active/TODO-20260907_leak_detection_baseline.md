@@ -975,6 +975,48 @@ bug; the fix arrives there with the port (cherry-pick `f2b35a60d9` if that slips
 the third-nightly-flavour proposal, and the wiff2 shared-api question now recorded in
 `TODO-20260915_wiff2_concurrency_tests.md` (the refcounted stash passes #4670's guard).
 
+### 2026-09-16 - The Private Bytes axis explained and fixed: the regions GC's retained commit (PR #4677)
+
+The first clean Integration nightly (9/15, `f2b35a60d9`, 14,246 tests, 0 failures, 0 leaks)
+still looked worse than 26.1's on the SkylineTester chart: dozens of Total spikes to 400-900 MB
+and one to 2.2 GB, where net472 is smooth. Retained memory is actually LOWER on net10 (floor
+355 vs 500 MB; managed and heaps within 10-20 MB with 1,200 more tests) - the difference is the
+variance, and it lives only in private bytes: managed and heaps do not move under a spike.
+
+**Root cause:** the harness samples after `GC.GetTotalMemory(true)`, a full blocking collection,
+but on .NET 7+ the regions GC keeps a budget of free regions committed after collecting and
+decommits them only gradually. The sample therefore reports what the GC chose to keep on hand,
+not what is live. Named from last night's log: `TestFindNodeCancel` 2,152 MB total with 91 MB
+managed, `TestDocumentSizeError` ~900 MB, then `TestMSstatsTutorialLegacy`,
+`TestRetentionTimeManager`, `TestSaveAsAlignmentTarget` ... - 26 tests with a spike > 150 MB.
+
+**A/B on the twelve spikiest, 2 loops (`ai/.tmp/sessions/20260915-e2d2927b/spike-slice.txt`):**
+
+| | stock regions GC | `DOTNET_GCName=clrgc.dll` (segments) | `GCCollectionMode.Aggressive` at the sample |
+|---|---|---|---|
+| Total median / max | 390 / 1937 MB | 99 / 282 | **72 / 84** |
+| Total - (managed+heaps) median / max | 355 / 1896 | 56 / 236 | **31 / 33** |
+| samples > 50 MB over local floor | 11/24 | 2 | **0** |
+| wall time | 115.7 s | 111.7 | 113.9 |
+
+Brendan's spec: the between-test sample should be a quiet point where only truly static memory
+is measured. `GC.Collect(MaxGeneration, Aggressive, blocking, compacting)` is the runtime's API
+for exactly that ("about to go idle": compact everything, LOH included, decommit everything).
+Shipped as `MemoryManagement.CollectForMeasurement()` in the harness library,
+`#if NET7_0_OR_GREATER` so master's net472 build is untouched, test harness only - not Skyline.
+`TestData.dll` x179: +1% wall time. PR #4677 into the port branch. `compare-gc-logs.py` in the
+session folder is the analysis script (excess over a trailing 5-sample floor).
+
+**Consequence to expect:** the Total axis is now quiet enough that its 150 KB threshold can
+fire on real native-side growth (connections, threads, GDI) the noise used to hide. Work item 2
+(characterise Private Bytes variance) is resolved by this; whether the estimator still inverts
+the sign on that axis (the Min-over-windows finding) is a separate question for the parked
+estimator branch, now testable against a clean signal.
+
+**Also today:** #4674 filed to Matt for the wiff2 leak with the refcounted fix measured (34.4
+KB/run -> flat); PR #4670 (the guard tests) green and answered; `Run-Tests.ps1` documents the
+pass-1 leak hanger.
+
 ## Method notes
 
 - **"Does not reproduce in isolation" means a loop, not a run.** At least 15 minutes of
