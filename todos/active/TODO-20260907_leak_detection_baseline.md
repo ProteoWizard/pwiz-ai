@@ -1013,6 +1013,11 @@ fire on real native-side growth (connections, threads, GDI) the noise used to hi
 the sign on that axis (the Min-over-windows finding) is a separate question for the parked
 estimator branch, now testable against a clean signal.
 
+**Merged**: #4677 as `05d8d46c8b` into the port branch, 7/7 checks green, 2026-09-16 - in
+time for tonight's nightly, which is the first full-suite test of the quiet sample point.
+Review cleanups folded in before the merge: one Aggressive pass per test (FlushMemory plain
+again), dead net472 arm dropped, `wait=on` parks at the same point, `# GC:` header line.
+
 **Also today:** #4674 filed to Matt for the wiff2 leak with the refcounted fix measured (34.4
 KB/run -> flat); PR #4670 (the guard tests) green and answered; `Run-Tests.ps1` documents the
 pass-1 leak hanger.
