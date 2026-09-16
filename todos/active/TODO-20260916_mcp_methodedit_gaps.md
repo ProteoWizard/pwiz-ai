@@ -143,3 +143,57 @@ Notes, not code: `get_document_status` can read stale counts right after a setti
 the raw text if the popup's first population has not focused a row yet (Down first, or re-read
 the popup, makes it deterministic); protein order after typed additions can differ from the
 tutorial (reorder_elements fixes it).
+
+### 2026-09-16 - Second live run from `E:\Users\nicksh\git_e\sky_automation` (Release)
+
+Drove the tutorial end to end again on the Release build at `3ab0f36039`, after the four fixes
+above landed, to see what was still missing. Same result: 36/71/71/355 and five
+`Yeast_list_000N.csv` totalling 355 rows, every document count matching the tutorial. Item 3
+(Ion Types) confirmed fixed live - `View > Libraries > Ion Types > B` resolved before any
+transition-settings change and rendered b-ions, so the `ViewMenuDropDownOpening` fix holds.
+s-12 and s-16..s-22 all matched, so findings 1 and 7 of `TEST-MethodEdit.md` are closed.
+
+Two further gaps found and fixed (commit `d5a2d8cbb5`), both on the Build Library input-file grid:
+
+8. **A grid was not addressable by the Label `get_controls` reports for it.**
+   `get_controls(BuildLibraryDlg:Build Library)` prints
+   `BuildLibraryGridView  Input Files  True  gridInputFiles`, but `perform_action(label="Input
+   Files", ...)` failed with "No control found matching the path" - `GridElement.MatchesText`
+   matched only `Control.Name`, so the adjacent-label caption that `ControlElement.Label` derives
+   ("&Input Files:" over the grid) was never a valid address. It now also matches the base Label,
+   so whatever the enumeration prints resolves. This is the caption path, not Name matching - it
+   does not extend the item-5 Name rule.
+9. **`grid[column,row]` rejected a column header.** The tutorial step is "In the Score Threshold
+   field, enter 0.95"; the locator's regex required `-?\d+` for the column, so the header name fell
+   through to the control lookup and failed with the misleading "No control matching
+   'dataGridViewRules[Pattern,0]' supports the action 'set_value'". The column token is now parsed
+   as text and resolved by `GridElement.ColumnIndex`: all digits still mean the zero-based
+   visible-column index, anything else matches a column header (exact preferred over
+   symbol-insensitive), and a miss names the columns that exist. `skyline_set_form_value` and
+   `IJsonToolService.SetFormValue` document it.
+
+`GridCellMcpConnectorTest` covers both; each half was confirmed to fail without its own fix, with
+exactly the two errors above. All 22 `*McpConnectorTest` tests and CodeInspection pass in Debug and
+Release except `PickChildrenMcpConnectorTest`, which fails `GC-LEAK (SkylineWindow, SrmDocument)`
+**identically on unmodified `3ab0f36039`** - pre-existing, worth its own investigation.
+
+Still open after this run, none blocking: the Enter-vs-Down divergence on the completion popup
+(already noted above - the tutorial's s-16 text says Enter alone, which commits the literal text);
+`get_value` returns nothing for a TreeView or a ListBox despite its description; no verb resizes a
+grid column (s-10's header-drag step, cosmetic); nothing on the tool surface reveals that `Space`
+opens a pick-list (found only by reading `SequenceTree.OnKeyDown`, so the earlier run concluded
+s-19/s-20 were unreachable) - worth a `show_pick_list` action or a mention in the tree's action
+descriptions; and screen-capture consent still needs a one-time human grant.
+
+Tutorial-text staleness worth its own issue: protein metadata is populated now (s-10, s-15, s-21)
+where the text says those columns "will be empty"; the `Fasta.txt` paste raises an Empty Proteins
+prompt the text never mentions (Keep is the answer that gives s-04's 35 proteins); and the
+reference spreadsheet's SCIEX DP/CE (76.2/31) no longer match the current equations (80/29.3),
+though every m/z does.
+
+Walkthrough: `pwiz_tools/Skyline/Documentation/WalkThroughs/MethodEdit/` (commit `ca7e81c29f`) -
+every tutorial step paired with the MCP call that performed it and a screenshot, 32 captures.
+Note for anyone repeating this: screen capture redacts to solid cyan wherever another window
+overlaps Skyline, so the first pass was unusable (the session terminal sat over the window) and
+had to be redone raising Skyline before each capture - except for a pick-list, which raising the
+main window dismisses, so Skyline must be raised *before* `Space`.
