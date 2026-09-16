@@ -12,6 +12,8 @@ description: Use this skill when reading or updating wiki pages on skyline.ms.
 - **Before querying wiki pages**: Read ai/docs/mcp/wiki.md (MCP Tools section)
 - **For updating pages**: Read ai/docs/mcp/wiki.md (Update Workflow)
 - **For attachments**: Read ai/docs/mcp/wiki.md (Attachment section)
+- **Before deleting/renaming a page, or to find what links to one**: Read ai/docs/mcp/wiki.md (Searching All Wiki Pages Site-Wide)
+- **When a tool 404s, or a fetched file looks wrong**: Read ai/docs/mcp/wiki.md (Gotchas)
 - **For MCP server changes**: Read ai/mcp/LabKeyMcp/README.md
 
 ## Slash Commands

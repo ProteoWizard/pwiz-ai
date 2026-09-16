@@ -165,6 +165,98 @@ The wiki maintains full version history, so changes can be reverted if needed.
 | `wiki_page_list` | All pages without body content |
 | `wiki_page_content` | Single page with full body (parameterized) |
 
+## Searching All Wiki Pages Site-Wide
+
+The MCP tools list pages one container at a time and fetch one body per call, so
+neither can answer "which pages link to X?" Use LabKey's query API through
+`fetch_labkey_page` with `containerFilter=AllFolders` to search every wiki body
+on the server in a single call:
+
+```python
+fetch_labkey_page(
+    view_name="query-selectRows.api",
+    container_path="/home/software/Skyline",
+    params={
+        "schemaName": "wiki",
+        "query.queryName": "CurrentWikiVersions",
+        "query.containerFilterName": "AllFolders",
+        "query.Body~contains": "2026-ugm.url",
+        "query.columns": "Name,Title,Container",
+        "query.maxRows": "200",
+    },
+)
+```
+
+Returns JSON with `rowCount` and one row per matching page.
+
+> **Use `query-selectRows.api`, not `query-executeQuery.view`.** The `.view`
+> action returns a JS-rendered grid whose rows are not present in the saved
+> HTML, so grepping the file finds nothing and looks like a zero-result search.
+> The `.api` action returns plain JSON.
+
+**Always validate the filter with a control string first** — something you know
+exists in a page body. A typo, a mis-named column, or a non-filterable field
+returns `rowCount: 0`, which is indistinguishable from a true "nothing links
+here" result. Confirming a known string matches first is what makes a zero
+result trustworthy.
+
+Typical uses:
+
+- Find every page linking to one you plan to delete or rename
+- Confirm a page is orphaned before removing it
+- Audit where a short URL (`*.url`) is referenced
+
+**Scope limit**: this searches wiki page bodies only. Links can also live in
+webparts, message board posts, or entirely off-site.
+
+**Short URLs** are not in the `wiki` schema. Resolve a `*.url` redirect directly:
+
+```bash
+curl -s -o /dev/null -D - "https://skyline.ms/ugms.url" | grep -i "^location:"
+```
+
+Repointing a short URL requires the LabKey admin UI — `admin-shortURLAdmin.view`
+is not reachable through the MCP, and `core.ShortURL` is not exposed as a query.
+
+## Gotchas
+
+**`fetch_labkey_page` needs the `.view` or `.api` suffix.** The tool builds
+`{server}/{container}/{view_name}` verbatim and appends nothing. `view_name="wiki-page"`
+returns HTTP 404; `view_name="wiki-page.view"` works.
+
+**`get_wiki_page` collides on same-named pages in different containers.** The
+output filename derives from the page name alone (`ai/.tmp/wiki-{page_name}.md`),
+ignoring the container. Fetching `default` from both `/home/software/Skyline` and
+`/home/software/Skyline/events` writes both to `ai/.tmp/wiki-default.md` — the
+second silently overwrites the first. Easy to miss when the calls run in
+parallel. Fetch, rename, then fetch the next:
+
+```bash
+get_wiki_page("default", container_path="/home/software/Skyline")
+cp ai/.tmp/wiki-default.md ai/.tmp/wiki-home-default.md
+get_wiki_page("default", container_path="/home/software/Skyline/events")
+```
+
+**Saved wiki bodies use CRLF line endings.** Splitting on `'\n---\n'` to strip
+the markdown header fails — use `re.search(r'\r?\n---\r?\n', text)`. Plain `diff`
+also reports *every* line as changed when comparing an edited LF file against the
+CRLF original; use `diff --strip-trailing-cr` to see the real changes.
+
+**`<style>` blocks are permitted, and LabKey rewrites the markup.** Wiki bodies
+may contain `<style>` (unlike `<script>` and `<iframe>`). The HTML cleaner
+normalizes self-closing tags — `<hr class="x" />` becomes `<hr class="x">` — and
+may emit the style block twice in the rendered page. Both are harmless, but
+account for them when grepping a fetched page to confirm an update landed.
+
+> A `<style>` block in a wiki body applies to the **whole document**, not just
+> the wiki content. Scope rules to a class you define; styling bare element
+> selectors like `hr` or `p` will restyle LabKey's own page chrome.
+
+**Verify content preservation on scripted bulk edits.** Before publishing, diff
+the set of `href` values and visible text blocks against the original rather than
+comparing line counts — counts shift misleadingly when line endings or separator
+elements change.
+
 ## Future Enhancements
 
 - Tutorial sync workflow (`pw-tutorial-sync`, proposed) for coordinating Git and wiki updates
