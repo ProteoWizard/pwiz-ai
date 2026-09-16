@@ -5,10 +5,10 @@
   master `7af9eb0ea5`)
 - **Base**: `master`
 - **Created**: 2026-09-12
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4657](https://github.com/ProteoWizard/pwiz/issues/4657)
 - **Module**: `osprey`
-- **PR**: [#4662](https://github.com/ProteoWizard/pwiz/pull/4662) - STACKED on #4661
+- **PR**: [#4662](https://github.com/ProteoWizard/pwiz/pull/4662) (merged 2026-09-15 as `06ae566254`)
 - **Labels to carry**: `performance`
 
 ## Objective
@@ -1493,5 +1493,40 @@ wall of 446), and the **#4650** comment (Stage 7 rebuilds a retained base_id set
 wrote to `out.1st-pass.retained_base_ids.bin`; the sidecar is readable BEFORE the library load,
 which is what `RetainFragmentsFor` needs).
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260915_osprey_night_gate_green_bed_running.md` before starting work.
+### 2026-09-15 - Merged
+
+PR #4662 merged as commit `06ae566254`, squashed to
+`osprey: Stopped the diagnostics fold and the pass-2 q floor re-deriving per file (#4662)`.
+TeamCity #252 was SUCCESS on the merged head `1fff978b2f`; the local four-dataset gate was
+70 PASS / 0 FAIL / 0 SKIP.
+
+**What shipped.** The co-assignment panel's per-file working set became reusable buffers
+allocated once, so first-pass diagnostics memory is flat where it climbed 10 -> 35 GB. The
+second-pass experiment q is now floored where it is computed - folded out of the per-file
+records the pass-2 sweep already reads, with the peptide identities taken from the survivor
+walk - and `ReclampExperimentQToBestRun`, a full pass over every run costing 8 minutes and a
+multi-GB working set, is deleted. The experiment sidecar stayed v2/44 bytes and `;expsidecar=`
+came out of all three validity keys, so no existing bed was invalidated. The four protein
+goldens were recaptured: flooring at the source puts the floored q in front of protein FDR's
+detected-peptide gate, dropping 189-527 groups per dataset - conservative, and signed off.
+
+**Validated at cohort scale.** A 446-file Stage 5-7 rebuild completed in 15 h 16 m (exit 0):
+Stage 5 peak 38.39 GB, Stage 7 max working set 29.85 GB where that phase used to be the run's
+largest consumer. All four diagnostics regeneration tests pass, and one-shot
+`--task ModelDiagnostics` and the split `--task FirstPassFDR` + `--task SecondPassFDR` produce a
+payload-identical report.
+
+**Deferred, and NOT closed by this merge.** #4657 auto-closed. #4664 did not: the PR says
+`Addresses`, because sections 3-5 (#4577 / #4665 / #4663), the Parquet.Net per-row-group arrays
+in section 1, and the 500- and 1000-file acceptance runs all remain. Code-review findings #3
+(`WillOnlyFoldDiagnostics` is a query with side effects) and #5 (the
+`OSPREY_LOG_COASSIGN_ALLOC` tautology) were triaged out and remain open.
+
+**Filed from this work, for follow-up.** #4673 - `OSPREY_LOG_MEMORY=0` enabled the forced-GC
+probes instead of disabling them, so every runner-launched run had 446 blocking gen2 collections
+in the diagnostics fold while its banner said "no forced GCs"; fix written and held out of this
+PR, patch banked at `ai/.tmp/sessions/20260915-night/logmemory-gate-4673.patch`. #4672 - the 446
+per-run co-assignment boundary log lines belong in the diagnostics report as a line plot. A
+comment on #4650 - Stage 7 rebuilds a retained base_id set Stage 5 already wrote to
+`out.1st-pass.retained_base_ids.bin`, which is readable before the library load and is what
+`RetainFragmentsFor` needs.
