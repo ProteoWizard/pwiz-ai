@@ -180,7 +180,8 @@ ts = datetime.strptime(time_str, "%d/%b/%Y:%H:%M:%S %z")
 ```
 
 ### Files
-- Named `access_log.YYYY-MM-DD.log`, one file per day, rotated by Tomcat itself.
+- Named `access_log.YYYY-MM-DD.log`, one file per day, rotated by Tomcat itself. The file
+  for today has the same name while it is still being written.
 - 480K-750K lines and 200-430 MB per day (09-14: 752K/428 MB, 09-15: 478K/201 MB,
   09-16: 699K/289 MB). Read the file line by line; don't load it into memory.
 - A file holds requests that **finished** that day, so a request that started just before
@@ -269,12 +270,13 @@ cases the parser must handle:
     behind that proxy.**
 
 ### Files
-- `access.log`, rotated daily by `logrotate` on Linux.
-- The copy process delivers both the **finished rotated file** (`access.log.1`, the previous
-  day) and the **current file** (`access.log`, still being written). The current file's last
-  line may be cut off mid-write; skip an unparseable final line instead of reporting it as an
-  error.
-- About 33K lines/hour, which is about 790K lines and 260 MB per day. Read line by line.
+- The file being written is `access.log`. `logrotate` renames it daily to
+  **`access.log.YYYY-MM-DD`** (no `.log` suffix), and **the date is the day of rotation, not
+  the day of the traffic**: `access.log.2026-09-17` holds 2026-09-16 00:00:15-23:59:59.
+- The copy process delivers the rotated files and the current `access.log`. The current
+  file's last line may be cut off mid-write; skip an unparseable final line instead of
+  reporting it as an error.
+- 2026-09-16 (full day): 734K lines, 239 MB. Read line by line.
 
 ### Existing protections
 Both are configured in Apache on the web server.

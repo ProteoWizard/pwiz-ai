@@ -87,7 +87,7 @@ Verified against `examples/panoramaweb.org/access-logs/tomcat/access_log.2026-09
 - [x] Exclude `/_websocket/` (101) and treat `targetedms-downloadDocument.view` as a download,
       alongside WebDAV and `experiment-showFile.view`
 - [x] Durations top out near 3,600 s, which looks like a 1-hour timeout
-- [ ] Still parse the timezone from each line (the sample is all `-0700`; winter is `-0800`)
+- [x] Parse the timezone from each line (the sample is all `-0700`; winter is `-0800`); done in `timestamps.py`
 - [ ] `%D` also counts time spent sending the response; report response size alongside duration
 - [ ] Apache-only responses (429, 408) never reach Tomcat; the count difference is useful
 - [x] Same-day samples (Tomcat 09-15 and 09-16 added) tested on 2026-09-17; see the doc's
@@ -99,7 +99,7 @@ Verified against `examples/panoramaweb.org/access-logs/tomcat/access_log.2026-09
   - Tomcat logs the rewritten URL (partly percent-decoded, sometimes with doubled slashes);
     after normalizing, 99.96% of Tomcat requests match an Apache line
   - The 17.7K Apache-only lines are 429, 403, 408, 400, and Apache's own redirects
-- Size: a full day of Tomcat log is ~430 MB and Apache is about 260 MB (estimated), so the parser must
+- Size: a full day is 200-430 MB of Tomcat log and ~240 MB of Apache log, so the parser must
   stream line by line
 
 ## Scope
@@ -122,21 +122,35 @@ Verified against `examples/panoramaweb.org/access-logs/tomcat/access_log.2026-09
       phases). 2 pytest tests pass
 
 ### Phase 1: Log input
-- [ ] Configurable input directory (where the separate copy process drops the logs)
-- [ ] Apache input: the copy process delivers both `access.log.1` (the finished previous day) and
-      `access.log` (still being written). Read both, select by timestamp, and tolerate a
-      cut-off last line in `access.log`. Also accept `.gz` in case older rotated files appear
-- [ ] Select exactly the last 24 hours by request **start** time (not by file), with timezone
-      offsets. For Tomcat, start = `%t` − `%D`, so read the neighboring day's file as well
-- [ ] Fail clearly when expected logs are missing or stale
+Development window: **2026-09-16 07:00 to 2026-09-17 07:00 PDT** (a run at 07:00 on 9/17),
+using the samples in `~/dev/ai-dev/examples/panoramaweb.org/access-logs/` (`apache/`, `tomcat/`).
+
+- [x] Input directory `--logs-dir` with `apache/` and `tomcat/` subdirectories (the layout of
+      the samples). Assumes the copy process uses the same layout
+- [x] File naming (`sources.py`):
+  - Apache: current `access.log`, rotated `access.log.YYYY-MM-DD` (no `.log` suffix; the date
+    is the **rotation** date, so the file holds the previous day). Other names, including
+    `.gz`, are ignored
+  - Tomcat: `access_log.YYYY-MM-DD.log`, same name while being written; the date is the day
+    requests **finished**. Reads the next day's file too when the window ends within an hour
+    of midnight
+- [x] Select by request **start** time: Apache `%t`; Tomcat `%t` − `%D`. `--end` (ISO 8601 with
+      offset, default now) and `--hours` (default 24) define the half-open window
+- [x] A cut-off last line (no newline) is counted separately, not as an unparsed line
+- [x] Errors when a source has no log files; warns when the logs start more than 15 minutes
+      after the window start or end more than 15 minutes before its end
+- [x] Parsers (`records.py`) with typed records; client IP rules as in the doc; fast cached
+      timestamp parsing (`timestamps.py`)
+- [x] 25 pytest tests with anonymized lines (documentation IP ranges, fake users)
+- [x] Real samples, dev window: Apache 640,672 requests in window (908,937 lines), Tomcat
+      616,659 (868,043 lines), 0 unparsed, no coverage warnings. 20.6 s, 17 MB peak memory
 - [ ] Keep only what the report needs from IPs and user details; nothing beyond `reports/`
+      (applies once reports are written, Phase 3)
 
 ### Phase 2: Parsing and aggregation (plain code)
 Do the heavy lifting in ordinary code, not in the LLM; the logs are too large to feed in raw
 (~90 MB for 8.5 hours).
-- [ ] Apache parser (regex in the doc; client IP from `%h`, XFF kept as extra information; `-` bytes,
-      `"-"` request lines for 408s, garbage request lines)
-- [ ] Tomcat/LabKey access log parser (format in `ai/docs/websites/panoramaweb.org/access-logs.md`)
+- [x] Apache and Tomcat parsers (done in Phase 1, `records.py`)
 - [ ] Common record: time, client IP, method, URL, normalized controller-action, container,
       status, bytes, duration (Tomcat only), user agent, referrer, LabKey user where available
 - [ ] Correlate Apache and Tomcat records using the doc's matching rule (normalized request +
