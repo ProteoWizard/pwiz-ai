@@ -743,3 +743,85 @@ floor port in the `maccoss/osprey` PR. Prove which, do not assume.
 Cost: manifest-using beds (CHS, SEA-AD libdecoy, StellarLibDecoy) invalidate once and re-score.
 `regression.ps1` stages its own beds so the gate only pays a slower first leg; re-running the
 446-file CHS bed is the 13.5 h shape and needs asking first.
+
+### 2026-09-17 (night session) - GOAL 1 DONE: the floor port cleared cross-impl, and #4679 needed nothing
+
+**Result: `Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files Single` is GREEN** - all three
+legs, on the branch's own C# Release build, against Rust
+`fix/experiment-q-floor-before-consumers` @ `42f40ea`:
+
+```
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+FDR sidecars (per-field 1e-9):      PASS
+OVERALL: PASS -- bit-parity at 1e-9 on Stellar 1-file   (Rust 01:47, C# 01:28)
+```
+
+**Nothing in #4679 was touched.** The expectation the handoff recorded held: Rust-side changes
+alone clear the gate.
+
+#### The root cause, in one line
+
+Rust ran `clamp_experiment_q_to_best_run` at the END of the pipeline - `pipeline.rs:6043`,
+**after** the protein-FDR block - so protein parsimony's detected-peptide set,
+`effective_experiment_qvalue(peptide_gate_level) <= experiment_fdr`, read the RAW experiment q
+while C# has read the floored one since #4662. That is exactly the one-directional signature the
+handoff predicted from the failure text: Rust admitted peptides C# excludes, so Rust had protein
+groups C# did not emit and none the other way.
+
+#### The correction took two placements, and the second one is the actual lesson
+
+The first move put the clamp just before protein parsimony but still AFTER
+`persist_fdr_scores(..., "2nd-pass", 2)`, on the reasoning that the per-file sidecar should keep
+the unfloored competition q. Stage 7 and the blib went green; the **sidecar leg stayed red and
+named the residue precisely**:
+
+```
+2nd-pass sidecars: FAIL (2 issue(s), 292833 record(s) compared)
+  experiment_precursor_qvalue differs on 1312 record(s); first entry_id=23  rust=0.00043005 -> cs=1
+  experiment_peptide_qvalue   differs on 1769 record(s); first entry_id=23  rust=0.00043005 -> cs=1
+```
+
+`cs=1` is a floored value - an entry with no surviving run support. So the C# artifact the
+comparator joins against (the analysis-wide experiment-scope file, per
+`Compare-FdrSidecars-Crossimpl.ps1`) carries the FLOORED q. Which is what "apply the floor at the
+source" says on the tin: the C# pass-2 sweep raises the q-values **before the records are
+written**. The first placement ported the destination and not the timing.
+
+Second placement - clamp ahead of `persist_fdr_scores` as well - made all three legs pass. Rust
+fuses run and experiment scope into one per-file record where C# splits them, so "before they are
+written" is a single call site on the Rust side rather than two.
+
+#### Why this is a port and not an accommodation
+
+The clamp only ever RAISES a q-value. Moving it earlier is one-directional in both directions it
+now reaches: protein groups drop out and none appear, and a persisted experiment q rises and never
+falls. That is the same conservative direction the four C# protein goldens were recaptured in.
+
+It also fixes a second, independent defect on the Rust side that had nothing to do with
+cross-impl: the 2nd-pass sidecar is read unconditionally by Stage 7 (`--join-at-pass=2`), so a
+distributed or resumed Rust run took its experiment q from records the straight-through run
+corrected only in memory. The persisted and in-process values disagreed about the same analysis.
+
+#### Rust gates and rebaseline
+
+`Build-OspreyRust.ps1 -Fmt -Clippy -RunTests` green on both placements. **No Rust
+expected-output rebaseline was needed** - `cargo test` is unchanged - which is worth stating
+explicitly because the handoff flagged a Rust-side rebaseline as an expected possibility.
+
+One thing checked and deliberately NOT changed: the second `persist_fdr_scores(..., "2nd-pass")`
+at `pipeline.rs:5337` (the missing-sidecar HPC-chain path) runs immediately after
+`run_percolator_fdr`, whose own terminal clamp already applies, so those records are floored too.
+Only the non-default Mokapot / Simple arms of that branch would write unfloored values.
+
+#### Commit
+
+`maccoss/osprey` branch `fix/experiment-q-floor-before-consumers`, commit `42f40ea`, based on
+`origin/main` `9e4edaf` (the squash of PR #67). NOT pushed yet.
+
+**Note on the commit trailer**: it carries `Co-Authored-By: Claude <noreply@anthropic.com>`.
+Recent upstream commits (#59-#67) carry no trailer and the osprey skill says Skyline's format does
+not apply to maccoss/osprey, but `Deny-HarnessAttribution.ps1` refuses a message without it and
+its `PWIZ_ALLOW_HARNESS_ATTRIBUTION=1` escape hatch is not reachable from inside a tool call
+(the hook runs before the command's environment exists). Amend before opening the PR if the bare
+upstream form is wanted - the commit is local.
