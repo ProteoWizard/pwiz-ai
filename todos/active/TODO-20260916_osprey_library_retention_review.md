@@ -1344,3 +1344,30 @@ may be the small-N face of something that matters; nothing tonight distinguishes
 
 Samples for whoever picks this up: `soak-*.log` in the session directory (kept only for
 failures), and `Flake-Soak.ps1` to gather more.
+
+#### Narrowed once more: the two in-range OVERLAYS intermittently fail to apply
+
+Mapping the two soak signatures onto `TestStreamReconciledTransferMatchesLoadAllOverlay`'s
+assertions (`IOTest.cs:3026+`) makes them one symptom, not two:
+
+* `Expected:<2>. Actual:<0>.` -> `Assert.AreEqual(2, result.NReplaced)` - **neither** of the two
+  in-range overlays was applied.
+* `Expected:<0>. Actual:<2>.` -> the streamed-vs-load-all comparison differing by **exactly 2**
+  rows - i.e. the same two overlay rows, applied on one path and not the other.
+
+The test's fixture is 7 original rows, 2 in-range overlays (replaced), 2 gap-fill (appended), 1
+out-of-range overlay (dropped with a warning), written with `RowGroupRowCapForTest = 3` so the
+output is genuinely multi-group. So the failing quantity is always **the overlay application**,
+never the originals or the gap-fill: `NAppended` and `OrigRowCount` were correct in every
+captured failure.
+
+That narrows the search a long way. The overlay is addressed by row position, and the test exists
+because the streamed merge must emit in canonical `(entry_id, charge, scan_number)` order across
+row-group boundaries rather than appending. So the question to take into the morning is: **can
+the row ORDER the overlay indices are resolved against differ between the streamed and load-all
+paths, or between runs?** An order that varies by one position would replace the wrong rows or
+none, in either direction, at a low rate - which is exactly the observed shape.
+
+Still NOT established, and deliberately not guessed at further: whether the varying order comes
+from unordered-collection enumeration, a comparator that can tie, or the row-group split. Reading
+that path properly wants fresh context rather than 03:30.
