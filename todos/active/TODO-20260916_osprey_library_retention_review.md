@@ -1187,3 +1187,75 @@ the 633 could still be load-time removals of another kind.
 the intermediate indexes. `--cache-dir` MUST stay on scratch: the `.libcache` beside the library
 predates v3, so a current build would rewrite 2.27 GB that every other run on this machine
 shares, and a warm v3 cache would short-circuit the pairing path the dump hangs off.
+
+### 2026-09-17 (night session) - CORRECTION + a real one: a parquet round-trip intermittently reads `charge` back as 0
+
+**First, a correction to the section above.** I earlier recorded
+`TestParquetBoundedRowGroupRoundTrip` as flaky "because `ParquetScoreCache.RowGroupRowCapForTest`
+is a shared mutable static". **That mechanism is wrong** and the shared-static reading should not
+be carried forward. The evidence that refuted it is below. The test IS intermittent; the reason
+is not test isolation.
+
+#### What it actually is
+
+Both observed failures are the SAME assertion in different tests: a stub read back from parquet
+has **`Charge == 0` where 2 was written**.
+
+| run | worktree | test | assertion |
+|---|---|---|---|
+| work2 pre-commit | `pwiz-work2` | `TestParquetBoundedRowGroupRoundTrip` | `IOTest.cs:2767` - `AreEqual(single[i].Charge, multi[i].Charge)` |
+| flake loop iter 1 | **`pwiz-work1`, unmodified #4679 branch** | `TestParquetScoreCacheRoundTrip` | `IOTest.cs:2205` - `AreEqual(2, stubs[0].Charge)` |
+
+Both report `Assert.AreEqual failed. Expected:<2>. Actual:<0>.` - which is what made the first one
+look like a row-group count (an honest misread on my part; `CountRowGroups` asserts in that test
+expect 1 and 3, never 2).
+
+**It is not the diagnostic branch and not this branch's change**: the second failure is on
+`pwiz-work1` with the #4679 branch exactly as pushed.
+
+#### Rate
+
+`Flake-Loop.ps1` ran the full suite 12 times back to back on the unmodified checkout:
+
+```
+iter 1   passed=594  failed=[TestParquetScoreCacheRoundTrip]
+iter 2-12 passed=595 failed=[]
+```
+
+With the earlier observation that is **2 failures in ~15 full-suite runs**. Both were the FIRST
+run of their batch, which is a pattern worth testing rather than trusting - two points is not a
+correlation.
+
+#### Why this is more than test noise
+
+In the failing read, `stubs.Count == 3`, the three `EntryId`s and all three `IsDecoy` flags are
+CORRECT; only `Charge` comes back 0. So a single column round-trips as its default while its
+siblings in the same row group are fine.
+
+`ReadColumnByName` (`ParquetScoreCache.cs:848`) returns **null when the field is not found**, and
+reads via `RunSync(groupReader.ReadColumnAsync(field))` - sync-over-async, which the codebase uses
+because Skyline forbids `async`/`await`. A null column then flows to consumers that fall back to a
+default, so "column not read" and "charge really is 0" are indistinguishable downstream. That
+silent fallback is the part worth changing regardless of the root cause: by this project's own
+"hard fail over warn-and-proceed" rule, a missing column in a `.scores.parquet` should abort, not
+default - a precursor whose charge silently became 0 is exactly the kind of invalid output a user
+would trust.
+
+`charge` is `DataField<byte>("charge")` (`:105`), written at `:686`, read at `:1032`, `:1207`,
+`:1726`.
+
+#### NOT established - do not repeat as fact
+
+* Whether this can happen on production-sized files, or only on the tiny 3-7 row files the tests
+  write. The tests are the only observation.
+* The root cause. `#4652` ("Made parquet column compression run in parallel") is the obvious
+  suspect on timing grounds, but `ParquetScoreCache.cs` contains no `Parallel`/`Task.Run` of its
+  own - only `writer.CompressionMethod = CompressionMethod.Zstd` (`:738`, `:1557`) - so whatever
+  is parallel lives below this file, and I did not chase it.
+
+#### How to pick this up
+
+`ai/.tmp/sessions/20260916-night-4650/Flake-Loop.ps1` runs the suite N times and prints one line
+per iteration, keeping the raw log only for failures. Roughly 1 failure in 8 runs, so 20-30
+iterations gives a usable rate. The decisive A/B would be the same loop with parallel column
+compression disabled.
