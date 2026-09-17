@@ -185,11 +185,18 @@ reconciled parquet to read one `uint` per entry. Deleting that pass removes the 
 
 ### Observed, not fixed (out of scope for this branch)
 
-* `docs/14-intermediate-files.md:36` says `<stem>.1st-pass.model.json` carries "the
+* ~~`docs/14-intermediate-files.md:36` says `<stem>.1st-pass.model.json` carries "the
   protein-compact stratum when that mode is active", while
   `docs/00-pipeline-architecture.md:1106` lists `<stem>.1st-pass.stratum.json` as a separate
   experiment-wide artifact split out of the model sidecar. One of the two is stale. The
-  stratum artifact is also missing from the 14-intermediate-files tables.
+  stratum artifact is also missing from the 14-intermediate-files tables.~~
+  **ALREADY RESOLVED, on this branch, by `7e520ff71d`** (checked 2026-09-17, night session).
+  The model row now reads "The protein-compact stratum is NOT in it - see the next row" and
+  the `<stem>.1st-pass.stratum.json` row IS in the table, so the two docs agree and nothing
+  is missing. The code is the arbiter and says the same: `FirstPassModelIO.StratumBaseIds`
+  is "NO LONGER WRITTEN here - the stratum moved to its own `.1st-pass.stratum.json`", still
+  read so a pre-split directory keeps its fast-path resume. No doc change needed; the note
+  outlived its fix.
 
 ## Tasks
 
