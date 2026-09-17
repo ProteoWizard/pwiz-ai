@@ -6,7 +6,8 @@
 - **Base**: `master`
 - **Created**: 2026-09-17
 - **Module**: `osprey`
-- **PR**: (pending)
+- **Status**: Completed
+- **PR**: [#4680](https://github.com/ProteoWizard/pwiz/pull/4680) (merged 2026-09-17)
 - **Fork PR**: the `maccoss-developers` `parquet-parallel-compression` PR (awaiting Nick's
   review) carries the library-side fix as commit `2ca33b1`. This pwiz PR only STAGES the
   rebuilt binary and adds the regression guard.
@@ -109,3 +110,40 @@ correctness now that the scan is clean, but still unverified.
 a column it cannot read, and three sites substitute `(byte)0`. That did NOT cause this bug -
 the column reads back faithfully - but a silently defaulted charge is invalid output a user
 would trust, which is what the hard-fail-over-warn rule exists for.
+
+## 2026-09-17 - Merged
+
+PR #4680 merged as commit `f8f0a9a6f5`. Shipped the rebuilt `ParquetNet.dll`, the
+`RequireCharge` guard, and `TestParquetRoundTripScalarStress`.
+
+**Gates on the merged head `366586a855`** (which carries a merge of master, so this is the
+#4679 + #4680 combination, not a stale base):
+
+| gate | where | result |
+|---|---|---|
+| `regression-parallel.ps1 -Dataset All` | local | 70 PASS / 0 FAIL / 0 SKIP |
+| Perf/Regression, build 4178032 | MacCoss TeamCity Agent 1 | 70 PASS / 0 FAIL / 0 SKIP (1:07:38) |
+| Osprey Windows .NET, build 4177603 | MacCoss TeamCity Agent 1 | 596 tests passed |
+| stress A/B, 100k iterations per arm | local | 0 corrupted, parallel and serial |
+
+Both TeamCity builds show FAILURE for `Failed to load build settings from VCS` only - the
+configs were moved into `ProteoWizard / Versioned Configs` and a master-based ref cannot carry
+versioned settings. A third red, `ProteoWizard and Skyline Docker container (Wine x86_64)`, was
+investigated and dismissed: it failed three `msconvert` vendor conversions, and build 4170821 on
+unrelated master commit `e5afd8e6c2` failed two of the same three with the identical
+Unicode-filename stderr. msconvert never touches Parquet.Net.
+
+**An earlier build was worse than it looked and is worth remembering.** Build 4177770 landed on
+an AWS agent (`pwiz-windows-i-0aac9f75d0b8ec680`) where dotCover is not installed; step 3 exited
+2 and **zero tests ran** - `number of tests 0 is 595 less than 595`. Its summary line still read
+as an ordinary settings failure. Pinning `agent_name='MacCoss TeamCity Agent 1'` is what turned
+that into the real 596/70 PASS numbers above.
+
+**Existing artifacts were scanned and are clean** - see the section above: 2,176 files,
+1,444,467,818 rows, 15,544 row groups compared against their own statistics, zero corruption. No
+cached scoring needed invalidating, and the guard fires on nothing already on disk.
+
+**Upstream is still open.** The same use-after-return is present in upstream `master` and
+`6.1.0`; the fork carries the patch and PATCH-NOTES records that a 6.1.0 upgrade would not avoid
+it. The library-side fix is `2ca33b1` on the `maccoss-developers` `parquet-parallel-compression`
+branch, pushed to the PR awaiting Nick's review.
