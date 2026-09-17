@@ -685,3 +685,15 @@ passing all tests."*
 * `maccoss/osprey`'s default branch is `main`, not `master`, and the local checkout sits on the
   feature branch with a stale `origin/main`, so `90c8968` reads as "1 ahead of main" when it is
   in fact merged as PR #67.
+
+#### PR and TeamCity
+
+* **PR [#4679](https://github.com/ProteoWizard/pwiz/pull/4679)** opened 2026-09-16, marked
+  **DO NOT MERGE YET** at the top of the description.
+* TeamCity Perf/Regression queued: build **4177549**, `pull/4679`, MacCoss TeamCity Agent 1.
+  Do not re-trigger without asking.
+* No `Reported by` line: #4650 was authored by Brendan, a developer of this project, which the
+  crediting rules explicitly exclude.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260916_osprey_library_retention_review.md` before starting work.
