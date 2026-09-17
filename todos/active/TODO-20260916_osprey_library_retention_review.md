@@ -5,7 +5,7 @@
 - **Checkout**: `C:\proj\pwiz-work1` (C:\proj\pwiz is occupied by open PR #4660)
 - **Base**: `master` (at `7993a4ef55`, which includes #4662)
 - **Created**: 2026-09-16
-- **Status**: In Progress
+- **Status**: PR open, BLOCKED on cross-impl (see 2026-09-16 entry)
 - **GitHub Issue**: [#4650](https://github.com/ProteoWizard/pwiz/issues/4650)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -217,49 +217,27 @@ reconciled parquet to read one `uint` per entry. Deleting that pass removes the 
 
 ## Regression Test
 
-**Built-in oracle** (from the issue): any correct version must still log the same retained
-count on both release lines and `Released ... 0 of N` at Stage 7 on a straight-through run.
-Reproduced at 3 files, so no new comparison was needed - it became an assertion in the gate
-that already parses those lines.
+**Built-in oracle** (from the issue): a correct version must still log the same retained count
+on both release lines and `Released ... 0 of N` at Stage 7. Reproduced at 3 files, so it became
+an assertion in the gate that already parses those lines rather than a new comparison.
 
-- **Test name**: `regression.ps1` mode 6, via `Test-LibraryFragmentRelease -MatchesSummaryScope`
-- **Test project**: `pwiz_tools/Osprey/regression.ps1` (mode 6)
-- **What it asserts**: on any leg that re-ran FirstPassFDR, Stage 7's retained count must
-  EQUAL the count that leg's own `Wrote analysis-wide retained base_id summary: N base_id(s)`
-  line reported. A Stage 7 that went back to folding the pool would report the pool's count;
-  a Stage 7 reading anything else would report a third number. Relative, not absolute - both
-  sides move together with any scoring change, so it does not cry wolf.
-- **Fails on master**: not applicable in the usual red->green sense - on master the two
-  numbers coincide, because the fold was recomputing the same set. What master does NOT have
-  is any assertion tying Stage 7's set to its SOURCE, which is the gap. The renamed scope
-  token is the part that goes red on master: mode 6 expects `the reported pool` there.
-- **Passes on fix**: yes. `regression.ps1 -Dataset Stellar`, run 2026-09-16 07:13,
-  mode 6 PASS over 8 legs. Log:
-  `C:\Users\brendanx\AppData\Local\Temp\claude\C--proj\dde0f0cf-fa52-4c86-9b61-97f48a7f798b\scratchpad\regression-stellar2.log`
+- **Test name**: `IOTest.TestLibraryCacheRetainMatchesRelease` (unit) + `regression.ps1` mode 6
+  (`Test-LibraryFragmentRelease -MatchesSummaryScope`)
+- **Test project**: `Osprey.Test` and `pwiz_tools/Osprey/regression.ps1`
+- **Fails on master**: YES for the unit test - red-checked by disabling the single
+  `entry.ReleaseSpectrum()` call in `LibraryCache`, which fails it at `entry 2 (id 11)`. The
+  mode 6 oracle is relative rather than red/green on master: master has no assertion tying
+  Stage 7's set to its SOURCE, which is the gap; the renamed scope token is the part that
+  reddens there.
+- **Passes on fix**: YES. 596 unit tests; `regression-parallel.ps1 -Dataset All` **70 PASS /
+  0 FAIL / 0 SKIP** (45:13), mode 6 green on all four datasets with the #4650 count oracle
+  evaluating on 4/4/2/2 legs.
 
-### Measured at 3 files
-
-`C:\proj\pwiz-work1\pwiz_tools\Osprey\TestResults\regression-20260916_071352_38036\Stellar\straight\straight.log`:
-
-```
-Wrote analysis-wide retained base_id summary: 166724 base_id(s) across 3 run(s)
-Released library fragments for 152180 of 485628 entries (166724 base_ids retained for rescore + gap-fill)
-Released library fragments for      0 of 485628 entries (166724 base_ids retained for the 1st-pass retained set)
-```
-
-Same shape as the 446-run CHS evidence on the issue, and the `Collecting the reported
-base_ids` progress line is gone entirely - that fold no longer exists.
-
-The HPC SecondPassFDR node still performs a REAL release, which is what mode 6's
-`-RequireFreed` exists to protect
-(`...\Stellar\chain\logs\phase4.log`):
-
-```
-Released library fragments for 76117 of 242841 entries (166724 base_ids retained for the 1st-pass retained set)
-```
-
-242,841 rather than 485,628 because that leg skips decoy generation entirely
-(`PerFileScoringTask.cs:1082`), so its library is targets only.
+What mode 6 now asserts, on every leg that runs the Stage 7 release: Stage 7's retained count
+equals the count that leg's summary write reported; Stage 5's retained count is not GREATER
+than it (a direction, because the relationship is documented as asymmetric); and Stage 7
+releases 0 wherever Stage 5 released in the same process. It reports how many legs the oracle
+evaluated on, and a run where it evaluated on none is a failure.
 
 ## Progress Log
 
@@ -617,3 +595,93 @@ modes 1, 2, 3, 5 and 7 all pass straight through the defect.
 
 Byte parity of the move itself is clean: `mode1 (vs golden)` PASS on all four datasets, plus
 mode 3 (HPC chain == straight-through) and the `mode1b` diagnostics goldens.
+
+### 2026-09-16 - CHS measurements, and a MERGE BLOCKER that is not this branch's
+
+#### CHS 446-file, `--task SecondPassFDR --model-diagnostics` (the issue's own bed)
+
+Bed: `chs-446files-libdecoy-r1.0-protein-compact4650-secondpass`, a `-LinkThroughTask` mirror
+of `...compactmdiagregen2` (8,028 staged artifacts) presented as mode 11's **cell B2** - pass-1
+report present, pass-2 JSON and HTML absent. The first attempt staged NO diagnostics products
+at all (they are in no stage's list) and Osprey correctly refused in 0 s: pass-2 enriches
+pass-1, and pass-1 was missing. That refusal is cell B, which the gate already covers.
+
+Warm-cache run, `run.log`:
+
+```
+Loaded 6175389 library entries from cache            (14 s)
+Skipped library fragments for 4924513 of 6175389 entries at load
+                             (625620 base_ids retained for the 1st-pass retained set)
+Second-pass join: folding over 446 run(s) ... (625620 retained base_id(s) read once)
+[TASK] SecondPassFDR:done (505.9s)   ->  8m25s total
+```
+
+* **4,924,513** skipped at load - the exact count Stage 5's release used to FREE. Never allocated.
+* **No `Collecting the reported base_ids` line anywhere.** The 11-minute, 41.5 GB fold is gone.
+* Cold first run (v3 cache rebuild) was 14m22s: 85 s TSV parse + pairing + a 2.06 GB cache write.
+  Pairing inside the load held on the real cohort: `paired 3085757/3087385 decoys (99.9%)`.
+
+#### Three-way library load, same warm cache, `OSPREY_LIBRARY_LOAD_ONLY`
+
+| leg | load | shape |
+|---|---|---|
+| `PerFileScoring` | **14.58 s** | every fragment - what SecondPassFDR used to do |
+| `FirstPassFDR` | **9.22 s** | `OmitFragments`, no fragment arrays |
+| `SecondPassFDR` | **10.00 s** | `retainSet=625620` |
+
+All three read 6,175,389 entries. The retained-set load recovers ~79% of the gap to the
+omit-everything floor, which is the expected shape when 4.92 M of 6.18 M fragment blocks are
+skipped but every entry still pays identity scalars, interning and protein IDs.
+
+Bed for this: `_libload-4650`, holding ONLY the retained summary. Two preconditions, both
+learned by getting them wrong and now asserted in the script: the cache must be warm (a cold
+one charges the first leg a 6.2 M-entry reparse) and the bed must present UNFINISHED work (a
+completed one logs `skipping (outputs valid)`, Stage 1 never runs, and three sub-second no-ops
+look like a result).
+
+#### MERGE BLOCKER: cross-impl is RED, and it is red on master too
+
+`Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files Single`, Rust at
+`fix/experiment-q-per-entry-not-per-file` 90c8968 (= merged maccoss/osprey PR #67):
+
+| check | this branch | master `7993a4ef55` |
+|---|---|---|
+| precursors | 26659 = 26659, delta 0 | same |
+| blib content (SQL 1e-9) | PASS | PASS |
+| Stage 7 protein FDR | **FAIL** | **FAIL** |
+| FDR sidecars | **FAIL** | **FAIL** |
+
+**A/B settles authorship**: identical failure on master at this branch's own base commit, with
+the identical C# blib size (19,550,208 both). Not this branch.
+
+Per-column, the failure is narrow:
+
+```
+best_peptide_score   PASS  max_diff=1.599e-014   n_diverg=0/3258
+group_qvalue         FAIL  max_diff=3.058e-004   n_diverg=18/3258
+  first-diverg: sp|O00443|P3C2A_HUMAN  rust=0.0003058103975535168  cs=0
+n_unique / n_shared / is_target_winner   PASS
+Keys only in Rust: 5+   Keys only in C#: 0
+```
+
+Scoring agrees to 1e-14 and parsimony agrees row for row. What diverges is the protein GROUP
+q-value - C# assigning exactly 0 where Rust assigns a small positive value on 0.55% of groups -
+plus a handful of groups C# does not emit at all. That is not compounding arithmetic drift, so
+the gate's own advice ("drift compounds beyond 1e-9 ... use the per-stage gates to localize")
+points at a bisection that will find nothing. Widening the comparator would paper over it.
+
+**Brendan's call: this PR does not merge until cross-impl passes**, and a parity branch/PR in
+`maccoss/osprey` has to land first so the fix can be confirmed not to make things worse.
+*"Allowing changes to continue past a failing test is more likely to add new failures than
+passing all tests."*
+
+#### Two harness traps worth keeping
+
+* The cross-impl gate resolves the C# exe from `Get-PwizRoot` = `C:\proj\pwiz` unless
+  `$env:PWIZ_ROOT` is set. It refused here only because that tree's Release build was from
+  2026-08-30; had it been fresh, the comparison would have run happily against the WRONG
+  CHECKOUT. Same failure mode as `/code-review` picking the wrong repo. Always set
+  `$env:PWIZ_ROOT` to the checkout under test.
+* `maccoss/osprey`'s default branch is `main`, not `master`, and the local checkout sits on the
+  feature branch with a stale `origin/main`, so `90c8968` reads as "1 ahead of main" when it is
+  in fact merged as PR #67.
