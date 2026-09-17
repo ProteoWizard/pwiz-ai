@@ -989,3 +989,110 @@ now carries the manifest-key change. Plain push, no history rewrite.
 No third `/code-review` round was run on this commit. The branch has already had two rounds
 today, the reviews do not stack, and Copilot auto-reviews the push. Say so rather than leaving it
 to be assumed.
+
+### 2026-09-17 (night session) - BONUS: the unpaired-library cause breakdown, and it reframes the proposal
+
+Both night goals were done and shipped, so I took the one deferred item whose PREREQUISITE is
+unblocked. The strict-gating proposal says "flipping the default needs the cause breakdown first"
+and wants "an error that NAMES the cause"; the breakdown is measurement, not the decision, which
+stays with Brendan and Mike.
+
+**Not on #4679.** Separate branch `Skyline/work/20260917_osprey_unpaired_library_breakdown` in
+**`C:\proj\pwiz-work2`** (clean, and it leaves the PR checkout untouched), commit `5a52b26e76`,
+based on the pushed #4679 tip because that is where the pairing code lives - master's
+`LibraryLoader.cs` is the 218-line pre-fold version. **Not pushed.**
+
+#### The tool
+
+`OSPREY_DUMP_UNPAIRED_LIBRARY=<path>` writes one identity-only TSV row per entry that finishes
+pairing unpaired. Read off the finished `PairingState` at the one point where it and the library
+are both in hand (`LibraryLoader.cs`, immediately before `LogPairingSummary`), so the row count
+equals the logged counts BY CONSTRUCTION - which is what makes it evidence about those counts
+rather than a second opinion on them. Verified on the first run:
+
+```
+OSPREY_DUMP_UNPAIRED_LIBRARY: wrote 9746 unpaired decoy and 9996 unpaired target row(s)
+Library-decoy pairing: paired 484499/494245 decoys (98.0%); manifest=484212, composition=287;
+                       9746 unpaired decoys, 9996 unpaired targets
+```
+
+Deliberately NOT classified in-process: the classification is a join against the manifest, and
+freezing one taxonomy into the search would make revising it a code change.
+
+**Run on the SMALL bed, not SEA-AD.** `target+decoy+entrapment-20260817` is a 12.4 GB TSV whose
+`.libcache` predates the v3 format, so a current build would re-parse all of it and rewrite a
+2.27 GB cache that is shared machine-wide - hours, with a side effect on an artifact other runs
+depend on. `StellarLibraryDecoy` exercises the identical code path in 31 s. `--cache-dir` pointed
+at scratch on purpose: a warm v3 cache holds an already-paired library, which short-circuits the
+pairing path so the dump would never fire.
+
+#### The breakdown: it is manifest COVERAGE, not pairing quality
+
+Bare sequences (UniMod stripped), joined against the manifest's `sequence` column:
+
+| | unpaired targets | unpaired decoys |
+|---|---:|---:|
+| **not in the manifest at all** | 7,680 | 7,429 |
+| in the manifest, `target` | 9 | 0 |
+| in the manifest, `p_target` | 2 | 0 |
+
+**15,109 of 15,120 distinct unpaired sequences (99.93%) are absent from the manifest.** The
+genuine pairing residue - covered by the manifest and still unpaired - is **11 sequences**.
+
+Validated rather than assumed: three sampled unpaired sequences are absent from the manifest's
+`sequence` column by direct `grep -F -x`, and a known-present control is found by the same
+method, so the "not in manifest" verdict is not a join artifact.
+
+The manifest carries 875,471 distinct sequences in four types, near-evenly split
+(`target` 218,871 / `decoy` 218,870 / `p_target` 218,866 / `p_decoy` 218,864).
+
+#### Why this matters to the proposal
+
+* **The cause to NAME is not "pairing failed", it is "the manifest does not cover the library".**
+  An error phrased as a pairing percentage points the operator at the wrong artifact. The remedy
+  is a manifest regenerated for this library, or an explicit acceptance of the uncovered
+  fraction.
+* **`StellarLibraryDecoy` measures 98.0%, so a perfect-by-default gate would refuse it too** -
+  and that is a REGRESSION-GATE bed, not just a cohort. The deferred note lists CHS and SEA-AD as
+  the beds at risk; this one is in `regression.ps1` itself, and mode legs 8 and 9 run on it. That
+  is a stronger argument for the `--allow-unpaired-library <fraction>` loophole than the cohort
+  beds were, because without it the flip breaks the project's own gate.
+* The composition fallback is doing very little here: 287 of 484,499 pairings, against 484,212
+  from the manifest.
+
+#### Open, and cheap for whoever picks this up
+
+The 11 in-manifest-but-unpaired sequences are the only real pairing residue and were not chased -
+numerically irrelevant here, but they are the cases a "perfect" default would actually be about.
+Checking whether their manifest partners exist in the library needs the 2.5 GB library TSV.
+
+Running the same dump on SEA-AD is now one command, whenever the 12.4 GB re-parse is worth it.
+
+### 2026-09-17 (night session) - `TestParquetBoundedRowGroupRoundTrip` is FLAKY (not this branch)
+
+Observed while gating the diagnostic branch. Three runs of the same test suite:
+
+| run | tree | result |
+|---|---|---|
+| 1 | with the dump diagnostic | 594/595 - `TestParquetBoundedRowGroupRoundTrip` FAILED, `Assert.AreEqual failed. Expected:<2>. Actual:<0>.` |
+| 2 | diagnostic stashed | 595/595 |
+| 3 | diagnostic restored | 595/595 |
+
+I first read run 1 as my change breaking the test; run 3 refutes that. **The test is flaky.**
+
+**The tell**: `Expected:<2>` matches NO assertion in the test that was named. Its own asserts are
+`AreEqual(1, ...)` and `AreEqual(3, ...)` (`IOTest.cs:2745-2746`, `:2806`). The assertion that
+expects 2 belongs to a DIFFERENT test - the one that sets the cap to 2 at `IOTest.cs:2871`.
+
+**The mechanism**: `ParquetScoreCache.RowGroupRowCapForTest` (`ParquetScoreCache.cs:345`) is a
+single mutable `internal static` that at least five tests write, with inconsistent reset
+discipline - some assign `null` inline (`:2743`, `:2804`), others in a `finally` (`:2819`,
+`:2911`). Any test that leaves it set, or any interleaving, silently changes the row-group count
+another test computes. The cap is not env-derived, so this is purely shared-static leakage.
+
+**Fix shape** (NOT applied - unrelated to #4679 and to the diagnostic, so it is Brendan's call):
+a scoped set-and-restore (`IDisposable`, or `try/finally` uniformly) instead of bare assignment,
+so no test can leave the cap set for the next one.
+
+Worth noting because a gate that fails one run in three teaches people to re-run rather than to
+read the failure.
