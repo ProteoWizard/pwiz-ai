@@ -1259,3 +1259,39 @@ would trust.
 per iteration, keeping the raw log only for failures. Roughly 1 failure in 8 runs, so 20-30
 iterations gives a usable rate. The decisive A/B would be the same loop with parallel column
 compression disabled.
+
+#### The flake, concluded: real, rare, and NOT explained - two hypotheses tested and refuted
+
+I tested both hypotheses I raised above rather than leaving either standing. **Both are
+refuted.** Recording this so nobody repeats the experiments or carries the guesses forward.
+
+| experiment | runs | failures |
+|---|---:|---:|
+| parallel parquet column writes (default) | 90 | 2 |
+| serialized writes (`OSPREY_PARQUET_WRITE_THREADS=1`) | 90 | 0 |
+| default settings, under heavy concurrent disk load | 30 | 0 |
+
+* **Concurrency (`#4652`) is not supported.** 2/90 vs 0/90 is Fisher p ~ 0.5. An intermediate
+  reading of 2/30 vs 0/30 looked suggestive and I extended both arms precisely because it was
+  not decisive; the extension is what killed it - the parallel arm's own second round was 0/60.
+* **I/O load is not supported.** Two readers churning the 12.4 GB library through the page cache
+  for the whole run produced 0/30.
+
+**What is established**: 4 failures across roughly 150 full-suite runs tonight (~2.7%), in at
+least THREE different tests - `TestParquetScoreCacheRoundTrip`,
+`TestParquetBoundedRowGroupRoundTrip`, `TestReconciledTransferKeepsOnlySurvivors` - with a shared
+signature, a written scalar reading back as 0. Confirmed on `pwiz-work1` with #4679 exactly as
+pushed, so it is nothing from tonight. Failures CLUSTER in time (two inside one 15-minute window,
+two during earlier gate runs) rather than arriving at a steady rate, which is why a 30-run arm
+is not enough to call anything.
+
+**The one change worth making regardless**: `ReadColumnByName`
+(`ParquetScoreCache.cs:848`) returns null for a field it cannot find, and consumers fall back to
+a default, so "column not read" is indistinguishable from "the value really is 0". Making that a
+hard failure would turn the next occurrence from a silent wrong value into a diagnosable abort -
+and it is what this project's own hard-fail-over-warn rule asks for.
+
+**Cheap to continue**: `Flake-AB.ps1` and `Flake-UnderLoad.ps1` in the session dir each take an
+iteration count and print one summary line, keeping raw logs only for failures. At ~2.7%, a few
+hundred iterations would be needed to characterise the trigger; the scripts make that an
+overnight job rather than an investigation.
