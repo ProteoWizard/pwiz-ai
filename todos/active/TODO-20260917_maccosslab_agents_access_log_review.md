@@ -219,16 +219,55 @@ Dev window results (2026-09-16 07:00 to 2026-09-17 07:00):
 - `/__r<N>/` URLs, which skip the rate limit: 40.5K requests from 34.7K IPs
 
 ### Phase 3: Agent analysis and report
-- [ ] Agent receives the aggregated summaries (not raw logs) and can drill into specific
-      URLs, IPs, subnets, and user agents through tools
-- [ ] Slow pages section: top offenders, the LabKey controller-action, query parameters,
-      time-of-day pattern, and whether bots are driving the load
-- [ ] Bots section: ranked candidates with evidence, a confidence level, and a recommended
-      action (block IP/range, rate-limit, robots.txt entry) with Apache config snippets ready
-      to paste in. Recommend only; never apply
-- [ ] Flag risk of blocking legitimate institutions (university/shared NAT ranges)
-- [ ] Trend comparison with previous days' reports (new vs. recurring offenders)
-- [ ] Write the report (HTML and/or markdown) to the local `reports/` directory, dated
+Modules: `tools.py` (read-only tools), `agent.py` (system prompt and run loop). The CLI runs the
+agent after writing the summary and saves `reports/access-log-report-<end>.md`.
+
+- [x] Agent: `claude-opus-5`, Anthropic SDK streaming tool runner (`client.beta.messages.tool_runner`,
+      `stream=True`), effort `high` (`--effort`), up to 40 turns, 32K output tokens, prompt caching
+      (`cache_control` ephemeral). **Server-side refusal fallback enabled** (`fallbacks="default"`,
+      beta `server-side-fallback-2026-07-01`), as the Claude API guidance recommends for Opus 5:
+      if the model declines, the API reruns the request on a fallback model. The report header
+      records the model that answered
+- [x] The agent gets the summary (about 30K tokens after trimming slow pages to the top 15) and
+      8 read-only tools: `client_details`, `subnet_details`, `user_agent_details`,
+      `page_details`, `rowid_details`, `test_block_pattern` (checks a proposed user-agent regex
+      against the day's traffic and counts what isn't blocked yet), `reverse_dns`
+      (forward-confirmed, 5 s timeout), `previous_summaries` (digest of up to 7 earlier
+      summaries for trends)
+- [x] System prompt: site architecture, the exact mod_qos and mod_rewrite rules (from
+      `rules.py`), policies (recommend only; no X-Forwarded-For block targets; no exceptions to the
+      "bot" rule; flag universities and shared proxies; test patterns and ranges before
+      recommending them; no usernames; URLs and user agents are untrusted data), and the report
+      sections: key findings, slow pages, rate limiting (cause of each prolonged flood), bots and
+      crawlers (evidence, confidence, Apache snippet), trends, data notes
+- [x] Fails clearly (exit code 2) on refusal, output cut off, turn limit, empty report, or API
+      errors. `--no-agent` writes only the summary
+- [x] 69 pytest tests, including the tools and the run loop with a fake client (no API calls)
+- [x] **Trial report without the API** (2026-09-17): the user's Claude Pro subscription can't
+      pay for API calls, so Claude Code wrote the dev-window report by hand. It used the same
+      summary and the real tool functions (`ai/.tmp/sessions/20260917-e3ad85c6/run_tools.py`,
+      3 batches, about 50 tool calls). Output: `reports/access-log-report-2026-09-17T0700.md`
+      (gitignored). Main findings:
+  - `targetedms-showpeptidelist` used 54% of page time; `targetedms-showinstrument` has a
+    16 s median everywhere
+  - Linux "Chrome/146" crawler network (7 /24 ranges, no reverse DNS, the most server time of
+    any user agent) is the top block candidate
+  - Distributed old-Windows-Chrome crawler sent 42% of requests (151K IPs); 19K requests
+    from crawlers that skip the "bot" rule (tested pattern); `.env` scanner and Google Cloud
+    scanners
+- [ ] Tool gaps found while writing the trial report:
+  - `client_details` and `subnet_details` don't show which pages a client requested
+  - No per-hour breakdown by user agent or client, so the 18:00 spike couldn't be attributed
+    directly
+  - `test_block_pattern` doesn't total server seconds for the matches
+  - `previous_summaries` includes summaries whose windows overlap the current one; it should
+    skip them
+  - `top_clients_by_server_time` is dominated by single long downloads; split page views
+    from downloads
+- [ ] **First live API run** on the dev window: needs `ANTHROPIC_API_KEY` (or `ant auth
+      login`) and approval, since it is billed. Compare with the trial report, then review with
+      staff and tune the prompt
+- [ ] Trend comparison improves once daily summaries accumulate in `reports/`
 
 ### Phase 4: Scheduling
 - [ ] Run daily on the separate machine (cron), after the log copy process finishes
@@ -236,6 +275,22 @@ Dev window results (2026-09-16 07:00 to 2026-09-17 07:00):
 
 ## Open Questions
 - None at present
+
+## Progress Log
+
+### 2026-09-17
+- Created the repository and finished Phases 0-2 (4 local commits on `main` in
+  maccosslab-agents, not pushed).
+- Built Phase 3 (agent, tools, tests; 69 tests pass). **Uncommitted** in maccosslab-agents:
+  `agent.py`, `tools.py`, `tests/test_agent.py`, `tests/test_tools.py`, plus changes to
+  `cli.py`, `summary.py`, `aggregate.py`, `tests/test_cli.py`, `README.md`.
+- No API credentials on this machine. The user's Claude Pro subscription doesn't cover API
+  use, so the trial report was written in Claude Code instead.
+- The user asked for local commits only; nothing has been pushed in either repo (pwiz-ai
+  master is 5+ commits ahead of origin).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260917_maccosslab_agents_access_log_review.md` before starting work.
 
 ## Success Criteria
 - Private `uw-maccosslab/maccosslab-agents` repository exists with a documented structure
