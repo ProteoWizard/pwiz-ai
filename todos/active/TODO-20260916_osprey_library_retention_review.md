@@ -926,3 +926,40 @@ It also pins the no-manifest term to the literal `None`.
 
 TeamCity has NOT been re-triggered for the new commits (`fee760058b`, and #4679 now also waits on
 maccoss/osprey#68). Per standing rule, that needs asking first.
+
+### 2026-09-17 (night session) - TeamCity 4177549 reads FAILURE, and it is NOT the code
+
+The handoff recorded build **4177549** as merely "queued". It has since finished, and the
+**build status is FAILURE while the work passed**. Do not read that red as a regression.
+
+```
+Finished 2026-09-16 22:55:34 with status FAILURE 'Failed to load build settings from VCS (new)'
+[21:12:49]E: Failed to load build configuration settings from VCS: build configuration config
+             is not found, use current settings from TeamCity server
+[21:12:49]i: Changed build status to failed due to build problem: freeze.settings.error
+```
+
+**The failure was stamped at 21:12:49 - the trigger moment - and the first step did not start
+until 21:53:30, forty minutes later.** Everything that then ran succeeded:
+
+```
+[22:55:29] [Step 3/5]   TOTAL 70 PASS / 0 FAIL / 0 SKIP in 01:01:21 wall
+[22:55:29] [Step 3/5] Osprey regression PASSED
+[22:55:29] [Step 3/5] Process exited with code 0
+```
+
+Steps 4 and 5 are disabled by configuration, so step 3 is the last one that does work.
+`get_failed_tests` returns "No failed tests in build 4177549", which is the tell: a red with no
+failing test and no failing step is a build PROBLEM, not a result.
+
+70 PASS / 0 FAIL / 0 SKIP is exactly the count this branch measured locally, on the same commit
+(`7e520ff71d`), so the gate agrees with the local run.
+
+Likely cause, NOT confirmed: the config is a *Versioned Configs* build type, and the `pull/4679`
+ref does not carry the Kotlin settings, so the settings load falls back to the server copy and
+flags a problem. The other five recent builds of this config are mostly SUCCESS, so it is not a
+chronic condition. Saved to memory (`reference_osprey_teamcity_pr_trigger`) as a third way this
+config reddens without the code being wrong, alongside `invalid_branch` and the AWS-agent 9009.
+
+**What this means for the morning**: the gate has NOT been run against `fee760058b` (the manifest
+key change), only against `7e520ff71d`. A re-trigger needs asking first, per standing rule.
