@@ -675,6 +675,20 @@ points at a bisection that will find nothing. Widening the comparator would pape
 *"Allowing changes to continue past a failing test is more likely to add new failures than
 passing all tests."*
 
+**RESOLVED - it is a PORT, not an investigation.** Brendan has already reviewed and signed off
+the pwiz Osprey side: C# is correct, Rust needs the same change. The change is how the
+**run-level minimum floor for a precursor q-value reaches the protein level**. The floor used
+to be applied LATE (a re-clamp mutating the entries feeding the blib); it is now applied at the
+SOURCE, so the floored experiment q reaches protein FDR's **detected-peptide gate**
+(`ProteinFdr.cs:883`), which shrinks parsimony's input. Principle, measurement (1,125,526 of
+593,865,660 values raised, 0.1895%) and sign-off are in
+`ai/todos/completed/TODO-20260912_osprey_coassignment_allocation.md`.
+
+That explains the cross-impl signature exactly: Rust's gate still admits peptides C# now
+excludes, so Rust emits groups C# does not (`Keys only in Rust: 5+`, `Keys only in C#: 0` -
+one-directional, matching "groups drop, never rise") and the overlap differs on group q. Do NOT
+re-open which side is right, and do NOT widen the comparator.
+
 #### Two harness traps worth keeping
 
 * The cross-impl gate resolves the C# exe from `Get-PwizRoot` = `C:\proj\pwiz` unless
