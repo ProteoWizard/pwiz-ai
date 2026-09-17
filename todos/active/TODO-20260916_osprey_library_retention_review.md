@@ -1371,3 +1371,64 @@ none, in either direction, at a low rate - which is exactly the observed shape.
 Still NOT established, and deliberately not guessed at further: whether the varying order comes
 from unordered-collection enumeration, a comparator that can tie, or the row-group split. Reading
 that path properly wants fresh context rather than 03:30.
+
+#### Root cause chain, complete: a null column read is silently substituted with a default
+
+Following the overlay question into the code closes the loop. Every symptom tonight is one
+mechanism plus its downstream consequences.
+
+1. **`ReadColumnByName` returns null on a read it cannot satisfy** (`ParquetScoreCache.cs:848`):
+
+   ```csharp
+   if (!fieldsByName.TryGetValue(name, out field))
+       return null;
+   return RunSync(groupReader.ReadColumnAsync(field)).Data as T;
+   ```
+
+   Both the missing-field path AND a `Data as T` that does not cast yield null - indistinguishable
+   from "the column is absent".
+
+2. **Consumers substitute a default instead of failing.** Three sites, identically:
+
+   ```csharp
+   Charge = chargeCol != null ? chargeCol[row] : (byte)0,   // :1062, :1227, :1787
+   ```
+
+   That is literally the observed `Expected:<2>. Actual:<0>.` in
+   `TestParquetScoreCacheRoundTrip` and `TestParquetBoundedRowGroupRoundTrip`.
+
+3. **A zero charge corrupts row IDENTITY, not just one field.** The reconciled transfer keeps rows
+   by `ISet<(uint, byte, uint)> keepIdentities` - `(entry_id, charge, scan_number)` - and emits in
+   canonical `(entry_id, charge, scan_number)` order. A charge of 0 makes the identity miss and the
+   ordering wrong.
+
+4. **Which produces exactly the observed downstream failures**:
+   * `TestReconciledTransferKeepsOnlySurvivors`: `NWritten` 1 instead of 4 - the three survivors
+     missed `keepIdentities` and only the gap-fill row was written - while `NAppended` (1) and
+     `OrigRowCount` (7) stayed correct, because the rows WERE read, just mis-identified.
+   * `TestStreamReconciledTransferMatchesLoadAllOverlay`: `NReplaced` 0 instead of 2, or the
+     streamed/load-all comparison differing by exactly those 2 rows - in either direction,
+     depending on which path drew the bad read.
+
+**A second, latent hazard on the same line of reasoning**, not the mechanism behind tonight's
+failures but worth fixing alongside: `ReadFdrEntryGroup` ends its column reads with
+
+```csharp
+if (entryIdCol == null || isDecoyCol == null)
+    return entries;   // an EMPTY list, silently
+```
+
+and the caller advances its overlay cursor by `origRead += groupEntries.Count` (`:1655`). A row
+group that fails to read therefore vanishes AND shifts every later row's overlay index. It is not
+what happened tonight - `OrigRowCount` was correct in every captured failure, so no group was
+dropped - but it is the same silent-degrade pattern with a worse blast radius.
+
+**The fix that does not require knowing why the read fails**: make an unreadable column a hard
+error. This project's own rule is hard-fail over warn-and-proceed when proceeding risks silently
+invalid output a user would trust, and a precursor whose charge silently became 0 is precisely
+that. Today the failure is invisible in production and only shows up as a ~2% test flake.
+
+**Still open**: WHY the read intermittently returns null. That is now a single, precisely located
+question - `RunSync(groupReader.ReadColumnAsync(field))` at `:855` - rather than a search. Ruled
+out by experiment tonight: parallel column writes (2/90 vs 0/90 serialized) and disk I/O load
+(0/30).
