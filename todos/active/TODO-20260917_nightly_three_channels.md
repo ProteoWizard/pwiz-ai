@@ -1,14 +1,14 @@
-# TODO-nightly_three_channels.md - Standard, Leak Checking and Perf as separate nightly channels
+# TODO-20260917_nightly_three_channels.md - Standard, Leak Checking and Perf as separate nightly channels
 
 ## Branch Information
-- **Branch**: (not started - `Skyline/work/YYYYMMDD_nightly_three_channels` when picked up)
+- **Branch**: `Skyline/work/20260917_nightly_three_channels`
 - **Module**: `skyline`
 - **Base**: `master` for SkylineNightly (the shim auto-updates every machine from master);
   TestRunner and SkylineTester changes on master, cherry-picked to `Skyline/skyline_26_1`,
   merged into `Skyline/work/20260612_net8_port` (each branch's nightly runs that branch's
   SkylineTester)
 - **Created**: 2026-09-17 (design), by Brendan and Claude
-- **Status**: Backlog - design settled except the open points at the bottom
+- **Status**: In Progress - design settled except the open points at the bottom
 - **GitHub Issue**: (none yet)
 - **PR**: (pending)
 
