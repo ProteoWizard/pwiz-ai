@@ -5,10 +5,10 @@
 - **Checkout**: `C:\proj\pwiz-work1` (C:\proj\pwiz is occupied by open PR #4660)
 - **Base**: `master` (at `7993a4ef55`, which includes #4662)
 - **Created**: 2026-09-16
-- **Status**: PR open, BLOCKED on cross-impl (see 2026-09-16 entry)
+- **Status**: Completed
 - **GitHub Issue**: [#4650](https://github.com/ProteoWizard/pwiz/issues/4650)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4679](https://github.com/ProteoWizard/pwiz/pull/4679) (merged 2026-09-17)
 
 ## Objective
 
@@ -1517,3 +1517,35 @@ user would trust, which is exactly what the project's hard-fail rule is for.
 Brendan's call. Also unverified: whether `.scores.parquet` files written between 2026-09-10 and
 this fix can carry corrupted rows in practice, and whether the daily version stamp invalidates
 them on every resume path.
+
+### 2026-09-17 - Merged
+
+PR #4679 merged as commit `e904ed8e95`. Shipped: Stage 7 reading
+`out.1st-pass.retained_base_ids.bin` instead of rebuilding 446 runs to recompute it (11 minutes
+and a 41.5 GB peak, ~86% uncollected garbage); decoy marking and pairing moved inside
+`LibraryLoader.Load` so the `.libcache` holds a finished library; and the decoy pairing manifest
+keyed by file name + size + mtime rather than its path.
+
+**The cross-impl blocker was cleared on the Rust side, not here.** Root cause was Rust running
+`clamp_experiment_q_to_best_run` after the protein-FDR block, so its detected-peptide gate read
+the raw experiment q while the C# port has read the floored one since #4662. Fixed in
+[maccoss/osprey#68](https://github.com/maccoss/osprey/pull/68) (CI green on all three platforms);
+nothing in this PR changed. Gates green on `fee760058b` on two machines: local
+`regression-parallel.ps1 -Dataset All` 70 PASS / 0 FAIL / 0 SKIP, and TeamCity build 4177805 on
+`pull/4679` reporting the same 70 PASS / 0 FAIL / 0 SKIP. Perf gate passed; cross-impl green on
+Stellar, Astral 3-file and StellarLibraryDecoy.
+
+**Merged with a red TeamCity check, deliberately.** Both Osprey configs were moved into
+`ProteoWizard / Versioned Configs` (`d6b8377dfc`, `c355adb70e`), and versioned settings load from
+the branch - so a master-based ref cannot carry them and fails with `freeze.settings.error`
+before any step runs. Build 4177572 reported `Tests passed: 595; failed to load build settings
+from VCS`. There is no path to a green TeamCity for master-based Osprey work until the net10 port
+lands; that is why this merged on local gates plus the agent's own step-3 count.
+
+**Follow-ups, all tracked elsewhere**: future Osprey PRs are based on
+`Skyline/work/20260612_net8_port` (#4619), which carries the configs in-repo; that branch was
+updated to current master as `889d6fac36` (one conflict in `OspreyEnvironment.cs`, resolved by
+keeping master's three new members and dropping `MzmlViaMzmlReader`, which #4588 removed) and its
+full regression passes on net10 at 70 PASS / 0 FAIL / 0 SKIP. The parquet write race found while
+gating this work is TODO-20260917_parquet_write_race.md / #4680. Cross-impl has still never run
+on net10, and `pwiz-perfbase` needs re-pinning there before its perf leg means anything.
