@@ -368,3 +368,25 @@ To file (per the SEA-AD README, while the logs are on disk):
   (3 gaps); par4 has 4, with the same three Stage-7 gaps each shorter.
 
 Nightly will additionally exercise TestPerf, which was not run on TeamCity here.
+
+### 2026-09-17 - Postscript: a latent corruption bug survived the gates (PR #4680)
+
+The binary the 82-file par4 run measured (`a9ee510ada`) carried a use-after-return
+in Parquet.Net's narrow-integer encoders: the widening buffer was returned to the
+`ArrayPool` in a `finally` and THEN read, so once #4652 made columns compress
+concurrently, another column could overwrite it mid-encode - corrupting the
+byte-typed `charge` column at ~0.1% of rows, intermittently. Fixed in
+[#4680](https://github.com/ProteoWizard/pwiz/pull/4680); library fix `2ca33b1` on
+the fork branch; guarded by `TestParquetRoundTripScalarStress`, which iterates
+in-process because a 0.1% defect is invisible to a single-shot test.
+
+Two lessons for the record:
+* The 1.74x figure stands as a TIMING, but it was measured on a binary now known
+  to be latently unsound. The FDP matched baseline to every digit, so the bug
+  either did not fire in that run or its effect stayed below the metrics -
+  neither is evidence the code was correct.
+* Every gate passed - Astral 19 modes, Stellar 15, 82-file FDP, TeamCity - and
+  none caught it. Goldens compare decoded values on 3-file datasets; a 0.1%
+  intermittent corruption needs a stress test that iterates, which is exactly
+  what #4680 added. The same shape (uncleared/returned `ArrayPool` rental) as the
+  bool-encoder bug - worth an audit for a third instance.
