@@ -847,3 +847,75 @@ commit `42f40ea`, based on `origin/main` `9e4edaf`.
 
 **#4679 is unblocked** as far as cross-impl is concerned: it now needs maccoss/osprey#68 merged
 (or the reviewer's agreement that it will be), not a change of its own.
+
+### 2026-09-17 (night session) - GOAL 2 DONE: the manifest key is file identity, and cross-impl does not care
+
+**Answer: branch (a) of the decision tree. The key change lands in #4679 and Rust needs nothing.**
+Both halves of the proof the handoff asked for, in the order it asked for them.
+
+#### Structural: `search_hash` does not enter the cross-impl comparison at all
+
+The gate compares three surfaces and none of them carries a search hash:
+
+| comparator | what it reads | hash field? |
+|---|---|---|
+| `Compare-Stage7-Crossimpl.ps1` | Stage-7 protein FDR dump | no |
+| `Compare-Blib-Crossimpl.ps1` | blib SQL rows + columns | no |
+| `Compare-FdrSidecars-Crossimpl.ps1` | per-file FDR score sidecars | no |
+
+`grep -n hash` over all three returns only PowerShell `[hashtable]` declarations. The FDR sidecar
+header carries no hash either - `FdrScoresSidecar.cs` contains the string nowhere, and the Rust
+header is 32 bytes of magic/version/pass/count (`FDR_SIDECAR_HEADER_LEN`). The parquet FOOTER does
+carry `osprey.search_hash`, but nothing in the gate reads it, and each implementation validates
+only its OWN workdir's artifacts.
+
+#### Empirical: the gate result is identical with and without the change
+
+Run on `StellarLibraryDecoy`, the discriminating bed - it is the one the comparator hands
+`--decoys-in-library --decoy-pairing-manifest <absolute path>` to both sides:
+
+| | Stage 7 | blib | sidecars | OVERALL | precursors | C# blib bytes |
+|---|---|---|---|---|---|---|
+| BEFORE (path key) | PASS | PASS | PASS | **PASS** | 24787 = 24787 | 17,817,600 |
+| AFTER (identity key) | PASS | PASS | PASS | **PASS** | 24787 = 24787 | 17,817,600 |
+
+Byte-identical C# blib across the change, as expected: the key decides cache validity, not any
+computed value. `Stellar` (generated decoys, no manifest, term stays exactly `None`) re-run after
+the change is also still **PASS** on all three legs - the guarantee that generated-decoy beds
+invalidate nothing.
+
+Wall times are NOT evidence either way here: the comparator rebuilds its workdir per run, so
+neither leg reused a cache in either arm. The behavioural claim is carried by the unit test
+instead (below).
+
+#### What changed
+
+`SearchIdentity.cs`. `LibraryIdentityHash()` and the new `DecoyPairingManifestTerm()` now share one
+`FileIdentityHash(path)` - file name + size + mtime, no directory - so the manifest is identified
+exactly the way the library is. The term is `None`, or `Some(<64-hex>)`.
+
+`EscapeForRustDebug` is DELETED. It existed only to reproduce Rust's `{:?}` on a `PathBuf` for this
+one term, and the table above is why that mirroring bought nothing observable. The class doc now
+records the divergence from Rust deliberately rather than claiming byte-identity it no longer has,
+and `docs/00-pipeline-architecture.md` loses its "the exception is `--decoy-pairing-manifest`"
+paragraph - **nothing left in artifact identity is a path**, which strengthens the relocatability
+property that paragraph was the exception to.
+
+The test is rewritten around the two properties that matter, on real temp files with pinned
+mtimes: MOVED (different directory, same name/size/mtime) hashes the SAME; EDITED IN PLACE
+invalidates, tested twice - once by size and once by mtime alone, because size alone would miss an
+equal-length in-place correction, which is exactly what fixing a mislabelled accession looks like.
+It also pins the no-manifest term to the literal `None`.
+
+#### Gates
+
+* `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`: **595 tests pass**, zero
+  inspection warnings. 595 not 596 because `TestEscapeForRustDebugMatchesRustOutput` is gone.
+* Cross-impl: the four runs tabulated above.
+* Commit `fee760058b` on the branch. **Not pushed yet** - the full `regression-parallel.ps1
+  -Dataset All` gate is running, since a change to a cache key belongs in front of the resume leg.
+
+#### For the morning
+
+TeamCity has NOT been re-triggered for the new commits (`fee760058b`, and #4679 now also waits on
+maccoss/osprey#68). Per standing rule, that needs asking first.
