@@ -148,34 +148,75 @@ using the samples in `~/dev/ai-dev/examples/panoramaweb.org/access-logs/` (`apac
       (applies once reports are written, Phase 3)
 
 ### Phase 2: Parsing and aggregation (plain code)
-Do the heavy lifting in ordinary code, not in the LLM; the logs are too large to feed in raw
-(~90 MB for 8.5 hours).
+Do the heavy lifting in ordinary code, not in the LLM; the logs are too large to feed in raw.
+Modules: `urls.py` (page classification), `rules.py` (the server's Apache rules), `aggregate.py`
+(single pass), `summary.py` (JSON for the agent). The CLI writes
+`reports/access-log-summary-<end>.json`.
+
 - [x] Apache and Tomcat parsers (done in Phase 1, `records.py`)
-- [ ] Common record: time, client IP, method, URL, normalized controller-action, container,
-      status, bytes, duration (Tomcat only), user agent, referrer, LabKey user where available
-- [ ] Correlate Apache and Tomcat records using the doc's matching rule (normalized request +
-      client IP + start time; nearest unused match), so each Apache request gets a duration and
-      a LabKey user where available
-- [ ] Slow-page aggregates (from Tomcat timings): per controller-action (and container):
-      count, p50/p95/max duration, total time consumed, error rate
-- [ ] Bot aggregates: per IP, /24 and /16 subnet, ASN, and user agent: request count, rate,
-      burstiness, 404/403/429/408 ratios, crawl patterns (sequential IDs, deep query strings,
-      the same URL across many IPs), robots.txt compliance, verified crawlers
-      (reverse-DNS-checked Googlebot/Bingbot) vs. spoofed user agents
-- [ ] Rate-limit summary. The 429s come from one `mod_qos` rule: a **global** limit of 25
-      concurrent `Panorama%20Public` requests (details in the doc). Report:
-  - flood windows (minutes with 429s) and the clients and user agents driving them
-  - likely real users caught by the global limit during a flood
-  - traffic that bypasses the rule: `/__r<N>/` URLs, `%2520` and `+` spellings, and
-    folders other than Panorama Public. There is no API to map `/__r<N>/` to a folder, so
-    report that traffic grouped by `<N>` (requests, clients, user agents)
+- [x] Page classification: current (`/<folder>/<controller>-<action>.view`) and older
+      (`/<controller>/<folder>/<action>.view`) LabKey URLs, `.api`/`.post`, `/__r<N>/` row IDs,
+      `/labkey/` prefix, WebDAV, WebSocket, static files. `experiment-showFile` and
+      `targetedms-downloadDocument` count as downloads, kept out of slow-page statistics
+- [x] **Decision: no request-by-request Apache-Tomcat matching.** Both logs carry the same
+      client IP, so server time per client/user agent comes from Tomcat and Apache-only
+      responses (429/403/408) from Apache. The doc's matching rule stays available if a later
+      feature needs it
+- [x] Slow pages (Tomcat) per controller-action: requests, total/p50/p95/max seconds, requests
+      over 10 s, 5xx/4xx, signed-in requests, MB sent, top folders/clients/user agents by
+      seconds, busiest hour, slowest examples. Also the 50 slowest page views overall, and
+      hourly Apache/Tomcat volume and server time
+- [x] Clients (Apache traffic + Tomcat server time): requests, statuses, first/last, peak per
+      minute, distinct targets (capped at 2000), user agents, X-Forwarded-For (information only),
+      Panorama Public and bypass requests, server seconds, number of signed-in users (never the
+      names), distinct sessions
+- [x] Subnets (/24 and /16; /48 and /32 for IPv6), built from the client statistics after
+      reading; user agents (distinct IPs, statuses, server seconds, which block rule applies,
+      declared crawler); declared crawlers with their 403 share and matching block rules;
+      internal monitoring (`check_http`) counted separately
+- [x] Rate limiting: floods (minutes with at least 10 429s, gaps of 2 minutes or less merged)
+      with their top IPs and user agents; signed-in clients that were rate-limited; bypasses
+      (other spellings of Panorama Public, `/__r<N>/` requests grouped by row ID, projects with no
+      limit)
+- [x] **Prolonged flood analysis** (`ratelimit.py`), requested 2026-09-17: floods longer than
+      5 minutes are re-read in a second pass (the flood plus a 5-minute lead-in; Tomcat from 65
+      minutes earlier for long requests). For each flood:
+  - Volume (Apache, matching requests): rate vs the median normal minute and the lead-in,
+    rate-limited share, distinct IPs, one-request and new-client shares, top IPs, subnets,
+    user agents, pages, folders
+  - Slot time (Tomcat, served matching requests clipped to the flood): average and busiest-
+    minute concurrency, minutes near the limit (at least 90% of 25), top client and its share
+    and concurrency, slow requests (at least 10 s) and their share, top pages, folders,
+    clients, user agents by slot time
+  - A per-minute timeline (matching requests, 429s, average concurrency)
+  - Concurrency is reported only as minute averages: Tomcat's 1-second `%t` makes
+    instantaneous peaks unreliable
+- [x] Verified on the 09-16 04:48-05:22 flood (`--end 2026-09-17T00:00-07:00`): **one
+      `curl/8.5.0` client downloading raw files over WebDAV held 98% of slot time (~22.7 of 25
+      slots)**. Volume was only 1.65x normal. Details in the doc. Run time 54 s with the second pass
+- [x] Memory: per-client collections are created only when needed, targets and sessions stored
+      as hashes, and user-agent strings shared. Dev window peak 930 MB -> 451 MB; run time 33 s
+- [x] 50 pytest tests (urls, rules, aggregation, summary floods, flood cause analysis, and a
+      check that usernames never reach the summary)
+- [ ] Deferred to Phase 3 tools or later: ASN lookup (needs an offline database), reverse-DNS
+      verification of crawlers (network calls), robots.txt compliance (needs the site's
+      robots.txt), sequential-ID crawl detection
 - [ ] Recommendations for `mod_qos` (currently only the one global Panorama Public limit
-      plus `QS_ErrorResponseCode 429`; no per-client limits), e.g. per-client limits (`QS_ClientEventLimitCount` or
-      similar), a regex fix (`[Pp]`, and covering the other spellings)
+      plus `QS_ErrorResponseCode 429`; no per-client limits), e.g. per-client limits
+      (`QS_ClientEventLimitCount` or similar), a regex fix (`[Pp]`, and covering the other
+      spellings). Phase 3 (agent), using the summary's `rate_limiting` section
 - [ ] User-agent block review: new crawlers that get past the `mod_rewrite` rules (no "bot"
       in the name, e.g. Baiduspider), and which agents the catch-all blocks. Recommend changes
-      in the same `RewriteCond`/`RewriteRule` form
-- [ ] Unit tests with small anonymized fixtures cut from the sample log
+      in the same `RewriteCond`/`RewriteRule` form. Phase 3 (agent), using `crawlers`
+
+Dev window results (2026-09-16 07:00 to 2026-09-17 07:00):
+- `targetedms-showpeptidelist`: 4,957 requests, 102K server seconds (54% of all page time),
+  2,722 over 10 s; one Panorama Public folder alone 20.7K s. Next: `targetedms-showinstrument`
+  (30.8K s, p50 16 s), `targetedms-showprecursorlist` (15.8K s)
+- Downloads: `experiment-showfile` 55.7K s, `targetedms-downloaddocument` 31.8K s
+- 271K client IPs, 220K with a single request; 15K 403s; 638 429s in two floods (largest
+  18:28-18:30, 581 responses from 425 IPs); no signed-in clients were rate-limited
+- `/__r<N>/` URLs, which skip the rate limit: 40.5K requests from 34.7K IPs
 
 ### Phase 3: Agent analysis and report
 - [ ] Agent receives the aggregated summaries (not raw logs) and can drill into specific

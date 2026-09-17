@@ -302,8 +302,30 @@ QS_ErrorResponseCode 429
   - The 429s were spread across **9.5K distinct IPs** (at most 47 per IP). 83% carried the
     same Windows Chrome user agent, and 68% an old `Chrome/1xx.0.0.0` version (see profile).
     The top IPs are in `43.154.x.x` / `43.167.x.x`, which are believed to be Tencent Cloud
-    ranges. This is a distributed crawler. The ~17% of 429s with other user agents may
-    include real users who were locked out during the flood.
+    ranges. The ~17% of 429s with other user agents may include real users who were locked
+    out during the flood.
+- **Root cause of the 04:48-05:22 flood: slow requests holding the slots, not volume.**
+  Established on 2026-09-17 with the full 09-16 Apache and Tomcat logs, using the slot time
+  of served matching requests (Tomcat duration, clipped to the flood):
+  - One client, `218.249.94.200` with user agent `curl/8.5.0`, was downloading `.raw` files
+    from `/_webdav/Panorama%20Public/2022/MacCoss - Human AD Clean Diagnosis DIA Data/...`.
+    It held **98% of all slot time**, about **22.7 of the 25 slots** for the whole flood, and
+    about 17 slots in the 5 minutes before it started.
+  - **WebDAV downloads count against the limit**, because their URLs contain
+    `Panorama%20Public`. The largest downloads each held a slot for the whole 33-minute
+    flood.
+  - Everyone else shared the remaining ~2 slots: 78% of the 15.5K matching requests got a
+    429. Matching traffic was only 1.65x the normal-minute median (456 vs 276 per minute),
+    mostly the distributed crawler (12K IPs, 92% with one request).
+  - The busiest minute averaged exactly 25.0 concurrent matching requests, and 32 of 34
+    minutes averaged at least 22.5. The flood ended when the downloads finished.
+  - Implication: a per-client concurrency limit, or excluding `/_webdav/` from the
+    `mod_qos` match, would have kept one downloader from locking out all other clients.
+- **Measuring concurrency**: use minute averages of slot time (sum of each matching Tomcat
+  request's overlap with the minute, divided by 60). Instantaneous peaks are unreliable
+  because Tomcat's `%t` has 1-second resolution, so start times computed as `%t` - `%D`
+  overlap more than they really did (a peak of 48 was computed for this flood, which the
+  limit of 25 rules out).
 - **Requests that bypass the limit** (the regex only matches the literal text `Panorama%20Public`):
   - **`/__r<N>/` URLs** (container addressed by row ID): 15K requests, **never a 429**. Neither
     log shows which of these are Panorama Public folders, and LabKey has no API to map a row
