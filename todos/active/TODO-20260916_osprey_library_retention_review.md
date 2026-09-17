@@ -1295,3 +1295,52 @@ and it is what this project's own hard-fail-over-warn rule asks for.
 iteration count and print one summary line, keeping raw logs only for failures. At ~2.7%, a few
 hundred iterations would be needed to characterise the trigger; the scripts make that an
 overnight job rather than an investigation.
+
+#### 400-run soak: the rate, the affected tests, and the one clue that discriminates
+
+```
+TOTAL 8 failure(s) in 400 run(s)      (2.0%)
+  4  TestStreamReconciledTransferMatchesLoadAllOverlay
+  3  TestParquetBoundedRowGroupRoundTrip
+  1  TestReconciledTransferKeepsOnlySurvivors
+```
+
+Plus `TestParquetScoreCacheRoundTrip` earlier in the night: **four distinct tests**. The rate is
+stable across batches (2/90, 5/200, 8/400), so ~2% is a real number rather than a burst artifact,
+even though individual failures do cluster.
+
+**The clue that rules out the obvious story**: `TestStreamReconciledTransferMatchesLoadAllOverlay`
+failed BOTH WAYS -
+
+```
+iter 151, 156   Expected:<0>  Actual:<2>
+iter 175        Expected:<2>  Actual:<0>
+```
+
+A comparison that disagrees in both directions across runs is not a file being corrupted - it is
+two paths (streamed vs load-all) that do not agree on which rows they produce, with either side
+able to be the odd one out. That also fits `TestReconciledTransferKeepsOnlySurvivors`, where
+`NWritten` was 1 against an expected 4 while `NAppended` (1) and `OrigRowCount` (7) were both
+CORRECT - the input was read fine and the selection produced the wrong set.
+
+**Leading hypothesis, NOT established**: nondeterministic iteration/selection order. .NET
+randomises string hashing per process, so `Dictionary`/`HashSet` enumeration order over string
+keys differs run to run; any place that takes rows in enumeration order, or breaks a tie by
+position, will diverge between a streamed and a load-all path. The codebase is clearly alert to
+this - `ParquetScoreCache` and `DecoyPairingManifest` carry repeated `// Array.Sort OK: ...
+comparator never ties` justifications - so the suspect is a comparator that CAN tie, or an
+ordered walk over an unordered collection, in the reconciled-transfer path. Not chased.
+
+**What is ruled out**, both by experiment tonight:
+
+* parallel parquet column writes - 2/90 vs 0/90 serialized, Fisher p ~ 0.5
+* disk I/O contention - 0/30 under two readers churning a 12.4 GB file
+
+**Why it matters beyond a red gate**: if a streamed path and a load-all path can disagree about
+which rows survive, that is the same class of question the Stage-7 streamed join and the resident
+arm are supposed to answer identically - and `regression.ps1` mode 3 exists to assert exactly
+that equivalence. A 2% divergence that only shows on tiny test files may be benign at scale, or
+may be the small-N face of something that matters; nothing tonight distinguishes those.
+
+Samples for whoever picks this up: `soak-*.log` in the session directory (kept only for
+failures), and `Flake-Soak.ps1` to gather more.
