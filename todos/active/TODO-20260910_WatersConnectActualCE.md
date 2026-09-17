@@ -35,22 +35,49 @@ Source: waters_connect Skyline integration feedback (2026-06-17), item 6. Jira: 
 
 ## Tasks
 
-- [ ] C++: parse `msTechnique.fragmentationProperties.collisionEnergy` in `WatersConnectData.ipp`,
+- [x] C++: parse `msTechnique.fragmentationProperties.collisionEnergy` in `WatersConnectData.ipp`,
       store on `UnifiChromatogramInfo`, set `MS_collision_energy` in `ChromatogramList_UNIFI.cpp`
-- [ ] C#: `MsDataFileImpl.IsWatersConnectFile` + product m/z shift in `GetChromatogramMetadata`
+- [x] C#: `MsDataFileImpl.IsWatersConnectFile` + product m/z shift in `GetChromatogramMetadata`
       (math in a pure helper `WatersConnectCeSteps`)
-- [ ] Export: waters_connect product m/z unshifted, quant ion only on step 0
-- [ ] Unit test for the shift math (regression test)
-- [ ] Extend `WatersConnectMethodExportTest` with a CE optimization export
-- [ ] Import tests with new-style and old-style waters_connect runs (data requested from Waters)
-- [ ] Regenerate `Reader_UNIFI_Test.data` reference mzML if the live reader test can be run
+- [x] Export: waters_connect product m/z unshifted, quant ion only on step 0
+- [x] Unit test for the shift math (`WatersConnectCeStepsTest`, Test project)
+- [x] Extend `WatersConnectMethodExportTest` with a CE optimization export (`TestCeOptimizationExport`)
+- [x] Build (native + Skyline) and run the tests
+- [x] Regression run (all pass, Release x64): TestAgilentCeOptimization, TestAgilentCEOpt, TestAsymCEOpt,
+      TestMissingOptSteps, TestIsOptimizationSpacing, TestVerifyOptimizationSpacingInFile,
+      TestImportOptimizationChromatograms, TestOptimization, TestPrmCeOptimization, TestLegacyOptimizationStep,
+      TestChromDataSetMatching, TestExportMethodDlg, ConsoleMethodTest, TestSmallMolMethodDevCEOptTutorial,
+      TestCEOptimizationTutorial
+- [x] Import test with old-style and actual-CE waters_connect data (`WatersConnectCeImportTest`)
+- [x] Reader reference mzML: no regeneration needed - all existing devconnect MRM data reports CE as NaN,
+      so the reader adds no CE param for it
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
+- **Test name**: `TestWatersConnectCeSteps` (shift math); `TestWatersConnectExportMethodDlg` ->
+  `TestCeOptimizationExport` (export); `TestWatersConnectCeImport` (import, both data styles)
 - **Test project**: Test (shift math), TestFunctional (export, import)
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
+- **Fails on master**: yes - with master's `Export.cs`, `TestCeOptimizationExport` fails at line 414
+  (22 distinct product m/z vs 2 expected: the steps are shifted). `WatersConnectCeSteps` does not exist on master.
+- **Passes on fix**: yes - all three tests pass (Release x64; export test looped 4x), 2026-09-10 / 2026-09-17
+- **Import test red/green (2026-09-17)**: with the shift line in `MsDataFileImpl.GetChromatogramMetadata`
+  commented out, `TestWatersConnectCeImport` fails with area 0 for every step of the actual-CE file; with it
+  restored the two files agree step for step.
+
+## Import test data
+
+Stephen (Waters) added a CE-step run on devconnect: sample set `2c8b56a1-81d7-41ed-9cdd-450b015c69e9`,
+injection `75fb8289-e287-492a-a81a-0eca56738ff3` ("6-Mix", folder Skyline/6mix). 121 MRM channels with
+**numeric CE**, 11 transitions x 11 steps (2 V apart, step count 5), product m/z still shifted per step
+because the method came from the current export. Converted with the rebuilt msconvert; the mzML keeps the
+`MS_waters_connect` software term, which is what switches the shift on.
+
+`TestFunctional/WatersConnectCeImportTest.zip` holds:
+* `6Mix.sky` - built from the channel list (center product m/z and center CE per transition, CE regression
+  step size 2 / count 5); scripts in `ai/.tmp/sessions/20260910-4346/`
+* `6Mix-CEsteps-shifted.mzML` - the converted run as acquired (old style)
+* `6Mix-CEsteps-actual-ce.mzML` - the same run with each series' product m/z set to its center value, which is
+  what a method exported without the shift acquires (stand-in until such a run can be acquired)
 
 ## Progress Log
 
@@ -60,3 +87,14 @@ Explored export (`WatersMassListExporter.WriteTransition`, `Export.cs:4697` shif
 and import (`ChromDataProvider.SetOptStepsFromProductMz`; waters_connect reader never reads CE).
 Agreed design with the developer: shift applied before the loader, gated on the waters_connect software
 CV term; test data (new-style and old-style CE optimization runs) requested from the Waters team.
+
+Scanned devconnect (scripts in ai/.tmp/sessions/20260910-4346/): 120 MRM injections, none new-style.
+`DataRoot/Company/Skyline/SmallMolOptimization` / "CE Opt" (5 injections, ID33144 EnergyMet tutorial data) is
+old-style (product m/z shifted 0.01 per step). Every MRM channel reports `fragmentationProperties.collisionEnergy`
+= NaN in both `/channels` and `/channels/mrm`; CE is only in the channel title ("145>100.98 1eV"). Open question
+for Matt / Waters: do current acquisitions populate the numeric field, and is a title fallback needed?
+Import tests ON HOLD until the developer settles how to obtain the test data.
+
+Implemented the reader, shift, and export changes plus the unit and export tests. Build gotcha: the
+Claude Code harness sets `NoDefaultCurrentDirectoryInExePath=1`, so `cmd /c build_skyline_64.bat` reports
+"not recognized"; the detached launcher clears it before running the build.
