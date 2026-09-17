@@ -1096,3 +1096,94 @@ so no test can leave the cap set for the next one.
 
 Worth noting because a gate that fails one run in three teaches people to re-run rather than to
 read the failure.
+
+### 2026-09-17 (night session) - SEA-AD breakdown: the unpaired entries are mostly a PAIR-BLIND min-fragment filter
+
+The dump reproduces the recorded figures exactly on the library the proposal names -
+`target+decoy+entrapment-20260817`, 6,175,389 entries, 108 s cold load:
+
+```
+OSPREY_DUMP_UNPAIRED_LIBRARY: wrote 1628 unpaired decoy and 2247 unpaired target row(s)
+Library-decoy pairing: paired 3085757/3087385 decoys (99.9%); manifest=3085756, composition=1;
+                       1628 unpaired decoys, 2247 unpaired targets
+```
+
+#### SEA-AD fails for the OPPOSITE reason to StellarLibraryDecoy
+
+| | not in manifest | in manifest |
+|---|---:|---:|
+| StellarLibraryDecoy (3,874 distinct... see prior section) | 15,109 | 11 |
+| **SEA-AD (3,874 distinct)** | **0** | **3,874** |
+
+Every SEA-AD unpaired sequence is in the manifest, typed `target` 1,169 / `p_target` 1,077 /
+`decoy` 819 / `p_decoy` 809. So the manifest is not the problem here; the pairing is.
+
+#### The pairing rule, and what actually goes wrong
+
+`DecoyPairingManifest.ApplyToLibrary` buckets entries by
+`BucketKey(pair_index, partition, charge, isTargetSide)` and zips the two sides with
+**`int n = Math.Min(tSorted.Count, dSorted.Count)`** (`DecoyPairingManifest.cs:400`). Surplus on
+the longer side is left unpaired. Partition pairs `target`<->`decoy` and `p_target`<->`p_decoy`.
+
+Classifying all 3,875 unpaired ENTRIES against the manifest and the library:
+
+| cause | entries | share |
+|---|---:|---|
+| sibling present at that charge, but it has **<3 fragments** | **2,557** | **66.0%** |
+| sibling absent from the library at that charge | 685 | 17.7% |
+| sibling present with >=3 fragments - NOT explained by the above | 633 | 16.3% |
+| not in the manifest | 0 | 0% |
+
+**`DiannTsvLoader` drops any precursor with fewer than 3 fragments**
+(`DEFAULT_MIN_FRAGMENTS = 3`, `DiannTsvLoader.cs:40`, applied at `:148`), and that filter runs
+BEFORE pairing (`LibraryLoader.cs:239` dedup, then pairing at `:328+`). So the dominant cause is:
+the filter removes ONE SIDE of a manifest pair, the bucket goes short, and `Math.Min` leaves the
+survivor unpaired.
+
+Worked example, pair index 872 - both sides in the manifest exactly once, both in the library at
+charges 2 and 3, one modified form each, correct `decoy_` prefix:
+
+```
+AAAPPDAPARPAVAGAGR  charge 2   6 fragments   target, UNPAIRED
+GAGAVAPRAPADPPAAAR  charge 2   2 fragments   its decoy -> dropped at load (<3)
+AAAPPDAPARPAVAGAGR  charge 3   8 fragments   \  both survive,
+GAGAVAPRAPADPPAAAR  charge 3  14 fragments   /  so charge 3 pairs
+```
+
+#### Why this matters more than a threshold default
+
+**The min-fragment filter is pair-blind, and that is an FDR asymmetry, not just a tidiness
+problem.** Osprey treats "target-decoy pairs stay together" as a critical invariant where it
+splits CV folds - an unpaired target in the training set auto-wins its competition. The same
+principle is violated at library load: a target whose decoy was dropped for having 2 predicted
+fragments now competes against nothing. 2,557 entries on this library.
+
+Consequences for the strict-gating proposal:
+
+* **Making the filter pair-aware - drop both sides together, or neither - would remove ~66% of
+  the unpaired population AND close the asymmetry.** That is a better answer than an
+  `--allow-unpaired-library` loophole, because it fixes the cause rather than widening the gate
+  around it. The loophole is still needed for the rest.
+* **The cause to NAME differs by library**, which is the strongest argument against a single
+  error message: SEA-AD is "your library's fragment filter split pairs", StellarLibraryDecoy is
+  "your manifest does not cover your library". A percentage names neither.
+* Carafe predicts a target and its decoy independently, so their fragment counts differ freely;
+  nothing upstream keeps a pair on the same side of a >=3 threshold.
+
+#### Not established
+
+The remaining **633** entries have a sibling present at the same charge WITH >=3 fragments, so
+neither mechanism above explains them. Candidates are `LibraryDeduplicator` (which runs before
+pairing and has a fragment-count tie-break) and modified-form count asymmetry inside a bucket.
+Not chased - saying so rather than stretching the two causes to cover them.
+
+Method note: "present in the library" above is computed from the source TSV, which is the right
+input for the <3-fragment question (the filter is exactly what the TSV does not show) but means
+the 633 could still be load-time removals of another kind.
+
+#### Reproducing
+
+`ai/.tmp/sessions/20260916-night-4650/` holds `Run-UnpairedDump-SeaAd.ps1`, `classify.awk` and
+the intermediate indexes. `--cache-dir` MUST stay on scratch: the `.libcache` beside the library
+predates v3, so a current build would rewrite 2.27 GB that every other run on this machine
+shares, and a warm v3 cache would short-circuit the pairing path the dump hangs off.
