@@ -8,7 +8,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none; noted under "Minor" in #4671)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4678](https://github.com/ProteoWizard/pwiz/pull/4678)
 
 ## Objective
 
@@ -25,8 +25,9 @@ document's own layout name "<document>.sky.view" as a whole file name. The worka
 - [x] `EXT_VIEW`, `FILTER_VIEW`; export and import dialogs use them; suggested name from GetViewFile
 - [x] `LayoutExportImportTest` updated: base names now pick up ".view"; typed "Name.sky.view" and
       "Name.view" both come out as typed
-- [ ] Build Release, run TestLayoutExportImport and CodeInspection
-- [ ] Commit, push, PR
+- [x] Build Release, run TestLayoutExportImport and CodeInspection
+- [x] Commit, push, PR #4678 (EXT_SKY_VIEW removed and the restating comments dropped at Nick's
+      direction before opening)
 
 ## Progress Log
 
