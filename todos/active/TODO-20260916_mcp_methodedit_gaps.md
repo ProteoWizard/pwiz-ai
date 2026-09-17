@@ -134,6 +134,24 @@ Findings, fixed in the same session (uncommitted until built and tested):
 4. **show_node_tip threw "has no data tip" for custom-drawn tips** although the tip was shown
    (document node tips draw themselves; only text/table tips have text). Now it refuses only a
    node with no tip provider, returns the text or empty, and hiding takes no value or an empty one.
+### 2026-09-17 - Window verbs split (Nick's design)
+
+`SetWindowPlacement` is gone, replaced by three verbs that map onto the docking library's model
+(every dockable window is a tab in one pane, every pane is in one area - document, a side, or a
+floating window - and an area's panes form a split tree of "split off pane P on side S with
+share X"):
+- `SetWindowState(formId, state | relativeTo + relation)` - Normal/Maximized/Minimized for a
+  top-level window; Document/DockLeft/.../AutoHide/Floating/Hidden for a dockable one; or
+  relativeTo another dockable window with relation tab/left/right/top/bottom (half each). No sizes:
+  a window lands at the default size and `SetWindowBounds` sizes it after.
+- `SetWindowBounds(formId, bounds, placement)` - bounds only (top-level window, floating frame,
+  or a docked side's width/height); placement maximize/center; nothing given reads.
+- `GetLayout()` - main window plus every area with its panes: tabs, active tab, bounds, and the
+  split each pane made (SplitFrom = the active tab of the pane it split, SplitSide, SplitShare).
+MCP tools: `skyline_set_window_state`, `skyline_set_window_bounds`, `skyline_get_layout`.
+`WindowLayoutMcpConnectorTest` replaces the placement test. The walkthrough's table and Getting
+Started block name the new verbs; the SkylineAiConnector.zip in the tree is stale again until rebuilt.
+
 Design note for the PR: Name matching (item 5 and finding 2) is kept only because the issue asked
 for it. Nick's preference is that verbs address controls by what the user can see (caption, label
 beside the field, kind); the trailing-label rule alone drives the tutorial's count boxes. Do not
