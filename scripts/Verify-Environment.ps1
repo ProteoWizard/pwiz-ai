@@ -370,6 +370,28 @@ if ($vsVersions.Count -gt 0) {
     Add-Result "Visual Studio" "MISSING" "Install from visualstudio.microsoft.com" $false
 }
 
+# The .NET 10 port branch (PR #4619) builds native Hardklor.exe and MobilionShim.dll with VS
+# MSBuild, so the Desktop C++ workload is required even though the managed build is dotnet.
+# vswhere is the only reliable check: the VS Installer can show a workload as checked while
+# VC\Tools\MSVC is empty on disk (see new-machine-setup.md troubleshooting).
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (Test-Path $vswhere) {
+    $vcInstalls = & $vswhere -all -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion 2>$null
+    if ($vcInstalls) {
+        Add-Result "VS Desktop C++ workload" "OK" ("MSVC in VS " + (($vcInstalls | ForEach-Object { $_.Split('.')[0] }) -join ", ")) $true
+    } else {
+        Add-Result "VS Desktop C++ workload" "MISSING" "Needed for Hardklor.exe/MobilionShim.dll on the .NET 10 port and for all master builds. VS Installer > Modify > Desktop development with C++" $false
+    }
+}
+
+# .NET 10 SDK - the managed build on the port branch, and the Roslyn LSP host.
+$sdk10 = (dotnet --list-sdks 2>$null) | Where-Object { $_ -match '^10\.' } | Select-Object -Last 1
+if ($sdk10) {
+    Add-Result ".NET 10 SDK" "OK" ($sdk10 -replace '\s+\[.*$', '') $true
+} else {
+    Add-Result ".NET 10 SDK" "MISSING" "Required by the .NET 10 port branch. VS 2026 .NET desktop workload installs it, or: winget install Microsoft.DotNet.SDK.10" $false
+}
+
 # 5. TortoiseGit
 Write-Host "Checking TortoiseGit..." -ForegroundColor Gray
 $tortoiseGitPath = "C:\Program Files\TortoiseGit\bin\TortoiseGitProc.exe"

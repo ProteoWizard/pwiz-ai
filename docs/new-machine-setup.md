@@ -93,7 +93,8 @@ Record their choice and reference it throughout setup.
 **Before installing anything, confirm the machine is x64.** Skyline's build chain is x64-only:
 the build scripts pass `address-model 64` with `toolset=msvc-14.3`, output lands in `bin\x64\`,
 and the vendor SDKs (Thermo, Bruker, Waters, Sciex, Agilent) ship as closed-source x64 binaries.
-Nightly testing requires x64 Visual Studio 2022.
+Nightly testing requires x64 Visual Studio. On master (Boost.Build) that means VS 2022; on the
+.NET 10 port branch (PR #4619) VS 2026 alone is sufficient - see the VS 2026 note in Phase 2.
 
 ```powershell
 $env:PROCESSOR_ARCHITECTURE   # AMD64 = supported. ARM64 = read the note below.
@@ -594,7 +595,18 @@ The `--passive` flag shows progress without requiring interaction.
 If the targeting pack is not available in the VS installer, download the Developer Pack directly:
 - https://dotnet.microsoft.com/download/dotnet-framework/net472
 
-> **Note on VS 2026:** Optionally install VS 2026 for compatibility testing. While VS 2026 support is being developed, nightly testing currently requires VS 2022. VS 2026 builds have shown compatibility issues with some vendor DLLs (access violations). Use `toolset=msvc-14.3` (VS 2022) for production builds. Set environment variable `SKYLINE_BUILD_TOOLSET=msvc-14.5` to test with VS 2026.
+> **Note on VS 2026 (updated 2026-09-17):** The team is moving to VS 2026 with the .NET 10 port
+> (PR #4619). **On that branch VS 2026 alone is sufficient** - verified on a machine with VS 2022
+> uninstalled: `build.bat` compiles Hardklor.exe and MobilionShim.dll with the `v145` toolset
+> (both `.vcxproj` files fall back from `v143` to `v145` when VS 2022 is absent), and a Release
+> IDE build plus a test run succeeded. What VS 2026 needs for that branch: the **Desktop
+> development with C++** workload (MSVC 14.5x), **.NET desktop development**, and the **.NET 10
+> SDK** (`dotnet --list-sdks` shows `10.0.x`; the VS .NET workload installs it).
+>
+> **On master (Boost.Build) VS 2022 is still required**: the nightly and `b.bat` use
+> `toolset=msvc-14.3`, and earlier VS 2026 builds of the C++ tree showed vendor-DLL access
+> violations. `SKYLINE_BUILD_TOOLSET=msvc-14.5` selects VS 2026 there for experiments only.
+> A developer who works on both branches needs both VS versions installed side by side.
 
 ### 2.2 Verify Installation
 
@@ -921,8 +933,11 @@ completely different way, through the .NET SDK. The two share the `b.bat` / `bs.
 *names* and nothing else, so do not carry instructions across.
 
 **Prerequisite:** the .NET 10 SDK. Check with `dotnet --list-sdks` and look for a `10.0.x`
-entry. Visual Studio is not required for the managed build; the C++ toolchain from Phase 2
-is not used by it either.
+entry. **Visual Studio with the Desktop C++ workload is still required**, even though the managed
+projects build through the .NET SDK: `build.bat` uses VS MSBuild (found via `vswhere`) for the
+native `Hardklor.exe`, and `Mobilion.csproj` does the same for `MobilionShim.dll`. Either VS 2022
+(`v143`) or VS 2026 (`v145`) works - both `.vcxproj` files fall back to `v145` when `v143` is not
+installed. The Boost.Build toolchain from Phase 2 is not used.
 
 `pwiz-sharp/` is **tracked on this branch** and arrives with the checkout - there is no
 second repository to clone. (On master the same directory is untracked, so a checkout
@@ -1054,8 +1069,22 @@ convenience wrapper:
   `vswhere`, because - in its own words - *"`dotnet build` (the .NET SDK MSBuild) cannot build
   a C++ vcxproj"*. `Skyline.csproj` then deploys that exe beside Skyline through a `Content`
   include, so the Hardklor/Bullseye pipeline can shell out to it
-* it runs `dotnet restore` across the whole target set
-* it passes `--i-agree-to-the-vendor-licenses`, which the IDE has nowhere to pass
+* it runs `dotnet restore` across the whole target set (the IDE does this too, so on its own
+  this is not a reason)
+* it passes `--i-agree-to-the-vendor-licenses` - redundant once `i-agree-to-the-vendor-licenses.bat`
+  has written `Directory.Build.user.props`, which covers IDE and command-line builds alike
+
+So the two things that genuinely require a command-line build before the IDE can build are the
+pwiz-sharp binaries (Visual Studio only calls `GetTargetPath` on project references outside the
+solution; PR #4634 fixed which configuration it looks in, not whether the binaries exist) and
+`Hardklor.exe`. Whether to fold both into `Skyline.sln` instead, as Nick prototyped on 2026-09-01,
+is an open design question for Matt and Nick - not something to work around per machine.
+
+> **The top-level `b.bat`/`bs.bat`/`bo.bat` are optional.** They are gitignored per-developer
+> state that has to be hand-swapped whenever you move between master and the port branch, and a
+> stale master-style one (hard-coded `toolset=msvc-14.3`) fails outright on a VS 2026-only
+> machine. `pwiz_tools\Skyline\build.bat Release --build-only` is the same build with no file
+> to maintain.
 
 Skip it and the IDE has no restored packages, no Hardklor, and - unless you ran
 `i-agree-to-the-vendor-licenses.bat` - stub vendor readers.
@@ -1745,7 +1774,7 @@ Or from an **elevated** terminal:
 
 After it finishes, re-run the `VC\Tools\MSVC` check above — a `14.3x.xxxxx` (or `14.4x`) folder confirms `cl.exe` is present and `toolset=msvc-14.3` will resolve.
 
-> **Note on multiple VS versions:** `vswhere -latest` returns the highest version (VS 2026 = `...\18\Community`), which can mask a compiler-less VS 2022. Use `-all` to enumerate every install, and remember nightly builds require VS 2022's `msvc-14.3` toolset specifically — having C++ tools only in VS 2026 is not enough.
+> **Note on multiple VS versions:** `vswhere -latest` returns the highest version (VS 2026 = `...\18\Community`), which can mask a compiler-less VS 2022. Use `-all` to enumerate every install, and remember **master** nightly builds require VS 2022's `msvc-14.3` toolset specifically — having C++ tools only in VS 2026 is not enough there. (The .NET 10 port branch is the exception: VS 2026 alone builds it.)
 
 ### NuGet Package Errors (NU1101)
 

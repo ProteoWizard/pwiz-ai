@@ -11,7 +11,7 @@ Detailed reference for building, testing, and analyzing Skyline from LLM-assiste
 
 ## Prerequisites
 
-- Visual Studio 2022 Community/Professional installed
+- Visual Studio 2022 Community/Professional installed (master); the .NET 10 port branch builds with VS 2026 alone - see new-machine-setup.md Phase 2
 - Initial full build completed with `bs.bat` (Boost.Build + native dependencies)
 
 > **On the .NET 10 port branch this is not how the build works.** There the tree builds

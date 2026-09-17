@@ -52,7 +52,7 @@
 
 .NOTES
     Author: LLM-assisted development
-    Requires: Visual Studio 2022, initial full build with bs.bat
+    Requires: Visual Studio 2022 or 2026, initial full build with bs.bat
 #>
 
 param(
@@ -239,13 +239,13 @@ if (-not $isNet8) {
     # Find MSBuild using vswhere
     $vswherePath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (-not (Test-Path $vswherePath)) {
-        Write-Error "vswhere.exe not found. Is Visual Studio 2022 installed?"
+        Write-Error "vswhere.exe not found. Is Visual Studio (2022 or 2026) installed?"
         exit 1
     }
 
     $vsPath = & $vswherePath -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
     if (-not $vsPath) {
-        Write-Error "Visual Studio 2022 with MSBuild not found"
+        Write-Error "Visual Studio (2022 or 2026) with MSBuild not found"
         exit 1
     }
 
