@@ -180,6 +180,8 @@ nightly definition; language coverage comes from machine count and the per-machi
       argument and `Nightly.Parse` over last night's integration log (-> integration/standard)
 - [ ] skyline.ms: three leak folders (needs project admin)
 - [ ] Reporting: docs, labkey MCP, `/pw-nightly`, `/pw-daily-research`; the machine table on the wiki
+- [x] `/code-review max` findings triaged and applied (2026-09-17, see Progress)
+- [ ] PR
 - [ ] Rollout steps 1-4 above, one branch and one machine class at a time
 
 ## Progress
@@ -207,9 +209,11 @@ Branch `Skyline/work/20260917_nightly_three_channels` off master.
   `trunk`, `perf`, `release_perf`, ... plus `leak`, `release_leak`, `integration_leak`), so
   nothing on disk moves when a machine is reconfigured and the log parser keeps finding the
   branch in the clone command's directory name.
-- **Open point 1**: Stress stays in the Type combo (it was in the old one; removing it is a
-  regression for whoever uses it). Stress is not "long" for the 9+12 rule - it never was
-  limited.
+- **Open point 1, settled**: stress is gone entirely (Brendan, 2026-09-17: never noticed the 7th
+  option, not interested in preserving it; its `NightlyStress` folder does not exist on
+  skyline.ms, so it could not have posted in years). No `RunType.stress`, no legacy `stress`
+  argument, and the Nightly tab's repeat / randomize controls are removed with it - the run
+  type alone decides the run.
 - **Open point 4**, provisionally: `Nightly x64 Leak Detection`, `Release Branch Leak
   Detection`, `Integration Leak Detection` (the names in the design). Only `Nightly.cs`
   knows them; change there and on skyline.ms together.
@@ -220,15 +224,45 @@ Branch `Skyline/work/20260917_nightly_three_channels` off master.
 - **Perf run after every language has had its perf pass**: the remaining passes cycle the
   suite (loop=-1 keeps its meaning) rather than ending the run.
 
-**Files**: `TestRunner/Program.cs` (pass 1 and pass 2, `GetPerfTestLanguage`,
+**Files**: `TestRunner/Program.cs` (pass 1 and pass 2, `GetPerfTestLanguageIndex`,
 `OrderForPerfNight`), `TestRunnerLib/RunTests.cs`, `TestUtil/TestFunctional.cs`, 23 test
 files, `SkylineTester/{TabNightly,SkylineTesterWindow,SkylineTesterWindow.Designer}.cs`,
 `SkylineNightly/{RunSpec (new),Nightly,LogFileMonitor,Program,SkylineNightly,
 SkylineNightly.Designer}.cs`, `SkylineNightly.skytr`, `SkylineNightly.csproj`.
 
+### 2026-09-17, later - the form, and the review
+
+**SkylineNightly form** (three iterations with Brendan's UI rules: no disabled control without
+an obvious reason, no order dependence between controls): a `Runs (o) 1 ( ) 2` row between
+Folder and Tests; the Then row (Branch + Type) is hidden with one run. The 9+12 rule fires as
+the type is chosen (message box, combo switches back), with an OK-time check only for a pair
+loaded from saved settings. Brendan laid the form out in the designer (standard button margins,
+tab order); do not re-generate it.
+
+**`/code-review max`** returned 15 findings (commit `734dfdbbb5`). Applied: #8 (`LoadNightlyRunType`
+ignores non-nightly documents), #9 (perf language index read once per run - a pass starting
+after midnight walked past a language), #15 (`ShortName` distinct per run: `master`,
+`release_standard`, `master_leak`; legacy specs keep `trunk`, `perf`, `release`, ...), #10 (the
+antivirus check is the first test of a perf night, before the perf tests), #6 (pass 1 drops a
+failed test for the following sweeps and runs the run-once tests once, not as leak checks),
+#2 (`RunAndPost` posts to the folder the log proves - `# Perf tests` / `# Leak checking only` -
+so a branch whose SkylineTester predates the run type never posts a combined run to a leak
+folder), #3 as a loud failure rather than rotation: TestRunner logs `# Pass 1 sweep N
+complete.` and a leak run whose log lacks sweep 1's completion gets a synthetic
+`LeakCheckingIncomplete` failure in the posted XML (Brendan: a machine that cannot get through
+the suite in 12 h should not be a leak machine, and today nobody but him notices). #5 became
+moot with stress removed. Declined: #1 and #7 (legacy machines keep the combined run, now with
+the 33 extra tests in pass 1, and saving the form is the deliberate switch - Brendan is the one
+reconfiguring machines), #4 (the leak hanger is pre-existing), #11 (manual `parse` command
+matches master), #12 (folders are rollout step 3), #13 (perf-only list with loop=0 - not worth
+the code), #14 (moot).
+
+Dry runs after the fixes: perf night order is AV check, perf (ja), suite (en, fr), perf (zh);
+leak run logs the sweep marker; quick inspection clean.
+
 ## Open points
 
-1. **Stress** in the Type combo, or legacy-argument only?
+1. ~~**Stress** in the Type combo, or legacy-argument only?~~ Removed entirely (2026-09-17).
 2. **Leak machines per branch**: one, or two for resilience?
 3. **Leak duration**: 12 h everywhere, or 9 h on machines that also run a 12 h perf?
    (9 + 12 is allowed; 12 + 12 is not.)

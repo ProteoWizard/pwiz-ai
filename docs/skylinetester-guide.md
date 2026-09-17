@@ -100,7 +100,6 @@ everything in one night); it maps to these TestRunner arguments on top of the co
 | Standard | `pass0=on pass1=off pass2=on` | Pass 0 (French, no vendor readers, no internet), then pass 2 cycling the suite in each language until stopped |
 | Leak checking | `pass0=off pass1=on pass2=off` | Pass 1 over every test, repeated as independent sweeps until stopped; logs `# Leak checking only` |
 | Perf | `pass0=off pass1=off pass2=on perftests=on perffirst=on` | TestPerf once in one language (rotating by day and machine), the suite once in each language (tutorials, then functional, then unit projects), then TestPerf in each further language until stopped; logs `# Perf tests` |
-| Stress | `pass0=off pass1=off pass2=on` plus the repeat count and randomize | Each test repeated in a row, random order |
 | Standard with leak checking | `pass0=on pass1=on pass2=on` | The pre-split nightly (all three passes); what an old `.skytr` without `nightlyRunType` gets |
 
 A `.skytr` stores the choice as `<nightlyRunType>` with the combo text; SkylineNightly writes
