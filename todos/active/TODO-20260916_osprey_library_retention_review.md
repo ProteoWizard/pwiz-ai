@@ -1442,3 +1442,78 @@ is a write-side symptom - or the `.Data as T` cast failing. The first keeps the 
 frame despite the underpowered parallel/serial A/B (2/90 vs 0/90 discriminates nothing at this
 rate), and it is the cheaper of the two to instrument: log the field names actually found when a
 read returns null.
+
+#### 2026-09-17 07:00 — SOLVED, and two conclusions above are WRONG. Read this before the sections above.
+
+The intermittent failure is a **use-after-return in Parquet.Net's narrow-integer encoders**,
+turned live by the parallel column writer. Fixed, measured, and pushed. Two things recorded
+above are now known to be false and are retracted here rather than edited in place, so the
+reasoning that produced them stays visible.
+
+**RETRACTION 1 — "parallel parquet column writes: ruled out, Fisher p ~ 0.5".** False negative
+from an underpowered test. Full-suite runs are a terrible instrument for this: one suite run
+performs only a handful of parquet writes, so 90 runs per arm carried almost no information. An
+in-process harness doing 20,000 write/read cycles per arm settled it in 50 seconds:
+
+| arm | corrupted round-trips |
+|---|---|
+| parallel (default DOP) | **27 / 20,000** |
+| serialized (`OSPREY_PARQUET_WRITE_THREADS=1`) | 0 / 20,000 |
+| parallel, after the fix | 0 / 20,000, and **0 / 100,000** |
+
+The lesson is about instrument power, not about the hypothesis: I had the right suspect and
+dismissed it on evidence that could not have convicted anyone.
+
+**RETRACTION 2 — the "null column read defaults silently" chain.** The `chargeCol != null ?
+chargeCol[row] : (byte)0` fallback is real and still worth hardening, but it is NOT what
+happened. The column is not null and the read does not fail; the column is written CORRUPT and
+read back faithfully. I inferred a read failure from the only code path I could see that
+produces a 0, and said so as though I had observed it.
+
+**The actual root cause** — `ParquetPlainEncoder.Encode(ReadOnlySpan<byte>, Stream,
+SchemaElement)`:
+
+```csharp
+int[] ints = ArrayPool<int>.Shared.Rent(data.Length);
+try {
+    for(int i = 0; i < data.Length; i++) ints[i] = data[i];
+} finally {
+    ArrayPool<int>.Shared.Return(ints);          // returned here...
+} 
+Encode(ints.AsSpan(0, data.Length), destination); // ...then READ after return
+```
+
+Benign single-threaded (nothing rents in between, so the contents survive — which is why it has
+been latent for years); a live data race once `WriteColumnsAsync` encodes columns concurrently.
+`sbyte`, `short` and `ushort` carry the identical copy-paste. `charge` is Osprey's only `byte`
+column, exactly as `is_decoy` was the only `bool` when the sibling encoder bug was found on
+2026-09-09.
+
+**Everything else follows.** `charge` is part of the `(entry_id, charge, scan_number)` identity
+used by `keepIdentities` and by canonical ordering, so a corrupted value does not merely lose a
+field — the row fails identity matching and is dropped. That is `NWritten` 1 instead of 4, and
+`NReplaced` 0 instead of 2, and the streamed-vs-load-all pair differing in either direction
+depending on which side drew the bad write.
+
+**Fix**: encode inside the `try`, all four overloads. `maccoss-developers` commit `2ca33b1` on
+`parquet-parallel-compression`, pushed to the PR already awaiting review with the bool fix.
+PATCH-NOTES updated.
+
+**Upstream disposition — the opposite of the bool bug.** Verified by fetching the source rather
+than assuming: identical code in upstream `master` AND `6.1.0` (`ParquetPlainEncoder.cs:580`),
+with no `EncodeHwx` bypass for these types (that exists only for `bool`). So this IS worth
+reporting upstream, and it **corrects the PATCH-NOTES claim that 6.1.0 makes parallel writing
+safe** — that was established for the bool encoder only. A 6.1.0 upgrade would not have avoided
+this and must carry the patch.
+
+**Still worth doing, independent of the fix**: make an unreadable/absent parquet column a hard
+error instead of defaulting (`ReadColumnByName` at `ParquetScoreCache.cs:848`, the three
+`(byte)0` fallbacks, and `ReadFdrEntryGroup`'s silent empty-list return). It would not have
+caught this one — the column read fine — but a silently defaulted charge is invalid output a
+user would trust, which is exactly what the project's hard-fail rule is for.
+
+**Open**: the patched `ParquetNet.dll` is deployed only to `pwiz-work2`. Staging it into
+`pwiz_tools/Shared/Lib/Parquet/` is a separate pwiz change (Skyline consumes it too) and is
+Brendan's call. Also unverified: whether `.scores.parquet` files written between 2026-09-10 and
+this fix can carry corrupted rows in practice, and whether the daily version stamp invalidates
+them on every resume path.
