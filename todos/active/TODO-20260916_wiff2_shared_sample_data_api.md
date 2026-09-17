@@ -8,10 +8,10 @@
   #4670 merges (GitHub retargets automatically).
 - **Checkout**: `C:\dev\pwiz-im7`
 - **Created**: 2026-09-16
-- **Status**: Code complete, reviewed, re-measured and committed (unpushed). Pending: open the PR.
+- **Status**: PR open, awaiting CI and Copilot review
 - **GitHub Issue**: [#4674](https://github.com/ProteoWizard/pwiz/issues/4674)
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#4681](https://github.com/ProteoWizard/pwiz/pull/4681) into Skyline/work/20260915_wiff2_concurrency_tests
 - **Requester/Reporter**: none. Filed by Brendan, a developer of this project - not an outside
   report, so no credit line.
 
@@ -179,7 +179,7 @@ All found by `/code-review max`, all verified before acting:
       branch and base explicitly)
 - [x] Re-run the Skyline leak pass and the four tests on the FINAL code - four pass; leak pass flat at 22.56 MB from iteration 5, delta 0.1 KB over 15 iterations
 - [x] Amend the commit (cedf35c6fe, unpushed)
-- [ ] Open the PR (`pwiz:` prefix, `pwiz` label, `Fixes #4674`)
+- [x] Open the PR - #4681 (`pwiz:` prefix, `pwiz` label, `Fixes #4674`)
 - [ ] File the cpp-side issue
 
 ## Regression Test
