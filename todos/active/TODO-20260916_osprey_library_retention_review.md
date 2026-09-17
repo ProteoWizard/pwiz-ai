@@ -1432,3 +1432,13 @@ that. Today the failure is invisible in production and only shows up as a ~2% te
 question - `RunSync(groupReader.ReadColumnAsync(field))` at `:855` - rather than a search. Ruled
 out by experiment tonight: parallel column writes (2/90 vs 0/90 serialized) and disk I/O load
 (0/30).
+
+**One further narrowing** (added before session close): `RunSync` is a plain
+`task.GetAwaiter().GetResult()` (`:826`), so the sync-over-async wrapper is NOT a race and can be
+ruled out. That leaves two candidates for the intermittent null: `BuildFieldLookup` (`:840`)
+returning a lookup WITHOUT the field - Parquet.Net 4.x requires schema-attached `DataField`
+instances, so the lookup is rebuilt per reader from the FILE OWN schema, and a short schema there
+is a write-side symptom - or the `.Data as T` cast failing. The first keeps the WRITE path in the
+frame despite the underpowered parallel/serial A/B (2/90 vs 0/90 discriminates nothing at this
+rate), and it is the cheaper of the two to instrument: log the field names actually found when a
+read returns null.
