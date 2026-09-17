@@ -825,3 +825,25 @@ not apply to maccoss/osprey, but `Deny-HarnessAttribution.ps1` refuses a message
 its `PWIZ_ALLOW_HARNESS_ATTRIBUTION=1` escape hatch is not reachable from inside a tool call
 (the hook runs before the command's environment exists). Amend before opening the PR if the bare
 upstream form is wanted - the commit is local.
+
+#### The rigorous gate, and the PR
+
+`Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All` - the version the handoff recorded as
+never having been run on either side - is also **GREEN**:
+
+```
+precursors: rust=117265  cs=117265  delta=0
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+FDR sidecars (per-field 1e-9):      PASS
+OVERALL: PASS -- bit-parity at 1e-9 on Astral 3-file   (Rust 23:40, C# 10:53)
+```
+
+So the branch-specific divergence the handoff worried could be hiding in the Astral all-files
+case is not there. Both the quick and the rigorous cross-impl gates pass with #4679 untouched.
+
+**PR: <https://github.com/maccoss/osprey/pull/68>** - `fix/experiment-q-floor-before-consumers`,
+commit `42f40ea`, based on `origin/main` `9e4edaf`.
+
+**#4679 is unblocked** as far as cross-impl is concerned: it now needs maccoss/osprey#68 merged
+(or the reviewer's agreement that it will be), not a change of its own.
