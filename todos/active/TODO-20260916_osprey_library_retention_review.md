@@ -963,3 +963,29 @@ config reddens without the code being wrong, alongside `invalid_branch` and the 
 
 **What this means for the morning**: the gate has NOT been run against `fee760058b` (the manifest
 key change), only against `7e520ff71d`. A re-trigger needs asking first, per standing rule.
+
+#### Gates after the manifest-key change, and the push
+
+`regression-parallel.ps1 -Dataset All` on `fee760058b`:
+
+```
+  StellarGenDecoyEntrap+Astral    exit=0  26 PASS / 0 FAIL / 0 SKIP
+  Stellar+StellarLibDecoy         exit=0  44 PASS / 0 FAIL / 0 SKIP
+  TOTAL 70 PASS / 0 FAIL / 0 SKIP in 00:45:34 wall
+Osprey regression PASSED
+```
+
+70 is the expected COUNT, asserted rather than inferred from "no failures" - an aborted run
+reports zero failures too. It matches both the branch's earlier local run and TeamCity's step 3.
+The StellarLibDecoy legs are the ones that actually re-score under the new key, and modes 8 and 9
+(partial and crash-shaped resume) are the ones that would catch a cache-key change being wrong;
+all pass.
+
+`maccoss/osprey#68` CI is green on all three platforms (macos, ubuntu, windows).
+
+**Pushed**: `fee760058b` is on `Skyline/work/20260916_osprey_library_retention_review`, so #4679
+now carries the manifest-key change. Plain push, no history rewrite.
+
+No third `/code-review` round was run on this commit. The branch has already had two rounds
+today, the reviews do not stack, and Copilot auto-reviews the push. Say so rather than leaving it
+to be assumed.
