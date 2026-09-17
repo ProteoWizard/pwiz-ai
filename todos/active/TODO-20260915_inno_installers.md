@@ -64,6 +64,21 @@ pwiz_tools/Skyline/Executables/Installer/
       (see Progress); re-verified by compile + build.ps1 + pwiz Installer.Tests
 - [x] Committed (0e6d1ac5a8) and PR #4676 opened for discussion, 2026-09-16
 
+### 2026-09-17
+
+- First CI round on #4676: Core Windows/Linux .NET and Skyline Windows .NET green. Osprey
+  Windows .NET built and PUBLISHED Osprey-Setup-26.1.1.259.exe through the Ensure-InnoSetup
+  bootstrap (no WiX on the agent) but was marked failed by TeamCity's freeze.settings.error:
+  the base moved the Osprey configs into versioned .teamcity settings after the branch
+  point. Skyline Perf/Tutorial: TestAlphaPeptDeepBuildLibrary failed opening its own input
+  blib (SQLite CantOpen) - environmental, passed on the identical base commit, no nightly
+  history. Merged the base twice (second merge brought #4640's ProteoWizard rename +
+  WithVendorSdks variant into Setup.iss/Installer.Tests; resolved keeping both).
+- Osprey Linux .NET (new config #4682, failing on the base with "A compatible .NET SDK was
+  not found"): tcbuild.sh now sources pwiz-sharp/scripts/ensure-dotnet.sh like Core Linux
+  does (36389a1418). Bootstrap verified under WSL from the Osprey directory. The base keeps
+  failing until this lands or that one commit is cherry-picked onto it.
+
 ## Follow-ups (not in this PR)
 
 - UpgradeManager: replace NullDeployment with a check against skyline.ms for a newer
