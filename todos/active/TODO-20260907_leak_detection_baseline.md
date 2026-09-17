@@ -1022,6 +1022,22 @@ again), dead net472 arm dropped, `wait=on` parks at the same point, `# GC:` head
 KB/run -> flat); PR #4670 (the guard tests) green and answered; `Run-Tests.ps1` documents the
 pass-1 leak hanger.
 
+### 2026-09-17 - First nightly with the quiet sample point: the Total axis is usable
+
+9/16 nightly on the port branch at `05d8d46c8b`+: 9:00, **14,530 tests, 0 failures, 0 leaks**.
+Against 9/15 (same suite, before #4677): Total max 2218 -> 354 MB; samples more than 50 MB above
+their local floor 386 -> **0**; excess p90 15.6 -> 2.0 MB, max 1871 -> 28 MB; managed and
+heaps unchanged (115 / 97 MB at the end). Residual above managed + heaps is 107 MB median,
+145 max - the full app's static native floor, vs 30 MB for the TestRunner-only slice.
+`# GC:` header confirms the stock regime. Brendan: still not as smooth as net472 but the
+plateau is lower, and "probably good enough for this to become master".
+
+The one step that stands out is `FileTypeTest` in pass 2: +11.2 MB managed on its first run
+(en), then flat across fr/ja/zh (+0.1 MB over three more runs). A one-time load, not the
+24 KB/open wiff2 leak (which would be 0.1 MB across those runs) - most likely
+`Wiff2LoadContext`'s static byte[] bundle of the SDK's embedded assemblies, first populated
+when pass 2 opens the first real `.wiff2`. Static floor, same SDK; noted on #4674.
+
 ## Method notes
 
 - **"Does not reproduce in isolation" means a loop, not a run.** At least 15 minutes of

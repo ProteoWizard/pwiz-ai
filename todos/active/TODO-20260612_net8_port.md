@@ -7092,6 +7092,20 @@ Two pre-existing wiff2 defects were filed rather than fixed: [#4638](https://git
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
 
+## 2026-09-17: Two clean nightlies, and a private-bytes axis that can be read
+
+9/15 (`f2b35a60d9`): 14,246 tests, 0 failures, 0 leaks, but a Total trace with spikes to 2.2 GB.
+9/16 (after #4677, the aggressive decommitting collection before each sample): 14,530 tests,
+0 failures, 0 leaks, Total max 354 MB, no sample more than 28 MB above its local floor.
+Retained memory ends LOWER than 26.1's net472 run (Total floor ~350 vs ~500 MB; managed and
+heaps within 20 MB with 1,500 more tests). Brendan's read: probably good enough for the port
+to become master. Detail in `TODO-20260907_leak_detection_baseline.md` (2026-09-16/17).
+
+Landed on the branch this week: #4667 (ThermoCancelImportTest + the SingleFileLoadMonitor
+cancel-check throttle), #4677 (quiet measurement point). Open: #4670 (wiff2 concurrency guard
+tests), #4674 to Matt (the wiff2 leak and its refcounted fix). Known and hidden, not fixed:
+the wiff2 SDK leak (four tests read mzML in pass 1 via `IsAbWiff2Safe`).
+
 ## 2026-09-05/07: The binding leak landed as a master PR, and the heap axis was disproved at scale
 
 ### The 2026-09-05 nightly: first complete run, and the population-level before/after
