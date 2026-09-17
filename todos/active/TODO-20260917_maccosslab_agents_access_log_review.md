@@ -125,8 +125,8 @@ Verified against `examples/panoramaweb.org/access-logs/tomcat/access_log.2026-09
 Development window: **2026-09-16 07:00 to 2026-09-17 07:00 PDT** (a run at 07:00 on 9/17),
 using the samples in `~/dev/ai-dev/examples/panoramaweb.org/access-logs/` (`apache/`, `tomcat/`).
 
-- [x] Input directory `--logs-dir` with `apache/` and `tomcat/` subdirectories (the layout of
-      the samples). Assumes the copy process uses the same layout
+- [x] Input directory `--logs-dir` (default `logs/panoramaweb.org`, relative to the repository
+      root) with `apache/` and `tomcat/` subdirectories, where the copy process writes the logs
 - [x] File naming (`sources.py`):
   - Apache: current `access.log`, rotated `access.log.YYYY-MM-DD` (no `.log` suffix; the date
     is the **rotation** date, so the file holds the previous day). Other names, including
