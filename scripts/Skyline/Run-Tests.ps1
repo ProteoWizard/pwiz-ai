@@ -130,6 +130,12 @@ param(
                                 # "!!! ... LEAKED" line and stop the process; it will not exit on its own.
 
     [Parameter(Mandatory=$false)]
+    [switch]$PerfFirst = $false,  # The nightly perf run's order (perffirst=on): TestPerf tests first in one
+                                  # language, then the other tests in each language, then TestPerf in each
+                                  # further language, one per loop. Needs a TestPerf test in the list and -Loop
+                                  # above 1 to show more than the first perf language.
+
+    [Parameter(Mandatory=$false)]
     [switch]$ReportHandles = $false,  # Enable handle count diagnostics
 
     [Parameter(Mandatory=$false)]
@@ -856,15 +862,19 @@ try {
         # passes have to be asked for by name, which is what the Quality tab does.
         # Exactly what SkylineTester's Quality tab runs, taken from its own logged command line:
         #   quality=on qualityonly=on pass0=True pass1=True
-        # Every part earns its place. Without qualityonly the pass-1 header still prints and pass 1
-        # runs NOTHING - a leak switch that reports "All tests PASSED" having skipped the leak
-        # detection. And pass 2 is not part of it: quality is passes 0 and 1, the edge-case pass
-        # and the repeat-for-leaks pass.
+        # qualityonly is kept for parity with the Quality tab; it stopped meaning anything when the
+        # NoLeakTesting attribute went (it used to keep the tab from inverting that attribute the
+        # way a nightly perf run did). And pass 2 is not part of it: quality is passes 0 and 1,
+        # the edge-case pass and the repeat-for-leaks pass.
         if ($Quality) {
             $runnerArgs += @("quality=on", "qualityonly=on")
             if (-not $Pass) {
                 $runnerArgs += @("pass0=on", "pass1=on")
             }
+        }
+
+        if ($PerfFirst) {
+            $runnerArgs += "perffirst=on"
         }
 
         if ($TakeScreenshots) {

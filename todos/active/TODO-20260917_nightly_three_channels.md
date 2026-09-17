@@ -151,22 +151,80 @@ nightly definition; language coverage comes from machine count and the per-machi
 3. Create the three folders; teach the report side (`ai/docs/nightly-tests.md`, the labkey MCP
    `current_target` / `get_daily_test_summary` / folder lists, `/pw-nightly`,
    `/pw-daily-research`); write the machine table in the wiki (`skyline-wiki` skill).
+   Files with the six-folder list, found 2026-09-17: `ai/mcp/LabKeyMcp/tools/nightly.py`
+   (two lists, with the 540/720 minute expectations - a leak folder is 720),
+   `ai/mcp/LabKeyMcp/tools/nightly_history.py`, `ai/mcp/LabKeyMcp/README.md`,
+   `ai/mcp/LabKeyMcp/queries/nightly/hangs-schema.md`, `ai/docs/mcp/nightly-tests.md`,
+   `ai/docs/daily-report-guide.md`, `ai/docs/testing-patterns.md`,
+   `ai/claude/skills/skyline-nightlytests/SKILL.md` (folder table). Not before the folders
+   exist: the daily report queries every listed folder.
 4. Reconfigure the leak machines first (open the form, save `<branch> / Leak Checking`);
    verify a night of posts in the new folders. Then the perf machines, then the standard
    ones. No night is without leak coverage.
 
 ## Tasks
 
-- [ ] TestRunner: `leakall=on`, `perffirst=on` with the perf-first / suite / perf-languages
-      order and the per-machine rotation, `# Leak checking only`, remove the inversion and the
-      pass-2 front-loading
-- [ ] SkylineTester: `nightlyRunType` in `.skytr` and the Nightly tab, the four arg sets, old
+- [x] `NoLeakTesting` removed as an annotation (2026-09-17, Brendan: it only ever meant "leak
+      test this in a perf run", a stopgap this replaces) - the attribute class, `DoNotLeakTest`
+      and all 33 usages; so no `leakall` argument, pass 1 simply checks every test
+- [x] TestRunner: `perffirst=on` with the perf-first / suite / perf-languages order and the
+      per-machine rotation, `# Leak checking only`, the inversion and the pass-2 front-loading
+      removed
+- [x] SkylineTester: `nightlyRunType` in `.skytr` and the Nightly tab, the arg sets, old
       `.skytr` fallback
-- [ ] SkylineNightly: `RunSpec`, the two-row form with the 9+12 rule, legacy argument and
+- [x] SkylineNightly: `RunSpec`, the two-row form with the 9+12 rule, legacy argument and
       settings migration, durations, posting folders, parser key phrase
+- [x] Build, CodeInspection, ReSharper quick inspection; dry runs of the perf-first order
+      (`Run-Tests.ps1 -PerfFirst -Loop 3`), the leak-only pass (`-Quality -Pass 1`) and the
+      repeated sweeps (loop=-1, stopped after 12 s); `RunSpec.Parse` over every legacy
+      argument and `Nightly.Parse` over last night's integration log (-> integration/standard)
 - [ ] skyline.ms: three leak folders (needs project admin)
 - [ ] Reporting: docs, labkey MCP, `/pw-nightly`, `/pw-daily-research`; the machine table on the wiki
 - [ ] Rollout steps 1-4 above, one branch and one machine class at a time
+
+## Progress
+
+### 2026-09-17 - the code for steps 1 and 2
+
+Branch `Skyline/work/20260917_nightly_three_channels` off master.
+
+**Decisions made while implementing** (each is reversible before the PR merges):
+
+- **`NoLeakTesting` is gone**, per Brendan's mid-session note. That removes the `leakall`
+  argument from the design: pass 1 checks every test, always. Consequence for the rollout: a
+  machine still on a pre-split standard argument now leak-checks the 33 formerly excluded tests
+  too (about 1.4 h more pass 1 on a fast machine), and a machine on a pre-split perf argument
+  gets the new perf run (no pass 1 at all), because "today's perf run" depended on inverting
+  an attribute that no longer exists.
+- **A fifth run type, `standard_leak`**, is the pre-split combined run (pass 0, pass 1, pass 2).
+  It exists so that step 2 changes nothing on a standard machine: the legacy `trunk`,
+  `release` and `integration` arguments map to it, and it stays until the machine is saved
+  through the new form, which shows it as Standard. It is not in SkylineNightly's Type combo.
+  SkylineTester's Run type combo does list it ("Standard with leak checking"), because an old
+  `.skytr` with no `nightlyRunType` has to land on a visible item. Remove both once every
+  machine has been reconfigured.
+- **Working directory and log names keep the pre-split short names** (`RunSpec.ShortName`:
+  `trunk`, `perf`, `release_perf`, ... plus `leak`, `release_leak`, `integration_leak`), so
+  nothing on disk moves when a machine is reconfigured and the log parser keeps finding the
+  branch in the clone command's directory name.
+- **Open point 1**: Stress stays in the Type combo (it was in the old one; removing it is a
+  regression for whoever uses it). Stress is not "long" for the 9+12 rule - it never was
+  limited.
+- **Open point 4**, provisionally: `Nightly x64 Leak Detection`, `Release Branch Leak
+  Detection`, `Integration Leak Detection` (the names in the design). Only `Nightly.cs`
+  knows them; change there and on skyline.ms together.
+- **`.skytr` protocol**: `nightlyRunType` holds the combo text (`Standard`, `Leak checking`,
+  `Perf`, `Stress`, `Standard with leak checking`), the way every other combo in a `.skytr`
+  is stored. SkylineNightly still writes `nightlyRunPerfTests`, `nightlyRepeat` and
+  `nightlyRandomize` for an older SkylineTester, which ignores the unknown element.
+- **Perf run after every language has had its perf pass**: the remaining passes cycle the
+  suite (loop=-1 keeps its meaning) rather than ending the run.
+
+**Files**: `TestRunner/Program.cs` (pass 1 and pass 2, `GetPerfTestLanguage`,
+`OrderForPerfNight`), `TestRunnerLib/RunTests.cs`, `TestUtil/TestFunctional.cs`, 23 test
+files, `SkylineTester/{TabNightly,SkylineTesterWindow,SkylineTesterWindow.Designer}.cs`,
+`SkylineNightly/{RunSpec (new),Nightly,LogFileMonitor,Program,SkylineNightly,
+SkylineNightly.Designer}.cs`, `SkylineNightly.skytr`, `SkylineNightly.csproj`.
 
 ## Open points
 
