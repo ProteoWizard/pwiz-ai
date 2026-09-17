@@ -140,10 +140,13 @@ Findings, fixed in the same session (uncommitted until built and tested):
 (every dockable window is a tab in one pane, every pane is in one area - document, a side, or a
 floating window - and an area's panes form a split tree of "split off pane P on side S with
 share X"):
-- `SetWindowState(formId, state | relativeTo + relation)` - Normal/Maximized/Minimized for a
-  top-level window; Document/DockLeft/.../AutoHide/Floating/Hidden for a dockable one; or
-  relativeTo another dockable window with relation tab/left/right/top/bottom (half each). No sizes:
-  a window lands at the default size and `SetWindowBounds` sizes it after.
+- `SetWindowState(formId, state)` - Normal/Maximized/Minimized for a top-level window;
+  Document/DockLeft/.../AutoHide/Floating/Hidden for a dockable one. No sizes: a window lands at
+  the default size and `SetWindowBounds` sizes it after. (A hidden window leaves the open forms
+  and comes back through its View menu item.)
+- `DockWindow(formId, relativeTo, relation)` - next to another dockable window: tab (default) or
+  left/right/top/bottom, half each. Split out of SetWindowState at Nick's direction: a method
+  whose two parameter groups are mutually exclusive is two methods.
 - `SetWindowBounds(formId, bounds, placement)` - bounds only (top-level window, floating frame,
   or a docked side's width/height); placement maximize/center; nothing given reads.
 - `GetLayout()` - main window plus every area with its panes: tabs, active tab, bounds, and the
