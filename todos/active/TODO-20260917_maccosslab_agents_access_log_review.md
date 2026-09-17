@@ -1,11 +1,12 @@
-# TODO-maccosslab_agents_access_log_review.md
+# TODO-20260917_maccosslab_agents_access_log_review.md
 
 ## Branch Information
-- **Branch**: (to be created when work starts)
+- **Repository**: `uw-maccosslab/maccosslab-agents` (local checkout `~/dev/ai-dev/maccosslab-agents`)
+- **Branch**: `main` (initial scaffold)
 - **Base**: `main` (new repository)
-- **Created**: 2026-09-16
-- **Status**: Backlog
-- **PR**: (pending)
+- **Created**: 2026-09-16 (started 2026-09-17)
+- **Status**: In Progress
+- **PR**: (none yet)
 - **Objective**: Create a new `maccosslab-agents` repository and build an agent that reviews
   the last 24 hours of panoramaweb.org Apache and LabKey Server access logs and produces a
   report that helps Skyline staff fix slow pages and block bots
@@ -24,7 +25,7 @@ operational agents for MacCoss Lab infrastructure (separate from pwiz and pwiz-a
 
 | Topic | Decision |
 |-------|----------|
-| Repository | `maccoss/maccosslab-agents`, **private** (reports contain IPs and user details) |
+| Repository | `uw-maccosslab/maccosslab-agents`, **private** (reports contain IPs and user details) |
 | Servers in scope | **panoramaweb.org** only (others may follow later) |
 | Where it runs | A separate machine, not the web server |
 | Log acquisition | Out of scope. A separate process copies the logs over daily into a local, **gitignored** directory; the agent only reads from there |
@@ -104,11 +105,21 @@ Verified against `examples/panoramaweb.org/access-logs/tomcat/access_log.2026-09
 ## Scope
 
 ### Phase 0: Repository setup
-- [ ] Create private repository `maccoss/maccosslab-agents` (README, LICENSE, .gitignore, CLAUDE.md)
-- [ ] Choose language/runtime and agent framework (e.g. Python + Claude Agent SDK)
-- [ ] Establish layout: `agents/<agent-name>/`, shared `lib/`, `tests/`, small anonymized log fixtures
-- [ ] `.gitignore` the log input directory and `reports/` output directory
-- [ ] Secrets handling for API keys (never committed)
+- [x] Created private repository `uw-maccosslab/maccosslab-agents` on 2026-09-17 and cloned it
+      to `~/dev/ai-dev/maccosslab-agents`. README, .gitignore, and CLAUDE.md written. No
+      license (private repository)
+- [x] Stack: Python 3.11+ with the `anthropic` SDK (`>=1.6,<2`) **Tool Runner**, not the Claude
+      Agent SDK. The agent only needs our own tools over aggregated data, with no shell or file
+      access. Model `claude-opus-5`. pytest for tests
+- [x] Virtual environment at the repository root (`.venv/`, gitignored), created with
+      `python3 -m venv` (uv isn't installed). Install with `pip install -e ".[dev]"`
+- [x] Layout: a `src/` package (`src/maccosslab_agents/<agent>/`) instead of top-level
+      `agents/` and `lib/`, so the code installs as a normal Python package. Shared code will
+      go in `src/maccosslab_agents/common/` when a second agent needs it. `tests/` at the root
+- [x] `.gitignore` covers `.venv/`, `logs/` (input), `reports/` (output), `.env`, and `config.toml`
+- [x] Secrets: API key from `ANTHROPIC_API_KEY` or an `ant auth login` profile; nothing in the repo
+- [x] CLI entry point `access-log-review --logs-dir --reports-dir` (a placeholder until later
+      phases). 2 pytest tests pass
 
 ### Phase 1: Log input
 - [ ] Configurable input directory (where the separate copy process drops the logs)
@@ -172,7 +183,7 @@ Do the heavy lifting in ordinary code, not in the LLM; the logs are too large to
 - None at present
 
 ## Success Criteria
-- Private `maccoss/maccosslab-agents` repository exists with a documented structure
+- Private `uw-maccosslab/maccosslab-agents` repository exists with a documented structure
 - A daily run produces a local report covering the previous 24 hours of panoramaweb.org
   Apache and Tomcat logs
 - Report identifies the slowest pages with enough detail for a developer to start on a fix
