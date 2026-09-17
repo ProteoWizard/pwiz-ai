@@ -711,3 +711,35 @@ re-open which side is right, and do NOT widen the comparator.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260916_osprey_library_retention_review.md` before starting work.
+
+### 2026-09-16 - Goal 2 for tonight: key the pairing manifest correctly, and prove it
+
+Brendan put this IN SCOPE for #4679 rather than deferring it, and framed it as an experiment
+rather than a cleanup:
+
+> I definitely want the key for the manifest use the same principles as the library TSV and not
+> to use the full path because that is somehow seen as more compatible with the Rust
+> implementation. ... To prove the key can be filename,size,mtime and not full path. And our
+> original reason for looking at cross-impl proven: either the correct key makes no difference
+> to the cross-impl comparison, or then there is a second fix that needs to go into the PR for
+> maccoss/osprey.
+
+`SearchIdentity.cs:106-109` keys the manifest on its FULL PATH, with `EscapeForRustDebug`
+existing specifically to reproduce Rust's `{:?}` on a `PathBuf` (Rust writes the same term at
+`crates/osprey-core/src/config.rs:512`). So "the path form is more Rust-compatible" is the
+stated justification, and it is what gets tested. The behaviour it produces today is backwards:
+the comment says "a moved manifest invalidates the cache", while an in-place EDIT does not - so
+every scored parquet stays valid against a manifest whose contents changed, and the manifest
+decides decoy classification, pairing and the protein accessions protein FDR runs on.
+
+Target: file NAME + size + mtime, the same recipe as `LibraryIdentityHash()`. The no-manifest
+case must keep emitting exactly `None` so generated-decoy beds do not invalidate.
+
+Both outcomes are results: if cross-impl is unaffected (likely - each implementation runs in its
+own workdir and neither reads the other's artifacts, so a differing `search_hash` has nothing to
+compare against) the change lands in #4679 alone; if it IS affected, a second fix joins the
+floor port in the `maccoss/osprey` PR. Prove which, do not assume.
+
+Cost: manifest-using beds (CHS, SEA-AD libdecoy, StellarLibDecoy) invalidate once and re-score.
+`regression.ps1` stages its own beds so the gate only pays a slower first leg; re-running the
+446-file CHS bed is the 13.5 h shape and needs asking first.
