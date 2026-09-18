@@ -206,3 +206,18 @@ product or test code (two doc-comment mentions aside; `OspreyTask.Name`'s now po
 `HpcTaskName`).
 
 Gate on `df6c6169dd`: build, 592/592 (599 - 8 + 1), inspection 0.
+
+### 2026-09-18 - Registry replaced by per-class TASK_NAME (`146faff9db`)
+
+Brendan on `df6c6169dd`: not his favorite - `PerFileRescoreTask` had the right idea with
+`public const string TASK_NAME` returned from `Name`, so a test writes
+`PerFileRescoreTask.TASK_NAME` and there is no extra class to keep in step with the task
+classes. Reworked: every `OspreyTask` declares its `TASK_NAME` and returns it from `Name`;
+`--task ModelDiagnostics` has no task class (it re-runs the canonical pipeline with artifact
+writes suppressed), so `ModelDiagnosticsReport.TASK_NAME` owns that one. `HpcTaskName.cs`
+deleted. `ARG_TASK`'s value list is the six constants in `--help` order;
+`Program.TaskCliName` (now internal, for the round-trip test) is the `HpcTask`-to-constant
+switch; `ResolveTask` loops the enum through it case-insensitively and lists
+`ARG_TASK.Values` in its error. Tests reference the class constants (36 sites).
+Gate on `146faff9db`: build, 592/592, inspection 0. On `df6c6169dd` before the rework,
+TeamCity Osprey Windows #689 (ID 4179214) and Osprey Linux both passed 592.
