@@ -255,15 +255,34 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
   - Distributed old-Windows-Chrome crawler sent 42% of requests (151K IPs); 19K requests
     from crawlers that skip the "bot" rule (tested pattern); `.env` scanner and Google Cloud
     scanners
-- [ ] Tool gaps found while writing the trial report:
-  - `client_details` and `subnet_details` don't show which pages a client requested
-  - No per-hour breakdown by user agent or client, so the 18:00 spike couldn't be attributed
-    directly
-  - `test_block_pattern` doesn't total server seconds for the matches
-  - `previous_summaries` includes summaries whose windows overlap the current one; it should
-    skip them
-  - `top_clients_by_server_time` is dominated by single long downloads; split page views
-    from downloads
+- [x] Tool gaps found while writing the trial report, fixed 2026-09-18:
+  - `client_details` and `subnet_details` now show pages requested (Apache counts by
+    controller-action or kind), requests per hour, and page vs download seconds
+  - New tool `hour_details(hour)`: top user agents, /24 subnets, clients, and pages by
+    requests and by server seconds for one hour. `user_agent_details` adds totals per hour.
+    On real data, the 18:00 spike is the Linux "Chrome/146" crawler: 13,484 of 58,991
+    requests and 9,844 of 34,250 page-seconds
+  - `test_block_pattern` totals server seconds (all matches and not yet blocked)
+  - `previous_summaries` skips summaries whose windows overlap the review window
+    (`ReviewContext` now takes the window instead of the current summary path)
+  - Summary: `top_clients_by_server_time` replaced by `top_clients_by_page_time` and
+    `top_clients_by_download_time` (15 each); client entries show top pages
+  - Per-client collections stay lazy (created only for a second page or hour). Dev window:
+    33 s, peak RSS 547 MB (was 451 MB). 72 tests pass
+- [x] Phase 3 committed locally 2026-09-18 (`f25af73`), not pushed
+- [x] WebDAV tool gap, fixed 2026-09-18 (found in the report for the window ending
+      2026-09-17T00:00): WebDAV time wasn't counted per client, so `client_details` showed 0 s
+      for the curl client that held 46,258 slot-seconds in the 04:48 flood. Now tracked
+      separately from server seconds (which stay page views + downloads): per client
+      (`webdav_requests`, `webdav_seconds`), per user agent, per hour by client. Shown in
+      `client_details`, `subnet_details`, `user_agent_details`, `hour_details`
+      (`clients_by_webdav_seconds`) and the summary (`tomcat_webdav_seconds`,
+      `top_clients_by_webdav_time`). 75 tests pass. Real data (window ending 09-17 00:00):
+      543,873 WebDAV seconds, more than pages + downloads (287,969 s). Top WebDAV clients:
+      `panorama-inventory/2.0` (160.62.2.16, 297,114 s, outside Panorama Public) and the curl
+      client (180,863 s). 54 s run, 606 MB peak RSS. Uncommitted
+- [x] Trial reports written 2026-09-18 by hand from SYSTEM_PROMPT: `reports/access-log-report-2026-09-17T0700-2.md`
+      (dev window) and `reports/access-log-report-2026-09-17T0000.md` (covers the 34-minute flood)
 - [ ] **First live API run** on the dev window: needs `ANTHROPIC_API_KEY` (or `ant auth
       login`) and approval, since it is billed. Compare with the trial report, then review with
       staff and tune the prompt
@@ -288,6 +307,12 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
   use, so the trial report was written in Claude Code instead.
 - The user asked for local commits only; nothing has been pushed in either repo (pwiz-ai
   master is 5+ commits ahead of origin).
+
+### 2026-09-18
+- Fixed the five tool gaps (9 tools now), verified on the dev window, and committed Phase 3
+  locally (`f25af73` in maccosslab-agents, not pushed).
+- Next: user feedback on the trial report to tune `SYSTEM_PROMPT`, the first live API run
+  (needs credentials and approval), or Phase 4 scheduling.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260917_maccosslab_agents_access_log_review.md` before starting work.
