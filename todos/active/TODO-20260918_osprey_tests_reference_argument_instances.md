@@ -182,3 +182,27 @@ Dropped: the "memoize AllArguments" suggestion (moot once the split left product
 
 Gate on `b678c1a37b`: net10.0 build, 599/599, inspection 0. PR #4686 opened against the port
 branch; `pwiz_tools/Shared` changed, so TeamCity runs the Skyline configs as well as Osprey's.
+
+### 2026-09-18 - Brendan: task names are constants too (`df6c6169dd`)
+
+Brendan, reviewing the PR: the repeated `"FirstPassFDR"` / `"PerFileRescoring"` strings in
+`ProgramTests.cs` should be constants in the code, not literals. The product spelled them in
+five places itself - `ARG_TASK`'s value list, `Program.ResolveTask` (six `string.Equals`), the
+`HpcTask`-to-name switch, `AnalysisPipeline`'s name-to-stage map, each task's `Name`
+(`PerFileRescoreTask` alone had a `TASK_NAME` const) plus two private consts in
+`ModelDiagnosticsReport` - and the names are also the key `TaskValiditySidecar` stamps into
+`.osprey.task`, so they are a contract with four readers.
+
+Added `Osprey.Core/HpcTaskName.cs`: the six constants, `ALL` in `--help` order, `Of(HpcTask)`
+(not `ToString()`: `FirstPassFdr` vs `FirstPassFDR`, `PerFileRescore` vs `PerFileRescoring`),
+and a case-insensitive `TryParse`. Every product site reads it; `ResolveTask` collapsed to
+`TryParse` with the valid-task list joined from `ALL`. Tests: `ProgramTests` (ValidateArgs
+assertions and the `--task` tokens), `PipelineMembershipTest`, `LibraryFragmentReleaseTest`,
+`TaskValidityKeyTest`, `IOTest`'s sidecar tests and the one `--task=` spelling all use the
+constants; the six per-task `ResolveTask` tests, which pinned spellings that now live in one
+constant, became one `TestResolveTask` round-trip over every `HpcTask` that also asserts
+`ALL` covers the enum once and equals `ARG_TASK.Values`. No task-name literal remains in
+product or test code (two doc-comment mentions aside; `OspreyTask.Name`'s now points at
+`HpcTaskName`).
+
+Gate on `df6c6169dd`: build, 592/592 (599 - 8 + 1), inspection 0.
