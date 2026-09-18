@@ -10,7 +10,8 @@
 - **Created**: 2026-09-17 (design), by Brendan and Claude
 - **Status**: In Progress - design settled except the open points at the bottom
 - **GitHub Issue**: (none yet)
-- **PR**: (pending)
+- **PR**: [#4687](https://github.com/ProteoWizard/pwiz/pull/4687); the gate
+  [#4684](https://github.com/ProteoWizard/pwiz/pull/4684) merged 2026-09-18 as `f6e34de4fa`
 
 ## Objective
 
@@ -170,6 +171,13 @@ master's build and its old runs.
 Order: merge #4684; merge master into this branch; open this PR; flag one master machine;
 create the leak folders; then the machine-by-machine rollout below.
 
+**2026-09-18, the #4684 live test on BRENDANX-UW8**: staged the PR's shim in `D:\Nightly`, set
+the variable to `pull/4684`, Brendan scheduled "Now". Shim log: `...SkylineNightly.zip?branch=pull%2F4684`;
+`SkylineNightly.exe` and the shim replaced by the PR build (6:55 AM stamps, shim now the Release
+copy); the old task argument `run integration trunk` ignored, `run` read `mode1`/`mode2` and the
+integration run started. Merged, branch deleted, variable cleared. Every other machine picks up
+the merged shim on its next run and from then on runs its settings.
+
 ## Rollout (the shim auto-update makes the order matter)
 
 1. TestRunner + SkylineTester on master; cherry-pick to `Skyline/skyline_26_1`; merge into the
@@ -211,7 +219,9 @@ create the leak folders; then the machine-by-machine rollout below.
 - [x] `/code-review max` findings triaged and applied (2026-09-17, see Progress)
 - [x] PR #4684 for the `SKYLINE_NIGHTLY_BRANCH` gate (off master; merge first)
 - [x] `Run1`/`Run2` settings and the `run`-only task on this branch (`98772c12da`)
-- [ ] After #4684 merges: merge master here, open this PR, flag a first machine
+- [x] #4684 merged (`f6e34de4fa`, 2026-09-18), master merged here, PR #4687 opened
+- [ ] Flag a first machine with `SKYLINE_NIGHTLY_BRANCH=pull/4687` (BRENDANX-UW8 is the obvious
+      one: its variable was cleared after the #4684 test and its shim is #4684's build)
 - [ ] Rollout steps 1-4 above, one branch and one machine class at a time
 
 ## Progress
