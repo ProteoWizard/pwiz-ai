@@ -330,9 +330,14 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
 
 ### 2026-09-18
 - Fixed the five tool gaps (9 tools now), verified on the dev window, and committed Phase 3
-  locally (`f25af73` in maccosslab-agents, not pushed).
-- Next: user feedback on the trial report to tune `SYSTEM_PROMPT`, the first live API run
-  (needs credentials and approval), or Phase 4 scheduling.
+  locally (`f25af73` in maccosslab-agents).
+- Added WebDAV time per client, the HTML report, and the confidence rules and verification
+  step in the prompt (after a medium-effort comparison run). Updated README (module map,
+  `--hours`) and CLAUDE.md (prompt location, server vs WebDAV seconds, usernames, HTML
+  escaping).
+- **Pushed maccosslab-agents `main` to GitHub** (`ebd13ec`, first push; the repository was
+  empty). pwiz-ai commits remain local.
+- Next: the first live API run (needs credentials and approval), or Phase 4 scheduling.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260917_maccosslab_agents_access_log_review.md` before starting work.
