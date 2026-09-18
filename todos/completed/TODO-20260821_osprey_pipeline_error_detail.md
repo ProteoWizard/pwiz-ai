@@ -4,10 +4,11 @@
 - **Branch**: `Skyline/work/20260821_osprey_pipeline_error_detail`
 - **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-09-18; was `master`)
 - **Created**: 2026-08-21
-- **Status**: PR opened 2026-09-12 - rebased onto master, review findings applied, gate green
-  (593/593, inspection 0). Sat as an unpushed local commit from 2026-08-21 to 2026-09-12
+- **Status**: Completed - merged 2026-09-18 into the .NET 10 port branch as `7bac992ee6`.
+  Sat as an unpushed local commit from 2026-08-21 to 2026-09-12, PR opened 2026-09-12 on
+  master, retargeted 2026-09-18
 - **Module**: `osprey`
-- **PR**: [#4660](https://github.com/ProteoWizard/pwiz/pull/4660) (opened 2026-09-12)
+- **PR**: [#4660](https://github.com/ProteoWizard/pwiz/pull/4660) (merged 2026-09-18)
 - **Worktree**: `C:\proj\pwiz-work2` (was `C:\proj\pwiz` until the 2026-09-18 retarget)
 - **Requester/Reporter**: none - found while auditing the TDP-43 163-file baseline run
 
@@ -196,3 +197,15 @@ pwiz-sharp dependencies to the sln, a solution filter, or document "bo.bat first
 Note the Linux CI leg Matt is adding (`tcbuild.sh` -> the same `build.ps1`, `$platform = 'x64'`,
 then `package.ps1 -Rid linux-x64`) also builds `/p:Platform=x64`, so Any CPU stays a VS-only
 concern; the Linux gate's risks are OS-level, and neither #4660 nor #4595 touches OS-specific code.
+
+### 2026-09-18 - Merged
+
+PR #4660 merged as commit `7bac992ee6` on `Skyline/work/20260612_net8_port` (squash; 4 files,
++98/-7), over the non-required `Osprey Linux .NET` check that is red on the port branch itself
+(Brendan's explicit call). Shipped: both terminal sinks report the whole exception; usage errors
+stay one line, with numeric-option typos now among them; the new test names the Argument
+instances. Deferred, by design: the other `ex.Message` sites (self-naming, in scope note), a
+usage-exception type, asserting the sinks' OUTPUT from a `regression.ps1` mode, and the
+test-wide Argument-instance standardization
+(`ai/todos/backlog/brendanx67/TODO-osprey_tests_reference_argument_instances.md`). Master
+does not carry this until #4619 lands - all Osprey development now targets the port branch.
