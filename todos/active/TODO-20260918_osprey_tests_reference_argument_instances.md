@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260918_osprey_tests_reference_argument_instances`
 - **Base**: `Skyline/work/20260612_net8_port` (all Osprey development moved there 2026-09-18)
 - **Created**: 2026-09-18
-- **Status**: In Progress
+- **Status**: PR opened 2026-09-18 after /code-review max; waiting on TeamCity (Osprey + Skyline configs) and review
 - **Module**: `osprey` (a few lines land in `pwiz_tools/Shared/CommonUtil`, behavior-neutral for Skyline)
-- **PR**: (pending)
+- **PR**: [#4686](https://github.com/ProteoWizard/pwiz/pull/4686) (opened 2026-09-18)
 - **Worktree**: `C:\proj\pwiz-work2`
 - **Requester/Reporter**: none - raised by Brendan 2026-09-18 while reviewing [#4660](https://github.com/ProteoWizard/pwiz/pull/4660)
 
@@ -148,3 +148,37 @@ Branch from the port tip `7bac992ee6` in `C:\proj\pwiz-work2`. Four files, +241/
   (`--threads 99999999999999999999`) would escape as a non-usage error. Worth its own PR
   as part of the locale work.
 - `--name=value` for USERS is not added; the `=` pre-scan for `--task` is unchanged.
+
+### 2026-09-18 - /code-review max, rework, PR #4686 opened (`b678c1a37b`)
+
+The review returned 14 findings; the two it verified with the built exe changed the design.
+The first cut split `"--name value"` tokens INSIDE `ParseArgs` on the premise that a quoted
+single token "was Unknown argument before, so splitting is harmless". False on two counts:
+`Program.Main` pre-scans the RAW argv for `--task`, so a quoted `"--task PerFileScoring"`
+slipped past it, was consumed by the ARG_TASK branch, and the node ran the FULL pipeline
+instead of the one HPC task (exit 1 on the base branch); and `"--no-prefilter false"` went
+from a hard error to flag-plus-LogWarning. The only consumer of the split was the tests, so
+it moved to a test-side `ArgTokens.Split` and the production tokenizer is byte-identical to
+the base again (re-probed with the Debug exe: all three quoted tokens are `Unknown argument`).
+The TODO's own "untested capability is a liability" standard applied to my own addition.
+
+Accepted and applied from the rest: `ArgUsage.ValueFormatProvider` (Osprey sets invariant, so
+`ARG_RUN_FDR + 0.05` renders `0.05` under any thread culture and the FDR tests use numbers);
+null value refused; `HasValueChecking` honored by the builder and declared on
+`fragment-unit`, `fdr-method`, `fdr-level`, `shared-peptides`, `fdrbench-pass` (aliases /
+warn-and-default / own check) so ONE idiom covers every test; `[DoNotParallelize]` on the
+static-mutating contract test and its comment corrected (CurrentCulture is per-thread);
+`ArgumentBase.Parse` splits on the separator too; three stale "never reached" comments;
+`ParseFdrBenchPass` and the `--task requires a value` message built from the declarations;
+`ShortArgumentText` on `ArgumentBase` used by `ArgumentDescription`, `FindByToken` and the
+alias test; and the literals the first `@"` sweep missed - plain `"-i"`/`"--task"` strings
+in `ProgramTests.cs` 540-614 and `ArtifactPathsTest.cs`, plus the `ValidateArgs` message
+assertions. The earlier "every parser token ... is an ARG_* instance" claim above was
+premature; it is true as of `b678c1a37b`, with the retired `--no-join` / `--join-only` /
+`--join-at-pass`, `--bogus-flag`, the deliberate `--task=` spelling and two assertion labels
+left literal on purpose.
+
+Dropped: the "memoize AllArguments" suggestion (moot once the split left production).
+
+Gate on `b678c1a37b`: net10.0 build, 599/599, inspection 0. PR #4686 opened against the port
+branch; `pwiz_tools/Shared` changed, so TeamCity runs the Skyline configs as well as Osprey's.
