@@ -164,3 +164,32 @@ port branch; both open Osprey PRs are retargeted there rather than merged to mas
   fixing `ai/scripts/Osprey/Build-Osprey.ps1` to pass `Platform=x64` to InspectCode
   (pwiz-ai `5f8755c`); without it the out-of-solution `ProteowizardWrapper` reference the
   port branch adds to Osprey.IO reported 5 CSharpErrors on a clean port tip.
+- TeamCity on the retargeted head `7bb71e2c8f`: `Osprey Windows .NET` SUCCESS, 598 tests, on an
+  ephemeral agent (build 4178860). `Osprey Linux .NET` (new versioned config) errors with
+  "Install the [10.0.100] .NET SDK" - the Linux agent image has no .NET SDK; identical on
+  `pull/4619` itself (builds #1-#4), so not a PR signal. For Matt.
+
+### 2026-09-18 - Brendan's review: reference the Argument instances
+
+Brendan: Osprey uses CommonUtil's `Argument` / `ArgumentBase` like Skyline, and Skyline settled
+the test idiom - name the instance (`CommandArgs.ARG_IN`) and build the token with `+`
+(`CommandArgs.ARG_IN + docPath`, see `TestData\CommandLineImportTest.cs`). Osprey's tests have
+135 bare literals and no `ARG_*` references, so standardization is a separate PR:
+`ai/todos/backlog/brendanx67/TODO-osprey_tests_reference_argument_instances.md` carries the
+agreed design (honor `ArgUsage.ArgumentValueSeparator` in the `+` operator - a consistency bug,
+since usage text already honors it - take `object` on the right-hand side, split a
+`--name value` token in `ParseArgs`, then convert the literals).
+
+This PR converts only its own new test (`ad39a6a6ab`): `Parse(argThreads, badValue)` through
+`ArgumentBase`'s implicit string conversion, `.ArgumentText` where a string is required. Gate
+on the commit: x64 build, 598/598, inspection 0.
+
+**VS 2026 finding (port branch, not this PR).** Building `Osprey.sln` in VS on the `Any CPU`
+solution platform fails with "Metadata file '...\obj\Debug\net10.0\ref\ProteowizardWrapper.dll'
+could not be found" cascading through Osprey.IO / Osprey.Tasks / Osprey. Root cause: VS does
+not build out-of-solution project references (IDE builds run `BuildProjectReferences=false`),
+and neither `ProteowizardWrapper` nor pwiz-sharp is in `Osprey.sln`. x64 works in VS only
+because `bo.bat` (`build.ps1`, `/p:Platform=x64`) has already produced the x64 outputs; nothing
+ever built them as Any CPU. A command-line `msbuild Osprey.sln /p:Platform="Any CPU"` succeeds
+and produces the missing files. Durable fix is a port-branch decision (add the wrapper and its
+pwiz-sharp dependencies to the sln, a solution filter, or document "bo.bat first, x64 in VS").
