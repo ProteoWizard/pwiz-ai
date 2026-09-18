@@ -281,6 +281,12 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
       543,873 WebDAV seconds, more than pages + downloads (287,969 s). Top WebDAV clients:
       `panorama-inventory/2.0` (160.62.2.16, 297,114 s, outside Panorama Public) and the curl
       client (180,863 s). 54 s run, 606 MB peak RSS. Uncommitted
+- [x] Report output (2026-09-18, `4aa8739`): the CLI writes both `access-log-report-<end>.md`
+      (the agent's Markdown, with a metadata comment) and `.html` (a self-contained page with
+      light/dark styles). `render.py` uses markdown-it-py (new dependency) with raw HTML
+      disabled, so user agents and URLs from the logs are escaped and `javascript:` links are
+      dropped. The prompt tells the agent not to use raw HTML. Metadata (window, model, token
+      usage) is at the bottom of both formats. 78 tests pass
 - [x] Trial reports written 2026-09-18 by hand from SYSTEM_PROMPT: `reports/access-log-report-2026-09-17T0700-2.md`
       (dev window) and `reports/access-log-report-2026-09-17T0000.md` (covers the 34-minute flood)
 - [ ] **First live API run** on the dev window: needs `ANTHROPIC_API_KEY` (or `ant auth
