@@ -221,3 +221,18 @@ switch; `ResolveTask` loops the enum through it case-insensitively and lists
 `ARG_TASK.Values` in its error. Tests reference the class constants (36 sites).
 Gate on `146faff9db`: build, 592/592, inspection 0. On `df6c6169dd` before the rework,
 TeamCity Osprey Windows #689 (ID 4179214) and Osprey Linux both passed 592.
+
+### 2026-09-18 - TeamCity Skyline caught the HasValueChecking bypass (`c8b5c0783a`)
+
+`Skyline Windows .NET` build #288 (ID 4179223) on `146faff9db` failed ONE test:
+`CommandLineRefineTest.ConsoleArgumentInvalidValuesTest` -> `ValidateInvalidValue`, "Exception
+expected". That test iterates every Skyline argument with a `Values` list and asserts
+`GetArgumentTextWithValue("NO VALUE")` throws `ValueInvalidException` - HasValueChecking or
+not. So review finding 6 (honor HasValueChecking in the builder) contradicted a contract
+Skyline's tests pin, and the "byte-identical for Skyline" claim was false for exactly those
+arguments. Reverted the bypass; the builder is strict for every listed argument again, the
+five `HasValueChecking = true` declarations are gone from Osprey's arguments, and the four
+accepted-but-unlisted values (`th`, `da`, `bogus`, `3`) go back to two tokens in the tests
+with the reason in a comment. Osprey gate: 592/592, inspection 0. Skyline verification is
+the TeamCity run on `c8b5c0783a` - not run locally (a Skyline.sln build on this box is the
+wrong trade for a one-line revert to base behavior; CI is ~70 min).
