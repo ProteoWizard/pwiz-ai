@@ -98,3 +98,19 @@ Import tests ON HOLD until the developer settles how to obtain the test data.
 Implemented the reader, shift, and export changes plus the unit and export tests. Build gotcha: the
 Claude Code harness sets `NoDefaultCurrentDirectoryInExePath=1`, so `cmd /c build_skyline_64.bat` reports
 "not recognized"; the detached launcher clears it before running the build.
+
+### 2026-09-17 - Review and PR
+
+Ran /code-review max: 20 items. Refuted finding 5 (reference mzML needs no regeneration - all existing
+devconnect MRM data reports CE as NaN, verified by re-converting the Hazell injection). Acted on the rest in
+two commits: moved the CE spacing from MsDataFileImpl into ChromatogramDataProvider (shared library keeps no
+Skyline semantics, short series anchor from the highest CE, duplicated constant removed), then fixed the
+cases where CE cannot identify a step (no predictor, whole-volt collisions, DP optimization), put the quant
+ion on the center step without relying on ParseMethod's fallback, and accepted a quoted CE in the reader.
+Finding 13 (SortByMz) left alone deliberately; finding 14 (ChromKey.FromId and a comma in the chromatogram
+ID) is pre-existing and now in todos/backlog/TODO-chromkey_fromid_comma_in_chromatogram_id.md.
+
+Uploaded a CE optimization method built by this code to devconnect (Skyline/6mix, 6Mix-ceopt-09171440) for
+Waters to acquire; the server accepted steps that differ only in CE, which confirms the export premise. Note
+the template must be a tandem-MS method - the Lancaster LC template was rejected with TargetsNotSupported.
+PR #4683 opened.
