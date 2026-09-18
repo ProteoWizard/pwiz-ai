@@ -443,7 +443,7 @@ try {
                 "--no-swea",
                 "--no-build",
                 "--caches-home=$cacheDir",
-                "--properties=Configuration=$Configuration",
+                "--properties=Configuration=$Configuration;Platform=$Platform",
                 "--target-framework=$tfm",
                 "--verbosity=WARN"
             )
