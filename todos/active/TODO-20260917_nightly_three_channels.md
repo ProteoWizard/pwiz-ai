@@ -142,6 +142,34 @@ a human at the keyboard. Brendan enforces this by hand today; the new UI enforce
 Perf tests in all four languages on one machine is 11.2 h on the fastest machine and is not a
 nightly definition; language coverage comes from machine count and the per-machine rotation.
 
+## Gradual adoption: `SKYLINE_NIGHTLY_BRANCH` (2026-09-18)
+
+Merging this to master would put the new SkylineNightly on every machine the next night through
+the shim's auto-update - too abrupt. PR #4684 (`Skyline/work/20260918_nightly_branch_env_var`, off
+master, tiny, a no-op when unset) adds the gate:
+
+- `SKYLINE_NIGHTLY_BRANCH`, read in the shared `TeamCityNightlyAuth`: a bt209 branch locator
+  (`pull/NNNN`) that stands in for master when the shim downloads `SkylineNightly.zip` and when
+  SkylineNightly downloads its master-run `SkylineTester.zip`. Verified: bt209 serves a PR
+  build's artifacts for `?branch=pull%2F4683`; bt209 is "master and PRs" only, so a `Skyline/work`
+  branch needs a PR to be reachable. Release and Integration runs use their own configs (unaffected;
+  #4619 has no bt209 builds, so the port branch is reached only by merging this work into it).
+- The shim ignores its arguments: update SkylineNightly and itself, then `SkylineNightly run`.
+  `run` with no modes runs what the saved settings say; the form schedules the task as `run`.
+  Caveat for the night #4684 lands: every machine then runs its *settings*, not its task
+  argument; they agree wherever the form wrote both - the daily report shows any machine that
+  changed folder.
+
+This branch, on top: the form stores its runs in new settings `Run1`/`Run2` and never writes the
+pre-split `mode1`/`mode2` (read only as a fallback), so a machine put back on master's
+SkylineNightly (which would crash on `master/leak` in `mode1`) still opens its form and runs
+what it ran. Flag a machine: set the variable to this PR's `pull/NNNN`, let the next scheduled run
+update it, open the new form, save the run. Unflag: unset the variable; next night it is back on
+master's build and its old runs.
+
+Order: merge #4684; merge master into this branch; open this PR; flag one master machine;
+create the leak folders; then the machine-by-machine rollout below.
+
 ## Rollout (the shim auto-update makes the order matter)
 
 1. TestRunner + SkylineTester on master; cherry-pick to `Skyline/skyline_26_1`; merge into the
@@ -181,7 +209,9 @@ nightly definition; language coverage comes from machine count and the per-machi
 - [ ] skyline.ms: three leak folders (needs project admin)
 - [ ] Reporting: docs, labkey MCP, `/pw-nightly`, `/pw-daily-research`; the machine table on the wiki
 - [x] `/code-review max` findings triaged and applied (2026-09-17, see Progress)
-- [ ] PR
+- [x] PR #4684 for the `SKYLINE_NIGHTLY_BRANCH` gate (off master; merge first)
+- [x] `Run1`/`Run2` settings and the `run`-only task on this branch (`98772c12da`)
+- [ ] After #4684 merges: merge master here, open this PR, flag a first machine
 - [ ] Rollout steps 1-4 above, one branch and one machine class at a time
 
 ## Progress
