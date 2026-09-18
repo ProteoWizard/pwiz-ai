@@ -287,6 +287,20 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
       disabled, so user agents and URLs from the logs are escaped and `javascript:` links are
       dropped. The prompt tells the agent not to use raw HTML. Metadata (window, model, token
       usage) is at the bottom of both formats. 78 tests pass
+- [x] Medium-effort comparison (2026-09-18): cold-start subagents (Opus 5, `effort: medium`,
+      `SYSTEM_PROMPT` as system prompt, the 9 tools through a runner script) wrote
+      `reports/access-log-report-2026-09-17T{0700,0000}-medium.{md,html}` (85 and 107 tool
+      calls, about 10 min each). They found things the hand-written reports missed (the full 12
+      Chrome/146 /24s, a Chrome/48 crawler, Lightpanda, the correct passport protein IDs
+      19802130/19802162, which were then fixed in the hand-written report). But the two runs
+      disagreed on the biggest block decisions, and one leaned on outside knowledge and
+      misattributed 18:28 slot use to non-Panorama-Public requests
+- [x] Prompt changes from that comparison (`dd4336e`): confidence definitions for block
+      recommendations (high needs a non-browser string or a range with `signed_in_clients` 0;
+      ordinary browser strings are at most medium; outside knowledge never raises confidence),
+      a check-before-writing step, and "only requests matching the pattern hold the slots".
+      `subnet_details` now returns `signed_in_clients`. 79 tests pass. Trial agent definition:
+      `~/.claude/agents/access-log-review-medium.md` (refreshed with the new prompt)
 - [x] Trial reports written 2026-09-18 by hand from SYSTEM_PROMPT: `reports/access-log-report-2026-09-17T0700-2.md`
       (dev window) and `reports/access-log-report-2026-09-17T0000.md` (covers the 34-minute flood)
 - [ ] **First live API run** on the dev window: needs `ANTHROPIC_API_KEY` (or `ant auth
