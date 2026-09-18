@@ -73,3 +73,5 @@ ai/docs/{topic-name}.md
 ## Key Principle
 
 All documentation in `ai/` belongs to the **pwiz-ai** repository. Commit and push directly to master - no feature branches needed for documentation work.
+
+**Personal memory vs team docs**: a rule that matters to anyone other than you on this machine belongs in `ai/`, and the memory that held it is deleted in the same step it lands - see "Personal memory vs team docs" in `ai/docs/documentation-maintenance.md`.

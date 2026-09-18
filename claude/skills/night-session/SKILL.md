@@ -69,7 +69,7 @@ Tell the user — before they go to bed — something like:
 > in 3–4 hours. I can either (a) start now and pivot to sub-agents
 > early, (b) wait while you run `/pw-handoff` → `/clear` →
 > `/pw-continue` to start near 90%, or (c) work for as long as the
-> budget lasts and write a clean handoff at ~15% so the morning
+> budget lasts and write a clean handoff at ~10% so the morning
 > session picks up cleanly. Which do you prefer?"
 
 This is the one acceptable place to ask a clarifying question at
@@ -182,6 +182,16 @@ has gaps between phases and the waiter fires early), and assert the expected
 result COUNT rather than merely "no failures" (an aborted run reports zero
 failures too).
 
+**Head-start the long "after" run.** When a multi-hour full-pipeline run is an
+option and there is night left, launch it detached and monitor it rather than
+stopping - even on a partial, byte-identical improvement. The developer wants to
+wake to an in-progress (or finished) run whose logs they can inspect; a clean
+early stop with only short isolated-stage measurements loses that ("we lost the
+opportunity to be 6 hours into this run"). Do not over-apply a "only run the full
+demo once the result is fully proven" gate from a handoff: an end-to-end run of a
+gated improvement is still a valid, inspectable measurement. The short
+stage-isolated harness is a quick metric, not a substitute.
+
 ## When to use sub-agents
 
 Use sub-agents to **conserve your own context budget** when:
@@ -237,9 +247,12 @@ Genuinely stop, not just pause-and-wait, when:
   work to do until they return, AND the wait will exceed 30 minutes
 - You hit a hard environmental block — out of disk, network down,
   binary that refuses to build despite multiple fix attempts
-- Context budget is genuinely tight (under 15% remaining for 1M
-  context, under 10% for 200K context) and continuing risks
-  losing the synthesis you've built
+- Context budget is genuinely tight (under 10% remaining, whatever the
+  window) and continuing risks losing the synthesis you've built. The
+  developer normally calls the handoff: above that line do not propose
+  stopping, scoping down or handing off because of a percentage, and
+  never state a percentage that did not come from
+  `mcp__status__get_context_usage`
 
 When you stop, write a high-density handoff at
 `ai/.tmp/handoff-<date>.md` and update the TODO with a postscript.

@@ -68,6 +68,17 @@ It **refuses a verdict on a phase that is still running**, because a phase that 
 at its end looks flat for its first 90%. A partial log cannot answer the question, and a
 'flat iteration' verdict read off one would be worse than no answer.
 
+**Drop the stage boundary before computing per-stage statistics.** A phase's first minutes
+carry the previous phase's teardown, so a per-phase max taken from the raw boundary reports
+the neighbour's spike as this phase's peak (a rescoring phase once read as a 44 GB peak
+against a 15 GB median; trimming five minutes took it to 21 GB). Then **judge each stage by
+its sustained level, not its maximum**: a brief spike at the end of one stage can sit below
+a flat plateau that another stage holds for its whole duration, and comparing the two
+maxima inverts the answer. Look at the plot before stating a memory verdict - it shows a
+plateau versus a spike instantly, where a table of peaks and post-GC probe percentiles
+manufactures precision - and never announce a memory goal met without checking the resident
+floor the goal is about.
+
 The **numeric summary is stdlib-only**, so it runs on a fresh machine with nothing
 installed. `--png` additionally needs matplotlib (`pip install matplotlib`); the import is
 inside the plotting function, so without it you still get every number and just a note that
@@ -185,6 +196,23 @@ would have hidden the actual result.
 Also expect a fix that releases something mid-run to move the FLOOR and not the
 PEAK, when the peak is set by a transient before the release point. That is not a
 failed fix - check which phase sets the peak before concluding anything.
+
+## Pooling and buffer reuse
+
+Do not add pooling, object reuse or buffer reuse to "help" the GC without a demonstrated
+A/B win. Gen-0 allocation is very fast and the .NET GC usually wins the cases where C++
+instincts say "pool"; pooling adds complexity and a lifetime-correctness surface, and a
+byte-identical change that eliminated hundreds of millions of gen-0 allocations has already
+been discarded here because it moved neither the peak (LOH column churn dominated) nor the
+wall time (the run was I/O-bound). Before proposing reuse, name the mechanism it targets
+(allocation rate, LOH, object count) and confirm that mechanism is the bottleneck; if the
+churn is LOH or Server-GC committed-but-free, gen-0 pooling will not move the number.
+
+One run landing "within variance" of the baseline is not proof of no regression. To claim
+no-harm-or-better, run at least one more A/B in which the new code comes out faster and the
+run-to-run variance is characterized; if that cannot be shown, discard the change. Prefer
+lowering peak allocation or using idle cores (parallelization) over fighting the GC, but
+hold those to the same prove-faster-first standard.
 
 ## Related
 

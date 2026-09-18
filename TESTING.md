@@ -141,6 +141,13 @@ Prefer `AssertEx` methods over custom wrappers:
 
 See `pwiz_tools/Skyline/TestUtil/AssertEx.cs` for full API.
 
+**Assert whole strings from public constants, not substring fragments.** A
+`Contains("part of the message")` assertion breaks on any reword and, if the literal
+is English, under localization. Put the message in a public constant (or resource) the
+test can reference and assert the whole value - one source of truth for the production
+message and the test. Reserve `AssertEx.Contains` for composed messages where only the
+resource-derived part is stable.
+
 ## Localization Testing
 
 All tests must pass in all locales:

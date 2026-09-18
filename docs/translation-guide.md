@@ -193,6 +193,25 @@ If you see an unexpectedly large number of **additions** (new entries added to l
 1. Many new strings were added since the last release (normal)
 2. A bug in the RESX sync process where localized files weren't updated (investigate)
 
+### Reviewing translated CSVs: reviewer term changes are deliberate
+
+Translations arrive in two stages. Professional translators work against the project
+glossary but are not proteomics practitioners; native-speaker domain reviewers who work
+in the field then review the output in context. Those reviewers change terms on purpose
+when the literal translation reads wrong to a practitioner - the zh-CHS reviewer replaced
+the literal rendering of "imputation" with a "delineate / mark out" term, for example,
+and the ja reviewer has made comparable substitutions.
+
+When reviewing a translation PR, treat a reviewer-level term shift as a UX decision, not
+a regression. Do not "fix" it back toward the literal English. Limit cleanup to actual
+errors:
+
+- Structural problems: placeholder count or order mismatches, malformed XML
+- Typos
+- Mnemonic mismatches with the English string
+- English literals leaking into a translated value
+- Inconsistency within a single file
+
 ### Troubleshooting: Localized files missing entries
 
 If localized RESX files are missing entries that exist in English files:

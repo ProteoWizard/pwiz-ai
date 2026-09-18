@@ -29,7 +29,15 @@
     MSBuild verbosity: quiet, minimal, normal, detailed, diagnostic (default: minimal)
 
 .PARAMETER SourceRoot
-    Path to pwiz root (auto-detected if not specified)
+    Path to pwiz root. When omitted the script resolves the pwiz checkout that
+    is a SIBLING of the ai/ folder this script lives in (e.g. C:\proj\pwiz) -
+    NOT the shell's current directory and not the session's active project.
+    In any worktree session (pwiz-work1, pwiz-work2, ...) pass it explicitly,
+    because pointing at the wrong tree does not fail: it prints "Build
+    succeeded", "All tests passed" and inspection results for the OTHER
+    checkout, so a gate run that way is green on code nobody changed. The
+    tell on a surprising green is the "->" output paths in the build lines
+    and a "No modified/added files found" line on a branch you know is dirty.
 
 .PARAMETER TargetFramework
     Which test assembly to RUN. Note this does NOT limit what is COMPILED -

@@ -109,6 +109,16 @@ Cross-impl parity work additionally needs:
 Osprey and cross-impl TODOs live at
 `ai/todos/active/TODO-*_osprey*.md`.
 
+**Before starting or resuming Osprey work, check those active TODOs for an unmerged
+branch touching the same pipeline stage.** A session reading master cannot tell "this
+is a defect" from "this is fixed on a branch that has not merged" - only merge order
+can - and the second session then writes a conflicting fix. If one exists, say so and
+propose sequencing rather than starting; when pausing for this reason, put the blocker
+and what the other branch already fixed (with commits) in the TODO's **Status** field,
+where it is read first. TODO prose also lags the other way: before writing "in flight"
+or "still violates" anywhere, grep the CODE for the method or file, not the TODO - a
+retired method survives in comments and TODO prose long after it is gone.
+
 ## Rust osprey - Upstream Conventions Apply
 
 When working in `C:\proj\osprey`, Skyline rules do NOT apply. Read:
@@ -121,7 +131,13 @@ When working in `C:\proj\osprey`, Skyline rules do NOT apply. Read:
 2. **`C:\proj\osprey\CLAUDE.md`** - Rust-side project overview:
    architecture, CI requirements, critical invariants (fold splits
    keep target-decoy pairs together; protein FDR uses raw SVM score;
-   etc.).
+   etc.). **A `Read` of ANY file under `C:\proj\osprey` auto-loads that
+   ~8k-token CLAUDE.md** (the harness injects the nearest CLAUDE.md for
+   the directory a Read opens). That is wanted for Rust work; when the
+   Rust tree is only a reference (doc lineage, a filename check), use
+   `Grep -C` or Bash `sed -n` / `head` there instead, so the budget is
+   not spent on an unrequested changelog. Same caution for any sibling
+   checkout with its own large CLAUDE.md.
 3. **`ai/WORKFLOW.md`** - read ONLY to understand what *differs* on
    the Rust side. Skyline's commit format, branch naming, and TODO
    conventions do NOT apply to maccoss/osprey work.
@@ -179,7 +195,16 @@ and `README.md` are the authoritative gate references.
   `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
 - **C#-side refactor / algorithm-affecting changes** (scoring, calibration,
   LOESS/KDE, SVM, FDR, decoy generation, blib) and every OOP/structural
-  refactor: pass two standing gates.
+  refactor: pass two standing gates. **The only refactor gate is
+  byte-identical output** - there has never been a gate on preserving the
+  Rust code structure. The giant verbatim-`pipeline.rs` methods
+  (`CoelutionScorer.ScoreCandidate`, `PercolatorFdr.RunPercolator`) are
+  porting residue: mirroring Rust was the expedient way to reach the bit
+  parity that makes regression-safe refactoring possible, and that parity
+  is the scaffold, not the structure. Decompose them freely by pure code
+  motion, output-locked by the golden. Characterization unit tests on
+  parity-locked extracts stay low-ROI because the golden already pins
+  those values.
   - **Correctness** (output unchanged): the self-contained straight-through
     regression vs a committed C# golden + a resume leg, both at 1e-9 (no Rust
     checkout):

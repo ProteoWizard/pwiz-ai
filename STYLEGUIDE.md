@@ -253,6 +253,8 @@ All source files should include:
 - **Unicode dashes** (em dash `U+2014`, en dash `U+2013`): visually indistinguishable in many UIs but cause encoding issues. Avoid all characters above ASCII 127 unless required by the domain.
 - **Double hyphen `--` used as an em-dash substitute** in prose comments (e.g. `// foo -- bar`). Human comments use a single `-`; a `--` is an LLM tell, and inside XML/Razor/Jam comments (`<!-- -->`) a literal `--` is a parse error. Write `// foo - bar` instead. (This does not apply to real code: the C# `--` operator, CLI flags like `--task`, or `--` inside a quoted string are fine.)
 
+**Never cite a `TODO-*.md` filename in a source comment** (C#, MSBuild, ps1). The TODO lives in the separate pwiz-ai repo, so the pointer does not resolve from a pwiz checkout and it dates the comment. State the reason in the comment itself; the `See TODO-...` pointer belongs in the commit message and PR body.
+
 See [ai/docs/style-guide.md](docs/style-guide.md) for detailed guidelines and examples.
 
 ## User Interface Guidelines

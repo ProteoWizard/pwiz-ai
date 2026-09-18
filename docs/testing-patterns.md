@@ -1740,6 +1740,19 @@ TestRunner.exe /locale:zh-CHS
 
 **TeamCity runs full test suite in all locales** - tests must pass everywhere.
 
+**Language switches happen in-process.** One TestRunner run executes the list in en,
+then ja, zh, fr, tr, changing `CurrentUICulture` between passes without restarting. So
+production code must never capture a `Resources.*` value in a static field or property:
+a static evaluated once holds the first locale's text, and every later pass compares
+against the wrong string - failures that appear only in the non-en passes, typically
+across every test that touches that message. Store a `Func<string>` (or `Func<...>`
+predicate) that re-reads the resource on each call, or read the resource at the point
+of use. `Program.Main`-time initialization does not help: tests do not run it.
+
+The local gate for any change to user-facing or command-line output is
+`pwsh -File ai/scripts/Skyline/Run-Tests.ps1 -UseTestList -Language all`
+(`-Language zh` for a fast repro). A green build and an en-only run will not catch this.
+
 ### Common Mistakes to Avoid
 
 ```csharp

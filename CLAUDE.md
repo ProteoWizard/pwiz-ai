@@ -200,6 +200,13 @@ a session leaves scores of files in it. Test and run output goes to the machine'
 data area, never here. Run `/pw-cleanup` when it has grown untidy; see
 `ai/docs/cleanup-guide.md`.
 
+**Cite the on-disk path for anything you report from output or logs.** Whenever a
+finding comes from a log, a run result, or a generated file, give the exact path the
+developer can open to confirm it - every time, not only when asked. A summary is
+verified against the file, not taken on trust. Write run logs to a stable path
+(`--log-file` where the tool has one) and use distinct per-run directories so earlier
+outputs stay available for comparison.
+
 ## Essential Documentation
 
 Before writing code, read these files:

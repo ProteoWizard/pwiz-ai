@@ -62,7 +62,21 @@ in [`Carafe/README.md`](../scripts/Osprey/Carafe/README.md#machine-configuration
 - **`mvn -o test` fails even with a warm `.m2`** if `surefire-testng` was never
   fetched; `mvn -o package` is fine. Run tests online once.
 - **`Compress-Archive` cannot zip these libraries** - it dies with "Stream was
-  too long" on a >4 GB member and they are ~12 GB. Use 7-Zip.
+  too long" on any single member over ~2 GB and `carafe_spectral_library.tsv`
+  is ~12 GB. Use the .NET API, which streams and writes Zip64 (and is roughly
+  10x faster):
+
+  ```powershell
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::CreateFromDirectory(
+      $stagedDir, $tmpZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+  Move-Item $tmpZip (Join-Path $stagedDir (Split-Path $tmpZip -Leaf))
+  ```
+
+  `$false` is `includeBaseDirectory`, giving the flat archive every library drop
+  uses. Build the zip OUTSIDE the directory being archived and move it in
+  afterwards, or `CreateFromDirectory` tries to archive the archive it is
+  writing. When the drop is copied to a network share, verify by byte count.
 
 ---
 
@@ -332,6 +346,29 @@ a net *gain* of 753.
 `-no_similarity_gate` reproduces the pre-fix behaviour. It is an audit switch,
 not a tuning knob: it is what proves a rebuilt library differs from the delivered
 one only by the fix, and a library built with it should not be searched.
+
+**Within-group similarity is not what the gate removes.** When judging whether a
+null population (decoys, entrapment) models the targets well, keep two
+measurements strictly apart, and state which population each was measured
+*against* before comparing any two rates:
+
+- *Within-group* - targets resembling other targets, entrapment resembling other
+  entrapment, decoys resembling other decoys. This is the natural phenomenon, and
+  a faithful null must REPRODUCE it at target-like rates; it must never be
+  filtered away.
+- *Cross-group* - a generated null resembling a real target. This is
+  contamination: the null is detected on the real peptide's signal and counted as
+  a false positive it never earned. Drive it to zero regardless of the
+  within-group rate.
+
+The two rates can come out nearly the same size, which is exactly what makes them
+easy to conflate; "targets shadow each other at X%, so filtering entrapment that
+shadows targets at Y% biases FDP" compares different quantities and is invalid.
+Under-modeling is fixed by making the nulls shadow *themselves* more, not by
+letting them shadow targets. Weight cross-group harm by how detectable the
+shadowed target is: a conserved ortholog matches because it is conserved, and
+conservation tracks expression, so foreign-species entrapment carries several
+times the detection-weighted harm of a shuffle at the same raw rate.
 
 ## The I/L collision check
 

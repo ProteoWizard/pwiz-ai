@@ -85,6 +85,35 @@ The Osprey script directory has three flavors of tool:
 | `Compare-Stage7-Crossimpl.ps1` | Stage 7 protein-FDR TSV dumps (`OSPREY_DUMP_STAGE7_PROTEIN_FDR`), format-tolerant | Per-column `max_abs_diff` ≤ threshold (default `1e-9`); row-set match on `accessions` key. |
 | `Compare-Stage7-Rehydration.ps1` | Rust↔Rust bit parity for `--join-at-pass=2` rehydration (reference straight-through vs test rehydrated) | SHA-256 equality of Stage 7 protein-FDR TSV. Gates the rehydration wiring, not the C# port. |
 
+## Tolerance discipline
+
+The pass criteria above are of two kinds, and be honest about which is which when
+asked how the gate works: byte-identical / SHA-256 (true bit parity) versus
+numeric-tolerance (the `1e-9` / `1e-6` comparators), where any slack is provisional
+and subject to review.
+
+- **Never widen a tolerance, add a skip-list or allowlist of mismatched rows or
+  columns, or fall back to an absolute-tolerance comparator to make a stage pass,
+  without explicit sign-off.** Each loosened gate hides real algorithmic drift that
+  cascades into later stages: a `1e-9` tolerance absorbs both harmless ryu-vs-.NET
+  `G16` rendering differences and a genuine 1-ULP score drift from BLAS/FMA
+  differences, and the developer wants the option to fix the latter even while the
+  gate is green. Earlier stages reached different levels of actual bit parity
+  precisely because past sessions gave themselves permission to add tolerance
+  whenever a strict gate failed.
+- **When a strict gate fails, bisect and fix the drift first**; propose a tolerance
+  only as a fallback, naming what is being tolerated (rendering vs algorithmic).
+- **Record every adopted tolerance** in the TODO progress log AND on the punch list
+  for the end-of-pipeline review, so it is revisited rather than buried.
+- **Do not port code that has no parity oracle.** If a score or feature exists only
+  in the reference implementation and the pipeline cannot verify a C# version
+  against it, do not write the C# now: write a backlog TODO that catalogs what is
+  missing (source refs, exclusion reasons) and plans the verification harness first
+  (emit the full set from both implementations, compare at `1e-9`). Distinguish
+  "exists but disabled" (can be wired and cataloged) from "does not exist in C#"
+  (defer). Unverified math shipped without an oracle is what the parity discipline
+  exists to prevent.
+
 ## Regression harnesses
 
 | Script | When to use |

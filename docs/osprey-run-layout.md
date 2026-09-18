@@ -61,6 +61,17 @@ worth knowing before using it:
 * **Pin the build.** Osprey refuses artifacts stamped by another day's build, so the runner
   reads `OSPREY_VERSION_OVERRIDE` out of the source run and pins it; sources from two
   different builds are rejected outright.
+* **Verify the bed presents the scenario before concluding "it is broken".** A staged bed
+  is a hand-built approximation of a real output directory, and anything the staging table
+  omits is indistinguishable, from inside the run, from an artifact the analysis never
+  produced - so the code takes a correct branch for the wrong reason and the log line reads
+  like a bug report. Three separate mis-staged beds (wrong library variant, so a
+  `search_hash` mismatch; an unstaged `out.blib`, so a correct decline to skip the join;
+  missing pass-1 diagnostics products) each produced a confident, wrong "broken" verdict
+  about a capability that worked. Before believing one: diff the `-WhatIf` command against
+  the source run's own `Command:` line (they should differ only in `--task` and output
+  paths), confirm the bed's file counts and analysis-wide artifacts, and read the decline
+  message - it names the file. Then re-test by the entry point the design actually names.
 
 ## Naming a run directory
 

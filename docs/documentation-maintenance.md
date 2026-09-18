@@ -119,6 +119,32 @@ RESULT: NEVER create new .md files in ai/ root. The nine that belong there are
         that list is closed.
 ```
 
+### Personal memory vs team docs
+
+Claude Code auto-memory (`~/.claude/projects/<project>/memory/`) lives on one machine
+and is read by one developer's sessions. Before writing a lesson there, ask: *is this
+personal, or team-wide?* Think of ReSharper's layered settings - every setting is
+explicitly personal or team-shared, and the team layer wins.
+
+- **Team-wide, goes in `ai/`**: workflow rules, script usage, project architecture,
+  build gotchas any developer can hit, naming conventions, the "why" behind a
+  convention. Anything a new developer on a new machine would need. Write it for that
+  reader - if a sentence only makes sense to one person on one machine, it is not
+  team doc material.
+- **Personal, stays in memory**: this-machine state ("VS 2026 preview is installed
+  here"), the developer's individual role and preferences, session-to-session
+  continuity no teammate needs.
+- **Both**: a machine-specific symptom that led to a team-wide rule. Put the rule in
+  the team doc, framed for a new developer; optionally note the local trigger in
+  memory. Do not narrate the debugging session in the team doc.
+
+**Retire the memory when the finding lands.** The moment a rule is written into an
+`ai/` doc or a completed TODO, delete the memory file that held it - in the same step,
+not later. Memories are written at the moment of learning, before anything is
+consolidated; if nothing retires them, they accumulate indefinitely (125 of them, most
+duplicating docs, before the first sweep) and each session pays to load guidance that
+already lives where the team can see it.
+
 ## Common Mistakes and Corrections
 
 ### ❌ MISTAKE 1: Creating New Core Files

@@ -53,6 +53,10 @@ one indexed workspace, not textual matches duplicated across sibling checkouts.
 
 **Banned phrases**: Do not use "smoking gun" or similar dramatic detective/crime
 idioms. We are engineers doing "root cause" analysis, not crime scene investigators.
+The same goes for the rest of the gun-metaphor family - "foot-gun", "silver bullet",
+"pull the trigger" - which models over-use where plain language is clearer:
+- "foot-gun" -> "easy to misuse" / "prone to silent failure" / "a trap"
+- "silver bullet" -> "a complete fix" / "the one change that solves it"
 
 When you find decisive evidence, use analytical language, with these explicit preferences:
 - "I found the smoking gun." -> "I found the root cause." or "Root cause identified!"

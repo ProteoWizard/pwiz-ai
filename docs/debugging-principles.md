@@ -32,6 +32,18 @@ Every debugging session begins with these questions:
 
 Cycle time is the time required to determine whether a bug is present or absent after making a change. This single variable determines your entire debugging strategy.
 
+**Prove the fix before running the nothing-broke gates.** A defect fix has two
+tests: the one that shows the fix changes the failing state, and the regression
+gates that show nothing else moved. Run the first one first. The gates are the
+expensive half (tens of minutes to hours) and the half that tells you least
+about the change under test; gating first means a wrong fix costs a full gate
+before you learn it was wrong, and that waste compounds across iterations. Find
+or construct the reproducing state (the real failing case if it is already on
+disk, else the smallest synthetic one), show the fix changes it, then run the
+gates once on a fix you already believe. If the existing gates structurally
+cannot observe the defect, say so before running them: a green gate on a fix it
+cannot see is not evidence.
+
 ### Reducing Cycle Time
 
 Before diving into investigation, **aggressively pursue cycle time reduction**:
@@ -234,6 +246,25 @@ Signs you've fallen into guess-and-test:
 **When you catch yourself guessing, stop and ask:** "What does my debug output actually say?" If the output doesn't answer your question, add more instrumentation. If it does answer it, read it more carefully — the answer is often already there.
 
 **Concrete example:** If debug output shows `listCount=1` when you expected `listCount=0` after `NewDocument()`, don't hypothesize about `BeginInvoke` timing. The output is telling you the list genuinely exists. Investigate *why* the list exists, not why some cleanup mechanism "didn't fire fast enough."
+
+**"Race condition" and "regression" are not explanations until verified.** Both
+are plausible mechanisms that *could* produce a symptom, which is not evidence
+that they *did*; naming one sends the investigation down the wrong path. Say
+what the data shows ("non-deterministic, mechanism unknown"; "slower than a
+recorded number") and then separate the variables:
+
+- **Use a change-immune anchor.** Re-run something the suspected change cannot
+  have touched (a reference implementation, an unchanged tool, a clean binary)
+  to tell environment drift from a code change. "Never seen in weeks of
+  testing" is strong counter-evidence to an intermittent-race story.
+- **Reproduce the baseline first.** Before calling a gap a regression, rerun
+  the baseline commit (a low-variance median of several runs) and confirm the
+  recorded number still reproduces. A published number that no longer
+  reproduces is not a regression in the new code.
+- **Bisect; do not reason from one comparison.** Verify the anchors you bisect
+  between instead of assuming a nearby commit is "the good one".
+- **Read the TODO notes first.** They record what was deliberately skipped (a
+  waived gate, a deferred check), which localizes a discrepancy fast.
 
 ### Bisection
 
@@ -687,6 +718,29 @@ Rust 33K (1.3x off)" tells you nothing about root cause. It should be
 replaced with "Stage 3 sample: 0 diff lines; Stage 4 scoring: 192,469 vs
 192,289 (180 diff lines, investigating)". Prove match at each stage; record
 the proof.
+
+**Treating "both patched sides agree" as "the fix is a no-op".** A parity test
+run with the same fix applied to both implementations proves only that the two
+patched tools agree with each other. It says nothing about whether the fix
+changed behavior relative to the old code. To claim "no observable impact on
+existing datasets", compare patched against unpatched on at least one side
+(hold the fix back on one implementation and rerun parity against the patched
+other), and say in the write-up which comparison the claim rests on.
+
+**Trusting a green parity gate as proof of correctness.** Parity answers "do
+the implementations agree?", not "are they right?". A defect present in both
+implementations is green on every parity gate by construction, and stays green
+until someone fixes one side, at which point the gate fires and the fix looks
+like the regression. A shared defect is also the more serious finding: it means
+the reference implementation is wrong too. When a defect turns out to be
+symmetric, sequence the fix so the gate is seen to work:
+
+1. Add the missing comparison first and verify it is green on the unfixed
+   code. Green here is the expected result: it proves the gate can only fire
+   on a one-sided change.
+2. Fix one side and confirm the gate goes red. Skipping this leaves an
+   assertion nobody has seen fail.
+3. Fix the other side and confirm it goes green again.
 
 ## Integration with Other Resources
 

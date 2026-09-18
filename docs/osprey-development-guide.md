@@ -21,6 +21,16 @@
 >   `cargo fmt` / `clippy -D warnings`, upstream commit prose); the `ai/*.md` Skyline
 >   rules do NOT apply there.
 
+**Status.** C# Osprey (`pwiz_tools/Osprey`) is the official Osprey: it ships with
+Skyline the way SkylineBatch and AutoQC do, and is versioned on the Skyline scheme
+(`YEAR.ORDINAL.BRANCH.DOY` from the Jamfile constants), not the old Rust release
+number. The Rust implementation (`maccoss/osprey`) is not released; it is the
+**parity mirror** for the standing C#<->Rust byte-identity gate (see "The parity
+gate is a STANDING requirement" below), so substantive C# changes still ship a
+companion Rust PR, but C# is the source of truth and its committed golden
+regression (`regression.ps1`) is the primary correctness gate. Do not treat Rust
+drift as a blocker for C# work that the goldens and the oracle already cover.
+
 Development conventions for work on the `maccoss/osprey` Rust
 project. Referenced by `TODO-OR-*.md` files, which may have workflow
 rules that differ from the Skyline-mainline conventions documented
@@ -89,18 +99,29 @@ as workspace members.
 
 ## Osprey project layering
 
-The C# port at `pwiz_tools/Osprey/` mirrors the Rust crate split
-with seven `.csproj`s:
+**Osprey stays a standalone, out-of-process EXE.** Skyline runs it as a separate
+process, never embeds it in-process, and that is a settled non-goal - so the
+heavyweight concrete pipeline tasks living below the exe is a layering choice, not
+a debt to pay down for embeddability. Future code sharing with Skyline goes
+through `pwiz_tools\Shared` (where the `Common*` projects, `ProteoWizardWrapper`
+and `BiblioSpec` already live), as its own PR driven by a real sharing need; land
+genuinely shared, stateless code in an Osprey project first.
+
+The C# port at `pwiz_tools/Osprey/` started from the Rust crate split and has
+grown to these `.csproj`s (`ls pwiz_tools/Osprey/*/*.csproj` is the check):
 
 | Project | Role |
 |---|---|
-| `Osprey.Core` | Data types, configs, enums, env-var wrapper (`OspreyEnvironment`). **Bottom of the dependency graph -- everything else depends on Core.** |
-| `Osprey.IO` | Library loaders, parquet readers/writers, blib writer |
+| `Osprey.Core` | Data types, configs, enums, env-var wrapper (`OspreyEnvironment`), `FileSaver`, the output seam. **Bottom of the dependency graph -- everything else depends on Core.** |
+| `Osprey.IO` | Library loaders, parquet readers/writers, sidecars, blib writer |
 | `Osprey.ML` | Machine learning (SVM, PEP, matrix) |
 | `Osprey.Chromatography` | RT calibration (`RTCalibrator`), peak detection |
 | `Osprey.Scoring` | XCorr, cosine, batch scoring |
 | `Osprey.FDR` | Percolator, protein FDR, reconciliation |
-| `Osprey` (main) | Pipeline orchestration, CLI, diagnostics |
+| `Osprey.Diagnostics` | `-d`-only diagnostics seam (`IOspreyDiagnostics`, `OspreyDiagnosticsLog`); references Chromatography, Scoring and FDR |
+| `Osprey.Tasks` | The pipeline tasks (`PerFileScoringTask`, `FirstPassFdrTask`, `PerFileRescoreTask`, `SecondPassFdrTask`), `PipelineContext`, blib / report / FDRBench output writers |
+| `Osprey` (main) | CLI (`Program`), run planning, `OspreyFileDiagnostics` dumps |
+| `Osprey.Test` | Unit tests |
 
 ### Sharing rule: push down to Core
 
@@ -134,6 +155,28 @@ in one place. The same Rust convention applies in `osprey-core`'s
 When a new env var is needed in a project that the wrapper class doesn't
 yet live in, push the wrapper down to Core first (see "Sharing rule"
 above), then add the new field.
+
+### User-visible output: one CommandStatusWriter, never raw Console.*
+
+All user-visible output goes through **one `CommandStatusWriter`**
+(`pwiz.Common.SystemUtil`, PortableUtil), held by the exe as `Program._out`, so
+`--timestamp` / `--memstamp` prefixing and `--log-file` redirection apply to
+every line uniformly - that uniform stamping is what `perfviz` and the memory-band
+analysis read. Below the exe, code writes through the Core seam
+`OspreyOutput.Out` (`Osprey.Core`), which `Program` points at `_out`. Only
+`--version` / `--help` write to stdout; everything else is stderr-by-default
+through the seam. Do not call `Console.Write*` / `Console.Error` directly
+anywhere, and do not add a second writer.
+
+`Osprey.Diagnostics` is **`-d`-only debug code and must not sit on the mainline
+output path**: routing a mainline `[TIMING]` / `[COUNT]` line through
+`OspreyDiagnosticsLog` conflates mainline with debug (and would need a
+`FDR -> Diagnostics` reference, a cycle, since Diagnostics already references
+FDR). The contract is "`-d` turns it on, otherwise silent": a task may call the
+diagnostics seam to emit a `-d` dump, but no mainline line is produced by it.
+New long-running operations should lean
+toward posting `ProgressStatus` to an `IProgressMonitor` rather than writing
+lines directly; fully plumbing that is not a current goal.
 
 ### Atomic file writes: FileSaver (never a cross-volume temp + move)
 
@@ -180,14 +223,15 @@ durable pipeline artifacts.
 
 | Path | Remote | Purpose |
 |---|---|---|
-| `C:\proj\osprey` | `maccoss/osprey` (SSH) | **Primary working tree.** Branches for new PRs live here. Also serves as upstream baseline for `Bench-Scoring.ps1` when checked out to `main`. Brendan has push access. |
+| `C:\proj\pwiz\pwiz_tools\Osprey` | `ProteoWizard/pwiz` | **The official C# Osprey.** Source of truth; ships with Skyline. Branches and PRs follow the pwiz workflow (see "Commit and PR conventions" for the current base branch). |
+| `C:\proj\osprey` | `maccoss/osprey` (SSH) | **Parity mirror.** The unreleased Rust implementation, kept for the standing C#<->Rust byte-identity gate; companion Rust PRs branch here. Also the upstream baseline for `Bench-Scoring.ps1` when checked out to `main`. Brendan has push access. |
 | `C:\proj\osprey-fork` | `brendanx67/osprey` | **Retired fork.** Preserved as archive; do not extend. Several session's scripts still reference it for legacy but new work ignores it. |
 
 (Rename from `osprey-mm`/`osprey` to `osprey`/`osprey-fork` completed
 2026-04-21. Any remaining scripts or docs that mention `osprey-mm`
 should be updated to `osprey` when touched.)
 
-New work goes to branches on `maccoss/osprey` directly, never to
+Companion Rust PRs go to branches on `maccoss/osprey` directly, never to
 the fork. Push directly; create PR with
 `gh pr create --repo maccoss/osprey`.
 
@@ -324,7 +368,7 @@ residual parameterization from the dual-tree era:
 |---|---|---|
 | `Build-OspreyRust.ps1` | `-OspreyRoot` param, default `C:\proj\osprey` | Works on any tree |
 | `Bench-Scoring.ps1` | Hardcoded two-tree comparison (historical) | May need updating once the legacy fork references are swept out |
-| `Run-Osprey.ps1` | Check before invoking on a non-default tree | Older script; may still hardcode a path |
+| `Run-Osprey.ps1` | Check before invoking on a non-default tree | Older script; may still hardcode a path. **Runs in place**: the exe writes its per-file outputs (`.scores.parquet`, `.spectra.bin`, `.calibration.json`, `.osprey.task`) next to each input mzML, so never point `-TestBaseDir` at a read-only source such as the Perftests fixture - copy the mzML + library into a scratch base (`D:\test\osprey-runs\<dataset>`, the `OSPREY_TEST_BASE_DIR` default) first. `regression.ps1` copies for you; this script does not. |
 | `Test-Features.ps1` | `-CsharpRoot` param with auto-detect across `pwiz-work1` / `pwiz` / `pwiz-work2` | The Rust side always uses `C:\proj\osprey` |
 
 When extending these scripts, the canonical Rust root is
@@ -404,9 +448,15 @@ the normal, cheap way to chain runs, and it has been used successfully many time
 82 Astral parquets is ~135 GB; a link is instant.
 
 The hazard is narrower than "hard links are unsafe", and worth stating precisely because the
-over-broad version costs an hour of pointless copying. A link is only dangerous when the
-validity key might NOT match: Osprey then re-scores and writes the new parquet **through the
-link**, overwriting the source run's artifact. So:
+over-broad version costs an hour of pointless copying. **The source run is never overwritten
+through a link.** Every durable artifact is written with `FileSaver` (sibling temp + rename,
+above), which replaces the *directory entry*; the other links keep the old content - verified
+on this machine with a two-link probe (`New-Item -ItemType HardLink`, rewrite one side, read
+the other), and it is what makes the `D:\test\osprey-runs\chs-seer\runs\*` link farm safe,
+where one 446-file bed's sidecar is shared by ten run dirs. The hazard when the validity key
+does NOT match is an unexpected re-score into your OWN directory: hours of Stage 1-4, and a
+run dir that silently diverges from the bed you thought you staged, so an A/B against a
+sibling is no longer comparing what you meant. So:
 
 - **Chaining your own runs in one session** - you just produced those artifacts and know the
   key. Link freely. This is the common case.
@@ -424,8 +474,12 @@ sidecars, run that single file, and look for:
 
 `SearchParameterHash` covers scoring parameters, NOT the input file list, so a one-file probe
 proves the key for the whole set. Minutes and ~2 GB, after which linking the other 81 is
-safe. If it says `PerFileScoring:starting` instead, the key moved and a link would have
-silently rewritten the source.
+safe. If it says `PerFileScoring:starting` instead, the key moved and the full set would
+have re-scored into your directory.
+
+Do not generalise the "links are safe" half to non-Osprey writers: a tool that opens the
+destination and truncates it writes THROUGH every link. When in doubt, run the two-link
+probe - it takes seconds.
 
 ## Test data locations
 
@@ -476,6 +530,17 @@ re-acquires every trap these folders already document. Measured cost of doing ex
   harness reads failure as success) and refuse to adopt a populated output directory unless you
   pass `-Resume`, because Osprey silently adopts per-file caches it finds there.
 
+**Fix the committed script; do not rebuild one.** Before writing any runner, gate or harness,
+`ls ai/scripts/Osprey` and read its `README.md` - the tool usually exists
+(`New-OspreyResumeStage.ps1`, `Test-Snapshot.ps1`, `Test-Full-Regression.ps1`,
+`Measure-Pipeline.ps1`, `ModelDiagnostics/`), and it has absorbed defects a fresh one would
+re-acquire: a one-off written to test a partial resume amputated artifacts IN PLACE in a run
+directory, while `New-OspreyResumeStage.ps1` already stages a disposable hard-link copy for
+exactly that reason. Starting from the committed script is also how its own gaps get found and
+fixed. **A new regression assertion is a MODE in `pwiz_tools/Osprey/regression.ps1`**, next to
+the existing modes, not a sibling script - that is what gives it the golden-comparison machinery
+and gets it run on TeamCity.
+
 **Run `-WhatIf` first.** It prints the resolved exe, data dir, library, cache count and the full
 command line without starting anything - the cheap way to confirm a multi-hour run is pointed at
 what you think it is. Paths resolve from parameter, then environment variable
@@ -525,8 +590,8 @@ Workflow:
   whenever the change can reach a protein accession. Found on #4573, whose
   `CarafeProteinIdNormalizer` is a no-op on Stellar and Astral by construction.
 - **Confirm `C:\proj\osprey` is actually on `origin/main` before believing ANY
-  cross-impl result.** It is the primary working tree, so it is routinely sitting
-  on a feature branch, and `git fetch` alone does not move it. A stale checkout
+  cross-impl result.** Companion Rust PRs are branched there, so it is routinely
+  sitting on a feature branch, and `git fetch` alone does not move it. A stale checkout
   produces a divergence that looks exactly like a real parity break, and the
   natural (wrong) reading is "a prior C# PR shipped without its Rust companion".
   That happened on 2026-08-16: `experiment_protein_qvalue` diverged on 2,370
@@ -611,15 +676,15 @@ a correctness proof. Two decisive precedents:
   (30674 = 30674, stage-7 + blib @ 1e-9) yet **degraded** entrapment
   FDP on Stellar library-decoy from 0.82% to 1.46% (above the line).
   It was held back rather than shipped to match Rust -- see
-  [[project_osprey_libdecoy_vs_gendecoy_calibration]] and
-  [[feedback_parity_vs_impact]]. Rust HEAD was simply anti-conservative
+  the gendecoy salvage record (ai/todos/completed/TODO-20260725_osprey_gendecoy_salvage_or_deadend.md) and
+  "Treating both patched sides agree as the fix is a no-op" in debugging-principles.md. Rust HEAD was simply anti-conservative
   there too.
 - **The pass-2 protein-FDR investigation:** the oracle showed the
   `--protein-fdr` rescue removal was a near no-op on output and that the
   real anti-conservative source was the 2nd-pass Percolator
   *recalibration* on a decoy-depleted null -- a conclusion no parity
   gate could have reached. See
-  [[project_osprey_pass2_recalibration_inflates_fdr]].
+  pwiz_tools/Osprey/docs/12-second-pass-fdr.md (the retrain was removed in #4528).
 
 Corollary: report every measured cell honestly, and judge any
 FDR-affecting code change on the entrapment oracle, not on parity or on
@@ -736,12 +801,12 @@ things the retrain does are visible on a plain run with NO `--protein-fdr`:
    distributions between the two models.
 2. **The pass-2 FDR is shifted upward**, because that retrain runs against a
    decoy-DEPLETED null -- the known anti-conservative source
-   ([[project_osprey_pass2_recalibration_inflates_fdr]]). On Stellar libdecoy the
+   (pwiz_tools/Osprey/docs/12-second-pass-fdr.md (the retrain was removed in #4528)). On Stellar libdecoy the
    pass-2 combined FDP is ~1.47% vs the well-calibrated pass-1 ~0.90% (reproduced
    2026-07-09 on the #4395 binary, no `--protein-fdr`). This is now the DEFAULT,
    with no committed off-switch; the fix + a kill-switch
    (`OSPREY_PASS2_QVALUE`) are tracked in
-   [[TODO-osprey_pass2_recalibration_fix.md]]. Compare the two via the report's
+   ai/todos/completed/TODO-20260710_osprey_pass2_recalibration_fix.md. Compare the two via the report's
    Pass 1 vs Pass 2 selector within a single run -- no need to toggle
    `--protein-fdr`. (Its interaction with #4390's best-of-runs q-clamp, formerly
    ~5% ID drop, now happens by default too; re-measure its post-#4395 ID effect.)
@@ -777,7 +842,7 @@ science explanation, not just a green build:
   Historically measured as 0.92% (2nd pass off) -> 1.57% (on); carrying
   the full 1st-pass score->q null to Stage 7 and transferring q through it
   (TRIC-style) restores 0.86%. Fix + kill-switch:
-  [[TODO-osprey_pass2_recalibration_fix.md]].
+  ai/todos/completed/TODO-20260710_osprey_pass2_recalibration_fix.md.
 
 ### Caveats
 
@@ -1625,7 +1690,15 @@ git show <hash>
 Differences from Skyline WORKFLOW.md:
 
 - **No CRLF requirement.** Rust convention is LF. Do NOT run
-  `fix-crlf.ps1` on the Rust working tree.
+  `fix-crlf.ps1` on the Rust working tree. `maccoss/osprey` is LF-only
+  (`.gitattributes` has `* text=auto`, blobs are LF); the global
+  `core.autocrlf=true` that pwiz needs makes the working tree CRLF, so set
+  `core.autocrlf=input` locally in that checkout. **Checking EOL is a byte
+  question**: `grep -c $'\r'` over a Git Bash pipe returns the LINE count, not
+  the CR count (a false CRLF positive that nearly triggered a needless "fix"),
+  and `git show` applies the checkout smudge, so neither is a raw-bytes view.
+  Use `git cat-file blob <sha>:<path> | tr -cd '\r' | wc -c` (or `| od -c |
+  head`, `| file -`).
 - **No `Co-Authored-By: Claude` trailer** unless Mike opts in.
 - **Reasonable prose is fine.** The Skyline 10-line cap is a
   Skyline-team convention.
@@ -1647,6 +1720,34 @@ gh pr create --repo maccoss/osprey \
 EOF
 )"
 ```
+
+### Base branch while the .NET 10 port (PR #4619) is open
+
+C# Osprey PRs currently base on **`Skyline/work/20260612_net8_port`** (Matt's .NET 10
+port, pwiz#4619), not `master`. The port branch is the team's integration branch for
+nightly testing and is expected to become master once the release question is settled;
+merge-vs-squash of #4619 itself is Brendan's call.
+
+Why not master: master's `Osprey Windows .NET` build is red on every new ephemeral
+TeamCity agent (`pwiz-windows-i-*`) - its `tcbuild.bat` wants a globally installed
+dotCover, while the port branch restores it from `.config/dotnet-tools.json` and carries
+the versioned `.teamcity/` settings. TeamCity builds the PR HEAD, not GitHub's merge
+ref, so retargeting a master-based branch alone fixes nothing: **merge the port branch
+in** (merge, never rebase, once the PR has review history).
+
+- New branches: `gh pr create --base Skyline/work/20260612_net8_port`; `/pw-complete`
+  works with the base and tracking branch swapped for master. Squash subjects are still
+  `osprey: ... (#N)`.
+- Build **x64** in Visual Studio: the solution's Any CPU configuration fails there
+  because VS never builds out-of-solution project references (`ProteowizardWrapper`
+  and pwiz-sharp are not in `Osprey.sln`); command-line `msbuild` is fine either way.
+- Pass `-SourceRoot <the port-branch checkout>` to `Build-Osprey.ps1`; it defaults to
+  `C:\proj\pwiz` and reports success on the wrong tree.
+- `Osprey Linux .NET` was red on the port branch itself while the Linux agent was being
+  provisioned; check `pull/4619` before reading it as a signal about your PR.
+
+**Delete this subsection** when #4619 merges and all Osprey work returns to master with
+no net472 work remaining.
 
 ## Differences from Skyline's WORKFLOW.md
 
@@ -1711,6 +1812,70 @@ The counter-example to learn from is `TODO-20260508_osprey_sharp_audit.md` item 
 cross-impl comparator flagged an "asymmetric absence", and that session deleted the FILE
 instead of fixing the COMPARATOR - then taught `Compare-DumpSha` to accept symmetric
 absence, which entrenched it and is why the instruction had to be given again.
+
+## Decide which artifact from the task, never from what is on disk
+
+When code needs to know WHICH artifact to read (which file, which mode, which path),
+the answer comes from the task or the config, never from probing disk for what happens
+to be there. `File.Exists(reconciled) ? reconciled : scoresPath` is the shape to refuse:
+it is only right as far as the stages happen to run in order, so it cannot be read
+locally - every reader has to reconstruct the pipeline to know what it does, and a
+review with the architecture doc open still got it wrong. It also fails in exactly the
+case nobody tests: re-run an early task over a COMPLETED directory, both files exist,
+and the probe hands the first pass the last pass's data with every hash matching.
+Confusing-if-harmless under correct operation is still wrong.
+
+Ask what makes the answer true. If it is "the stages run in order" rather than "this
+task needs that artifact", replace the probe with a task-membership predicate that names
+the ADMITTED set, so it fails closed; an absent declared artifact is then a reported
+fault, not a fallback. The same shape recurs as a proxy flag standing in for a question
+nobody re-asks once the flag is retired.
+
+## An untested capability is blocked, not left enabled
+
+"It happens to still work, so leave it enabled" is not free: anything left reachable is
+in the contract, and anything in the contract either gets a test kept green forever or
+rots into a bug report on a promise nobody made. The cost is paid later, which is why the
+call feels free at the time. When removing or replacing something, ask whether the old
+path is worth a permanent test; if it is not important, BLOCK it with an actionable error
+naming what to do instead (the precedent: `--task ModelDiagnostics` over a pre-survivor-
+subset reconciled parquet would have produced a correct report, and is refused with
+"re-run the analysis"). Do not leave a comment explaining that the old path would have
+worked - that documents a guarantee nobody signed up for and invites a later session to
+re-enable it. State the decision, not the workaround.
+
+## Hard failure over warn-and-proceed
+
+When a validity or compatibility check cannot establish that proceeding is safe, abort
+with a clear error rather than logging a warning and continuing. A warning in a log is
+missed; a run that completes is trusted, so warn-and-proceed ships silently invalid output
+as if it were valid. `ParquetScoreCache.CheckParquetMetadata` hard-fails on ANY
+`osprey.version` mismatch - daily-build drift and unparseable legacy versions included -
+for this reason. Reserve warn-and-proceed for cases that are genuinely expected and valid,
+not "probably fine". (The env-var section above carves out the one place this is about
+instrumentation rather than interface: misattributing one arm's numbers as another's
+still earns the hard failure.)
+
+## Format changes before the first public release
+
+Osprey has not had its first public release. Until it does, the only readers of its
+on-disk intermediates (`.scores.parquet`, `.spectra.bin`, the FDR sidecars, `.libcache`)
+are development sessions and the regression harness, so an incompatible artifact costs a
+**re-run, not a wrong answer shipped to a user** - and with the code moving this fast a
+fresh run is usually wanted anyway. For a format or semantics change, ask who reads the
+artifact today; if the answer is only dev sessions and the harness, take the simpler change
+and record the revisit trigger rather than adding a version guard or compat shim that
+rejects still-good data to protect a user who does not exist yet.
+
+Two things that stay strict regardless: the cross-build `osprey.version` hard-fail (the
+section above), and the cross-impl comparator's refusal of a sidecar version mismatch -
+that refusal is what let a layout be *proven* identical across implementations rather
+than assumed. And a format bump does NOT cost a golden re-record, so do not argue against
+one on that basis: `osprey-regression.data/<dataset>/` holds only the reported output
+(`blib_summary.tsv`, `protein_fdr.tsv`, `tables/`), never a binary intermediate, so a bump
+costs one `ExpectedVersion` line in `Regression/FdrSidecars.ps1` plus landing C# and Rust
+together. Revisit at the first public release; anything a user CAN already see through
+Skyline (a document, a reported q-value) is not covered by this latitude.
 
 ## Critical rules
 
@@ -1792,6 +1957,25 @@ anything new that is shared between lanes needs the same care: `SQLite.Interop.d
 was overwritten while the other lane held it open, and the run root was keyed on a
 whole-second timestamp so lanes starting in the same second shared - and deleted -
 one directory. See `regression-parallel.ps1`'s header.
+
+**Locally: one dataset per `pwsh` process, and never from a sub-agent's background.**
+`regression-parallel.ps1` is the sanctioned way to run two lanes; anything else that
+overlaps on one checkout collides on the shared Release tree and `SQLite.Interop.dll`.
+Two rules that follow:
+
+- Chaining datasets in ONE script (`regression.ps1 -Dataset Stellar; regression.ps1
+  -Dataset Astral`) kills the second in seconds with `SQLite.Interop.dll ... being used
+  by another process` - nothing is concurrent; the first dataset's blib comparison loaded
+  System.Data.SQLite into the hosting pwsh, and a native DLL stays loaded for that
+  process's lifetime, so the script waits on itself. The tell is a dataset log a few
+  dozen bytes long. Run each dataset as its own `pwsh -NoProfile -File
+  .../regression.ps1 -Dataset <one>`, or use `-Dataset All` / `regression-parallel.ps1`.
+- A delegated sub-agent must run the gate **foreground, exactly once**, and capture
+  `$LASTEXITCODE` - never via `run_in_background` or a poll-until loop. Background
+  launches persisted after the sub-agent completed and respawned fresh runs on every
+  re-notification; killing PIDs did not stop them (`TaskStop` the agent first). Prefer
+  running the correctness gate yourself in the parent after reviewing the sub-agent's
+  diff - verdict clarity is worth more than the wall clock.
 
 It is deliberately **manual / overnight**, NOT
 triggered on every commit or push, so opening or pushing a PR does **not** start
@@ -1960,7 +2144,8 @@ Where the MCP *is* connected, trigger via:
 ```
 mcp__teamcity__trigger_build(
     build_type_id="ProteoWizard_OspreyWindowsNetPerfRegressionTests",
-    branch="pull/<N>")
+    branch="pull/<N>",
+    agent_name="MacCoss TeamCity Agent 1")
 ```
 
 ### Always use `branch="pull/<N>"`, NEVER the named branch
@@ -1969,6 +2154,53 @@ The Osprey configs watch PR refs (`refs/pull/<N>/head`). A named
 `Skyline/work/...` branch is not recognized and TeamCity **silently falls back to
 building master** - a green result that tested the wrong commit. (The MCP now
 refuses a named branch for Osprey configs and tells you to use `pull/<N>`.)
+Always verify the build's reported commit matches your branch HEAD.
+
+### Pin `agent_name="MacCoss TeamCity Agent 1"`, and read the steps before the status
+
+The perf/regression config only works on that agent. On an AWS ephemeral
+`pwiz-windows-i-*` agent it dies in ~10 seconds with **exit code 9009** (Windows
+"command not recognized" - a tool missing from the agent's PATH), so an unpinned
+trigger has a good chance of returning a meaningless 10-second red that reads exactly
+like a real regression, and the config's last state on master is red for that
+environmental reason.
+
+Two more reds that are not yours:
+
+- **`freeze.settings.error`** - TeamCity stamps `FAILURE 'Failed to load build settings
+  from VCS'` at the *trigger* moment, before any step runs (this is a versioned-settings
+  build type and the `pull/<N>` ref does not carry them). Compare the failure timestamp
+  with the first step's start time; if the failure predates the steps, read the step
+  results instead - a genuine run shows `Osprey regression PASSED` and
+  `Process exited with code 0` under a red banner. `get_failed_tests` reporting "No
+  failed tests" is the tell.
+- **Cross-impl parity tests shown as ignored / `Assert.Inconclusive`** ("reference
+  parquet not present") on agents without the Rust reference data. Normal, not a failure.
+
+### Triaging a red: split self-consistency from vs-golden before blaming the code
+
+Modes come in two kinds. **Self-consistency** compares the build with itself (mode 2
+`resume == straight`, mode 3 `HPC chain == straight` and per-file sidecars `== straight`,
+mode 4 warm re-run all cached). **Vs-golden** compares the build with a stored baseline
+(mode 1, the diagnostics modes, mode 7). **All self-consistency green and only vs-golden
+red means the build agrees with itself and disagrees with a baseline - an input or
+baseline mismatch, not a code defect.** A real defect reds the self-consistency modes
+first, because they compare the very paths a change touches.
+
+Two cheap corroborations:
+
+1. **Dataset partition** - which datasets share a library or input? A red confined to the
+   datasets sharing one non-git artifact points at that artifact. (The case: two Stellar
+   variants red, Stellar and Astral green to the record count; the two red ones were
+   exactly the two sharing `stellar-libdecoy/carafe_spectral_library.tsv`, which another
+   session's script had overwritten in place on the shared agent.)
+2. **Anchor the baseline** - compare the date of the config's last GREEN run with the last
+   golden rebaseline (`git log -- pwiz_tools/Osprey/osprey-regression.data`). If no green
+   run exists since the goldens changed, there is no baseline the PR could have broken.
+
+Why this happens: the Perftests tree is mutable state outside git, and acquisition is
+skip-if-present on the extracted root, so a machine that already holds the tree never
+updates and cannot tell its inputs are wrong.
 
 ### What this gate uniquely buys
 

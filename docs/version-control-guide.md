@@ -159,6 +159,15 @@ Rules:
 - If told to commit them, write the message for what the change does, and say in it that
   it came from an earlier session, so the log does not imply it was part of your work.
 
+**Submodule build noise is the exception: clean it, do not announce you will ignore it.**
+When `git status` shows a submodule as `modified: ... (untracked content)` (e.g.
+`pwiz_tools/Skyline/Executables/BullseyeSharp`, `.../Hardklor`), inspect it; if it is
+`bin/` or `obj/` output from a Skyline build, clear it with `git -C <submodule> clean -fd`
+(git-aware, touches only untracked files). Nobody here edits those submodules, so noise
+in them is always noise, and reporting it untouched just recurs every session. The
+durable fix is a `.gitignore` (`bin/`, `obj/`) committed to the submodule's own repo,
+then a bump of the pwiz submodule pointer so it survives `git submodule update`.
+
 ## Commit Message Format
 
 All commits MUST follow this exact format:
@@ -283,24 +292,38 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 The title and the "Added…" bullet lead with a past-tense action; "Timer **closes**…" and
 "**Throws**…" describe ongoing behavior in the present tense.
 
-### Creating Commits with HEREDOC
+### Squash-merge message
 
-Use HEREDOC for proper formatting:
+The squash commit (`gh pr merge --squash`) is the only message that reaches master, so
+it is the durable project-level record. Write it about the **net advance the merge
+brings to the project**, not the development history:
+
+- **No internal-to-PR fixes.** A regression introduced and fixed within the same branch
+  or review round never existed as far as master is concerned; leave it out.
+- **No test plan.** "Verified ..." lines belong in the PR body, not the squash message.
+- **Headline advances only**: 1-3 `* ` bullets, the past-tense module-prefixed title
+  ending in ` (#NNNN)`, the `See TODO-...md in pwiz-ai/todos` reference, and the
+  `Co-Authored-By` trailer.
+- **The detail lives in the TODO.** Sub-steps, parity evidence, and validation go in
+  the completed TODO the message references. Per-commit messages on the branch may be
+  detailed; the squash message is the distilled view for a different reader.
+
+### Creating Commits: Message File + `git commit -F`
+
+Write the message to a file, then commit from it. This is the one recommended form,
+attended or unattended:
 
 ```bash
-git commit -m "$(cat <<'EOF'
-Fixed alert dialog timeout in functional tests
-
-* Added ShowWithTimeout method to catch unexpected dialogs
-* Timer closes dialog after 10 seconds in test mode
-* Throws TimeoutException with dialog message for debugging
-
-See TODO-20251217_alert_timeout.md in pwiz-ai/todos
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)"
+git commit -F C:/proj/ai/.tmp/sessions/<session>/commit-msg.txt
 ```
+
+Write the file with the Write tool (a session subfolder under `ai/.tmp/`), containing
+exactly the message shown in the example above. Do not build the message inside the
+shell command - not with a heredoc, not with `-m` and embedded newlines. A heredoc or
+any other large multi-part command is one the permission classifier cannot approve on
+its own, so in an unattended session it stalls at a prompt; the file form is also what
+`.claude/hooks/Deny-HarnessAttribution.ps1` reads to check the trailer. The same applies
+to `gh pr create --body-file <file>` and `gh pr merge --body-file <file>`.
 
 ## Pull Request Format
 
@@ -311,13 +334,11 @@ EOF
 gh pr create \
   --title "skyline: Fixed alert dialog timeout in functional tests" \
   --label skyline \
-  --body "$(cat <<'EOF'
-...
-EOF
-)"
+  --body-file C:/proj/ai/.tmp/sessions/<session>/pr-body.md
 ```
 
-Body:
+Write the body file with the Write tool first (see "Creating Commits" above for why
+not a heredoc). Body:
 
 ```markdown
 ## Summary
@@ -416,7 +437,14 @@ so it does not need a PR to exist. Reviewing first is materially cheaper:
 
 - **Copilot auto-reviews on PR open.** Measured on #4460: PR created 14:44:23,
   Copilot review submitted 14:46:57, nobody requested it. Open first and that
-  billed pass is spent on code you are about to rewrite.
+  billed pass is spent on code you are about to rewrite. Do not add Copilot as
+  a reviewer yourself; the project automation does it. **Exception: a stacked
+  PR (base is not `master`) gets no Copilot pass** until its parent merges and
+  it is retargeted to `master`, so do not plan an "address Copilot" step for
+  one. Do not try to force it: `gh pr edit <N> --add-reviewer Copilot` exits 0
+  and attaches nothing. If a repo without the automation ever needs it, the
+  call that works is
+  `gh api repos/<owner>/<repo>/pulls/<N>/requested_reviewers --method POST -f "reviewers[]=Copilot"`.
 - **Every push re-runs CI.** Landing review fixes after opening costs extra
   TeamCity rounds on states that are obsolete within the hour. #4460 cost three
   before this ordering was adopted.
@@ -457,6 +485,25 @@ auto-start something slow, weigh that overlap against the wasted Copilot pass.
      a distinct literal value, so it does fail. Reproduce or refute each finding
      against the code. Pushing back with the reason is a legitimate outcome;
      auto-applying the list is not.
+   - **Triage into two buckets - fix now, or drop.** `/code-review max` returns
+     about 15 findings every time because 15 is its cap; it is already choosing
+     not to mention more, so the count says nothing about how much is worth
+     doing, and a re-run after fixing a batch returns another 15 indefinitely.
+     Fix what is worth fixing now. Drop the rest with a one-line reason each -
+     do not file the leftovers as issues and do not carry them into the TODO as
+     open items; that relocates the backlog and looks diligent. Ask only about a
+     finding that changes the design or needs the developer's authority (a golden
+     rebaseline, a scope expansion).
+   - **A second review cycle on the same branch: stop after triage and report.**
+     Do not start fixing; wait for the developer's call. Fixing many unimportant
+     findings introduces new important defects, and each cycle raises the bar:
+     cycle 2 fixes only real defects in shipped behavior, not comments, docs,
+     names, or "could be clearer". Applying cycle 1's threshold again is what
+     produces cycle 3.
+   - **Do not merge with open findings.** A PR is worked until there is nothing
+     left worth posting; "fix these, file those" is the same relocation of the
+     backlog. PR size is not a reason to defer a finding - the team prefers larger,
+     higher-quality steps over smaller ones carrying known issues.
    - **Default to `max` for any code change.** The effort levels - `low`,
      `medium`, `high`, `xhigh`, `max` - all run locally against the Max
      subscription with **no extra billing**, so there is no cost reason to hold
@@ -487,6 +534,36 @@ independent passes; do not add a third by rote.
 Request human review only after the findings are settled and TeamCity is green.
 The goal is to spend reviewers' time on judgment calls, not on issues an AI pass
 would have caught.
+
+## PR size and when a PR is done
+
+**Lean bigger.** The model's instinct is very small PRs, and that granularity is not
+free: review attention, CI cycles, merge ceremony, TODO lifecycle, and branch juggling
+are paid per PR by the developer, not by the model, which is why the instinct
+systematically under-weights them. When related work turns up mid-branch, the default
+is to fold it in. Do not volunteer "keep this PR minimal and file the rest separately".
+
+**Split only for a named reason**: a genuinely different risk class, a change that
+needs its own baseline or gate (a compressor version bump that can move committed
+byte-identical goldens, say), or a dependency that must merge first. Tidiness is not a
+reason.
+
+**A cleanup sprint is one grab-bag PR.** When a session is framed as clearing small
+friction items (a permanently-skipped test, a stale doc reference, a script that
+silently no-ops, an IDE warning), roll everything being fixed into a single PR even
+though the items are unrelated. Deferring items to "a follow-up" recreates the backlog
+the sprint exists to clear. The squash message reads as a batch of unrelated fixes;
+that is fine. Still exclude a change in a different risk class, and the batch still owes
+the standing gates for whatever it touches.
+
+**Green is not done.** A branch whose gates are green is *mergeable*, not *finished*;
+the developer judges a PR done when its goal is reached, and on a measured-improvement
+branch that is often several increments away. When gates go green, report the result
+and stop: do not propose merging, do not offer `/pw-complete`, do not treat a stale CI
+run as the last blocker. A TODO that says "ready to merge" from an earlier session is a
+snapshot, not a standing instruction. Blockers found mid-branch that prevent further
+testing belong in the same branch even when they are in unrelated files and the TODO
+has declared its scope closed - reaching the goal outranks the scope line.
 
 ## Branch Naming Convention
 
@@ -570,6 +647,25 @@ produce a tidier branch, and it is still wrong: it force-pushes an open PR.
 
 Retarget the child onto master when the parent merges (`gh pr edit <N> --base master`).
 That does not cause the conflict - it surfaces one that the squash already created.
+
+### Merging a stack
+
+Squash-merge a stack of dependent PRs bottom-up, and **never pass `--delete-branch`
+to `gh pr merge` on a PR that still has an open PR based on it.** Deleting a branch that
+is another open PR's base makes GitHub auto-close that PR, and it cannot be reopened
+once its base is gone - the only recovery is a brand-new PR, losing the number and every
+review thread. The order:
+
+1. Merge the bottom PR: `gh pr merge <N> --squash --subject "<module>: ... (#N)" --body-file <file>` - **no `--delete-branch`**.
+2. `git checkout master && git pull origin master`.
+3. Retarget the next PR to master: `gh pr edit <next> --base master`. This is allowed
+   only while the PR is open and its base branch still exists, so it comes before any
+   delete.
+4. On the next branch, `git merge origin/master`, resolve (see above), plain `git push`.
+5. Delete the just-merged remote branch only once `gh pr list --base <branch>` is empty.
+6. Wait for the retargeted PR's checks, then repeat from step 1.
+
+`/pw-complete` follows this order and checks step 5 before any remote delete.
 
 ### Check whether a force-push is actually needed
 

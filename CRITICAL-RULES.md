@@ -38,6 +38,11 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - Add new UI strings to `pwiz_tools/Skyline/Menus/MenusResources.resx`
 - .resx changes require corresponding .Designer.cs updates
 - Resource properties in .Designer.cs must be in alphabetical order
+- **NEVER** capture a `Resources.*` string in a static field or property. Tests switch
+  UI language in-process, so a static evaluated once freezes the first locale and every
+  later language gets the wrong text. Store a `Func<string>` (or a `Func<...>` predicate)
+  that re-reads the resource on each call, or read it at the point of use. The gate is
+  `Run-Tests.ps1 -UseTestList -Language all`; an en-only run will not catch it
 
 ## Naming Conventions
 - Private fields: `_camelCase`
@@ -112,11 +117,20 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 
 ## Bash Tool: Avoid Compound Commands
 - **NEVER** use `cd /path && command` — the shell working directory persists between Bash tool calls
-- `cd` once, then run subsequent commands individually
+- Prefer no `cd` in a Bash call at all: use `git -C <abs path>`, `pwsh -File <abs path>`, and
+  absolute paths for every read and redirect target (`cd` once, then simple commands, is the
+  fallback when a tool truly needs the cwd)
+- **NEVER** assign or expand shell variables (`FOO=...` then `$FOO`) — spell file lists out inline
+- **NEVER** put large content in a Bash command: no heredocs, no `python -c` + `git` chains, no
+  "generate text and commit" one-liners. Write the content to a file with the Write tool, then run
+  ONE short command on it (`git commit -F msg.txt`, `cat entry.md >> target.md`)
+- One logical action per Bash call
 - **NEVER** pipe build/test script output through `grep`, `tail`, `head` etc.
 - Use `-Summary` flag on `Build-Skyline.ps1` and `Run-Tests.ps1` instead
 - Use `Build-Skyline.ps1 -RunTests -TestName X -Summary` for build+test in one command
-- Piped commands trigger compound-command permission prompts, blocking unattended iteration
+- The reason for all of the above: the auto-mode permission classifier cannot classify `cd`
+  compounds, variable expansion, pipes, or long commands, so it stops at a prompt - in an
+  unattended session that prompt blocks everything until someone returns
 
 ## Commits Require Build and Test Verification
 - **NEVER** commit code that has not been built and tested

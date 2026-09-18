@@ -324,6 +324,14 @@ weigh that overlap against the wasted Copilot pass.)
      distinct offset with a distinct literal and does fail. Reproduce or
      refute each finding against the code. Pushing back with the reason is
      a legitimate outcome; auto-applying is not.
+   - **Triage into two buckets: fix now, or drop.** `/code-review max` returns
+     ~15 findings every time because 15 is its cap, so the count carries no
+     information and a re-run yields another 15. Fix what is worth it; drop the
+     rest with a one-line reason each. Never file the leftovers as issues or
+     carry them into the TODO. On a SECOND cycle over the same branch, stop
+     after triage and report before fixing anything - and raise the bar to real
+     defects in shipped behavior only. Do not merge with open findings; PR size
+     is not a reason to defer one. Details in the guide ("Pre-Review Workflow").
    - **Default to `max` for code changes.** The effort levels
      (`low` / `medium` / `high` / `xhigh` / `max`) all run locally on the
      Max subscription with NO extra billing, so use the highest effort the

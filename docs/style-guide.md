@@ -128,6 +128,7 @@ warning severity so the pattern is rejected at review time.
 - Keep names descriptive and intention-revealing; avoid abbreviations.
 - Keep methods small and cohesive; extract helpers as needed (placed after usage as above).
 - **Blank lines should be completely empty** - do not include spaces or tabs for indentation on blank lines.
+- **Terminology**: the SQLite-backed `.blib` spectral library format is **BiblioSpecLite** (the "Lite" is SQLite), not "BibliospecLight"; the tool suite (BiblioSpec, BlibBuild, BlibFilter) is just "BiblioSpec".
 
 ## Error handling and diagnostics
 
@@ -750,6 +751,12 @@ Comments should generally start with a capital letter, especially if they are es
   - `// Useful for disambiguation of multiple responses.`
 - **Short phrases**: Capital letter, period optional for very short phrases
   - `// A better read on name.` or `// A better read on name`
+- **The comment must stand on its own - never cite a `TODO-*.md` filename.** The TODO
+  files live in the separate pwiz-ai repo, so `(see TODO-2026..._foo.md)` is an
+  unresolvable reference from a pwiz checkout (Copilot flags it as broken) and it dates
+  the comment. Write the rationale directly (`// Removed as anti-conservative: the
+  entrapment oracle showed 6x the baseline false rate.`); the `See TODO-...` pointer goes
+  in the commit message and PR body, where it is the team convention.
 
 ### XML documentation comments
 When referencing class names in XML documentation, use `<see cref="ClassName">` for proper IntelliSense linking.

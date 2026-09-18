@@ -205,6 +205,15 @@ Add this **final section** before moving to ai/todos/completed/:
 4. **Use DRY principles** - Avoid duplication in long-lived codebase
 5. **Handle exceptions properly** - Use established patterns for error handling
 
+#### Don't build what the next step deletes
+
+Before starting a bounded fix (a leaner pool, a smaller cache, a cheaper variant of a
+structure), check the TODO's planned sequence for a later step that removes the structure
+altogether. If one exists, say so and price both options rather than delivering the
+intermediate and noting the overlap afterwards. The intermediate's cost is real and its
+value expires on a known date; go at the architecture instead, and keep only the parts
+that genuinely survive the pivot.
+
 ### Build, Test, and Inspection Workflow
 
 **IMPORTANT**: AI agents build and test their own changes through the project's
@@ -225,6 +234,7 @@ can run yourself.
 - **DO**: Report build/test results plainly, including failures with their output
 - **DON'T**: Commit code that has not been built and tested
 - **DON'T**: Introduce a new build system or invoke raw msbuild/test runners directly when a wrapper script covers the task
+- **DON'T**: Treat a "wrap up" or "finish up regardless" nudge as authorization for an operation you advised against (a force-push, a merge, a rebaseline) - that message is about pace and scope, not permission; and a question you asked that went unanswered is still open, not implied by the next thing the developer says
 
 ### Context Switching
 When switching between LLM tools or sessions:
@@ -446,6 +456,23 @@ Brief description of the work.
 Use /pw-startissue <number> to begin work."
 ```
 
+#### When to file an issue vs note in the TODO
+
+Default to **noting findings in the active TODO**, not `gh issue create`. An issue is
+for work that must be scheduled or handed to someone else; it is not the unit of
+record for every defect found while working a branch.
+
+The normal loop is: notice something off, bisect to the root cause, fix, iterate. Reaching
+the bottom usually exposes a chain - A should have prevented the failure; since it did
+not, B should have; since it did not, C's null check should have stopped the crash. One
+unexpected failure routinely yields three fixes. Fix the whole chain in one pass, let one
+PR carry it, and name each link in the commit and PR body. Filing an issue and a PR per
+link is what makes that loop feel held back.
+
+Bisection cells are cheap - run them, including the one the developer is walking toward,
+rather than concluding it by elimination. Four minutes of controlled cells that isolate a
+cause are worth more than a two-hour oracle that measures a symptom.
+
 ### Workflow 7: Branching from a Feature Branch (Pre-Merge Dependency)
 
 When you want to start new work that depends on changes in a feature branch not yet merged to master:
@@ -462,12 +489,18 @@ git checkout -b Skyline/work/20251221_new_feature
 - **Base**: `Skyline/work/20251122_parent_feature` (will rebase to master after parent merges)
 ```
 
-**Step 3: After parent branch merges, rebase onto master**
+**Step 3: After parent branch merges, retarget the PR and merge master in**
 ```bash
+gh pr edit <N> --base master
 git fetch origin master
-git rebase origin/master
-git push --force-with-lease
+git merge origin/master       # NOT rebase: the branch has a PR, so its history is public
+git push
 ```
+
+The merge will conflict on files the child edited further - both sides carry the
+parent's content after the squash. Resolve and push; see "Merging a stack" in
+`ai/docs/version-control-guide.md` for the full cascade, including why the parent's
+branch must not be deleted while this PR is still based on it.
 
 **Caution:**
 - Only use when confident the parent will merge before your PR

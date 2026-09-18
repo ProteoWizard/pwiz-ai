@@ -18,6 +18,10 @@ on the PR's `state`:
 
 Only a **CLOSED-not-merged** PR is a hard stop.
 
+**Run only when the developer asks for it.** Green gates make a PR mergeable, not
+done; never propose this command unprompted (see "PR size and when a PR is done"
+in `ai/docs/version-control-guide.md`).
+
 Finalizing = write the final TODO, move it to `ai/todos/completed/`, sync
 the local checkout so the work branch is gone and `master` is the merged
 state. It is safe by construction: no merge happens without the user's
@@ -143,7 +147,8 @@ Format rules (also in `version-control-guide.md`):
   (`OspreySharp:`, `msconvert:`, `Volcano plot:`), replace it with the module
   and fold the sub-area into the prose:
   `osprey: Made the OspreySharp protein razor rollup deterministic`
-- Bullets: 1-5, each `* `-prefixed; what shipped, not how
+- Bullets: 1-3, each `* `-prefixed; the project-level advances only - no
+  fixes that were internal to the PR, no test plan; the detail lives in the TODO
 - TODO reference: a `See TODO-...md in pwiz-ai/todos` line, even
   though Step 3 moves the file to `completed/` — the commit lands
   before the move, so the path in the message is the pre-move path
@@ -184,14 +189,17 @@ Show the drafted subject and body to the user verbatim, then ask:
 On approval (note the literal ` (#<N>)` at the end of `--subject` —
 GitHub will NOT add it for you when an explicit subject is passed):
 
+Write the approved body verbatim (blank lines, TODO and Co-Author footers included)
+to a file with the Write tool, then:
+
 ```bash
 gh pr merge <N> --squash \
   --subject "<approved subject> (#<N>)" \
-  --body "$(cat <<'EOF'
-<approved body, verbatim, including blank lines and the TODO + Co-Author footers>
-EOF
-)"
+  --body-file C:/proj/ai/.tmp/sessions/<session>/squash-body.txt
 ```
+
+No heredoc: the permission classifier cannot approve one on its own, and the
+hook that checks the attribution trailer reads the `--body-file` file.
 
 After the merge, sanity-check the subject landed correctly:
 
@@ -369,8 +377,8 @@ gh pr list --repo ProteoWizard/pwiz --state open \
   This is reversible: the merged PR keeps a "Restore branch" button, so a
   mistaken delete is one click to undo.
 - **Non-empty → STOP, do not delete.** The branch is the base of an open
-  PR; deleting it auto-closes that PR *unreopenably* (see
-  `feedback_stacked_pr_no_delete_branch`). Retarget the child onto
+  PR; deleting it auto-closes that PR *unreopenably* (see "Merging a stack"
+  in `ai/docs/version-control-guide.md`). Retarget the child onto
   `master` first, or leave the remote branch until the end of the
   cascade and tell the user it was left behind on purpose.
 

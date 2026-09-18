@@ -31,6 +31,15 @@ could be claimed. Silence is not success; a dead wrapper looks exactly like a qu
 There is no "short enough to just run it" threshold. Assume anything past a few minutes
 needs detaching.
 
+**A silent death under the job object leaves no crash artifact, so it is consistent with
+OOM.** The harness job object sets `JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION`, which
+disables Windows Error Reporting for its children: an unhandled `OutOfMemoryException`
+terminates the process with no WER report, no Application Error (event 1000), no .NET
+Runtime (1026) and no system (2004) entry. The job sets no memory limit, so this is not
+a job cap either. When a run stops with no verdict and nothing in the event log, check
+peak memory against the machine (working-set and commit around the time of death)
+before blaming the code.
+
 ## How to launch, in order of preference
 
 ### 1. `run_in_background: true` on the Bash tool
@@ -170,6 +179,39 @@ its terminal line — absence of a process is not presence of a result.
 **Assert the expected result COUNT, not merely "no failures".** The same chain then
 accepted a run reporting `2 PASS, 0 FAIL` when a clean Stellar gate is 11 PASS. An aborted
 run and a clean one are indistinguishable under a no-failures test.
+
+**Include a liveness check.** A monitor that watches only for terminal markers cannot
+tell "still running" from "died silently". Poll the driver PID as well and report "gone
+with no verdict" when it disappears, or silence reads as progress.
+
+**Read Osprey progress from the last `file NN/NN:` line, never from a tailed `%`.** Many
+phases emit a percentage, so whatever `%` a `tail` happens to catch cannot be attributed
+to a phase and says nothing about how far the run is. Grep for the per-file counter
+(`\b\d+/\d+:`) and take the last match; it covers both PerFileScoring and
+PerFileRescoring, which are the bulk of a large cohort's wall time:
+
+```
+Re-scoring file 66/86: EXP25033_2025us0062bX63_A
+===== Loading file 86/86: EXP25033_2025us0059bX85_A =====
+```
+
+**Bound the wait when iterating on a fix.** An event-driven monitor is right for a run
+that is *producing* a result (an overnight cohort). It is wrong while you are *iterating*:
+waiting on the success event costs the full failure duration every time the fix does not
+work, and a change meant to make something fast has already answered the question once it
+is slow. State the predicted time before launching, set a hard cutoff at roughly 1.5x it,
+poll on a fixed cadence (about every two minutes) in between, and kill at the cutoff. The
+prediction is the timeout; do not watch the slow path finish.
+
+## Do not edit a script while it runs
+
+Do not modify a script, or anything it dot-sources or imports, while a run is executing
+it. "PowerShell parsed the whole file at launch, so editing now is safe" is a guess, and
+acting on it turns any later failure into an ambiguous one you cannot attribute. While a
+gate or long run is live, restrict yourself to reading and to writing files outside the
+tree it executes (`ai/.tmp` notes, handoffs); queue tree edits and apply them when the run
+returns. If an edit truly cannot wait, kill the run first and relaunch: a deliberate
+restart costs less than an ambiguous death.
 
 ## Killing a run leaves the build output locked
 

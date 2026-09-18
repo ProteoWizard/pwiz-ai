@@ -40,6 +40,14 @@ search_builds(build_type_id="bt209", branch="pull/4038", count=3)
 
 **Important**: `search_builds` defaults to finished builds only. Pass `state="running"` to find in-progress builds.
 
+**Query freshness.** A `search_builds` result is a snapshot of that instant. Before
+asserting that a build did or did not run (or pass), re-run the query right then -
+never reuse an earlier result across a time gap or a date rollover, since right after a
+push the new run has not queued yet. Do not over-narrow the locator either: a nightly
+or a manually triggered run may be on `master` or the default branch rather than
+`pull/<N>`, so a branch-filtered query never shows it. If you can only see part of the
+picture, say so and defer to the developer's ground truth rather than concluding.
+
 ### Step 3: Investigate failures
 
 ```

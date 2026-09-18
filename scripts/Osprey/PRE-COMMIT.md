@@ -30,6 +30,11 @@ Exit code 0 = safe to commit.  Non-zero = fix issues before committing.
 Typical wall is a few minutes from a warm incremental build, dominated
 by the two inspection passes.
 
+In a worktree session (`pwiz-work1`, `pwiz-work2`, ...) add
+`-SourceRoot <checkout>`: the default is the `pwiz` sibling of `ai/`, not
+the current directory, and a run against the wrong tree still reports
+"Build succeeded" - for code nobody changed.
+
 Common LLM-introduced inspection findings (caught here, not after):
 
 - `RedundantUsingDirective` (unused `using` left behind after edits)

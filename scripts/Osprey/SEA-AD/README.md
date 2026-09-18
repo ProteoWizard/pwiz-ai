@@ -303,6 +303,32 @@ Measured, not guessed - these cost real time to learn:
 * `Clear-StandbyCache.ps1` before a timing run - otherwise the OS file cache makes a cold
   read look warm.
 
+## Dataset caveats
+
+* **Acquisition drift confounds cohort size with cohort quality.** Instrument response
+  degrades badly across this dataset's acquisition series: the 7 pooled QC injections are
+  the same sample run 7 times through the series, and their passing targets fall
+  monotonically from ~23,500 to ~10,900 (more than 2x), so it is the instrument/column,
+  not biology. Files 1-40 pass a median ~27,000 targets against ~19,000 for files 41-82
+  (-29%, with or without the pools). File NAME order tracks acquisition order, and the
+  pools sort LAST (positions 76-82). So a "first N files" cohort (`Run-SeaAd.ps1
+  -NumFiles N`) is also the EARLIEST and best N files, and only the 82-file cohort
+  contains the pools and the most degraded donors. Any size-vs-effect trend on this
+  dataset is partly a quality trend; verify with matched-size, different-content cohorts
+  using `-SkipFirstFiles`, `-EveryNthFile` and `-ExcludePattern pool`. This is what broke
+  an apparent "benefit grows with run count" result: F=4..60 was flat and only F=82 was
+  high.
+* **Per-file ID counts are not comparable across cohort sizes.** The trained first-pass
+  model's target-decoy separation varies ~3x and NON-monotonically with cohort size here,
+  and per-file run-level passing tracks it (going from 40 to 60 files cost every file
+  ~13.6%). Compare arms at the same cohort, never per-file counts across cohorts.
+* **Convert at `-Throttle 4`, not higher.** `Convert-SeaAdRaw.ps1` defaults to 4 for a
+  reason: the data lives on a SATA HDD, and msconvert buffers each full indexed mzML in
+  RAM (~4-7 GB each; the `.partial` stays at 0 bytes, then flushes in one burst). At
+  throttle 8 on a 64 GB box the workers held ~41 GB and pushed toward paging while 8-way
+  HDD seeks thrashed, and throughput dropped BELOW throttle 4. Expect ~7-10 min/file
+  4-wide.
+
 ## Scripts here
 
 | script | purpose |
