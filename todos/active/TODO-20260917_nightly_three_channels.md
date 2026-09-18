@@ -168,6 +168,18 @@ what it ran. Flag a machine: set the variable to this PR's `pull/NNNN`, let the 
 update it, open the new form, save the run. Unflag: unset the variable; next night it is back on
 master's build and its old runs.
 
+**What the gate reaches** (traced 2026-09-18 after Brendan asked): the `.zip`s carry only
+SkylineNightly and SkylineTester; TestRunner and the tests are always built on the machine from
+the branch SkylineTester clones. So for a **master run** on a flagged machine everything comes
+from the PR - shim and SkylineNightly from the PR's `SkylineNightly.zip`, SkylineTester from its
+`SkylineTester.zip`, and the clone of the PR's head branch (`6cba70df06`: SkylineNightly resolves
+`pull/NNNN` to the head branch through the GitHub API, because a TeamCity PR build is a detached
+checkout whose stamp reads `(HEAD detached at ...)` and would have broken the clone). For an
+**Integration or Release run** the variable reaches only SkylineNightly: SkylineTester comes from
+that branch's own config and the clone is that branch, so the run types need this work merged
+into the branch first (the port branch for #4619). The first full-stack trial is therefore a
+master machine.
+
 Order: merge #4684; merge master into this branch; open this PR; flag one master machine;
 create the leak folders; then the machine-by-machine rollout below.
 
