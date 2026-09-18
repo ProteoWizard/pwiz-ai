@@ -116,10 +116,10 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
   run it
 
 ## Bash Tool: Avoid Compound Commands
-- **NEVER** use `cd /path && command` — the shell working directory persists between Bash tool calls
-- Prefer no `cd` in a Bash call at all: use `git -C <abs path>`, `pwsh -File <abs path>`, and
-  absolute paths for every read and redirect target (`cd` once, then simple commands, is the
-  fallback when a tool truly needs the cwd)
+- **NEVER** use `cd /path && command` — a compound command that starts with `cd` is not allowed
+- `cd` on its own is fine, and the shell working directory PERSISTS between Bash tool calls: `cd`
+  once to the directory you are working in, then run any number of plain commands against it and
+  keep track of where you are. Do not re-`cd` per command
 - **NEVER** assign or expand shell variables (`FOO=...` then `$FOO`) — spell file lists out inline
 - **NEVER** put large content in a Bash command: no heredocs, no `python -c` + `git` chains, no
   "generate text and commit" one-liners. Write the content to a file with the Write tool, then run
