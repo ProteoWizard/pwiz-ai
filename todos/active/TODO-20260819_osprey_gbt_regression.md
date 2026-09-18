@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260819_osprey_gbt_regression`
 - **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-09-18; was `master`)
 - **Created**: 2026-08-19
-- **Status**: PR open, retargeted to the port branch 2026-09-18; Stellar regression PASSED, waiting on TeamCity
+- **Status**: PR open on the port branch; review fixes pushed 2026-09-18 (`386ce6457a`, TeamCity #687 green, 600 tests); waiting on Mike
 - **GitHub Issue**: [#4592](https://github.com/ProteoWizard/pwiz/issues/4592)
 - **Module**: `osprey`
 - **PR**: [#4595](https://github.com/ProteoWizard/pwiz/pull/4595)
@@ -290,3 +290,10 @@ diagnostics assume a resulting linear model (per-feature weights), which a tree 
 does not have. Assessing model success and feature importance at a feature level for GBDT
 needs its own thought (gain-based split importance is the usual first cut; a tree model has no
 weight vector to render). Not this PR; noted so it is not forgotten when GBDT next comes up.
+
+Pushed as `386ce6457a`; TeamCity `Osprey Windows .NET` #687 (ID 4179100) SUCCESS, 600 tests.
+Summary comment for Mike posted on the PR (issuecomment-5732999061). A formal reviewer
+request is impossible - GitHub returns 422 "Review cannot be requested from pull request
+author" because the PR is his - so his sign-off will be a comment. Brendan merges after that;
+squash subject `osprey: Added squared-error objective and model persistence to Osprey.ML
+GradientBoostedTrees (#4595)`, third bullet to cite the golden test, not regression.ps1.
