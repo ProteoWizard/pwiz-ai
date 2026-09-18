@@ -280,7 +280,7 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
       `top_clients_by_webdav_time`). 75 tests pass. Real data (window ending 09-17 00:00):
       543,873 WebDAV seconds, more than pages + downloads (287,969 s). Top WebDAV clients:
       `panorama-inventory/2.0` (160.62.2.16, 297,114 s, outside Panorama Public) and the curl
-      client (180,863 s). 54 s run, 606 MB peak RSS. Uncommitted
+      client (180,863 s). 54 s run, 606 MB peak RSS. Committed `336448b`
 - [x] Report output (2026-09-18, `4aa8739`): the CLI writes both `access-log-report-<end>.md`
       (the agent's Markdown, with a metadata comment) and `.html` (a self-contained page with
       light/dark styles). `render.py` uses markdown-it-py (new dependency) with raw HTML
@@ -299,10 +299,17 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
       recommendations (high needs a non-browser string or a range with `signed_in_clients` 0;
       ordinary browser strings are at most medium; outside knowledge never raises confidence),
       a check-before-writing step, and "only requests matching the pattern hold the slots".
-      `subnet_details` now returns `signed_in_clients`. 79 tests pass. Trial agent definition:
-      `~/.claude/agents/access-log-review-medium.md` (refreshed with the new prompt)
-- [x] Trial reports written 2026-09-18 by hand from SYSTEM_PROMPT: `reports/access-log-report-2026-09-17T0700-2.md`
-      (dev window) and `reports/access-log-report-2026-09-17T0000.md` (covers the 34-minute flood)
+      `subnet_details` now returns `signed_in_clients`. 79 tests pass. Not yet validated by a
+      rerun (the trial agent definition and its working files were deleted at the user's request)
+- [x] Trial reports written 2026-09-18 by hand from SYSTEM_PROMPT, all in `reports/`
+      (gitignored): `access-log-report-2026-09-17T0700-2.md` (dev window) and
+      `access-log-report-2026-09-17T0000.{md,html}` (covers the 34-minute flood and WebDAV)
+- [x] Docs (`ebd13ec`): README module map and `--hours`; CLAUDE.md notes on the prompt location,
+      server vs WebDAV seconds, usernames, and HTML escaping. maccosslab-agents pushed
+- [ ] Unknown WebDAV client `160.62.2.16` (`panorama-inventory/2.0`, 297,114 WebDAV seconds on
+      09-16): staff should identify the owner (whois) before any action
+- [ ] The mod_qos snippets in the trial reports (separate WebDAV pool, per-IP limit, row-ID
+      pool) are untested proposals; staff must try them on staging
 - [ ] **First live API run** on the dev window: needs `ANTHROPIC_API_KEY` (or `ant auth
       login`) and approval, since it is billed. Compare with the trial report, then review with
       staff and tune the prompt
@@ -336,11 +343,19 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
   `--hours`) and CLAUDE.md (prompt location, server vs WebDAV seconds, usernames, HTML
   escaping).
 - **Pushed maccosslab-agents `main` to GitHub** (`ebd13ec`, first push; the repository was
-  empty). pwiz-ai commits remain local.
-- Next: the first live API run (needs credentials and approval), or Phase 4 scheduling.
+  empty) and pwiz-ai `master` (rebased onto origin, `8c0ad689`). Both repos are clean and in
+  sync.
+- 79 tests pass. Reports now come out as Markdown and HTML.
+- Next:
+  1. The first live API run on the dev window (needs `ANTHROPIC_API_KEY` or `ant auth login`,
+     and approval, since it is billed). Compare it with the trial reports, especially whether
+     the new confidence rules keep block decisions consistent.
+  2. Phase 4: daily cron run on the separate machine, plus failure logging.
+- Blocker: no API credentials on this machine (the user's Claude Pro plan doesn't cover the
+  API).
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260917_maccosslab_agents_access_log_review.md` before starting work.
+`ai/.tmp/handoff-20260918_maccosslab_agents_access_log_review.md` before starting work.
 
 ## Success Criteria
 - Private `uw-maccosslab/maccosslab-agents` repository exists with a documented structure
