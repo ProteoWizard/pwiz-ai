@@ -2,9 +2,9 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260819_osprey_gbt_regression`
-- **Base**: `master`
+- **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-09-18; was `master`)
 - **Created**: 2026-08-19
-- **Status**: In Progress
+- **Status**: PR open, retargeted to the port branch 2026-09-18; Stellar regression gate running
 - **GitHub Issue**: [#4592](https://github.com/ProteoWizard/pwiz/issues/4592)
 - **Module**: `osprey`
 - **PR**: [#4595](https://github.com/ProteoWizard/pwiz/pull/4595)
@@ -229,3 +229,25 @@ content and independently reproduced by the modified file.
   it, but it changes the public surface and belongs in its own change.
 - Histogram subtraction is worth roughly a 2x training speedup and should be revisited if
   the bit-identity constraint is ever relaxed behind an opt-in flag.
+
+## Progress Log
+
+### 2026-09-18 - Retargeted to the .NET 10 port branch
+
+Same move as #4660 (see TODO-20260821_osprey_pipeline_error_detail.md for the CI evidence):
+master's `Osprey Windows .NET` fails on the new ephemeral agents (dotCover not provisioned),
+the port branch `Skyline/work/20260612_net8_port` (#4619) passes there, and all Osprey
+development moves to the port branch. The green check on this PR was build #489 from
+2026-08-20 on the old `MacCoss TeamCity Agent 1`; a re-push on master would have failed.
+
+- Merged `origin/Skyline/work/20260612_net8_port` into the branch (merge, not rebase - the
+  PR has two review rounds) in `C:\proj\pwiz-work2`; clean, 3-dot diff vs the new base is
+  still exactly the 3 PR files (+886/-80). Pushed as `0a1fe092a0`.
+- `gh pr edit 4595 --base Skyline/work/20260612_net8_port`.
+- Local gate on the merged branch (net10.0): build, 600/600, inspection 0 warnings.
+- `Osprey.FDR` (Percolator) trains through this class, so the standing correctness gate
+  applies and had not been run: `regression.ps1 -Dataset Stellar` launched detached on the
+  merged branch, log `ai/.tmp/sessions/20260918-net10-retarget/regression-stellar-4595.log`.
+- Title needs the past tense before the squash: the PR grew to cover `GbtModelData`
+  persistence too, so `osprey: Added squared-error objective and model persistence to
+  Osprey.ML GradientBoostedTrees`.

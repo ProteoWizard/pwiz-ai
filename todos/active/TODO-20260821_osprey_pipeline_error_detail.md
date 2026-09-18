@@ -2,13 +2,13 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260821_osprey_pipeline_error_detail`
-- **Base**: `master`
+- **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-09-18; was `master`)
 - **Created**: 2026-08-21
 - **Status**: PR opened 2026-09-12 - rebased onto master, review findings applied, gate green
   (593/593, inspection 0). Sat as an unpushed local commit from 2026-08-21 to 2026-09-12
 - **Module**: `osprey`
 - **PR**: [#4660](https://github.com/ProteoWizard/pwiz/pull/4660) (opened 2026-09-12)
-- **Worktree**: `C:\proj\pwiz`
+- **Worktree**: `C:\proj\pwiz-work2` (was `C:\proj\pwiz` until the 2026-09-18 retarget)
 - **Requester/Reporter**: none - found while auditing the TDP-43 163-file baseline run
 
 ## Objective
@@ -144,3 +144,23 @@ to `ex.Message` is a one-character edit no current gate catches.
 TeamCity #249 on `pull/4660` (`ca29bc84b3`): SUCCESS. The PR is ready to merge - three Copilot
 threads answered, the one real finding fixed with a red-green test, and the gate green on the
 commit that carries the fix rather than on its parent.
+
+### 2026-09-18 - Retargeted to the .NET 10 port branch
+
+Master's `Osprey Windows .NET` config no longer passes on the new ephemeral agents
+(`pwiz-windows-i-*`): every master-based build there fails with `dotcover not on PATH`,
+0 tests run, including master's own tip after #4680 (build #678). The port branch
+`Skyline/work/20260612_net8_port` (#4619) restores dotCover from `.config/dotnet-tools.json`
+and carries the `.teamcity/` versioned settings, and passes on those agents (5/5). TeamCity
+builds the PR HEAD, not GitHub's merge ref, so retargeting alone is not enough - the branch
+itself must carry the port's scripts. Brendan's call: all Osprey development moves to the
+port branch; both open Osprey PRs are retargeted there rather than merged to master.
+
+- Merged `origin/Skyline/work/20260612_net8_port` into the branch (merge, not rebase - the
+  PR has review history) in `C:\proj\pwiz-work2`; clean, 3-dot diff vs the new base is
+  still exactly the 4 PR files (+95/-7). Pushed as `7bb71e2c8f`.
+- `gh pr edit 4660 --base Skyline/work/20260612_net8_port`.
+- Local gate on the merged branch (net10.0): build, 598/598, inspection 0 warnings - after
+  fixing `ai/scripts/Osprey/Build-Osprey.ps1` to pass `Platform=x64` to InspectCode
+  (pwiz-ai `5f8755c`); without it the out-of-solution `ProteowizardWrapper` reference the
+  port branch adds to Osprey.IO reported 5 CSharpErrors on a clean port tip.
