@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260819_osprey_gbt_regression`
 - **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-09-18; was `master`)
 - **Created**: 2026-08-19
-- **Status**: PR open, retargeted to the port branch 2026-09-18; Stellar regression gate running
+- **Status**: PR open, retargeted to the port branch 2026-09-18; Stellar regression PASSED, waiting on TeamCity
 - **GitHub Issue**: [#4592](https://github.com/ProteoWizard/pwiz/issues/4592)
 - **Module**: `osprey`
 - **PR**: [#4595](https://github.com/ProteoWizard/pwiz/pull/4595)
@@ -251,3 +251,6 @@ development moves to the port branch. The green check on this PR was build #489 
 - Title needs the past tense before the squash: the PR grew to cover `GbtModelData`
   persistence too, so `osprey: Added squared-error objective and model persistence to
   Osprey.ML GradientBoostedTrees`.
+- `regression.ps1 -Dataset Stellar` on `0a1fe092a0` (net10.0): **PASSED** - mode1 vs golden
+  PASS, and every other Stellar mode (1c, 2, 3, 4, 5, 6) PASS; 06:10-06:22, 11 min wall.
+  Log: `ai/.tmp/sessions/20260918-net10-retarget/regression-stellar-4595.log`.
