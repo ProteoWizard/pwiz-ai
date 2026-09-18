@@ -193,3 +193,6 @@ because `bo.bat` (`build.ps1`, `/p:Platform=x64`) has already produced the x64 o
 ever built them as Any CPU. A command-line `msbuild Osprey.sln /p:Platform="Any CPU"` succeeds
 and produces the missing files. Durable fix is a port-branch decision (add the wrapper and its
 pwiz-sharp dependencies to the sln, a solution filter, or document "bo.bat first, x64 in VS").
+Note the Linux CI leg Matt is adding (`tcbuild.sh` -> the same `build.ps1`, `$platform = 'x64'`,
+then `package.ps1 -Rid linux-x64`) also builds `/p:Platform=x64`, so Any CPU stays a VS-only
+concern; the Linux gate's risks are OS-level, and neither #4660 nor #4595 touches OS-specific code.
