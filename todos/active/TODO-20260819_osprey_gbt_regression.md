@@ -254,3 +254,39 @@ development moves to the port branch. The green check on this PR was build #489 
 - `regression.ps1 -Dataset Stellar` on `0a1fe092a0` (net10.0): **PASSED** - mode1 vs golden
   PASS, and every other Stellar mode (1c, 2, 3, 4, 5, 6) PASS; 06:10-06:22, 11 min wall.
   Log: `ai/.tmp/sessions/20260918-net10-retarget/regression-stellar-4595.log`.
+
+### 2026-09-18 - Brendan's review (`/pw-review 4595`), fixes applied on the branch
+
+Reach check first: `--fdr-method gbdt` is opt-in (`OspreyConfig.FdrMethod` defaults to
+Percolator; `PercolatorEngine` sets `UseGradientBoostedTrees` only for `FdrMethod.Gbdt`), the
+PR changes one class plus tests and a doc, and the only production call is
+`PercolatorTrainer.cs:1036` inside that branch - so no default run reaches a modified line.
+Corollary: the Stellar `regression.ps1` PASS recorded above is evidence the SVM path is
+undisturbed, NOT evidence about this change - the gate never passes `--fdr-method gbdt`. The
+GBT guards are the ten-probe golden test (1 and 4 threads), `FdrTest.TestGbdt*` through the
+real Percolator loop, and the out-of-tree 1,925-score harness.
+
+Findings, all applied on the branch:
+- `docs/16-determinism.md` claimed row-partitioning would break "the 1e-9 cross-impl parity
+  gate that regression.ps1 enforces" - it is neither cross-impl nor a gate that runs GBT.
+  Reworded to name the golden test as the only guard.
+- `FromModelData`: one braceless `if` with a two-line `throw` (STYLEGUIDE); `Train`'s
+  pre-existing single-line `if (n == 0) throw` fixed in passing.
+- `PARALLEL_WORK_THRESHOLD` had been inserted between `AccumulateHistograms` and its comment;
+  moved to the top of the class with the fields, with its own comment.
+- `TreeWorkspace` mixed public fields, public readonly fields and private `_fields` with
+  accessors; now private `_camelCase` fields behind get-only properties throughout.
+- `TestGbtTrainArgumentValidation` did not exercise the three rejections the PR argues for
+  (negative/NaN weight, logistic target outside [0, 1], out-of-range objective cast); added.
+- `LeafValue`: with `RegLambda = 0` (env-settable) a squared-error node whose rows all carry
+  weight 0 divides 0/0 and NaNs the model. Guarded (`h + RegLambda <= 0` returns 0, the
+  correct no-update leaf since g is 0 too); pass-through for every other input, so the
+  logistic golden is untouched. Red-green: the new all-zero-weight assertion fails
+  `Expected:<0>. Actual:<NaN>` with the guard disabled.
+
+**Brendan on scope (2026-09-18):** GBDT is still experimental. Promoting it to general use
+would take a lot more testing AND a design pass on the model diagnostics: the JSON/HTML
+diagnostics assume a resulting linear model (per-feature weights), which a tree ensemble
+does not have. Assessing model success and feature importance at a feature level for GBDT
+needs its own thought (gain-based split importance is the usual first cut; a tree model has no
+weight vector to render). Not this PR; noted so it is not forgotten when GBDT next comes up.
