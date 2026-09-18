@@ -1,8 +1,16 @@
-# Osprey tests reference the Argument instances, and `ARG + value` works for a space-separated CLI
+# TODO-20260918_osprey_tests_reference_argument_instances.md
 
-**Status**: Backlog. Raised by Brendan 2026-09-18 while reviewing [#4660](https://github.com/ProteoWizard/pwiz/pull/4660).
-**Module**: `osprey` (one line lands in `pwiz_tools/Shared/CommonUtil`, behavior-neutral for Skyline)
-**Base**: `Skyline/work/20260612_net8_port` - all Osprey development moved there 2026-09-18
+## Branch Information
+- **Branch**: `Skyline/work/20260918_osprey_tests_reference_argument_instances`
+- **Base**: `Skyline/work/20260612_net8_port` (all Osprey development moved there 2026-09-18)
+- **Created**: 2026-09-18
+- **Status**: In Progress
+- **Module**: `osprey` (a few lines land in `pwiz_tools/Shared/CommonUtil`, behavior-neutral for Skyline)
+- **PR**: (pending)
+- **Worktree**: `C:\proj\pwiz-work2`
+- **Requester/Reporter**: none - raised by Brendan 2026-09-18 while reviewing [#4660](https://github.com/ProteoWizard/pwiz/pull/4660)
+
+# Osprey tests reference the Argument instances, and `ARG + value` works for a space-separated CLI
 
 ## The idea
 
