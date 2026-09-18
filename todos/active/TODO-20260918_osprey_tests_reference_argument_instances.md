@@ -106,3 +106,45 @@ work ahead of us"), not this TODO. Until then, no Osprey test should pass a doub
 - Osprey `--help` output unchanged (the separator was already honored there).
 - Not output-affecting for Osprey runs; the regression gate is not engaged unless step 3 grows
   into accepting `=` for users.
+
+## Progress Log
+
+### 2026-09-18 - Implemented on the branch (`661761084f`, local)
+
+Branch from the port tip `7bac992ee6` in `C:\proj\pwiz-work2`. Four files, +241/-131:
+
+- `ArgumentBase.GetArgumentTextWithValue` joins with `ArgUsage.ArgumentValueSeparator`;
+  `operator +(ArgumentBase, object)` formats with `Convert.ToString(value,
+  CultureInfo.CurrentCulture)` and refuses an `ArgumentBase` right-hand side.
+- `OspreyCommandArgs.SplitJoinedValues` runs before `TokenizeAndDispatch`: a token whose
+  head is a declared option (long or short) and that contains the separator is split at
+  the FIRST separator. `ParseInt` / `ParseDouble` take the `NameValuePair` and name the flag
+  from `ArgumentBase.ARG_PREFIX + p.Name` (`InvalidValueMessage`); the 7 literals are gone.
+- Tests: every parser token in `OspreyCommandArgsTests.cs` and `ProgramTests.cs` is an
+  `ARG_*` instance (63 replacements in the first, a `RequiredIoThen` helper in the second).
+  `+` wherever the value is fixed and listed; two tokens (`Parse(ARG_X, @"bogus")`) for the
+  accepted-but-unlisted aliases `th`, `da`, `bogus`, `3`; the short-alias test derives `-i`
+  from `ARG_INPUT.ShortName` via a `Short()` helper. The nine remaining `@"--task ..."`
+  strings in `LibraryFragmentReleaseTest.cs` / `PipelineMembershipTest.cs` are assertion
+  prose, not parser tokens, and were left.
+- New `TestArgumentTokensFromInstances` pins the contract: separator rendering, first-space
+  split with `C:\my dir\run.log`, Skyline's `=` under the same operator (set/restore),
+  current-culture number rendering under a cloned invariant culture with `,` as decimal
+  separator (no ICU dependency), and the three refusals.
+- Gate: build, 599/599, inspection 0.
+
+**Decisions made while implementing**
+
+- FDR thresholds in tests stay strings (`ARG_RUN_FDR + @"0.05"`), ints go through `+` as
+  numbers (`ARG_THREADS + 8`). Osprey's `ParseDouble` is invariant-only and stays so.
+- Adopting `NameValuePair.ValueInt` / `ValueDouble` (the shared accessors, which already
+  throw `UsageException : ArgumentException` with `ArgumentText`-carrying messages) was
+  considered and deferred. Two behavior changes hide in it: `ValueDouble` parses
+  local-first, and under a locale whose group separator is '.' `double.TryParse("0.01")`
+  accepts the '.' as a thousands separator and returns **1** - an FDR threshold cannot
+  afford that, and Skyline's own CLI carries the hazard today. And `IsMatch` enforces
+  `Values`, where Osprey warns-and-defaults (`--fdr-method bogus`) and honors the
+  `fasttree` alias. Also `ValueInt` catches `FormatException` only, so an overflow
+  (`--threads 99999999999999999999`) would escape as a non-usage error. Worth its own PR
+  as part of the locale work.
+- `--name=value` for USERS is not added; the `=` pre-scan for `--task` is unchanged.
