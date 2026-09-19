@@ -46,16 +46,16 @@ In-depth documentation on specific topics.
 | [architecture-error-handling.md](docs/architecture-error-handling.md) | Error handling: IsProgrammingDefect, UserMessageException, dialog patterns | 609 |
 | [architecture-files.md](docs/architecture-files.md) | File handle architecture: ConnectionPool, pooled streams, FileSaver patterns | 583 |
 | [architecture-reporting-layer.md](docs/architecture-reporting-layer.md) | Skyline reporting/databinding layer (Document Grid, Results grids, report export): Pivoter, DataSchema, BoundDataGridView, BindingListSource; sits atop the SrmDocument model | 677 |
-| [aws-ami-updates.md](docs/aws-ami-updates.md) | **NEW** - needs description | 295 |
+| [aws-ami-updates.md](docs/aws-ami-updates.md) | Update the Windows AMI the TeamCity build agents launch from, driven from a local checkout via the AWS scripts | 295 |
 | [build-and-test-guide.md](docs/build-and-test-guide.md) | Comprehensive build and test commands for MSBuild and TestRunner | 825 |
-| [cleanup-guide.md](docs/cleanup-guide.md) | **NEW** - needs description | 88 |
+| [cleanup-guide.md](docs/cleanup-guide.md) | Clean up ai/.tmp and the machine's test data area, deciding item by item; driven by /pw-cleanup | 88 |
 | [code-review-guide.md](docs/code-review-guide.md) | Review posture, the five OOP/architecture lenses, and PR quality criteria with their real rule sources | 190 |
 | [daily-report-guide.md](docs/daily-report-guide.md) | Daily consolidated reports: nightly tests, exceptions, support activity | 1,279 |
 | [debugging-principles.md](docs/debugging-principles.md) | Systematic debugging methodology and investigation techniques | 783 |
 | [developer-setup-guide.md](docs/developer-setup-guide.md) | Environment setup: Visual Studio, Git, GitHub CLI, tools | 170 |
 | [documentation-maintenance.md](docs/documentation-maintenance.md) | How to maintain ai/ documentation: structure, line limits, validation | 629 |
 | [leak-debugging-guide.md](docs/leak-debugging-guide.md) | Handle and memory leak investigation techniques | 909 |
-| [long-running-jobs-guide.md](docs/long-running-jobs-guide.md) | **NEW** - needs description | 252 |
+| [long-running-jobs-guide.md](docs/long-running-jobs-guide.md) | Launch anything longer than a few minutes detached with a readable log and no desktop window; reaping, monitoring, chaining, and the do-not-edit-a-running-script rule | 252 |
 | [memory-band-guide.md](docs/memory-band-guide.md) | Reading the --timestamp --memstamp memory band (Skyline + Osprey); perfviz.html / perfviz.py | 221 |
 | [memory-cleanup-guide.md](docs/memory-cleanup-guide.md) | Review per-machine Claude Code auto-memory against ai/: classify, move team-wide guidance into docs, delete the rest; driven by /pw-cleanup-memory | 139 |
 | [native-file-dialog-automation.md](docs/native-file-dialog-automation.md) | Automating Skyline's native Win32 Open/Save dialogs via UI Automation (not WinForms): NativeDialogAutomation classes + cross-Windows control-ID re-dump checklist | 231 |
@@ -65,8 +65,8 @@ In-depth documentation on specific topics.
 | [osprey-crossimpl-validation-guide.md](docs/osprey-crossimpl-validation-guide.md) | Catalog of Rust ↔ Osprey parity-testing scripts (Compare-*, Test-*, Bench-*); standard flow and per-stage gate selection | 160 |
 | [osprey-development-guide.md](docs/osprey-development-guide.md) | Osprey C# and Rust development: which convention set applies per tree, cross-impl parity + FDRBench oracle, memory measurement, HPC flags, env-var reference, bisection methodology | 2,244 |
 | [osprey-large-datasets.md](docs/osprey-large-datasets.md) | Candidate catalog of Osprey test datasets larger than the 82-file SEA-AD Pilot set, with measured run counts and sizes | 277 |
-| [osprey-library-generation-guide.md](docs/osprey-library-generation-guide.md) | **NEW** - needs description | 613 |
-| [osprey-run-layout.md](docs/osprey-run-layout.md) | **NEW** - needs description | 133 |
+| [osprey-library-generation-guide.md](docs/osprey-library-generation-guide.md) | Build an Osprey spectral library from a FASTA with Carafe on any machine, including the natural-entrapment variant; tool preflight, traps, similarity gate | 613 |
+| [osprey-run-layout.md](docs/osprey-run-layout.md) | One layout for Osprey test data and runs on every machine (D:\test\osprey-runs), run naming, -LinkFrom staging, and housekeeping | 133 |
 | [pr-report-guide.md](docs/pr-report-guide.md) | PR & TODO activity report: thresholds, gh queries, TODO classification, HTML render spec, fan-out roster | 545 |
 | [project-context.md](docs/project-context.md) | Detailed project background: history, architecture, team | 274 |
 | [README.md](docs/README.md) | Index of all guides in ai/docs/ with when-to-read guidance | 96 |
@@ -78,9 +78,9 @@ In-depth documentation on specific topics.
 | [skylinetester-debugging-guide.md](docs/skylinetester-debugging-guide.md) | LLM-assisted debugging using SkylineTester with automated dev-build-test cycles | 193 |
 | [skylinetester-guide.md](docs/skylinetester-guide.md) | GUI tool reference: building Skyline, running tests, nightly configurations | 237 |
 | [style-guide.md](docs/style-guide.md) | Comprehensive C# style guide with examples | 852 |
-| [test-clearance-ledger.md](docs/test-clearance-ledger.md) | **NEW** - needs description | 66 |
-| [test-flake-candidates.md](docs/test-flake-candidates.md) | **NEW** - needs description | 81 |
-| [test-flakiness-method.md](docs/test-flakiness-method.md) | **NEW** - needs description | 180 |
+| [test-clearance-ledger.md](docs/test-clearance-ledger.md) | Ledger of intermittent-test measurements: which tests ran N times under which detection classes without failing, per test-flakiness-method | 66 |
+| [test-flake-candidates.md](docs/test-flake-candidates.md) | Ranked flake candidates in TestFunctional derived from code shape alone (no runs), the step-3 soak population for the flakiness sweep | 81 |
+| [test-flakiness-method.md](docs/test-flakiness-method.md) | Find and clear intermittent test failures with targeted soaks instead of all-night full-suite runs; detection classes and what 'this test is solid' means | 180 |
 | [testing-patterns.md](docs/testing-patterns.md) | Encyclopedic testing guide: patterns, examples, troubleshooting | 2,338 |
 | [translation-guide.md](docs/translation-guide.md) | RESX localization workflow: syncing files, generating CSVs for translators, importing translations | 269 |
 | [tutorial-doc-style-guide.md](docs/tutorial-doc-style-guide.md) | Tutorial HTML writing conventions and formatting rules | 351 |
