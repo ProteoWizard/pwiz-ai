@@ -70,6 +70,43 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Bug fix (2026-09-19): Integration-with-Perf nightly, 5 DIA FullSearch failures
+
+Fix branch `Skyline/work/20260919_perfutil_reset` off the port branch, PR
+[#4691](https://github.com/ProteoWizard/pwiz/pull/4691) (base = port branch). The port branch is now
+the Integration branch: a prospective master, expected to become master in 2-3 weeks once nightly
+and nightly-with-perf are green.
+Nightly runs 85523 and 85547 (`/home/development/Integration with Perf Tests`) failed the same
+five tests: `ConsoleTestDiaQeFullSearch`, `ConsoleTestDiaTtofFullSearch`,
+`TestDiaQeFullSearchTutorialExtra`, `TestDiaTtofFullSearchTutorialExtra`,
+`TestDiaQeDiaNnFullSearchTutorialExtra`. One root cause:
+
+- `MsDataFileImpl.PerfUtilFactory.Reset()` at the end of every functional test
+  (`TestUtil/TestFunctional.cs`, `WaitForSkyline`) had been wrapped in `#if NET472` during the
+  port and was collapsed away by `b53aa3bd63` (drop the net472 leg). After
+  `AgilentIMSImportFringeValuesTest` sets `IssueDummyPerfUtils = false`, every later
+  `MsDataFileImpl` in the process gets a real `PerfUtilActual`.
+- The FullSearch variants (whole proteome + iRT predicted-RT filter) run a two-pass extraction
+  over one reader (`SpectraChromDataProvider.CompleteFirstPass`). Pass 1 ends with `GetLog()`,
+  which appends a `"%"` root-close event; pass 2's first `CreateTimer` then computes
+  `calldepth = -1` and indexes `_callstack[-1]` -> `ArgumentOutOfRangeException` at
+  `PerfUtil.cs:91`. Master has the identical test order in one process (run 85511) and passes
+  only because the reset is still there.
+- Fix: restored the reset, moved to `AbstractUnitTest.MyTestCleanup` (per `/code-review`: covers
+  `AbstractUnitTest` perf tests like `PerformanceVsMz5Test` and functional tests that throw before
+  `WaitForSkyline`), AND hardened `PerfUtilActual.Timer` so a timer after `GetLog()` becomes a new
+  top-level timer (`Math.Max(0, calldepth - 1)`) and the call stack grows past 9 instead of
+  throwing (interleaved timers from two threads ratchet the inferred depth). New
+  `CommonTest/PerfUtilTest.cs` is red on the original `PerfUtil.cs` with the nightly's exception,
+  green with the fix. No local DIA-QE data; TeamCity "Tutorials and Perf" is the verifier for the
+  five tests (Brendan's call).
+- Dropped review finding: `GetLog()` called twice on one `PerfUtilActual` double-counts the
+  `lifetime` row (each call appends another root-close measured from creation). Pre-existing
+  measurement nit in a dev-only tool; on master that scenario crashed instead.
+- Gotcha: `Build-Skyline.ps1` / `Run-Tests.ps1` default to the `C:\proj\pwiz` sibling (master,
+  net472 MSBuild path) unless given `-SourceRoot C:\proj\pwiz-work1`; the no-op "build
+  succeeded in 5 s" against the wrong checkout looks exactly like a real one.
+
 ## Status (2026-07-24, session: DIA-NN tutorial perf test CI failure -> DocDir move)
 
 Resumed via `/pw-continue`. **The progress log had gone stale at the 07-23b `efe6f7824c` entry; HEAD had
