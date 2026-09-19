@@ -1,17 +1,24 @@
 # TODO-20260917_nightly_three_channels.md - Standard, Leak Checking and Perf as separate nightly channels
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260917_nightly_three_channels`
+- **Branch**: `Skyline/work/20260918_skylinenightly_run_types` (SkylineNightly, off master) and
+  `Skyline/work/20260918_run_types_net8_port` (SkylineTester, TestRunner, tests, off the port
+  branch; work in the `C:\proj\pwiz-work1` checkout). The combined
+  `Skyline/work/20260917_nightly_three_channels` (#4687) was split on 2026-09-18 and deleted;
+  GitHub keeps it restorable from the closed PR.
 - **Module**: `skyline`
-- **Base**: `master` for SkylineNightly (the shim auto-updates every machine from master);
-  TestRunner and SkylineTester changes on master, cherry-picked to `Skyline/skyline_26_1`,
-  merged into `Skyline/work/20260612_net8_port` (each branch's nightly runs that branch's
-  SkylineTester)
+- **Base**: `master` for SkylineNightly (the shim auto-updates every machine from master, and
+  SkylineNightly drives every branch's SkylineTester, old or new); `Skyline/work/20260612_net8_port`
+  for everything else - the run types are proven there, on machines Brendan controls, and reach
+  master when the port merges. The release branch never changes.
 - **Created**: 2026-09-17 (design), by Brendan and Claude
 - **Status**: In Progress - design settled except the open points at the bottom
 - **GitHub Issue**: (none yet)
-- **PR**: [#4687](https://github.com/ProteoWizard/pwiz/pull/4687); the gate
-  [#4684](https://github.com/ProteoWizard/pwiz/pull/4684) merged 2026-09-18 as `f6e34de4fa`
+- **PR**: [#4688](https://github.com/ProteoWizard/pwiz/pull/4688) SkylineNightly -> master;
+  [#4689](https://github.com/ProteoWizard/pwiz/pull/4689) SkylineTester + TestRunner + tests ->
+  port branch; the gate [#4684](https://github.com/ProteoWizard/pwiz/pull/4684) merged
+  2026-09-18 as `f6e34de4fa`; [#4687](https://github.com/ProteoWizard/pwiz/pull/4687) closed,
+  superseded by the split
 
 ## Objective
 
@@ -190,12 +197,23 @@ copy); the old task argument `run integration trunk` ignored, `run` read `mode1`
 integration run started. Merged, branch deleted, variable cleared. Every other machine picks up
 the merged shim on its next run and from then on runs its settings.
 
-## Rollout (the shim auto-update makes the order matter)
+## Rollout (revised 2026-09-18: prove it on the port branch, master and release untouched)
 
-1. TestRunner + SkylineTester on master; cherry-pick to `Skyline/skyline_26_1`; merge into the
-   port branch. An old `.skytr` still means today's run, so nothing changes yet.
-2. SkylineNightly on master with the new form and the legacy argument mapping. Every machine
-   picks it up the next night and still runs exactly what it ran.
+Brendan's target: a SkylineNightly on master that can run both the old way (master, release:
+their SkylineTester ignores `nightlyRunType` and runs its combined passes with its own
+TestRunner, attributes and all) and the new way (the port branch, whose SkylineTester and
+TestRunner carry #4689). `SKYLINE_NIGHTLY_BRANCH` means only "which SkylineNightly" -
+SkylineTester always comes from the branch's own build - so trying #4688 on a machine changes
+nothing about what that machine tests.
+
+1. Merge #4689 into the port branch (Brendan's; the Integration config then builds the new
+   SkylineTester and the clone builds the new TestRunner). Flag an Integration machine with
+   `SKYLINE_NIGHTLY_BRANCH=pull/4688`, save its form as Integration / Standard: the first full
+   new-stack night. Create `Integration Leak Detection`, switch it to Leak Checking: the first
+   leak-only night, with `LeakCheckingIncomplete` as the loud check.
+2. Merge #4688 to master. Every machine picks it up the next night and still runs what it
+   ran (legacy arguments map to the combined or perf run; master's and release's SkylineTester
+   ignore the new element). Clear the variable on the flagged machine.
 3. Create the three folders; teach the report side (`ai/docs/nightly-tests.md`, the labkey MCP
    `current_target` / `get_daily_test_summary` / folder lists, `/pw-nightly`,
    `/pw-daily-research`); write the machine table in the wiki (`skyline-wiki` skill).
@@ -206,9 +224,10 @@ the merged shim on its next run and from then on runs its settings.
    `ai/docs/daily-report-guide.md`, `ai/docs/testing-patterns.md`,
    `ai/claude/skills/skyline-nightlytests/SKILL.md` (folder table). Not before the folders
    exist: the daily report queries every listed folder.
-4. Reconfigure the leak machines first (open the form, save `<branch> / Leak Checking`);
-   verify a night of posts in the new folders. Then the perf machines, then the standard
-   ones. No night is without leak coverage.
+4. Master gets the run types when the port branch merges (#4619). Then reconfigure the leak
+   machines first (open the form, save `<branch> / Leak Checking`); verify a night of posts in
+   the new folders. Then the perf machines, then the standard ones. No night is without leak
+   coverage. The release branch keeps its combined run for good.
 
 ## Tasks
 
@@ -231,9 +250,10 @@ the merged shim on its next run and from then on runs its settings.
 - [x] `/code-review max` findings triaged and applied (2026-09-17, see Progress)
 - [x] PR #4684 for the `SKYLINE_NIGHTLY_BRANCH` gate (off master; merge first)
 - [x] `Run1`/`Run2` settings and the `run`-only task on this branch (`98772c12da`)
-- [x] #4684 merged (`f6e34de4fa`, 2026-09-18), master merged here, PR #4687 opened
-- [ ] Flag a first machine with `SKYLINE_NIGHTLY_BRANCH=pull/4687` (BRENDANX-UW8 is the obvious
-      one: its variable was cleared after the #4684 test and its shim is #4684's build)
+- [x] #4684 merged (`f6e34de4fa`, 2026-09-18); #4687 split into #4688 (SkylineNightly -> master)
+      and #4689 (the rest -> port branch), both open; the variable narrowed to SkylineNightly only
+- [ ] Merge #4689 into the port branch; flag BRENDANX-UW8 with `SKYLINE_NIGHTLY_BRANCH=pull/4688`
+      and save Integration / Standard; then the Integration leak folder and Leak Checking
 - [ ] Rollout steps 1-4 above, one branch and one machine class at a time
 
 ## Progress
