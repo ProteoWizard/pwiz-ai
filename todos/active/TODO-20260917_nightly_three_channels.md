@@ -14,11 +14,12 @@
 - **Created**: 2026-09-17 (design), by Brendan and Claude
 - **Status**: In Progress - design settled except the open points at the bottom
 - **GitHub Issue**: (none yet)
-- **PR**: [#4688](https://github.com/ProteoWizard/pwiz/pull/4688) SkylineNightly -> master;
-  [#4689](https://github.com/ProteoWizard/pwiz/pull/4689) SkylineTester + TestRunner + tests ->
-  port branch; the gate [#4684](https://github.com/ProteoWizard/pwiz/pull/4684) merged
-  2026-09-18 as `f6e34de4fa`; [#4687](https://github.com/ProteoWizard/pwiz/pull/4687) closed,
-  superseded by the split
+- **PR**: [#4688](https://github.com/ProteoWizard/pwiz/pull/4688) SkylineNightly -> master,
+  merged 2026-09-19 as `7037da93c6`; [#4689](https://github.com/ProteoWizard/pwiz/pull/4689)
+  SkylineTester + TestRunner + tests -> port branch, merged 2026-09-19 as `1a95f04634`; the
+  gate [#4684](https://github.com/ProteoWizard/pwiz/pull/4684) merged 2026-09-18 as
+  `f6e34de4fa`; [#4687](https://github.com/ProteoWizard/pwiz/pull/4687) closed, superseded by
+  the split. Both work branches deleted.
 
 ## Objective
 
@@ -252,8 +253,16 @@ nothing about what that machine tests.
 - [x] `Run1`/`Run2` settings and the `run`-only task on this branch (`98772c12da`)
 - [x] #4684 merged (`f6e34de4fa`, 2026-09-18); #4687 split into #4688 (SkylineNightly -> master)
       and #4689 (the rest -> port branch), both open; the variable narrowed to SkylineNightly only
-- [ ] Merge #4689 into the port branch; flag BRENDANX-UW8 with `SKYLINE_NIGHTLY_BRANCH=pull/4688`
-      and save Integration / Standard; then the Integration leak folder and Leak Checking
+- [x] #4688 tried on BRENDANX-UW8 (2026-09-18 6:25 PM: shim pulled `pull/4688`, the new
+      SkylineNightly ran `integration/standard_leak` from `mode1`, the port branch's SkylineTester
+      ran its usual passes; the new form showed Runs 1, Integration / Standard) and merged to
+      master; #4689 merged into the port branch (its Perf/Tutorial TeamCity check was already
+      failing on #4619-based branches); the variable cleared again
+- [x] `Integration Leak Detection` folder created by Brendan (2026-09-18; testresults module
+      answers there)
+- [ ] Quiet-period check (8:00-10:00 AM): a master or release machine's next run unchanged
+      under master's new SkylineNightly; then this machine's first Leak Checking night once the
+      Integration config has built the port branch with #4689
 - [ ] Rollout steps 1-4 above, one branch and one machine class at a time
 
 ## Progress
