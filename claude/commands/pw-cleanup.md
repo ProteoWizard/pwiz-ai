@@ -12,3 +12,6 @@ Deleting is a normal outcome here - the point is that each deletion was judged, 
 nothing gets removed.
 
 If the developer names a scope (`tmp` or `test`), do only that phase.
+
+Memory is a separate command: `/pw-cleanup-memory` reviews this machine's Claude Code
+auto-memory against `ai/` (see `ai/docs/memory-cleanup-guide.md`).

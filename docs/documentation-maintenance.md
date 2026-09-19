@@ -145,6 +145,12 @@ consolidated; if nothing retires them, they accumulate indefinitely (125 of them
 duplicating docs, before the first sweep) and each session pays to load guidance that
 already lives where the team can see it.
 
+**Sweep it periodically, per machine.** `/pw-cleanup-memory` (procedure in
+`memory-cleanup-guide.md`) inventories the memory directory, classifies every file
+against `ai/`, moves what is team-wide into the docs, deletes the rest, and puts each
+conflict to the developer. Memory does not travel between machines, so run it on each
+one - monthly, after a long sprint, or when `MEMORY.md` passes about 5 KB or 30 files.
+
 ## Common Mistakes and Corrections
 
 ### ❌ MISTAKE 1: Creating New Core Files
