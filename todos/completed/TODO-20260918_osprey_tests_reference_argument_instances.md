@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260918_osprey_tests_reference_argument_instances`
 - **Base**: `Skyline/work/20260612_net8_port` (all Osprey development moved there 2026-09-18)
 - **Created**: 2026-09-18
-- **Status**: PR #4686 green on all TeamCity configs at `c8b5c0783a` (Osprey Win 592, Core Win 644, Skyline Win 1,799); waiting on review
+- **Status**: Completed - merged 2026-09-19 into the .NET 10 port branch as `40312c7979`
 - **Module**: `osprey` (a few lines land in `pwiz_tools/Shared/CommonUtil`, behavior-neutral for Skyline)
-- **PR**: [#4686](https://github.com/ProteoWizard/pwiz/pull/4686) (opened 2026-09-18)
+- **PR**: [#4686](https://github.com/ProteoWizard/pwiz/pull/4686) (merged 2026-09-19)
 - **Worktree**: `C:\proj\pwiz-work2`
 - **Requester/Reporter**: none - raised by Brendan 2026-09-18 while reviewing [#4660](https://github.com/ProteoWizard/pwiz/pull/4660)
 
@@ -240,3 +240,23 @@ wrong trade for a one-line revert to base behavior; CI is ~70 min).
 TeamCity on `c8b5c0783a`: Osprey Windows .NET 592, Core Windows .NET 644, Skyline Windows .NET
 1,799 (`ConsoleArgumentInvalidValuesTest` included) - `ready_to_merge: true`. Osprey Linux
 .NET passed 592 on the two previous heads and did not re-queue for the test-only Osprey delta.
+
+### 2026-09-19 - Merged
+
+PR #4686 merged as commit `40312c7979` on `Skyline/work/20260612_net8_port` (squash; 20 files,
++543/-333), over the non-required `Skyline Windows .NET Perf/Tutorial Tests` check, which fails
+on the ephemeral Windows agents for `pull/4619` itself the same way: 46 of its 48 failures and
+31 of this PR's 34 are "There is not enough space on the disk" downloading tutorial data to
+`c:\skyline-downloads`; its last successes were all on `MacCoss TeamCity Agent 1`. For Matt,
+with the Linux SDK note. Every config that exercises this change was green: Osprey Windows 592,
+Osprey Linux 592, Core Windows 644, Skyline Windows 1,799.
+
+Shipped: the `+` operator honors the process-wide separator and a new `ValueFormatProvider`;
+`operator +` takes `object` and refuses null and an argument as a value; every Osprey parser
+token in the tests is an `ARG_*` instance, split into argv by the test-side `ArgTokens`; every
+task name is its class's `TASK_NAME`; `ParseInt` / `ParseDouble` / `ParseFdrBenchPass` name the
+flag from the pair through the provider; `ShortArgumentText`. Deferred, recorded above:
+adopting `NameValuePair.ValueInt` / `ValueDouble` in Osprey (the de-DE `0.01` -> 1 hazard) and
+`--name=value` for users. Follow-up filed from Brendan's review of this PR:
+`ai/todos/backlog/brendanx67/TODO-osprey_one_task_list_no_enum.md` - one authoritative task
+list, `--task` a lookup in it, the `HpcTask` enum and its switches gone.
