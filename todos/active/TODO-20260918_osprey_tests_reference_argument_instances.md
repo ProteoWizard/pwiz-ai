@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260918_osprey_tests_reference_argument_instances`
 - **Base**: `Skyline/work/20260612_net8_port` (all Osprey development moved there 2026-09-18)
 - **Created**: 2026-09-18
-- **Status**: PR opened 2026-09-18 after /code-review max; waiting on TeamCity (Osprey + Skyline configs) and review
+- **Status**: PR #4686 green on all TeamCity configs at `c8b5c0783a` (Osprey Win 592, Core Win 644, Skyline Win 1,799); waiting on review
 - **Module**: `osprey` (a few lines land in `pwiz_tools/Shared/CommonUtil`, behavior-neutral for Skyline)
 - **PR**: [#4686](https://github.com/ProteoWizard/pwiz/pull/4686) (opened 2026-09-18)
 - **Worktree**: `C:\proj\pwiz-work2`
@@ -236,3 +236,7 @@ accepted-but-unlisted values (`th`, `da`, `bogus`, `3`) go back to two tokens in
 with the reason in a comment. Osprey gate: 592/592, inspection 0. Skyline verification is
 the TeamCity run on `c8b5c0783a` - not run locally (a Skyline.sln build on this box is the
 wrong trade for a one-line revert to base behavior; CI is ~70 min).
+
+TeamCity on `c8b5c0783a`: Osprey Windows .NET 592, Core Windows .NET 644, Skyline Windows .NET
+1,799 (`ConsoleArgumentInvalidValuesTest` included) - `ready_to_merge: true`. Osprey Linux
+.NET passed 592 on the two previous heads and did not re-queue for the test-only Osprey delta.
