@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260919_osprey_hygiene` (checkout `C:\proj\pwiz-work1`)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619)
 - **Module**: `osprey`
-- **Status**: PR #4690 open (base = port branch); local gates green; /code-review and TeamCity pending
+- **Status**: PR #4690 open (base = port branch); local gates green twice; /code-review max findings addressed in c8c5612b6c; TeamCity Perf/Regression pending (ask before triggering)
 
 ## Why
 
@@ -15,10 +15,15 @@ set of small, low-risk items that belong in one PR rather than one issue each.
 ## Scope
 
 1. **`regression.ps1` output retention** (Brendan's 2026-09-10 rule, decision 2026-09-18):
-   clean BEFORE a run, never after. Local runs retain output; `-KeepRunDirs` defaults to 1
-   so the startup prune keeps the last set; `-TeamCity` implies cleaning; new
-   `-CleanOutput` forces it locally; `-KeepOutput` overrides both. Documented in
-   `docs/19-testing.md`.
+   clean BEFORE a run, never after. Final design after review: a local run retains its
+   PRODUCTS (`<dataset>\straight`, chain phase 3/4 outputs, `chain\logs`, comparison
+   inputs) via `Remove-Scratch`; the HPC chain's staged input copies and consumed phase
+   dirs go through `Remove-Staging` and are kept only by `-KeepOutput` (they were 69% of a
+   retained Stellar run: 19 GB -> 5.7 GB). `-KeepRunDirs` (default 1) is applied by the
+   NEXT run's prune, only `run.complete`-stamped dirs count, a dir stamped with the
+   current shell's PID is not live, and the keep defaults to 0 when not retaining.
+   `-TeamCity` implies `-CleanOutput`; `regression-parallel.ps1` forwards the switches
+   with keep = dataset count. Documented in `docs/19-testing.md`.
 2. **`regression.ps1` known-resident-gaps row** re-keyed from the closed #4486 to #4665.
 3. **`OspreyReportWriter`**: the two opt-in TSV reports now write through `FileSaver`
    (they opened the final path directly with `StreamWriter`, the one durable-artifact
@@ -41,10 +46,11 @@ console unique count, #4672 boundary column, BASE_ID_MASK consolidation (#4494 i
 
 - [x] `Build-Osprey.ps1 -SourceRoot C:\proj\pwiz-work1 -Configuration Debug -RunTests -RunInspection` - 592/592, zero warnings
 - [x] `regression.ps1 -Dataset Stellar` - PASSED; 19 GB run dir retained, prune touched nothing else
-- [ ] `/code-review max`
+- [x] `/code-review max 4690` - 15 findings, all fixed or answered (second commit)
 - [ ] TeamCity Perf/Regression on `pull/<N>` with the agent pin (ask first)
 
 ## Progress
 
 - 2026-09-19: branch created; items 1-6 applied (item 6 also fixed five adjacent stale PercolatorEngine citations); build/tests/inspection green; Stellar gate PASSED; PR #4690 opened against the port branch.
-- Found in passing, not fixed: docs/16 still cites PerFileRescoreTask lines from before the rescore split (`:1306-1315`); the guide's "Validation before pushing to a PR" section in ai/docs still says pwiz has no Osprey CI.
+- 2026-09-19 (later): /code-review max returned 15 confirmed findings; the big ones were that retention also kept the staged input copies, the two-lane runner would prune three of four dataset dirs, a long-lived shell's runs were never prunable, fragments displaced complete sets, and the report writers adopted FileSaver's contract without its catch. All addressed in c8c5612b6c (three writers: regression scripts by me, report writer + docs 00/08/14/DIVERGENCES, doc citations + TeamCity docs); Stellar gate PASSED again on the final tree; PR body corrected (reports are default-on, not opt-in).
+- Found in passing, not fixed: docs/16 still cites PerFileRescoreTask lines from before the rescore split (`:1306-1315`); the guide's "Validation before pushing to a PR" section in ai/docs still says pwiz has no Osprey CI. OspreyConfig.cs doc comments advertised --no-protein-report / --no-summary-report that were never registered (comments corrected; decide whether to register the flags).
