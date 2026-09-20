@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260920_osprey_one_task_list` (checkout `C:\proj\pwiz-work2`)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619) - all Osprey development is on the port branch
 - **Created**: 2026-09-20
-- **Status**: PR #4693 open (base = port branch); local gates green on both commits (Debug tests + inspection, Stellar x2, StellarLibDecoy); /code-review max triaged in `41e44df8da`; TeamCity Perf/Regression not yet triggered (ask first, `branch="pull/4693"`)
+- **Status**: PR #4693 open (base = port branch), three commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`, see the rework section at the end); local gates green on the final commit (Debug tests + inspection, Stellar, StellarLibDecoy); /code-review max triaged in `41e44df8da`; TeamCity Perf/Regression not yet triggered (ask first, `branch="pull/4693"`)
 - **Module**: `osprey`
 - **PR**: [#4693](https://github.com/ProteoWizard/pwiz/pull/4693)
 
@@ -266,3 +266,57 @@ Dropped, with the reason:
 - Base `ValidateSelection` duplicates the no-task branch's three checks with different
   wording: two three-line checks whose distinct wordings are each pinned by a test; a shared
   which-is-missing helper is more machinery than the duplication.
+
+### 2026-09-20 - design rework after Brendan's review (`f852b35316`)
+
+Brendan's review of the first two commits: `--no-join` was dropped with `--task` (a Skyline
+one-fan-out/one-join concept that does not fit a two-fan-out/two-join pipeline that could
+grow a third), yet `NoJoin` survived as an internal flag; `StartsAfterPerFileScoring`,
+`RunsStage7Join` and `InCanonicalPipeline` were overkill or misplaced - the last implied the
+All list is kept in pipeline order and the pipeline is filtered out of it, which needs a
+comment to explain; two explicit lists (all, the pipeline - eventually several, selectable
+by `--pipeline`) are cleaner, and a task's membership in a pipeline is the pipeline's
+configuration, not the task's self-description. He asked for the PR to reach a fully reduced
+design before squash-merge.
+
+What changed:
+- **`OspreyTasks` is an instance with two explicit lists**: `All` (help order) and `Pipeline`
+  (execution order), built together in `Create()` so instances are shared, plus the pipeline
+  each selector-only task runs (`SpectraCache` -> `[SpectraCache]`; `ModelDiagnostics` ->
+  the canonical stages) declared in the set, not on the tasks. The constructor validates the
+  lists (every task once, every stage listed, every selector given a pipeline).
+  `PipelineFor(selected)` reads them; `FindByName` is an instance method. `InCanonicalPipeline`,
+  `RunsCanonicalPipeline`, `RunsStandalone` are gone.
+- **One membership rule**, `OspreyConfig.Includes(stage)`: every stage with no selection; the
+  selected stage alone when the selection is a stage of the pipeline it runs; every stage when
+  it is not (the diagnostics render). The four `IsIncluded` overrides, the base virtual and
+  `FirstPassFdrTask.IsIncludedFor` are gone; `AnalysisPipeline.Run(config, pipeline)` asks the
+  config. The config carries `Pipeline` (set by `SelectTask(task, pipeline)`) so the
+  config-keyed predicates can answer position questions.
+- **`NoJoin` deleted.** Its two non-membership readers (`FinalizeAndCheck`'s Stage 1-4 stop,
+  the diagnostics-product guard) ask `SelectedTask?.IsPerFileWorker`. The stop boundary's log
+  line now names the selected task and says "loaded" for the rescore worker's rehydrate arm
+  instead of claiming PerFileScoring scored something (the reviewer's finding 3, dropped
+  earlier as behavior-adjacent; the return path is unchanged and documented benign on Demand).
+- **Position facts derive from the pipeline**: `ScoringTaskShared.SelectedStageIsAfter<T>`
+  and `Includes<T>` answer `StartsAfterPerFileScoring` (after `PerFileScoringTask`),
+  `ReadsReconciledScores` (after `PerFileRescoreTask`) and `RunsStage7Join`
+  (`Includes<SecondPassFdrTask>`). `ISelectableTask` is `Name`, `IsPerFileWorker`,
+  `HydratesPerRun`, `ApplySelection`, `ValidateSelection`, `DescribeOutput`.
+- `StopAfterStage5` / `ExpectReconciledInput` stay as behavior flags (~10 readers each in the
+  first-pass task's arms and the reconciled-footer gate in Osprey.IO, below the task types);
+  `CanHydratePerRun`'s redundant test on them is gone.
+- Tests: `TaskConfigs.ForTask` selects with the pipeline; `StraightThrough()` and
+  `ContextFor(config)` added; `ResidentPoolGuardTest`'s flag-only configs
+  (`{ ExpectReconciledInput = true }` standing for `--task SecondPassFDR`) became real
+  selections - with membership on the selection, a flag without one no longer stands for a
+  task. `PipelineMembershipTest` pins `Includes`, the two lists, `PipelineFor`, the facts
+  table, and the reflection guard.
+
+Gates on `f852b35316`: Debug build + 594/594 + zero inspection warnings; Stellar and
+StellarLibDecoy regressions (below).
+
+Gate results on `f852b35316`: Stellar PASS 17/17 legs
+(`ai/.tmp/sessions/20260920-one-task-list/regression-stellar3.log`); StellarLibDecoy PASS 27/27
+legs including modes 7/11 (`regression-libdecoy2.log`). PR body refreshed to describe the final
+design.
