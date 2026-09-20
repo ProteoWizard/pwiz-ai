@@ -68,8 +68,10 @@ $m = [regex]::Match($cmd, '(?im)^\s*(?:Set-Location|cd)\s+(?:-Path\s+)?["'']?([A
 if ($m.Success) { $base = $m.Groups[1].Value.Trim() }
 
 # -F file, --file file, --body-file file; with = or whitespace; quoted or bare. Windows paths,
-# Git Bash /c/... paths and relative paths are all resolved.
-foreach ($fm in [regex]::Matches($cmd, '(?:^|\s)(?:-F|--file|--body-file)(?:=|\s+)(["'']?)([^"''\s]+)\1')) {
+# Git Bash /c/... paths and relative paths are all resolved. A bare path ends at whitespace
+# OR at a shell separator: `git commit -F msg.txt; git push` used to read "msg.txt;" as the
+# filename, find nothing, and refuse a correct message as missing its trailer.
+foreach ($fm in [regex]::Matches($cmd, '(?:^|\s)(?:-F|--file|--body-file)(?:=|\s+)(["'']?)([^"''\s;|&]+)\1')) {
     $p = $fm.Groups[2].Value
     if ($p -eq '-') { continue }   # message on stdin - already in the command text if a heredoc
     if ($p -match '^/([A-Za-z])/(.*)$') { $p = "$($Matches[1].ToUpper()):\$($Matches[2] -replace '/', '\')" }
