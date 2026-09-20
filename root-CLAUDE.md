@@ -43,6 +43,13 @@ active one. Do not re-`cd` per command. Your shell cwd is independent of
 `CLAUDE_PROJECT_DIR` (which stays at the root so the `ai/` tooling works); invoke
 shared `ai/` scripts by absolute path (`<project-root>/ai/scripts/...`).
 
+**The build and test scripts default to `<project-root>\pwiz`.** For any other
+checkout every `Build-*.ps1` / `Run-Tests.ps1` call needs `-SourceRoot <checkout>`;
+without it the build silently targets the wrong tree and "succeeds" in seconds.
+`get_project_status` prints the exact command lines per checkout, from
+**ai/docs/github-repo-guide.md** - the per-repository guide (skills, scripts,
+default locations) for every repo this team works in.
+
 **Prefer the C# LSP over grep for symbol navigation.** In a `skyclaude` session
 the csharp-lsp plugin indexes the active checkout. For C# symbols — find
 references, go to definition, call hierarchy — use the LSP, not text `grep`. That

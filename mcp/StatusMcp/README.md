@@ -47,6 +47,61 @@ Or add to your Claude Code MCP settings manually:
 }
 ```
 
+## Tool: get_project_status
+
+Call at session start, no arguments. Scans every subdirectory of the project
+root (the parent of `ai/`) and returns git status for each repo, plus what a
+fresh session needs to know to work in it.
+
+### Repository guide integration
+
+`ai/docs/github-repo-guide.md` is the source of truth for per-repository
+tooling. On every call the server parses it, matches each checkout's
+`remote.origin.url` (reduced to `owner/repo`, case-insensitive) to a section,
+and adds a `tooling` block to that repo:
+
+| Field | Description |
+|-------|-------------|
+| `tooling.project` | The section heading, e.g. `ProteoWizard/pwiz` |
+| `tooling.critical` | That section's `### Critical` bullets, verbatim, with `{ai}`, `{root}` and `{projectRoot}` expanded for THIS checkout (forward slashes, ready for `pwsh -File`) |
+| `tooling.guide` | Path to the guide and the section to read for the rest |
+| `tooling.warning` | Present only when the checkout is not at the section's `**Default location**` - names the `-SourceRoot` every build/test call for it needs |
+
+Top-level fields from the same file:
+
+| Field | Description |
+|-------|-------------|
+| `guidance` | The guide's `## Every repository` Critical bullets - standing rules about using and extending `ai/scripts` |
+| `repoGuide` | Path to the guide |
+| `activeProject` | This session's `set_active_project` value, when set |
+| `lspCheckout` | The checkout `PWIZ_LSP_DIR` points at (a `skyclaude` session), when set |
+
+A repo whose remote has no section gets no `tooling` block. To describe a new
+repository, add a `## Owner/Repo` section to the guide - nothing in this
+server names a project.
+
+Example for a second pwiz checkout:
+
+```json
+{
+  "path": "C:\\proj\\pwiz-work1",
+  "name": "pwiz-work1",
+  "git": { "branch": "Skyline/work/20260919_perfutil_reset", "remote": "git@github.com:ProteoWizard/pwiz.git", ... },
+  "tooling": {
+    "project": "ProteoWizard/pwiz",
+    "critical": [
+      "Build: `pwsh -File C:/proj/ai/scripts/Skyline/Build-Skyline.ps1 -SourceRoot C:/proj/pwiz-work1`",
+      "Test: `pwsh -File C:/proj/ai/scripts/Skyline/Run-Tests.ps1 -SourceRoot C:/proj/pwiz-work1 -TestName <Name>`"
+    ],
+    "guide": "C:/proj/ai/docs/github-repo-guide.md (section 'ProteoWizard/pwiz')",
+    "warning": "Not the default checkout: scripts build C:/proj/pwiz when -SourceRoot is omitted. Every Build-*/Run-* call for this checkout needs -SourceRoot C:/proj/pwiz-work1."
+  }
+}
+```
+
+Also ensures `<projectRoot>/CLAUDE.md` is a hard link to `ai/root-CLAUDE.md`
+(`claudeMdSync` reports when it had to create or repair the link).
+
 ## Tool: get_status
 
 Returns current system status as JSON, supporting multiple directories.

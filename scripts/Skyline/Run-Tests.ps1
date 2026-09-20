@@ -244,6 +244,16 @@ if ($SourceRoot) {
         Write-Error "Cannot find pwiz_tools. Tried:`n  Sibling mode: $siblingPath`n  Child mode: $childPath`nUse -SourceRoot to specify the pwiz root directory."
         exit 1
     }
+
+    # The default is silent about siblings: a session working in pwiz-work1 that forgets
+    # -SourceRoot gets a no-op incremental build of C:\proj\pwiz that succeeds in seconds
+    # and looks real. Name the other checkouts so the mistake is visible on the first line.
+    $otherCheckouts = Get-ChildItem -Directory (Split-Path -Parent $pwizRoot) -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -ne $pwizRoot -and (Test-Path (Join-Path $_.FullName 'pwiz_tools/Skyline/Skyline.csproj')) } |
+        ForEach-Object { $_.Name }
+    if ($otherCheckouts) {
+        Write-Host "Target checkout: $pwizRoot (default; -SourceRoot not given). Other pwiz checkouts here: $($otherCheckouts -join ', ') - pass -SourceRoot to use one of those." -ForegroundColor Yellow
+    }
 }
 $skylineRoot = Join-Path $pwizRoot 'pwiz_tools/Skyline'
 $initialLocation = Get-Location

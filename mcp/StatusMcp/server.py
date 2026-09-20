@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import platform
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -150,6 +151,143 @@ def get_directory_status(directory: str, verbose: bool = False) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Repository guide: what a fresh session should know about each checkout,
+# read from ai/docs/github-repo-guide.md on every call so the doc stays the
+# single source of truth. Sections are keyed by GitHub "owner/repo"; only
+# their "### Critical" bullets are surfaced here, the rest is pointed at.
+# Format details are at the top of that file.
+# ---------------------------------------------------------------------------
+
+REPO_GUIDE_PATH = _AI_ROOT / "docs" / "github-repo-guide.md"
+EVERY_REPO_SECTION = "every repository"
+_DEFAULT_LOCATION_RE = re.compile(r"\*\*Default location\*\*\s*:\s*`?([^`\s]+)`?", re.IGNORECASE)
+
+
+def parse_github_repo(remote: Optional[str]) -> Optional[str]:
+    """Reduce a remote URL to lower-case 'owner/repo', or None.
+
+    Handles git@github.com:Owner/Repo.git, https://github.com/Owner/Repo(.git)
+    and ssh://git@github.com/Owner/Repo. Non-GitHub remotes return None.
+    """
+    if not remote:
+        return None
+    remote = remote.strip()
+    marker = "github.com"
+    idx = remote.lower().find(marker)
+    if idx < 0:
+        return None
+    tail = remote[idx + len(marker):].lstrip(":/")
+    if tail.lower().endswith(".git"):
+        tail = tail[:-4]
+    parts = [p for p in tail.split("/") if p]
+    if len(parts) < 2:
+        return None
+    return f"{parts[0]}/{parts[1]}".lower()
+
+
+def parse_repo_guide(text: str) -> dict:
+    """Parse github-repo-guide.md into {key: section}.
+
+    key is the lower-cased H2 heading text ("proteowizard/pwiz", "every
+    repository"). Each section has "title" (heading as written), "critical"
+    (bullets under "### Critical", in order) and "defaultLocation" (from a
+    "**Default location**:" bullet, or None). Anything else in the section is
+    ignored here and left for the reader to open the file.
+    """
+    sections: dict = {}
+    current = None
+    in_critical = False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if line.startswith("## "):
+            title = line[3:].strip()
+            current = {"title": title, "critical": [], "defaultLocation": None}
+            sections[title.lower()] = current
+            in_critical = False
+            continue
+        if current is None:
+            continue
+        if line.startswith("### "):
+            in_critical = line[4:].strip().lower() == "critical"
+            continue
+        stripped = line.strip()
+        if not (stripped.startswith("- ") or stripped.startswith("* ")):
+            continue
+        bullet = stripped[2:].strip()
+        match = _DEFAULT_LOCATION_RE.search(bullet)
+        if match:
+            current["defaultLocation"] = match.group(1)
+        elif in_critical:
+            current["critical"].append(bullet)
+    # Prose sections such as the format description have no Critical bullets
+    # and are not repositories; keep only the ones that say something.
+    return {key: s for key, s in sections.items() if s["critical"]}
+
+
+def load_repo_guide() -> dict:
+    """The parsed guide, or an empty dict when the file is missing."""
+    try:
+        return parse_repo_guide(REPO_GUIDE_PATH.read_text(encoding="utf-8"))
+    except OSError as e:
+        logger.warning(f"Could not read {REPO_GUIDE_PATH}: {e}")
+        return {}
+
+
+def _fill(text: str, subs: dict) -> str:
+    for key, value in subs.items():
+        text = text.replace("{" + key + "}", value)
+    return text
+
+
+def get_tooling(status: dict, project_root: Path, guide: dict) -> Optional[dict]:
+    """Tooling block for a repo status, or None for a remote the guide omits."""
+    git = status.get("git") or {}
+    key = parse_github_repo(git.get("remote"))
+    if not key or key not in guide:
+        return None
+
+    section = guide[key]
+    checkout = Path(status["path"])
+    subs = {
+        "ai": _AI_ROOT.as_posix(),
+        "root": checkout.as_posix(),
+        "projectRoot": project_root.as_posix(),
+    }
+    tooling = {
+        "project": section["title"],
+        "critical": [_fill(b, subs) for b in section["critical"]],
+        "guide": f"{REPO_GUIDE_PATH.as_posix()} (section '{section['title']}')",
+    }
+
+    default_location = section.get("defaultLocation")
+    if default_location:
+        default_path = Path(_fill(default_location, subs))
+        try:
+            is_default = checkout.resolve() == default_path.resolve()
+        except OSError:
+            is_default = checkout == default_path
+        if not is_default:
+            tooling["warning"] = (
+                f"Not the default checkout: scripts build {default_path.as_posix()} when "
+                f"-SourceRoot is omitted. Every Build-*/Run-* call for this checkout needs "
+                f"-SourceRoot {checkout.as_posix()}."
+            )
+    return tooling
+
+
+
+def _read_active_project() -> Optional[dict]:
+    """The active project recorded for this session (or the global fallback)."""
+    for candidate in (_per_session_active_project_file(), ACTIVE_PROJECT_FILE):
+        if candidate and candidate.exists():
+            try:
+                return json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+    return None
+
+
 def _ensure_root_claude_md_link(project_root: Path) -> Optional[str]:
     """Ensure project-root CLAUDE.md is a hard link to ai/root-CLAUDE.md.
 
@@ -202,6 +340,15 @@ def get_project_status(verbose: bool = False) -> str:
     (derived from the ai/ folder location). Call this at session start to
     orient yourself — no arguments needed.
 
+    Repos whose GitHub remote has a section in ai/docs/github-repo-guide.md
+    carry a "tooling" block: that section's Critical bullets (skills, script
+    folders, exact build/test lines for THIS checkout) and a pointer to the
+    section for the rest. A checkout that is not at the section's default
+    location gets a "warning", because the scripts build the default location
+    when -SourceRoot is omitted. Top-level "guidance" is the guide's "Every
+    repository" section; "activeProject" and "lspCheckout" say which checkout
+    this session is working in, when known.
+
     Also ensures the project-root CLAUDE.md is a hard link to
     ai/root-CLAUDE.md, creating or re-linking it as needed. This replaces
     the older copy-and-sync mechanism, so legacy machines installed with
@@ -220,10 +367,14 @@ def get_project_status(verbose: bool = False) -> str:
         if d.is_dir() and not d.name.startswith(".")
     ])
 
+    guide = load_repo_guide()
     directory_statuses = []
     for d in subdirs:
         status = get_directory_status(str(d), verbose=verbose)
         if status["git"] is not None:
+            tooling = get_tooling(status, project_root, guide)
+            if tooling:
+                status["tooling"] = tooling
             directory_statuses.append(status)
 
     now_utc = datetime.now(timezone.utc)
@@ -236,6 +387,27 @@ def get_project_status(verbose: bool = False) -> str:
         "projectRoot": str(project_root),
         "repositories": directory_statuses,
     }
+
+    # Rules that apply to every checkout, from the guide's "Every repository"
+    # section, plus where to read the rest.
+    every = guide.get(EVERY_REPO_SECTION)
+    if every:
+        subs = {"ai": _AI_ROOT.as_posix(), "projectRoot": project_root.as_posix()}
+        result["guidance"] = [_fill(b, subs) for b in every["critical"]]
+    result["repoGuide"] = REPO_GUIDE_PATH.as_posix()
+
+    # Which checkout this session is working in, from the two places that
+    # record it: set_active_project (per session) and the C# LSP's
+    # PWIZ_LSP_DIR (a skyclaude session; drop the trailing pwiz_tools).
+    active = _read_active_project()
+    if active:
+        result["activeProject"] = {"path": active.get("path"), "setAt": active.get("setAt")}
+    lsp_dir = os.environ.get("PWIZ_LSP_DIR")
+    if lsp_dir:
+        lsp_path = Path(lsp_dir)
+        if lsp_path.name.lower() == "pwiz_tools":
+            lsp_path = lsp_path.parent
+        result["lspCheckout"] = str(lsp_path)
 
     if sync_message:
         result["claudeMdSync"] = sync_message
