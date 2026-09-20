@@ -107,6 +107,16 @@ five tests: `ConsoleTestDiaQeFullSearch`, `ConsoleTestDiaTtofFullSearch`,
   net472 MSBuild path) unless given `-SourceRoot C:\proj\pwiz-work1`; the no-op "build
   succeeded in 5 s" against the wrong checkout looks exactly like a real one.
 
+**2026-09-19 - Merged.** PR #4691 squash-merged into the port branch as `f438033ddf`; work branch
+deleted. The TeamCity "Perf/Tutorial Tests" check was red twice for reasons unrelated to the
+change (agents `pwiz-windows-i-0c098cdf632f13ab2` and `-03037559776ae49b8` ran out of disk in
+`c:\skyline-downloads`, killing the run after ~35 of 90 tests; `TestAlphaPeptDeepBuildLibrary`
+and the `TestDiaTtofDiaUmpireTutorial` count mismatch were casualties of the same, not real);
+rerun #97 on MacCoss TeamCity Agent 1 passed 116/116. Note for next time: the five DIA
+FullSearch tests are on `tc-perftests-skiplist.txt`, so that config never runs them - the
+end-to-end verifier is the Integration-with-Perf nightly (BRENDANX-UW7), first with this fix
+on 2026-09-19/20.
+
 ## Status (2026-07-24, session: DIA-NN tutorial perf test CI failure -> DocDir move)
 
 Resumed via `/pw-continue`. **The progress log had gone stale at the 07-23b `efe6f7824c` entry; HEAD had
