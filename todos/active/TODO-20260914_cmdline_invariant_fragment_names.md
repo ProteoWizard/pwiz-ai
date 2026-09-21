@@ -71,6 +71,13 @@ Same class of bug in `--tran-predict-ce`, `--tran-predict-dp`, `--tran-predict-c
   against d9882f2d4f (deleted SCIEX accepted, ja help diff), green with redesign.
 - Copilot thread on #4669 (tests only red in ja/zh): addressed by the ja-culture tests - reply + resolve after commit.
 
+## Reporter follow-up (2026-09-21)
+
+Daopu reports the Tools > Options > Language workaround did NOT help; only changing the Windows
+system language did. Root cause: `Program.cs:222` returns `CommandLineRunner.RunCommand` before the
+`Settings.Default.DisplayLanguage` block at `:251`, so SkylineCmd always runs in the OS UI culture.
+The fix on this branch makes the arguments work in any culture, so no workaround is needed once it ships.
+
 ## Follow-up (not in this PR unless decided otherwise)
 
 - Fragment-finder args list only localized labels in `--help` / errors (invariant names accepted but unlisted)
@@ -79,6 +86,13 @@ Same class of bug in `--tran-predict-ce`, `--tran-predict-dp`, `--tran-predict-c
 - `--full-scan-isolation-scheme`: `IsolationSchemeList.GetDefaults` stores localized names as keys
   (e.g. `結果のみ`), so `Results only` is rejected for lists first created in a ja/zh UI
 - Legacy fragment names (`y3`, `last y-ion`) not accepted on the command line (never were; nit)
+- `--tran-product-add-special-ion` stores `p.Value` verbatim after a culture-insensitive check, while
+  `GetMeasuredIonByName` is ordinal, so e.g. `tmt-127l` stores a null `MeasuredIon` (same bug class)
+- `--report-name` keys are localized too (`ReportSpecList` defaults have ja/zh translations)
+- Pre-existing: `TransitionFullScan.ChangePrecursorIsotopes` tests unqualified `IsotopeEnrichments`
+  (the pre-change value) beside two `im.` operands, so the analyzer branch uses the old enrichment
+- Idea: model argument values once as (invariant key, localized label) pairs on `ArgumentBase`, with
+  `Values`/`IsValidValue`/resolver derived from it, instead of `AcceptedValues` beside `Values`
 
 ## Files Modified
 
