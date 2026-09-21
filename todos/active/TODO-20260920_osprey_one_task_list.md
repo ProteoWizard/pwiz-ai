@@ -331,3 +331,41 @@ backlog sweep `ai/todos/backlog/brendanx67/TODO-osprey_log_readability.md`, whos
 table already rules "never a stage number; the `--task` names are fine" - not a new follow-up.
 Debug gate green; no script or test keys on the changed text (checked), so the regression was
 not re-run for this message-only commit.
+
+### 2026-09-20 - second /code-review max, high triage bar (`65574be266`)
+
+Brendan asked for one more review of the two-list rework with a high bar: serious issues
+that went unnoticed in the refactor, no minor cleanups. 15 findings at the cap; verified.
+
+Fixed:
+- `AnalysisPipeline.Run(config, pipeline)` took the pipeline separately from `config.Pipeline`
+  with nothing checking they were the same instances; a mismatch is a silent no-op "Analysis
+  complete" (every stage excluded) or fail-open (a namesake selection). Now refused with an
+  `ArgumentException`; pinned in `TestTaskSetAndPipelineForSelection`.
+- `OspreyTasks`' constructor did not check that a selector's declared pipeline uses the set's
+  own instances, nor that a stage has no selector entry - the by-reference contract was
+  unenforced where the lists are declared. Both checked now.
+- `--task FirstPassFDR` still echoed `Output: out.blib` (the misreading the PR fixed for
+  PerFileRescoring) and my `Program.cs` comment claimed only SecondPassFDR writes the blib;
+  `FirstPassFdrTask.DescribeOutput` added, comment corrected.
+- Strings I added broke the recorded vocabulary (`feedback_osprey_user_facing_terminology`):
+  "sidecar" -> "intermediate files", `{1:N0}`, "entries" -> "precursor candidates",
+  "boundary files" -> "intermediate files".
+- Docs I rewrote were wrong: doc 00 named `OspreyTasks.CanonicalPipeline` (no such member);
+  doc 15's truth table still annotated rows with the flags its own prose says are not
+  membership flags and spelled the column `PerFileRescore`; doc 15 claimed doc 20 names the
+  selector-only tasks (it listed four `--task` values; now six, with a sentence each); two
+  `regression.ps1` comments still cited the deleted `NoJoin`; two `--` em-dashes in a comment.
+
+Dropped:
+- `ARG_TASK`'s type-init now runs a validating constructor, so a malformed list crashes the
+  no-args usage path with a `TypeInitializationException`: developer-time only, the inner
+  message still prints, every other path reports it with a stack; design per the TODO.
+- Deriving `StopAfterStage5` / `ExpectReconciledInput` / `DiagnosticsOnly` from interface
+  facts; moving `RunModelDiagnosticsTask` behind an `ISelectableTask` hook; splitting a
+  lighter selectable base so `ModelDiagnosticsTask` need not throw from `Run`: design
+  alternatives, and the report-owning task is the named follow-up.
+- `ResolveTask` spelling its own invalid-value sentence rather than `ValueInvalidMessage`, the
+  pre-scan duplicating the tokenizer's missing-value message, `FinalizeAndCheck` re-deriving
+  the stop from the selection and its early `return false` suppressing `[TIMING]`: all
+  pre-existing shapes.
