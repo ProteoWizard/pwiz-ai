@@ -1003,6 +1003,79 @@ git submodule update --init --recursive
 Without this, you risk building against old versions of Hardklor, BullseyeSharp, or other
 submodules — the build will succeed but ship incorrect code.
 
+### AI Connector ZIP and the Tool Store
+
+`SkylineAiConnector.zip` is a **committed artifact**, and publishing it to the Skyline
+Tool Store is a **separate act from committing it**. Both belong to the release: skip the
+commit and master ships stale; skip the publish and Tool Store users stay on old code
+while master looks correct.
+
+```
+pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineAiConnector/SkylineAiConnector.zip
+```
+
+**Rebuild it AFTER the version-bump commit, and stamp `AssemblyInfo.cs` first.** The
+ZIP's advertised version is stamped by `PackageToolZip` (`AfterTargets="Build"` in
+`SkylineAiConnector.csproj`) from `SkylineAiConnector/Properties/AssemblyInfo.cs` — a
+`.gitignore`d file that **only the jam build generates** (`Jamfile.jam`,
+`generate-skyline-AssemblyInfo.cs "SkylineAiConnector"`), carrying the version and commit
+hash of the checkout at the time of that jam build. Visual Studio does not regenerate it.
+So a VS rebuild right after the bump commit compiles fresh binaries but stamps whatever
+the LAST jam build left there — at the 2026-09-21 release that was July's
+`26.1.1.209-61fa751304`, and the "rebuilt" ZIP advertised `26.1.1.209`.
+
+The ordering problem is that the jam build wants to come LAST: the Skyline binaries and
+the Docker image both carry the git hash of the commit they were built from, so the
+release commit that is tagged and built must already contain the connector ZIP and its
+test pin. The ZIP therefore necessarily carries the hash of the bump commit (its
+parent), and something other than the full release build has to stamp `AssemblyInfo.cs`
+before the connector is rebuilt. Two ways:
+
+- **Edit the three version lines by hand** to what jam would write for the bump commit:
+  `AssemblyVersion` and `AssemblyFileVersion` = `YY.N.B.DDD`,
+  `AssemblyInformationalVersion` = `YY.N.B.DDD-<10-char hash>`
+  (`git rev-parse --short=10 HEAD`). Touch nothing else in the file — it is ISO-8859 with
+  CRLF line endings, so use a byte-preserving edit, not `sed -i` in Git Bash.
+- **Or run a quick jam build** at the bump commit (`quickbuild.bat -j12 --abbreviate-paths
+  pwiz_tools\Skyline//Skyline.exe --official`) before the connector rebuild, and accept
+  that the full `clean.bat` + `bso.bat` still runs afterwards at the release commit.
+
+Either way, **verify `Version =` in `tool-inf/info.properties` inside the ZIP before
+committing** (`unzip -p SkylineAiConnector.zip tool-inf/info.properties`) — the file
+timestamps inside the ZIP say only that it was rebuilt, not what it was stamped with.
+
+**Rebuild from `SkylineMcp.sln` in Visual Studio**, not `Skyline.sln` (which does not
+build it) and not the command line: a whole-solution `dotnet build` of `SkylineMcp.sln`
+fails on the net472 `SkylineTool.csproj` for want of its `packages.config` restore, on a
+clean checkout with no local changes.
+
+**Update the test pin in the same commit.** `TestSkylineMcp` asserts the ZIP's version
+against `EXPECTED_ZIP_VERSION` in `pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs`
+and fails otherwise — the assertion message gives the value to use. It also diffs the
+`[McpServerTool]` names in source against the ZIP's advertised list, so a forgotten
+rebuild after adding or renaming a tool fails. Nothing catches a stale
+`ChatAppRegistry.cs` / `MainForm.cs`, so rebuild deliberately after touching those.
+
+**Connector steps at each release:**
+
+1. Commit the version bump
+2. Stamp `SkylineAiConnector/Properties/AssemblyInfo.cs` for that commit (see above)
+3. Rebuild the ZIP from `SkylineMcp.sln`; check `Version =` in its `info.properties`
+4. Update `EXPECTED_ZIP_VERSION` to the new version
+5. Commit the ZIP and the pin together — this is the commit to build and tag
+6. Run the full release build (`clean.bat` + `bso.bat`) and tag
+7. **Publish the ZIP to the Tool Store**
+8. Confirm the store's listed version matches
+   `tool-inf/info.properties` in the committed ZIP
+
+> **Why step 7 and step 8 are called out (found 2026-09-20).** At the 2026-07-28 daily
+> release the connector was rebuilt as `26.1.1.209` and published to the Tool Store, but
+> never committed. Master self-healed a month later when PR #4452 rebuilt and committed
+> `26.1.1.232` — nothing was lost from the repository, but that newer build was never
+> published. So the Tool Store served July code, without the graph click/zoom and keyboard
+> verbs, for a month while master carried the newer ZIP. Neither half of the mismatch is
+> visible from the other: comparing the two versions at release time is what catches it.
+
 ### Full Release Build
 
 ```bash
