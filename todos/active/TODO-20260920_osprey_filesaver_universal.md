@@ -56,8 +56,22 @@ self-deleting writability check — no content ever persists).
 
 - [x] `Build-Osprey.ps1 -SourceRoot C:\proj\pwiz-work1 -Configuration Debug -RunTests -RunInspection` - 593/593 (incl. new `TestFileSaverKeepFailedWrites`), zero warnings
 - [x] `regression.ps1 -Dataset Stellar` - PASSED, all modes
-- [ ] `/code-review max`
-- [ ] TeamCity Perf/Regression on `pull/<N>` with the agent pin (ask first)
+- [x] `/code-review max 4694` - 15 findings, 13 fixed in de3db716c9, 2 addressed by documentation (multi-process HPC race; pre-existing NaN/rounding format gap left out of scope)
+- [ ] TeamCity Perf/Regression on `pull/4694` with the agent pin (ask first)
+
+**Review round (2026-09-20/21)**: `/code-review max` found 15 issues, mostly real races/leaks the
+conversion introduced (two unsynchronized writers of the same search-XIC file; CoAssignRowDump
+not surviving its own writer throwing; its filename-collision check racing FileSaver's deferred
+real-path existence; Environment.Exit - two dozen call sites - abandoning the three held-open
+dumps' FileSaver temps instead of committing; WriteStage6CalibrationDump's O(files^2) re-read).
+Fixed: new Osprey.Core.DiagnosticFileLock (shared per-path lock, process-local by design);
+CoAssignRowDump's Dispose and NextSequence; a CloseAll registered on AppDomain.ProcessExit;
+WriteStage6CalibrationDump restructured to the held-open pattern (4th such stream); the
+two-step FileSaver+StreamWriter construction leak in 4 places; missing InvariantCulture in
+WriteFeatureDump; docs/00's inaccurate description of which writer commits unconditionally.
+Not fixed: true multi-process HPC fan-out sharing one directory (documented limitation - these
+dumps are single-session opt-ins); a pre-existing NaN/rounding formatting gap unrelated to
+write atomicity (out of scope, worth its own issue). All three gates re-run clean after.
 
 **Not exercised**: none of the `-d`-gated dump paths were run live end-to-end (no
 cached mzML on hand for a quick manual smoke test); confidence rests on the uniform
