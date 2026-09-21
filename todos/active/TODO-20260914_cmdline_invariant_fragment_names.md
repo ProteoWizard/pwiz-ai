@@ -93,6 +93,17 @@ The fix on this branch makes the arguments work in any culture, so no workaround
   (the pre-change value) beside two `im.` operands, so the analyzer branch uses the old enrichment
 - Idea: model argument values once as (invariant key, localized label) pairs on `ArgumentBase`, with
   `Values`/`IsValidValue`/resolver derived from it, instead of `AcceptedValues` beside `Values`
+- Idea: a public command-line argument for language selection. One already exists internally:
+  `ARG_INTERNAL_CULTURE` (`CommandArgs.cs:143`, `--culture=en|fr|ja|zh-CHS...`), whose `SetCulture`
+  (`:165`) sets `CurrentCulture` and `CurrentUICulture` and re-inits the thread, but it is
+  `InternalUse = true` and sits in `GROUP_INTERNAL` with the test-only args, so it is undocumented
+  and absent from `--help`. Making it public would give scripts control over the language of
+  messages and accepted display names without changing the Windows language - the workaround
+  Daopu actually needed, since SkylineCmd ignores Tools > Options > Language.
+  Considerations: arguments are processed in order, so `--culture` only affects what is parsed
+  after it (value lists are evaluated per argument), meaning it must come first to be useful;
+  decide whether it also belongs in the usage/help output and the generated `CommandLine.html`;
+  and a test should assert it changes message language, not just that it parses.
 
 ## Files Modified
 
