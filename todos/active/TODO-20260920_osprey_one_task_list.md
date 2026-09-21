@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260920_osprey_one_task_list` (checkout `C:\proj\pwiz-work2`)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619) - all Osprey development is on the port branch
 - **Created**: 2026-09-20
-- **Status**: PR #4693 open (base = port branch), five commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`), then the vocabulary fix (`1b9523f73e`) and a second high-bar /code-review round (`65574be266`); local gates green on the final commit (Debug tests + inspection, Stellar; StellarLibDecoy on `f852b35316`); TeamCity Perf/Regression triggered on `pull/4693` at Brendan's request: build 4181728 (https://teamcity.labkey.org/build/4181728)
+- **Status**: PR #4693 open (base = port branch), five commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`), then the vocabulary fix (`1b9523f73e`) and a second high-bar /code-review round (`65574be266`); local gates green on the final commit (Debug tests + inspection, Stellar; StellarLibDecoy on `f852b35316`); TeamCity Perf/Regression triggered on `pull/4693` at Brendan's request: build 4181728 failed on a pre-existing port-branch entry-point defect (fixed in `2acac36fba`), re-triggered as build 4181731 (https://teamcity.labkey.org/build/4181731)
 - **Module**: `osprey`
 - **PR**: [#4693](https://github.com/ProteoWizard/pwiz/pull/4693)
 
@@ -371,3 +371,17 @@ Dropped:
   pre-existing shapes.
 
 Gate on `65574be266`: Stellar PASS 17/17 (`regression-stellar4.log`). PR body finalized.
+
+### 2026-09-20 - TeamCity Perf/Regression: port-branch entry-point defect found and fixed
+
+Build 4181728 on `pull/4693` failed before any test: `tctest.bat` runs `regression-parallel.ps1`,
+which still hard-coded `bin\x64\Release\net8.0\Osprey.exe` and passed `-Framework net8.0` to a
+`build.ps1` that no longer has that parameter and builds only `net10.0`. #4588 moved `build.ps1`
+and the serial `regression.ps1` to `net10.0` and missed the two-lane script, which only TeamCity
+runs; the port branch's copy is identical, so no Perf/Regression run on the port branch could
+have passed since (the last green build, #241, is a master commit). Fixed in `2acac36fba` (three
+lines mirroring the serial script, plus `tctest.bat`'s SDK line), validated locally by running the
+same entry point on Stellar with its build step (`regression-parallel-stellar.log`: build net10.0,
+exe check, 17/17 PASS). Re-triggered as build 4181731 (https://teamcity.labkey.org/build/4181731).
+Brendan has finished reviewing and will take one last look when the build is green, before
+`/pw-complete`.
