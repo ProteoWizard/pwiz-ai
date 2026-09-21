@@ -79,6 +79,16 @@ pwiz_tools/Skyline/Executables/Installer/
   does (36389a1418). Bootstrap verified under WSL from the Osprey directory. The base keeps
   failing until this lands or that one commit is cherry-picked onto it.
 
+### 2026-09-21
+
+- Nick's review: a ProgId allows no punctuation but periods, so `Skyline-daily.Document.1`
+  was not a legal name. The daily channel's ProgIds are now `SkylineDaily.Document.1` /
+  `.Data.1` / `.Pointer.1` (9acec4d512; Setup.iss ProgIdPrefix and Test-Installer.ps1);
+  install/uninstall cycle with the hand-back re-verified. Thread replied to and resolved.
+- Merged the base again on 2026-09-18 (31776743f2); the base had landed its own Osprey Linux
+  SDK bootstrap (c927f5e019), so tcbuild.sh was resolved to the base's version and the
+  branch is back to the 18 installer files.
+
 ## Follow-ups (not in this PR)
 
 - UpgradeManager: replace NullDeployment with a check against skyline.ms for a newer
