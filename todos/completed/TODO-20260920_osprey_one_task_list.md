@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260920_osprey_one_task_list` (checkout `C:\proj\pwiz-work2`)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619) - all Osprey development is on the port branch
 - **Created**: 2026-09-20
-- **Status**: PR #4693 open (base = port branch), five commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`), then the vocabulary fix (`1b9523f73e`) and a second high-bar /code-review round (`65574be266`); local gates green on the final commit (Debug tests + inspection, Stellar; StellarLibDecoy on `f852b35316`); TeamCity Perf/Regression triggered on `pull/4693` at Brendan's request: build 4181728 failed on a pre-existing port-branch entry-point defect (fixed in `2acac36fba`), re-triggered as build 4181731 - SUCCESS, 70 PASS / 0 FAIL / 0 SKIP on all four datasets in 58 min (https://teamcity.labkey.org/build/4181731). Fully green; awaiting Brendan's last look, then `/pw-complete`
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#4693](https://github.com/ProteoWizard/pwiz/pull/4693)
+- **PR**: [#4693](https://github.com/ProteoWizard/pwiz/pull/4693) (merged 2026-09-20 into `Skyline/work/20260612_net8_port` as `d18cc24983`)
 
 Raised by Brendan 2026-09-19 reviewing [#4686](https://github.com/ProteoWizard/pwiz/pull/4686).
 Started after #4686 merged (2026-09-19; that PR makes each task's `TASK_NAME` the one spelling
@@ -388,3 +388,18 @@ Brendan has finished reviewing and will take one last look when the build is gre
 
 Build 4181731 on `2acac36fba`: SUCCESS - 70 PASS / 0 FAIL / 0 SKIP across StellarGenDecoyEntrap +
 Astral (26) and Stellar + StellarLibDecoy (44), 58:07 wall. The PR is fully green.
+
+### 2026-09-20 - Merged
+
+PR #4693 merged as commit `d18cc24983` on `Skyline/work/20260612_net8_port` (the port branch, not
+master - it reaches master when #4619 does). Shipped: `OspreyTasks` with two explicit lists and
+the selector-only tasks' pipelines declared in the set; one membership rule
+(`OspreyConfig.Includes`) replacing the per-task `IsIncluded` predicates and the `NoJoin` flag;
+`ISelectableTask` reduced to name, the two task-nature facts and the three selection calls, with
+position facts derived from the pipeline; `ModelDiagnosticsTask`; the `HpcTask` enum,
+`TaskCliName`, the `ValidateArgs` / echo / `ExperimentAggFileCount` switches and `RescoreWorker`
+removed; the `--task` messages this PR touched in task-name vocabulary; DIVERGENCES U6 marked
+resolved; and the `regression-parallel.ps1` net10.0 fix that unblocked the TeamCity gate.
+Deferred, by design: the report-owning `ModelDiagnosticsTask` as a fifth canonical stage (named
+in the class doc), and the remaining 38 "Stage N" user-facing strings, which belong to
+`ai/todos/backlog/brendanx67/TODO-osprey_log_readability.md`. No follow-up issues filed.
