@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260920_osprey_one_task_list` (checkout `C:\proj\pwiz-work2`)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619) - all Osprey development is on the port branch
 - **Created**: 2026-09-20
-- **Status**: PR #4693 open (base = port branch), three commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`, see the rework section at the end); local gates green on the final commit (Debug tests + inspection, Stellar, StellarLibDecoy); /code-review max triaged in `41e44df8da`; TeamCity Perf/Regression not yet triggered (ask first, `branch="pull/4693"`)
+- **Status**: PR #4693 open (base = port branch), five commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`), then the vocabulary fix (`1b9523f73e`) and a second high-bar /code-review round (`65574be266`); local gates green on the final commit (Debug tests + inspection, Stellar; StellarLibDecoy on `f852b35316`); TeamCity Perf/Regression not yet triggered (ask first, `branch="pull/4693"`)
 - **Module**: `osprey`
 - **PR**: [#4693](https://github.com/ProteoWizard/pwiz/pull/4693)
 
@@ -369,3 +369,5 @@ Dropped:
   pre-scan duplicating the tokenizer's missing-value message, `FinalizeAndCheck` re-deriving
   the stop from the selection and its early `return false` suppressing `[TIMING]`: all
   pre-existing shapes.
+
+Gate on `65574be266`: Stellar PASS 17/17 (`regression-stellar4.log`). PR body finalized.
