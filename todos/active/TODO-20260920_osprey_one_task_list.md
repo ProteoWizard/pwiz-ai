@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260920_osprey_one_task_list` (checkout `C:\proj\pwiz-work2`)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619) - all Osprey development is on the port branch
 - **Created**: 2026-09-20
-- **Status**: PR #4693 open (base = port branch), five commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`), then the vocabulary fix (`1b9523f73e`) and a second high-bar /code-review round (`65574be266`); local gates green on the final commit (Debug tests + inspection, Stellar; StellarLibDecoy on `f852b35316`); TeamCity Perf/Regression triggered on `pull/4693` at Brendan's request: build 4181728 failed on a pre-existing port-branch entry-point defect (fixed in `2acac36fba`), re-triggered as build 4181731 (https://teamcity.labkey.org/build/4181731)
+- **Status**: PR #4693 open (base = port branch), five commits; reworked to two explicit lists + one membership rule per Brendan's review (`f852b35316`), then the vocabulary fix (`1b9523f73e`) and a second high-bar /code-review round (`65574be266`); local gates green on the final commit (Debug tests + inspection, Stellar; StellarLibDecoy on `f852b35316`); TeamCity Perf/Regression triggered on `pull/4693` at Brendan's request: build 4181728 failed on a pre-existing port-branch entry-point defect (fixed in `2acac36fba`), re-triggered as build 4181731 - SUCCESS, 70 PASS / 0 FAIL / 0 SKIP on all four datasets in 58 min (https://teamcity.labkey.org/build/4181731). Fully green; awaiting Brendan's last look, then `/pw-complete`
 - **Module**: `osprey`
 - **PR**: [#4693](https://github.com/ProteoWizard/pwiz/pull/4693)
 
@@ -385,3 +385,6 @@ same entry point on Stellar with its build step (`regression-parallel-stellar.lo
 exe check, 17/17 PASS). Re-triggered as build 4181731 (https://teamcity.labkey.org/build/4181731).
 Brendan has finished reviewing and will take one last look when the build is green, before
 `/pw-complete`.
+
+Build 4181731 on `2acac36fba`: SUCCESS - 70 PASS / 0 FAIL / 0 SKIP across StellarGenDecoyEntrap +
+Astral (26) and Stellar + StellarLibDecoy (44), 58:07 wall. The PR is fully green.
