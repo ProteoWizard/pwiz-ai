@@ -320,3 +320,14 @@ Gate results on `f852b35316`: Stellar PASS 17/17 legs
 (`ai/.tmp/sessions/20260920-one-task-list/regression-stellar3.log`); StellarLibDecoy PASS 27/27
 legs including modes 7/11 (`regression-libdecoy2.log`). PR body refreshed to describe the final
 design.
+
+### 2026-09-20 - user-facing vocabulary (`git log -1` on the branch)
+
+Brendan: "Stage 1-4" reached a log line; stage numbers are never user-facing, the `--task`
+names are (they are in the CLI and the help). Fixed the four strings this PR touched (the two
+`FirstPassFdrTask.ValidateSelection` errors, moved from `Program.cs`, and the two
+`FinalizeAndCheck` stop lines). 38 pre-existing sites in 10 files remain and belong to the
+backlog sweep `ai/todos/backlog/brendanx67/TODO-osprey_log_readability.md`, whose vocabulary
+table already rules "never a stage number; the `--task` names are fine" - not a new follow-up.
+Debug gate green; no script or test keys on the changed text (checked), so the regression was
+not re-run for this message-only commit.
