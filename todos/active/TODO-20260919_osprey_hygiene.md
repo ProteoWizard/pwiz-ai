@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260919_osprey_hygiene` (checkout `C:\proj\pwiz-work1`)
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619)
 - **Module**: `osprey`
-- **Status**: PR #4690 open (base = port branch); local gates green twice; /code-review max findings addressed in c8c5612b6c; TeamCity Perf/Regression pending (ask before triggering)
+- **Status**: Completed
+- **PR**: [#4690](https://github.com/ProteoWizard/pwiz/pull/4690) (merged 2026-09-20 as `f6a36077b1` into `Skyline/work/20260612_net8_port`)
 
 ## Why
 
@@ -47,10 +48,19 @@ console unique count, #4672 boundary column, BASE_ID_MASK consolidation (#4494 i
 - [x] `Build-Osprey.ps1 -SourceRoot C:\proj\pwiz-work1 -Configuration Debug -RunTests -RunInspection` - 592/592, zero warnings
 - [x] `regression.ps1 -Dataset Stellar` - PASSED; 19 GB run dir retained, prune touched nothing else
 - [x] `/code-review max 4690` - 15 findings, all fixed or answered (second commit)
-- [ ] TeamCity Perf/Regression on `pull/<N>` with the agent pin (ask first)
+- [x] TeamCity Perf/Regression on `pull/4690` with the agent pin - build #257 SUCCESS on c8c5612b6c
 
 ## Progress
 
 - 2026-09-19: branch created; items 1-6 applied (item 6 also fixed five adjacent stale PercolatorEngine citations); build/tests/inspection green; Stellar gate PASSED; PR #4690 opened against the port branch.
 - 2026-09-19 (later): /code-review max returned 15 confirmed findings; the big ones were that retention also kept the staged input copies, the two-lane runner would prune three of four dataset dirs, a long-lived shell's runs were never prunable, fragments displaced complete sets, and the report writers adopted FileSaver's contract without its catch. All addressed in c8c5612b6c (three writers: regression scripts by me, report writer + docs 00/08/14/DIVERGENCES, doc citations + TeamCity docs); Stellar gate PASSED again on the final tree; PR body corrected (reports are default-on, not opt-in).
 - Found in passing, not fixed: docs/16 still cites PerFileRescoreTask lines from before the rescore split (`:1306-1315`); the guide's "Validation before pushing to a PR" section in ai/docs still says pwiz has no Osprey CI. OspreyConfig.cs doc comments advertised --no-protein-report / --no-summary-report that were never registered (comments corrected; decide whether to register the flags).
+
+### 2026-09-20 - Merged
+
+PR #4690 merged as commit `f6a36077b1` into `Skyline/work/20260612_net8_port` (the PR's
+base, per the current Osprey convention of targeting the .NET 10 port branch rather than
+master). TeamCity Perf/Regression build #257 was SUCCESS on `pull/4690` before the merge.
+Nothing from the six-item scope was deferred. This work reaches `master` when the port
+branch (#4619) merges. Two small follow-ups noted above (stale docs/16 citation, the
+unregistered report-off flags) were left as-is rather than expanded into this PR.
