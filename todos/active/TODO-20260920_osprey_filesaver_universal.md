@@ -1,10 +1,12 @@
-# TODO-20260920_osprey_filesaver_universal.md - Made every Osprey file write go through FileSaver
+# TODO-20260920_osprey_filesaver_universal.md - Made "artifact" writes go through FileSaver, "log" writes stream directly
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260920_osprey_filesaver_universal` (checkout `C:\proj\pwiz-work1`)
-- **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619), off commit `f6a36077b1` (#4690)
+- **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619), synced to its tip as of
+  merge commit `412751ae97` (2026-09-22) + a local merge on top for the log/artifact simplification
 - **Module**: `osprey`
-- **Status**: PR #4694 open (base = port branch); local gates green; /code-review and TeamCity pending
+- **Status**: PR #4694 open (base = port branch); local gates green post-sync; /code-review re-review
+  of the log/artifact simplification and TeamCity still pending
 
 ## Why
 
@@ -57,6 +59,11 @@ self-deleting writability check — no content ever persists).
 - [x] `Build-Osprey.ps1 -SourceRoot C:\proj\pwiz-work1 -Configuration Debug -RunTests -RunInspection` - 593/593 (incl. new `TestFileSaverKeepFailedWrites`), zero warnings
 - [x] `regression.ps1 -Dataset Stellar` - PASSED, all modes
 - [x] `/code-review max 4694` - 15 findings, 13 fixed in de3db716c9, 2 addressed by documentation (multi-process HPC race; pre-existing NaN/rounding format gap left out of scope)
+- [x] Log/artifact simplification (2026-09-22, commit `8684e0ead5`): re-ran `Build-Osprey.ps1 -RunTests
+      -RunInspection` - 595/595, zero warnings
+- [x] Synced with PR #4619's tip (merge commit `412751ae97` on origin, then a local merge on top):
+      re-ran `Build-Osprey.ps1 -RunTests -RunInspection` - 595/595, zero warnings
+- [x] `regression.ps1 -Dataset Stellar` re-run post-sync - PASSED, all modes
 - [ ] TeamCity Perf/Regression on `pull/4694` with the agent pin (ask first)
 
 **Review round (2026-09-20/21)**: `/code-review max` found 15 issues, mostly real races/leaks the
@@ -86,3 +93,27 @@ direct test coverage before this branch either.
   the streaming/append/unconditional-commit cases, the ~30 one-shot dumps delegated
   to two parallel agents); three clean gate runs (one race with a concurrently-running
   regression.ps1 build caught a real but already-fixed inconsistency, re-run clean).
+- 2026-09-21/22: Brendan reviewed the diff and pushed back on the FileSaver conversion for
+  debugging-only diagnostics - too large and complex for what these files are, and
+  `CoAssignRowDump`'s unconditional-`Commit()` override read as fighting FileSaver's
+  contract rather than benefiting from it. Landed on a "log" vs "artifact" distinction:
+  atomicity matters where a *reader* (downstream code, or a second concurrent writer)
+  depends on presence proving completeness; for a debug dump whose only reader is a human
+  or a Claude session doing bisection, showing how far processing got before a crash is
+  more valuable than all-or-nothing. `CoAssignRowDump`'s rows file and the four
+  `OspreyFileDiagnostics` held-open streams (`cs_stage6_mp_inputs.tsv`,
+  `cs_stage6_predict_rt.tsv`, `cs_stage6_cwt_path.tsv`, `cs_stage6_calibration.tsv`) fit
+  the "log" case and now write directly to their final path, no `FileSaver`, no
+  `KeepFailedWrites` dependency. `PeakDataExtractor`'s search-XIC dump stays an artifact
+  (two independent call sites write the same file - a concurrent-writer hazard, not a
+  partial-progress one). Committed as `8684e0ead5`; net ~30 fewer lines than the prior
+  state. docs/00's P8 section and docs/14's table rewritten to describe the split.
+- 2026-09-22: found PR #4619 had moved 3 commits past this branch's base (most notably
+  #4693, an Osprey task-list refactor touching `PerFileScoringTask.cs` and this branch's
+  own docs/00 - GitHub's "Update branch" button never appears for any PR in this repo
+  because `allow_update_branch` is off repo-wide, unrelated to which branch is base).
+  Merged #4619's tip into the branch (origin now carries merge commit `412751ae97`);
+  verified by hand that `WriteFeatureDump` still uses `FileSaver` post-merge and that the
+  merged docs/00 P8 section reflects the current log/artifact split, not #4693's
+  now-stale wording. Re-ran build/test/inspection clean (595/595) and
+  `regression.ps1 -Dataset Stellar` - PASSED, all modes. Pushing now.
