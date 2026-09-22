@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4668](https://github.com/ProteoWizard/pwiz/issues/4668)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4669](https://github.com/ProteoWizard/pwiz/pull/4669)
 
 ## Objective
 
@@ -86,11 +86,13 @@ The fix on this branch makes the arguments work in any culture, so no workaround
 - `--full-scan-isolation-scheme`: `IsolationSchemeList.GetDefaults` stores localized names as keys
   (e.g. `結果のみ`), so `Results only` is rejected for lists first created in a ja/zh UI
 - Legacy fragment names (`y3`, `last y-ion`) not accepted on the command line (never were; nit)
-- `--tran-product-add-special-ion` stores `p.Value` verbatim after a culture-insensitive check, while
-  `GetMeasuredIonByName` is ordinal, so e.g. `tmt-127l` stores a null `MeasuredIon` (same bug class)
-- `--report-name` keys are localized too (`ReportSpecList` defaults have ja/zh translations)
-- Pre-existing: `TransitionFullScan.ChangePrecursorIsotopes` tests unqualified `IsotopeEnrichments`
-  (the pre-change value) beside two `im.` operands, so the analyzer branch uses the old enrichment
+- Filed as [#4696](https://github.com/ProteoWizard/pwiz/issues/4696) (all three pre-existing items, verified):
+  - `--tran-product-add-special-ion` stores `p.Value` verbatim after a culture-insensitive check, while
+    `GetMeasuredIonByName` is ordinal, so e.g. `tmt-127l` stores a null `MeasuredIon` that
+    `ChangeMeasuredIons` does not filter (dereferenced at `TransitionSettings.cs:860/871`, written at `:1113`)
+  - `--report-name` fails in ja/zh: `PersistedViews.GetDefaults` renames built-in views to localized
+    resource names (one-way map, `PersistedViews.cs:160-185`), but `CommandLine.cs:3712` matches exactly
+  - `TransitionFullScan.ChangePrecursorIsotopes` reads the pre-change `IsotopeEnrichments` (confirm intent first)
 - Idea: model argument values once as (invariant key, localized label) pairs on `ArgumentBase`, with
   `Values`/`IsValidValue`/resolver derived from it, instead of `AcceptedValues` beside `Values`
 - Idea: a public command-line argument for language selection. One already exists internally:
