@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Runs Claude Code PR-activity report and emails results.
 
@@ -457,12 +457,32 @@ finally {
 "[$(Get-Date)] Pulling latest pwiz/ master..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
 Push-Location (Join-Path $WorkDir "pwiz")
 try {
-    $GitOutput = git pull origin master 2>&1
-    $GitOutput | Out-File -FilePath $LogFile -Append -Encoding UTF8
-    if ($LASTEXITCODE -ne 0) {
-        "[$(Get-Date)] WARNING: pwiz/ git pull failed, continuing with existing version" | Out-File -FilePath $LogFile -Append -Encoding UTF8
-    } else {
-        "[$(Get-Date)] pwiz/ git pull successful" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    # Fast-forward master ONLY. Never `git pull` here: pull is fetch + MERGE, so when this
+    # checkout is left on a feature branch it merges master INTO that branch. Conflicts then
+    # leave the tree mid-merge with conflict markers in the working copy, and every later
+    # read or build in it is against a broken tree. Observed 2026-09-20/21, when pwiz/ was
+    # left on the .NET 10 port branch and both scheduled reports re-conflicted it daily.
+    $Branch = (git rev-parse --abbrev-ref HEAD 2>&1 | Out-String).Trim()
+    $MergeInProgress = Test-Path (Join-Path (git rev-parse --git-dir 2>$null) "MERGE_HEAD")
+    if ($MergeInProgress) {
+        "[$(Get-Date)] ERROR: pwiz/ has a merge in progress - not touching it. Resolve or 'git merge --abort' first." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        Write-Warning "pwiz/ has an unresolved merge in progress; skipping update."
+    }
+    elseif ($Branch -ne "master") {
+        "[$(Get-Date)] ERROR: pwiz/ is on branch '$Branch', not master - skipping update. Reports read source from this checkout, so results may reflect that branch rather than master." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        Write-Warning "pwiz/ is on '$Branch', not master; skipping update."
+    }
+    else {
+        $GitOutput = git fetch origin master 2>&1
+        $GitOutput | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        $GitOutput = git merge --ff-only FETCH_HEAD 2>&1
+        $GitOutput | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        if ($LASTEXITCODE -ne 0) {
+            "[$(Get-Date)] ERROR: pwiz/ master could not fast-forward (local commits on master?) - continuing with existing version" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+            Write-Warning "pwiz/ master could not fast-forward; continuing with existing version."
+        } else {
+            "[$(Get-Date)] pwiz/ master fast-forwarded" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        }
     }
 }
 finally {
