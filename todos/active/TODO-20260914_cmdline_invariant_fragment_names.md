@@ -41,7 +41,13 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
 - [x] All-language run (en, fr, tr, ja, zh): ConsoleNewDocumentTest, ConsoleChangePredictTranSettingsTest,
       ConsoleArgumentInvalidValuesTest, CommandLineUsageTest, CommandLineUsageDescriptionsTest,
       ConsoleArgumentValidationTest, ConsoleSettingsArgumentsTest, TestSkylineCmd, TestJsonToolServer
-- [ ] Code review, Copilot review ([#4669](https://github.com/ProteoWizard/pwiz/pull/4669))
+- [x] Code review (3 rounds) and Copilot rounds 1-2 ([#4669](https://github.com/ProteoWizard/pwiz/pull/4669))
+- [ ] Copilot round 3 (2026-09-23): `Values != null` gate bypassed `AcceptedValues` in
+      `ArgumentBase.GetArgumentTextWithValue` and `NameValuePair.IsMatch`; both now gate on
+      `IsValidValue`, with `ValuesForError` keeping the rejection message non-null. Latent today
+      (no argument declares `AcceptedValues` alone). Test: `ValidateValueSources` covers all four
+      combinations through both entry points
+- [ ] Human review
 - [ ] Reply to support thread once fix ships
 
 ## Settings-list arguments
