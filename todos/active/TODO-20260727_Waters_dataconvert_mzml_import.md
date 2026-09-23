@@ -12,7 +12,7 @@
   also carries the general pwiz-level solution. `591445b58` reverts the two sort commits here and
   the PR body is trimmed to match. Matt's CHANGES_REQUESTED (2026-08-03) is answered - three of
   the four threads discuss code that has moved, and a comment on the PR says so.
-  **Start at Phase 11.**
+  **Start at Phase 12** - Phase 11 is answered and Phase 12 (2026-08-21) carries uncommitted work.
 - **GitHub Issue**: (none)
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4498
 - **Cherry-pick to release**: no - Brian decided 2026-07-29, do not add the label
@@ -532,7 +532,9 @@ pwiz fixes would not reach other packages in time to matter. So: Skyline and Bib
 
 **Checked and found NOT at risk**, so the blast radius is smaller than first feared: `threshold`
 sorts by intensity itself and re-sorts by m/z on output (`ThresholdFilter.cpp:423`) - **but only
-when it actually cuts something**, corrected 2026-08-04, see Phase 12; `peakPicking
+when it actually cuts something**, corrected 2026-08-04, see the completed
+`TODO-20260804_mzml_mz_sort_order.md` (that correction left with the sort split; Phase 12 below is
+unrelated); `peakPicking
 cwt` sorts explicitly (`CwtPeakDetector.cpp:82`); the default `LocalMaximumPeakDetector` compares
 array neighbours and *would* be vulnerable, but `SpectrumList_PeakPicker.cpp:252` returns centroided
 spectra as-is and DATA Convert 5.x output is centroided, so it is unreachable. `SpectrumList_MZWindow`
@@ -667,17 +669,379 @@ at ~1.25 ns/element, roughly 0.2-2% of import wall time, and that was recorded i
 being acted on until Matt raised it independently. Worth remembering as a calibration point: a
 measured cost noted and not acted on is a finding, not a footnote.
 
-**psi-ms CV issue #539 - agreed, not landed, nothing to bundle.** Matt opened it 2026-07-30 out of
+**psi-ms CV issue #539 - agreed, PR open, still not landed.** Matt opened it 2026-07-30 out of
 this very work; edeutsch minuted agreement on 2026-07-31 (*"Joshua will make a PR"*) to move
 `MS:1000928` from `spectrum type` to `spectrum attribute`. **Same CVID, re-parented in place - no new
-accession.** Verified 2026-08-03: issue still open, no PR, `psi-ms.obo` master 4.1.258 still says
-`is_a: MS:1000559`, and the most recent obo commit (2026-07-31, #536) does not touch it. OLS agrees.
-Matt is fine not bundling it.
+accession.**
 
-When it does land, two things here need revisiting: `MSe_Short_tagged.mzML` currently declares
-`calibration spectrum` as the lockspray scan's **sole** type (correct today, wrong once it is an
-attribute - it would then need `MS1 spectrum` plus the attribute), and `SpectrumList_UIMF.cpp:106`
-has the same problem in the writer.
+**The PR now exists: https://github.com/HUPO-PSI/psi-ms-CV/pull/541** (mobiusklein = Joshua Klein,
+opened 2026-08-04, `change/reparent-calibration` -> master, "Closes #539"). One line:
+
+```diff
+-is_a: MS:1000559 ! spectrum type
++is_a: MS:1000499 ! spectrum attribute
+```
+
+Re-verified 2026-08-21: **still open, not merged.** Upstream `psi-ms.obo` master is now 4.1.258
+(23 June 2026) and still says `is_a: MS:1000559`; our vendored copy is 4.1.232 (16 Jan 2026), same
+declaration. Nothing to re-vendor yet, and re-vendoring ahead of upstream would be worse than waiting.
+
+**Note the shape: it is a reparent, not a "has-a".** The edge stays `is_a`, pointing at MS:1000499
+instead of MS:1000559. So after it lands `cvIsA(MS_calibration_spectrum, MS_spectrum_type)` goes
+false, but the term stays in cvgen's `relationsIsA_` - it does *not* move to `parentsPartOf` or
+`otherRelations`. Code that keys off the term itself is unaffected either way; code that asks
+"is this a child of spectrum type" is what changes.
+
+What needs revisiting when it lands is now tracked in Phase 12.
+
+### Phase 12: ignoreCalibrationScans honored for UIMF and mzML (IN PROGRESS)
+
+**Stays on this branch and this PR (Brian, 2026-08-24).** Asked whether it should split out as its own
+`pwiz:` PR, given it is mostly pwiz core on a `skyline`-labelled branch. It should not: not
+misidentifying calibration scans is the branch's subject, and this is the same pwiz-side-in-support-of
+-Skyline shape the Module note in Branch Information already describes. The
+`calibrationSpectraAreOmitted()` handshake it plugs into landed here in Phase 4, so splitting would
+put one mechanism in two PRs. (Not to be confused with the m/z sort work, which *was* split out on
+2026-08-04 and has since merged as #4552.)
+
+Worth stating plainly in the PR body, since a reviewer will notice it: the msconvert-facing parts -
+`--ignoreCalibrationScans` working for UIMF and mz5 at all, the worker-thread regression, the
+fileContent reconciliation - help consumers that never touch Skyline, so they are not purely "in
+support of" the Skyline fix. The ungated inference follow-up below is a different matter and **does**
+want its own PR.
+
+**Decision (Brian, 2026-08-21): it should be sufficient for Skyline to set the flag and not worry
+about it - lockmass/calibration detection belongs on the pwiz side.** Phase 8 fixed the msLevel
+predicate, but "who drops calibration scans" was still split: `Reader::Config::ignoreCalibrationScans`
+was honored only by the Waters raw reader, so for every other input Skyline had to do its own
+detection. `SpectrumList_Waters.cpp:653` skips the lockmass function at index time and
+`calibrationSpectraAreOmitted()` reports it; `MsDataFileImpl.cs:827` already stands down when a list
+says so. That handshake existed - two of the three readers just were not part of it.
+
+- [x] **`SpectrumList_FilterPredicate_MSLevelSet::accept` restructured** so a declared ms level is
+      read and returned on *before* any spectrum-type query, rather than after the
+      `hasCVParamChild(MS_spectrum_type)` gate. Same behavior today; the point is #541. Once
+      `calibration spectrum` is a spectrum *attribute*, a UIMF calibration-only frame has no
+      spectrum-type child at all, so the old ordering would hit that gate, return `indeterminate`,
+      exhaust the detail levels and **silently drop the frame**. Reading the level first means the
+      type is consulted only for spectra that declare no level, and those terms keep their `is_a`
+      children across the reparent.
+- [x] `testMSLevelSetCalibrationSpectrum` gained the Waters lockspray shape - a spectrum carrying
+      **both** `MS1 spectrum` and `calibration spectrum` with ms level 1 - alongside the UIMF
+      sole-type shape. Both are filtered on their declared level.
+- [x] **Fixed 2026-08-22: the fixture gained a spectrum declaring `MS_ms_level` with no spectrum type
+      at all**, which is the only input the two orderings disagree on. Now genuinely
+      mutation-verified - stashing `SpectrumList_Filter.cpp` fails it at
+      `SpectrumList_FilterTest.cpp:590`, `expected "4" but got "3"`. The history below is kept
+      because the failure mode is worth remembering.
+- [ ] **The test did NOT discriminate the reorder - an earlier draft of this entry claimed it was
+      mutation-verified, and that was wrong.** Re-checked 2026-08-21 by stashing
+      `SpectrumList_Filter.cpp` and rebuilding: `SpectrumList_FilterTest` **passes** on the old
+      ordering. It has to, because today `MS:1000928` is still `is_a MS:1000559`
+      (`psi-ms.obo:6619`), so all four fixture spectra clear the `hasCVParamChild(MS_spectrum_type)`
+      gate and both orderings agree. The mutation check that *did* go red was against an abandoned
+      intermediate draft that dropped calibration spectra outright; the claim was carried over
+      without being re-run. The input that actually separates the two orderings is **a spectrum
+      declaring `MS_ms_level` with no child of `MS_spectrum_type`** - old code returns
+      `indeterminate` and `SpectrumList_Filter.cpp:88-101` silently drops it, new code returns
+      `contains(level)`. That is the post-#541 UIMF shape and the whole point of the change. Add it
+      to the fixture. Note a build-time-fixed CV also means the test comment's claim that the
+      assertions hold "however the CV happens to attach calibration spectrum" cannot be
+      demonstrated here at all.
+- [x] **UIMF** honors the flag: `createIndex()` skips `FrameType_Calibration`, plus a
+      `calibrationSpectraAreOmitted()` override. Required splitting `rawIndex` out of `IndexEntry` -
+      the inherited `SpectrumIdentity::index` was doing double duty as both the reported list
+      position and the key into `UIMFReader`'s index, which is fine only while nothing is skipped.
+- [x] **mzML** honors it: new `SpectrumList_IgnoreCalibrationScans` (`pwiz/data/msdata/`), applied by
+      `Reader_mzML::read` and `Reader_mzMLb::read`. **Gated on `fileContent` declaring MS:1000928** -
+      deciding otherwise means reading every spectrum's metadata, and Skyline sets the flag for
+      *every* file it opens, so an ungated version would put a full metadata pass on every mzML
+      import. A file that does not declare them comes back untouched (`create()` returns `inner`
+      itself). A writer that labels spectra but omits the fileContent declaration is not filtered -
+      fails safe to previous behavior, and Skyline's own `IsCalibrationSpectrum` check
+      (`SpectraChromDataProvider.cs:1233`) still catches that case, so the two are complementary
+      rather than redundant.
+      - Note `Reader_mzML::read`'s cases declare a local `Serializer_mzML::Config config` that
+        **shadows the `Reader::Config` parameter** (msvc C4457, pre-existing). The call is placed
+        after the switch, where `config` is the parameter again; there is a comment saying so.
+- [x] `MSData.cpp`'s default `calibrationSpectraAreOmitted()` comment no longer claims "currently
+      only Waters lockmass functions are actually handled"
+- [x] `PwizFileInfoTest.TestWatersCalibrationSpectrum` split into `VerifyUntaggedLockmassSpectrum`
+      (3 spectra, Skyline still identifies function 3 itself) and
+      `VerifyTaggedLockmassSpectrumOmitted` (2 spectra - pwiz removed the labeled one before Skyline
+      saw it). Required rebuilding + restaging the CLI bindings, per
+      [[reference_rebuilding_pwiz_cli_bindings]].
+
+Verified: `SpectrumList_IgnoreCalibrationScansTest` (new unit test - removal, renumbering, `find()`,
+and that the index map fetches the *right* inner spectrum, not merely one with the right id);
+`pwiz/data/msdata` 281 targets; `pwiz/analysis/spectrum_processing` 61 targets; all 7
+`PwizFileInfoTest` methods. The Skyline assertion `AreEqual(2, SpectrumCount)` on the tagged fixture
+is genuine end-to-end proof - it reads 3 if the wrapper is not working.
+
+**NOT verified: the UIMF skip itself.** `BSA_10ugml_CID.UIMF` is the only UIMF test file and holds
+only `frameType=1` and `2`, so no reference mzML moves and nothing exercises the new branch.
+`Reader_UIMF_Test` passing establishes only that the `index`/`rawIndex` split did not break normal
+indexing - which was the risky part, but is not the same claim. **Say so in the commit; do not let
+it read as covered.**
+
+**An earlier draft of this entry said closing it "cannot be synthesized without the UIMF writer SDK".
+That was wrong** - `/code-review max` caught it and the check is trivial: `head -c 16` on the fixture
+gives `SQLite format 3`. Frame types live in `Frame_Parameters.FrameType`, `FrameType_Calibration` is
+3 (`UIMFReader.hpp:48`), and the checked-in `trim_data.sql` already does direct SQL surgery on this
+same file. So the fixture is about one `UPDATE Frame_Parameters SET FrameType=3 WHERE FrameNum=1;`
+away, with `generate_uimf_mzml.bat` regenerating the reference. Worth confirming the managed
+UIMFLibrary agrees with hand-edited SQL, but there is no SDK blocker. `Reader_UIMF_Test.cpp:55`
+declares no `ReaderTestConfig` variants at all, where the Waters half of this branch does it properly
+at `Reader_Waters_Test.cpp:122-140`.
+
+#### `/code-review max` round 4 (2026-08-22) - 15 findings, 12 acted on
+
+Two of them corrected claims **this TODO** was making; both are fixed above rather than left as
+errata. The rest, in the order they matter:
+
+- [x] **`calibrationSpectraAreOmitted()` returned `true` whenever the wrapper existed**, not when it
+      had removed anything - and `create()` wrapped on the fileContent declaration alone. On a file
+      declaring the term with no spectrum carrying it (the #4499 shape this branch's Phase 6 cites),
+      the wrapper removed nothing, said it had, and `MsDataFileImpl.cs:827` stood Skyline down from
+      its own lockspray heuristic - so lockspray summed into chromatograms. **Worse than before the
+      change.** `create()` now returns `inner` untouched when the scan finds nothing, and the
+      override is `indexMap_.size() != inner_->size() || inner_->calibrationSpectraAreOmitted()`.
+      Covered by `testLeavesDeclaredButUntaggedFilesAlone`.
+- [x] **`spectrum()` renumbered the inner list's own object.** `SpectrumListSimple` hands back the
+      element itself, so `result->index = index` corrupted it; `SpectrumList_Filter.cpp:150` deep
+      copies for exactly this reason. Now copies first. The unit test was corrupting its own fixture
+      and passing, so it now re-inspects `inner` afterwards.
+- [x] **UIMF file TIC still summed dropped frames** - the same defect this branch already fixed for
+      Waters (`ChromatogramList_Waters.cpp:127`). `getTic` gained `ignoreCalibrationFrames`, and
+      `ChromatogramList_UIMF` now takes `Reader::Config` (it previously took only the reader, so the
+      guard could not even be written).
+- [x] **`Reader_UIMF::fillInMetadata` declared MS:1000928 regardless of the flag**, manufacturing a
+      fresh instance of #4499 - and the new mzML gate trusts that declaration, so every later read
+      paid a full scan to remove nothing. Now gated on `!config.ignoreCalibrationScans`.
+- [x] **mzML/mzMLb/mz5 output kept a fileContent declaration it no longer honored.** New
+      `applyIgnoreCalibrationScans` helper strips the term when spectra were actually hidden, so
+      msconvert stops emitting files that advertise content they do not have.
+- [x] **mz5 ignored the flag entirely, and its vector overload dropped `Config`** - `read(filename,
+      head, *results.back())` discarded runIndex and config both, so *every* Reader::Config option
+      was lost through the overload msconvert uses. Fixed and wired to the wrapper.
+- [x] **msconvert silently dropped to single-threaded.** It infers threading from whether the top
+      list is a `SpectrumListWrapper`, and the inherited `benefitsFromWorkerThreads()` answers false
+      when the list underneath is not itself a wrapper. Overridden to `true`, restoring the
+      pre-wrapper behavior.
+- [x] **`scanTimeToFrameMap_` was left unfiltered** while `index_` was filtered, so `spectrum3d()`
+      could still reach a calibration frame - and one whose retention time matched a surviving
+      frame's would *replace* it in the map, handing back calibration data for an MS1.
+- [x] **No `find()`/`findAbbreviated()` override.** The base delegates to the inner list only while
+      sizes match, so hiding one spectrum dropped id lookup from a hash onto a linear scan, and
+      `findAbbreviated` onto a scan of scans - which Skyline calls per full-scan-viewer open.
+- [x] **`DetailLevel_FullMetadata` does not avoid reading the arrays**, only decoding them: the
+      parser still pulls each encoded blob off disk. The comment claiming otherwise is corrected, and
+      the loop now tolerates a spectrum that will not read rather than making the file unopenable.
+- [x] Four places still documented the flag as Waters-only (`Reader.hpp:68`, `msconvert.cpp:449`,
+      `msconvert-help.txt:57`, CLI `MSData.hpp`/`MSData.cpp` - the last also misnamed it
+      `--ignoreCalibrationSpectra`).
+- [x] `VerifyTaggedLockmassSpectrumOmitted`'s assertions were weak: `WatersFunctionNumber <= 2` is a
+      lifted nullable comparison that fails on null, and the `IsWatersLockmassSpectrum` assertion was
+      vacuous (with function 3 removed the first surviving spectrum is function 1, so the probe would
+      decline to infer either way). Now asserts the surviving functions by value and checks the
+      handshake directly via a new `MsDataFileImpl.CalibrationSpectraAreOmitted`.
+
+**Deferred, with reasons - these are real, not refuted:**
+
+- [ ] **`MsDataFileImpl.cs:827` consumes a narrower guarantee as a broader one.** pwiz removes the
+      labeled lockspray function; Skyline's rule is "everything at or above the lockmass function is
+      not data", which the comment at 836-841 says exists for non-MS functions above it (analog/UV,
+      "electromagnetic radiation spectrum"). With function 3 removed, the probe sees function 1 first
+      and infers nothing, so a function 4 stops being excluded. Note removing the gate does **not**
+      fix this - the removal itself is what changes what the probe sees. The real fix is for Skyline
+      to exclude non-mass-spectra by type rather than by function arithmetic, which is a chromatogram
+      semantics decision, not a mechanical one.
+- [ ] **Osprey `.spectra.bin` parity.** `VendorRawReader.cs:150` uses `spectrum.Index` as the record
+      id under a comment asserting it matches the mzML `index` attribute `MzmlReader` reads; any
+      filtering wrapper renumbers, so the two read paths diverge on a declaring mzML. Contiguous
+      renumbering is required of a `SpectrumList`, so the fix belongs on Osprey's side - either read
+      the attribute or record the source index explicitly.
+- [ ] **No progress or cancellation on the constructor's scan.** `SpectrumList_Filter.cpp:64-69`
+      broadcasts and honors `Status_Cancel`; `create()` has no `IterationListenerRegistry` plumbed
+      through `Reader::read` to pass one.
+- [ ] **UIMF reader-level coverage** - see the corrected note above; the fixture is editable SQLite
+      and `Reader_UIMF_Test.cpp:55` declares no `ReaderTestConfig` variants, unlike
+      `Reader_Waters_Test.cpp:122-140`.
+
+Verified after the fixes: `pwiz/data/msdata`, `pwiz/analysis/spectrum_processing` and
+`pwiz/data/vendor_readers/UIMF` all green (221 targets); all 7 `PwizFileInfoTest` methods green after
+rebuilding and restaging the CLI bindings.
+
+#### Gated on psi-ms-CV #541 landing (then re-vendor `psi-ms.obo`)
+
+Do none of these until the reparent is merged and the CV regenerated - the additive form is
+*illegal* under today's semantic mapping, which is exactly why #4499 withdrew the writer.
+
+- [ ] **Restore the additive Waters writer** - per-spectrum `MS:1000928` alongside the existing
+      spectrum type in `SpectrumList_Waters::spectrum()`, and the `fileContent` half in
+      `Reader_Waters.cpp`. Reverted in Phase 6 (`85d99ed85`); recover it from there rather than
+      rewriting. Prerequisite beyond #541: the `fileContent` "committed pre-filter" fault in
+      https://github.com/ProteoWizard/pwiz/issues/4499, since the new mzML wrapper above *trusts*
+      that declaration. Landing this is also what would finally retire Skyline's function-number
+      heuristic, since our own msconvert output would stop being untagged.
+- [ ] **UIMF `SpectrumList_UIMF.cpp:106` becomes additive** - it currently writes
+      `MS_calibration_spectrum` **instead of** `MS_MS1_spectrum`/`MS_MSn_spectrum`. Once the term is
+      an attribute, such a frame would carry no spectrum type at all.
+- [ ] **`MSe_Short_tagged.mzML`** (in `TestData\WatersLockmassMzml.zip`) declares
+      `calibration spectrum` as the lockspray scan's sole type; it would need `MS1 spectrum` plus the
+      attribute. Regenerate with `--noindex` - see Phase 5 on offsets.
+
+**Interim policy while #541 is open (Brian, 2026-08-21): where a writer must choose one term, emit
+`MS_calibration_spectrum`.** Consumers typically want to ignore calibration scans, and the marker is
+the only thing that lets them; losing the accompanying spectrum type is the lesser cost. So
+`SpectrumList_UIMF.cpp:106`'s sole-type write **stays as it is** - it is not a bug to be fixed early,
+it is the preferred behavior until the attribute reparent makes the additive form legal.
+
+#### Ungated follow-up: move the Waters lockmass inference from Skyline into pwiz
+
+**Not blocked by #541** - this is about *untagged* files, not about the term's parentage, so it can
+be done any time. Brian's direction, 2026-08-21.
+
+After Phase 12 the responsibility split is: pwiz handles every case it can *identify* (Waters raw by
+lockmass function, UIMF by frame type, mzML by MS:1000928), and Skyline still handles the one case
+pwiz cannot - **untagged mzML with MassLynx `function=` ids**, where the lockspray function has to be
+inferred. That case is permanent (every file converted by an older msconvert), so
+`IsWatersLockmassSpectrum` cannot simply be deleted. But the inference itself has no business being
+Skyline-only: `msconvert --ignoreCalibrationScans` on an untagged Waters mzML **silently does
+nothing** today, which is the same asymmetry Phase 12 just closed for the tagged case.
+
+**pwiz is the structurally safer home, not merely the more convenient one.** The reported defect was
+Skyline parsing the function number *positionally*, so `channel=2 process=0 spectrum=1 scan=1` read
+channel 2 as function 2. pwiz's `id::value(id, "function")` (`MSData.hpp:974`) is **name-keyed** and
+simply finds nothing in the waters_connect dialect - the carve-out that
+`WATERS_FUNCTION_ID_LAYOUTS` has to encode explicitly in `MsDataFileImpl.cs` comes for free.
+`MS_Waters_nativeID_format` (MS:1000769, set at `Reader_Waters.cpp:93`) gives a second gate that
+waters_connect files do not satisfy either.
+
+Sketch, as a sibling of `SpectrumList_IgnoreCalibrationScans`:
+
+1. **Gate** - flag set, sourceFile declares `MS_Waters_nativeID_format`, and fileContent does *not*
+   declare MS:1000928 (tagged files are already handled by the Phase 12 wrapper).
+2. **Probe** - read until the first spectrum carrying an ms level; if that level is 1 and its
+   `function` is present and > 1, that is the lockspray function. Mirrors
+   `MsDataFileImpl.cs:829-851`, which breaks at the first ms-level spectrum.
+3. **Filter** - drop every spectrum whose `function` >= that, read straight from
+   `spectrumIdentity().id`.
+
+Step 3 needs **no spectrum reads at all** - the function number lives in the index - so this is
+*cheaper* than the tagged path, which must read metadata to see the cvParam. Implementation note: use
+`id::value()` (string) rather than `id::valueAs<int>()`, which returns 0 for an absent key and would
+blur "no function" into "function 0".
+
+**Two things to be deliberate about.**
+
+- *It promotes a guess into the reader.* For `.raw` pwiz **knows** (`TryGetLockMassFunction`); for
+  mzML it would **infer**, so `calibrationSpectraAreOmitted()` starts sometimes meaning "I guessed".
+  `85d99ed85` deliberately *removed* a guess, so this cuts against a recent decision and should be
+  argued rather than slipped in. What makes it defensible: it fires only under an opt-in flag
+  (msconvert defaults false), so the user has asked for these scans gone - and Skyline sets it
+  unconditionally, so a faithful port is behavior-neutral there.
+- *The failure mode is reintroducing the reported bug one layer down.* A wrong dialect gate would
+  have **msconvert** discarding waters_connect spectra - strictly worse than the original, which was
+  Skyline-only. Needs the same mutation-level rigor Phase 7 applied: re-add a positional/channel
+  reading and prove a test fails. The name-keyed parse makes this structurally hard rather than
+  merely tested-against, which is the main reason it is worth doing at all.
+
+**Payoff:** Skyline can then delete `IsWatersLockmassSpectrum` (`MsDataFileImpl.cs:515`), the
+`_lockmassFunction` probe loop, and both call sites (`SpectraChromDataProvider.cs:1238`, and the
+SONAR IM probe at `MsDataFileImpl.cs:1830`) - so "Skyline sets the flag and does not worry about it"
+becomes literally true. `PwizFileInfoTest.VerifyUntaggedLockmassSpectrum` is what currently pins that
+logic and would move to the pwiz side with it.
+
+**Do this as its own PR, not on #4498.** That branch already spans Skyline, pwiz, BiblioSpec and
+Common under a `skyline` prefix, is awaiting Matt's re-review, and his comment #4 already offered to
+split the `SpectrumList_Filter` change out. Adding Waters inference to the reader would make the
+scope problem worse, and the Skyline deletions want to land as one coherent change rather than half
+here.
+
+#### Interaction with #4589 (merged into this branch 2026-09-23)
+
+`#4589` ("keep spectra that have no m/z and intensity values") replaced `Mzs.Length == 0` with a new
+`SpectraChromDataProvider.IsEmptySpectrum()` in four places. **No collision with this branch**: the
+empty-spectrum drop (`SpectraChromDataProvider.cs:1235`) sits upstream of the lockspray/calibration
+drop (`:1243-1254`) and both are `continue`, so widening what survives the first check cannot leak a
+calibration scan - anything that is lockspray is still caught below. The Phase 12 wrapper removes
+labeled spectra in pwiz before either check sees them.
+
+It does, however, **sharpen the first deferred item above** (`MsDataFileImpl.cs:827` consuming a
+narrow guarantee as a broad one). That item's concern is non-MS functions above the lockmass one
+(analog/UV): such a scan carries no m/z values, so it used to be dropped by `Mzs.Length == 0`
+regardless of the probe. Post-#4589, if it declares scan window limits it survives that drop, and its
+exclusion rests entirely on `IsWatersLockmassSpectrum` - which infers nothing once pwiz has removed
+the labeled function. Narrow but real; needs all of:
+
+1. a Waters file where pwiz actually removed a labeled lockspray function (today only the
+   `MSe_Short_tagged.mzML` fixture, since Phase 6 withdrew the writer),
+2. `_filter.IsWatersMse` **false** - the MSe branch's `WatersFunctionNumber > 2` catches function 4
+   regardless of the probe, so only the plain `IsWatersFile` branch at `:1250` is exposed,
+3. a function > 3 scan with no m/z values that *does* declare scan window limits.
+
+Not a defect to fix here, but it is a concrete argument for the deferred item's real fix (exclude
+non-mass-spectra by type, not by function arithmetic) that did not exist before 2026-09-23.
+
+#### Port impact: what Phase 12 costs the net8 / pwiz-sharp port
+
+Surveyed 2026-09-23 against `C:\Dev\pwizSharp` (`chambem2/pwiz-sharp`). See
+[[TODO-20260612_net8_port]]. The port swaps Skyline's data layer from the `pwiz.CLI` C++/CLI bindings
+to managed `pwiz-sharp`, so the question is not how many of these C++ lines get rewritten - the C++
+keeps serving msconvert - but which of these mechanisms Skyline still reaches once it no longer goes
+through pwiz.CLI.
+
+**The Phase 4 baseline is already ported, with test parity.** Verified present: `ReaderConfig`
+`IgnoreCalibrationScans` (`pwiz-sharp/pwiz/src/MsData/IReader.cs:82`, genuinely wired, not one of the
+fields that file marks "advisory"); `CalibrationSpectraAreOmitted` on the list interface
+(`MsData/ISpectrumList.cs:46`), its `=> false` base default (`:87`), the Waters override
+(`Vendor/Waters/SpectrumList_Waters.cs:269`, same two conditions as `SpectrumList_Waters.cpp:632`),
+and wrapper delegation (`Analysis/SpectrumListWrapper.cs:60`). `MS:1000928` exists
+(`Common/CVID.generated.cs:3478`) with `CvIsA`/`HasCVParamChild` over `is_a` edges parsed from
+embedded OBO at runtime (`Common/CV.cs:168`, `:264-294`). So the `MsDataFileImpl.cs:827/:875`
+handshake has somewhere to land.
+
+**Genuinely new C# work - roughly 390 of Phase 12's 633 native lines:**
+
+- `SpectrumList_IgnoreCalibrationScans` (~260) - absent; a new `SpectrumListWrapper` subclass, with
+  the base class and all of mzML/mz5/mzMLb already present.
+- `applyIgnoreCalibrationScans` fileContent reconciliation (~38) - absent, but the hook is placed:
+  `FillInCommonMetadata` sits at the matching call site (`MsData/MzmlReaderAdapter.cs:66-70`, whose
+  comment cites `DefaultReaderList.cpp:168`).
+- UIMF honoring the flag (~90) - absent there *and* in C++ master, so new on both sides. Groundwork
+  is in place: `UimfFrameType.Calibration = 3` (`Vendor/UIMF/UimfData.cs:14`), per-entry `FrameType`
+  in the index, and the `MS_calibration_spectrum` mapping (`SpectrumList_UIMF.cs:102`). A ctor
+  parameter plus a `continue`.
+
+**Costs the port nothing:** the `SpectrumList_FilterPredicate_MSLevelSet` reorder (39 lines).
+`MsLevelPredicate.Accept` already reads the declared ms level and *only* that -
+`Analysis/Predicates.cs:119-124`, no spectrum-type gate, no `cvIsA(..., MS_mass_spectrum)`, no
+tribool. This branch moves the C++ toward what the port already does, which is worth saying in
+Matt's thread since he wrote both.
+
+**Two concerns that evaporate, and one new one:**
+
+- `benefitsFromWorkerThreads() => true` has no analogue - no such hook exists anywhere in pwiz-sharp,
+  which is single-threaded by documented decision (`docs/module-detail-data_msdata.dot:125`). The
+  regression that override exists to prevent cannot occur there.
+- The `find()`/`findAbbreviated()` remap has no analogue either, because pwiz-sharp's
+  `SpectrumListWrapper` does not delegate them at all - every wrapper there already pays the O(n)
+  scan. Pre-existing and affects all 17 wrapper subclasses; worth telling Matt, but not this
+  branch's problem.
+- **New risk:** the pwiz.CLI-compat shim (`Tools/MsConvertGUI/src/Compat.cs`) exposes the config
+  *flag* but **not** the `CalibrationSpectraAreOmitted` getter. If Skyline binds to a
+  pwiz-sharp-backed shim, that accessor must be surfaced or the handshake silently reads false and
+  Skyline falls back to its lockspray heuristic - exactly the failure the Phase 12 code-review round
+  caught once in C++. Note also an unrelated, unread `ReaderConfig.CalibrationSpectraAreOmitted`
+  *setter* at `IReader.cs:214`: two members with that name, one meaningless.
+
+**Free leverage, and why the UIMF fixture gap matters more than it looks.** The port's harness
+byte-compares Waters against the C++ reference mzML *for this flag* -
+`HDDDA_Short_noLM-combineIMS-centroid-cwt-ignoreCalibrationScans.mzML`, resolved by
+`TestHarness/ReaderTestConfig.cs:183` reproducing the C++ filename mangling, reading the C++ fixture
+directory in place. So any reference mzML this branch generates becomes a port oracle for free; skip
+the calibration-frame UIMF fixture and *neither* side gets coverage.
 
 ## Open Questions / Unresolved
 
