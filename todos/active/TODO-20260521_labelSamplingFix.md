@@ -201,6 +201,28 @@ this checkout used 2022.
 PR state: all review threads resolved, CI green, no approval yet, and the merge above clears the BEHIND
 status. Still open from the list below: the interactive cursor confirmation.
 
+## 2026-09-22 - Sampler still too aggressive on dense marker clouds
+
+Developer reported the Relative Abundance panel of
+`ProteoBugs/NotEnoughLabels/ExtracellularVesicalMagNet.sky` showing only 3-4 labels with both formatted series
+marked as labeled, while most of the plot was empty.
+
+Root cause: the per-cell cap in `SamplePointsByDensityGrid` divided by `GridCell.PointCount`, which
+`LabelLayout.FillDensityGrid` increments once per **data point marker**, not per label candidate. So
+`MAX_LABELS_PER_CELL = 4` really meant "4 divided by the marker density under this label". On a plot whose
+labeled points sit on a ribbon of ~1600 markers, a cell covering 30 markers gives a keep probability of 4/30,
+independent of how much free space the chart has - which is what starved the plot.
+
+It was also double counting: marker density is already handled downstream twice, by the annealer's
+`EvaluateLabelBaseCost` and by the pruner's foreign-marker check.
+
+Fix: count label candidates per cell (a histogram of the cells already computed for the candidates) and cap on
+that. `MAX_LABEL_AREA_RATIO` left at 0.3 - the developer confirmed the plot looks right without raising it.
+
+No regression test (developer's call - not a critical bug). Note for anyone re-checking: the four existing
+tests pass identically before and after the fix, so none of them covers this behavior. Reproducing it needs a
+document whose labeled points sit on a large marker cloud, which `Rat_Plasma.sky` is not.
+
 ## Notes
 
 - The annealer already soft-avoids markers via the density grid
