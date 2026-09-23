@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260819_osprey_gbt_regression`
 - **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-09-18; was `master`)
 - **Created**: 2026-08-19
-- **Status**: PR open on the port branch; review fixes pushed 2026-09-18 (`386ce6457a`, TeamCity #687 green, 600 tests); waiting on Mike
-- **GitHub Issue**: [#4592](https://github.com/ProteoWizard/pwiz/issues/4592)
+- **Status**: Completed
+- **GitHub Issue**: [#4592](https://github.com/ProteoWizard/pwiz/issues/4592) (closed by hand 2026-09-23)
 - **Module**: `osprey`
-- **PR**: [#4595](https://github.com/ProteoWizard/pwiz/pull/4595)
+- **PR**: [#4595](https://github.com/ProteoWizard/pwiz/pull/4595) (merged 2026-09-23 into the port branch as `cec7ee38d9`)
 
 ## Objective
 
@@ -163,10 +163,14 @@ two new fields, deriving them for files written before they existed. MARS 60/60 
 
 ### Phase 7: Pre-merge
 
-- [ ] TeamCity
-- [ ] Human review
+- [x] TeamCity - Perf/Regression #263 (ID 4184395) SUCCESS at `b0f070cd98`; the four automatic
+      checks green on the final head `28d1e27196`
+- [x] Human review - Mike approved
 
 ## Status
+
+**Completed** - merged 2026-09-23 as `cec7ee38d9`; see the final Progress Log entry.
+(The paragraph below is the historical pre-push status, kept for the MARS validation table.)
 
 Both commits are on the branch locally and NOT pushed. Osprey.Test is green on both
 target frameworks: 588/588 on net472 and 588/588 on net8.0.
@@ -297,3 +301,20 @@ request is impossible - GitHub returns 422 "Review cannot be requested from pull
 author" because the PR is his - so his sign-off will be a comment. Brendan merges after that;
 squash subject `osprey: Added squared-error objective and model persistence to Osprey.ML
 GradientBoostedTrees (#4595)`, third bullet to cite the golden test, not regression.ps1.
+
+### 2026-09-23 - Merged
+
+PR #4595 squash-merged into `Skyline/work/20260612_net8_port` (the .NET 10 port, #4619) as
+`cec7ee38d9`; it reaches `master` when #4619 merges. Before the merge the branch was synced
+with the port tip, which carried #4694 (`17e5945523`, no shared files), as merge commit
+`28d1e27196`: Build-Osprey 598/598 tests, zero inspection warnings, and the four automatic
+TeamCity checks green on that head. Perf/Regression was not re-run on the synced head; it
+passed on the PR's own code at `b0f070cd98` (#263), and #4694's side passed separately (#262).
+An earlier Perf/Regression run, #260 at `386ce6457a`, failed; the only change between it and
+#263 was a port-branch merge, so that failure came from the base, not this PR. A TeamCity
+settings commit (`2b3ee1d2c2`) landed on the port branch a minute before the merge and
+became the squash's parent. Issue #4592 closed by hand with a completion comment, since
+GitHub does not auto-close on a non-default base. Deviation: the squash subject shipped as
+`osprey: Added a squared-error objective to Osprey.ML GradientBoostedTrees (#4595)` - it
+omits the "and model persistence" wording planned in the entry above (persistence is in
+the second bullet). Nothing deferred from scope; the Follow-up Work section stands as written.
