@@ -190,7 +190,10 @@ For each exception in the **"Needs Attention"** section of the exception report:
 ### Exception: [fingerprint] - [signature]
 - Exception ID: [id]
 - Report: exceptions-report-YYYYMMDD.md
-- Version: [version] — check code in the relevant pwiz checkout (release branch or master)
+- Version: [version] — check code in the checkout matching the failure's folder
+  (master → `C:\proj\pwiz`, release → `C:\proj\skyline_26_1`,
+  Integration → `C:\proj\integration`); see "Which checkout to read source from"
+  in ai/docs/daily-report-guide.md
 - Steps:
   1. get_exception_details(exception_id=XXXXX)
   2. Read code at stack trace location — understand the actual failure mechanism,

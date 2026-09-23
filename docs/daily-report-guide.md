@@ -301,7 +301,15 @@ backfill_nightly_history()
 backfill_exception_history()
 ```
 
-These are additive and non-destructive - they merge new data into existing history files without losing prior records.
+**These REBUILD rather than merge.** `backfill_nightly_history` re-queries every folder and
+writes a fresh history, so the run data it produces covers exactly the window it was given -
+passing `since_date` narrows the file to that window rather than adding to what is there.
+Recorded fixes and issues ARE carried across (and any that no longer match an entry are kept
+under `_orphaned_fixes`), but nothing else is.
+
+Prefer the default window. The previous contents rotate to `history/backups/` on every write,
+so a narrowed backfill is recoverable - that is how the 2026-09-22 loss of all seven recorded
+fixes was recovered, before the re-application step behind them was implemented.
 
 **Output files updated:**
 - `ai/.tmp/history/nightly-history.json` - Test failures, leaks, hangs with fingerprints
@@ -739,6 +747,26 @@ exercises. Tests named "AgilentFormatsTest" or "WatersLockmassChromatogramTest" 
 leaking because of Agilent or Waters code — they leak because of the shared regression.
 Without an explicit list, downstream reporting may see vendor names in test names and
 incorrectly categorize them as chronic vendor-specific leaks.
+
+## Which checkout to read source from
+
+The nightly folders are **branches**, and each has its own checkout on disk. Read source
+from the checkout matching the folder the failure came from - the stack trace, the line
+numbers and `git log` all differ between them.
+
+| Nightly folder | Branch | Read source from |
+|---|---|---|
+| Nightly x64, Performance Tests | master | `C:\proj\pwiz` |
+| Release Branch, Release Branch Performance Tests | release | `C:\proj\skyline_26_1` |
+| Integration, Integration with Perf Tests, Integration Leak Detection | `Skyline/work/20260612_net8_port` (PR #4619) | `C:\proj\integration` |
+
+**Name the checkout you read in the finding.** A diagnosis that does not say which tree it
+came from cannot be checked, and the two trees disagree about exactly the files that fail:
+the port branch has `pwiz-sharp/`, a different SkylineTester and test runner, and its own
+`SkylineNightly`. `C:\proj\pwiz` is kept on master by the scheduled reports; do not check
+out a branch in it - see the guarded fast-forward in `Invoke-DailyReport.ps1`.
+
+---
 
 ### Investigate Leaks
 
