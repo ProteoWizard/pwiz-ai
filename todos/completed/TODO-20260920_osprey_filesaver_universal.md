@@ -5,8 +5,9 @@
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port, PR #4619), synced to its tip as of
   merge commit `412751ae97` (2026-09-22) + a local merge on top for the log/artifact simplification
 - **Module**: `osprey`
-- **Status**: PR #4694 open (base = port branch); local gates green post-sync; /code-review re-review
-  of the log/artifact simplification and TeamCity still pending
+- **Status**: Completed
+- **PR**: [#4694](https://github.com/ProteoWizard/pwiz/pull/4694) (merged 2026-09-23 into the port
+  branch as `17e5945523`)
 
 ## Why
 
@@ -64,7 +65,8 @@ self-deleting writability check — no content ever persists).
 - [x] Synced with PR #4619's tip (merge commit `412751ae97` on origin, then a local merge on top):
       re-ran `Build-Osprey.ps1 -RunTests -RunInspection` - 595/595, zero warnings
 - [x] `regression.ps1 -Dataset Stellar` re-run post-sync - PASSED, all modes
-- [ ] TeamCity Perf/Regression on `pull/4694` with the agent pin (ask first)
+- [x] TeamCity Osprey Windows .NET Perf/Regression Tests on `pull/4694` at head `4dbeafacb0` -
+      SUCCESS (build #262, ID 4184393); build #261 had covered the pre-simplification `412751ae97`
 
 **Review round (2026-09-20/21)**: `/code-review max` found 15 issues, mostly real races/leaks the
 conversion introduced (two unsynchronized writers of the same search-XIC file; CoAssignRowDump
@@ -117,3 +119,18 @@ direct test coverage before this branch either.
   merged docs/00 P8 section reflects the current log/artifact split, not #4693's
   now-stale wording. Re-ran build/test/inspection clean (595/595) and
   `regression.ps1 -Dataset Stellar` - PASSED, all modes. Pushing now.
+
+### 2026-09-23 - Merged
+
+PR #4694 squash-merged into `Skyline/work/20260612_net8_port` (the .NET 10 port, #4619) as
+commit `17e5945523`; it reaches `master` when #4619 merges. Shipped: every durable artifact
+(`cs_features.tsv`, `WriteCutoffs`, the one-shot `-d` dumps, the search-XIC dump) commits
+through `FileSaver`; the five log-shaped dumps (`CoAssignRowDump` rows and four held-open
+`OspreyFileDiagnostics` streams) write directly so a crash leaves partial progress;
+`OSPREY_KEEP_FAILED_WRITES` and `DiagnosticFileLock` added; docs/00 P8 and docs/14 describe
+the split. Final gates: 595/595 + zero inspection warnings, Stellar regression PASSED, and
+TeamCity Perf/Regression build #262 SUCCESS on the merged head. PR description rewritten
+before merge to match what shipped. Deviations: the log/artifact simplification commit
+(`8684e0ead5`) was not put through its own `/code-review` pass (the first round covered the
+all-FileSaver version); the `-d` dump paths were never run live end-to-end; and the
+pre-existing NaN/rounding formatting gap in two dump methods remains unfiled.
