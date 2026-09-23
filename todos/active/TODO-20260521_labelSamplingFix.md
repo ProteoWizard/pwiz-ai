@@ -1,7 +1,8 @@
 # Fix aggressive label sampling in Volcano / Relative Abundance plots
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260521_labelSamplingFix` (pwiz1)
+- **Branch**: `Skyline/work/20260521_labelSamplingFix` (pwiz2 as of 2026-09-22)
+- **Module**: `skyline`
 - **Base**: `master`
 - **Created**: 2026-07-21
 - **Status**: In Progress
@@ -184,6 +185,21 @@ clears the static saved layout via `OnLabelOverlapPropertyChange`
 layout. Verified: en/ja/fr/zh batch onscreen (SkylineTester scenario),
 en single onscreen (pins intact), en+ja offscreen batch, volcano +
 rel-abundance tests - all green.
+
+## 2026-09-22 - Picked back up
+
+Moved the working checkout to `pwiz2` and merged `origin/master` (58 commits behind, clean merge, no
+conflicts; the PR diff is intact). Build clean, and `TestLabelLayoutDeterminism`, `TestVolcanoPlotFormatting`,
+`TestVolcanoPlotLayout` and `TestPeakAreaRelativeAbundanceGraph` all pass in en offscreen.
+
+Build gotcha in a fresh checkout of this branch: `CommonMsData` now pulls `Microsoft.Extensions.Http` 9.0.4 as
+a NuGet `PackageReference`, so a checkout with no restored packages fails with `CS0234 Microsoft.Extensions`
+and `IHttpClientFactory` not found. `MSBuild Skyline.sln /t:Restore` fixes it; no code change needed.
+Note also that MSBuild now resolves to Visual Studio 18 Community on this machine, where earlier builds in
+this checkout used 2022.
+
+PR state: all review threads resolved, CI green, no approval yet, and the merge above clears the BEHIND
+status. Still open from the list below: the interactive cursor confirmation.
 
 ## Notes
 
