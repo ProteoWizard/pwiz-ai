@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260923_skylinetester_zip_fixes`
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-23
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4699](https://github.com/ProteoWizard/pwiz/pull/4699) (merged 2026-09-23)
 
 ## Objective
 
@@ -70,10 +70,10 @@ Nothing automated consumed the root copy: `SkylineNightly` launches
 
 ## Verification
 
-- [ ] `Build-Skyline.ps1 -Target SkylineTester -Configuration Release` - 0 errors
-- [ ] `build.bat Release --no-tests SkylineTester.zip` produces the distro zip
-- [ ] Zip root contains `SkylineTester.cmd` and no `SkylineTester.exe`
-- [ ] Extracted outside any `Skyline` ancestor, `SkylineTester Files\SkylineTester.exe`
+- [x] `Build-Skyline.ps1 -Target SkylineTester -Configuration Release` - 0 errors
+- [x] `build.bat Release --no-tests SkylineTester.zip` produces the distro zip
+- [x] Zip root contains `SkylineTester.cmd` and no `SkylineTester.exe`
+- [x] Extracted outside any `Skyline` ancestor, `SkylineTester Files\SkylineTester.exe`
       lists tests instead of showing the empty-tree dialog
 
 ## Notes
@@ -81,3 +81,20 @@ Nothing automated consumed the root copy: `SkylineNightly` launches
 Found while reviewing Integration-branch nightly runs. The third issue from that review,
 the `RefineConvertToSmallMolecules*` `LibraryDotProduct` failure, was fixed separately by
 PR #4631 (`WaitForLibrariesLoaded`) and needs nothing here.
+
+## Progress Log
+
+### 2026-09-23 - Merged
+
+PR #4699 merged as commit bba77099 onto `Skyline/work/20260612_net8_port`. Both
+defects shipped as described: `FindTestAssembly` now falls back to `ExeDir`, and the
+zip root carries `SkylineTester.cmd` in place of the apphost that could not start.
+Verified end to end on a zip extracted outside any `Skyline` ancestor - SkylineTester
+listed tests with no empty-tree dialog, and the launcher started the nested copy with
+`SkylineTester Files` as its working directory, arguments intact.
+
+The change reaches master only when PR #4619 merges, since this landed on the port
+branch. Nothing was deferred. The `Skyline Windows .NET` build failed once on
+`TestKoinaSkylineIntegration` (360s `WaitForGraphs` timeout, external prediction
+service) and passed on re-run of the same commit; no code in this PR is reachable
+from that test, as no test project references `SkylineTester.csproj`.
