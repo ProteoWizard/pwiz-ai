@@ -195,11 +195,51 @@ or round-tripping breaks for any name containing a reserved character.
 - **Run the baseline before the change, not after.** The full suite was run with the changes
   already in, so separating new failures from pre-existing ones meant reading each stack.
 
-## Overlap with TODO-20260823_resharper_cleanup
+## Overlap with TODO-20260823_resharper_cleanup (measured 2026-09-23)
 
-Same goal, different entry point, and neither knew about the other until 2026-09-23. That
-branch has 12 commits and covers SkylineBatch and AutoQC, which this work does not touch at
-all; this work has the in-build inspection, the severity policy and the sweep, which that one
-does not. They should be reconciled deliberately - decide which branch owns the
-`.editorconfig` severity policy before both edit it - rather than discovered as a conflict at
-merge time.
+Same goal, different entry point, and neither knew about the other until 2026-09-23. The two
+are mostly complementary: that branch works the projects OUTSIDE `Skyline.sln` - SkylineBatch,
+AutoQC, SharedBatch - which the inspection measured here never sees.
+
+**`Skyline/work/20260823_resharper_cleanup` has no PR and never has.** 12 commits on origin,
+idle since 2026-08-24, merge base `2cb66ee39d`, now **179 commits behind** the port branch.
+
+Its sibling DID land: [#4648](https://github.com/ProteoWizard/pwiz/pull/4648) (merged
+2026-09-10) carried the WebClient migration and the prohibition rule to master, and the net8
+line has it. Verified on `origin/Skyline/work/20260612_net8_port`: `DownloadDlg.cs` uses
+`HttpClientWithProgress`, the `CodeInspectionTest` WebClient rule is present, and the only
+`new WebClient` left under `Executables` is `Installer/SetupDeployProject.cs`. So **4 of the
+12 commits are already in by content** (`3d1e03b3b3`, `a7ba7007f6`, `54c3d374c1`,
+`f6180de116`); `git cherry` still reports them as unmerged because #4648 was squash-merged.
+
+What is actually stranded on that branch is 8 commits over ~41 files:
+
+| Commit | What |
+|---|---|
+| `d75c9b1b8a` | net472 build + test prerequisites for SkylineBatch and AutoQC (13 files) |
+| `e03778809f` | 12 ReSharper warnings in the batch tools |
+| `bb760ed8d0` | 20 warnings in the shared assemblies |
+| `38eb21a434` | 8 warnings in AutoQC and CommonUtil |
+| `7d55c6b316` | 4 null-analysis warnings in CommonUtil |
+| `50ff57ef89` | 6 warnings, plus two documented as unfixable |
+| `47513caf32` | **Fix**: AutoQC suite hanging on a modal Skyline error dialog |
+| `1a99335fa3` | **Fix**: DNS failures reported as connection failures on net8 |
+
+The last two are real bug fixes, not warning cleanup, and are the strongest argument for not
+letting the branch rot.
+
+**Collision set with the sweep commit `d99bae0e24`** - five files both branches change, so a
+rebase forward will conflict here and nowhere else:
+
+```
+Shared/CommonBaseUI/Controls/ControlUtil.cs
+Shared/CommonUtil/Collections/ImmutableList.cs
+Shared/CommonUtil/Spectra/SpectrumMetadata.cs
+Shared/CommonUtil/SystemUtil/FileEx.cs
+Skyline/TestPerf/DiannSearchLFQbenchTest.cs
+```
+
+Three of those are cast/using removals from the sweep on the same lines the cleanup branch
+edited for the same reason, so the conflicts should resolve to "both did it" rather than to a
+real disagreement. Whoever moves that branch forward should also decide which branch owns the
+`.editorconfig` severity policy before both edit it.
