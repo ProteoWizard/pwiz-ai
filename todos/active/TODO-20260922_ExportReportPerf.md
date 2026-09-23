@@ -58,8 +58,9 @@ Key files:
 - [x] Removed the `lock (this)` from `Transition.get_Precursor`
 - [x] Per-entity values recomputed per row (ModifiedSequence, FragmentIon, ...): solved generally by `DependsOnlyOnRowValue` - columns that read only `RowItem.Value` are evaluated once per run of rows sharing the same Value object (export 328s -> 214s)
 - [ ] Result columns: each of the 8 result columns re-enters `CachedValue` on a cold TransitionResult/PrecursorResult (~556M calls, ~0.5us each = memory latency, ~300s worker CPU). Fetch ChromInfo once per row for all six TransitionResult columns, and/or fold CachedValues fields into TransitionResult to save a pointer hop
-- [ ] Parquet writer thread is now on the critical path: main thread blocks ~51s in `writeWorker.Add`; writer is ~120s CPU, mostly dictionary encoding of string columns. Write row groups from more than one thread or skip dictionary encoding for high-cardinality strings
-- [ ] Overlap enumeration of chunk N+1 with population of chunk N (MoveNext is ~38s serial on the main thread)
+- [x] Overlap enumeration of chunk N+1 with population of chunk N (MoveNext is ~38s serial on the main thread): `ParquetReportExporter.ExportPipeline` runs the reader, the populate stage and the writer as three threads joined by one-chunk queues, and builds the DataColumns in parallel over columns (the DataColumn constructor packs nullable arrays eagerly; ~45s serial before)
+- [ ] Re-profile the pipeline. Expected: the writer thread (~120s CPU) is now the critical path, with the main thread waiting in `_rowGroups.Add`
+- [ ] Parquet writer thread: ~120s CPU, mostly dictionary encoding of string columns. Parquet.Net writes one row group at a time to one stream, so parallelizing the write means skipping dictionary encoding for high-cardinality strings or encoding row groups into memory first
 - [ ] `Array.SetValue` / boxing in `ColumnData.StoreValue` (~70s across workers): consider typed columns
 - [ ] Document open: the tail waits ~42s for the peptide deserialization workers; the "Load Document XML" QueueWorker is capped at 8 threads
 - [ ] Later ceiling: Parquet writer thread (149s CPU, mostly dictionary encoding of string columns) once the export drops under ~150s
@@ -80,12 +81,16 @@ Reporter.exe's XML `Samples` attribute is stack samples, not call counts (Progra
 - **HashingStream stays synchronous.** A background hashing thread was tried (commit 7f65d9f465) and reverted: with SequentialReadStream feeding the parser, the queue and copy overhead cost more than the SHA1 it moved off the thread. A version where HashingStream owned 64KB buffers was also slower and is parked in `git stash` on this branch ("HashingStream owns 64KB read/write buffers").
 - **No .NET thread pool.** SequentialReadStream uses its own `Thread`; task continuations were rejected because pool threads complicate leak checking.
 - **Peptide.ModifiedSequence caching was committed (5a06ff7629) and then undone (af8250a099)** in favor of the general DependsOnlyOnRowValue mechanism, which covers every per-entity column without touching entities.
+- **The export pipeline uses its own threads and BlockingCollections, not QueueWorker.** A bounded QueueWorker deadlocks when a consumer throws: Abort's `DoneAdding` adds a null to a full queue with no consumer left to take it, and the caller's `DoneAdding(wait: true)` then blocks forever, so the old exporter hung on a writer failure (disk full). The pipeline cancels a CancellationToken that every blocking Add/Take carries, records the first exception and rethrows it from `Run` with its stack. `TestParquetArrays` covers this with a stream that fails after the PAR1 magic.
+- **A failed export does not dispose the ParquetWriter.** Its Dispose writes the footer; on a stream that has already failed that throws again, and from a `using` the AggregateException would replace the exception that explains the failure.
+- **Memory: two more chunks in flight** than before (the reader's queued chunk and the one it is filling, both holding RowItems rather than arrays). Bounded by the one-chunk queues; not measured on the 27GB document yet.
 - **Compiled getters only for the framework's own ReflectPropertyDescriptor**, gated by exact type name, and applied at the evaluation site in `ColumnDescriptor.Reflected` rather than by wrapping descriptors in DataSchema. Any PropertyDescriptor subclass with its own GetValue is untouched. A first attempt wrapped descriptors in DataSchema and keyed its cache on the descriptor; `PropertyDescriptor.Equals` ignores ComponentType, so `Replicate.Name` got `Protein.Name`'s getter and every call threw. Watch for this if the cache key ever changes.
 
 ## Verification so far
 
 - PRISM export from `CommandLineReportTest`'s Rat_plasma.sky is byte-identical with and without compiled getters.
 - Passing in Release: AuditLogSavingTest, AuditLogListTest, CommandLineReportTest, ParquetReportExporterTest, DocumentGridTest.
+- Pipeline (Debug): TestParquetArrays, TestConvertToStorageType, TestExportHugeParquetReport, TestParquetReportInvariant, TestTextReportInvariant, TestDocumentGrid, TestAuditLogSaving.
 
 ## Regression Test
 
