@@ -1036,6 +1036,13 @@ before the connector is rebuilt. Two ways:
   `AssemblyInformationalVersion` = `YY.N.B.DDD-<10-char hash>`
   (`git rev-parse --short=10 HEAD`). Touch nothing else in the file — it is ISO-8859 with
   CRLF line endings, so use a byte-preserving edit, not `sed -i` in Git Bash.
+  **There are TWO of these files and stamping one is not enough** (`Jamfile.jam` generates
+  both, lines 106-107): `SkylineAiConnector/Properties/AssemblyInfo.cs` stamps the ZIP's
+  `info.properties`, and `SkylineMcpServer/Properties/AssemblyInfo.cs` stamps the bundled
+  `mcp-server/SkylineMcpServer.exe`. `TestSkylineMcp` pins both — `TestToolInstallation`
+  checks the manifest and `TestMcpServerEndToEnd` checks the EXE's `FileVersion` — so a
+  half-stamped rebuild produces a ZIP whose manifest reads right and whose binary does
+  not, and the test fails on the EXE. That cost two rebuild cycles on 2026-09-21.
 - **Or run a quick jam build** at the bump commit (`quickbuild.bat -j12 --abbreviate-paths
   pwiz_tools\Skyline//Skyline.exe --official`) before the connector rebuild, and accept
   that the full `clean.bat` + `bso.bat` still runs afterwards at the release commit.
@@ -1043,6 +1050,14 @@ before the connector is rebuilt. Two ways:
 Either way, **verify `Version =` in `tool-inf/info.properties` inside the ZIP before
 committing** (`unzip -p SkylineAiConnector.zip tool-inf/info.properties`) — the file
 timestamps inside the ZIP say only that it was rebuilt, not what it was stamped with.
+
+**The connector version does not have to equal the Skyline release version.** If the ZIP
+commit slips past midnight, its DDD is a day behind the release built the next day —
+26.1.1.264 shipped inside the 26.1.1.265 release on 2026-09-22, which is fine: the
+connector carries the same code. What must agree is the chain the test and the store
+check: ZIP `info.properties` == bundled `SkylineMcpServer.exe` `FileVersion` ==
+`EXPECTED_ZIP_VERSION` == the version the Tool Store lists. Do not restamp a committed,
+tested ZIP just to make its number match the release.
 
 **Rebuild from `SkylineMcp.sln` in Visual Studio**, not `Skyline.sln` (which does not
 build it) and not the command line: a whole-solution `dotnet build` of `SkylineMcp.sln`
