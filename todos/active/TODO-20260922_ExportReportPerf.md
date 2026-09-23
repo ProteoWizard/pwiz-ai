@@ -57,12 +57,16 @@ Key files:
 - [x] Re-profile with the compiled getters and the progress fix; reflection frames are gone from the workers (export 506s -> 328s)
 - [x] Removed the `lock (this)` from `Transition.get_Precursor`
 - [x] Per-entity values recomputed per row (ModifiedSequence, FragmentIon, ...): solved generally by `DependsOnlyOnRowValue` - columns that read only `RowItem.Value` are evaluated once per run of rows sharing the same Value object (export 328s -> 214s)
-- [ ] Result columns: each of the 8 result columns re-enters `CachedValue` on a cold TransitionResult/PrecursorResult (~556M calls, ~0.5us each = memory latency, ~300s worker CPU). Fetch ChromInfo once per row for all six TransitionResult columns, and/or fold CachedValues fields into TransitionResult to save a pointer hop
-- [ ] Parquet writer thread is now on the critical path: main thread blocks ~51s in `writeWorker.Add`; writer is ~120s CPU, mostly dictionary encoding of string columns. Write row groups from more than one thread or skip dictionary encoding for high-cardinality strings
+- [x] Column tree: `ColumnDescriptor.GetValueFromParent` plus `ColumnValueTree` in the exporter evaluate shared ancestors once per row (Reflected calls ~54/row -> ~15/row, `Results!*.Value` 13/row -> 1); TransitionResult getters read ChromInfo once (b56e27f6e0)
+- [x] Nick's 3-stage pipeline (reader thread, populate, writer thread; e9883b7e3f) - measured slightly slower on its own because per-chunk LOH churn made the stages pause each other
+- [x] Typed `ColumnBuffer<T>` with definition levels, 3 buffer sets recycled through the pipeline, and the fork's `WriteColumnsAsync` for concurrent column compression (970f344861): export 236s -> 132s
+- [ ] Writer: try `ParquetOptions { UseDictionaryEncoding = false }` (one line in Export). Removes ~90s of Distinct work; pyarrow on the Rat_plasma report was 31% SMALLER without dictionaries under zstd, but Parquet.Net's encoder must be measured on the big file (size vs 1.33GB, writer wall)
+- [ ] Writer, fork side (skylinedev/Parquet.Net 4.25): pool with a max array size covering a column chunk instead of ArrayPool<byte>.Shared (121s), drop the ToArray in the plain encoder Pack (40s) and the Span.ToArray of compressed output (25s). Upstream 6.x already writes numerics straight to the stream via MemoryMarshal and pools through RecyclableMemoryStream, and its dictionary decision uses adaptive sampling; but 6.x needs .NET 8+, so this waits for the .NET 10 port. On .NET 10 even the 4.25 fork stops hitting the Rent fallback, since ArrayPool.Shared there pools up to 1GB arrays
+- [ ] Reader thread: pre-size the chunk list to RowsPerGroup (12s of List growth); not the bottleneck
+- [ ] Result columns still ~55% of worker CPU (CachedValue GetValue ~216s own): fold CachedValues fields into TransitionResult, or fetch ChromInfo once per row for all six columns
 - [ ] Overlap enumeration of chunk N+1 with population of chunk N (MoveNext is ~38s serial on the main thread)
 - [ ] `Array.SetValue` / boxing in `ColumnData.StoreValue` (~70s across workers): consider typed columns
 - [ ] Document open: the tail waits ~42s for the peptide deserialization workers; the "Load Document XML" QueueWorker is capped at 8 threads
-- [ ] Later ceiling: Parquet writer thread (149s CPU, mostly dictionary encoding of string columns) once the export drops under ~150s
 
 ## Progress (main thread, ms; profiles in the bugs folder)
 
@@ -71,6 +75,15 @@ Key files:
 | 15-16-19 SequentialStream | 765,007 | 198,203 | 506,477 | 2,434,588 |
 | 21-06-29 ReflectedPropertyGetter | 580,569 | 198,081 | 327,644 | 1,563,094 |
 | 22-07-59 DependsOnRowValue | 454,857 | 188,969 | 214,006 | 732,485 |
+| 00-44-50 MoreParallel (3-stage pipeline) | 475,634 | 188,109 | 236,166 | 736,053 |
+| 01-09-09 typed buffers + WriteColumnsAsync | 372,487 | 187,462 | 132,048 | 598,821 |
+
+Stages in the last run: reader ~67s busy, populate 90s, writer 121s wall. The writer is the wall
+now. Its ~315s of CPU across the compression threads is mostly not compression: ArrayPool.Rent
+fallback allocations 121s (17MB column chunks exceed the 1MB max of ArrayPool<byte>.Shared on
+.NET Framework), LINQ Buffer<T> from a ToArray in the plain encoder 40s, Span.ToArray of the
+compressed chunk 25s, and ~90s computing Distinct for every column to decide on dictionary
+encoding (Dictionary.FindEntry, GetHashCode, HashSet).
 
 Reporter.exe's XML `Samples` attribute is stack samples, not call counts (Program.Main shows 48,275), even with `--only-call-count`. Call counts need the dotTrace GUI on a Tracing snapshot. The exported report has 69,483,192 rows in 33 row groups.
 
