@@ -47,6 +47,17 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
       `IsValidValue`, with `ValuesForError` keeping the rejection message non-null. Latent today
       (no argument declares `AcceptedValues` alone). Test: `ValidateValueSources` covers all four
       combinations through both entry points
+- [x] Exposed `--culture` (Brendan approved on #4668, 2026-09-23): as a workaround for the localized-key
+      arguments we are putting off, a user on a ja/zh system can run SkylineCmd in English
+  - `ARG_INTERNAL_CULTURE` -> public `ARG_CULTURE` in `GROUP_GENERAL_IO`, `_culture` description added
+    to `CommandArgUsage.resx` (English only; translators own the ja/zh resx)
+  - `Values` lists Skyline's localized languages for help, `HasValueChecking = true` so any culture name
+    is accepted; `SetCulture` validates against `CultureInfo.GetCultures` and reports a usage error
+  - Regenerated `Documentation/Help/{en,ja,zh-CHS}/CommandLine.html` via `IsRecordMode` (ja/zh rows carry
+    the English description until translated)
+  - Two of my own regressions, both caught by tests, not by reasoning: restricting `Values` to the display
+    languages rejected `--culture=en-US`, which `SkylineCmdTest` passes on every invocation; and
+    `CultureNotFoundException` never fires for well-formed names, so `not-a-culture` was accepted silently
 - [ ] Human review
 - [ ] Reply to support thread once fix ships
 
