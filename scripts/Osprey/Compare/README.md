@@ -97,3 +97,13 @@ fresh failure surfaces and the end-to-end gate doesn't tell you
 which stage diverged, those scripts are the next step in.  They are
 sprint-specific and not maintained; expect to rebuild them rather
 than treat them as supported.
+
+## Demultiplexed spectra (not cross-impl)
+
+`Compare-DemuxSpectra.py --reference <a.spectra.bin> --test <b.demux.spectra.bin>` pairs two sets
+of demultiplexed MS2 spectra by parent retention time and bin center and reports cosine
+similarity, total-intensity ratio and exclusive-peak intensity, overall, by bin and for the
+worst pairs. Its first use is spectrum-level G7.1 of the Osprey demux work: Osprey's
+`--demux auto` against msconvert's `demultiplex optimization=overlap_only`, the latter read into
+a plain cache by `--task SpectraCache`. Unlike `Compare-SpectraCache.ps1` it measures closeness,
+not byte parity. See TODO-20260923_osprey_demux.md.
