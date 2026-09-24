@@ -107,3 +107,9 @@ worst pairs. Its first use is spectrum-level G7.1 of the Osprey demux work: Ospr
 `--demux auto` against msconvert's `demultiplex optimization=overlap_only`, the latter read into
 a plain cache by `--task SpectraCache`. Unlike `Compare-SpectraCache.ps1` it measures closeness,
 not byte parity. See TODO-20260923_osprey_demux.md.
+
+`Measure-StaggerConsistency.py --reference NAME=<cache> --input NAME=<cache> ...` is the
+library-free accuracy proxy for k=2 staggered demux. Each bin is sampled alternately through its
+two parent windows, so a biased split between bins shows as a zig-zag in the bin's fragment
+chromatograms. Events (bin, fragment channel, apex) are found once in the reference output and
+measured identically in every input; lower zigzag means the two parent windows agree better.

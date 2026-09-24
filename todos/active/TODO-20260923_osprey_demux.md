@@ -175,9 +175,43 @@ Versus msconvert (cosine over the union of peaks, per demultiplexed spectrum):
 - The block mode is the main source of difference from msconvert; the interpolant is minor. Total intensity agrees to 0.2% in every variant.
 - Where the msconvert-like residual lives: across the interior the per-bin p05 is 0.93-0.98. It is worst at the top of the range (986-1004 Th, p05 0.76-0.86). There pwiz clamps its 7-bin slice and its 7 nearest rows leave the last bins with no measurement, so the NNLS solution is not unique and solvers legitimately differ.
 - Inputs check: msconvert's demux summed back per parent vs Osprey's undemuxed raw read gives a median cosine of 1.0000, and Osprey's input carries 0.1% more intensity. That fits msconvert dropping peaks whose solution is zero in both bins; no difference in centroids is evident.
-- **Open: which is RIGHT needs truth.** Candidates:
-  - a library-free stagger-consistency metric: each bin is sampled alternately from window A and window B parents, so a biased demux shows as an A/B sawtooth in the bin's XICs;
-  - a search with a library covering 394-1006 m/z.
+- **Which is right needs truth.** The Osprey search is the real test: Mike is providing an
+  Eclipse-appropriate library, since the Astral-tuned one would mispredict RT here.
+
+### Stagger consistency, Eclipse (2026-09-24, library-free)
+
+Method: `ai/scripts/Osprey/Compare/Measure-StaggerConsistency.py`.
+- Each bin is sampled alternately through its two parent windows.
+- Zigzag = sum |x_i - time-weighted mean of its two neighbors| / sum x over the apex window
+  (+/- 6 samples).
+- Events: the top 300 apexes per bin, found in msconvert's output and measured identically in
+  every input.
+- Lower means the two parent windows agree better. Curvature and counting noise are common to
+  all inputs, so the differences between inputs are the allocation.
+- Outputs: `D:\test\osprey-runs\eclipse-staggered\stagger-consistency-EV1{3,4}-allbins.txt`.
+
+EV13, all bins (30,598 events):
+
+| input | median | mean | p90 | per event lower than msconvert |
+|---|---|---|---|---|
+| msconvert | 0.2210 | 0.3044 | 0.551 | - |
+| Osprey default (covered_bins + makima) | 0.2109 | 0.2793 | 0.481 | 55.7% |
+| Osprey msconvert-like (truncated + natural3) | 0.2125 | 0.2869 | 0.505 | 50.7% |
+| covered_bins + natural3 | 0.2120 | 0.2814 | 0.487 | 51.4% |
+| truncated + makima | 0.2117 | 0.2853 | 0.501 | 54.7% |
+
+EV14 (30,599 events) replicates it:
+- msconvert: median 0.2195, p90 0.545;
+- default: median 0.2093, p90 0.482, lower in 56.0% of events;
+- msconvert-like: median 0.2110, p90 0.499.
+
+Readings:
+- The defaults are best in every m/z region.
+- covered_bins mostly trims the tail; makima raises the per-event win rate.
+- Osprey's msconvert-like setting is already more self-consistent than msconvert (p90 0.505 vs
+  0.551). Probably pwiz's index-based choice of block rows and interpolation stencil (with
+  possible duplicate rows of one window) rather than Osprey's time-based choice.
+- The 1st and last bins are covered once, so they have no alternation; about 0.51-0.61 for all.
 
 ## Data needed (from Mike)
 
