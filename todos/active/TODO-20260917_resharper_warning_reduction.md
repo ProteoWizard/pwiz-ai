@@ -27,10 +27,7 @@ warning count low enough that a new finding is visible rather than lost in four 
 
 ## Goal
 
-Zero `CSharpErrors`, and the warning count down to the point where the remaining findings are
-ones a human would choose to argue about. Not literally zero warnings: several categories are
-artifacts of .NET 10 annotating framework members that net472 left unannotated, and "fixing"
-them would mean editing working code to satisfy an annotation.
+Zero errors and zero warnings. net472 runs at zero today; the net10 line should too.
 
 ## Why
 
@@ -53,6 +50,46 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 today (+ wave 2 clipboard) | 0 | **201** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with waves 3 and 4 | 0 | ~139 |
+
+### The 201, in full (measured 2026-09-23 on #4685's branch)
+
+Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
+group the report by `TypeId`.
+
+| Inspection | Count | What it is | Route to zero |
+|---|---|---|---|
+| `CSharpWarnings::CS0618` | 42 | Use of obsolete symbol | waves 1, 3, 4 |
+| `ConditionIsAlwaysTrueOrFalse` | 32 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
+| `LocalizableElement` | 25 | Element is localizable | move to resources, or mark the ones that are not UI text |
+| `ConstantConditionalAccessQualifier` | 23 | `?.` qualifier known null or non-null | per-site, same family as the above |
+| `CSharpWarnings::CS0672` | 20 | Member overrides obsolete member | wave 1 (the `OnClosing`/`OnClosed` pairs) |
+| `ConstantNullCoalescingCondition` | 13 | `??` condition known null or non-null | per-site, same family |
+| `InvalidXmlDocComment` | 7 | Invalid XML doc comment | fix the `cref` targets |
+| `HeuristicUnreachableCode` | 7 | Heuristically unreachable code | pairs with the always-false conditions |
+| `CheckNamespace` | 6 | Namespace does not match file location | rename namespace or move file |
+| `CA1416` | 4 | Platform compatibility | annotate or guard the Windows-only calls |
+| `NotAccessedField.Local` | 3 | Private field never read | delete |
+| `RedundantEnumerableCastCall` | 3 | Redundant `Cast<T>`/`OfType<T>` | delete |
+| `RedundantArgumentDefaultValue` | 3 | Argument equals the default | delete |
+| `RedundantNullableDirective` | 3 | Redundant `#nullable` directive | delete |
+| `RedundantJumpStatement` | 2 | Redundant control flow jump | delete |
+| `RedundantCast` | 2 | Redundant cast | **leave**: `null as double?` in `AlignmentForm` types the conditional, which LangVersion 8 cannot infer - needs a suppression, not a deletion |
+| `RedundantSuppressNullableWarningExpression` | 2 | Redundant `!` | delete |
+| `PartialTypeWithSinglePart` | 1 | `partial` with one part | delete the modifier |
+| `RedundantEmptyFinallyBlock` | 1 | Empty `finally` | delete (leftover from the mechanical port) |
+| `UsingStatementResourceInitialization` | 1 | Object initializer on a `using` variable | restructure |
+| `NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract` | 1 | `??` never null per annotations | per-site |
+
+Two notes on getting this to zero rather than to "small":
+
+- **75 of the 201 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
+  `ConstantConditionalAccessQualifier`, `ConstantNullCoalescingCondition`,
+  `HeuristicUnreachableCode`. These flag our own defensive null checks as provably
+  unnecessary, on the strength of .NET 10 annotations net472 never had. Each one is either
+  dead code to delete or a guard to keep with a suppression; they cannot be swept.
+- The 1,833 warnings the `.editorconfig` severities removed are **demoted, not fixed**. If
+  the zero-warning bar is meant to include them, that is a much larger body of work and the
+  severity rules are the wrong instrument.
 
 ## What landed, and why
 
