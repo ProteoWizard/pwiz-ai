@@ -1292,8 +1292,11 @@ Patterns the pipeline now relies on:
   ties; matches the comment "first C as tiebreaker" that the Rust
   code didn't originally implement). `Iterator::max_by_key` returns
   the *last* tied element per stdlib docs — don't use it for
-  tie-sensitive selection. Manual scan with strict `>` is what both
-  tools now use.
+  tie-sensitive selection. Manual scan with strict `>` is what Rust
+  uses, and what C# uses under `OSPREY_SVM_C_TOLERANCE=0`. C#'s default
+  keeps the most regularized C within 1% of the best count instead
+  (`PercolatorTrainer.SelectC`), so a C#-vs-Rust comparison must set
+  that variable; the `Compare/` scripts do.
 - **Non-conservative FDR formula `n_decoy / n_target`** for
   internal grid-search counting in
   `count_passing_targets_svm` — matches `compute_qvalues` on the

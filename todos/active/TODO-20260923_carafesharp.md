@@ -172,6 +172,29 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       Astral XIC export (pay-later, `--training-export-xics`) replaced the plain one; the plain copy is
       `osprey_train\Ast-..._55.training-noxics.parquet.bak`.
 
+      MASKING EVALUATION (2026-09-24): fine-tune at `-cor` 0.8 vs 0.7 (corr_polish), seeds 2024 and
+      2025, final library searched on all 3 runs with the 1% C-selection rule (Osprey
+      `_bin\cdiag-0a0b744`, OSPREY_DIAG_C_TOL=0.01) so the bimodality cannot decide it. Scripts
+      `run-masking-eval.sh` / `run-masking-eval-astral.sh`; libraries `D:\test\carafesharp-runs\mask-*`,
+      searches `D:\test\osprey-runs\mask-*` and `astral-mask-*`; FDP via `py/stage6_summary.py`.
+      The seed changes only the training order (same test split), so the pretrained test metrics
+      repeat per threshold; the test sets differ between thresholds, so COS is not comparable across them.
+
+      | Stellar arm | MS2 spectra kept | Fine-tuned COS | Experiment | Peptides | Proteins | Combined / paired FDP |
+      |---|---|---|---|---|---|---|
+      | cor 0.8, seed 2024 | 15,318 | 0.9840 | 31,225 | 28,344 | 4,230 | 0.64% / 0.56% |
+      | cor 0.8, seed 2025 | 15,318 | 0.9840 | 31,203 | 28,395 | 4,186 | 0.63% / 0.55% |
+      | cor 0.7, seed 2024 | 15,966 | 0.9825 | 31,074 | 28,248 | 4,270 | 0.68% / 0.60% |
+      | cor 0.7, seed 2025 | 15,966 | 0.9827 | 30,890 | 28,039 | 4,286 | 0.62% / 0.53% |
+
+      Stellar: 0.8 leads by 232 precursors on the mean (0.7%) and both seeds agree; seed spread 22
+      (0.8) and 184 (0.7). Proteins go the other way by 40-100. First-pass C: 0.01 in every 0.8 fold,
+      0.1 / 0.001 in the 0.7 folds.
+
+      | Astral arm | Experiment | Peptides | Proteins | Combined / paired FDP |
+      |---|---|---|---|---|
+      | cor 0.8, seed 2024 (workflow library) | 103,644 | 91,541 | 7,700 | 0.41% / 0.38% |
+
 ## Reference data on this machine (developer's own Carafe runs)
 
 `D:\GitHub-Repo\maccoss\osprey\example_test_data\stellar\`:

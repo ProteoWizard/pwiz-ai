@@ -895,9 +895,12 @@ function Invoke-OspreyDatasetRun {
     # is nowhere in Osprey's log: an inherited '0' would silently train the old way and be
     # unrecoverable after the fact, exactly the pick-model failure described below. If a
     # sampler A/B is ever wanted, add a switch and set this in both directions.
+    # OSPREY_SVM_C_TOLERANCE is stripped for the same reason: the cross-implementation scripts
+    # set it to 0 (Rust's strict-maximum C selection), and an inherited 0 would train the
+    # cohort under the old rule behind a banner that claims defaults.
     foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
-                   'OSPREY_TRAIN_PICK_RUN',
+                   'OSPREY_TRAIN_PICK_RUN', 'OSPREY_SVM_C_TOLERANCE',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
                    'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
                    'OSPREY_PROTEIN_COMPACT_QUALIFY',

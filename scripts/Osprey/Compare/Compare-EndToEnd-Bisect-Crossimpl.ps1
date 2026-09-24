@@ -182,10 +182,16 @@ function Run-Side {
     # Only Stage 7 dump enabled in Pass 1 (it doesn't produce a file
     # otherwise). All other boundary files are written naturally.
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
+    # Rust keeps the strict maximum of the inner-CV counts when it picks the first-pass SVM C;
+    # C# keeps the most regularized C within 1% of it unless told otherwise. Without this the
+    # two diverge at Stage 5 on every dataset.
+    # Rust ignores the variable, so it is set for both sides.
+    $env:OSPREY_SVM_C_TOLERANCE = '0'
     try {
         $r = Invoke-Tool -Exe $Exe -WorkDir $Dir -CliArgs $cliArgs -LogName $logName
     } finally {
         Remove-Item Env:OSPREY_DUMP_STAGE7_PROTEIN_FDR -ErrorAction SilentlyContinue
+        Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     }
     $prec = Get-PrecursorCount -LogPath $r.logPath
     Write-Host ("  {0} wall: {1}; precursors: {2}" -f $SideName, (Format-Duration $r.wall), $prec) -ForegroundColor Green

@@ -418,10 +418,15 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
                 '--work-dir', $csDir)
     $args2 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
+    # Rust keeps the strict maximum of the inner-CV counts when it picks the first-pass SVM C;
+    # C# keeps the most regularized C within 1% of it unless told otherwise. Without this the
+    # two diverge at Stage 5 on every dataset.
+    $env:OSPREY_SVM_C_TOLERANCE = '0'
     try {
         $r = Invoke-Tool -Exe $ospreyShExe -WorkDir $csDir -CliArgs $args2 -LogName 'osprey-cs.log'
     } finally {
         Remove-Item Env:OSPREY_DUMP_STAGE7_PROTEIN_FDR -ErrorAction SilentlyContinue
+        Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     }
     $csWall = $r.wall
     $csPrec = Get-PrecursorCount -LogPath $r.logPath
