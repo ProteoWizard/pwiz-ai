@@ -317,6 +317,19 @@ of line, tag list, gating, consumer rule, the `@` convention, the vocabulary tab
 short "Localization" section pointing at `ai/docs/translation-guide.md`. These are "what the
 code does", so they live in pwiz, not `ai/`.
 
+## Progress
+
+**2026-09-24**
+- [x] Branch created off the port branch (`bba770990a`), TODO moved to active.
+- [x] Step 1a: `[PATH]` and `[TRAIN]` added to `OspreyOutput.IsStatLine` (`02bfb8d29e`).
+  No script or test read either tag, so nothing else changed. The "Ignoring the persisted
+  1st-pass model" line (CSV row "Keep") lost its `[TRAIN]` tag so it stays visible; it is now
+  plain prose and goes to RESX in Step 4. `MultiProgressReporterTest` covers both tags.
+  Build-Osprey -RunTests -RunInspection green (598 tests).
+- [ ] Step 1b: `[PATH]`/`[COUNT]` route lines from the coupling inventory, `regression.ps1`
+  on `--perf-stats` with probes moved, `Get-MemoryReport.ps1`, `perfviz.py`, `Run-Osprey.ps1 -Summary`.
+- [ ] Step 1c: demote the B1 lines.
+
 ## Acceptance
 
 - `Build-Osprey.ps1 -RunTests -RunInspection` green with the six `.csproj.DotSettings` in
