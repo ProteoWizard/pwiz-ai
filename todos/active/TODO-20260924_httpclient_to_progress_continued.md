@@ -81,10 +81,36 @@ them as work to do.
 ## Task Checklist
 
 ### Phase 1: SkylineNightly and SkylineNightlyShim
-- [ ] Replace `WebClient` in `Nightly.cs` and `SkylineNightlyShim/Program.cs` with plain `HttpClient`
-- [ ] Replace the three `HttpWebRequest` uses in `Nightly.cs` (log post, email notification, CSRF token)
-- [ ] Lower the `CodeInspectionTest` WebClient tolerance from 3 to 1
+- [x] Replace `WebClient` in `Nightly.cs` and `SkylineNightlyShim/Program.cs` with plain `HttpClient`
+- [x] Replace the three `HttpWebRequest` uses in `Nightly.cs` (log post, email notification, CSRF token)
+- [x] Lower the `CodeInspectionTest` WebClient tolerance from 3 to 1
 - [ ] Verify by running SkylineNightly for real: posting results, and a Shim self-update check
+
+Done 2026-09-24. Build, CodeInspection and QuickInspection (SkylineNightly,
+SkylineNightlyShim, Test) all clean. Live verification is still open: the dev
+machine has no `TEAMCITY_NIGHTLY_TEST_AUTH_TOKEN`, and the posts write to the shared
+results database and send email.
+
+Design:
+- Both downloads go through a new `TeamCityNightlyAuth.DownloadArtifact(url, path, token)`,
+  which replaced `ConfigureClient(WebClient, token)`. The file is already linked into the
+  Shim, so there is one implementation.
+  - Uses `ResponseHeadersRead` and streams to disk, so the 100 s `HttpClient.Timeout` covers only
+    the headers and does not cut off a large SkylineTester zip.
+  - Deletes the partial file on failure, as `WebClient.DownloadFile` did.
+  - Wraps `HttpRequestException`/`TaskCanceledException` in an `IOException` whose message
+    includes the inner exceptions. Both callers log only `ex.Message`, and HttpClient's own
+    message ("An error occurred while sending the request") says nothing about the cause.
+- `CreateLabKeyClient(logFileName, timeout)` in Nightly.cs replaced `SetCSRFToken(HttpWebRequest)`.
+  It returns an `HttpClient` whose handler has a `CookieContainer` and `UseDefaultCredentials`,
+  and adds the X-LABKEY-CSRF header from the session cookie. On failure it throws, and the
+  callers' existing retry loops catch it.
+- Kept from the old requests:
+  - the results post: HTTP/1.0, a 100 s timeout, and a multipart part with exactly
+    `name="xml_file"; filename="..."` (no `filename*`);
+  - the email post: a 30 s timeout and a bare `application/x-www-form-urlencoded`
+    content type (no charset).
+- Non-2xx responses still throw (`EnsureSuccessStatusCode`), so the retry loops behave as before.
 
 ### Phase 2: Core Skyline and SkylineBatch `HttpWebRequest`
 - [ ] `Skyline/Program.cs` analytics pings -> `HttpClientWithProgress` (fire-and-forget, silent progress)
