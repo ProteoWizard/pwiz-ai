@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1a and 1b committed (`02bfb8d29e`, `c5947b788b`); next is `regression-parallel.ps1 -Dataset All` for modes 7 and 10-12, then Step 1c. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
+- **Status**: In Progress - Steps 1a and 1b committed (`02bfb8d29e`, `c5947b788b`, `db620525ce`) and green on all four datasets; next is Step 1c. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -326,7 +326,7 @@ code does", so they live in pwiz, not `ai/`.
   1st-pass model" line (CSV row "Keep") lost its `[TRAIN]` tag so it stays visible; it is now
   plain prose and goes to RESX in Step 4. `MultiProgressReporterTest` covers both tags.
   Build-Osprey -RunTests -RunInspection green (598 tests).
-- [x] Step 1b (`c5947b788b`; Stellar gate green, 17 legs; `-Dataset All` pending for modes 7, 10-12):
+- [x] Step 1b (`c5947b788b` + fix `db620525ce`; `regression-parallel -Dataset All` green after the fix):
   - **`LogTag` design (Brendan, 2026-09-24).** Every `[TAG]` prefix comes from
     `Osprey.Core/LogTag.cs`: gated machine tags (COUNT, TIMING, BENCH, STAGE_WALL, PATH, TRAIN
     under `--perf-stats`; `Mem(label)` under `OSPREY_LOG_MEMORY`), TASK always, and category tags
@@ -349,7 +349,11 @@ code does", so they live in pwiz, not `ai/`.
     `Loading scored entries`, `enrichment of the pass-1 report`). The mode 11 probe
     `Folding experiment-q floors` was dead (no emitter since #4522) and is removed.
     `Loading scored entries` was a deferred progress heading; its `[PATH] scored-entries: load`
-    twin always prints, so the mode 11 cells are stricter now.
+    twin always prints. The first `-Dataset All` run went 69 PASS / 2 FAIL on exactly that:
+    mode 11 cells A and D emitted it. The load has a resident arm (O(files) stubs) and a lean
+    arm (calibration + footers); the line now names the arm and mode 11 forbids only
+    `resident`. Rerun confirmed cells A, D and the main pay-later leg all take `lean`;
+    StellarLibDecoy 27/27, other lane 26/26.
   - `Get-MemoryReport.ps1` reads `[COUNT] scored-candidates` (prose fallback kept for pre-change
     logs only). `perfviz.py` unchanged: Osprey failures already carry `[ERROR]`.
     `Run-Osprey.ps1` gained `-Exe`; its Stellar dataset config is stale against the current
