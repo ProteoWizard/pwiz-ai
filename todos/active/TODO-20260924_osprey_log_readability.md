@@ -383,6 +383,20 @@ code does", so they live in pwiz, not `ai/`.
     `Run-Chs.ps1 -DataDir D:/test/osprey-runs/chs-seer/raw -LibraryDir "D:/test/osprey-runs/sea-ad/lib/target+decoy+entrapment-20260817" -LinkFrom D:/test/osprey-runs/chs-seer/runs/chs-446files-libdecoy-r1.0-protein-compact-stage5stream -Exe D:/test/osprey-runs/_bin/<snapshot>/Osprey.exe -NoModelDiagnostics -Tag <tag>`
     Compare with `perfviz.py` against `chs-446files-libdecoy-r1.0-protein-compact-stages567-n4646\run.log`
     (same link source and settings, 14h58m). A cold run including scoring is ~20 h.
+- [x] Step 2 (`792c06da6d`): A1-A13 rewritten (A3/A4 were already done; A5 `Interned library
+  strings` is Mike's, wording kept). A13 uses `GetLocalizedString` extensions over literal
+  `LOCALIZED_VALUES` (Step 4 swaps in resources); `SearchIdentity` keeps enum `ToString()` for the
+  cache hash. Same commit: `N0` on every integer count in the Stellar/Astral default logs (Brendan:
+  "until I added the comma above, at first glance, I thought the number was 25,349"), and the
+  experiment-q floors line reworded with its `[FDR]` tag removed (`LogTag.FDR` deleted).
+  Default logs `D:\test\osprey-runs\logtag-gaps\{stellar,astral}-step2.log`, `stellar-n0.log`.
+  - **N0 decision (Brendan, 2026-09-24):** explicit `{n:N0}` per count, not an implicit
+    formatter: an implicit rule would also hit IDs, memstamp columns and the invariant machine
+    lines. Enforcement belongs in Step 6: a Roslyn-based check that every integer argument of a
+    log / progress / exception format carries an explicit format (`N0`, `D`, ...).
+    `ai/.tmp/sessions/20260924-01355z/fmtfix/` has the start of that scanner.
+  - **Tag rule (Brendan):** `[TASK]` is the only tag in the default log. Open question: the
+    `[WARN]`/`[ERROR]` severity prefixes.
 
 ## Acceptance
 
