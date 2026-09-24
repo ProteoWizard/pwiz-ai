@@ -1,7 +1,7 @@
 # TODO-20260917_resharper_warning_reduction.md
 
-Get the Skyline ReSharper inspection to a number that means something: zero errors, and a
-warning count low enough that a new finding is visible rather than lost in four figures.
+Get the Skyline ReSharper inspection back to zero errors and zero warnings on the net10 line,
+the way it already runs on net472.
 
 ## Branch Information
 - **Checkout**: `C:\dev\pwiz-inspect`
