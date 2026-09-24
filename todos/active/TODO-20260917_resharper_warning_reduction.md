@@ -13,7 +13,8 @@ the way it already runs on net472.
     **stacked on #4685**. Obsolete Form close methods, ServicePointManager, Assembly.CodeBase.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
-- **Status**: In Progress - #4685 and #4697 open; waves 3 and 4 not started
+- **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
+  **176 warnings, 0 errors** on #4685 as of 2026-09-24. Waves 3 and 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
   [#4697](https://github.com/ProteoWizard/pwiz/pull/4697)
@@ -300,3 +301,21 @@ Three of those are cast/using removals from the sweep on the same lines the clea
 edited for the same reason, so the conflicts should resolve to "both did it" rather than to a
 real disagreement. Whoever moves that branch forward should also decide which branch owns the
 `.editorconfig` severity policy before both edit it.
+
+## Progress log
+
+### 2026-09-24
+
+- Wave 5 landed (`a593268c93`): 25 `LocalizableElement` findings to 0, branch total 201 -> 176.
+- #4685 pushed and current: inspection mechanics, severities, mechanical sweep, wave 2, wave 5.
+- #4697 rebased onto #4685 with `--onto` so its diff is the 25 wave-1 files alone, then the
+  base merged forward into it (`44d88d839c`). No review or comment existed when it was
+  force-pushed, which is the only window the repo's rules allow for that.
+- The former `Skyline/work/20260917_resharper_inspection_noise` branch is **gone**: its two
+  commits were cherry-picked onto #4685 (`f621e178f3`, `d99bae0e24`) and the branch deleted
+  local and remote. Do not look for it.
+- Measured the overlap with `TODO-20260823_resharper_cleanup`: 4 of its 12 commits are already
+  in by content via #4648; 8 are stranded; 5 files collide with the sweep.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
