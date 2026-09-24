@@ -27,17 +27,18 @@ Every Osprey work branch **starts from** the port branch and its PR
 **returns to** it:
 
 - Branch: `git checkout -b Skyline/work/YYYYMMDD_name origin/Skyline/work/20260612_net8_port`
-  in a checkout on that branch (`C:\proj\pwiz-work1` or `C:\proj\pwiz-work2`),
-  not `C:\proj\pwiz` on master.
+  in whichever checkout holds the port branch on this machine (it may be
+  `pwiz` itself or a sibling checkout; `mcp__status__get_project_status`
+  shows each checkout's branch). Never branch from master.
 - TODO header: `- **Base**: \`Skyline/work/20260612_net8_port\``.
 - PR: `gh pr create --base Skyline/work/20260612_net8_port --label osprey`.
   Squash subjects are still `osprey: ... (#N)`.
 - Updating: `git merge origin/Skyline/work/20260612_net8_port`, never
   `origin/master` (master lacks the port, so merging it in is backwards).
 - `/pw-complete`: sync the port branch, not master, after the merge.
-- Every `Build-Osprey.ps1` / `regression.ps1` call needs
-  `-SourceRoot <that checkout>`; the default `C:\proj\pwiz` is master and
-  "succeeds" against the wrong tree.
+- When that checkout is not `<project-root>\pwiz`, every `Build-Osprey.ps1`
+  call needs `-SourceRoot <that checkout>`; without it the script builds
+  `pwiz` and "succeeds" against the wrong tree.
 
 Why, and the TeamCity and VS x64 details: "Base branch while the .NET 10
 port (PR #4619) is open" in `ai/docs/osprey-development-guide.md`. When
@@ -310,8 +311,8 @@ Backlog overview: `ai/scripts/Osprey/Get-OspreyBacklog.ps1` (see the guide's "Os
 
 ## Key Repositories
 
-- `pwiz_tools/Osprey` in a port-branch checkout (`C:\proj\pwiz-work1`
-  / `C:\proj\pwiz-work2`) - the C# implementation. Lives in
+- `pwiz_tools/Osprey` in the checkout holding the port branch - the C#
+  implementation. Lives in
   `ProteoWizard/pwiz`. Branches and PRs follow Skyline conventions
   (`Skyline/work/YYYYMMDD_*`, past-tense title, Co-Authored-By), but
   base on `Skyline/work/20260612_net8_port` - see "Base branch" above.

@@ -1,7 +1,7 @@
 # TODO-20260924_osprey_log_readability.md - make Osprey's user-facing text read for a mass spectrometrist, and move it to RESX
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260924_osprey_log_readability` (checkout `C:\proj\pwiz-work1`)
+- **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
 - **Status**: In Progress - branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). Step 1 not started. The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
