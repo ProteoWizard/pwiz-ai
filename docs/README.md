@@ -19,6 +19,7 @@ This directory contains comprehensive, detailed documentation for LLM-assisted d
 - **[new-machine-bootstrap.md](new-machine-bootstrap.md)** - Quick start: pristine Windows to working dev environment
 - **[new-machine-setup.md](new-machine-setup.md)** - Detailed new machine setup for LLM assistants
 - **[new-machine-windows-install.md](new-machine-windows-install.md)** - Clean Windows installation and initial configuration
+- **[wsl2-setup-guide.md](wsl2-setup-guide.md)** - Using the ai repo from a WSL2 Ubuntu VM (additional to the Windows setup)
 - **[labkey-setup/](labkey-setup/)** - LabKey Server development environment setup
 
 ### Development

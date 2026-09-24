@@ -54,6 +54,11 @@ ai/scripts/Usage/                    (pwiz-ai repo — the tooling)
 
 `Setup-ThisMachine.ps1` backs up `settings.json` before editing and is safe to re-run.
 
+**WSL2:** Claude Code running inside WSL2 keeps its transcripts in the Linux `~/.claude`, so
+use `wsl/` instead (Python port + systemd user timer; same CSV format, pricing read from
+`Snapshot-ClaudeUsage.ps1`). See `/pw-usage-reporting-wsl` or run
+`bash ai/scripts/Usage/wsl/setup-this-machine.sh`. The machine key gets a `-WSL` suffix.
+
 ## Daily charts (one host only)
 
 Each machine's snapshot task already runs `Combine` at 06:00, so `usage_combined.csv` stays
