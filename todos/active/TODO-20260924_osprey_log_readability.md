@@ -363,7 +363,7 @@ code does", so they live in pwiz, not `ai/`.
 - [x] Step 1c: demoted the B1 lines (`2512333e94`). Default logs, developer logging off, before vs after:
     Stellar max gap 5 s -> 5 s (248 -> 230 lines), Astral 16 s -> 16 s (437 -> 428), 0 gaps >= 30 s
     either side; only the demoted lines left, every result count unchanged. Logs in
-    `D:	est\osprey-runs\logtag-gaps\`. Regression not rerun: no probe reads the demoted prose.
+    `D:\test\osprey-runs\logtag-gaps\`. Regression not rerun: no probe reads the demoted prose.
   - **Keep rule (Brendan, 2026-09-24):** Mike reinstated count lines after the June console
     cleanup (`TODO-20260623_ospreysharp_console_output`), and issue #4387 records what he keys
     off: experiment-level precursor/peptide counts at 1% FDR, the per-file calibration summary
