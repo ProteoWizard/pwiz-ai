@@ -1,10 +1,10 @@
-# TODO-osprey_log_readability.md - make Osprey's user-facing text read for a mass spectrometrist, and move it to RESX
+# TODO-20260924_osprey_log_readability.md - make Osprey's user-facing text read for a mass spectrometrist, and move it to RESX
 
 ## Branch Information
-- **Branch**: (pending; suggest `Skyline/work/YYYYMMDD_osprey_log_readability`)
-- **Base**: `master`
-- **Created**: 2026-09-11
-- **Status**: Backlog (spec complete, not started; Brendan plans to start after PR #4656 merges)
+- **Branch**: `Skyline/work/20260924_osprey_log_readability` (checkout `C:\proj\pwiz-work1`)
+- **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
+- **Created**: 2026-09-11 (spec); started 2026-09-24
+- **Status**: In Progress - branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). Step 1 not started. The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -26,9 +26,9 @@ in log lines).
 
 | File | What it is |
 |---|---|
-| `TODO-osprey_log_readability-spec.html` | The review page: glossary with decisions, Table A (user-facing lines by confusion, with rewrites), B1 (developer lines leaking into the default log), B2 (gated diagnostics inventory), C (warnings written for a developer). Open in a browser. Same content as the published artifact `https://claude.ai/code/artifact/c51944d7-39b3-4208-9432-92160c6a2fca`. |
-| `TODO-osprey_log_readability-lines.csv` | One row per emitting call site (583), with priority, the flag that exposes it, current text, flagged terms, why, suggested text and action. Line numbers are for master `794cb6a5d8`. This is also the worklist for the RESX move: every default-tier row becomes a resource. |
-| `TODO-osprey_log_readability-terms.csv` | The term sheet with Brendan's decisions in the "Brendan decision so far" column. |
+| `TODO-20260924_osprey_log_readability-spec.html` | The review page: glossary with decisions, Table A (user-facing lines by confusion, with rewrites), B1 (developer lines leaking into the default log), B2 (gated diagnostics inventory), C (warnings written for a developer). Open in a browser. Same content as the published artifact `https://claude.ai/code/artifact/c51944d7-39b3-4208-9432-92160c6a2fca`. |
+| `TODO-20260924_osprey_log_readability-lines.csv` | One row per emitting call site (583), with priority, the flag that exposes it, current text, flagged terms, why, suggested text and action. Line numbers are for master `794cb6a5d8`. This is also the worklist for the RESX move: every default-tier row becomes a resource. |
+| `TODO-20260924_osprey_log_readability-terms.csv` | The term sheet with Brendan's decisions in the "Brendan decision so far" column. |
 
 The HTML is the readable form; the CSV is the checklist to work down. Where they disagree,
 the HTML is newer.

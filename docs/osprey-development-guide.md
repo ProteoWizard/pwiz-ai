@@ -1723,8 +1723,11 @@ EOF
 
 ### Base branch while the .NET 10 port (PR #4619) is open
 
-C# Osprey PRs currently base on **`Skyline/work/20260612_net8_port`** (Matt's .NET 10
-port, pwiz#4619), not `master`. The port branch is the team's integration branch for
+**All C# Osprey work starts from and returns to `Skyline/work/20260612_net8_port`**
+(Matt's .NET 10 port, pwiz#4619); Osprey is no longer developed on `master`. Branch
+from `origin/Skyline/work/20260612_net8_port` in a checkout on that branch
+(`C:\proj\pwiz-work1` / `pwiz-work2`) and update by merging that branch, not master.
+The port branch is the team's integration branch for
 nightly testing and is expected to become master once the release question is settled;
 merge-vs-squash of #4619 itself is Brendan's call.
 
