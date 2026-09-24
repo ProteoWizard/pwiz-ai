@@ -14,7 +14,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **178 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
+  **160 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -53,11 +53,12 @@ the team `Skyline.sln.DotSettings` profile.
 | After the mechanical sweep | 0 | 211 |
 | #4685 after wave 2 (clipboard) | 0 | 201 |
 | #4685 after wave 5 (non-UI literals) | 0 | 176 |
-| #4685 today, after merging the base forward (`316e234536`) | 0 | **178** |
+| #4685 after merging the base forward (`316e234536`) | 0 | 178 |
+| #4685 today, after the `Redundant*` sweep | 0 | **160** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 178, in full (measured 2026-09-24 on #4685 at `316e234536`)
+### The 160, in full (measured 2026-09-24 on #4685, after the `Redundant*` sweep)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
@@ -75,21 +76,14 @@ group the report by `TypeId`.
 | `CheckNamespace` | 6 | Namespace does not match file location | rename namespace or move file |
 | `CA1416` | 4 | Platform compatibility | annotate or guard the Windows-only calls |
 | `NotAccessedField.Local` | 3 | Private field never read | delete |
-| `RedundantEnumerableCastCall` | 3 | Redundant `Cast<T>`/`OfType<T>` | delete |
-| `RedundantArgumentDefaultValue` | 3 | Argument equals the default | delete |
-| `RedundantNullableDirective` | 3 | Redundant `#nullable` directive | delete |
-| `RedundantJumpStatement` | 2 | Redundant control flow jump | delete |
-| `RedundantCast` | 3 | Redundant cast | **all three need a suppression, not a deletion**: 2 are `null as double?` in `AlignmentForm`, typing the conditional in a way LangVersion 8 cannot infer; the third is `(IntPtr)(-1)` in `PInvoke/User32.cs`, redundant only because `IntPtr` IS `nint` on net10 |
-| `RedundantSuppressNullableWarningExpression` | 2 | Redundant `!` | delete |
+| ~~`Redundant*`, 8 categories~~ | ~~18~~ 0 | Casts, `Cast<T>` calls, default arguments, `#nullable` directives, jumps, `!`, an empty `finally`, a name qualifier | **done, the `Redundant*` sweep** - see below |
 | `PartialTypeWithSinglePart` | 1 | `partial` with one part | delete the modifier |
-| `RedundantEmptyFinallyBlock` | 1 | Empty `finally` | delete (leftover from the mechanical port) |
-| `RedundantNameQualifier` | 1 | Redundant name qualifier | delete - `System.Text.Encoding.UTF8` in `SkylineTester/CreateZipInstallerWindow.cs:214`, arrived with the base |
 | `UsingStatementResourceInitialization` | 1 | Object initializer on a `using` variable | restructure |
 | `NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract` | 1 | `??` never null per annotations | per-site |
 
 Two notes on getting this to zero rather than to "small":
 
-- **75 of the 178 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
+- **75 of the 160 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
   `ConstantConditionalAccessQualifier`, `ConstantNullCoalescingCondition`,
   `HeuristicUnreachableCode`. These flag our own defensive null checks as provably
   unnecessary, on the strength of .NET 10 annotations net472 never had. Each one is either
@@ -317,9 +311,8 @@ real disagreement. Whoever moves that branch forward should also decide which br
 - **Re-measured after the merge: 178 warnings, 0 errors** (was 176). The base brought two new
   findings, both in the mechanical sweep's own categories, neither swept:
   - `Shared/CommonBaseUI/SystemUtil/PInvoke/User32.cs:420` - `RedundantCast` on `(IntPtr)(-1)`.
-    **Do not just delete it.** It is redundant only because `IntPtr` IS `nint` on net10 and
-    takes an implicit `int` conversion; on a net472 leg that cast is load-bearing. This one
-    needs a suppression or a multi-target check, not a deletion.
+    (Flagged here mid-session as "needs a suppression, the cast is load-bearing on net472".
+    **That was wrong** - see the LangVersion note in the sweep entry below. It was deleted.)
   - `SkylineTester/CreateZipInstallerWindow.cs:214` - `RedundantNameQualifier` on
     `System.Text.Encoding.UTF8`. Safe to delete.
   - The lesson generalises: the base branch will keep adding a finding or two per merge in
@@ -340,6 +333,47 @@ real disagreement. Whoever moves that branch forward should also decide which br
 **Still open on #4697's description**: it says it is "Stacked on
 `Skyline/work/20260917_resharper_inspection_noise` ... which is the base of this PR". That
 branch no longer exists and its base is now `Skyline/work/20260918_inspection_in_build`.
+
+### The `Redundant*` sweep: 178 -> 160, all 8 categories to zero
+
+18 findings over 13 files, worked per site. 16 deleted, 2 kept.
+
+**`LangVersion 8` was the wrong premise, and it had been recorded twice.** This TODO said the
+`AlignmentForm` casts must stay because "LangVersion 8 cannot infer" the conditional, and this
+session then repeated the same reasoning for `(IntPtr)(-1)`. Both were wrong:
+`pwiz_tools/Directory.Build.props` sets `LangVersion 8.0`, but **`Skyline.csproj`,
+`CommonUtil.csproj` and `CommonBaseUI.csproj` each override it to `latest`**, unconditionally,
+on a single `net10.0[-windows]` target. So C# 9 target-typed conditionals and the C# 11 numeric
+`IntPtr` are both available, the net472 legs those arguments assumed are not built at all, and
+all three casts were plain deletions. **Check the project's effective `LangVersion` before
+accepting a "the old compiler needs it" argument** - the repo-wide default is not what Skyline
+compiles with.
+
+**The two kept, and why:**
+- `MSAmandaSearchWrapper.cs:104` - `MzTolerance.Units.mz` equals the default, but it sits one
+  line under `new MzTolerance(5, MzTolerance.Units.ppm)`. Making the fragment tolerance's unit
+  implicit next to an explicit ppm sibling invites exactly the unit confusion this domain
+  punishes. Kept under `// ReSharper disable once RedundantArgumentDefaultValue`.
+- Nothing else. The other 16 were provably equivalent.
+
+**Two that needed checking rather than sweeping:**
+- `MsDataFileImpl` `GetSpectrum(0, false)` -> `GetSpectrum(0)`: optional-argument defaults bind
+  from the **static** type, not the overrides. `_spectrumList` is an `ISpectrumList` and
+  `IonMobilitySpectrumList` is a `SpectrumListWrapper`; both declare `getBinaryData = false`,
+  so the calls are identical. Had either differed, this would have silently changed whether
+  binary data loads on a file-open hot path.
+- Removing the dead `Thread.CurrentThread.Name` guard in `ConcurrencyVisualizer` orphaned
+  `using System.Threading;`. Same two-pass effect the original mechanical sweep hit: a
+  deletion can create the next finding, so re-inspect rather than assuming a clean subtraction.
+
+**Also found**: all three `AssortResources` files carried `#nullable enable` **twice**, once
+before the usings and once after. And `build.bat` does not build `SkylineTester` or
+`Executables/DevTools/AssortResources` at all - only the inspection's solution build compiles
+them, so a code change there is not covered by a `build.bat --no-tests` green.
+
+Verified: `build.bat --no-tests` 0 errors; `tcinspect` 160/0 with every `Redundant*` category
+absent and no new category and no other count moved; `Test.dll` 421 tests (incl.
+`CodeInspection`), `TestData.dll` 178 tests, `TestRetentionTimeAlignment` - all 0 failures.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
