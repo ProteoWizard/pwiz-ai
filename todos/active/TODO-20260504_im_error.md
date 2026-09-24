@@ -317,6 +317,35 @@ will be blank for those — by design, asserted in the functional test.
 - **Doc follow-up (remaining):** re-capture s-19 (now carries the observed-IM/CCS tooltip) in
   en/ja/zh-CHS and update its caption; no figure renumbering needed.
 
+## /code-review max findings + fixes (2026-09-24, uncommitted)
+
+Max-effort review of the branch vs master (23 correctness findings survived verification).
+Fixed test-first (red -> green) in the working tree:
+- **.sky persistence (#1)**: observed IM/CCS were never written to the .sky, so they vanished
+  on save/reopen. New DocumentFormat 26.12 (`OBSERVED_ION_MOBILITY`): `observed_ion_mobility` /
+  `observed_ccs` attributes on transition_peak (Skyline_Current.xsd), `TransitionPeak` proto
+  fields 28/29, reader/writer, `TransitionChromInfo.ChangeObservedIonMobility`, Equals/GetHashCode.
+  Verified by IonMobilityTest save/reopen in both XML and compact formats.
+- **3.6-era cache misread (#2)**: v11 caches wrote zero-filled mass-error slots for
+  MissingMassErrors transitions; ReadFromStream now uses the stream length to tell the layouts apart.
+- **Share as 3.6 (#3)**: interpolated groups written to cache format < v20 drop observed IM
+  (`InterpolatedTimeIntensities.RemoveObservedIonMobilities`) and the group flag.
+- **v19-or-older peaks (#4)**: `ChromPeak.StructSerializer` masks the observed IM/CCS known bits
+  when the on-disk size has no room for the values.
+- **Rescore scale 0 (#5)**: CachedChromatogramDataProvider captures IM units before
+  ReleaseMemory(); IonMobilityTest rescores 3x (the loss only shows on the 3rd).
+- **CCS lost on re-integration (#6)**: ChangePeak keeps stored CCS while observed IM is
+  unchanged.
+- **EquivalentTolerant (#8)**: observed IM compared within one cache quantization step, only
+  when both sides have it; CCS not compared.
+- **IntegrateWithoutBackground (#9)**: now reports apex-of-valid observed IM.
+- **Full Scan opt step (#14)**: TryGetCurrentTargetChromInfo matches OptimizationStep (no test).
+- **Grid % error format (#15)**: PercentError (0.##) on PrecursorResult error columns.
+- **Ungated pause (#11)**: PerfMeasuredInverseK0 pause replaced by a commented PauseTest.
+- Conventions: em dashes, braceless multi-line if, StringAssert -> AssertEx.Contains.
+
+Remaining findings are being triaged (fix now or drop) with Brian, not tracked here.
+
 ## Remaining before merge
 - [ ] (Optional) /pw-self-review on the final state; TeamCity green; human review
 - [ ] Produce Release/test build for the requesting user
