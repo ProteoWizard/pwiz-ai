@@ -113,10 +113,28 @@ Design:
 - Non-2xx responses still throw (`EnsureSuccessStatusCode`), so the retry loops behave as before.
 
 ### Phase 2: Core Skyline and SkylineBatch `HttpWebRequest`
-- [ ] `Skyline/Program.cs` analytics pings -> `HttpClientWithProgress` (fire-and-forget, silent progress)
-- [ ] `SkylineBatch/Program.cs` analytics ping -> same pattern
-- [ ] `ReportErrorDlg.cs` -> `HttpClientWithProgress` with a `CookieContainer` for the CSRF token
-- [ ] Test the report post against skyline.ms (or with `HttpClientTestHelper`)
+- [x] `Skyline/Program.cs` GA4 hit -> `HttpClientWithProgress.SendRequest`
+- [x] Universal Analytics (v=1, UA-9194399-1) hits **deleted** in both Skyline and SkylineBatch, per
+      Brendan: Google stopped processing UA data in July 2023. SkylineBatch now sends no analytics.
+      Its orphaned resource string was removed too. It had sent the hit synchronously on the UI
+      thread at startup, so it could delay startup by up to 100 s on a slow network.
+- [x] `ReportErrorDlg.cs` -> `HttpClientWithProgress` with a `CookieContainer` for the CSRF token
+- [x] Test the report post against skyline.ms
+
+Done 2026-09-24. Skyline build, CodeInspection, `SendGa4AnalyticsHitTest` (live, debug endpoint),
+QuickInspection, SkylineBatch build and inspection all clean.
+
+- ReportErrorDlg keeps the same form: the same five fields and the same file-part names,
+  including the long-standing `formFiles[00` with no closing bracket, which the server has
+  always received.
+  - Parts are built with `ByteArrayContent` and a hand-quoted Content-Disposition, so no
+    `filename*` parameter or text/plain charset is added.
+  - It is still synchronous and silent on the UI thread, as before. Adding a progress dialog
+    would be a UX change, out of scope here.
+- Live check: a temporary test method called `HttpUploadFiles` directly and posted exception
+  **#75637** ("TEST - please delete - ...") with a `test-attachment.txt` attachment. Both the
+  post and the attachment arrived. The test was reverted, not committed.
+  **#75637 needs deleting on skyline.ms.**
 
 ### Phase 3: Test and developer tools
 - [ ] Migrate the simple ones from section 3; note the rest as allowed exceptions
