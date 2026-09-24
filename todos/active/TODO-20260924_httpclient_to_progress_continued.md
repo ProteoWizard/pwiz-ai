@@ -136,6 +136,33 @@ QuickInspection, SkylineBatch build and inspection all clean.
   post and the attachment arrived. The test was reverted, not committed.
   **#75637 needs deleting on skyline.ms.**
 
+### Code review (2026-09-24, `/code-review max 4700`)
+15 findings, triaged by risk against reward, fixed in one follow-up commit:
+- Fixed:
+  - ReportErrorDlg closed as if the report was sent when the PC was offline. This was a
+    regression from this PR. Now only `NetworkRequestException` with a `StatusCode` is logged
+    and ignored, and connection failures propagate as they did on master.
+  - A DownloadArtifact timeout was logged as "A task was canceled.".
+  - Added a zero-tolerance `WebRequest.Create` inspection rule, and checked with a temporary
+    violation that it fires.
+  - Reused `TextUtil.Quote`, removed a dead `errmessage` reset, and fixed comment periods and
+    one comment that gave the wrong reason for the quoting.
+- Dropped:
+  - Strict cookie parsing and a stalled GET blocking the CSRF token: latent, and nothing in
+    today's server triggers them.
+  - `SendRequest` timeouts not cancelling, which holds shared connections: fixing it needs a
+    new `HttpClientWithProgress` upload API.
+  - The long-message `EscapeDataString` limit and TLS on Windows 7 for `SkylineNightly post`:
+    pre-existing.
+  - Aborting the report when the CSRF GET fails: changes timeout behavior for little gain.
+  - Three copies of the LabKey CSRF logic: a refactor across PanoramaClient.
+  - SkylineBatch's leftover `InstallationId` read: touches settings-file creation for a
+    cosmetic gain.
+- Server-side, reported to Brendan: LabKey/MacCossLabModules #622 (May 2026) restricted
+  `testresults/sendEmailNotification.view` to site admins. SkylineNightly posts hang alerts as
+  a guest, so every alert gets a 401 and the failure is swallowed. This predates this PR, and the
+  #622 review proposes deleting the action as unused.
+
 ### Phase 3: Test and developer tools
 - [ ] Migrate the simple ones from section 3; note the rest as allowed exceptions
 
@@ -143,7 +170,8 @@ QuickInspection, SkylineBatch build and inspection all clean.
 - [ ] Make the decision in section 4 and apply it
 
 ### Phase 5: Inspection
-- [ ] Add a `CodeInspectionTest` rule against `WebRequest.Create` / `HttpWebRequest`, with a tolerance equal to the Ardia count
+- [x] Add a `CodeInspectionTest` rule against `WebRequest.Create`. Tolerance is 0, because
+      Ardia's use (`Shared/CommonMsData`) is outside the scan roots.
 - [ ] Consider a bare `new HttpClient` rule for product code, exempting Ardia and the test and dev tools
 - [ ] When the WebClient tolerance reaches 0, or everything is on net10 and SYSLIB0014 covers it, delete that rule (see the prohibition TODO)
 
