@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). Step 1 not started. The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
+- **Status**: In Progress - Steps 1a and 1b committed (`02bfb8d29e`, `c5947b788b`); next is `regression-parallel.ps1 -Dataset All` for modes 7 and 10-12, then Step 1c. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -326,8 +326,36 @@ code does", so they live in pwiz, not `ai/`.
   1st-pass model" line (CSV row "Keep") lost its `[TRAIN]` tag so it stays visible; it is now
   plain prose and goes to RESX in Step 4. `MultiProgressReporterTest` covers both tags.
   Build-Osprey -RunTests -RunInspection green (598 tests).
-- [ ] Step 1b: `[PATH]`/`[COUNT]` route lines from the coupling inventory, `regression.ps1`
-  on `--perf-stats` with probes moved, `Get-MemoryReport.ps1`, `perfviz.py`, `Run-Osprey.ps1 -Summary`.
+- [x] Step 1b (`c5947b788b`; Stellar gate green, 17 legs; `-Dataset All` pending for modes 7, 10-12):
+  - **`LogTag` design (Brendan, 2026-09-24).** Every `[TAG]` prefix comes from
+    `Osprey.Core/LogTag.cs`: gated machine tags (COUNT, TIMING, BENCH, STAGE_WALL, PATH, TRAIN
+    under `--perf-stats`; `Mem(label)` under `OSPREY_LOG_MEMORY`), TASK always, and category tags
+    (WARN, ERROR, MODEL_DIAGNOSTICS, ENTRAPMENT, BISECT, DIAG, FDR, LIB_LOAD, DROP) always
+    emitted and followed by prose. `LogKey` in the same file holds the route/count keys the gate
+    reads. Code writing a tagged line takes an `IOspreyLog` (option A, chosen over an
+    `Action<string>` extension method); `PipelineContext` implements it; `OspreyLog.Write` is
+    the one emission decision; `OspreyLog.Out` / `None` / `FromDelegate` adapt other sinks. The
+    `IsStatLine` / `StatFilteringTextWriter` string filter is deleted;
+    `CodeInspectionTest.TestLogTagsComeFromLogTag` fails on a tag written as a literal.
+  - Behaviour change: the three unconditional `[MEM pass2-fold: ...]` probes in
+    `SecondPassFdrTask.FoldPass2DiagnosticsOnly` now need `OSPREY_LOG_MEMORY` (spec rule 4).
+  - Verified by an A/B log diff on Stellar (3 files), base `02bfb8d29e` vs the refactor, in
+    `D:\test\osprey-runs\logtag-ab\` (snapshots in `D:\test\osprey-runs\_bin\logtag-{base,new}`).
+    Default log identical apart from two timing-deferred progress headings. `--perf-stats` log:
+    every baseline tagged line present and unchanged except `[TIMING] Per-window` (slowest
+    window varies), plus only the new `[PATH]`/`[COUNT]` lines.
+  - `regression.ps1` passes `--perf-stats`; every route/count probe reads a `[PATH]`/`[COUNT]`
+    line, including three the inventory missed (`requires the RESIDENT pre-compaction`,
+    `Loading scored entries`, `enrichment of the pass-1 report`). The mode 11 probe
+    `Folding experiment-q floors` was dead (no emitter since #4522) and is removed.
+    `Loading scored entries` was a deferred progress heading; its `[PATH] scored-entries: load`
+    twin always prints, so the mode 11 cells are stricter now.
+  - `Get-MemoryReport.ps1` reads `[COUNT] scored-candidates` (prose fallback kept for pre-change
+    logs only). `perfviz.py` unchanged: Osprey failures already carry `[ERROR]`.
+    `Run-Osprey.ps1` gained `-Exe`; its Stellar dataset config is stale against the current
+    `D:\test\osprey-runs\stellar` layout (open, not fixed here). `-Summary` prose filter still
+    to rebase or drop.
+  - `docs/20-command-line.md` has the "Log format" section.
 - [ ] Step 1c: demote the B1 lines.
 
 ## Acceptance

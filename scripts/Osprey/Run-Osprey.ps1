@@ -92,6 +92,12 @@
 .PARAMETER ExtraArgs
     Additional arguments to pass to the tool (e.g. "--protein-fdr 0.01")
 
+.PARAMETER Exe
+    Run this Osprey.exe instead of the default C:\proj\pwiz Release build. Use it for any
+    other checkout, or for a snapshot under D:\test\osprey-runs\_bin\<tag> (an A/B, or a run
+    that must not lock the build tree). Pair it with --work-dir in -ExtraArgs so the run's
+    caches stay out of the shared dataset folder.
+
 .PARAMETER Summary
     Show only key output lines (timing, calibration, results)
 
@@ -206,6 +212,9 @@ param(
     [string]$TestBaseDir = $null,
 
     [Parameter(Mandatory=$false)]
+    [string]$Exe = $null,
+
+    [Parameter(Mandatory=$false)]
     [ValidateSet("net472", "net8.0")]
     [string]$TargetFramework = "net472"
 )
@@ -234,7 +243,7 @@ $rustForkBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
 $rustUpstreamBinary = Join-Path $projRoot "osprey-mm\target\release\osprey.exe"
 $rustBinary = if ($RustTree -eq "Upstream") { $rustUpstreamBinary } else { $rustForkBinary }
 
-$binary = if ($Tool -eq "CSharp") { $csharpBinary } else { $rustBinary }
+$binary = if ($Exe) { $Exe } elseif ($Tool -eq "CSharp") { $csharpBinary } else { $rustBinary }
 if (-not (Test-Path $binary)) {
     Write-Error "$Tool binary not found at: $binary`nRun Build-Osprey.ps1 or Build-OspreyRust.ps1 first."
     exit 1

@@ -18,7 +18,7 @@
       [MEM reconciliation-floor]     managed_heap=.. (post-GC ..)
       [MEM reconciliation-resident]  managed_heap=.. (files=..)
       [STAGE-WALL] <stage>: <sec>s
-      Coelution analysis complete. <N> total scored entries across <M> files
+      [COUNT] scored-candidates: total=<N> files=<M>   (older logs: "Coelution analysis complete. ...")
       [TIMING] Total pipeline: <sec>s
 
     Scoring is reported as the MAX peak working set across all per-file probes
@@ -129,7 +129,11 @@ function Read-RunLog {
             continue
         }
 
-        if ($line -match 'Coelution analysis complete\.\s+(\d+) total scored entries across (\d+) files') {
+        # The [COUNT] line (--perf-stats) is the contract. The prose form is matched only so
+        # logs written before 2026-09-24, which have no such line, still report; prose may be
+        # reworded or translated, so nothing newer may depend on it.
+        if ($line -match '\[COUNT\] scored-candidates: total=(\d+) files=(\d+)' -or
+            $line -match 'Coelution analysis complete\.\s+(\d+) total scored entries across (\d+) files') {
             $r.ScoredEntries = [long]$Matches[1]
             $r.NFiles = [int]$Matches[2]
             continue
