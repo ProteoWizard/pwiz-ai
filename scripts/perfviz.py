@@ -47,7 +47,11 @@ import sys
 
 LINE_RE = re.compile(
     r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\]\t(\d+)\t(\d+)\t(.*)$')
-FAIL_RE = re.compile(r'\[ERROR\]|Unhandled exception|Pipeline failed')
+# A run failed if it wrote an "Error:" line - in any language Osprey and Skyline ship, at the
+# start of the message or after the stamp columns (CommandStatusWriter.IsErrorLine) - or a
+# crash trace. "[ERROR]" is Osprey's prefix before 2026-09-24, kept so older logs still read.
+FAIL_RE = re.compile(r'(^|\t)(Error:|\u30a8\u30e9\u30fc\uff1a|\u9519\u8bef\uff1a)'
+                     r'|\[ERROR\]|Unhandled exception|Pipeline failed')
 
 
 class Sample:
@@ -201,7 +205,7 @@ def summarize(path, threshold, force, files=0):
     print('=' * 72)
 
     if failed and not force:
-        print('RUN FAILED - an [ERROR] / exception is present in this log.')
+        print('RUN FAILED - an Error: line or an exception is present in this log.')
         print('Refusing to report memory or gap statistics: a run that died early')
         print('yields a flat, gap-free summary that reads as a pass. Use --force to')
         print('override once you know why it failed.')

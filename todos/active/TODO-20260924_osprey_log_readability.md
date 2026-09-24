@@ -401,8 +401,28 @@ code does", so they live in pwiz, not `ai/`.
     lines. Enforcement belongs in Step 6: a Roslyn-based check that every integer argument of a
     log / progress / exception format carries an explicit format (`N0`, `D`, ...).
     `ai/.tmp/sessions/20260924-01355z/fmtfix/` has the start of that scanner.
-  - **Tag rule (Brendan):** `[TASK]` is the only tag in the default log. Open question: the
-    `[WARN]`/`[ERROR]` severity prefixes.
+  - **Tag rule (Brendan):** `[TASK]` is the only tag in the default log.
+- [x] Step 2b (`e089e4f2e0`; `-Dataset All` 70 PASS / 0 FAIL): Skyline's `Error:` / `Warning:` convention (Brendan, 2026-09-24: "not a
+  developer-side line... explicitly for the user... follow the Skyline example, [which] has
+  worked for many years and for Japanese and Chinese").
+  - `LogTag.WARN`/`ERROR` retired; `Program.LogError` writes `Error: `, `LogWarning` `Warning: `
+    (English literals until Step 4 resources them).
+  - Shared `CommandStatusWriter`: `ERROR_PREFIXES` (`Error:`, ja, zh-CHS, as ASCII escapes) and
+    `IsErrorLine` (prefix at line start or after a tab, i.e. after the stamp columns), ported
+    from SkylineRunner's `ErrorChecker`; `DefaultIsErrorMessage` now matches all three. Skyline
+    installs its own predicate, so this changes nothing there (Skyline itself not rebuilt).
+  - `Program.Main` reconciles exit code and error lines both ways, as Skyline's
+    `CommandLine.Run`: error under exit 0 -> exit 2 (`EXIT_CODE_RAN_WITH_ERRORS`); non-zero with
+    no error line -> "Error: Failure occurred. Exiting...". Either writes
+    `[PATH] exit-reconciled`. No-args usage now writes an `Error:` line. Tested by
+    `ProgramTests.TestErrorLinesAndExitCodeAgree` (detector in 3 languages + `GetExitAgreement`).
+  - `regression.ps1`: `Assert-ExitAgreesWithLog` on every leg (both run helpers), Skyline's
+    `ValidateRunExitStatus` equivalent; throws on `[PATH] exit-reconciled`, error under exit 0,
+    or non-zero exit without an error line.
+  - `perfviz.py` failure pattern matches `Error:` in all three languages (keeps `[ERROR]` for old
+    logs). `docs/20-command-line.md` Log format section documents the prefixes and exit codes.
+  - **Ask Mike** whether any of his pipelines (or the NextFlow POC) grep Osprey logs for
+    `[ERROR]` / `[WARN]` before this merges.
 
 ## Acceptance
 
