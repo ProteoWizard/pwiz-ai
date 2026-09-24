@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Step 1 done (`02bfb8d29e`, `c5947b788b`, `db620525ce`, `2512333e94`); next is Step 2. CHS 446 gap run deferred to the end (see Step 1c). Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
+- **Status**: In Progress - Steps 1, 2 and 2b done and pushed (last pwiz commit `e089e4f2e0`; `regression-parallel -Dataset All` 70 PASS / 0 FAIL on it). Next: Step 3 (Medium/Low rows + Table C), then 4 (RESX), 5, 6. CHS 446 gap run deferred to the end (see Step 1c). Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -423,6 +423,21 @@ code does", so they live in pwiz, not `ai/`.
     logs). `docs/20-command-line.md` Log format section documents the prefixes and exit codes.
   - **Ask Mike** whether any of his pipelines (or the NextFlow POC) grep Osprey logs for
     `[ERROR]` / `[WARN]` before this merges.
+- [ ] Step 3: Medium/Low rows (A14-A31) and Table C, same rules (1-7), `N0` on every count.
+  Known leftovers in the Stellar/Astral default logs: `Persisted the trained 1st-pass model
+  (3 file sidecar(s))`, `protein-compact: mapped recomputed q onto N reported survivors (0
+  frozen-model scores swapped in)`. `Interned library strings` (A5) stays until Mike decides.
+  Tools: `ai/.tmp/sessions/20260924-01355z/{banned_terms,bare_counts,logdiff}.py` over a
+  default log (`--timestamp --memstamp`, no `--perf-stats`) find what is left.
+- [ ] Step 4: RESX (plan above), including the `GetLocalizedString` literal arrays and the
+  `Warning:` / `Error:` prefixes (reuse Skyline's translations).
+- [ ] Step 5: tests under a second culture. Step 6: guards (banned vocabulary in the .resx;
+  explicit format on every integer argument - see the N0 decision under Step 2).
+- [ ] End of sprint: CHS 446 gap run (Step 1c), `/code-review max`, PR against
+  `Skyline/work/20260612_net8_port`, TeamCity Perf/Regression (ask first).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
 
 ## Acceptance
 
