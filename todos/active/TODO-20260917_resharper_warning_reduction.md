@@ -14,7 +14,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **147 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
+  **111 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -55,11 +55,12 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after wave 5 (non-UI literals) | 0 | 176 |
 | #4685 after merging the base forward (`316e234536`) | 0 | 178 |
 | #4685 after the `Redundant*` sweep (`0be13270fb`) | 0 | 160 |
-| #4685 today, after the doc-comment and namespace fixes (`ac6a36a17c`) | 0 | **147** |
+| #4685 after the doc-comment and namespace fixes (`ac6a36a17c`) | 0 | 147 |
+| #4685 today, after the constant `?.` / `??` fixes (`7049b83324`) | 0 | **111** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 147, in full (measured 2026-09-24 on #4685 at `ac6a36a17c`)
+### The 111, in full (measured 2026-09-24 on #4685 at `7049b83324`)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
@@ -69,9 +70,9 @@ group the report by `TypeId`.
 | `CSharpWarnings::CS0618` | 42 | Use of obsolete symbol | wave 1 here; wave 4 here; wave 3's share arrives through the base once the other branch merges |
 | `ConditionIsAlwaysTrueOrFalse` | 32 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
 | ~~`LocalizableElement`~~ | ~~25~~ 0 | Element is localizable | **done, wave 5** - see below |
-| `ConstantConditionalAccessQualifier` | 23 | `?.` qualifier known null or non-null | per-site, same family as the above |
+| ~~`ConstantConditionalAccessQualifier`~~ | ~~23~~ 0 | `?.` qualifier known null or non-null | **done** - see below |
 | `CSharpWarnings::CS0672` | 20 | Member overrides obsolete member | wave 1 (the `OnClosing`/`OnClosed` pairs) |
-| `ConstantNullCoalescingCondition` | 13 | `??` condition known null or non-null | per-site, same family |
+| ~~`ConstantNullCoalescingCondition`~~ | ~~13~~ 0 | `??` condition known null or non-null | **done** - see below |
 | ~~`InvalidXmlDocComment`~~ | ~~7~~ 0 | Invalid XML doc comment | **done** - see below |
 | `HeuristicUnreachableCode` | 7 | Heuristically unreachable code | pairs with the always-false conditions |
 | ~~`CheckNamespace`~~ | ~~6~~ 0 | Namespace does not match file location | **done, all 6 suppressed** - the rename it asks for would break every one; see below |
@@ -84,11 +85,13 @@ group the report by `TypeId`.
 
 Two notes on getting this to zero rather than to "small":
 
-- **75 of the 147 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
-  `ConstantConditionalAccessQualifier`, `ConstantNullCoalescingCondition`,
-  `HeuristicUnreachableCode`. These flag our own defensive null checks as provably
-  unnecessary, on the strength of .NET 10 annotations net472 never had. Each one is either
-  dead code to delete or a guard to keep with a suppression; they cannot be swept.
+- **39 of the 111 are what is left of the annotation family** - `ConditionIsAlwaysTrueOrFalse`
+  (32) and `HeuristicUnreachableCode` (7); the other two members are now done. These flag our
+  own defensive null checks as provably unnecessary, on the strength of .NET 10 annotations
+  net472 never had. Each one is either dead code to delete or a guard to keep with a
+  suppression; they cannot be swept. **The measured split from the 36 already worked is
+  32 delete / 2 real bug / 2 keep**, so expect the bulk to be genuine and a real minority
+  not to be.
 - The 1,833 warnings the `.editorconfig` severities removed are **demoted, not fixed**. If
   the zero-warning bar is meant to include them, that is a much larger body of work and the
   severity rules are the wrong instrument.
@@ -414,6 +417,55 @@ suppressed with the reason inline:
 This is the first category where the honest answer was "the inspection is wrong about intent"
 for every instance. The remaining 147 still contain more of these - a count reaching zero is not
 the same as every finding being a defect.
+
+### Constant `?.` and `??`: 147 -> 111 (`7049b83324`)
+
+36 findings, 17 files, the first two members of the annotation family. **32 removed, 2 kept
+under a suppression, and 2 turned out to be real defects.** Use `Offset` in the inspection XML
+to locate the exact operator - several lines carry two findings and the message alone will not
+say which.
+
+**Why 32 were safe to remove.** Three distinct guarantees, not one:
+- **Our own pwiz-sharp types**: `Chromatogram.Precursor`, `Precursor.Activation` and
+  `BinaryDataArray.Data` are `= new()` field initializers on non-nullable properties, and
+  `GetChromatogram` returns non-nullable. `CVParam.Value`/`UserParam.Value` are
+  `= string.Empty`. Those are real guarantees in code we own. The `?.` came from the legacy
+  C++/CLI wrapper, where the same members were pointers - another mechanical-port artifact.
+- **WinForms**: `Control.Text` and `DataGridViewCell.ToolTipText` return `string.Empty`, never
+  null; the grid indexers throw rather than return null.
+- **BCL contracts**: `HttpResponseMessage.Content`, `HttpContent.Headers`,
+  `HttpRequestMessage.Headers`/`Method`, `Exception.Message`, `Task<T>.Result`,
+  `ToolStripDropDownItem.DropDown`, `Path.GetExtension`/`GetFileName` of a non-null argument.
+
+**The two real defects are the same shape, and worth recognising again.** A `??` whose left
+operand returns `string.Empty` rather than null **can never fire**, so the fallback is dead:
+- `EditPeakScoringModelDlg.cs:1007` -
+  `cell.ToolTipText = cell.ToolTipText ?? <unexpected coefficient sign>` assigned the empty
+  string back to itself, so **the wrong-sign warning tooltip never appeared at all**. Now
+  guarded with `string.IsNullOrEmpty`.
+- `HangDetection.cs:238` - `dialog.Text ?? "<no text>"` reported an empty string instead of
+  the placeholder in hang diagnostics.
+
+If another `?? <fallback>` on a WinForms string property shows up, check it for this before
+deleting the `??`: deleting it preserves the bug, it does not fix it.
+
+**The two kept** are ClrMD (`Microsoft.Diagnostics.Runtime`) stack walks in `HangDetection`
+and `LogFileMonitor`. ClrMD annotates `ClrMethod.Type` non-null, but this code runs against a
+process that is already wedged, which is exactly when a library's happy-path annotation is
+least trustworthy, and an NRE there costs the diagnostic the code exists to produce.
+
+**One ReSharper conclusion was simply wrong** and is worth remembering: at
+`FormulaBox.cs:455` it claimed the parameter `text` was non-null, having inferred that from
+the preceding `textFormula.Text = text` - i.e. from the assumption that the assignment was
+valid, which is the very thing `assign_null_to_not_null` (demoted to `suggestion` in our
+`.editorconfig`) would have questioned. `text` reaches that line from `DisplayFormula` and
+other nullable sources. Rewritten as `textFormula.Text.Length`, which is what the line
+actually wants and cannot be null.
+
+Verified: `build.bat --no-tests` 0 errors; `tcinspect` 111/0 with both categories absent, no
+new category and no other count moved; `Test.dll` 421, `TestData.dll` 178, and
+`TestPeakScoringModel` + `TestEditCustomMoleculeDlg` + `TestIonMobility` (the dialogs touched,
+including the tooltip behaviour change) - all 0 failures.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
