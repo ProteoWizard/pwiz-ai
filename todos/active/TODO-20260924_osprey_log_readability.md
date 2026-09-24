@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1a and 1b committed (`02bfb8d29e`, `c5947b788b`, `db620525ce`) and green on all four datasets; next is Step 1c. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
+- **Status**: In Progress - Step 1 done (`02bfb8d29e`, `c5947b788b`, `db620525ce`, `2512333e94`); next is Step 2. CHS 446 gap run deferred to the end (see Step 1c). Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -360,7 +360,29 @@ code does", so they live in pwiz, not `ai/`.
     `D:\test\osprey-runs\stellar` layout (open, not fixed here). `-Summary` prose filter still
     to rebase or drop.
   - `docs/20-command-line.md` has the "Log format" section.
-- [ ] Step 1c: demote the B1 lines.
+- [x] Step 1c: demoted the B1 lines (`2512333e94`). Default logs, developer logging off, before vs after:
+    Stellar max gap 5 s -> 5 s (248 -> 230 lines), Astral 16 s -> 16 s (437 -> 428), 0 gaps >= 30 s
+    either side; only the demoted lines left, every result count unchanged. Logs in
+    `D:	est\osprey-runs\logtag-gaps\`. Regression not rerun: no probe reads the demoted prose.
+  - **Keep rule (Brendan, 2026-09-24):** Mike reinstated count lines after the June console
+    cleanup (`TODO-20260623_ospreysharp_console_output`), and issue #4387 records what he keys
+    off: experiment-level precursor/peptide counts at 1% FDR, the per-file calibration summary
+    (RT tolerance, MS1/MS2 with n= matches), Percolator training progress. Any line reporting a
+    result count, a calibration outcome or training progress stays in the default log. Only
+    code-path, intermediate-file and memory-bookkeeping lines move, and only after `git log -S`
+    shows who wrote them. All B1 lines trace to our branch work (#4213..#4642) except
+    `Interned library strings` (Mike, #4381): kept default, for Mike to decide.
+  - **Gap rule:** no demotion may open a reporting gap with developer logging off. Measured
+    with `ai/scripts/perfviz.py --gap-threshold 30` on default logs (`--timestamp --memstamp`,
+    no `--perf-stats`, no `--verbose`), before vs after, on Stellar and Astral.
+  - **CHS 446 prediction:** stripping every now-gated line (1,820) from the 2026-09-14 developer-off
+    log `chs-seer\runs\_oracle-floors4662\run.log` leaves max gap 27 s, 0 gaps >= 30 s.
+  - **CHS 446 actual run: DEFERRED** to the end of the sprint or a night session (Brendan:
+    ~20 h). Ready command (dry-run verified, 1,784 files link, 0 missing, version pinned
+    26.1.1.243); rebuild the snapshot from the final code first:
+    `Run-Chs.ps1 -DataDir D:/test/osprey-runs/chs-seer/raw -LibraryDir "D:/test/osprey-runs/sea-ad/lib/target+decoy+entrapment-20260817" -LinkFrom D:/test/osprey-runs/chs-seer/runs/chs-446files-libdecoy-r1.0-protein-compact-stage5stream -Exe D:/test/osprey-runs/_bin/<snapshot>/Osprey.exe -NoModelDiagnostics -Tag <tag>`
+    Compare with `perfviz.py` against `chs-446files-libdecoy-r1.0-protein-compact-stages567-n4646\run.log`
+    (same link source and settings, 14h58m). A cold run including scoring is ~20 h.
 
 ## Acceptance
 
