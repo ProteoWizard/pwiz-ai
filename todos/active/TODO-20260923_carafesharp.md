@@ -146,6 +146,11 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       CPU vs GPU fine-tune on the same data: MS2 PCC 0.9821/0.9823, COS 0.9835/0.9838, RT R2 0.9977 both.
 
 - [ ] **M6** `ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1`; Stellar then Astral end to end
+      Stellar done: all stages 1a-6 from hela-filtered.fasta with the CUDA build and the part-B Osprey
+      (`D:\test\carafesharp-runs\stellar-workflow`, log `ai/.tmp/sessions/20260923-carafesharp/workflow-stellar.log`):
+      1a 0.03 min, 2 2.1 min, 3 4.6 min, 4-5 7.3 min, 6 7.6 min. Training 23,169 precursors -> RT R2 0.9978,
+      MS2 COS 0.9853; final library 968,394; stage 6 31,460 precursors / 28,637 peptides / 4,338 proteins,
+      combined FDP 0.66% (high Osprey mode; gated stage 1b, so not June-comparable). Astral still to do.
 
 ## Reference data on this machine (developer's own Carafe runs)
 
