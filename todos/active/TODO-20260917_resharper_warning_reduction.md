@@ -14,7 +14,8 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **176 warnings, 0 errors** on #4685 as of 2026-09-24. Waves 3 and 4 not started.
+  **178 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
+  `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
   [#4697](https://github.com/ProteoWizard/pwiz/pull/4697)
@@ -22,8 +23,10 @@ the way it already runs on net472.
   - `TODO-20260823_resharper_cleanup.md` - **the same goal, reached from the other side**
     (Skyline + SkylineBatch + AutoQC, 12 commits on `Skyline/work/20260823_resharper_cleanup`,
     idle since 2026-08-24). Reconcile before either lands; see "Overlap" below.
+  - `TODO-20260924_httpclient_to_progress_continued.md` - **owns wave 3 as of 2026-09-24**,
+    on its own branch off master. See "Wave 3 moved out" below
   - `completed/2025/10/TODO-20251010_webclient_replacement.md` - the 2025 WebClient migration,
-    whose deferred Phase 2 IS wave 3 here
+    whose deferred Phase 2 was wave 3 here
   - `TODO-20260612_net8_port.md` - the port this rides on
 
 ## Goal
@@ -49,18 +52,19 @@ the team `Skyline.sln.DotSettings` profile.
 | After severity tuning | 0 | 536 |
 | After the mechanical sweep | 0 | 211 |
 | #4685 after wave 2 (clipboard) | 0 | 201 |
-| #4685 today (+ wave 5, non-UI literals) | 0 | **176** |
+| #4685 after wave 5 (non-UI literals) | 0 | 176 |
+| #4685 today, after merging the base forward (`316e234536`) | 0 | **178** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
-| Projected with waves 3 and 4 | 0 | ~139 |
+| Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 176, in full (measured 2026-09-24 on #4685's branch)
+### The 178, in full (measured 2026-09-24 on #4685 at `316e234536`)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
 
 | Inspection | Count | What it is | Route to zero |
 |---|---|---|---|
-| `CSharpWarnings::CS0618` | 42 | Use of obsolete symbol | waves 1, 3, 4 |
+| `CSharpWarnings::CS0618` | 42 | Use of obsolete symbol | wave 1 here; wave 4 here; wave 3's share arrives through the base once the other branch merges |
 | `ConditionIsAlwaysTrueOrFalse` | 32 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
 | ~~`LocalizableElement`~~ | ~~25~~ 0 | Element is localizable | **done, wave 5** - see below |
 | `ConstantConditionalAccessQualifier` | 23 | `?.` qualifier known null or non-null | per-site, same family as the above |
@@ -75,16 +79,17 @@ group the report by `TypeId`.
 | `RedundantArgumentDefaultValue` | 3 | Argument equals the default | delete |
 | `RedundantNullableDirective` | 3 | Redundant `#nullable` directive | delete |
 | `RedundantJumpStatement` | 2 | Redundant control flow jump | delete |
-| `RedundantCast` | 2 | Redundant cast | **leave**: `null as double?` in `AlignmentForm` types the conditional, which LangVersion 8 cannot infer - needs a suppression, not a deletion |
+| `RedundantCast` | 3 | Redundant cast | **all three need a suppression, not a deletion**: 2 are `null as double?` in `AlignmentForm`, typing the conditional in a way LangVersion 8 cannot infer; the third is `(IntPtr)(-1)` in `PInvoke/User32.cs`, redundant only because `IntPtr` IS `nint` on net10 |
 | `RedundantSuppressNullableWarningExpression` | 2 | Redundant `!` | delete |
 | `PartialTypeWithSinglePart` | 1 | `partial` with one part | delete the modifier |
 | `RedundantEmptyFinallyBlock` | 1 | Empty `finally` | delete (leftover from the mechanical port) |
+| `RedundantNameQualifier` | 1 | Redundant name qualifier | delete - `System.Text.Encoding.UTF8` in `SkylineTester/CreateZipInstallerWindow.cs:214`, arrived with the base |
 | `UsingStatementResourceInitialization` | 1 | Object initializer on a `using` variable | restructure |
 | `NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract` | 1 | `??` never null per annotations | per-site |
 
 Two notes on getting this to zero rather than to "small":
 
-- **75 of the 176 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
+- **75 of the 178 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
   `ConstantConditionalAccessQualifier`, `ConstantNullCoalescingCondition`,
   `HeuristicUnreachableCode`. These flag our own defensive null checks as provably
   unnecessary, on the strength of .NET 10 annotations net472 never had. Each one is either
@@ -146,7 +151,7 @@ were deliberately left - `null as double?` in `AlignmentForm` types the conditio
 |---|---|---|
 | 1 - Form close methods (WFDEV004), ServicePointManager, Assembly.CodeBase | 47 | [#4697](https://github.com/ProteoWizard/pwiz/pull/4697) |
 | 2 - Clipboard/DataObject `GetData` to `TryGetData<T>` (WFDEV005) | 10 | merged into #4685 |
-| 3 - `WebRequest.Create` / `WebClient` | 10 in-solution + 2 outside | **not started - see below** |
+| 3 - `WebRequest.Create` / `WebClient` | 10 in-solution + 2 outside | **moved out** to `TODO-20260924_httpclient_to_progress_continued.md` - see below |
 | 4 - `Uri.EscapeUriString` (SYSLIB0013) | 5 | not started, blocked on a question |
 | 5 - non-UI string literals (`LocalizableElement`) | 25 | merged into #4685 (`a593268c93`) |
 
@@ -168,44 +173,31 @@ has to find the opening quote both ways; and `MzTolerance` is a good specimen of
 idioms - `$@"..."` on `ToString()`, `[Localizable(false)]` on `AuditLogText`, the latter
 because its literal needs `\"` escapes.
 
-## Wave 3 is the WebClient replacement's missing Phase 2
+## Wave 3 moved out, to its own branch off master (2026-09-24)
 
-Do not design this fresh. `completed/2025/10/TODO-20251010_webclient_replacement.md` deferred
-exactly these call sites under "Deferred to Future Branches (Out of Scope for Phase 1)":
+`TODO-20260924_httpclient_to_progress_continued.md` owns it now, on
+`Skyline/work/20260924_httpclient_to_progress_continued`, based on **master** rather than on
+the port branch - so master and the port both get the fix instead of it riding here and
+arriving only when #4619 merges. Its inventory is this one's, re-taken from `origin/master`
+on 2026-09-23 and widened to `HttpWebRequest`/`WebRequest.Create` and bare `HttpClient`.
+Phase 1 (SkylineNightly, SkylineNightlyShim, and lowering the inspection tolerance) is
+already done there; Skyline's own `Program.cs` analytics pings and `ReportErrorDlg` are its
+Phase 2, and it makes the same "leave Ardia alone" call this TODO did.
 
-> **Tools Migration** - Executables (AutoQC, SkylineBatch, Installer); Nightly build tools
-> (SkylineNightly, SkylineNightlyShim)
+**Do not migrate any of these call sites here.** The only thing this branch still owes wave 3
+is that #4697 deletes `ServicePointManager`, and the legacy stack is what still uses it - see
+"Open items" below.
 
-It pointed at `todos/backlog/TODO-tools_webclient_replacement.md`, **which was never written** -
-the only deferral from that list with no successor. `TODO-20260823_resharper_cleanup.md`
-diagnoses this at length.
-
-The target is already decided and enforced: `CodeInspectionTest.cs` forbids
-`new\s+(System\.Net\.)?WebClient\s*[({]` at `Level.Error` with no inline opt-out, naming
-`pwiz.Common.SystemUtil.HttpClientWithProgress` as the project standard (progress reporting,
-cancellation, and a `TestBehavior` seam for tests). That rule shipped as
-[#4648](https://github.com/ProteoWizard/pwiz/pull/4648), merged to master 2026-09-10.
-
-**Open question for whoever starts it**: the surviving `new WebClient()` calls in
-`SkylineNightly/Nightly.cs` and `SkylineNightlyShim/Program.cs` apparently do not trip that
-rule today. Find out why before migrating - if the rule's file scope excludes those projects,
-the scope is the first fix, or the migration will drift again the same way.
-
-Sites, grouped by blast radius:
-
-- **3a** `SkylineNightly/Nightly.cs:767,1287,1354,1547` and `SkylineNightlyShim/Program.cs:141`.
-  Out-of-process; failures are visible and harmless to users. Forces
-  `TeamCityNightlyAuth.ConfigureClient(WebClient, string)` to change shape.
-- **3b** `Program.cs:523,578` - Google Analytics pings, fire-and-forget, on the startup path.
-- **3c** `Alerts/ReportErrorDlg.cs:257,324` - crash reporting. Highest risk: runs when Skyline
-  is already failing, synchronously, from the UI thread, where `.Result` deadlocks.
-- **Leave alone**: `ArdiaClient.cs:204` documents why it is `HttpWebRequest` - `HttpClient`
-  adds `charset=utf-8` to Content-Type and the Ardia delete API answers 400. Migrating it
-  means building the `HttpContent` with a `MediaTypeHeaderValue` that has no `CharSet`, and
-  verifying against the endpoint, which needs the `TestArdia*` credentials.
-- Outside `Skyline.sln` (never inspected, still warn in their own builds):
-  `Executables/SkylineBatch/SkylineBatch/Program.cs:286`,
-  `Executables/Installer/SetupDeployProject.cs:109`.
+**The open question this TODO raised is answered, and its premise was wrong.** The surviving
+`new WebClient()` calls in `SkylineNightly/Nightly.cs` and `SkylineNightlyShim/Program.cs`
+DO trip the `CodeInspectionTest` rule. Nothing excludes them: the rule passes `null` for
+exemptions, commented "notably not Executables, which NonSkylineDirectories would have
+skipped, and which is where the migration was missed". They are absorbed by the rule's
+**tolerance argument of 3** - the third is `Executables/Installer/SetupDeployProject.cs` -
+which tolerates known survivors as warnings so no NEW one can be added, and which the
+comment calls "the only thing tracking them". So the file scope needed no fix; the number is
+what gets lowered as each site migrates, which is exactly what the other branch's Phase 1
+did. Nothing here drifted.
 
 ## Wave 4 is blocked on a compatibility answer
 
@@ -221,11 +213,11 @@ or round-tripping breaks for any name containing a reserved character.
 
 ## Open items on the branches
 
-1. **#4685's description is stale** - it still describes the `ProteowizardWrapper.PwizSharp`
-   exclusion and a plan to add `DotSettings` entries for "about 14 of the 65 errors". Both
-   went away when the pre-build fixed resolution. It also ends with a
-   `Generated with [Claude Code]` line and a session URL, which
-   `ai/docs/version-control-guide.md` forbids.
+1. ~~**#4685's description is stale**~~ **DONE 2026-09-24.** Rewritten: the
+   `ProteowizardWrapper.PwizSharp` exclusion and the "about 14 of the 65 errors" DotSettings
+   plan are gone (both died with the pre-build fix), the severity tuning, sweep and waves 2
+   and 5 are described, and the forbidden `Generated with [Claude Code]` line and session URL
+   are removed. The missing `skyline` module label was added at the same time.
 2. **`.editorconfig` scope, raised by `/code-review max` and not yet addressed** - the blanket
    `[*.cs]` at repo root reaches `pwiz_tools/Osprey`, `Bumbershoot`, `MSConvertGUI`, `SeeMS`
    and `Skyline/Executables`, each of which keeps its own `.sln.DotSettings` that does not
@@ -316,6 +308,38 @@ real disagreement. Whoever moves that branch forward should also decide which br
   local and remote. Do not look for it.
 - Measured the overlap with `TODO-20260823_resharper_cleanup`: 4 of its 12 commits are already
   in by content via #4648; 8 are stranded; 5 files collide with the sweep.
+
+### 2026-09-24, later session
+
+- Merged the base forward into #4685 (`316e234536`, 12 commits, no conflicts) and pushed.
+  TeamCity build 4186456 picked it up, so the inspection step this PR ADDS is what verifies
+  the merge.
+- **Re-measured after the merge: 178 warnings, 0 errors** (was 176). The base brought two new
+  findings, both in the mechanical sweep's own categories, neither swept:
+  - `Shared/CommonBaseUI/SystemUtil/PInvoke/User32.cs:420` - `RedundantCast` on `(IntPtr)(-1)`.
+    **Do not just delete it.** It is redundant only because `IntPtr` IS `nint` on net10 and
+    takes an implicit `int` conversion; on a net472 leg that cast is load-bearing. This one
+    needs a suppression or a multi-target check, not a deletion.
+  - `SkylineTester/CreateZipInstallerWindow.cs:214` - `RedundantNameQualifier` on
+    `System.Text.Encoding.UTF8`. Safe to delete.
+  - The lesson generalises: the base branch will keep adding a finding or two per merge in
+    exactly the categories the sweep already cleared, so the count drifts UP between sessions
+    without anyone writing new bad code. Re-measure after every merge-forward.
+- **#4685's description rewritten** (open item 1, closed). It no longer claims the
+  `ProteowizardWrapper.PwizSharp` exclusion or the "about 14 of the 65 errors" DotSettings
+  plan, both dead since the pre-build fix; it now covers the severity tuning, the sweep and
+  waves 2 and 5; the `Generated with [Claude Code]` line and session URL are gone; and the
+  `.editorconfig` scope question is stated in the body as an open question for review rather
+  than left for a reviewer to find.
+- **#4685 had no module label.** Added `skyline`. #4697 already had it. Worth checking on any
+  PR this TODO opens - neither `gh pr create` nor the description edit adds it.
+- Wave 3 handed off to `TODO-20260924_httpclient_to_progress_continued.md`, and its open
+  question answered from `CodeInspectionTest.cs`: the rule's scope was never the problem, the
+  tolerance count of 3 is what tracks the survivors. See "Wave 3 moved out" above.
+
+**Still open on #4697's description**: it says it is "Stacked on
+`Skyline/work/20260917_resharper_inspection_noise` ... which is the base of this PR". That
+branch no longer exists and its base is now `Skyline/work/20260918_inspection_in_build`.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
