@@ -14,7 +14,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **160 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
+  **147 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -54,11 +54,12 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after wave 2 (clipboard) | 0 | 201 |
 | #4685 after wave 5 (non-UI literals) | 0 | 176 |
 | #4685 after merging the base forward (`316e234536`) | 0 | 178 |
-| #4685 today, after the `Redundant*` sweep | 0 | **160** |
+| #4685 after the `Redundant*` sweep (`0be13270fb`) | 0 | 160 |
+| #4685 today, after the doc-comment and namespace fixes (`ac6a36a17c`) | 0 | **147** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 160, in full (measured 2026-09-24 on #4685, after the `Redundant*` sweep)
+### The 147, in full (measured 2026-09-24 on #4685 at `ac6a36a17c`)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
@@ -71,9 +72,9 @@ group the report by `TypeId`.
 | `ConstantConditionalAccessQualifier` | 23 | `?.` qualifier known null or non-null | per-site, same family as the above |
 | `CSharpWarnings::CS0672` | 20 | Member overrides obsolete member | wave 1 (the `OnClosing`/`OnClosed` pairs) |
 | `ConstantNullCoalescingCondition` | 13 | `??` condition known null or non-null | per-site, same family |
-| `InvalidXmlDocComment` | 7 | Invalid XML doc comment | fix the `cref` targets |
+| ~~`InvalidXmlDocComment`~~ | ~~7~~ 0 | Invalid XML doc comment | **done** - see below |
 | `HeuristicUnreachableCode` | 7 | Heuristically unreachable code | pairs with the always-false conditions |
-| `CheckNamespace` | 6 | Namespace does not match file location | rename namespace or move file |
+| ~~`CheckNamespace`~~ | ~~6~~ 0 | Namespace does not match file location | **done, all 6 suppressed** - the rename it asks for would break every one; see below |
 | `CA1416` | 4 | Platform compatibility | annotate or guard the Windows-only calls |
 | `NotAccessedField.Local` | 3 | Private field never read | delete |
 | ~~`Redundant*`, 8 categories~~ | ~~18~~ 0 | Casts, `Cast<T>` calls, default arguments, `#nullable` directives, jumps, `!`, an empty `finally`, a name qualifier | **done, the `Redundant*` sweep** - see below |
@@ -83,7 +84,7 @@ group the report by `TypeId`.
 
 Two notes on getting this to zero rather than to "small":
 
-- **75 of the 160 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
+- **75 of the 147 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
   `ConstantConditionalAccessQualifier`, `ConstantNullCoalescingCondition`,
   `HeuristicUnreachableCode`. These flag our own defensive null checks as provably
   unnecessary, on the strength of .NET 10 annotations net472 never had. Each one is either
@@ -374,6 +375,45 @@ them, so a code change there is not covered by a `build.bat --no-tests` green.
 Verified: `build.bat --no-tests` 0 errors; `tcinspect` 160/0 with every `Redundant*` category
 absent and no new category and no other count moved; `Test.dll` 421 tests (incl.
 `CodeInspection`), `TestData.dll` 178 tests, `TestRetentionTimeAlignment` - all 0 failures.
+CI build 4186465 then measured 160 independently, matching exactly.
+
+### Doc comments and namespaces: 160 -> 147 (`ac6a36a17c`)
+
+13 findings, 13 files, **all comment-only** - a scripted check over `git diff -U0` confirmed no
+changed line was anything but a comment, so no IL could move and the suites could not be
+affected. Build and inspection were the whole gate; re-running tests would have proved nothing.
+
+**`InvalidXmlDocComment` (7)** - three were `cref`s made ambiguous by net10 adding overloads
+(`Path.GetFileNameWithoutExtension`, `File.GetAttributes`,
+`MSAmandaSearchWrapper.HasPercolatorQValues`), fixed by naming the overload. One was
+`MathNet.Numerics.Providers.LinearAlgebra.ManagedLinearAlgebraProvider`, which is **internal in
+MathNet 4.15** (the version `Common.csproj` deliberately pins), so it can never resolve - it is
+a provenance note and became a `<c>` span. One was a `<param name="forward">` for a parameter
+`Util.GetEnumerator` no longer has. One was a `cref` to an inherited `protected` member across
+projects, which ReSharper would not bind until qualified as `AbstractUnitTestEx.CheckRecordMode`.
+
+**The seventh was a real documentation bug**, not a formatting nit. `SkylineTesterWindow` had
+**three `<summary>` blocks stacked with no members between them**: the docs for
+`AddStagingCommand(string buildDir)` and `GetStagingTargetDir()` had been left behind when the
+methods moved, so `GetRunBuildDir()` carried all three and a `<param name="buildDir">` described
+a method that has no such parameter. Reattached each block to its own method; the text is
+byte-identical, only relocated. Worth knowing the inspection catches this class of drift at all.
+
+**`CheckNamespace` (6)** - **the rename it demands would break all six**, so all six are
+suppressed with the reason inline:
+- `SkylineNet8Stubs.cs` declares `namespace System.Deployment.Application` on purpose: it stands
+  in for the BCL namespace ClickOnce lost on net10, so the existing `using` directives still
+  compile. ReSharper wants `pwiz.Skyline`, which would defeat the file's entire reason to exist.
+- The five `Executables/DevTools/AssortResources/*.cs` are **compiled into two projects**: their
+  own `AssortResources.csproj`, and `Test.csproj`, which `Compile`-links them so
+  `CodeInspectionTest` can use `AssortResources.ResourceAssorter` without building the tool.
+  ReSharper judges them by the Test project's root namespace and asks for `pwiz.SkylineTest`;
+  `AssortResources` is the correct namespace for the tool, and `CodeInspectionTest` refers to it
+  by that name.
+
+This is the first category where the honest answer was "the inspection is wrong about intent"
+for every instance. The remaining 147 still contain more of these - a count reaching zero is not
+the same as every finding being a defect.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
