@@ -1,10 +1,10 @@
 # TODO-20260923_osprey_carafe_export.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260923_osprey_carafe_export` (not yet created)
+- **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: Not started (design below)
+- **Status**: In Progress
 - **Module**: `osprey`
 - **PR**: (pending)
 - **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`
@@ -110,6 +110,27 @@ With the new options off, every existing output must be byte-identical (regressi
 - Tests: TrainingEvidenceTest, TrainingExportParquetTest, RunInfoFileTest, membership/CLI/
   validity-key updates; regression.ps1 mode 13 (pay-later, resume, relay task, zero mp_cosine
   mismatches). Docs 00, 13, 14, 15, 19, 20 and new 21-training-export.md.
+
+## Progress Log
+
+### 2026-09-23
+- Worktree `D:\Dev\pwiz-osprey-export` from `origin/Skyline/work/20260612_net8_port` @ `bba770990a`.
+- This machine has only VS 2022 (MSBuild 17.14), which cannot load the .NET 10 SDK the #4619
+  branch needs (MSBuild 18). `ai/scripts/Osprey/Build-Osprey.ps1` now falls back to the SDK's own
+  msbuild and test runner in that case. Baseline on the branch: 598 tests pass.
+- Step 1 (partial): `Osprey.Core/PeptideFragmentMass.cs` - residue masses, PROTON/H2O and
+  `CalculateFragmentMz` moved verbatim out of DecoyGenerator, which delegates (TheoreticalLadder too).
+- Step 2 (part A, annotations): `Osprey.IO/BlibPeakAnnotations.cs` (grammar; one annotation per
+  peak - no loss first, then lowest charge; m/z validated at max(0.02 Th, 20 ppm); b/y only),
+  merge-joined in `BlibLoader.LoadSpectra` through a second ordered cursor; one summary log line;
+  `LibraryCompositionHash` gains `blib_reader:2` for blib sources only. Test
+  `BlibLibraryInputTest` (grammar table, typing, rejection, preference, plain blib unchanged,
+  generated decoys recompute annotated m/z).
+- **Scope change (proposed):** DecoyPairs support deferred. Osprey's existing
+  `--decoy-pairing-manifest` path already pairs Carafe-style libraries and is regression-tested;
+  CarafeSharp writes `decoy_` accessions plus the FDRBench manifest exactly as Carafe does.
+- Not done yet: the `;libext=` validity-key suffix (resume safety across the upgrade); the
+  regression gates need the 24.6 GB Panorama bundle, not on this machine (ask before downloading).
 
 ## Risks
 - Skyline has never loaded peptide fragment annotations - load a CarafeSharp blib in Skyline first.

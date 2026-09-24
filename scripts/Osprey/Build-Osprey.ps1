@@ -279,8 +279,19 @@ try {
         exit 1
     }
 
+    # The .NET 10 SDK (net10.0 Osprey, the ProteoWizard .NET port) requires MSBuild 18, which
+    # ships with Visual Studio 2026. Under Visual Studio 2022 (MSBuild 17.x) every SDK-style
+    # project fails to resolve Microsoft.NET.Sdk, so on such a machine build with the SDK's own
+    # MSBuild (dotnet msbuild, what the Linux path already uses) and test with dotnet test.
+    $useDotnetMsbuild = $false
+    $vsMsbuildVersion = (& $msbuildPath -version -nologo 2>$null | Select-Object -Last 1)
+    if ($resolvedTfm -like 'net1*' -and $vsMsbuildVersion -match '^(\d+)\.' -and [int]$matches[1] -lt 18) {
+        $useDotnetMsbuild = $true
+        Write-Host "Visual Studio MSBuild $vsMsbuildVersion cannot load the .NET 10 SDK; building with dotnet msbuild." -ForegroundColor Yellow
+    }
+
     if (-not $Summary) {
-        Write-Host "Using MSBuild: $msbuildPath" -ForegroundColor Cyan
+        Write-Host "Using MSBuild: $(if ($useDotnetMsbuild) { 'dotnet msbuild' } else { $msbuildPath })" -ForegroundColor Cyan
         Write-Host ""
     }
 
@@ -369,7 +380,11 @@ try {
         }
     }
 
-    & $msbuildPath @buildArgs
+    if ($useDotnetMsbuild) {
+        & dotnet msbuild @buildArgs
+    } else {
+        & $msbuildPath @buildArgs
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Build failed with exit code $LASTEXITCODE" -ForegroundColor Red
         exit $LASTEXITCODE
@@ -638,6 +653,17 @@ try {
                 "--"
             ) + $targetArgs
             & $dotCoverExe $coverArgs
+            $testExitCode = $LASTEXITCODE
+        } elseif ($useDotnetMsbuild) {
+            # Visual Studio 2022's vstest cannot host a net10.0 test assembly either.
+            $dotnetTestArgs = @('test', $testDll, '--nologo')
+            if ($TestName) {
+                Write-Host "Running test: $TestName" -ForegroundColor Cyan
+                $dotnetTestArgs += @('--filter', "Name~$TestName")
+            } else {
+                Write-Host "Running all Osprey unit tests..." -ForegroundColor Cyan
+            }
+            & dotnet $dotnetTestArgs
             $testExitCode = $LASTEXITCODE
         } elseif ($TestName) {
             Write-Host "Running test: $TestName" -ForegroundColor Cyan
