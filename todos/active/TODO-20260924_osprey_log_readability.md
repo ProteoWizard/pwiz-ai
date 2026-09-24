@@ -120,6 +120,12 @@ Rules that fell out of the review:
    diagnostic output behind `--verbose`, `--perf-stats` or `OSPREY_LOG_MEMORY`, never user text.
 5. No C# identifier, no task name outside the `[TASK]` marker, no environment variable and no
    stage number in a default-tier line.
+6. No possessive apostrophe on an inanimate noun; use the noun attributively (Brendan,
+   2026-09-24). "precursor candidate q-values", not "precursor candidates' q-values" - the
+   plural possessive in particular trips readers ("ASMS user meeting", never "users' meeting").
+7. A count states its denominator where the reader needs scale: "N of M precursor candidates".
+   Never print two counts that look like the same quantity (a follow-up line counting
+   precursor q-values vs the headline counting precursor records read as a contradiction).
 
 ## Two kinds of line
 
