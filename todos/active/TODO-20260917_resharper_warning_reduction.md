@@ -47,11 +47,12 @@ the team `Skyline.sln.DotSettings` profile.
 | After the pre-build fix (errors resolved) | 0 | 2,369 |
 | After severity tuning | 0 | 536 |
 | After the mechanical sweep | 0 | 211 |
-| #4685 today (+ wave 2 clipboard) | 0 | **201** |
+| #4685 after wave 2 (clipboard) | 0 | 201 |
+| #4685 today (+ wave 5, non-UI literals) | 0 | **176** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with waves 3 and 4 | 0 | ~139 |
 
-### The 201, in full (measured 2026-09-23 on #4685's branch)
+### The 176, in full (measured 2026-09-24 on #4685's branch)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
@@ -60,7 +61,7 @@ group the report by `TypeId`.
 |---|---|---|---|
 | `CSharpWarnings::CS0618` | 42 | Use of obsolete symbol | waves 1, 3, 4 |
 | `ConditionIsAlwaysTrueOrFalse` | 32 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
-| `LocalizableElement` | 25 | Element is localizable | move to resources, or mark the ones that are not UI text |
+| ~~`LocalizableElement`~~ | ~~25~~ 0 | Element is localizable | **done, wave 5** - see below |
 | `ConstantConditionalAccessQualifier` | 23 | `?.` qualifier known null or non-null | per-site, same family as the above |
 | `CSharpWarnings::CS0672` | 20 | Member overrides obsolete member | wave 1 (the `OnClosing`/`OnClosed` pairs) |
 | `ConstantNullCoalescingCondition` | 13 | `??` condition known null or non-null | per-site, same family |
@@ -82,7 +83,7 @@ group the report by `TypeId`.
 
 Two notes on getting this to zero rather than to "small":
 
-- **75 of the 201 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
+- **75 of the 176 are the annotation family** - `ConditionIsAlwaysTrueOrFalse`,
   `ConstantConditionalAccessQualifier`, `ConstantNullCoalescingCondition`,
   `HeuristicUnreachableCode`. These flag our own defensive null checks as provably
   unnecessary, on the strength of .NET 10 annotations net472 never had. Each one is either
@@ -146,6 +147,25 @@ were deliberately left - `null as double?` in `AlignmentForm` types the conditio
 | 2 - Clipboard/DataObject `GetData` to `TryGetData<T>` (WFDEV005) | 10 | merged into #4685 |
 | 3 - `WebRequest.Create` / `WebClient` | 10 in-solution + 2 outside | **not started - see below** |
 | 4 - `Uri.EscapeUriString` (SYSLIB0013) | 5 | not started, blocked on a question |
+| 5 - non-UI string literals (`LocalizableElement`) | 25 | merged into #4685 (`a593268c93`) |
+
+### Wave 5: none of those 25 belonged in a resource file
+
+Every one was an exe name, path fragment, extension, URL scheme, serialization key or
+separator - `"BlibBuild.exe"`, `"crux-output"`, `".pin"`, `"https"`, `"schema2"`, the `"_"`
+that builds a resource KEY in `MzTolerance.UnitText`. Localizing any of them would be a bug.
+`ai/STYLEGUIDE.md` already names the fix: a verbatim string is how this codebase marks text
+that must not be localized ("Use `$@""` format ... to avoid ReSharper localization
+warnings"). 22 became `@"..."`; the three whose literal contains escapes
+(`MSAmandaSearchWrapper.cs` x2, `ResourceAssorter.cs`) took
+`// ReSharper disable once LocalizableElement` instead, because `@"..."` would change what
+the string holds.
+
+Two things to know if this recurs: ReSharper reports the string's CONTENT for a plain literal
+(quotes excluded) but the WHOLE expression for an interpolated one, so an offset-driven fix
+has to find the opening quote both ways; and `MzTolerance` is a good specimen of both
+idioms - `$@"..."` on `ToString()`, `[Localizable(false)]` on `AuditLogText`, the latter
+because its literal needs `\"` escapes.
 
 ## Wave 3 is the WebClient replacement's missing Phase 2
 
