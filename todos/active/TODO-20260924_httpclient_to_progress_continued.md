@@ -1,10 +1,13 @@
-# TODO-httpclient_to_progress_continued.md
+# TODO-20260924_httpclient_to_progress_continued.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/YYYYMMDD_httpclient_to_progress_continued` (to be created when work starts)
+- **Branch**: `Skyline/work/20260924_httpclient_to_progress_continued`
 - **Base**: `master`
-- **Status**: Backlog
+- **Created**: 2026-09-24
+- **Status**: In Progress
+- **GitHub Issue**: (none)
 - **Module**: `skyline`
+- **PR**: (pending)
 - **Objective**: Retire the last `WebClient` and `HttpWebRequest` uses in Skyline and
   its tools, and decide what to do about bare `HttpClient` - so every HTTP call goes
   through `HttpClientWithProgress`, or plain `HttpClient` where the project cannot
