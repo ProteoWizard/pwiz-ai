@@ -129,11 +129,29 @@ With the new options off, every existing output must be byte-identical (regressi
 - **Scope change (proposed):** DecoyPairs support deferred. Osprey's existing
   `--decoy-pairing-manifest` path already pairs Carafe-style libraries and is regression-tested;
   CarafeSharp writes `decoy_` accessions plus the FDRBench manifest exactly as Carafe does.
-- Not done yet: the `;libext=` validity-key suffix (resume safety across the upgrade); the
-  regression gates need the 24.6 GB Panorama bundle, not on this machine (ask before downloading).
+- Part A committed `cdbab8c8ac` (600 tests, inspection clean). Developer approved the regression
+  bundle download (14.3 GB actual, `~/Downloads/Perftests`). `regression.ps1 -Dataset Stellar -NoBuild`
+  from a detached gate worktree `D:\Dev\pwiz-osprey-gate` at `cdbab8c8ac` (Release built there, so
+  part B edits in the main worktree cannot leak in): **PASSED** all modes (1, 1c, 2, 3, 4, 5, 6).
+  Note: `regression.ps1`'s own build step uses VS MSBuild, so on a VS 2022 machine build Release
+  with `Build-Osprey.ps1 -Configuration Release -SourceRoot <tree>` first and pass `-NoBuild`.
+- Build race on the #4619 branch: two configurations of pwiz-sharp's `Vendor.Common` build in
+  parallel and both run `VendorPinsGenerator`, so one fails to write its dll ("being used by another
+  process"). Rerunning the build succeeds. Worth reporting on #4619.
+- Part B `0a0b74432a`: `regression.ps1 -Dataset All -NoBuild` from the gate worktree (Release
+  built there) **PASSED**: 42 phases over Stellar, StellarLibDecoy, StellarGenDecoyEntrap and Astral,
+  3.9 h wall on a contended machine (log `ai/.tmp/sessions/20260923-carafesharp/gate-all.log`).
+- Part A in use: a CarafeSharp blib (968,437 spectra, 16.9M peaks) loads with 0 annotation
+  failures; Skyline-daily 26.1.1 (SkylineCmd) opens CarafeSharp blibs with peak annotations.
+  Part B in use: exports on Stellar _21 (Carafe TSV and CarafeSharp blib libraries), mp_cosine
+  parity 23,036/23,036 and 23,105/23,105; CarafeSharp trains on them (85% slot agreement with Carafe).
+- Found while comparing libraries: the Stellar experiment-level count is bimodal (about 21k or
+  28-30k at the same FDP) on 1e-4 library changes; see the CarafeSharp TODO. Separate task.
+- Not done yet: the `;libext=` validity-key suffix (resume safety across the upgrade); the perf gate
+  (`Test-PerfGate.ps1 -Dataset Stellar`, needs an uncontended machine).
 
 ## Risks
-- Skyline has never loaded peptide fragment annotations - load a CarafeSharp blib in Skyline first.
+- (Resolved) Skyline loads peptide fragment annotations from a CarafeSharp blib.
 - Osprey XICs take the closest peak unsmoothed; Carafe the max within tolerance with Savitzky-Golay.
   Carafe's 0.8 correlation threshold may need retuning (XIC blobs allow recomputing).
 - NCE semantics differ by vendor (Thermo NCE, Sciex eV, stepped HCD) - export the histogram.
