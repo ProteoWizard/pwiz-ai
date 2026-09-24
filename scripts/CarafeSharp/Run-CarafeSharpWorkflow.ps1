@@ -116,7 +116,10 @@ $presets = @{
             'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_60.mzML')
         TrainIndex  = 1
         Resolution  = 'hram'
-        FragTol     = '10'
+        # Both 20 ppm as Mike's June Astral Workflow 5 ran them: carafe_settings.json frag_tol 20 ppm,
+        # and the Osprey command in osprey_train/osprey.blib.carafe.sig (example_test_data/astral/
+        # Carafe-Osprey-entrapment). The Carafe workflow script's preset keeps Osprey's 10 ppm default.
+        FragTol     = '20'
         FragUnit    = 'ppm'
         CarafeItol  = '20'
         CarafeItolU = 'ppm'

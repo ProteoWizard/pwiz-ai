@@ -119,7 +119,7 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       14,146 of Carafe's 14,806 spectra in the export, 97% on the same apex scan; slot agreement
       85.0%; kept 15,345 (12,404 also kept by Carafe). corr_polish beats corr_reference (83.5%);
       thresholds 0.75-0.85 and skew on/off move agreement by <1 point. Opt-in
-      `OspreyMaskingParityTest` (`CARAFESHARP_OSPREY_TRAINING_EXPORT`).
+      `OspreyMaskingParityTest` (`CARAFESHARP_OSPREY_TRAINING_EXPORT`) = `D:\test\osprey-runs\carafe-june-train\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.training.parquet`).
       Running: CPU end-to-end on the CarafeSharp pipeline's own export
       (`D:\test\carafesharp-runs\stellar-m5`, exe `_bin\m5-92eb443`): 21,061 RT forms, 15,318 MS2
       spectra, then the 483k-precursor library from `osprey_library_db_peptides.fasta` as blib.
@@ -150,7 +150,27 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       (`D:\test\carafesharp-runs\stellar-workflow`, log `ai/.tmp/sessions/20260923-carafesharp/workflow-stellar.log`):
       1a 0.03 min, 2 2.1 min, 3 4.6 min, 4-5 7.3 min, 6 7.6 min. Training 23,169 precursors -> RT R2 0.9978,
       MS2 COS 0.9853; final library 968,394; stage 6 31,460 precursors / 28,637 peptides / 4,338 proteins,
-      combined FDP 0.66% (high Osprey mode; gated stage 1b, so not June-comparable). Astral still to do.
+      combined FDP 0.66% (high Osprey mode; gated stage 1b, so not June-comparable).
+      Astral done (`D:\test\carafesharp-runs\astral-workflow`, log `workflow-astral.log`; Osprey 20 ppm as
+      Mike's June run, not the Carafe script's 10 ppm preset): 1a 0.2, 1b 0.4, 2 12.4 (3.08M precursors),
+      3 13.9, 4-5 32.4 (6.18M), 6 34.0 min. Training 87,361 precursors; RT R2 0.8605 -> 0.9980; MS2 COS
+      0.9768 -> 0.9865 (Carafe June Astral: RT 0.853 -> 0.9974, COS 0.964 -> 0.977, own test set). Stage 6:
+      104,037 precursors / 91,879 peptides / 7,752 proteins, combined FDP 0.42%.
+      HRAM finding: only 39,296 of 87,361 spectra kept (Carafe kept 50,115 of 75,461); few_valid 34,918
+      vs Carafe 7,911. Osprey's unsmoothed corr_polish runs lower than Carafe's 3-point-smoothed
+      best-ion correlation on Astral. Slot agreement / valid matched / kept against Carafe:
+
+      | Correlation | Stellar (Carafe 181.1k valid, 14.8k kept) | Astral (Carafe 606k valid, 50.1k kept) |
+      |---|---|---|
+      | corr_polish >= 0.8 (current default) | 85.0% / 155.6k / 15.3k | 84.4% / 411k / 39.3k |
+      | corr_polish >= 0.7 | 85.0% / 181.1k / 16.0k | 86.1% / 494k / 45.7k |
+      | corr_polish >= 0.6 | 84.0% / 202.6k / 16.4k | 86.6% / 562k / 50.1k |
+      | Carafe smoothed best-ion (from exported XICs) >= 0.8 | 84.3% / 179.8k / 12.8k | 86.2% / 558k / 44.6k |
+
+      Prototypes: `py/carafe_policy_proto.py`, `py/carafe_corr_proto.py` (CARAFE_TABLES env). DECISION
+      PENDING (developer): the correlation default. corr_polish 0.7 tracks Carafe on both instruments.
+      Astral XIC export (pay-later, `--training-export-xics`) replaced the plain one; the plain copy is
+      `osprey_train\Ast-..._55.training-noxics.parquet.bak`.
 
 ## Reference data on this machine (developer's own Carafe runs)
 
