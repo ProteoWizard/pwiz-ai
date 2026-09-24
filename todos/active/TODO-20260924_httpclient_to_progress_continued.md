@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4700](https://github.com/ProteoWizard/pwiz/pull/4700)
 - **Objective**: Retire the last `WebClient` and `HttpWebRequest` uses in Skyline and
   its tools, and decide what to do about bare `HttpClient` - so every HTTP call goes
   through `HttpClientWithProgress`, or plain `HttpClient` where the project cannot
