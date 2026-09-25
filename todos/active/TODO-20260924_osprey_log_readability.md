@@ -477,6 +477,20 @@ code does", so they live in pwiz, not `ai/`.
   (snapshot `_bin\logtag-step3b`): 0 banned terms, 0 bare counts, no "entries" in the Stellar
   default log, max gap 6 s / 24 s, results unchanged (Stellar 4,238 groups / 27,321 spectra;
   Astral 8,924 / 117,265).
+- [x] In-process command-line error tests (`2c3eb484fd`, pushed; 601 tests, inspection green).
+  Before this, the ~45 CLI tests called `ParseArgs` / `ValidateArgs` / `ResolveTask` alone and
+  none ran `Main`, so the `Error:` line, the exit code and the file checks in `Run` were
+  untested. `Program.RunCommand(args, CommandStatusWriter)` mirrors Skyline's
+  `CommandLineRunner.RunCommand` (debuggable, no child process); `CommandLineErrorTest` covers
+  15 errors without data (no args, bad/missing `--task`, unknown flag, `--threads bad`, missing
+  `--input-list`, task missing `-l`, missing input, missing library, unwritable `--log-file`,
+  `--task ModelDiagnostics` with no analysis, `OSPREY_PASS2_QVALUE=bogus`,
+  `OSPREY_STAGE7_STREAM=1`, the `hpc-merge` warning), asserting exit 1, exactly one `Error:`
+  line, the typed token, and no `System.` type. `OspreyEnvironment` reads every variable
+  through an override dictionary (`OverrideVariables`); the startup-checked values are now
+  properties that re-read. **Guidance (Brendan):** a caller must not assume an
+  `OspreyEnvironment` read is free - read once outside any loop and pass a plain value down;
+  depending on an instant response couples to the class's implementation.
 - [ ] Open wording question: drop "Computing second-pass FDR scores for N files." when the
   "Second-pass FDR over N files: ..." line follows it (straight-through protein-compact).
 - [ ] **This PR: in-depth testing before opening it** (next session):
@@ -498,6 +512,9 @@ code does", so they live in pwiz, not `ai/`.
   translations), Step 5 tests under a second culture, Step 6 guards (banned vocabulary in the
   .resx; explicit format on every integer argument - see the N0 decision under Step 2).
   Reword the CSV "Review" rows on resume/HPC/error paths as they are resourced.
+  Tighten `CommandLineErrorTest` (added in PR 1, asserts only untranslated tokens) to exact
+  messages: `string.Format(OspreyResources.X, arg)` against the same resource ID the
+  production code uses, as Skyline's `CommandLineTest` does (Brendan, 2026-09-25).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
