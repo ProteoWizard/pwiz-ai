@@ -309,12 +309,11 @@ function Invoke-Tool {
 
 function Get-PrecursorCount {
     param([string]$LogPath)
-    # Rust logs "Wrote N precursors"; C# logs "Wrote N library spectra to
-    # output.blib" (reworded by the 2026-06 console-output pass -- an optional
-    # qualifier word can sit between the count and "spectra"). Both forms refer
-    # to the same blib RefSpectra row count.
-    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d+)\s+(?:\w+\s+)?(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
-    if ($m -and $m.Matches.Count -gt 0) { return [int]$m.Matches[0].Groups[1].Value }
+    # Rust logs "Wrote N precursors"; C# logs "Wrote N library spectra with M peaks
+    # across R runs to output.blib", N with thousands separators since 2026-09-24.
+    # Both N refer to the same blib RefSpectra row count.
+    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d[\d,]*)\s+(?:\w+\s+)?(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
+    if ($m -and $m.Matches.Count -gt 0) { return [int]($m.Matches[0].Groups[1].Value -replace ',', '') }
     return -1
 }
 
