@@ -377,7 +377,7 @@ When extending these scripts, the canonical Rust root is
 ## Long runs lock Osprey.exe - snapshot the binary first
 
 **Windows locks a running executable.** A long Osprey run holds
-`Osprey\bin\x64\Release\net8.0\Osprey.exe` open for its whole duration, so MSBuild cannot
+`Osprey\bin\x64\Release\net10.0\Osprey.exe` open for its whole duration, so MSBuild cannot
 relink and **every build fails until the run ends**. On an overnight regression or a
 multi-hour large-file run that blocks all code work - you cannot respond to review
 feedback, cannot try a fix, cannot even build to check a compile error. Sessions have
@@ -387,7 +387,7 @@ not build.
 **Copy the binaries somewhere off the build tree and run the long job from the copy.**
 
 ```powershell
-$src  = 'C:\proj\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0'
+$src  = 'C:\proj\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0'
 $snap = 'D:\test\osprey-runs\_bin\master-snapshot'
 New-Item -ItemType Directory -Path $snap -Force | Out-Null
 Copy-Item "$src\*" $snap -Recurse -Force
@@ -1592,7 +1592,7 @@ unaffected. Drive it via:
 pwsh -File ai/scripts/Osprey/Profile-Osprey.ps1 -Dataset Astral -MemoryProfile
 ```
 
-This forces `net8.0`, sets `OSPREY_LOG_MEMORY=1`, runs ONE file through
+This runs the Release net10.0 build, sets `OSPREY_LOG_MEMORY=1`, runs ONE file through
 Stage 1-4 scoring under `dotMemory start --use-api`, and writes a `.dmw`
 to `ai/.tmp`. It is a **scoped diagnosis run, not the batch** -- memory is
 stable file-to-file, so one file captures the whole per-file envelope;

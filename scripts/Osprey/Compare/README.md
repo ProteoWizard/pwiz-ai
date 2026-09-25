@@ -49,7 +49,7 @@ output is older than that side's newest source file, naming both timestamps.
 `-AllowStaleBinaries` overrides it when the mismatch is deliberate.
 
 The freshness check compares against the newest build output *beside* the exe,
-not the exe itself: on net8.0 `Osprey.exe` is only the apphost stub and
+not the exe itself: on .NET (net10.0) `Osprey.exe` is only the apphost stub and
 `Osprey.dll` the entry assembly, so a change confined to a dependency project
 (`Osprey.Core`, `.Scoring`, `.FDR`, `.Tasks`, ...) rebuilds only that dll and
 leaves both untouched.  Timestamping the exe alone reports a false "stale"

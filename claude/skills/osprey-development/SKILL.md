@@ -198,7 +198,7 @@ Rust-only TODOs live at `ai/todos/active/TODO-OR-*.md`
 ## Build, Test, and Commit
 
 **Starting a long run? Snapshot the exe first.** Windows locks a running executable, so a
-regression or large-file run holds `Osprey\bin\x64\Release\net8.0\Osprey.exe` and **every
+regression or large-file run holds `Osprey\bin\x64\Release\net10.0\Osprey.exe` and **every
 build fails until it finishes** - you cannot address review feedback or try a fix mid-run.
 Copy that output dir (~27 MB, one second) to **`D:\test\osprey-runs\_bin\<tag>`** (the
 canonical spot - don't invent a new one per session) and pass `-Exe <snapshot>\Osprey.exe`;

@@ -445,12 +445,15 @@ code does", so they live in pwiz, not `ai/`.
   - `ResidentPoolGuardTest` no longer asserts C13 wording (3 English literals dropped).
   - `FdrMethod.GetLocalizedString()`; docs/21-user-facing-text.md gained rules 6-7 and the
     "say what happened" rule, and its stale "no enum helper yet" line is gone.
-  - **Tooling trap found (not fixed here):** the port branch builds `Release\net10.0`, but ~15
-    `ai/scripts/Osprey` scripts, `OspreyDatasetRun.psm1`'s repo-exe fallback and the
-    osprey-development skill's snapshot instructions hard-code `Release\net8.0`, which on this
-    checkout holds a stale 2026-09-16 build (v26.1.1.259). A first Stellar log was run from it
-    by mistake and deleted. Always pass `-Exe` with a snapshot of `net10.0` until the scripts
-    resolve the TFM (master still builds net8.0).
+  - **Tooling trap found and fixed (2026-09-24, Brendan: "staying with net10.0, no intention of
+    going back"):** ~15 `ai/scripts/Osprey` scripts, `OspreyDatasetRun.psm1` and the skill
+    hard-coded `Release\net8.0`, which on pwiz-work1 held a stale 2026-09-16 build; a first
+    Stellar log ran from it by mistake and was deleted. Now one constant
+    (`OSPREY_TARGET_FRAMEWORK = 'net10.0'` in `Dataset-Config.ps1`, read by `Get-OspreyExe` /
+    `Get-OspreyTargetFramework`), the `-Framework net8.0|net472` switches are gone,
+    `Build-Osprey.ps1` defaults to net10.0, and the stale net8.0/net472 bin/obj folders (280,
+    835 MB) were deleted from pwiz-work1 and pwiz-work2. Test-PerfGate and Measure-SpectraCache
+    still read each root's declared TFM, since a perf baseline may predate the port.
 - [ ] Step 3b: the Review-priority "entries" lines a default run prints (Scored N entries,
   Writing N entries, the rescore block, Wrote reconciled parquet, Gap-fill CWT/forced,
   Reconciliation rescore, Collected scores, library load lines), checked against fresh logs.

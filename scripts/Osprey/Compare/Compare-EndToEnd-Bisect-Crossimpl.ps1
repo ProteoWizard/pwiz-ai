@@ -65,8 +65,6 @@ param(
     [switch]$SkipRust,
     [switch]$SkipCs,
     [int]$Threads = 16,
-    [ValidateSet('net472','net8.0')]
-    [string]$Framework = 'net8.0',
     [string]$CsExe,
     [string]$RustExe
 )
@@ -84,7 +82,7 @@ if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2
 }
-$ospreyShExe = if ($CsExe) { $CsExe } else { Get-OspreyExe -Framework $Framework }
+$ospreyShExe = if ($CsExe) { $CsExe } else { Get-OspreyExe }
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2

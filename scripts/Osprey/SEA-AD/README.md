@@ -145,7 +145,7 @@ so its apparent size double-counts the data - `du`-style totals will look far la
 the disk actually consumed.
 
 **Say which build you mean.** By default the runner takes `Osprey.exe` from the shared
-`pwiz` worktree's `Release/net8.0` output - whatever happens to be built there right now.
+`pwiz` worktree's `Release/net10.0` output - whatever happens to be built there right now.
 On a machine where someone is actively developing, that couples two sessions in both
 directions: the run measures their in-progress branch instead of master, and it holds
 those DLLs so their next build fails to relink. Both halves are silent. The runner prints

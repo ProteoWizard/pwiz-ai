@@ -113,7 +113,7 @@
     pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -ProteinFdr 0.01 -FragmentTolerance 0.4 -OutName B_proteinfdr
 
 .NOTES
-    Java (for the FDRBench jar) and a built Release net8.0 Osprey.exe must be on
+    Java (for the FDRBench jar) and a built Release (net10.0) Osprey.exe must be on
     the machine. FDRBench jar is resolved from -FdrBenchJar, then
     $env:FDRBENCH_JAR, then D:\test\fdrbench\fdrbench-*\fdrbench-*.jar.
 #>
@@ -153,8 +153,6 @@ param(
     [string]$OutDir = $null,
     [string]$FdrBenchJar = $null,
     [string]$TestBaseDir = $null,
-    [ValidateSet('net8.0', 'net472')]
-    [string]$Framework = 'net8.0',
 
     [switch]$SkipOsprey,
     [switch]$SkipFdrBench
@@ -281,9 +279,9 @@ if (-not $ds.Manifest) {
     throw "Dataset '$Dataset' has no entrapment pairing manifest; FDRBench cannot measure FDP. Use a *LibraryDecoy dataset."
 }
 
-$exe = Get-OspreyExe -Framework $Framework
+$exe = Get-OspreyExe
 if (-not (Test-Path $exe)) {
-    throw "Osprey.exe not found at $exe. Build Release ($Framework) first (Build-Osprey.ps1 -Configuration Release)."
+    throw "Osprey.exe not found at $exe. Build Release first (Build-Osprey.ps1 -Configuration Release)."
 }
 
 # The pairing manifest doubles as FDRBench's -pep file (it classifies

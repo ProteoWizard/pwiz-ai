@@ -26,6 +26,6 @@ These replace the per-session bash scripts that lived under `ai/.tmp/`
 (`reprocess-mdiag.sh`, `shot-mdiag.py`, `run-libtypes.sh`) — same pattern as
 `Run-FdrBench.ps1` replacing the earlier `.tmp` FDRBench scripts.
 
-Paths default to this machine's layout (primary `pwiz` checkout's net8.0
+Paths default to this machine's layout (primary `pwiz` checkout's net10.0
 Release build; `D:/test/osprey-runs/{stellar,astral}-libdecoy`). Adapt them
 for a different checkout/data root.

@@ -63,14 +63,7 @@ param(
     [string]$Dataset = 'Stellar',
     [string]$TestBaseDir,
     [switch]$Force,
-    [int]$Threads = 16,
-    # Target runtime to exercise. Defaults to net8.0 to match the
-    # active cross-impl gate (Compare-EndToEnd-Crossimpl.ps1) and the
-    # bulk of recent Windows/WSL validation; net472 available as a
-    # cross-runtime check (a divergence between the two localizes a
-    # TFM-specific bit-parity slip rather than a dataflow regression).
-    [ValidateSet('net8.0','net472')]
-    [string]$Framework = 'net8.0'
+    [int]$Threads = 16
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,10 +71,9 @@ $compareDir = Split-Path -Parent $PSCommandPath         # .../Compare
 $ospreyDir  = Split-Path -Parent $compareDir            # .../Osprey
 . (Join-Path $ospreyDir 'Dataset-Config.ps1')
 
-# Resolve the exe via Dataset-Config so net8.0/net472 selection stays in
-# one place. On Windows the net8.0 build emits an apphost Osprey.exe,
-# so the same '& $exe @args' invocation works for both runtimes.
-$ospreyShExe = Get-OspreyExe -Framework $Framework
+# Resolve the exe via Dataset-Config so the target framework stays in one place.
+$Framework = Get-OspreyTargetFramework
+$ospreyShExe = Get-OspreyExe
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe ($Framework) not found at $ospreyShExe -- build first:" -ForegroundColor Red
     exit 2

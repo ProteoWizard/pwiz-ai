@@ -14,7 +14,7 @@
     Two differences from SEA-AD worth knowing:
 
       * The inputs are vendor .raw, searched straight from their .spectra.bin caches. Any
-        build - including net8.0 with no ProteoWizard at all - reads them, because
+        build - including net10.0 with no ProteoWizard at all - reads them, because
         EnsureSpectraCache consults the cache BEFORE it dispatches on file extension. A
         missing or stale cache therefore fails LOUDLY naming the vendor reader; that error
         means "the cache is not where Osprey looked", NOT "use the vendor build".

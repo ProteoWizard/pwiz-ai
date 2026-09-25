@@ -49,9 +49,6 @@
 
 .PARAMETER Threads
     --threads CLI flag. Default 16.
-
-.PARAMETER Framework
-    net8.0 (default) or net472.
 #>
 
 param(
@@ -59,9 +56,7 @@ param(
     [string]$Dataset = 'Stellar',
     [string]$TestBaseDir,
     [switch]$Force,
-    [int]$Threads = 16,
-    [ValidateSet('net8.0','net472')]
-    [string]$Framework = 'net8.0'
+    [int]$Threads = 16
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,7 +64,8 @@ $compareDir = Split-Path -Parent $PSCommandPath
 $ospreyDir  = Split-Path -Parent $compareDir
 . (Join-Path $ospreyDir 'Dataset-Config.ps1')
 
-$ospreyShExe = Get-OspreyExe -Framework $Framework
+$Framework = Get-OspreyTargetFramework
+$ospreyShExe = Get-OspreyExe
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe ($Framework) not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2

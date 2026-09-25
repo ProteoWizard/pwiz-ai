@@ -78,8 +78,6 @@ param(
     [switch]$SkipCs,
     [switch]$AllowStaleBinaries,
     [int]$Threads = 16,
-    [ValidateSet('net472','net8.0')]
-    [string]$Framework = 'net8.0',
     [string]$Files = 'All'
 )
 
@@ -99,7 +97,7 @@ if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe (Rust) not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2
 }
-$ospreyShExe = Get-OspreyExe -Framework $Framework
+$ospreyShExe = Get-OspreyExe
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2
@@ -137,7 +135,7 @@ function Get-NewestSourceFile {
 }
 
 # The newest build output beside the exe -- NOT the exe itself.
-# On net8.0 `Osprey.exe` is only the apphost stub and `Osprey.dll` is the entry
+# On .NET (net10.0) `Osprey.exe` is only the apphost stub and `Osprey.dll` is the entry
 # assembly; a change confined to a dependency project (Osprey.Core, .Scoring,
 # .FDR, .Tasks, ...) rebuilds ONLY that dll and leaves both of those untouched.
 # Timestamping the exe therefore reports "stale" immediately after a successful

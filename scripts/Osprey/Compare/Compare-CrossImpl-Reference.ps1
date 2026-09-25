@@ -27,17 +27,14 @@
 
 .PARAMETER Dataset      Stellar (default) or Astral.
 .PARAMETER TestBaseDir  Override dataset root.
-.PARAMETER Framework    net8.0 (default, canonical) or net472.
 .PARAMETER Threads      --threads (default 16).
-.PARAMETER CsExe        Explicit Osprey.exe (else resolved for -Framework).
+.PARAMETER CsExe        Explicit Osprey.exe (else the Release net10.0 build).
 .PARAMETER SkipCs       Reuse an existing C# workdir.
 #>
 param(
     [ValidateSet('Stellar','Astral')]
     [string]$Dataset = 'Stellar',
     [string]$TestBaseDir,
-    [ValidateSet('net472','net8.0')]
-    [string]$Framework = 'net8.0',
     [int]$Threads = 16,
     [string]$CsExe,
     [switch]$SkipCs
@@ -50,7 +47,8 @@ foreach ($c in @((Join-Path $scriptDir 'Dataset-Config.ps1'),
     if (Test-Path $c) { . $c; break }
 }
 
-$ospreyShExe = if ($CsExe) { $CsExe } else { Get-OspreyExe -Framework $Framework }
+$Framework = Get-OspreyTargetFramework
+$ospreyShExe = if ($CsExe) { $CsExe } else { Get-OspreyExe }
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2

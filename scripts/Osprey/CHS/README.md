@@ -49,8 +49,10 @@ The staged cohort is **plates 0059-0061: 256 files, 1,019.5 GB**.
 
 ## Staging: download and cache, pipelined
 
-Osprey reads the `.raw` directly through a **vendor-enabled build**
-(`_bin\26.1.1.233-vendor-20260822` or later, net472 with `pwiz_data_cli`), so no msconvert
+Osprey reads the `.raw` directly through a **vendor-enabled build** (net10.0 built with
+`Build-Osprey.ps1 -VendorReader`, which reaches pwiz-sharp's vendor readers through
+ProteowizardWrapper; before the .NET 10 port this was the net472 `pwiz_data_cli` snapshot
+`_bin\26.1.1.233-vendor-20260822`), so no msconvert
 pass and no mzML copy is needed - which also makes it cheaper on disk than the mzML route.
 
 Download with `../Get-PanoramaFiles.ps1` (resumable, skips complete files by size), and cache

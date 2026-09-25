@@ -44,11 +44,11 @@
     Osprey.sln builds every target framework the projects declare, so a
     solution build compiles all of them regardless of this value.
 
-    Which frameworks exist depends on the branch: Osprey multi-targeted
-    net472;net8.0 until the ProteoWizard .NET 8 port (issue #4497) made it
-    net8.0 only. Rather than pin a default that is wrong on one side of that,
-    both this parameter and the ReSharper inspection's per-framework passes are
-    reconciled against what pwiz_tools/Osprey/Directory.Build.props DECLARES.
+    Osprey targets net10.0 only from the .NET 10 port (PR #4619) on, and that is
+    the default. Older trees (master before #4619 merges, a pinned perf baseline)
+    still declare net472;net8.0, so both this parameter and the ReSharper
+    inspection's per-framework passes are reconciled against what
+    pwiz_tools/Osprey/Directory.Build.props DECLARES.
 
     Declared, not discovered from bin/: switching to a branch that dropped a
     framework leaves the old bin/<tfm>/ output in place, and a test run against
@@ -59,7 +59,7 @@
     Build WITH vendor instrument-file reading. What that takes depends on the
     branch, and the switch resolves it from the frameworks Osprey declares:
 
-      net8.0 only (issue #4497)  -> /p:IAgreeToVendorLicenses=true, which lets
+      net10.0 (or net8.0) only   -> /p:IAgreeToVendorLicenses=true, which lets
         pwiz-sharp extract its encrypted vendor SDK archives. Nothing to stage:
         pwiz-sharp is a managed ProjectReference. Without the switch the vendor
         readers still compile, and a .raw fails at run time with "Thermo .raw
@@ -156,7 +156,7 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("net472", "net8.0", "net10.0")]
-    [string]$TargetFramework = "net472",
+    [string]$TargetFramework = "net10.0",
 
     [Parameter(Mandatory=$false)]
     [switch]$Coverage = $false,
@@ -200,8 +200,8 @@ if ($SourceRoot) {
 $Platform = "x64"
 $ospreyRoot = Join-Path $pwizRoot 'pwiz_tools/Osprey'
 $slnPath = Join-Path $ospreyRoot 'Osprey.sln'
-# Projects place outputs under a TFM subdirectory: bin/x64/Release/net8.0/
-# (and bin/x64/Release/net472/ on a branch that still multi-targets). Which ones
+# Projects place outputs under a TFM subdirectory: bin/x64/Release/net10.0/
+# (net8.0 and net472 on an older tree that still multi-targets). Which ones
 # this branch actually builds comes from Directory.Build.props - see the
 # TargetFramework parameter notes for why this is not read off disk.
 $testBinDir = Join-Path $ospreyRoot "Osprey.Test/bin/$Platform/$Configuration"
@@ -427,7 +427,7 @@ try {
         # The per-framework results are unioned below, so extra passes cost time but
         # lose no coverage: each pass reports its own branch of an #if, and together
         # they report exactly what a single all-frameworks pass reports. On a
-        # single-target branch (net8.0 only, issue #4497) that is one pass and the
+        # single-target tree (net10.0 only, PR #4619) that is one pass and the
         # race cannot arise at all.
         #
         # Read from Directory.Build.props rather than hardcoded, because the set

@@ -117,8 +117,8 @@ $tools = @{
     'CSharp' = @{
         Name = 'C#'
         BinName = "Osprey$exeSuffix"
-        Bin = Join-Path $projRoot "pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey$exeSuffix"
-        BuildHint = 'pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -TargetFramework net8.0'
+        Bin = Join-Path $projRoot "pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey$exeSuffix"
+        BuildHint = 'pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -TargetFramework net10.0'
     }
     'Rust' = @{
         Name = 'Rust'

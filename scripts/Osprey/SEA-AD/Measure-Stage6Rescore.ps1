@@ -159,7 +159,7 @@ $ErrorActionPreference = 'Stop'
 $readme = Join-Path $PSScriptRoot 'README.md'
 
 $LAB_SHARE_MZML = 'M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml'
-$REPO_EXE = Join-Path $PSScriptRoot '..\..\..\..\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
+$REPO_EXE = Join-Path $PSScriptRoot '..\..\..\..\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey.exe'
 
 # Same resolution contract as Run-SeaAd.ps1: a location you NAME must exist, so a typo
 # fails here instead of silently searching the wrong tree.
@@ -178,7 +178,7 @@ function Resolve-Location {
     throw "Could not resolve the SEA-AD $What. Set `$env:$EnvName or pass the parameter; see $readme."
 }
 
-if ($SourceRoot) { $Exe = Join-Path $SourceRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe' }
+if ($SourceRoot) { $Exe = Join-Path $SourceRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey.exe' }
 $ospreyExe = Resolve-Location -Explicit $Exe -EnvName 'OSPREY_EXE' -Fallbacks @($REPO_EXE) -What 'Osprey.exe'
 $dataDir   = Resolve-Location -Explicit $DataDir -EnvName 'OSPREY_SEAAD_DIR' -Fallbacks @($LAB_SHARE_MZML) -What 'mzML directory'
 $libRoot   = Resolve-Location -Explicit $LibraryDir -EnvName 'OSPREY_SEAAD_LIB' -Fallbacks @() -What 'library directory'

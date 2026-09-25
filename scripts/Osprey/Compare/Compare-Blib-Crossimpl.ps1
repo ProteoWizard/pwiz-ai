@@ -59,13 +59,13 @@ $configCandidates = @(
 )
 foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
 
-# Prefer the Osprey net8.0 build's copy: cross-platform (Linux/WSL
+# Prefer the Osprey Release build's copy: cross-platform (Linux/WSL
 # bin includes runtimes/linux-x64/native/SQLite.Interop.dll alongside),
 # always present when Osprey itself has been built, and decoupled
 # from Skyline Debug build state. Fall back to the Skyline Debug path
 # for environments where only Skyline is built.
 $pwizRoot = Get-PwizRoot
-$ospReleaseBin = Join-Path $pwizRoot 'pwiz_tools/Osprey/Osprey/bin/x64/Release/net8.0'
+$ospReleaseBin = Split-Path -Parent (Get-OspreyExe)
 $candidates = @(
     (Join-Path $ospReleaseBin 'System.Data.SQLite.dll'),
     (Join-Path $pwizRoot 'pwiz_tools/Skyline/bin/x64/Debug/System.Data.SQLite.dll')
@@ -77,7 +77,7 @@ foreach ($c in $candidates) {
 if (-not $dll) {
     Write-Host "Missing System.Data.SQLite.dll. Tried:" -ForegroundColor Red
     foreach ($c in $candidates) { Write-Host "  $c" -ForegroundColor DarkRed }
-    Write-Host "Build Osprey first: pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -TargetFramework net8.0" -ForegroundColor Yellow
+    Write-Host "Build Osprey first: pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Release" -ForegroundColor Yellow
     exit 2
 }
 # System.Data.SQLite uses P/Invoke to "SQLite.Interop.dll". It does NOT

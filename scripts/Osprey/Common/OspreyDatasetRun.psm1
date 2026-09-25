@@ -301,17 +301,19 @@ function Invoke-OspreyDatasetRun {
     # -SourceRoot names a checkout; the exe is at its usual place inside it. Prefer this to
     # -Exe when you want a specific TREE, e.g. a pinned worktree rather than a shared one that
     # other sessions are actively building in. See the banner warning below.
-    $EXE_UNDER_ROOT = 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
+    # net10.0, the one framework Osprey builds (same value as OSPREY_TARGET_FRAMEWORK in
+    # Dataset-Config.ps1). A leftover Release\net8.0 folder is a stale build, never a fallback.
+    $EXE_UNDER_ROOT = 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey.exe'
     if ($SourceRoot -and -not $Exe) {
         if (-not (Test-Path $SourceRoot)) { throw "-SourceRoot does not exist: '$SourceRoot'." }
         $Exe = Join-Path $SourceRoot $EXE_UNDER_ROOT
         if (-not (Test-Path $Exe)) {
-            throw "No Release/net8.0 Osprey.exe under -SourceRoot '$SourceRoot'. Build it there first."
+            throw "No Release/net10.0 Osprey.exe under -SourceRoot '$SourceRoot'. Build it there first."
         }
     }
     $repoExe = Join-Path $PSScriptRoot "..\..\..\..\pwiz\$EXE_UNDER_ROOT"
     $ospreyExe = Resolve-DatasetLocation -Explicit $Exe -EnvName 'OSPREY_EXE' `
-        -Fallbacks @($repoExe) -What 'Osprey.exe (build Release/net8.0 first)' `
+        -Fallbacks @($repoExe) -What 'Osprey.exe (build Release/net10.0 first)' `
         -DatasetName $dsName -Readme $readme
 
     # Windows locks a running .exe, so a multi-hour run out of the BUILD TREE blocks every build

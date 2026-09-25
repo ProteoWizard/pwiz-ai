@@ -25,11 +25,11 @@
 #   Fix + kill-switch tracked in TODO-osprey_pass2_recalibration_fix.md.
 #
 # Override the binary with OSPREY_EXE=... (defaults to the primary pwiz checkout's
-# net8.0 Release build). Data lives under $OSPREY_TESTDIR (default D:/test/osprey-runs).
+# net10.0 Release build). Data lives under $OSPREY_TESTDIR (default D:/test/osprey-runs).
 set -uo pipefail
 DS="${1:?usage: Run-ModelDiagnostics.sh stellar|astral [pfdr]}"
 MODE="${2:-plain}"
-EXE="${OSPREY_EXE:-C:/proj/pwiz/pwiz_tools/Osprey/Osprey/bin/x64/Release/net8.0/Osprey.exe}"
+EXE="${OSPREY_EXE:-C:/proj/pwiz/pwiz_tools/Osprey/Osprey/bin/x64/Release/net10.0/Osprey.exe}"
 TESTDIR="${OSPREY_TESTDIR:-/d/test/osprey-runs}"
 CMPTOOL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../Compare" && pwd)/Compare-Fdrbench-Html.py"
 
