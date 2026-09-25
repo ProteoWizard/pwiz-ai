@@ -6,14 +6,16 @@
 - **Created**: 2026-09-23
 - **Status**: In Progress. M0 and M1 (staggered DIA) in PR review; M2-M6 not started.
 - **Module**: `osprey`
-- **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710)
+- **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711)
+- **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (M0 + M1)
 - **Worktree**: `D:\Dev\pwiz-osprey-demux`
 
 ## Objective
 
 Demultiplex overlapping-window DIA inside Osprey. Read vendor raw files directly (pwiz-sharp),
 demux to the narrowest bins, and write a demuxed spectra cache that the rest of the pipeline
-searches. Source spec: the lab's `osprey-demux-spec.md` (Aug 2026). The review of that spec and
+searches. Source spec: the lab's `osprey-demux-spec.md` (Aug 2026), copied verbatim into
+[TODO-20260923_osprey_demux/osprey-demux-spec.md](TODO-20260923_osprey_demux/osprey-demux-spec.md). The review of that spec and
 the approved plan are summarized below.
 
 ## Decisions (with Mike, 2026-09-23)
@@ -81,7 +83,7 @@ spectra.bin + acquisition.bin -pass 2-> <stem>.demux.spectra.bin
     - the demux-off guard (throws on an overlapping scheme).
   - [ ] Metrics JSON (`--demux-metrics`); for now the summary and the timing gate go to the log.
   - [x] Gates: G7.1 vs msconvert explained (median cosine 0.999 msconvert-like, 0.997 default); timing gate 0.10-0.13 of parse; IDs/FDP above the msconvert baseline.
-  - [x] `regression.ps1 -Dataset Stellar` all PASS at d179d98fec; re-run on 366f7d0220 in progress (2026-09-25).
+  - [x] `regression.ps1 -Dataset Stellar` all PASS at d179d98fec, and again at 366f7d0220 (2026-09-25).
   - [x] Tests added 2026-09-25 (after a `pw-test-review`): `TestDemuxRealisticSynthetic` (3 ppm jitter, k=3, variable width, moving elution),
     `TestDemuxEclipseFixture` (in-repo 3-min, 8-window EV13 slice + msconvert's demux + golden, `Osprey.Test/Data/Demux`), `TestDemuxPipelineWiring`.
   - [x] `docs/22-demultiplexing.md`: pipeline flow, files, algorithm, msconvert differences, validation, limitations.
@@ -309,4 +311,5 @@ Readings:
   because regression.ps1 builds with the VS 2022 toolset, which cannot load the .NET 10 SDK).
 - 2026-09-24: G7.1 and stagger consistency on Eclipse EV13/EV14; b54a34a642 fixed first-cycle window detection.
 - 2026-09-25: Osprey searches with the Carafe library (+2.3% precursors at equal FDP); test review; tests 1-3, fixture,
-  wiring fix, share floor and docs/22 committed as 366f7d0220; opened PR #4710.
+  wiring fix, share floor and docs/22 committed as 366f7d0220; opened PR #4710 and issue #4711; Stellar regression
+  PASS on 366f7d0220; copied the spec into this TODO's folder.
