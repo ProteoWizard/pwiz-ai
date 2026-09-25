@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1, 2, 2b and 3a done and pushed (last pwiz commit `e45885b4e7`; `regression-parallel -Dataset All` 70 PASS / 0 FAIL on `e089e4f2e0`, Stellar + StellarLibDecoy PASS on `e45885b4e7`). Next: Step 3b (the "entries" sweep), then 4 (RESX), 5, 6. CHS 446 gap run deferred to the end (see Step 1c). Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
+- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `4225f40994` (Stellar regression PASS). Next: in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -460,21 +460,44 @@ code does", so they live in pwiz, not `ai/`.
     `Build-Osprey.ps1` defaults to net10.0, and the stale net8.0/net472 bin/obj folders (280,
     835 MB) were deleted from pwiz-work1 and pwiz-work2. Test-PerfGate and Measure-SpectraCache
     still read each root's declared TFM, since a perf baseline may predate the port.
-- [ ] Step 3b: the Review-priority "entries" lines a default run prints (Scored N entries,
-  Writing N entries, the rescore block, Wrote reconciled parquet, Gap-fill CWT/forced,
-  Reconciliation rescore, Collected scores, library load lines), checked against fresh logs.
-- [ ] Step 3: Medium/Low rows (A14-A31) and Table C, same rules (1-7), `N0` on every count.
-  Known leftovers in the Stellar/Astral default logs: `Persisted the trained 1st-pass model
-  (3 file sidecar(s))`, `protein-compact: mapped recomputed q onto N reported survivors (0
-  frozen-model scores swapped in)`. `Interned library strings` (A5) stays until Mike decides.
-  Tools: `ai/.tmp/sessions/20260924-01355z/{banned_terms,bare_counts,logdiff}.py` over a
-  default log (`--timestamp --memstamp`, no `--perf-stats`) find what is left.
-- [ ] Step 4: RESX (plan above), including the `GetLocalizedString` literal arrays and the
-  `Warning:` / `Error:` prefixes (reuse Skyline's translations).
-- [ ] Step 5: tests under a second culture. Step 6: guards (banned vocabulary in the .resx;
-  explicit format on every integer argument - see the N0 decision under Step 2).
-- [ ] End of sprint: CHS 446 gap run (Step 1c), `/code-review max`, PR against
-  `Skyline/work/20260612_net8_port`, TeamCity Perf/Regression (ask first).
+- [x] Brendan's line-by-line review of the step-3a logs (2026-09-24/25), each its own commit:
+  `2642d86a44` "Unique library strings" / "Unique decoy strings" (the decoy pool reduces less
+  by construction: "DECOY_"+modseq never collapses onto the plain sequence); `c719e587db`
+  first-pass scoring block in "precursor candidate peaks", "First-pass scoring complete"
+  (not "Coelution scoring"); `f50b50a25a` saved model line gives the path; `5438e76cfc` cut
+  the late "Running First-pass Percolator on N" heading (read as a second Percolator pass);
+  `08a787614f` "Wrote N library spectra with M peaks across R runs" (M = per-run peaks).
+- [x] Step 3b (`4225f40994`, pushed; regression Stellar PASS): library load in "library precursors"
+  / "precursor candidates", Percolator training/scoring in peaks, the per-file rescore block
+  (peaks to re-score, missing peaks found / integrated, written peaks vs first-pass peaks),
+  "Cross-run reconciliation re-scored N peaks" (planned-action count moved to
+  `[COUNT] rescored-peaks`, read by SEA-AD/Measure-Stage6Rescore.ps1), calibration refit and
+  protein-FDR peptide lines (`FdrLevel.GetLocalizedString`). docs/21 gained "Files written" and
+  "Peaks, candidates, library". Logs `D:\test\osprey-runs\logtag-gaps\{stellar,astral}-step3b.log`
+  (snapshot `_bin\logtag-step3b`): 0 banned terms, 0 bare counts, no "entries" in the Stellar
+  default log, max gap 6 s / 24 s, results unchanged (Stellar 4,238 groups / 27,321 spectra;
+  Astral 8,924 / 117,265).
+- [ ] Open wording question: drop "Computing second-pass FDR scores for N files." when the
+  "Second-pass FDR over N files: ..." line follows it (straight-through protein-compact).
+- [ ] **This PR: in-depth testing before opening it** (next session):
+  - `regression-parallel.ps1 -Dataset All` (~46 min; last full run was on `e089e4f2e0`).
+  - Exercise the reworded errors and warnings on purpose: missing input with no cache or
+    intermediate file; `OSPREY_PASS2_QVALUE=bogus`; `OSPREY_STAGE7_STREAM=1`;
+    `OSPREY_ALLOW_UNFIXED_RESIDENT=hpc-merge`; a resume with some `.1st-pass.*` files deleted;
+    a partial rescore resume; `--task` splits (PerFileScoring / FirstPassFDR / PerFileRescoring /
+    SecondPassFDR) to read every "--task X complete" line; `--task ModelDiagnostics` on a
+    completed analysis; transfer mode (`OSPREY_PASS2_QVALUE=transfer`). Read each message as a
+    user would and check the exit code / `Error:` agreement.
+  - `--verbose` runs on Stellar and Astral: read the verbose tier (it is user-facing too and
+    goes to RESX in the second PR), note code-vocabulary lines worth rewording now.
+  - CHS 446 gap run (Step 1c) with a fresh net10.0 snapshot passed by `-Exe`.
+  - `/code-review max`, then PR against `Skyline/work/20260612_net8_port`, TeamCity
+    Perf/Regression (ask first). Ask Mike about `[ERROR]`/`[WARN]` log consumers.
+- [ ] **Second PR (Brendan, 2026-09-25: "big enough already")**: Step 4 RESX (plan above,
+  including the `GetLocalizedString` literal arrays and Skyline's `Warning:` / `Error:`
+  translations), Step 5 tests under a second culture, Step 6 guards (banned vocabulary in the
+  .resx; explicit format on every integer argument - see the N0 decision under Step 2).
+  Reword the CSV "Review" rows on resume/HPC/error paths as they are resourced.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
@@ -496,8 +519,7 @@ code does", so they live in pwiz, not `ai/`.
 
 ## Shape of the PR
 
-One PR (memory: lean bigger on PRs; the small-PR instinct is not free), reviewed in two
-passes: steps 1 and 6 first (mechanical, no wording), then steps 2-5. If it must split, split
-after step 1, because step 1 is what makes everything after it safe against the gates. Run
-`/code-review max` before opening, and ask before triggering the TeamCity Perf/Regression
-config (memory).
+Two PRs (Brendan, 2026-09-25). This one: steps 1-3 (machine channel, gates, Skyline
+`Error:`/`Warning:`, rewording). The second: steps 4-6 (RESX, second-culture tests, guards).
+Run `/code-review max` before opening each, and ask before triggering the TeamCity
+Perf/Regression config.

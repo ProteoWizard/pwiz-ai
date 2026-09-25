@@ -445,8 +445,8 @@ foreach ($n in $counts) {
     # Post-GC live-set probe: the number that answers "will this fit".
     $resident = ($lines | Select-String -Pattern '\[MEM reconciliation-resident\] managed_heap=([\d.]+) GB' |
                  ForEach-Object { [double]$_.Matches.Groups[1].Value } | Measure-Object -Maximum).Maximum
-    # Guard against the no-op: a real rescore always reports its entry count.
-    $rescored = ($lines | Select-String -Pattern 'Reconciliation rescore: (\d+) entries' |
+    # Guard against the no-op: a real rescore always reports its peak count (--perf-stats line).
+    $rescored = ($lines | Select-String -Pattern '\[COUNT\] rescored-peaks: total=(\d+)' |
                  ForEach-Object { [int]$_.Matches.Groups[1].Value } | Select-Object -Last 1)
     $results += [pscustomobject]@{
         Files = $n; ResidentGB = $resident; Rescored = $rescored; WallSec = [int]$wall.TotalSeconds
