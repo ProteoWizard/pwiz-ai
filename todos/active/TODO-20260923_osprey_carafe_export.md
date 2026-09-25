@@ -176,7 +176,13 @@ With the new options off, every existing output must be byte-identical (regressi
   mp_cosine parity 23,169/23,169; pay-later skipped all four upstream tasks and wrote data identical to the
   straight-through export; `--task TrainingExport` re-run skipped as current; run-info v2 with 125 window ranges.
 - `regression.ps1 -Dataset All` (options off): PASSED (`ai/.tmp/sessions/20260923-carafesharp/export-regression-all.log`).
-- PR #4708 opened against the port branch. Remaining: perf gate; the `ddc_neighbor_n` decision.
+- PR #4708 opened against the port branch.
+- Copilot review (7 threads) addressed in `481e75680a`: `;libmods=2` task-key term for blibs whose mod text the
+  new reader parses differently; `;calib=`/`;spectra=` in the per-run export key; malformed caret charge
+  suffixes rejected; structurally damaged run-info reads as absent; docs/14 v2. Not changed: `double.IsFinite`
+  (net10.0-only build); DecoyGenerator's last-wins stacked-mod map (pre-existing, mirrors Rust).
+- Follow-ups: DecoyGenerator stacked mods at one position (change C# and Rust together); `ddc_neighbor_n`
+  removal is #4709 (developer: leave for now, low priority). Remaining here: perf gate (needs a quiet machine).
 
 ## Risks
 - (Resolved) Skyline loads peptide fragment annotations from a CarafeSharp blib.

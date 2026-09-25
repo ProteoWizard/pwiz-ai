@@ -78,7 +78,10 @@ model on reconciled peaks, handles much worse.
 - [x] `regression.ps1 -Dataset All` against the new goldens, on the port branch (net10.0): PASSED, 43 phases,
       3.4 h (log `ai/.tmp/sessions/20260923-carafesharp/cselport-regression-all.log`)
 - [x] `/code-review max`: 15 findings; 12 fixed, 3 skipped (below)
-- [ ] Perf gate (`Test-PerfGate.ps1 -Dataset Stellar`, uncontended machine)
+- [ ] Perf gate (`Test-PerfGate.ps1 -Dataset Stellar -BaselineRoot D:\Dev\pwiz-perfbase -BranchRoot D:\Dev\pwiz-osprey-csel`,
+      baseline worktree at `899f348f3d`). Attempt 2026-09-24 stopped: other sessions' builds loaded the machine
+      (a baseline run went 658 s -> 1,100 s). Needs a quiet machine.
+- [x] Copilot review (2 threads) addressed in `f9aa0dd9f0`, replied and resolved.
 - [x] Rust counterpart: maccoss/osprey#69 (`svm::select_c`, `PercolatorConfig::c_selection_tolerance`, no env
       opt-out, as #66). Cross-impl Stellar vs the port-branch C# at its default: #69 alone matches the whole
       first pass at 1e-9 (1,448,698 records) and the precursor count (31,720); #69 + maccoss/osprey#68 (open)

@@ -51,6 +51,7 @@ both defects his #4491 comment names (the dropped config and the missing tree sc
   `--fdr-method` can adopt the other method's results; a gbdt directory made before this fix holds SVM results.
 - `FrozenModelScorer.Score` writes a shared `_scratch` buffer, and one scorer is shared across Stage 6's
   parallel file loop (`PerFileRescoreTask.cs:~930/981/1561`, `Pass2FdrSidecar.cs:2771`). Only with
-  `--parallel-files` (the default is sequential). Silent, timing-dependent score corruption. Filed as #4706; awaiting the
-  developer's go-ahead for its own branch.
+  `--parallel-files` (the default is sequential). Silent, timing-dependent score corruption. Filed as #4706 and left to Brendan (he owns the `--parallel-files` work). Evidence posted there: a stress test
+  corrupts 49% of concurrent scores at 2 threads; two real 3-file Stellar Stage 6 runs at `--parallel-files 3` were
+  byte-identical to sequential (the per-file scoring loops are milliseconds long and did not overlap).
 - Step 6 of `07-fdr-control.md` still describes a removed second-pass retrain.
