@@ -39,14 +39,11 @@ Every Osprey work branch **starts from** the port branch and its PR
 - When that checkout is not `<project-root>\pwiz`, every `Build-Osprey.ps1`
   call needs `-SourceRoot <that checkout>`; without it the script builds
   `pwiz` and "succeeds" against the wrong tree.
+- Output is `Release\net10.0` only; a `net8.0`/`net472` folder under `bin/` is a stale
+  build - delete it, never run it.
 
-**Osprey is net10.0 only**, for good: the port branch (misnamed `net8_port`) is .NET 10,
-and unlike Skyline and ProteoWizard, Osprey has no reason to ship as net472 or net8.0.
-Every script and doc names `Release\net10.0`; a `net8.0` or `net472` folder under a
-checkout's `bin/` or `obj/` is a stale build to delete, never a binary to run.
-
-Why, and the TeamCity and VS x64 details: "Base branch while the .NET 10
-port (PR #4619) is open" in `ai/docs/osprey-development-guide.md`. When
+Why (including why net10.0 only), and the TeamCity and VS x64 details: "Base branch while
+the .NET 10 port (PR #4619) is open" in `ai/docs/osprey-development-guide.md`. When
 #4619 merges into master this section is removed and Osprey work returns
 to master.
 
