@@ -532,16 +532,20 @@ code does", so they live in pwiz, not `ai/`.
   the `-d` dump lines left flagged. Verbose+model-diagnostics regression on this build was still
   running at handoff (`after\verbose-diagnostics\regression\summary.log`); the previous build's
   run was 70/70.
-- [ ] **UNCOMMITTED in pwiz-work1: ProgressReporter heading always prints** (Brendan,
-  2026-09-25). Since #4582 the constructor DEFERRED the heading until LogWaitTime, so a fast step
-  printed nothing at all and headings appeared/vanished between runs of the same data. Intended:
-  the heading always prints; only the percent lines (including the final 100%) are skipped for a
-  fast step. Changed `ProgressReporter` constructor to `WriteHeading()` unconditionally and
-  `ProgressReporterTest.TestProgressReporterSuppressesFastScopes` (fast scope = exactly the
-  heading). Debug 602 tests + inspection green; NOT yet run through regression. Brendan: a quiet
-  flavor (defer the heading too) may exist but must not be the default - add it only at a call
-  site shown to repeat a heading per file/window. Check the verbose-regression legs and the
-  SEA-AD log for newly repeated headings, then regression + commit.
+- [ ] **UNCOMMITTED in pwiz-work1: ProgressReporter rule for a CLI log** (agreed with Brendan,
+  2026-09-25): (1) the heading prints immediately, always; (2) percent lines no sooner than one
+  report interval, then at most one per interval; (3) the closing 100% only if the step ran at
+  least `MinPercentTime` (1.0 s) and did not already show 100%; (4) `LogWaitTime` REMOVED;
+  (5) the `--parallel-files` multi-file display unchanged. A step under 1 s shows only its
+  heading. History: #4582 (`TODO-20260814_osprey_stage7_progress_reporting.md`) added
+  `LogWaitTime` after Skyline's LongWaitDlg to remove "content-free heading/100% pairs" and
+  deferred the HEADING too - Brendan had asked only about the pair. Headings then came and went
+  between runs of the same data, and a route check keyed on one could not fire at 3 files
+  (`TODO-20260910_osprey_mdiag_resident_removal.md` F6/F13). Do NOT reintroduce a hidden heading:
+  a CLI log is read afterwards. Changed `ProgressReporter.cs`, `ProgressReporterTest.cs`, a stale
+  comment in `RescoreHydration.cs`. Debug 602 tests + inspection green; NOT yet regression-tested.
+  A heading that now repeats once per file/window means the reporter belongs outside that loop.
+  Next: Release build, `regression-parallel -Dataset All`, scan for repeated headings, commit.
 - [ ] **Next: SEA-AD 82 files** (full run), then Brendan's review of everything, then
   `/code-review max`, then the PR. **CHS 446 (~20 h) only after the PR is posted.**
   **Next session handoff**: For detailed startup protocol, read
