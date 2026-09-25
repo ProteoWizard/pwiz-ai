@@ -377,7 +377,8 @@ code does", so they live in pwiz, not `ai/`.
     result count, a calibration outcome or training progress stays in the default log. Only
     code-path, intermediate-file and memory-bookkeeping lines move, and only after `git log -S`
     shows who wrote them. All B1 lines trace to our branch work (#4213..#4642) except
-    `Interned library strings` (Mike, #4381): kept default, for Mike to decide.
+    `Interned library strings` (Mike, #4381): kept default; reworded by Brendan 2026-09-24 to
+    "Unique library strings: N / M total (P% reduced)" (`4e77d51a52`).
   - **Gap rule:** no demotion may open a reporting gap with developer logging off. Measured
     with `ai/scripts/perfviz.py --gap-threshold 30` on default logs (`--timestamp --memstamp`,
     no `--perf-stats`, no `--verbose`), before vs after, on Stellar and Astral.
@@ -445,6 +446,11 @@ code does", so they live in pwiz, not `ai/`.
   - `ResidentPoolGuardTest` no longer asserts C13 wording (3 English literals dropped).
   - `FdrMethod.GetLocalizedString()`; docs/21-user-facing-text.md gained rules 6-7 and the
     "say what happened" rule, and its stale "no enum helper yet" line is gone.
+- [x] A5 reworded (`4e77d51a52`, Brendan 2026-09-24): "Unique library strings: 1,433,253 /
+  5,241,881 total (72.7% reduced)". His note: not every line needs to state an action was
+  taken; a plain outcome is fine. Recorded in docs/21 ("Outcomes, not mechanisms").
+  Osprey is net10.0 only for good (Brendan): no reason to ship net472 or net8.0, unlike
+  Skyline/pwiz; recorded in the osprey-development skill and guide.
   - **Tooling trap found and fixed (2026-09-24, Brendan: "staying with net10.0, no intention of
     going back"):** ~15 `ai/scripts/Osprey` scripts, `OspreyDatasetRun.psm1` and the skill
     hard-coded `Release\net8.0`, which on pwiz-work1 held a stale 2026-09-16 build; a first

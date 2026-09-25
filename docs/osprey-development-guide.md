@@ -1732,6 +1732,13 @@ The port branch is the team's integration branch for
 nightly testing and is expected to become master once the release question is settled;
 merge-vs-squash of #4619 itself is Brendan's call.
 
+**Osprey is .NET 10 (net10.0) only, and stays that way.** The branch name says `net8` for
+history; the port targets .NET 10. Unlike Skyline and ProteoWizard, Osprey has no reason
+to ship as .NET Framework 4.7.2 or .NET 8.0, so net472 and net8.0 are not coming back.
+Scripts and docs name `Release\net10.0`; a `net8.0` or `net472` folder under a checkout's
+`bin/` or `obj/` is a stale build to delete, never a fallback. (Master still declares
+`net472;net8.0` until #4619 merges; nothing new is built there.)
+
 Why not master: master's `Osprey Windows .NET` build is red on every new ephemeral
 TeamCity agent (`pwiz-windows-i-*`) - its `tcbuild.bat` wants a globally installed
 dotCover, while the port branch restores it from `.config/dotnet-tools.json` and carries
@@ -1750,8 +1757,8 @@ in** (merge, never rebase, once the PR has review history).
 - `Osprey Linux .NET` was red on the port branch itself while the Linux agent was being
   provisioned; check `pull/4619` before reading it as a signal about your PR.
 
-**Delete this subsection** when #4619 merges and all Osprey work returns to master with
-no net472 work remaining.
+**Delete this subsection** when #4619 merges and all Osprey work returns to master, but
+keep the net10.0-only paragraph: move it to the top of this guide.
 
 ## Differences from Skyline's WORKFLOW.md
 
