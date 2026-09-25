@@ -534,6 +534,8 @@ code does", so they live in pwiz, not `ai/`.
   run was 70/70.
 - [ ] **Next: SEA-AD 82 files** (full run), then Brendan's review of everything, then
   `/code-review max`, then the PR. **CHS 446 (~20 h) only after the PR is posted.**
+  **Next session handoff**: For detailed startup protocol, read
+  `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
 - [ ] RESX PR: add the user-correctable exceptions that still print a type, e.g. a blib that
   cannot be opened prints `Pipeline failed: ... SQLiteException ... CantOpen`.
 - [ ] Open wording question: drop "Computing second-pass FDR scores for N files." when the
@@ -560,9 +562,6 @@ code does", so they live in pwiz, not `ai/`.
   Tighten `CommandLineErrorTest` (added in PR 1, asserts only untranslated tokens) to exact
   messages: `string.Format(OspreyResources.X, arg)` against the same resource ID the
   production code uses, as Skyline's `CommandLineTest` does (Brendan, 2026-09-25).
-
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
 
 ## Acceptance
 
