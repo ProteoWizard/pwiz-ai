@@ -5,7 +5,9 @@
 - **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
 - **Status**: In Progress
-- **GitHub Issue**: [#4491](https://github.com/ProteoWizard/pwiz/issues/4491)
+- **GitHub Issue**: [#4491](https://github.com/ProteoWizard/pwiz/issues/4491) and
+  [#4543](https://github.com/ProteoWizard/pwiz/issues/4543) (one PR, per #4543's Sequencing; developer decision
+  2026-09-25)
 - **Module**: `osprey`
 - **PR**: (pending)
 - **Worktree**: `D:\Dev\pwiz-osprey-gbdt`
@@ -17,6 +19,17 @@ trees (since #4446). Filed by Brendan as #4491 (2026-08); he folded it into #454
 an env var) on an unpushed branch, and on 2026-09-18 marked it parked. Rediscovered by `/code-review max` on
 #4703; the developer asked for its own branch. COORDINATE with Brendan before opening a PR: this branch fixes
 both defects his #4491 comment names (the dropped config and the missing tree scoring on the streaming path).
+
+**Scope widened 2026-09-25:** the developer chose Brendan's recommendation in #4543, so the #4543
+cleanup ships in this branch too:
+- remove `--fdr-method`;
+- select trees with `OSPREY_FDR_MODEL=gbdt`, failing on an unrecognized value;
+- delete `simple` (and the unreachable `Mokapot`) together with the `non-percolator-fdr` resident token;
+- mark gbdt Experimental in doc 07.
+
+The wider command-argument audit stays follow-up. The starting-work note on #4543 states gbdt's purpose:
+it is not expected to help with the current (SVM-chosen) features, and exists for future features that
+do not suit a linear SVM.
 
 ## Root cause
 
@@ -65,8 +78,15 @@ both defects his #4491 comment names (the dropped config and the missing tree sc
 - [x] `regression.ps1 -Dataset Stellar -NoBuild` on `44c2c4e261`: PASSED, all phases (build Release with
   `Build-Osprey.ps1` first; the script's own build uses VS 2022 MSBuild, which cannot build .NET 10)
 - [x] Entrapment comparison, gbdt vs percolator on StellarGenDecoyEntrap (below; posted on #4491)
-- [ ] Brendan's answer on #4491: its own PR or folded into #4543
-- [ ] `regression.ps1 -Dataset All`
+- [x] Brendan's answer on #4491: his #4543 Sequencing says one PR; the developer chose that (2026-09-25)
+- [x] `regression.ps1 -Dataset All -NoBuild` on `44c2c4e261`/`cbf8289404`: PASSED, 43 phases, 2.5 h
+  (`D:\test\osprey-runs\gbdt-fix-44c2c4e\regression-all.log`)
+- [x] #4543 cleanup committed as `939ff0bb44` (Debug gate: 603 tests, 0 inspection warnings; all 36 SVM key
+  lines byte-identical before and after)
+- [ ] `regression.ps1 -Dataset All -NoBuild` on `939ff0bb44` (`D:\test\osprey-runs\gbdt-4543-939ff0b\regression-all.log`)
+- [ ] gbdt through `OSPREY_FDR_MODEL=gbdt` gives the same results as the `--fdr-method gbdt` run
+  (`D:\test\osprey-runs\gbdt-4543-939ff0b\entrap\gbdt`)
+- [ ] Push; open the PR against the port branch (`osprey:` prefix, label `osprey`, closes #4491 and #4543)
 
 ## Entrapment result (2026-09-25, build `44c2c4e261`)
 
@@ -87,9 +107,30 @@ StellarGenDecoyEntrap command line, once per `--fdr-method`. Script:
   gbdt's 31,404.
 - **Decoy exchangeability:** paired-win fraction 0.464 vs 0.471; null tilt 0.52 vs 0.38.
 - **Sanity bounds:** both arms pass them.
-- **Likely cause and next test:** consistent with in-sample scoring of training-subset rows, but not proven.
-  To confirm it, score each subset row only with folds that did not train on it (held-out), then
-  re-measure. Until then, gbdt stays opt-in and experimental.
+- **What this is:** a baseline, not a blocker (developer, 2026-09-25). gbdt exists to evaluate candidate
+  features that do not suit the linear SVM (some were removed for that reason); the default feature set
+  was chosen for the SVM, so the default stays percolator. Held-out scoring of subset rows is a possible
+  later experiment, not a requirement for this branch.
+
+## Scope of this branch (developer, 2026-09-25)
+
+1. gbdt must not break the current regression tests. They run percolator: Stellar PASSED on `44c2c4e261`;
+   `-Dataset All` is the remaining gate.
+2. gbdt itself must keep working, because MARS (`maccoss/mars`) uses it.
+
+## MARS dependency
+
+- MARS vendors two files from `Osprey.ML`: `GradientBoostedTrees.cs` verbatim and the `XorShift64` class
+  from `LinearSvmClassifier.cs` (`dotnet/third_party/Osprey.ML`, SHA-256 drift guard in `UPSTREAM.json`,
+  re-synced by `dotnet/scripts/sync-osprey-ml.ps1`). This branch touches neither file, and nothing in
+  `Osprey.ML`.
+- MARS main vendors `6efbc3ea5d`, the #4595 PR branch before its squash. What landed (`cec7ee38d9`, on the
+  port branch only, not master) adds a private `TreeWorkspace` refactor and a `LeafValue` guard for
+  `h + RegLambda <= 0`. No public API changed; MARS uses squared error with `RegLambda` 1.0 by default, so its
+  output is unchanged unless a user sets `reg_lambda` 0. Optional MARS re-sync picks up the guard.
+- Master still has the #4446 `GradientBoostedTrees.cs` without the squared-error objective MARS needs;
+  that arrives when the port branch merges.
+- MARS tests were not run here: the pwiz hook blocks direct `dotnet test` and there is no MARS wrapper.
 
 ## Found while fixing (not in this branch)
 

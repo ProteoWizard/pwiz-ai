@@ -1752,6 +1752,9 @@ in** (merge, never rebase, once the PR has review history).
 - New branches: `gh pr create --base Skyline/work/20260612_net8_port`; `/pw-complete`
   works with the base and tracking branch swapped for master. Squash subjects are still
   `osprey: ... (#N)`.
+- MARS (`maccoss/mars`) vendors `Osprey.ML/GradientBoostedTrees.cs` and `XorShift64`
+  (`dotnet/scripts/sync-osprey-ml.ps1`). Re-sync it from a port-branch checkout, never
+  master: the squared-error objective MARS trains with (#4595) is only on the port branch.
 - Build **x64** in Visual Studio: the solution's Any CPU configuration fails there
   because VS never builds out-of-solution project references (`ProteowizardWrapper`
   and pwiz-sharp are not in `Osprey.sln`); command-line `msbuild` is fine either way.

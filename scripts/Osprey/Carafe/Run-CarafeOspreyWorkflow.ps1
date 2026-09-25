@@ -409,7 +409,7 @@ $ospreyCommon = @(
     '--resolution', $preset.Resolution,
     '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
     '--run-fdr', '0.01', '--experiment-fdr', '0.01',
-    '--fdr-method', 'percolator', '--fdr-level', 'precursor',
+    '--fdr-level', 'precursor',
     '--shared-peptides', 'all', '--threads', "$Threads")
 if ($ProteinFdr) { $ospreyCommon += @('--protein-fdr', $ProteinFdr) }
 
