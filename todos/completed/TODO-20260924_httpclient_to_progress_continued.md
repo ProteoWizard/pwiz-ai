@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260924_httpclient_to_progress_continued`
 - **Base**: `master`
 - **Created**: 2026-09-24
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#4700](https://github.com/ProteoWizard/pwiz/pull/4700)
+- **PR**: [#4700](https://github.com/ProteoWizard/pwiz/pull/4700) (merged 2026-09-24)
 - **Objective**: Retire the last `WebClient` and `HttpWebRequest` uses in Skyline and
   its tools, and decide what to do about bare `HttpClient` - so every HTTP call goes
   through `HttpClientWithProgress`, or plain `HttpClient` where the project cannot
@@ -84,12 +84,12 @@ them as work to do.
 - [x] Replace `WebClient` in `Nightly.cs` and `SkylineNightlyShim/Program.cs` with plain `HttpClient`
 - [x] Replace the three `HttpWebRequest` uses in `Nightly.cs` (log post, email notification, CSRF token)
 - [x] Lower the `CodeInspectionTest` WebClient tolerance from 3 to 1
-- [ ] Verify by running SkylineNightly for real: posting results, and a Shim self-update check
+- [x] Verify by running SkylineNightly for real: posting results, and a Shim self-update check
 
 Done 2026-09-24. Build, CodeInspection and QuickInspection (SkylineNightly,
-SkylineNightlyShim, Test) all clean. Live verification is still open: the dev
-machine has no `TEAMCITY_NIGHTLY_TEST_AUTH_TOKEN`, and the posts write to the shared
-results database and send email.
+SkylineNightlyShim, Test) all clean. Verified live on BRENDANX-UW6 with
+`SKYLINE_NIGHTLY_BRANCH=pull/4700` (see the Progress Log). The token was there all
+along, set at Machine scope; the first check looked only at User scope.
 
 Design:
 - Both downloads go through a new `TeamCityNightlyAuth.DownloadArtifact(url, path, token)`,
@@ -134,7 +134,7 @@ QuickInspection, SkylineBatch build and inspection all clean.
 - Live check: a temporary test method called `HttpUploadFiles` directly and posted exception
   **#75637** ("TEST - please delete - ...") with a `test-attachment.txt` attachment. Both the
   post and the attachment arrived. The test was reverted, not committed.
-  **#75637 needs deleting on skyline.ms.**
+  #75637 has since been deleted.
 
 ### Code review (2026-09-24, `/code-review max 4700`)
 15 findings, triaged by risk against reward, fixed in one follow-up commit:
@@ -188,3 +188,38 @@ can be its own branch.
   `TODO-20251023_panorama_webclient_replacement.md` - Phase 1
 - `TODO-remove_async_and_await.md` - its `ArdiaLoginDlg` item is subject to the same Ardia freeze
 - `HttpClientWithProgress.cs`, `HttpClientTestHelper.cs`
+
+## Progress Log
+
+### 2026-09-24 - Merged
+
+PR #4700 merged as commit 4a8fa426e0.
+
+What shipped (Phases 1 and 2, plus part of Phase 5):
+- SkylineNightly and SkylineNightlyShim moved onto plain HttpClient through a shared
+  `TeamCityNightlyAuth.DownloadArtifact`, with a `CreateLabKeyClient` session helper.
+- ReportErrorDlg and the GA4 hit moved onto HttpClientWithProgress.
+- The Universal Analytics hits removed from Skyline and SkylineBatch.
+- The WebClient inspection tolerance lowered from 3 to 1 (only the Installer is left), and a
+  new zero-tolerance `WebRequest.Create` rule added.
+- One `/code-review max` round, triaged by risk against reward.
+
+Verified live on BRENDANX-UW6 with `SKYLINE_NIGHTLY_BRANCH=pull/4700`:
+- The old Shim fetched the PR's SkylineNightly.zip and swapped in both executables.
+- The PR's SkylineNightly downloaded SkylineTester and started it.
+- The PR's Shim authenticated, downloaded and launched the next round.
+- `SkylineNightly.exe <log>` posted an aborted run to Integration as run 85663 (since deleted).
+- ReportErrorDlg posted exception 75637 with an attachment (since deleted).
+- Gotcha: a console opened before the environment variable was set did not see it, so its
+  Shim fetched master's zip. Task Scheduler runs get a fresh environment and do not have this
+  problem.
+
+Not verified: the hang-alert email. The server rejects it for every client
+(LabKey/MacCossLabModules #622 restricted `sendEmailNotification.view` to site admins).
+
+Deferred and not shipped:
+- Phase 3: bare HttpClient in the test and developer tools.
+- Phase 4: pwiz-sharp, after the .NET port.
+- The bare-HttpClient inspection rule.
+- Connected-tests organization.
+- Ardia stays frozen pending Thermo.
