@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1, 2 and 2b done and pushed (last pwiz commit `e089e4f2e0`; `regression-parallel -Dataset All` 70 PASS / 0 FAIL on it). Next: Step 3 (Medium/Low rows + Table C), then 4 (RESX), 5, 6. CHS 446 gap run deferred to the end (see Step 1c). Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
+- **Status**: In Progress - Steps 1, 2, 2b and 3a done and pushed (last pwiz commit `e45885b4e7`; `regression-parallel -Dataset All` 70 PASS / 0 FAIL on `e089e4f2e0`, Stellar + StellarLibDecoy PASS on `e45885b4e7`). Next: Step 3b (the "entries" sweep), then 4 (RESX), 5, 6. CHS 446 gap run deferred to the end (see Step 1c). Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`, which already carries #4656 (`7af9eb0ea5`). The CSV line numbers are for master `794cb6a5d8` and will be off on the port branch; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -423,6 +423,37 @@ code does", so they live in pwiz, not `ai/`.
     logs). `docs/20-command-line.md` Log format section documents the prefixes and exit codes.
   - **Ask Mike** whether any of his pipelines (or the NextFlow POC) grep Osprey logs for
     `[ERROR]` / `[WARN]` before this merges.
+- [x] Step 3a (`e45885b4e7`, pushed): A15-A31, B1 and C1-C13 applied, plus the
+  same-kind lines found beside them (resume errors, retained-summary errors, transfer and
+  protein-compact warnings, the OSPREY_STAGE7_STREAM error). Build/tests/inspection green (600);
+  regression Stellar and StellarLibDecoy (incl. modes 8, 10, 11) PASS. Default logs
+  `D:\test\osprey-runs\logtag-gaps\{stellar,astral}-step3a.log` (snapshot `_bin\logtag-step3a`
+  from net10.0): results unchanged, only `Interned library strings` left on the banned list,
+  0 bare counts, max gap 5 s / 15 s. Open wording questions for Brendan: drop the short
+  "Computing second-pass FDR scores" heading when the "Second-pass FDR over N files" line
+  follows it; shorter A17 dedup line.
+  - Spec wording corrected where the code disagreed: A17 dedup is WITHIN one isolation window
+    (same polarity, apex within ~5 cycles, >= half of top-6 fragments shared), not "overlapping
+    windows"; A18 multi-charge consensus is per file (re-score at the best charge state's
+    boundaries). C1 lost its remedy ("run as --task SecondPassFDR" could not be confirmed
+    after the streaming admission became disk-derived). Transfer-mode warnings said "falling
+    back to the retrain", which no longer exists (the caller throws); fixed with the doc comment.
+    Remedies that said "beside each input" say "for each input" (they follow --output-dir).
+  - Step 1b missed two prose probes in regression.ps1: mode 2 `are absent but have a spectra
+    cache` and mode 8 `Rescore resume:`. Both now read new `[PATH] input-source:` /
+    `[PATH] rescore-resume:` lines (`LogKey.ROUTE_INPUT_SOURCE`, `ROUTE_RESCORE_RESUME`).
+  - `ResidentPoolGuardTest` no longer asserts C13 wording (3 English literals dropped).
+  - `FdrMethod.GetLocalizedString()`; docs/21-user-facing-text.md gained rules 6-7 and the
+    "say what happened" rule, and its stale "no enum helper yet" line is gone.
+  - **Tooling trap found (not fixed here):** the port branch builds `Release\net10.0`, but ~15
+    `ai/scripts/Osprey` scripts, `OspreyDatasetRun.psm1`'s repo-exe fallback and the
+    osprey-development skill's snapshot instructions hard-code `Release\net8.0`, which on this
+    checkout holds a stale 2026-09-16 build (v26.1.1.259). A first Stellar log was run from it
+    by mistake and deleted. Always pass `-Exe` with a snapshot of `net10.0` until the scripts
+    resolve the TFM (master still builds net8.0).
+- [ ] Step 3b: the Review-priority "entries" lines a default run prints (Scored N entries,
+  Writing N entries, the rescore block, Wrote reconciled parquet, Gap-fill CWT/forced,
+  Reconciliation rescore, Collected scores, library load lines), checked against fresh logs.
 - [ ] Step 3: Medium/Low rows (A14-A31) and Table C, same rules (1-7), `N0` on every count.
   Known leftovers in the Stellar/Astral default logs: `Persisted the trained 1st-pass model
   (3 file sidecar(s))`, `protein-compact: mapped recomputed q onto N reported survivors (0
