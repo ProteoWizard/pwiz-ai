@@ -397,8 +397,8 @@ foreach ($n in $counts) {
         $wallSt = Invoke-OspreyTask -CliArgs $aSt -LogName $logSt -LogMemory
 
         $linesSt = Get-Content (Join-Path $phaseDir $logSt)
-        $writtenSt = ($linesSt | Select-String -Pattern 'Wrote (\d+) library spectra' |
-                      ForEach-Object { [int]$_.Matches.Groups[1].Value } | Select-Object -Last 1)
+        $writtenSt = ($linesSt | Select-String -Pattern 'Wrote ([\d,]+) library spectra' |
+                      ForEach-Object { [int]($_.Matches.Groups[1].Value -replace ',', '') } | Select-Object -Last 1)
         # Peak PRIVATE bytes from the --memstamp trace. Column 1 is
         # GC.GetTotalMemory(false) and column 2 is Process.PrivateMemorySize64
         # (CommandStatusWriter.cs:138-139) - private, NOT working set, which is exactly the
@@ -487,8 +487,8 @@ foreach ($n in $counts) {
     $lines7 = Get-Content (Join-Path $phaseDir $log7)
     # Guard against a silent no-op the same way the Stage-6 point does: a real Stage 7
     # always reports what it wrote to the blib.
-    $written = ($lines7 | Select-String -Pattern 'Wrote (\d+) library spectra' |
-                ForEach-Object { [int]$_.Matches.Groups[1].Value } | Select-Object -Last 1)
+    $written = ($lines7 | Select-String -Pattern 'Wrote ([\d,]+) library spectra' |
+                ForEach-Object { [int]($_.Matches.Groups[1].Value -replace ',', '') } | Select-Object -Last 1)
     $stage7Results += [pscustomobject]@{
         Files       = $n
         InheritedGB = Get-ProbeGB -Lines $lines7 -Label 'stage7-inherited'

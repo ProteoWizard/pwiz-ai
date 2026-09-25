@@ -266,16 +266,17 @@ Every pre-Stage-7 artifact is hard-linked in, nothing but the inputs is on the c
 and the run resumes straight into the join. Read the `-WhatIf` link tally first: `0 missing`
 is the precondition, and a non-zero count means the bed does not cover this cohort.
 
-**Assert the marker.** A streamed join logs
+**Assert the marker.** Run with `--perf-stats`; a streamed join logs
 
 ```
-Second-pass join: folding over 446 run(s), ... (no all-runs survivor pool)
+[PATH] second-pass-join: per-run runs=446
 ```
 
-and a resident one logs `Stage 7 is taking the RESIDENT join` plus
-`Rebuilding first-pass survivors from 446 file(s)`. The output is IDENTICAL either way - that
-is the whole design - so the log line is the only evidence, exactly as it is for the P16 folds
-above. `regression.ps1` asserts the same marker per leg at Stellar scale.
+and a resident one logs `[PATH] survivor-pool: materialized runs=446`. The output is IDENTICAL
+either way - that is the whole design - so the log line is the only evidence, exactly as it is
+for the P16 folds above. `regression.ps1` asserts the same `[PATH]` keys per leg at Stellar
+scale. (Before 2026-09-25 these were prose lines, "Second-pass join: folding over N run(s)"
+and "Materializing survivors"; logs from then carry only those.)
 
 ### The library directory is part of `search_hash` - pin it from the SOURCE run
 

@@ -491,6 +491,51 @@ code does", so they live in pwiz, not `ai/`.
   properties that re-read. **Guidance (Brendan):** a caller must not assume an
   `OspreyEnvironment` read is free - read once outside any loop and pass a plain value down;
   depending on an instant response couples to the class's implementation.
+- [x] Log review round (2026-09-25, uncommitted until the final gates below pass; review folder
+  `D:\test\osprey-runs\logreview-20260925\`, `FINDINGS.md` there is the index). Every log from
+  the task splits, a one-file search and all 70 regression legs read end to end, then fixed:
+  - Behavior: false "No precursor candidates were scored" warning on every per-run worker
+    (pre-existing; per-run load now reports it is per-run); "+ 0 decoys" on SecondPassFDR and
+    library-supplied decoys counted as targets; per-file worker never printed "Analysis
+    complete"; `--task SecondPassFDR --model-diagnostics` refusal printed an exception + stack
+    (now one `Error:` line, exit 1, same `[PATH]` key); one-file search narrated cross-run
+    reconciliation that cannot happen; `--model-diagnostics` "...is missing, so the first pass is
+    re-run" on every COLD run (now only when an earlier analysis exists); verbose tolerance lines
+    repeated per rescoring sub-pass at column 0.
+  - Wording: every "(s)", "1 files", bare count and code word in default, `--model-diagnostics`
+    and `--verbose` text (headings that print only when slow included, found in code).
+    `Osprey.Core/CountText.Format` picks whole singular/plural sentences (Skyline's
+    `count == 1 ? X : Format(Y)`), so each becomes two resources in the RESX PR.
+  - Brendan's decisions: a true one-file search (one input, no `--task`;
+    `ScoringTaskShared.IsSingleFileSearch`) never says "cross-run reconciliation" - a
+    `--task PerFileRescoring` worker does; "Classifying N precursor candidates for first-pass /
+    second-pass model diagnostics"; keep "Computing second-pass FDR scores for N files."; keep
+    k-fold ("3-fold cross-validation" is the proteomics standard, Noble lab).
+  - Paths: `--output-dir`/`--cache-dir`/`-o` and the input directory are canonicalized with
+    `Path.GetFullPath` (a script's `D:/x` gave `D:/x\file` everywhere); input/library paths stay as
+    typed (echoed, and input names go into the blib). No hash or stamp reads a directory.
+  - Long paths: `Osprey/app.manifest` with `longPathAware`. Measured: a 306-char blib path fails
+    at the native SQLite open (`CantOpen`) without it and succeeds with it (LongPathsEnabled=1).
+    .NET 10's managed IO already handled every other long path.
+  - Machine channel: co-assignment self-checks moved to `[COUNT] coassign-*`, phases to
+    `[PATH] coassign-phase`; `Measure-CoAssignmentScaling.py` reads both forms.
+  - Scripts: `regression(-parallel).ps1 -ExtraOspreyFlags verbose,model-diagnostics`;
+    `Compare-EndToEnd-Crossimpl.ps1 -SourceRoot` (it silently compared `C:\proj\pwiz`);
+    `Compare-Blib-Crossimpl.ps1` copies SQLite.Interop.dll only when it differs (an unconditional
+    copy failed with the file held open by a running Osprey and read as a blib FAIL);
+    `Measure-Stage6Rescore.ps1` accepts thousands separators.
+  - Verified before the final changes: regression 70/70 three times, verbose+model-diagnostics
+    regression 70/70, Stellar cross-impl PASS at 1e-9. Tests 602.
+- [x] Final gates on the last build (`_bin\logtag-final2`), committed as `13373c6b4f` (pushed):
+  default regression 70/70; cross-impl at 1e-9 PASS on Stellar (27,321 precursors) and
+  StellarLibraryDecoy (27,963); task splits, one-file search and `-d` run all exit 0 with only
+  the `-d` dump lines left flagged. Verbose+model-diagnostics regression on this build was still
+  running at handoff (`after\verbose-diagnostics\regression\summary.log`); the previous build's
+  run was 70/70.
+- [ ] **Next: SEA-AD 82 files** (full run), then Brendan's review of everything, then
+  `/code-review max`, then the PR. **CHS 446 (~20 h) only after the PR is posted.**
+- [ ] RESX PR: add the user-correctable exceptions that still print a type, e.g. a blib that
+  cannot be opened prints `Pipeline failed: ... SQLiteException ... CantOpen`.
 - [ ] Open wording question: drop "Computing second-pass FDR scores for N files." when the
   "Second-pass FDR over N files: ..." line follows it (straight-through protein-compact).
 - [ ] **This PR: in-depth testing before opening it** (next session):

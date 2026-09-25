@@ -91,11 +91,16 @@ $dllDir = Split-Path $dll -Parent
 $rid = if ($IsLinux) { 'linux-x64' } else { 'win-x64' }
 $nativeSrc = Join-Path $dllDir "runtimes/$rid/native/SQLite.Interop.dll"
 $nativeDst = Join-Path $dllDir 'SQLite.Interop.dll'
-# Always overwrite: if a previous run on a different OS placed the
-# wrong-architecture binary here, P/Invoke would fail with
-# "incorrect format" (Windows trying to load an ELF, or vice versa).
-# Force-copy from the current-OS runtimes/ source on every invocation.
-if (Test-Path $nativeSrc) {
+# Overwrite whenever the copy differs: if a previous run on a different OS placed the
+# wrong-architecture binary here, P/Invoke would fail with "incorrect format" (Windows
+# trying to load an ELF, or vice versa). But ONLY when it differs: a running Osprey.exe
+# (a regression lane, a long run) holds this same file open, and an unconditional
+# overwrite then failed the whole comparison with "being used by another process" -
+# reported as a blib FAIL although no blib was compared. regression-parallel.ps1 fixed
+# the same collision for its own copy on 2026-09-05.
+if ((Test-Path $nativeSrc) -and
+    (-not (Test-Path $nativeDst) -or
+     (Get-FileHash $nativeSrc).Hash -ne (Get-FileHash $nativeDst).Hash)) {
     Copy-Item $nativeSrc $nativeDst -Force
 }
 Add-Type -Path $dll

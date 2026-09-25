@@ -69,6 +69,11 @@
     select_c rule (maccoss/osprey, feature/svm-c-selection-tolerance) must be
     compared against.
 
+.PARAMETER SourceRoot
+    The pwiz checkout whose C# Osprey build to compare, e.g. C:\proj\pwiz-work1. Default:
+    Get-PwizRoot (<project root>\pwiz, or $env:PWIZ_ROOT). Same meaning as Build-Osprey.ps1's
+    -SourceRoot: without it a sibling checkout's build is silently not the one compared.
+
 .PARAMETER AllowStaleBinaries
     Skip the binary-freshness guard. This script RUNS PREBUILT BINARIES and
     builds neither side, so by default it refuses to run when either exe is
@@ -84,6 +89,7 @@ param(
     [switch]$SkipRust,
     [switch]$SkipCs,
     [switch]$AllowStaleBinaries,
+    [string]$SourceRoot,
     [int]$Threads = 16,
     [string]$CsSvmCTolerance = '0',
     [string]$Files = 'All'
@@ -99,6 +105,11 @@ $configCandidates = @(
     (Join-Path $scriptDir '..\Dataset-Config.ps1')
 )
 foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
+
+# Every C#-side path below (exe, freshness roots, regression data helper, workdir) goes
+# through Get-PwizRoot, so pointing it at -SourceRoot moves all of them together. Process-
+# scoped: the caller's environment is untouched.
+if ($SourceRoot) { $env:PWIZ_ROOT = (Resolve-Path $SourceRoot).Path }
 
 $ospreyExe = Get-OspreyRustExe
 if (-not (Test-Path $ospreyExe)) {
