@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `4225f40994` (Stellar regression PASS). Next: in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
+- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `413a6c6950` (regression-parallel All 70/70). Next: SEA-AD 82 files, then in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -531,7 +531,7 @@ code does", so they live in pwiz, not `ai/`.
   StellarLibraryDecoy (27,963); task splits, one-file search and `-d` run all exit 0 with only
   the `-d` dump lines left flagged. Verbose+model-diagnostics regression on this build 70/70
   (`after\verbose-diagnostics\regression\summary.log`; legs not yet copied into the review folder).
-- [ ] **UNCOMMITTED in pwiz-work1: ProgressReporter rule for a CLI log** (agreed with Brendan,
+- [x] **ProgressReporter rule for a CLI log** (`413a6c6950`, pushed; agreed with Brendan,
   2026-09-25): (1) the heading prints immediately, always; (2) percent lines no sooner than one
   report interval, then at most one per interval; (3) the closing 100% only if the step ran at
   least `MinPercentTime` (1.0 s) and did not already show 100%; (4) `LogWaitTime` REMOVED;
@@ -543,8 +543,15 @@ code does", so they live in pwiz, not `ai/`.
   (`TODO-20260910_osprey_mdiag_resident_removal.md` F6/F13). Do NOT reintroduce a hidden heading:
   a CLI log is read afterwards. Changed `ProgressReporter.cs`, `ProgressReporterTest.cs`, a stale
   comment in `RescoreHydration.cs`. Debug 602 tests + inspection green; NOT yet regression-tested.
-  A heading that now repeats once per file/window means the reporter belongs outside that loop.
-  Next: Release build, `regression-parallel -Dataset All`, scan for repeated headings, commit.
+  Verified: `regression-parallel -Dataset All` 70/70 (46 min, lane logs in
+  `D:\test\osprey-runs\logtag-progress\regression\`). Headings per log compared with the
+  13:44-13:59 run (`ai/.tmp/sessions/20260925-01355z/heading_repeats.py`): no heading repeats
+  more often than before; 19 headings are newly visible, each once per log. One carried a
+  banned word ("Loading scored entries"), renamed "Reading first-pass results for N files".
+  The one-shot `WriteHeading` guard went with the deferral. Snapshot `_bin\logtag-progress`.
+  - Wording question for Brendan: a library load now shows "Loading spectral library from
+    <full path>..." directly followed by "Parsing <file name>..." (the parse heading was
+    hidden before when fast or cached).
 - [ ] **Next: SEA-AD 82 files** (full run), then Brendan's review of everything, then
   `/code-review max`, then the PR. **CHS 446 (~20 h) only after the PR is posted.**
   **Next session handoff**: For detailed startup protocol, read
