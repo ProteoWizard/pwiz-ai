@@ -194,4 +194,4 @@ With the new options off, every existing output must be byte-identical (regressi
 - `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
 - `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`, then `-Dataset All` (options off, 1e-9)
 - `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar`
-- TeamCity Perf/Regression only on the finished PR candidate, and only after asking.
+- TeamCity Perf/Regression only on the finished PR candidate, and only after asking. Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.

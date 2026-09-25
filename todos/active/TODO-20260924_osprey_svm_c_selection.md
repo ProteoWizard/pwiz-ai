@@ -89,7 +89,7 @@ model on reconciled peaks, handles much worse.
 - [ ] When #69 merges: flip `Compare-EndToEnd-Crossimpl.ps1 -CsSvmCTolerance` default to '' and drop the
       `OSPREY_SVM_C_TOLERANCE=0` pins in `Compare-CrossImpl-Reference.ps1` / `Compare-EndToEnd-Bisect-Crossimpl.ps1`.
       Running the Rust exe outside cargo needs `%USERPROFILE%\vcpkg\installed\x64-windows\bin` (OpenBLAS) on PATH.
-- [ ] TeamCity Perf/Regression only on the PR candidate, and only after asking
+- [ ] TeamCity Perf/Regression only on the PR candidate, and only after asking Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.
 
 ## Follow-ups (not in this PR)
 
