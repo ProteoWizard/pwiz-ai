@@ -10,9 +10,14 @@
   2026-08-04 (Brian's call - it is a separate issue) onto
   `Skyline/work/20260804_mzml_mz_sort_order`; see `TODO-20260804_mzml_mz_sort_order.md`, which
   also carries the general pwiz-level solution. `591445b58` reverts the two sort commits here and
-  the PR body is trimmed to match. Matt's CHANGES_REQUESTED (2026-08-03) is answered - three of
-  the four threads discuss code that has moved, and a comment on the PR says so.
-  **Start at Phase 12** - Phase 11 is answered and Phase 12 (2026-08-21) carries uncommitted work.
+  the PR body is trimmed to match.
+  **Everything through Phase 13 is committed and pushed** (`516213acec`, 2026-09-25) with both gates
+  green; **every review thread on the PR is resolved.** The PR is nonetheless still `BLOCKED`, because
+  `reviewDecision` is `CHANGES_REQUESTED` from Matt's 2026-09-24 re-review and resolving threads does
+  not clear a review verdict - only a new approving review or a dismissal does. So the next move is
+  asking Matt to re-review, not more thread work.
+  **Start at Phase 13** for what the last round changed; the one real coverage gap is still the UIMF
+  calibration-frame fixture (Phase 12).
 - **GitHub Issue**: (none)
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4498
 - **Cherry-pick to release**: no - Brian decided 2026-07-29, do not add the label
@@ -642,7 +647,7 @@ Fixture and tests:
 Replies posted on all four threads. The `SpectrumList_Filter.cpp:321` one was answered rather
 than complied with - see Phase 11.
 
-### Phase 11: NEXT SESSION STARTS HERE - awaiting Matt's re-review
+### Phase 11: the 2026-08-03 review round (DONE - answered, threads resolved)
 
 All four of Matt's 2026-08-03 comments are answered - three by the Phase 10 commit, one by argument.
 Nothing is outstanding on this branch except his re-review. If he comes back:
@@ -694,7 +699,7 @@ false, but the term stays in cvgen's `relationsIsA_` - it does *not* move to `pa
 
 What needs revisiting when it lands is now tracked in Phase 12.
 
-### Phase 12: ignoreCalibrationScans honored for UIMF and mzML (IN PROGRESS)
+### Phase 12: ignoreCalibrationScans honored for UIMF and mzML (DONE - committed b5d5e3118c)
 
 **Stays on this branch and this PR (Brian, 2026-08-24).** Asked whether it should split out as its own
 `pwiz:` PR, given it is mostly pwiz core on a `skyline`-labelled branch. It should not: not
@@ -1042,6 +1047,86 @@ byte-compares Waters against the C++ reference mzML *for this flag* -
 `TestHarness/ReaderTestConfig.cs:183` reproducing the C++ filename mangling, reading the C++ fixture
 directory in place. So any reference mzML this branch generates becomes a port oracle for free; skip
 the calibration-frame UIMF fixture and *neither* side gets coverage.
+
+### Phase 13: Matt's re-review, 2026-09-24 - three comments, all settled (DONE)
+
+Pushed as `d27bb8684b` and `516213acec` on 2026-09-25, both gates green (39 pwiz unit tests; Skyline
+build + CodeInspectionTest + full ReSharper at 0/0). `3e73fe6e4e` merged master in first - merge, not
+rebase, since the PR is public.
+
+- [x] **`SpectrumList_IgnoreCalibrationScans.cpp` asked for `DetailLevel_FullMetadata` outright.** Now
+      resolves the cheapest level that populates the term through `SpectrumList::min_level_accepted`
+      (`MSData.hpp:741`), the utility Matt pointed at. Precedents: `DiaUmpire.cpp:277`,
+      `VendorReaderTestHarness.cpp:590`.
+- [x] **The `#4499` case stopped needing a post-scan size comparison.** `min_level_accepted` throws
+      when nothing satisfies the predicate at any level, which *is* "fileContent declared MS:1000928
+      and no spectrum carries it", so that throw is now the signal to return `inner` unwrapped. The
+      size check survives as an explicit invariant only, because `calibrationSpectraAreOmitted()`
+      reports on it.
+- [x] **Help text**: dropped "in mzML/mzMLb/mz5" and named the term, in `msconvert.cpp`, `Reader.hpp`
+      and the CLI `MSData.hpp`. `msconvert-help.txt` is **generated** (`commandline/Jamfile.jam:46`),
+      so it is not hand-maintained - build `pwiz_tools/commandline//msconvert-help.txt` and diff to
+      confirm it agrees with the option string.
+- [x] **Matt asked for `testMSLevelSetCalibrationSpectrum` to be deleted outright** - "not this
+      filter's job to do anything with calibration spectra anymore." **Answered and resolved: the test
+      stays, renamed `testMSLevelWithCalibrations`, with the comment rewritten.** The premise does not
+      hold, because `Reader::Config::ignoreCalibrationScans` defaults to **false** (`Reader.cpp:45`):
+      on a plain `msconvert --filter "msLevel 1-"` the calibration spectra are still in the list when
+      the predicate runs. Phase 12 changed who *removes* them, not who *classifies* them. Brian made
+      the same argument on the PR independently and chose the name.
+
+#### The tribool in the `min_level_accepted` predicate is required, not ceremony
+
+Worth understanding before touching it, because the correct version looks over-engineered and the
+naive version is **worse than the hardcoded level it replaced**.
+
+`min_level_accepted` (`MSData.cpp:1209-1231`) maps the three tribool values to three *different
+actions*, and `false` is not "no":
+
+| returns | loop does |
+|---|---|
+| `true` | stop, return the current level |
+| `false` | **re-read the same spectrum at a higher level** |
+| `indeterminate` | abandon this spectrum, try the next, **keep the level** |
+
+So `return s.hasCVParam(MS_calibration_spectrum);` breaks. On an ordinary MS1 at spectrum 0: false at
+`Instant` -> escalate -> false at `Fast` -> escalate -> `FullMetadata` -> escalate -> `FullData`, at
+which point the inner loop exits. `result` is carried across the *outer* loop, so every later spectrum
+is probed at `FullData` and the resolved level comes back `FullData` - which decodes the binary arrays,
+so the wrapper then scans the whole file at the most expensive level available.
+
+The fix needs a discriminator for "are this spectrum's type terms populated yet", so that silence
+about calibration can be read as meaningful rather than as not-yet-loaded:
+
+```cpp
+if (s.hasCVParam(MS_calibration_spectrum)) return true;          // found it, this level works
+if (s.hasCVParamChild(MS_spectrum_type))   return indeterminate;  // populated, just not calibration
+return false;                                                     // nothing populated yet, escalate
+```
+
+Same shape as the msLevel probe at `VendorReaderTestHarness.cpp:592`.
+
+**This is pinned, so the regression is loud rather than silent.**
+`testAsksForTheCheapestDetailLevelThatWorks` asserts every requested level is `<= FastMetadata`; the
+plain-bool version resolves to `FullData` and records levels 2 and 3, so it fails. If that assertion
+ever fires, the answer is to re-read this section, not to relax the assertion.
+
+#### Pinning the detail level needed a fake list, and the first attempt was wrong twice
+
+- `SpectrumListSimple` **ignores detail level entirely**, so every pre-existing test in
+  `SpectrumList_IgnoreCalibrationScansTest.cpp` passes whatever level the wrapper asks for - including
+  the `FullMetadata` it used to hardcode. Hence `DetailLevelRecordingSpectrumList`, which reveals the
+  term only at or above a chosen level and records what it is asked for.
+- **First version failed for the wrong reason.** It recorded `FullMetadata` reads the wrapper never
+  requested, because `SpectrumListSimple::spectrumIdentity` is `return *spectrum(index, false);`
+  (`MSData.cpp:1249`) - so every `spectrumIdentity()` call in the ctor was charged as a spectrum read.
+  A real mzML list reads its index there. Fixed by overriding `spectrumIdentity` in the fake.
+- **That override also removed undefined behavior.** Because the fake's `spectrum()` returns a *copy*
+  rather than the stored element, inheriting `spectrumIdentity`'s `return *spectrum(index, false)`
+  returned a reference to a destroyed temporary, which the ctor then copied from. It happened to work.
+- Mutation-verified: restoring `DetailLevel_FullMetadata` fails the new test. Note the failing run
+  still **exited 0** - see [[reference_quickbuild_exit_code_hides_test_failure]]; it reported
+  `...failed updating 1 target...` with `Build failed: exit code was 1` only inside the log.
 
 ## Open Questions / Unresolved
 
