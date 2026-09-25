@@ -377,6 +377,12 @@ before the usings and once after. And `build.bat` does not build `SkylineTester`
 `Executables/DevTools/AssortResources` at all - only the inspection's solution build compiles
 them, so a code change there is not covered by a `build.bat --no-tests` green.
 
+Same for `TestPerf`, with a flag that changes it: the default target set omits `TestPerf`, and
+a plain `build.bat` only **stages** it out of whatever is already in `TestPerf\bin` (which is
+the stale-`TestPerf.dll` trap above). **`build.bat --with-tutorial-perf --build-only` pulls it
+into `BUILD_TARGET` and really compiles it** - look for `TestPerf -> ...TestPerf.dll` in the
+log, and do not accept `Staging TestPerf` as evidence that it built.
+
 Verified: `build.bat --no-tests` 0 errors; `tcinspect` 160/0 with every `Redundant*` category
 absent and no new category and no other count moved; `Test.dll` 421 tests (incl.
 `CodeInspection`), `TestData.dll` 178 tests, `TestRetentionTimeAlignment` - all 0 failures.
@@ -472,9 +478,10 @@ full Skyline suite on this commit: SUCCESS.
 
 ### Unread fields and the singletons: 111 -> 105 (`79b26ba191`)
 
-6 findings, 5 files. **And two of the three unread fields are dead product settings, which is
-the same defect shape as the dead `??` in the batch before: a value the user (or the test
-author) sets that never reaches the thing it configures.**
+6 findings, 5 files. **One of the three unread fields is a dead product setting** - the same
+defect shape as the dead `??` in the batch before, a value the user sets that never reaches the
+thing it configures. A second one LOOKED like it and was not; see the correction below, which
+is the more useful lesson of the two.
 
 **`MSAmandaSearchWrapper._maxVariableMods`** - `SetModifications(mods, maxVariableMods_)` is an
 `AbstractDdaSearchEngine` override, and **Comet and MSFragger both write their captured value
@@ -482,16 +489,59 @@ into the params file** (`max_variable_mods_in_peptide`, `max_variable_mods_per_p
 MS Amanda stores it and never reads it; the `MaxNoDynModifs` written to its settings XML comes
 from `AdditionalSettings[MAX_NO_DYN_MODIFS]`, default 4. **So the DDA search UI's max-variable-
 mods value has no effect on an MS Amanda search.** The field is deleted and the gap recorded at
-the call site. Whether that is a bug or intended (MS Amanda exposes its own additional setting)
-is a product question, deliberately NOT decided here - changing it moves search results.
+the call site.
 
-**`DiaUmpireTutorialTest.InstrumentSpecificValues.FragmentTolerance`** - same shape.
-`SetupPage` assigns `SearchSettingsControl.PrecursorTolerance = _instrumentValues.Precursor-
-Tolerance` but there is **no matching line for the fragment tolerance**, so the tutorial search
-runs at the dialog default while the test declares 40 ppm / 20 ppm per instrument. Kept under a
-suppression rather than deleted, because deleting it erases the recorded intent; wiring it up
-would move the tutorial results and needs a deliberate re-baseline. Note `TestPerf` is outside
-per-commit CI, so nothing would have caught this.
+**Fixed on `Skyline/work/20260925_msamanda_max_variable_mods` (`63892957d0`, pushed, no PR).**
+The duplicate `MaxNoDynModifs` additional setting is removed and the page's value drives it, the
+same resolution Comet's `max_variable_mods_in_peptide` already got - `CometSearchEngine.cs:83`
+still carries that commented-out `AddAdditionalSetting`. MS Amanda's own bundled `settings.xml`
+documents `MaxNoDynModifs` with the identical `(min 0, max 10)` range, so the two controls were
+one parameter. Effective default moves 4 -> 3 (the document default) for users; no baseline
+moved, because no PSM in the test sets needed a 4th variable modification. `MSAmandaSearchSettingsTest`
+was added as the verifier the defect lacked - a value stored and never read is invisible to
+every other test. **Two product calls for review**: it removes a user-visible setting, and it
+changes the effective default.
+
+`TestDiaUmpireWiffFile` was the one flagged-but-unverified risk, and it is now **closed**: the
+test has **no** document-count assertions at all (it asserts wizard state and `searchSucceeded`,
+then cancels), so there was never a count for 4 -> 3 to move, and the search succeeded under the
+new value. It did fail, on something unrelated - see below.
+
+**`DiaUmpireTutorialTest...FragmentTolerance` - I CALLED THIS THE SAME DEFECT AND I WAS WRONG.**
+Recorded because the reasoning error is the reusable part. I saw `SetupPage` assign
+`SearchSettingsControl.PrecursorTolerance` with no matching line for the fragment tolerance,
+concluded the assignment had been forgotten, and kept the field under a suppression "because
+deleting it erases the recorded intent". Investigation on
+`Skyline/work/20260925_diaumpire_fragment_tolerance` (`4b9394703f`) showed the line was
+**deliberately deleted**: commit `48e069d673`, "POC: search DiaUmpire TTOF tutorial with Comet",
+removed it and says so in its own body - *"high-res MS2 analyzer, no fragment tol"*.
+
+**Comet has no fragment tolerance.** `SearchSettingsControl` disables and clears the MS2
+tolerance box for Comet; `ValidateEntries` guards the apply with `if (txtMS2Tolerance.Enabled)`
+so `SetFragmentIonMassTolerance` is never called; and `CometSearchEngine`'s override is an
+explicit empty no-op commented "controlled by MS2 Analyzer selection". The knob that exists is
+`Ms2Analyzer`, which the test already sets to high-resolution for both instruments. The field
+was removed, not wired up.
+
+Wiring it would NOT have moved a search result - it would have written a bogus `40 m/z` into a
+disabled box (Comet offers no ppm unit, and the setter silently coerces an unsupported unit to
+index 0) and changed the `[Track]`ed audit log from `Fragment tolerance is "0" m/z` to `"40"`,
+breaking `AuditLogCompareLogs`. So the "fix" would have introduced the defect.
+
+**Separate defect found while running `TestDiaUmpireWiffFile` (not fixed, nobody's branch).**
+`DiaUmpireVendorFormatTest.RemoveDiaUmpireFiles` globs `"*-diaumpire.*"` - with a dot - so it
+misses `<file>-diaumpire_pin.tsv`, which the search leaves in the PERSISTENT dir. One orphan is
+enough to fail `CheckForModifiedPersistentFilesDir` ("New files: ...-diaumpire_pin.tsv"), after
+the test body has otherwise passed. Dropping the dot (`"*-diaumpire*"`) covers both. This never
+fires in CI because the test is `NoNightlyTesting(EXCESSIVE_TIME)`, which is also why it has
+gone unnoticed. Note the orphan then poisons the NEXT run's opening snapshot, so a naive re-run
+can pass and tell you nothing - delete it from the cache before re-testing (I did).
+
+**The lesson**: an unread field next to a used sibling looks like a forgotten assignment, and
+`git log -S` on the removed line settles it in one command. Check whether the value was removed
+on purpose BEFORE concluding it was dropped by accident. Two more things that made this quiet
+and are worth their own look: the `FragmentTolerance` setter coerces an unsupported unit
+instead of rejecting it, and assigning while the box is disabled is accepted silently.
 
 The other four were straightforward: a static `Control` field in the no-op
 `ConcurrencyVisualizer` that was only ever assigned (a GC root for nothing, had its one caller
