@@ -532,6 +532,16 @@ code does", so they live in pwiz, not `ai/`.
   the `-d` dump lines left flagged. Verbose+model-diagnostics regression on this build was still
   running at handoff (`after\verbose-diagnostics\regression\summary.log`); the previous build's
   run was 70/70.
+- [ ] **UNCOMMITTED in pwiz-work1: ProgressReporter heading always prints** (Brendan,
+  2026-09-25). Since #4582 the constructor DEFERRED the heading until LogWaitTime, so a fast step
+  printed nothing at all and headings appeared/vanished between runs of the same data. Intended:
+  the heading always prints; only the percent lines (including the final 100%) are skipped for a
+  fast step. Changed `ProgressReporter` constructor to `WriteHeading()` unconditionally and
+  `ProgressReporterTest.TestProgressReporterSuppressesFastScopes` (fast scope = exactly the
+  heading). Debug 602 tests + inspection green; NOT yet run through regression. Brendan: a quiet
+  flavor (defer the heading too) may exist but must not be the default - add it only at a call
+  site shown to repeat a heading per file/window. Check the verbose-regression legs and the
+  SEA-AD log for newly repeated headings, then regression + commit.
 - [ ] **Next: SEA-AD 82 files** (full run), then Brendan's review of everything, then
   `/code-review max`, then the PR. **CHS 446 (~20 h) only after the PR is posted.**
   **Next session handoff**: For detailed startup protocol, read
