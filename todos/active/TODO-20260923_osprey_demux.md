@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260923_osprey_demux`
 - **Base**: `Skyline/work/20260612_net8_port` (stacked on PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: In Progress. M0 and M1 (staggered DIA) in PR review; M2-M6 not started.
+- **Status**: In Progress. M0 and M1 (staggered DIA) in review by Brendan (#4710, requested 2026-09-25).
+  Next: M6 ZT Scan plus streaming ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)); M2-M5 not started.
 - **Module**: `osprey`
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711)
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (M0 + M1)
@@ -98,7 +99,7 @@ spectra.bin + acquisition.bin -pass 2-> <stem>.demux.spectra.bin
 - [ ] **M3**: Astral staggered (variable width).
 - [ ] **M4**: Osprey.Centroid (centrix port), `--centroid centrix` on any profile input (separate branch).
 - [ ] **M5**: Stellar profile demux (§5.4c, then §5.4d).
-- [ ] **M6**: ZT Scan. Stage the wiff2 plugin in Osprey; empirical kernel (§2.4).
+- [ ] **M6**: ZT Scan, with streaming demux: [#4714](https://github.com/ProteoWizard/pwiz/issues/4714). See "ZT Scan (M6)" below.
 
 ## Spec review notes (for the lab)
 
@@ -151,7 +152,8 @@ apex error as a % of peak height, with the % of values that came out negative in
   - The scheme is 12 Th windows at k=2, giving 6 Th bins covering about 394-1006 m/z.
   - msconvert command (per Mike): `--zlib --simAsSpectra --filter "peakPicking vendor msLevel=1-" --filter "demultiplex optimization=overlap_only massError=10.0ppm"` (plus titleMaker), with ProteoWizard 3.0.26100.
   - By the pwiz defaults that is: truncated 7x7 block, 3-point natural-spline RT interpolation, apportioned output.
-- `D:\demux-test-data\Amodei-Q-ExactiveHF` and `D:\demux-test-data\ZenoTOF8600-ZTScan`: still downloading as of 2026-09-23.
+- `D:\demux-test-data\Amodei-Q-ExactiveHF`: still downloading as of 2026-09-23.
+- `D:\demux-test-data\ZenoTOF8600-ZTScan`: complete 2026-09-25, three replicates; see "ZT Scan (M6)".
 - No library came with Eclipse. The first comparison (spectrum-level G7.1) needs none. For ID/FDR, the human SkylineAI library in the Astral regression set covers only 400-902 m/z of the 394-1006 range.
 
 ## G7.1 plan (spectrum level, no library)
@@ -274,8 +276,40 @@ Readings:
 - Orbitrap staggered raw files, the pwiz-demuxed mzML, and the msconvert command line used
 - The matching library/FASTA
 - The MSX raw file and the Astral staggered data
-- The ZT Scan data (a TODO cites `D:\test\ABI\ZTscan`; `D:\test` is absent on this machine)
+- ~~The ZT Scan data~~: received 2026-09-25 (`D:\demux-test-data\ZenoTOF8600-ZTScan`)
+- For M6 validation: the DIA-NN report and library behind the `.wiff.dia.quant` files, if available
 - Later: the Stellar profile staggered data
+
+## ZT Scan (M6, #4714)
+
+Data: `D:\demux-test-data\ZenoTOF8600-ZTScan`, `250814_ZTScan_100spd_A_{1_A1,2_D1,3_G1}` (A_3_G1 is the file the
+net8 port characterized as `D:\test\ABI\ZTscan`). Per replicate:
+
+| File | Size | What it is | Needed |
+|---|---|---|---|
+| `.wiff` | 40 MB | Legacy Analyst container (OLE compound file): method, sample, index | this or `.wiff2` |
+| `.wiff2` | 78 MB | SCIEX OS container (encrypted database; `-journal` is its empty rollback journal) | this or `.wiff` |
+| `.wiff.scan` | 8.6 GB | The spectra, shared by both containers | yes |
+| `.wiff.dia` | 5.7 GB | Apparently DIA-NN's converted `.dia` format of the run | no |
+| `.wiff.dia.quant` | 32 MB | Apparently DIA-NN's per-run quant file (records the `.wiff.dia` path) | no (validation) |
+| `.timeseries.data` | 24 KB | SCIEX OS sidecar; not referenced by the SDKs ProteoWizard ships | no |
+
+Evidence for the DIA-NN attribution: the naming (`<run>.dia`, `<run>.dia.quant`) and the path string in the quant file;
+neither Clearcore2 nor the wiff2 SDK contains `.dia`, `dia.quant` or `timeseries.data`. Confirm with whoever ran it.
+
+What is already known (TODO-20260612_net8_port.md, "2026-08-20/24: Sciex ZT Scan"):
+- 430 experiments x 699 cycles = 300,570 spectra: experiment 0 `TOF MS (400-900)`, 1..429 `TOF PI` quad bins.
+- Bins tile [392.760634, 899.778995] exactly, 1.181866 Da steps, the same position in every cycle.
+- Measured transmission ~Gaussian, FWHM ~10 bins (11.8 Da) vs method Q1 width 5.9 Da; apex within +/-1 bin of the
+  nearest reported center (9 of 10), so no lag calibration observed. Per-bin scan start 2.010 ms apart.
+- Per-bin CE is interpolated from the ramp endpoints (`ZtScanBin`, PR #4598); the linear ramp is an assumption.
+- Mode flag: `.wiff2` `GroupName == "ZTScan"`; `.wiff` sample field `Is ZT Scan`.
+- Native ids `sample= period= cycle= experiment=`, no `scan=`; Osprey does not stage the wiff2 plugin yet.
+
+Plan (issue #4714): read in Osprey -> measure the kernel (spec §2.4) -> choose (a) kernel-matrix deconvolution to
+narrow bins, per cycle, no RT interpolation (§2.3, §4.5) or (b) search the reported bins with a transmission-wide
+precursor window and the across-bin profile as a feature -> streaming (ring buffer of cycles, per-bin spill; §8.2-8.3)
+-> validate vs DIA-NN and vs undemultiplexed.
 
 ## Findings during M1
 
@@ -327,3 +361,5 @@ Readings:
 - 2026-09-25: demux thread scaling on EV13 (cache hit, `ai/.tmp/sessions/20260923-osprey-demux/Measure-DemuxThreads.ps1`,
   logs in `D:/test/osprey-runs/eclipse-staggered/thread-scaling`): NOT CLEAN - another session's 16-thread Stellar
   regression ran throughout. Raw: 1/2/4/8/16 threads = 125.4/94.6/38.9/38.6/17.6 s. Re-run on a quiet machine.
+- 2026-09-25: requested Brendan's review of #4710 (TeamCity green on ab5c54c416, 0 unresolved threads). Opened #4714
+  (ZT Scan + streaming); ZenoTOF data inventoried (see "ZT Scan (M6)").
