@@ -14,7 +14,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **111 warnings, 0 errors** on #4685 as of 2026-09-24. Wave 3 moved to
+  **105 warnings, 0 errors** on #4685 as of 2026-09-25. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -56,11 +56,12 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after merging the base forward (`316e234536`) | 0 | 178 |
 | #4685 after the `Redundant*` sweep (`0be13270fb`) | 0 | 160 |
 | #4685 after the doc-comment and namespace fixes (`ac6a36a17c`) | 0 | 147 |
-| #4685 today, after the constant `?.` / `??` fixes (`7049b83324`) | 0 | **111** |
+| #4685 after the constant `?.` / `??` fixes (`7049b83324`) | 0 | 111 |
+| #4685 today, after the unread fields and singletons (`79b26ba191`) | 0 | **105** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 111, in full (measured 2026-09-24 on #4685 at `7049b83324`)
+### The 105, in full (measured 2026-09-25 on #4685 at `79b26ba191`)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
@@ -77,11 +78,11 @@ group the report by `TypeId`.
 | `HeuristicUnreachableCode` | 7 | Heuristically unreachable code | pairs with the always-false conditions |
 | ~~`CheckNamespace`~~ | ~~6~~ 0 | Namespace does not match file location | **done, all 6 suppressed** - the rename it asks for would break every one; see below |
 | `CA1416` | 4 | Platform compatibility | annotate or guard the Windows-only calls |
-| `NotAccessedField.Local` | 3 | Private field never read | delete |
+| ~~`NotAccessedField.Local`~~ | ~~3~~ 0 | Private field never read | **done** - 2 deleted, 1 kept; see below |
 | ~~`Redundant*`, 8 categories~~ | ~~18~~ 0 | Casts, `Cast<T>` calls, default arguments, `#nullable` directives, jumps, `!`, an empty `finally`, a name qualifier | **done, the `Redundant*` sweep** - see below |
-| `PartialTypeWithSinglePart` | 1 | `partial` with one part | delete the modifier |
-| `UsingStatementResourceInitialization` | 1 | Object initializer on a `using` variable | restructure |
-| `NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract` | 1 | `??` never null per annotations | per-site |
+| ~~`PartialTypeWithSinglePart`~~ | ~~1~~ 0 | `partial` with one part | **done** - see below |
+| ~~`UsingStatementResourceInitialization`~~ | ~~1~~ 0 | Object initializer on a `using` variable | **done** - see below |
+| ~~`NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract`~~ | ~~1~~ 0 | `??` never null per annotations | **done** - see below |
 
 Two notes on getting this to zero rather than to "small":
 
@@ -465,7 +466,42 @@ actually wants and cannot be null.
 Verified: `build.bat --no-tests` 0 errors; `tcinspect` 111/0 with both categories absent, no
 new category and no other count moved; `Test.dll` 421, `TestData.dll` 178, and
 `TestPeakScoringModel` + `TestEditCustomMoleculeDlg` + `TestIonMobility` (the dialogs touched,
-including the tooltip behaviour change) - all 0 failures.
+including the tooltip behaviour change) - all 0 failures. CI builds #326 and #328 then ran the
+full Skyline suite on this commit: SUCCESS.
+
+### Unread fields and the singletons: 111 -> 105 (`79b26ba191`)
+
+6 findings, 5 files. **And two of the three unread fields are dead product settings, which is
+the same defect shape as the dead `??` in the batch before: a value the user (or the test
+author) sets that never reaches the thing it configures.**
+
+**`MSAmandaSearchWrapper._maxVariableMods`** - `SetModifications(mods, maxVariableMods_)` is an
+`AbstractDdaSearchEngine` override, and **Comet and MSFragger both write their captured value
+into the params file** (`max_variable_mods_in_peptide`, `max_variable_mods_per_peptide`).
+MS Amanda stores it and never reads it; the `MaxNoDynModifs` written to its settings XML comes
+from `AdditionalSettings[MAX_NO_DYN_MODIFS]`, default 4. **So the DDA search UI's max-variable-
+mods value has no effect on an MS Amanda search.** The field is deleted and the gap recorded at
+the call site. Whether that is a bug or intended (MS Amanda exposes its own additional setting)
+is a product question, deliberately NOT decided here - changing it moves search results.
+
+**`DiaUmpireTutorialTest.InstrumentSpecificValues.FragmentTolerance`** - same shape.
+`SetupPage` assigns `SearchSettingsControl.PrecursorTolerance = _instrumentValues.Precursor-
+Tolerance` but there is **no matching line for the fragment tolerance**, so the tutorial search
+runs at the dialog default while the test declares 40 ppm / 20 ppm per instrument. Kept under a
+suppression rather than deleted, because deleting it erases the recorded intent; wiring it up
+would move the tutorial results and needs a deliberate re-baseline. Note `TestPerf` is outside
+per-commit CI, so nothing would have caught this.
+
+The other four were straightforward: a static `Control` field in the no-op
+`ConcurrencyVisualizer` that was only ever assigned (a GC root for nothing, had its one caller
+not been commented out); `partial` on `MsDataFileImpl` with no second part (`MsDataFileImpl.-
+Vendors.cs` declares `VendorReaderRegistration`, a different class); a `StreamWriter` object
+initializer moved inside its `using` (the `LocalizableElement` suppression moves with the
+`"\n"` it guards); and a `??` over a `HashSet<string>` element in a nullable-enabled file.
+
+Verified: `build.bat --no-tests` 0 errors; `tcinspect` **105/0**, all four categories absent and
+no other count moved; `Test.dll` 421, `TestData.dll` 178, `TestDdaSearchSettingsPreset` +
+`TestDdaSearchDependencyErrors` (the MS Amanda path) - all 0 failures.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
