@@ -313,3 +313,6 @@ Readings:
 - 2026-09-25: Osprey searches with the Carafe library (+2.3% precursors at equal FDP); test review; tests 1-3, fixture,
   wiring fix, share floor and docs/22 committed as 366f7d0220; opened PR #4710 and issue #4711; Stellar regression
   PASS on 366f7d0220; copied the spec into this TODO's folder.
+- 2026-09-25: Copilot review on #4710, both findings real, fixed in 711d4ced1c: the demux descriptor joins every task
+  validity key (scores were reused after a settings change rebuilt the demux cache); half-open fragment channels (a peak
+  on a split edge counted twice; algorithm version 3). Its path-trigger nit did not apply (triggers match pwiz_tools/Osprey/.*).
