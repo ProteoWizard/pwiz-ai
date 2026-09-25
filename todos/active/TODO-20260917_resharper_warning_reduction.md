@@ -14,7 +14,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **105 warnings, 0 errors** on #4685 as of 2026-09-25. Wave 3 moved to
+  **101 warnings, 0 errors** on #4685 as of 2026-09-25. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -57,11 +57,12 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after the `Redundant*` sweep (`0be13270fb`) | 0 | 160 |
 | #4685 after the doc-comment and namespace fixes (`ac6a36a17c`) | 0 | 147 |
 | #4685 after the constant `?.` / `??` fixes (`7049b83324`) | 0 | 111 |
-| #4685 today, after the unread fields and singletons (`79b26ba191`) | 0 | **105** |
+| #4685 after the unread fields and singletons (`79b26ba191`) | 0 | 105 |
+| #4685 today, after the CA1416 annotation (`8f1527a771`) | 0 | **101** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 105, in full (measured 2026-09-25 on #4685 at `79b26ba191`)
+### The 101, in full (measured 2026-09-25 on #4685 at `8f1527a771`)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
@@ -77,7 +78,7 @@ group the report by `TypeId`.
 | ~~`InvalidXmlDocComment`~~ | ~~7~~ 0 | Invalid XML doc comment | **done** - see below |
 | `HeuristicUnreachableCode` | 7 | Heuristically unreachable code | pairs with the always-false conditions |
 | ~~`CheckNamespace`~~ | ~~6~~ 0 | Namespace does not match file location | **done, all 6 suppressed** - the rename it asks for would break every one; see below |
-| `CA1416` | 4 | Platform compatibility | annotate or guard the Windows-only calls |
+| ~~`CA1416`~~ | ~~4~~ 0 | Platform compatibility | **done** - see below |
 | ~~`NotAccessedField.Local`~~ | ~~3~~ 0 | Private field never read | **done** - 2 deleted, 1 kept; see below |
 | ~~`Redundant*`, 8 categories~~ | ~~18~~ 0 | Casts, `Cast<T>` calls, default arguments, `#nullable` directives, jumps, `!`, an empty `finally`, a name qualifier | **done, the `Redundant*` sweep** - see below |
 | ~~`PartialTypeWithSinglePart`~~ | ~~1~~ 0 | `partial` with one part | **done** - see below |
@@ -502,6 +503,25 @@ initializer moved inside its `using` (the `LocalizableElement` suppression moves
 Verified: `build.bat --no-tests` 0 errors; `tcinspect` **105/0**, all four categories absent and
 no other count moved; `Test.dll` 421, `TestData.dll` 178, `TestDdaSearchSettingsPreset` +
 `TestDdaSearchDependencyErrors` (the MS Amanda path) - all 0 failures.
+
+### CA1416: 105 -> 101 (`8f1527a771`)
+
+All 4 were one file and one API: `CommonTextUtil.EncryptString`/`DecryptString` call DPAPI
+(`ProtectedData.Protect`/`Unprotect`, `DataProtectionScope.CurrentUser`) to store credentials,
+and **`CommonUtil.csproj` targets plain `net10.0` rather than `net10.0-windows`**, on purpose,
+so Osprey can consume it on Linux. DPAPI has no cross-platform equivalent, so the honest fix is
+`[SupportedOSPlatform("windows")]` on the two methods - not a guard with a fallback, because
+any fallback that still returned a value would be a security regression.
+
+**The thing to check before annotating, and the reason it was free here**: an annotation
+normally cascades CA1416 to every caller. It did not, because a `net10.0-windows` project gets
+`[assembly: SupportedOSPlatform("Windows7.0")]` implicitly, and every caller is one -
+`CommonMsData` (Ardia, UNIFI, waters_connect, `RemoteAccount`), Skyline, and `Test`. Verified
+by building and grepping the log for `CA1416`: zero. Annotate only the two methods, never the
+class: the rest of `CommonTextUtil` is platform-neutral and is what Linux actually uses.
+
+Verified: 0 errors and no CA1416 anywhere in the build log; `tcinspect` **101/0** with nothing
+else moved; `Test.dll` 421 incl. `TestEncryptString` - 0 failures.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
