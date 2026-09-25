@@ -528,14 +528,21 @@ disabled box (Comet offers no ppm unit, and the setter silently coerces an unsup
 index 0) and changed the `[Track]`ed audit log from `Fragment tolerance is "0" m/z` to `"40"`,
 breaking `AuditLogCompareLogs`. So the "fix" would have introduced the defect.
 
-**Separate defect found while running `TestDiaUmpireWiffFile` (not fixed, nobody's branch).**
+**Separate defect found while running `TestDiaUmpireWiffFile`** - fixed on
+`Skyline/work/20260925_diaumpire_persistent_cleanup_glob` (`65c4286479`, pushed, no PR).
 `DiaUmpireVendorFormatTest.RemoveDiaUmpireFiles` globs `"*-diaumpire.*"` - with a dot - so it
 misses `<file>-diaumpire_pin.tsv`, which the search leaves in the PERSISTENT dir. One orphan is
 enough to fail `CheckForModifiedPersistentFilesDir` ("New files: ...-diaumpire_pin.tsv"), after
 the test body has otherwise passed. Dropping the dot (`"*-diaumpire*"`) covers both. This never
 fires in CI because the test is `NoNightlyTesting(EXCESSIVE_TIME)`, which is also why it has
 gone unnoticed. Note the orphan then poisons the NEXT run's opening snapshot, so a naive re-run
-can pass and tell you nothing - delete it from the cache before re-testing (I did).
+can pass and tell you nothing - delete it from the cache before re-testing.
+
+Verified from a **pristine** cache (orphan removed first, so the pass is not the masking effect
+above): `TestDiaUmpireWiffFile` 0 failures in 268 s, and the persistent dir has no `-diaumpire*`
+left afterwards, which is the behaviour the fix is actually for. The zip is now cached on this
+machine at `C:\test\Skyline\downloads\Perftests\` - it was only ever in the stale D: tree, which
+is why this test looked like it needed an 11 GB download.
 
 **The lesson**: an unread field next to a used sibling looks like a forgotten assignment, and
 `git log -S` on the removed line settles it in one command. Check whether the value was removed
