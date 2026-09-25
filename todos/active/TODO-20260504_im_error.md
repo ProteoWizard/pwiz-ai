@@ -344,7 +344,15 @@ Fixed test-first (red -> green) in the working tree:
 - **Ungated pause (#11)**: PerfMeasuredInverseK0 pause replaced by a commented PauseTest.
 - Conventions: em dashes, braceless multi-line if, StringAssert -> AssertEx.Contains.
 
-Remaining findings are being triaged (fix now or drop) with Brian, not tracked here.
+Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
+- **HE offset (#10)**: `ObservedIonMobilityCalculator.Calculate` takes the offset extraction used
+  (explicit per-transition, else the precursor's from settings) since results store only the
+  shifted window; target is the precursor IM; with MS1 filtering off, precursor transitions are
+  treated as high-energy channels. Observed CCS no longer computed for fragment-source chromatograms.
+- **Tooltip mobility peak metrics**: computed from the current transition's mobilogram (shared,
+  cached with the mobilogram pane), not the whole frame. Tooltip CCS now the stored value.
+- Column tooltips/help pages say observed IM is read at the peak apex.
+- Dropped (Brian agreed): in-window centroid bias (#7), rescore CCS loss, converter threading.
 
 ## Remaining before merge
 - [ ] (Optional) /pw-self-review on the final state; TeamCity green; human review
