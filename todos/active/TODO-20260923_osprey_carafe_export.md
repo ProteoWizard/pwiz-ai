@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (base `Skyline/work/20260612_net8_port`)
 - **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`
 
 ## Objective
@@ -172,9 +172,11 @@ With the new options off, every existing output must be byte-identical (regressi
   - Style, ASCII dashes, stale docs (four tasks -> five; NThreads windows resident).
   Gate: 606/606 tests, 0 inspection warnings.
 - Open questions for the developer: drop `ddc_neighbor_n` (about 0 by construction, unread by CarafeSharp)?
-- Running: end-to-end smoke (straight-through, pay-later, `--task TrainingExport` on Stellar _21 with the annotated
-  CarafeSharp blib; `D:\test\osprey-runs\export-smoke-255ad17`), then `regression.ps1 -Dataset All`
-  (`ai/.tmp/sessions/20260923-carafesharp/export-regression-all.log`).
+- End-to-end on Stellar _21 with the annotated CarafeSharp blib (`D:\test\osprey-runs\export-smoke-255ad17`): straight-through
+  mp_cosine parity 23,169/23,169; pay-later skipped all four upstream tasks and wrote data identical to the
+  straight-through export; `--task TrainingExport` re-run skipped as current; run-info v2 with 125 window ranges.
+- `regression.ps1 -Dataset All` (options off): PASSED (`ai/.tmp/sessions/20260923-carafesharp/export-regression-all.log`).
+- PR #4708 opened against the port branch. Remaining: perf gate; the `ddc_neighbor_n` decision.
 
 ## Risks
 - (Resolved) Skyline loads peptide fragment annotations from a CarafeSharp blib.
