@@ -277,7 +277,9 @@ Readings:
 - The matching library/FASTA
 - The MSX raw file and the Astral staggered data
 - ~~The ZT Scan data~~: received 2026-09-25 (`D:\demux-test-data\ZenoTOF8600-ZTScan`)
-- For M6 validation: the DIA-NN report and library behind the `.wiff.dia.quant` files, if available
+- ~~For M6 validation, a DIA-NN report~~: not needed; we run DIA-NN ourselves (`C:\DIA-NN\2.3.2\diann.exe`,
+  which has `--scanning-swath`; older versions 1.8.1-2.2.0 alongside)
+- For G6.1-G6.3: matched ZT Scan vs Zeno SWATH acquisitions of one sample, or a ZT Scan three-proteome mix
 - Later: the Stellar profile staggered data
 
 ## ZT Scan (M6, #4714)
@@ -306,10 +308,19 @@ What is already known (TODO-20260612_net8_port.md, "2026-08-20/24: Sciex ZT Scan
 - Mode flag: `.wiff2` `GroupName == "ZTScan"`; `.wiff` sample field `Is ZT Scan`.
 - Native ids `sample= period= cycle= experiment=`, no `scan=`; Osprey does not stage the wiff2 plugin yet.
 
-Plan (issue #4714): read in Osprey -> measure the kernel (spec §2.4) -> choose (a) kernel-matrix deconvolution to
-narrow bins, per cycle, no RT interpolation (§2.3, §4.5) or (b) search the reported bins with a transmission-wide
-precursor window and the across-bin profile as a feature -> streaming (ring buffer of cycles, per-bin spill; §8.2-8.3)
--> validate vs DIA-NN and vs undemultiplexed.
+Plan: follow the spec's unified model (§2): ZT Scan is `y = A x` with `A` from the fitted kernel, events gathered
+within one cycle, the shared solver. (An earlier "(b) search the reported bins undeconvolved" option was withdrawn
+2026-09-25 as a departure from the spec.) The gap analysis and order of work are in
+[TODO-20260923_osprey_demux/spec-status-2026-09-25.md](TODO-20260923_osprey_demux/spec-status-2026-09-25.md).
+
+Decisions (with Mike, 2026-09-25):
+- **Output bin width is the encoded bin, 1.18 Th**: the sensitivity of the ~11.8 Th transmission with the
+  specificity of a 1.18 Th bin. The solve deconvolves each precursor's signal, spread across the ~10 encoded bins
+  that transmit it, back into its one bin.
+- **Coupling across fragment channels and time (spec §6.5) is required for scanning data.** One fragment channel
+  has too few ions to place a precursor to 1.18 Th; pooling all its fragments and the cycles of its peak does.
+  Rough budget: kernel sigma ~5 Th, so placement ~5 Th / sqrt(pooled ions) - a few tens of ions for one bin.
+- **Validation against DIA-NN** runs locally (`--scanning-swath`, 2.3.2), on all three replicates.
 
 ## Findings during M1
 
