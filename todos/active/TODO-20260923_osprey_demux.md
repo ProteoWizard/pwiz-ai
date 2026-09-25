@@ -81,7 +81,10 @@ spectra.bin + acquisition.bin -pass 2-> <stem>.demux.spectra.bin
     - `SpectraWindowIndex` takes all distinct windows on demuxed caches;
     - Program's missing-source acceptance;
     - the demux-off guard (throws on an overlapping scheme).
-  - [ ] Metrics JSON (`--demux-metrics`); for now the summary and the timing gate go to the log.
+  - [ ] Metrics JSON (`--demux-metrics`): deferred to [#4713](https://github.com/ProteoWizard/pwiz/issues/4713);
+    for now the summary and the timing gate go to the log.
+  - [ ] Streaming demux (input ring buffer of ~8 cycles, streaming cache writer): needed for Astral and
+    profile data, where input plus demux output resident together (~2.7x input) is too much.
   - [x] Gates: G7.1 vs msconvert explained (median cosine 0.999 msconvert-like, 0.997 default); timing gate 0.10-0.13 of parse; IDs/FDP above the msconvert baseline.
   - [x] `regression.ps1 -Dataset Stellar` all PASS at d179d98fec, and again at 366f7d0220 (2026-09-25).
   - [x] Tests added 2026-09-25 (after a `pw-test-review`): `TestDemuxRealisticSynthetic` (3 ppm jitter, k=3, variable width, moving elution),
@@ -316,3 +319,11 @@ Readings:
 - 2026-09-25: Copilot review on #4710, both findings real, fixed in 711d4ced1c: the demux descriptor joins every task
   validity key (scores were reused after a settings change rebuilt the demux cache); half-open fragment channels (a peak
   on a split edge counted twice; algorithm version 3). Its path-trigger nit did not apply (triggers match pwiz_tools/Osprey/.*).
+- 2026-09-25: `/code-review high` on #4710: 7 findings. Fixed in ab5c54c416: a stale demux cache whose source and
+  .spectra.bin are gone is now refused at start-up (header-only `SpectraCache.CheckHeader`); Stage 6 no longer
+  logs a rebuild it does not do; scheme detection uses `IsolationWindows`; header truncation tests. Deferred:
+  descriptor in the key for non-overlapping `auto` runs; input + output resident (streaming); peaks dropped
+  when the target bins' share is zero (count it in #4713). Opened #4713 (metrics JSON).
+- 2026-09-25: demux thread scaling on EV13 (cache hit, `ai/.tmp/sessions/20260923-osprey-demux/Measure-DemuxThreads.ps1`,
+  logs in `D:/test/osprey-runs/eclipse-staggered/thread-scaling`): NOT CLEAN - another session's 16-thread Stellar
+  regression ran throughout. Raw: 1/2/4/8/16 threads = 125.4/94.6/38.9/38.6/17.6 s. Re-run on a quiet machine.
