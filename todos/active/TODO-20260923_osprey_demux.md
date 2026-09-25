@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260923_osprey_demux`
 - **Base**: `Skyline/work/20260612_net8_port` (stacked on PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: In Progress. Core library (M1) being written; M0 blocked on data paths from Mike.
+- **Status**: In Progress. M0 and M1 (staggered DIA) in PR review; M2-M6 not started.
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710)
 - **Worktree**: `D:\Dev\pwiz-osprey-demux`
 
 ## Objective
@@ -54,7 +54,9 @@ spectra.bin + acquisition.bin -pass 2-> <stem>.demux.spectra.bin
 
 ## Milestones
 
-- [ ] **M0**: search the Orbitrap staggered raw file (undemuxed) and the pwiz-demuxed mzML; record IDs, FDP and window counts; fix what Osprey mishandles on demuxed input (first-cycle window detection, at minimum). BLOCKED on data paths.
+- [x] **M0**: search the Orbitrap staggered raw file (undemuxed) and the pwiz-demuxed mzML; record IDs, FDP and window counts; fix what Osprey mishandles on demuxed input (first-cycle window detection, at minimum).
+  - The undemuxed raw is refused by the demux-off guard, as intended; msconvert's mzML was searched (see "Osprey search" below).
+  - First-cycle window detection fixed in b54a34a642 (all distinct windows, every cache).
 - [ ] **M1**: Osprey.Demux v1 for stepped staggered data, plus the demux cache, `--demux`, `SearchIdentity`, metrics, and the demux-off guard.
   - [x] Library (`pwiz_tools/Osprey/Osprey.Demux`):
     - `DemuxSchemeDetector`: boundary-union bins; the overlap factor is width-weighted, so DIA with a 1 Th margin overlap is NOT a stagger.
@@ -78,7 +80,14 @@ spectra.bin + acquisition.bin -pass 2-> <stem>.demux.spectra.bin
     - Program's missing-source acceptance;
     - the demux-off guard (throws on an overlapping scheme).
   - [ ] Metrics JSON (`--demux-metrics`); for now the summary and the timing gate go to the log.
-  - [ ] Gates: goldens unchanged with demux off (run `regression.ps1 -Dataset Stellar`); G7.1 vs pwiz-demuxed mzML explained (needs data); timing gate on real data.
+  - [x] Gates: G7.1 vs msconvert explained (median cosine 0.999 msconvert-like, 0.997 default); timing gate 0.10-0.13 of parse; IDs/FDP above the msconvert baseline.
+  - [x] `regression.ps1 -Dataset Stellar` all PASS at d179d98fec; re-run on 366f7d0220 in progress (2026-09-25).
+  - [x] Tests added 2026-09-25 (after a `pw-test-review`): `TestDemuxRealisticSynthetic` (3 ppm jitter, k=3, variable width, moving elution),
+    `TestDemuxEclipseFixture` (in-repo 3-min, 8-window EV13 slice + msconvert's demux + golden, `Osprey.Test/Data/Demux`), `TestDemuxPipelineWiring`.
+  - [x] `docs/22-demultiplexing.md`: pipeline flow, files, algorithm, msconvert differences, validation, limitations.
+  - [ ] Later: an optional Panorama-hosted regression dataset (e.g. `osprey-demux-eclipse-v1.zip` in `/MacCoss/software/@files/perftests/`)
+    and an opt-in `EclipseDemux` entry in `regression.ps1`, outside `-Dataset All`. Mike (2026-09-25): save it for later; in-repo tests for now.
+    The upload is Mike's or Brendan's.
   - [ ] Unit-resolution channel tolerance (fixed 10 ppm today); decide with Stellar data (M5).
 - [ ] **M2**: MSX. Every precursor, whole-cycle A, periodicity check; port Thermo `Multi Inject Info` onto the PRECURSOR in pwiz-sharp `SpectrumList_Thermo`.
 - [ ] **M3**: Astral staggered (variable width).
@@ -178,6 +187,48 @@ Versus msconvert (cosine over the union of peaks, per demultiplexed spectrum):
 - **Which is right needs truth.** The Osprey search is the real test: Mike is providing an
   Eclipse-appropriate library, since the Astral-tuned one would mispredict RT here.
 
+### Osprey search, Eclipse EV13 + EV14 (2026-09-25)
+
+Setup:
+- Library: `D:\demux-test-data\Eclipse-staggered\carafe_spectral_library+decoy+entrapment.tsv` (13.6 GB, Carafe).
+  - 7.04 M entries, with library decoys (`decoy_` prefix) and 1:1 shuffled entrapment (`_p_target`, r = 0.9999).
+  - Decoys were paired to targets by composition, 100%.
+- Flags: `--resolution hram --fdr-level precursor --protein-fdr 0.01 --decoys-in-library --fdrbench <dir>/fdrbench.tsv`.
+- Each search used its own spectra cache (`--cache-dir`); the libcache was copied between dirs.
+- Run dirs: `D:\test\osprey-runs\eclipse-staggered\search-{msconvert,osprey-default,osprey-msconvertlike}`.
+- Comparator: `ai/scripts/Osprey/Compare/Compare-DemuxSearches.py`.
+- Wall time: Osprey-default 32 min; msconvert mzML 51 min.
+
+`output.stats.tsv` (precursors / peptides / proteins):
+
+| search | EV13 | EV14 | Experiment |
+|---|---|---|---|
+| msconvert demux (mzML) | 35,006 / 30,436 / 3,064 | 34,277 / 29,686 / 3,056 | 38,465 / 33,199 / 3,202 |
+| Osprey default demux (raw) | 36,244 / 31,439 / 3,097 | 35,409 / 30,609 / 3,098 | 39,409 / 33,959 / 3,235 |
+
+First-pass run-level precursors at 1% (the metric least affected by the SVM C pick): msconvert 28,670 / 28,481;
+Osprey default 29,260 / 28,726 (+1.5%); Osprey msconvert-like 29,372 / 29,441 (+2.9%).
+
+Experiment level, q <= 0.01, over the precursor m/z both searches scored (< 1000.70):
+
+| search | target precursors | FDP | target peptides | FDP |
+|---|---|---|---|---|
+| msconvert | 38,411 | 0.28% | 33,145 | 0.33% |
+| Osprey default | 39,298 (+2.3%) | 0.27% | 33,883 (+2.2%) | 0.32% |
+| Osprey msconvert-like | 39,328 (+2.4%) | 0.30% | 33,957 (+2.4%) | - |
+
+- The two Osprey configurations are indistinguishable at this noise level, and both beat msconvert: the gain is in
+  implementation details (candidates: neighbors by index vs by window/RT, off-center interpolation points, NNLS non-convergence), not isolated.
+
+- Both have 54 entrapment hits, so FDR control is conservative and equal.
+- Peptide overlap: 31,098 shared; 2,785 only with Osprey; 2,047 only with msconvert.
+
+**Defect found (M0, fix on this branch):**
+- Osprey's first-cycle window detection drops the top bin, [1000.70, 1006.70), of msconvert-demuxed mzML: the search logged 101 windows vs 102.
+- That bin is covered only by the offset set's last window, so it first appears after the cycle has wrapped.
+- The m/z restriction above removes its effect from the comparison: msconvert loses 0 IDs to it and Osprey-default 57.
+- Fix: on plain caches too, take all distinct windows. First check that the regression caches' distinct windows equal their first-cycle windows, so the goldens are unaffected.
+
 ### Stagger consistency, Eclipse (2026-09-24, library-free)
 
 Method: `ai/scripts/Osprey/Compare/Measure-StaggerConsistency.py`.
@@ -236,6 +287,15 @@ Readings:
 - **Staggered data needs no acquisition sidecar.** A window's bins are co-isolated in one
   contiguous isolation with a single fill, and intensities are rates, so the design matrix is 0/1.
   Injection time matters only for noise weights (deferred). The sidecar moves to M2 (MSX).
+- **The demux-off refusal was swallowed on a cache hit** (found by `TestDemuxPipelineWiring`). `EnsureSpectraCache` called
+  `Resolve` inside the try that guards reading the cache, so the refusal became a warning and a re-parse, which then
+  failed with a NotSupportedException on the stand-in source. Fixed by resolving outside the try.
+- **Round-off shares wrote spurious peaks.** The exactness runs had 60 peaks at round-off level in bins without the
+  fragment. Shares below 1e-6 of the channel total are now dropped; `ALGORITHM_VERSION` 2 rebuilds older demux caches.
+- **Eluting-case leak is inherent, and ranks the interpolants.** With moving elution (sigma 2.5 cycles), intensity put in
+  bins without the fragment: makima 0.033%, PCHIP 0.072%, then natural 3-point and linear; makima max error 0.77%.
+- **On the Eclipse slice the msconvert-like setting is closer to msconvert in median cosine** (0.9991 vs 0.9987), not in
+  the fraction at 0.95 (93.4% vs 93.6%); the fixture test asserts the median only.
 - **The regression datasets are non-overlapping**, so the demux-off guard cannot trip on the goldens:
   - Stellar is 125 x 4 Th windows, centers 4.0018 apart;
   - Astral is 167 x 3 Th windows, touching within about 1 mTh, well under the 0.2 Th merge width.
@@ -245,3 +305,8 @@ Readings:
 
 - 2026-09-23: reviewed the spec; plan approved; created the worktree/branch.
 - 2026-09-23: Osprey.Demux library, tests and pipeline wiring written; demux tests green. Full pre-commit gate running.
+- 2026-09-23: committed d179d98fec; Stellar regression all PASS (Release build via Build-Osprey.ps1, then `-NoBuild`,
+  because regression.ps1 builds with the VS 2022 toolset, which cannot load the .NET 10 SDK).
+- 2026-09-24: G7.1 and stagger consistency on Eclipse EV13/EV14; b54a34a642 fixed first-cycle window detection.
+- 2026-09-25: Osprey searches with the Carafe library (+2.3% precursors at equal FDP); test review; tests 1-3, fixture,
+  wiring fix, share floor and docs/22 committed as 366f7d0220; opened PR #4710.
