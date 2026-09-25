@@ -9,7 +9,7 @@
   [#4543](https://github.com/ProteoWizard/pwiz/issues/4543) (one PR, per #4543's Sequencing; developer decision
   2026-09-25)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4715](https://github.com/ProteoWizard/pwiz/pull/4715) (base: the port branch; review requested from Brendan, who triggers Perf/Regression)
 - **Worktree**: `D:\Dev\pwiz-osprey-gbdt`
 
 ## Objective
@@ -93,7 +93,8 @@ do not suit a linear SVM.
   - an internal `ParseArgs(args, fdrModel)` seam plus a test that follows gbdt into `PercolatorConfig`; it fails
     (Expected Gbdt, Actual Percolator) when the classifier assignment is removed;
   - `regression.ps1` refuses `-CreateGolden` and warns on a compare run when `OSPREY_FDR_MODEL` is set.
-- [ ] Open the PR against the port branch (`osprey:` prefix, label `osprey`, closes #4491 and #4543)
+- [x] Opened [#4715](https://github.com/ProteoWizard/pwiz/pull/4715) against the port branch; Brendan asked to review and trigger Perf/Regression
+- [ ] Brendan review + TeamCity Perf/Regression
 
 ## Parked review findings (developer, 2026-09-25: fix when gbdt feature work starts)
 
