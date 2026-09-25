@@ -5,6 +5,7 @@
 - **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
 - **Status**: In Progress
+- **GitHub Issue**: [#4491](https://github.com/ProteoWizard/pwiz/issues/4491)
 - **Module**: `osprey`
 - **PR**: (pending)
 - **Worktree**: `D:\Dev\pwiz-osprey-gbdt`
@@ -12,8 +13,10 @@
 ## Objective
 
 `--fdr-method gbdt` on the default first-pass path trained the linear SVM instead of gradient-boosted
-trees (since #4446). Found by `/code-review max` on the C-selection change (#4703); the developer asked
-for its own branch.
+trees (since #4446). Filed by Brendan as #4491 (2026-08); he folded it into #4543 (demote `--fdr-method` to
+an env var) on an unpushed branch, and on 2026-09-18 marked it parked. Rediscovered by `/code-review max` on
+#4703; the developer asked for its own branch. COORDINATE with Brendan before opening a PR: this branch fixes
+both defects his #4491 comment names (the dropped config and the missing tree scoring on the streaming path).
 
 ## Root cause
 
@@ -48,6 +51,6 @@ for its own branch.
   `--fdr-method` can adopt the other method's results; a gbdt directory made before this fix holds SVM results.
 - `FrozenModelScorer.Score` writes a shared `_scratch` buffer, and one scorer is shared across Stage 6's
   parallel file loop (`PerFileRescoreTask.cs:~930/981/1561`, `Pass2FdrSidecar.cs:2771`). Only with
-  `--parallel-files` (the default is sequential). Silent, timing-dependent score corruption. Awaiting the
+  `--parallel-files` (the default is sequential). Silent, timing-dependent score corruption. Filed as #4706; awaiting the
   developer's go-ahead for its own branch.
 - Step 6 of `07-fdr-control.md` still describes a removed second-pass retrain.

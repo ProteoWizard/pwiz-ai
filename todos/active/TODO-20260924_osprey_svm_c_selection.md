@@ -5,6 +5,7 @@
 - **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
 - **Status**: In Progress
+- **GitHub Issue**: [#4704](https://github.com/ProteoWizard/pwiz/issues/4704)
 - **Module**: `osprey`
 - **PR**: [#4703](https://github.com/ProteoWizard/pwiz/pull/4703), base `Skyline/work/20260612_net8_port`
   (branch `Skyline/work/20260924_osprey_svm_c_selection_port`). Replaces #4701, opened against master and

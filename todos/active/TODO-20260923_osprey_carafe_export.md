@@ -5,6 +5,7 @@
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
 - **Status**: In Progress
+- **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
 - **PR**: (pending)
 - **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`

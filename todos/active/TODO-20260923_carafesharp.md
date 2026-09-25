@@ -5,6 +5,7 @@
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619), .NET 10 port; not yet merged)
 - **Created**: 2026-09-23
 - **Status**: In Progress
+- **GitHub Issue**: [#4707](https://github.com/ProteoWizard/pwiz/issues/4707)
 - **Module**: `osprey`
 - **PR**: (pending)
 - **Companion**: `ai/todos/active/TODO-20260923_osprey_carafe_export.md` (the Osprey-side PR this depends on)
