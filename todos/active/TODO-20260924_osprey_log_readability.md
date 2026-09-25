@@ -529,9 +529,8 @@ code does", so they live in pwiz, not `ai/`.
 - [x] Final gates on the last build (`_bin\logtag-final2`), committed as `13373c6b4f` (pushed):
   default regression 70/70; cross-impl at 1e-9 PASS on Stellar (27,321 precursors) and
   StellarLibraryDecoy (27,963); task splits, one-file search and `-d` run all exit 0 with only
-  the `-d` dump lines left flagged. Verbose+model-diagnostics regression on this build was still
-  running at handoff (`after\verbose-diagnostics\regression\summary.log`); the previous build's
-  run was 70/70.
+  the `-d` dump lines left flagged. Verbose+model-diagnostics regression on this build 70/70
+  (`after\verbose-diagnostics\regression\summary.log`; legs not yet copied into the review folder).
 - [ ] **UNCOMMITTED in pwiz-work1: ProgressReporter rule for a CLI log** (agreed with Brendan,
   2026-09-25): (1) the heading prints immediately, always; (2) percent lines no sooner than one
   report interval, then at most one per interval; (3) the closing 100% only if the step ran at
