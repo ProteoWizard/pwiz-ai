@@ -11,6 +11,12 @@ the way it already runs on net472.
     severity/sweep/clipboard work below.
   - `Skyline/work/20260922_form_close_obsolete_apis` - [#4697](https://github.com/ProteoWizard/pwiz/pull/4697),
     **stacked on #4685**. Obsolete Form close methods, ServicePointManager, Assembly.CodeBase.
+  - `Skyline/work/20260925_dda_search_fixes` - [#4712](https://github.com/ProteoWizard/pwiz/pull/4712),
+    **also stacked on #4685** (two of its commits edit lines #4685 introduced). The three product
+    and test defects the `NotAccessedField.Local` findings exposed, combined from the three
+    single-fix branches below, which are now superseded and can be deleted:
+    `20260925_msamanda_max_variable_mods`, `20260925_diaumpire_fragment_tolerance`,
+    `20260925_diaumpire_persistent_cleanup_glob`.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
