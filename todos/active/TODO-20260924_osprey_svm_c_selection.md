@@ -1,12 +1,15 @@
 # TODO-20260924_osprey_svm_c_selection.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260924_osprey_svm_c_selection`
-- **Base**: `master` (83836d2827)
+- **Branch**: `Skyline/work/20260924_osprey_svm_c_selection_port`
+- **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
 - **Status**: In Progress
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4703](https://github.com/ProteoWizard/pwiz/pull/4703), base `Skyline/work/20260612_net8_port`
+  (branch `Skyline/work/20260924_osprey_svm_c_selection_port`). Replaces #4701, opened against master and
+  closed: Osprey needs the .NET 10 port to read RAW files.
+- **Rust PR**: [maccoss/osprey#69](https://github.com/maccoss/osprey/pull/69) (`feature/svm-c-selection-tolerance` @ `c1d039a`)
 - **Worktree**: `D:\Dev\pwiz-osprey-csel`
 
 ## Objective
@@ -71,11 +74,17 @@ model on reconciled peaks, handles much worse.
       Stellar 27,321 -> 31,720, StellarLibDecoy 31,046 -> 31,392, StellarGenDecoyEntrap 29,953 -> 31,750,
       Astral 117,265 -> 117,236; entrap pass-2 experiment FDP 0.95% -> 1.02% combined, 0.95% -> 1.03%
       paired, ~160 entrapment hits, SE ~0.08 points)
-- [ ] `regression.ps1 -Dataset All` against the new goldens (running; log
-      `ai/.tmp/sessions/20260923-carafesharp/csel-regression-all.log`)
+- [x] `regression.ps1 -Dataset All` against the new goldens, on the port branch (net10.0): PASSED, 43 phases,
+      3.4 h (log `ai/.tmp/sessions/20260923-carafesharp/cselport-regression-all.log`)
 - [x] `/code-review max`: 15 findings; 12 fixed, 3 skipped (below)
 - [ ] Perf gate (`Test-PerfGate.ps1 -Dataset Stellar`, uncontended machine)
-- [ ] Rust counterpart in maccoss/osprey (cross-impl parity with OSPREY_SVM_C_TOLERANCE=0 meanwhile)
+- [x] Rust counterpart: maccoss/osprey#69 (`svm::select_c`, `PercolatorConfig::c_selection_tolerance`, no env
+      opt-out, as #66). Cross-impl Stellar vs the port-branch C# at its default: #69 alone matches the whole
+      first pass at 1e-9 (1,448,698 records) and the precursor count (31,720); #69 + maccoss/osprey#68 (open)
+      is OVERALL PASS at 1e-9 end to end, on Stellar and on Astral (117,236 precursors both sides).
+- [ ] When #69 merges: flip `Compare-EndToEnd-Crossimpl.ps1 -CsSvmCTolerance` default to '' and drop the
+      `OSPREY_SVM_C_TOLERANCE=0` pins in `Compare-CrossImpl-Reference.ps1` / `Compare-EndToEnd-Bisect-Crossimpl.ps1`.
+      Running the Rust exe outside cargo needs `%USERPROFILE%\vcpkg\installed\x64-windows\bin` (OpenBLAS) on PATH.
 - [ ] TeamCity Perf/Regression only on the PR candidate, and only after asking
 
 ## Follow-ups (not in this PR)

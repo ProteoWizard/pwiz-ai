@@ -147,8 +147,33 @@ With the new options off, every existing output must be byte-identical (regressi
   parity 23,036/23,036 and 23,105/23,105; CarafeSharp trains on them (85% slot agreement with Carafe).
 - Found while comparing libraries: the Stellar experiment-level count is bimodal (about 21k or
   28-30k at the same FDP) on 1e-4 library changes; see the CarafeSharp TODO. Separate task.
-- Not done yet: the `;libext=` validity-key suffix (resume safety across the upgrade); the perf gate
-  (`Test-PerfGate.ps1 -Dataset Stellar`, needs an uncontended machine).
+- Not done yet: the perf gate (`Test-PerfGate.ps1 -Dataset Stellar`, needs an uncontended machine).
+
+### 2026-09-24
+- `/code-review max` (11 finder angles, 9 verifiers, sweep; diff `ai/.tmp/sessions/20260923-carafesharp/export-review.diff`):
+  15 reported, all fixed in the review commit, then the branch was squashed to ONE commit `255ad17504`
+  (backup ref `backup/export-pre-squash-25b8316`). The fixes:
+  - `ModMassesByPosition` sums stacked mods (N-term + residue 0); DecoyGenerator's own last-wins map is untouched
+    (matches Rust and the goldens; decoy b ions of such targets still lose the N-term mass - a separate, gated change).
+  - `;libext=ann` task-key term and `blib_reader:2` libcache term only for blibs whose annotation table has rows;
+    `blib_mods:2` libcache term for blibs with low-precision or 100-200 mod text (re-parse once).
+  - Blib mod masses: absolute-Cys reading only on unsigned C text; snap tolerance max(0.01, half the last digit).
+  - `--task TrainingExport` validates upstream footers (`ValidateScoresParquetGroup` overload) and refuses a row whose
+    sequence/charge differ from its library entry.
+  - Per-run export key (`OspreyTask.OutputValidityKey`): reconciled parquet, 2nd-pass sidecar, run-info identities;
+    stale run-info (fingerprint vs `.spectra.bin` header) ignored; relay must keep mtimes (`cp -p`).
+  - 2nd-pass records paired by (entry_id, apex-RT bits); collisions throw.
+  - NaN custom loss rejected; separate out-of-range annotation counter; log line only when the export runs.
+  - Shared `TukeyMedianPolish.SCORING_*` polish arguments; parity test now runs the real CoelutionScorer.
+  - Projected reconciled read (`LoadTrainingExportRows`) and `RetainFragmentsFor` on pay-later loads.
+  - run-info v2: per-isolation-window MS2 scan ranges, UTC start time, `\n` JSON; v1 still read.
+  - `ddc_neighbor_n` asks pairs in the dedup's order; `DoubleCountingTolerance` delegates to `CalibratedTolerance`.
+  - Style, ASCII dashes, stale docs (four tasks -> five; NThreads windows resident).
+  Gate: 606/606 tests, 0 inspection warnings.
+- Open questions for the developer: drop `ddc_neighbor_n` (about 0 by construction, unread by CarafeSharp)?
+- Running: end-to-end smoke (straight-through, pay-later, `--task TrainingExport` on Stellar _21 with the annotated
+  CarafeSharp blib; `D:\test\osprey-runs\export-smoke-255ad17`), then `regression.ps1 -Dataset All`
+  (`ai/.tmp/sessions/20260923-carafesharp/export-regression-all.log`).
 
 ## Risks
 - (Resolved) Skyline loads peptide fragment annotations from a CarafeSharp blib.

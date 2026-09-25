@@ -191,9 +191,17 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       (0.8) and 184 (0.7). Proteins go the other way by 40-100. First-pass C: 0.01 in every 0.8 fold,
       0.1 / 0.001 in the 0.7 folds.
 
-      | Astral arm | Experiment | Peptides | Proteins | Combined / paired FDP |
-      |---|---|---|---|---|
-      | cor 0.8, seed 2024 (workflow library) | 103,644 | 91,541 | 7,700 | 0.41% / 0.38% |
+      | Astral arm | MS2 spectra kept | Fine-tuned COS | Experiment | Peptides | Proteins | Combined / paired FDP |
+      |---|---|---|---|---|---|---|
+      | cor 0.8, seed 2024 (workflow library) | 39,296 | 0.9865 | 103,644 | 91,541 | 7,700 | 0.41% / 0.38% |
+      | cor 0.8, seed 2025 | 39,296 | 0.9867 | 102,418 | 90,644 | 7,889 | 0.50% / 0.47% |
+      | cor 0.7, seed 2024 | 45,702 | 0.9826 | 102,571 | 90,498 | 7,555 | 0.43% / 0.40% |
+      | cor 0.7, seed 2025 | 45,702 | 0.9825 | 102,705 | 90,683 | 7,677 | 0.47% / 0.44% |
+
+      Astral: 0.8 leads by 393 precursors on the mean (0.4%) and 178 proteins, but the seed alone moves
+      0.8 by 1,226 precursors, so the thresholds are not separable here. CONCLUSION (both instruments):
+      the correlation threshold is a small lever; 0.8 (Carafe's default) is as good as or slightly better
+      than 0.7 despite keeping fewer spectra (fewer, cleaner spectra, as the developer expected). Keep 0.8.
 
 ## Reference data on this machine (developer's own Carafe runs)
 

@@ -62,6 +62,13 @@
 .PARAMETER Threads
     --threads CLI flag. Default 16.
 
+.PARAMETER CsSvmCTolerance
+    OSPREY_SVM_C_TOLERANCE for the C# run. Default '0', the strict-maximum C selection
+    that Rust main uses. Pass '' to run C# at its own default (the most regularized C
+    within 1% of the best), which is what a Rust build carrying the matching
+    select_c rule (maccoss/osprey, feature/svm-c-selection-tolerance) must be
+    compared against.
+
 .PARAMETER AllowStaleBinaries
     Skip the binary-freshness guard. This script RUNS PREBUILT BINARIES and
     builds neither side, so by default it refuses to run when either exe is
@@ -78,6 +85,7 @@ param(
     [switch]$SkipCs,
     [switch]$AllowStaleBinaries,
     [int]$Threads = 16,
+    [string]$CsSvmCTolerance = '0',
     [string]$Files = 'All'
 )
 
@@ -418,10 +426,14 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
                 '--work-dir', $csDir)
     $args2 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
-    # Rust keeps the strict maximum of the inner-CV counts when it picks the first-pass SVM C;
-    # C# keeps the most regularized C within 1% of it unless told otherwise. Without this the
-    # two diverge at Stage 5 on every dataset.
-    $env:OSPREY_SVM_C_TOLERANCE = '0'
+    # Rust main keeps the strict maximum of the inner-CV counts when it picks the first-pass
+    # SVM C; C# keeps the most regularized C within 1% of it unless told otherwise. Without
+    # this the two diverge at Stage 5 on every dataset. See -CsSvmCTolerance.
+    if ([string]::IsNullOrEmpty($CsSvmCTolerance)) {
+        Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
+    } else {
+        $env:OSPREY_SVM_C_TOLERANCE = $CsSvmCTolerance
+    }
     try {
         $r = Invoke-Tool -Exe $ospreyShExe -WorkDir $csDir -CliArgs $args2 -LogName 'osprey-cs.log'
     } finally {
