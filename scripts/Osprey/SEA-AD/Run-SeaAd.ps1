@@ -72,6 +72,13 @@
     and the output-directory name. At 82 files the run-level union is 12.95% false where the
     experiment-wide q is 0.79%, which is the whole point of the arm.
 
+.PARAMETER SvmCTolerance
+    First-pass SVM C-selection tolerance, exported as OSPREY_SVM_C_TOLERANCE (pwiz #4703).
+    Empty (the default) leaves Osprey's own default; '0' is the strict maximum of the inner-CV
+    counts that Percolator and mokapot use. Like -QualifyBy it is a parameter because the
+    module strips the variable: exporting it yourself has no effect. Recorded in the banner,
+    run.log and the directory name (-csel<value>).
+
 .PARAMETER LinkFrom
     Optional. Hard-link the per-file caches from a COMPLETED run over the same file set so
     this run resumes without re-parsing or re-scoring. What is linked is scoped by -Task:
@@ -142,6 +149,7 @@ param(
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
     [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
+    [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,

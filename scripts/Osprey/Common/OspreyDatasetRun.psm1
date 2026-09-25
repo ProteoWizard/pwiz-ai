@@ -247,6 +247,12 @@ function Invoke-OspreyDatasetRun {
         # two finished runs indistinguishable. Lands in the banner, the run.log START line and
         # the default output-directory name. Only meaningful with -Pass2Mode protein-compact.
         [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
+        # First-pass SVM C-selection tolerance (OSPREY_SVM_C_TOLERANCE, pwiz #4703). Empty (the
+        # default) leaves the variable unset so Osprey uses its own default; '0' is the strict
+        # maximum of the inner-CV counts. A parameter, not an inherited variable, for the same
+        # reason as -QualifyBy: the arms differ in nothing else, and the variable is stripped
+        # below. Lands in the banner, the run.log START/DONE lines and the directory name.
+        [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
         [string]$Tag = '',
         [string]$DataDir,
         [string]$LibraryDir,
@@ -461,7 +467,9 @@ function Invoke-OspreyDatasetRun {
         $agg = if ($ExperimentAgg) { "-$ExperimentAgg" } else { '' }
         # Empty on the shipped 'run' default, so this does not rename a single existing arm.
         $qual = if ($QualifyBy -eq 'experiment') { '-qualifyexp' } else { '' }
-        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$Tag"
+        # Empty when unset, so existing arms keep their names.
+        $csel = if ($SvmCTolerance) { "-csel$SvmCTolerance" } else { '' }
+        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$csel$Tag"
         if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
         $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
     }
@@ -604,6 +612,9 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  qualify  : {0}" -f $(if ($QualifyBy -eq 'experiment') {
                 'EXPERIMENT-wide q (OSPREY_PROTEIN_COMPACT_QUALIFY) - shrinks the protein-compact stratum' }
                 else { 'per-run q (default, the union over runs)' }))
+    Write-Host ("  svm C sel: {0}" -f $(if ($SvmCTolerance) {
+                "OSPREY_SVM_C_TOLERANCE=$SvmCTolerance - moves the first-pass model" }
+                else { "Osprey's default (OSPREY_SVM_C_TOLERANCE cleared)" }))
     # Since pwiz #4507 (2026-09-12) every pass selection streams: pass 1 is emitted off the
     # per-file 1st-pass sidecars, so `1` no longer forces the resident pool and `both` really
     # writes .pass1 and .pass2. The two yellow banners that stood here - a resident-pool
@@ -921,6 +932,8 @@ function Invoke-OspreyDatasetRun {
     # so an arm that exported only its ON value would leave the OFF arm running on whatever the
     # shell happened to hold.
     $env:OSPREY_PROTEIN_COMPACT_QUALIFY = $QualifyBy
+    # Only when given: unset is Osprey's own default, and the variable was stripped above.
+    if ($SvmCTolerance) { $env:OSPREY_SVM_C_TOLERANCE = $SvmCTolerance }
 
     $log = Join-Path $OutDir 'run.log'
     # NEVER truncate an existing run.log - rotate it to run-<stamp>.log first. A run.log is the
@@ -946,7 +959,7 @@ function Invoke-OspreyDatasetRun {
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
+     "qualify=$QualifyBy csel='$SvmCTolerance' files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
@@ -963,7 +976,7 @@ function Invoke-OspreyDatasetRun {
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "qualify=$QualifyBy csel='$SvmCTolerance' parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })
