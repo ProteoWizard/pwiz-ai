@@ -83,10 +83,45 @@ do not suit a linear SVM.
   (`D:\test\osprey-runs\gbdt-fix-44c2c4e\regression-all.log`)
 - [x] #4543 cleanup committed as `939ff0bb44` (Debug gate: 603 tests, 0 inspection warnings; all 36 SVM key
   lines byte-identical before and after)
-- [ ] `regression.ps1 -Dataset All -NoBuild` on `939ff0bb44` (`D:\test\osprey-runs\gbdt-4543-939ff0b\regression-all.log`)
-- [ ] gbdt through `OSPREY_FDR_MODEL=gbdt` gives the same results as the `--fdr-method gbdt` run
+- [x] `regression.ps1 -Dataset All -NoBuild` on `939ff0bb44`: PASSED, 43 phases
+  (`D:\test\osprey-runs\gbdt-4543-939ff0b\regression-all.log`)
+- [x] gbdt through `OSPREY_FDR_MODEL=gbdt` is byte-identical to the `--fdr-method gbdt` run: per-file pass-1/pass-2
+  score and decoy files, experiment sidecars, protein groups, model file, FDP table
   (`D:\test\osprey-runs\gbdt-4543-939ff0b\entrap\gbdt`)
-- [ ] Push; open the PR against the port branch (`osprey:` prefix, label `osprey`, closes #4491 and #4543)
+- [x] Second `/code-review max` over the whole branch (15 verified findings)
+- [x] Two guards from it, `73ec14404c` (gate: 603 tests, 0 inspection warnings):
+  - an internal `ParseArgs(args, fdrModel)` seam plus a test that follows gbdt into `PercolatorConfig`; it fails
+    (Expected Gbdt, Actual Percolator) when the classifier assignment is removed;
+  - `regression.ps1` refuses `-CreateGolden` and warns on a compare run when `OSPREY_FDR_MODEL` is set.
+- [ ] Open the PR against the port branch (`osprey:` prefix, label `osprey`, closes #4491 and #4543)
+
+## Parked review findings (developer, 2026-09-25: fix when gbdt feature work starts)
+
+The developer scoped this branch to the goals: gbdt works and stays working (MARS uses the trees), and the
+regression tests stay green. The rest of the second review is gbdt-resume, sweep and split-HPC robustness:
+
+- **Pass-2 model loads are unchecked.** Stage 6 `TryCreatePass2Worker` (`PerFileRescoreTask.cs:~1077`) and
+  SecondPassFDR `EnsureFrozenFirstPassPublished` (`Pass2FdrSidecar.cs:~465`) take the `LoadFromAny` model with no
+  marker or classifier check. An interrupted run of the other arm, or a failed first-stem write, leaves a stale
+  model that scores pass 2. Fix: a marker-checked loader at both readers, prefer the ctx model.
+- **Per-node env.** `--task` nodes key by their own `OSPREY_FDR_MODEL` but score with the loaded model. Fix:
+  refuse at load on a classifier mismatch; document that the keying env vars must be set on every node.
+- **Compaction gate** (`FirstPassFdrTask.cs:~3683`) takes the unmarked copy, so an interrupted sweep can publish
+  another point's trees. Fix: require the chosen stem's marker; stamp the test's files.
+- **Tree Model tab** says "trained on this run" for an adopted model (`PercolatorScorer.cs:~1300`).
+- The `OSPREY_FDR_MODEL` abort runs after the log file and directories are created (`Program.cs:~344`; move it to
+  `ValidateArgs`).
+- The width-mismatch retrain keeps resumed old-model scores (pre-existing, #4633, cross-build only). There is also no
+  post-training classifier assertion.
+- **Efficiency:** `LoadFromAny` parses the stratum before probing the model. Every retrain rewrites all model copies,
+  and tree JSON is indented (58% whitespace).
+- **Docs:** the linear model is 2.8 KB, not "a few hundred KB" (07/00/12/14); the 07 overview still describes a Stage 7
+  retrain; stale "tree model has none" comments; `regression.ps1:~2024/2136` says there is no GBDT model file.
+- **Cleanup:** duplicated classifier/width checks; the key term is hand-appended to three tasks; an unused `config`
+  parameter on the resident-pool helpers.
+- **Conventions:** test helpers placed before their tests (`FirstPassModelIoTest.cs:~106/120`); a TODO cited in a
+  comment (`Pass2FdrSidecar.cs:~2525`); "Synthesising"; em dashes in rewritten headings.
+- **ai scripts:** `Measure-Pipeline.ps1` and `Compare-EndToEnd-Crossimpl.ps1` do not scrub `OSPREY_FDR_MODEL`.
 
 ## Entrapment result (2026-09-25, build `44c2c4e261`)
 
