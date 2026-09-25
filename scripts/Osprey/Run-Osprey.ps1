@@ -442,7 +442,7 @@ try {
         $patterns = @(
             '\[BISECT\]', '\[TIMING\]', 'calibrated frag', 'Coelution search RT',
             'Applying MS2', 'First-pass RT tolerance', 'Refined RT tolerance',
-            'Wrote feature', 'precursors at', 'Coelution scoring complete',
+            'Wrote feature', 'precursors at', 'First-pass scoring complete',
             'MS2 calibration \(pass', 'Confident peptides', 'Coelution scored',
             'Analysis complete'
         )
