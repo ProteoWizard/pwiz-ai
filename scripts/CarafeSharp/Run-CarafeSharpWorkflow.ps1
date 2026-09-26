@@ -17,7 +17,11 @@
         trains on the <stem>.training.parquet it writes. Osprey's median polish and
         shared-peak evidence feed Carafe's masking rules (pwiz_tools/CarafeSharp/docs/02-masking.md).
       * Osprey writes its artifacts to per-stage folders and its spectra cache to one shared
-        folder (--output-dir / --cache-dir), so the mzML are read in place and never copied.
+        folder (--output-dir / --cache-dir), so the data files are read in place and never copied.
+      * No mzML is needed. Osprey reads Thermo .raw directly, with vendor centroiding: on the
+        Stellar training run its spectra cache is byte-identical to one built from msconvert's
+        "peakPicking vendor msLevel=1-" mzML. That takes an Osprey built with
+        ai/scripts/Osprey/Build-Osprey.ps1 -VendorReader; preflight checks for it.
 
     Stages (run a subset with -Stages):
 
@@ -35,6 +39,10 @@
 .PARAMETER Dataset
     Stellar or Astral; selects the FASTA, runs, training run and tolerances (see the Carafe
     workflow script; the Astral prediction tolerance is unvalidated there too).
+
+.PARAMETER InputFormat
+    raw (default) or mzML: the extension of the preset's runs when -MzmlNames is not given.
+    -MzmlSourceDir and -MzmlNames take vendor files as well as mzML despite their names.
 
 .PARAMETER Device
     gpu (default; a CPU-only CarafeSharp build falls back to the CPU) or cpu.
@@ -66,6 +74,7 @@ param(
     [string]$InputFasta,
     [string]$MzmlSourceDir,
     [string[]]$MzmlNames,
+    [ValidateSet('raw', 'mzML')] [string]$InputFormat = 'raw',
     [int]$TrainFileIndex = -1,
 
     [string]$CarafeSharpExe,
@@ -95,9 +104,9 @@ $presets = @{
         SourceDir   = Join-Path $testFilesRoot 'stellar'
         Fasta       = 'hela-filtered.fasta'
         Files       = @(
-            'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML',
-            'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.mzML',
-            'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_22.mzML')
+            'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20',
+            'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21',
+            'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_22')
         TrainIndex  = 1
         Resolution  = 'unit'
         FragTol     = '0.4'
@@ -111,9 +120,9 @@ $presets = @{
         SourceDir   = Join-Path $testFilesRoot 'astral'
         Fasta       = 'uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta'
         Files       = @(
-            'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML',
-            'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.mzML',
-            'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_60.mzML')
+            'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49',
+            'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55',
+            'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_60')
         TrainIndex  = 1
         Resolution  = 'hram'
         # Both 20 ppm as Mike's June Astral Workflow 5 ran them: carafe_settings.json frag_tol 20 ppm,
@@ -131,7 +140,7 @@ $preset = $presets[$Dataset]
 
 if (-not $MzmlSourceDir) { $MzmlSourceDir = $preset.SourceDir }
 if (-not $InputFasta)    { $InputFasta = Join-Path $MzmlSourceDir $preset.Fasta }
-if (-not $MzmlNames)     { $MzmlNames = $preset.Files }
+if (-not $MzmlNames)     { $MzmlNames = $preset.Files | ForEach-Object { "$_.$InputFormat" } }
 if ($TrainFileIndex -lt 0) { $TrainFileIndex = $preset.TrainIndex }
 if (-not $WorkDir) {
     $base = if ($env:CARAFESHARP_WORKDIR) { $env:CARAFESHARP_WORKDIR }
@@ -161,6 +170,13 @@ if ($ospreyHelp -notmatch '--training-export') {
     throw ("$OspreyExe has no --training-export. CarafeSharp trains on Osprey's training export; " +
            'build Osprey from the osprey_carafe_export branch (or a later master) and pass -OspreyExe.')
 }
+# Osprey reads Thermo .raw only when built with the vendor readers; without them Stage 3 fails
+# minutes in with "Thermo .raw reading requires the vendor SDK".
+if (($MzmlNames | Where-Object { $_ -match '\.raw$' }) -and
+    -not (Test-Path (Join-Path (Split-Path -Parent $OspreyExe) 'ThermoFisher.CommonCore.RawFileReader.dll'))) {
+    throw ("$OspreyExe cannot read Thermo .raw: it was built without the vendor readers. Build Osprey with " +
+           'ai/scripts/Osprey/Build-Osprey.ps1 -VendorReader, or pass -InputFormat mzML.')
+}
 $cudaBuild = Test-Path (Join-Path (Split-Path -Parent $CarafeSharpExe) 'runtimes\win-x64\native\torch_cuda.dll')
 
 # ---------------------------------------------------------------------------
@@ -179,7 +195,7 @@ $needMzml = @('3', '6') | Where-Object { $StageList -contains $_ }
 # @() keeps a single run an array: indexing a lone string would take its first character.
 $mzml = @($MzmlNames | ForEach-Object { Join-Path $MzmlSourceDir $_ })
 if ($needMzml) {
-    foreach ($m in $mzml) { if (-not (Test-Path $m)) { throw "mzML not found: $m (pass -MzmlSourceDir)" } }
+    foreach ($m in $mzml) { if (-not (Test-Path $m)) { throw "Data file not found: $m (pass -MzmlSourceDir)" } }
 }
 if (($StageList -contains '1a' -or $StageList -contains '1b') -and -not (Test-Path $InputFasta)) {
     throw "Input FASTA not found: $InputFasta"
