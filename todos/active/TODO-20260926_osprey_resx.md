@@ -21,6 +21,33 @@ Osprey will be integrated into Skyline within the year, and the time when our co
 could stay English-only is over. Osprey's text must translate to Japanese and Chinese through
 Skyline's existing pipeline, and it must be correct in any locale.
 
+## Follow Skyline - it already does all of this (Brendan, 2026-09-26)
+
+The goal is to EMULATE Skyline, not to design something new. Skyline is full of worked examples
+of every piece below; before writing any mechanism, find how Skyline does it and copy that. When
+Osprey needs something Skyline does differently, say why in the TODO.
+
+**Languages: we translate to Japanese and Chinese ONLY - never to a European language** (French,
+German, Spanish, Italian, ...). The only resource files are `.resx` (English), `.ja.resx` and
+`.zh-CHS.resx`. **fr-FR (and tr-TR) are TEST cultures, not translation targets**: Skyline runs its
+tests under them to catch culture-sensitive number formatting and parsing, with the UI still in
+English. Osprey does the same.
+
+Where to look in Skyline (`pwiz_tools/Skyline`):
+- Resources per area with generated classes: `Model/ModelResources.resx` (+ `.ja.resx`),
+  `Menus/MenusResources.resx`; the translation pipeline in `ai/docs/translation-guide.md`.
+- Localization enforcement: `Skyline.csproj.DotSettings` (the two lines Osprey's projects copy).
+- Enum display text: `Model/Export.cs` (`GetLocalizedString` over `LOCALIZED_VALUES`), and
+  `Helpers.EnumFromLocalizedString` for the parse direction.
+- Command line: `CommandArgs.cs` (`ARG_INTERNAL_CULTURE`, "en|fr|ja|zh-Hans"), `CommandLine.cs`
+  (the `Error:` / `Warning:` prefixes, exit-code reconciliation PR 1 already copied).
+- Tests: `TestData/CommandLineTest.cs` (exact-message assertions against resources),
+  `TestData/LocalizedResourcesTest.cs` (validates translated resources, incl. the error prefixes),
+  `TestRunner/Program.cs` (the language list `en-US`, `fr-FR`, `tr-TR`, and `PASS_0_AND_1_LANGUAGE =
+  "fr-FR"`; note its comments on .NET normalizing `zh-CHS` to `zh-Hans`).
+- Translation-proof testing rules: `ai/TESTING.md`; resource rules: `ai/CRITICAL-RULES.md`
+  "Resource Strings" (no resource string captured in a static).
+
 **Read first**: `TODO-20260924_osprey_log_readability.md` - "Two kinds of line", "Decided
 vocabulary", "Rules that fell out of the review", and its companion spec
 `TODO-20260924_osprey_log_readability-spec.html` / `-lines.csv` (583 emitting call sites, the
