@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `f98c497844`; PR #4718 open; SEA-AD 82 files done. Next: `/code-review max 4718`, then in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
+- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `f4a954e07a`; PR #4718 open; SEA-AD 82 files done; /code-review max triaged and fixed (regression 70/70). Next: Copilot comments, Brendan's review, TeamCity, then in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
 - **PR**: #4718 (steps 1-3; RESX is a second PR)
@@ -588,7 +588,12 @@ code does", so they live in pwiz, not `ai/`.
   - **Second PR plan addition:** machine-channel lines (`[STAGE-WALL]`, `[TIMING]`,
     `[TASK] :done`, `P0` counts) format with the current culture (de-DE writes `12,3s`); make
     every tagged line invariant when the second-culture tests land.
-- [ ] Regression on the round-2 fixes, commit, push. **CHS 446 (~20 h) only after the PR is posted.**
+- [x] Round-2 fixes committed as `f4a954e07a` (pushed): Debug 602 tests + inspection green,
+  `regression-parallel -Dataset All` 70/70 in 52 min on snapshot `_bin\logtag-review1`
+  (lane logs `D:\test\osprey-runs\logtag-review1\regression\`).
+- [ ] Next: Copilot's comments on #4718 (`/pw-respond 4718`), Brendan's review, TeamCity
+  Perf/Regression (ask first). **CHS 446 (~20 h) only after the PR is posted** - it is now; use
+  a fresh snapshot of the final code.
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
 - [ ] RESX PR: add the user-correctable exceptions that still print a type, e.g. a blib that
