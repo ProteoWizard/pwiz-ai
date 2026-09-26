@@ -1,13 +1,15 @@
 # TODO-20260926_osprey_resx.md - move Osprey's user-facing text to RESX and make it locale-correct
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260926_osprey_resx` (not yet created)
+- **Branch**: `Skyline/work/20260926_osprey_resx` (checkout `C:\proj\pwiz-work2`; created at
+  `8422c59eca`, the #4718 tip, and pushed 2026-09-26)
 - **Base**: `Skyline/work/20260924_osprey_log_readability` - STACKED on PR #4718. When #4718
   squash-merges into `Skyline/work/20260612_net8_port`, merge `origin/Skyline/work/20260612_net8_port`
   into this branch (never rebase once a PR exists) and retarget the PR base to the port branch.
 - **Created**: 2026-09-26
-- **Status**: Not started - plan only. Next: create the branch, then Step 1 (infrastructure) on
-  `Osprey.Core`.
+- **Status**: Not started - branch created, plan only. Next: Step 1 (infrastructure) on
+  `Osprey.Core`. Note: the port branch has moved since #4718 branched (`bba770990a` ->
+  `5246fa6b2f` on 2026-09-26); #4718 will pick that up when it merges or updates.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: (pending) - `gh pr create --base Skyline/work/20260924_osprey_log_readability --label osprey`
@@ -178,7 +180,8 @@ over current stamps does nothing).
 ## Progress
 
 **2026-09-26**
-- Plan written by the #4718 session. Branch not yet created; checkout to be confirmed with
-  Brendan (proposed `C:\proj\pwiz-work2`; pwiz-work1 stays on #4718).
+- Plan written by the #4718 session. Branch created in `C:\proj\pwiz-work2` (Brendan approved)
+  from `origin/Skyline/work/20260924_osprey_log_readability` at `8422c59eca` and pushed;
+  pwiz-work1 stays on #4718.
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20260926_osprey_resx.md` before starting work.
