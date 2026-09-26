@@ -8,6 +8,7 @@ description: Opt this machine in or out of team Claude usage reporting
 Turn this machine's participation in the team's Claude Code usage tracking **on** or
 **off**. Tooling lives in `ai/scripts/Usage` (this repo); data lives in the shared Google
 Drive folder `<drive>:\My Drive\Claude\Usage`. Background: `ai/scripts/Usage/README.md`.
+**Running Claude Code inside WSL2?** Use `/pw-usage-reporting-wsl` instead.
 
 ## Arguments
 
