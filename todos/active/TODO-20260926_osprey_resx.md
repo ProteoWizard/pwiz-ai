@@ -252,6 +252,11 @@ over current stamps does nothing).
   resource values; the `--culture` test now proves the culture was applied. Gated in a worktree:
   en/ja-JP/fr-FR 604/604, 0 warnings.
 - `regression-parallel.ps1 -Dataset All` (on `2972552f06`): 70 PASS / 0 FAIL / 0 SKIP, 48:46 wall.
+  fr-FR Stellar on final `c2a6a39038`: PASSED. Blib-open error verified by hand (output.blib locked
+  by another process): one clean Error: line, exit 1.
+- Open (Brendan): user-correctable InvalidDataException/IOException throws (76 resourced) still print
+  `Pipeline failed: <type>: <message>` + stack; moving them to pwiz.Common `UserMessageException`
+  printed message-only at the boundary is the Skyline answer but touches 15 typed catch sites.
 - Deferred (review finding, deliberately): CLI flag names and file extensions still appear inline
   in some resourced sentences (`--decoys-in-library`, `--parallel-files`, `--task PerFileScoring`,
   `.spectra.bin`) - docs/21 asks for them as `{N}` arguments; translators must keep them verbatim
