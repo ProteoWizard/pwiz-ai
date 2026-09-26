@@ -55,7 +55,7 @@ load with all 35 rows (`D:\test\osprey-runs\astral-entrap-3file\pairing-check-07
 - [x] `regression.ps1 -Dataset Stellar` on the branch: PASSED (12 phases, 22:54, under load)
 - [x] StellarLibDecoy (18 phases) + StellarGenDecoyEntrap (12 phases): PASSED 23:55 - the legs that run
       manifest pairing, with the v4 cache rebuilt
-- [ ] `regression-parallel.ps1` (-Dataset All) before merge; the Astral leg (generated decoys) was skipped overnight
+- [x] Astral leg PASSED 00:39 at b75f4970d2 (12 phases) - all four datasets now pass on the branch
       via `regression-parallel.ps1` - the cache bump rebuilds every regression library cache once
 - [x] Rust counterpart: LOCAL branch `fix/libdecoy-pairing-collision` in C:\proj\osprey, commit
       `a4d29fb` (off main b9ec678). Same refuse + backstop, same message text; fmt/clippy/test
