@@ -312,7 +312,7 @@ in the coupling table converted.
 
 **Step 6: guard against vocabulary regrowth.** A `CodeInspectionTest` rule that scans the
 English `.resx` values (not code, now that the strings live there) for the banned tokens:
-`sidecar`, `stratum`, `base_id`, `hydrat`, `compaction`, `survivor`, `stubs`, `scalars`,
+`sidecar`, `entry`/`entries`, `bundle`, `stratum`, `base_id`, `hydrat`, `compaction`, `survivor`, `stubs`, `scalars`,
 `frozen`, `projection`, `byproduct`, `interned`, `resident`, `Stage [1-7]`, `OSPREY_[A-Z_]+`
 and any `\w+\.cs` / `\w+Task\b` / `Run\w+\(` identifier. The review found ~120 such lines;
 without a guard they return one feature at a time, because the class name is the nearest word
@@ -591,8 +591,10 @@ code does", so they live in pwiz, not `ai/`.
 - [x] Round-2 fixes committed as `f4a954e07a` (pushed): Debug 602 tests + inspection green,
   `regression-parallel -Dataset All` 70/70 in 52 min on snapshot `_bin\logtag-review1`
   (lane logs `D:\test\osprey-runs\logtag-review1\regression\`).
-- [ ] Next: Copilot's comments on #4718 (`/pw-respond 4718`), Brendan's review, TeamCity
-  Perf/Regression (ask first). **CHS 446 (~20 h) only after the PR is posted** - it is now; use
+- [x] "sidecar"/"hydrate" in user-facing error, warning and verbose text (Brendan, 2026-09-26),
+  `8422c59eca`: Debug 602 + inspection green, regression Stellar 17/17. TeamCity
+  Perf/Regression triggered on `pull/4718` (Brendan approved): build 4190248.
+- [ ] Next: TeamCity 4190248 result, Copilot's comments on #4718 (`/pw-respond 4718`), Brendan's review. **CHS 446 (~20 h) only after the PR is posted** - it is now; use
   a fresh snapshot of the final code.
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
@@ -619,6 +621,12 @@ code does", so they live in pwiz, not `ai/`.
   translations), Step 5 tests under a second culture, Step 6 guards (banned vocabulary in the
   .resx; explicit format on every integer argument - see the N0 decision under Step 2).
   Reword the CSV "Review" rows on resume/HPC/error paths as they are resourced.
+  **Error paths were never reviewed in PR 1** (Brendan, 2026-09-26): the log reviews read only
+  lines that printed, so warnings/errors/exceptions on paths no run reached still carry banned
+  words. PR 1 swept only "sidecar" and "hydrate" (Brendan's catch); a grep found ~100 more
+  literals with stubs / base_ids / compaction / survivors / Stage N / stratum / bundle, plus
+  entry/entries. Brendan's call: the full sweep happens as each string is resourced, with the
+  Step 6 guard over the .resx values as the enforcement.
   Tighten `CommandLineErrorTest` (added in PR 1, asserts only untranslated tokens) to exact
   messages: `string.Format(OspreyResources.X, arg)` against the same resource ID the
   production code uses, as Skyline's `CommandLineTest` does (Brendan, 2026-09-25).
