@@ -16,6 +16,7 @@ ai/scripts/Osprey/
   PRE-COMMIT.md                 pre-commit + pre-PR validation gates
 
   Build-Osprey.ps1         build the .sln (+ optional tests/inspection/coverage)
+  Update-OspreyResxDesigners.ps1  regenerate each Osprey .resx Designer.cs (ResGen)
   Summarize-Coverage.ps1        summarize a dotCover JSON report (whole-project)
   Run-Osprey.ps1                run Osprey or Rust osprey on a dataset
   Run-FdrBench.ps1              FDRBench entrapment-calibration driver
@@ -63,8 +64,16 @@ pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1
 # Build + run all unit tests
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests
 
-# Build + ReSharper inspection (zero-warning gate)
+# Build + ReSharper inspection (zero-warning gate). Results go to
+# ai/.tmp/OspreyInspect-<checkout>.net10.0.xml, one file per checkout.
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunInspection
+
+# Unit tests under another culture (OSPREY_TEST_CULTURE): ja-JP proves assertions read
+# resources, fr-FR proves program-read numbers are invariant
+pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests -Culture fr-FR
+
+# After editing a .resx outside Visual Studio
+pwsh -File ./ai/scripts/Osprey/Update-OspreyResxDesigners.ps1 -SourceRoot <checkout>
 ```
 
 See [PRE-COMMIT.md](PRE-COMMIT.md) for the full pre-commit gate.

@@ -7,9 +7,9 @@
   squash-merges into `Skyline/work/20260612_net8_port`, merge `origin/Skyline/work/20260612_net8_port`
   into this branch (never rebase once a PR exists) and retarget the PR base to the port branch.
 - **Created**: 2026-09-26
-- **Status**: Not started - branch created, plan only. Next: Step 1 (infrastructure) on
-  `Osprey.Core`. Note: the port branch has moved since #4718 branched (`bba770990a` ->
-  `5246fa6b2f` on 2026-09-26); #4718 will pick that up when it merges or updates.
+- **Status**: Steps 1-7 done and committed locally (not pushed); ready for Brendan's review, then
+  push + `gh pr create` + TeamCity. Rewordings to review:
+  `ai/.tmp/sessions/20260926-resx/REVIEW-rewordings.md`; PR body draft `.../pr-body.md`.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: (pending) - `gh pr create --base Skyline/work/20260924_osprey_log_readability --label osprey`
@@ -212,3 +212,47 @@ over current stamps does nothing).
   pwiz-work1 stays on #4718.
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20260926_osprey_resx.md` before starting work.
+- Day session (Brendan driving, autonomous). Step 1 `747601fae9`: OspreyCoreResources + Designer,
+  invariant `LogInfo(tag, format, args)` overload (all ~85 tagged `string.Format` sites moved),
+  `--culture` (internal) + `CultureScope` (thread AND process-default culture, restored after an
+  in-process run), `OSPREY_TEST_CULTURE` + `Build-Osprey.ps1 -Culture`. Step 2 IO `0547541510`
+  (90 resources; metadata/version errors reworded with working remedies; blib modification mass
+  `+57.0215` fixed to invariant - fr-FR wrote `57,0215`).
+- Chinese files are `.zh-Hans.resx` on the port branch (dc12600f3a renamed zh-CHS for net8);
+  `ai/docs/translation-guide.md` still says zh-CHS. `MakeResourcesDb.bat` scans all of
+  `pwiz_tools`, so Osprey resx are picked up; languages come from the localized siblings, so
+  every Osprey resx gets `.ja`/`.zh-Hans` seeded from Skyline's existing translations only.
+- fr-FR unit tests before any resourcing: 4 failures - modseq mass (fixed in IO) and two tests
+  parsing prose percentages. Build-Osprey inspection output is now keyed per checkout
+  (`OspreyInspect-<checkout>.xml`) - concurrent sessions overwrote each other's results.
+- Tooling (session-only, `ai/.tmp/sessions/20260926-resx/`): cslit/mig/filt/lines/resx.py, the
+  agent BRIEF.md; durable: `ai/scripts/Osprey/Update-OspreyResxDesigners.ps1` (ResGen /str).
+- Projects converted by three parallel agents (Tasks and exe in temporary worktrees
+  `C:\proj\pwiz-resx-tasks` / `pwiz-resx-exe`, cherry-picked): Scoring `f10d3d64d9`, FDR
+  `237a662b22`, exe `d619b84f23`, Tasks (cherry-pick of `bd644ec7c0`); guard + fr-FR test parsing
+  `1b06b4a882`; docs + `regression.ps1 -Culture` `d7bf1807f0`; ja/zh-Hans seeds, pass-label display,
+  whole rescore headings, enforcement test `2972552f06`. 797 resources in six .resx.
+- Gates on the merged tree: `-RunTests -RunInspection` 0 warnings / 604 tests in en-US, ja-JP and
+  fr-FR. `regression.ps1 -Dataset Stellar -Culture fr-FR` PASSED every mode (prose in fr form -
+  "Run FDR: 1,0 %", "1 448 698"; tagged lines and every output file invariant, golden matched).
+  Format-argument check (session fmtcheck.py): 565 resourced format calls, 0 mismatches.
+- Bugs found and fixed: blib mod-mass culture; `--fdr-level <bad>` said "defaulting to both" but kept
+  precursor; blib CantOpen now reports the condition (BlibOutputException, not unit-tested - check
+  manually with the blib open in Skyline).
+- Rewordings for Brendan's review: `ai/.tmp/sessions/20260926-resx/REVIEW-rewordings.md`.
+- Left for Brendan: FormatDuration "1 days"/"1 hours" (pre-existing); "Osprey v{0}" kept English
+  shape (SEA-AD script greps it); the two carried-over wording questions below.
+- Step 7: three read-only review agents over `git diff 8422c59eca..HEAD` per path (the whole-diff
+  review died on prompt size in #4718). Fixed `c2a6a39038`: tagged `[COUNT] ... at {4:P0} FDR` had
+  become `1 %` (invariant P0 puts a space) - now `{4:0%}` -> `1%` as before; cache-mismatch errors
+  show the two hashes again; damage messages no longer tell the user to delete a cache Osprey
+  rebuilds itself; remaining user-reachable Tasks errors resourced (mode token and file names as
+  arguments); blib open failures classified as file problems only for access/IO SQLite codes, and
+  BlibWriter disposes its connection when the constructor throws; indentation moved out of 37
+  resource values; the `--culture` test now proves the culture was applied. Gated in a worktree:
+  en/ja-JP/fr-FR 604/604, 0 warnings.
+- `regression-parallel.ps1 -Dataset All` (on `2972552f06`): 70 PASS / 0 FAIL / 0 SKIP, 48:46 wall.
+- Deferred (review finding, deliberately): CLI flag names and file extensions still appear inline
+  in some resourced sentences (`--decoys-in-library`, `--parallel-files`, `--task PerFileScoring`,
+  `.spectra.bin`) - docs/21 asks for them as `{N}` arguments; translators must keep them verbatim
+  until they move. `ai/docs/translation-guide.md` still says zh-CHS (master); the port branch is zh-Hans.

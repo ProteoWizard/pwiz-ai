@@ -55,6 +55,14 @@
     a stale assembly passes while testing code that is no longer in the tree.
     That is a silent green, which is worse than the error it would replace.
 
+.PARAMETER Culture
+    Run the unit tests under this culture (e.g. ja-JP, fr-FR) by setting
+    OSPREY_TEST_CULTURE for the test process; Osprey.Test applies it in its
+    AssemblyInitialize. ja-JP catches an assertion on English text instead of a
+    resource; fr-FR catches a number written for a program in the current
+    culture. Omitted, the variable is cleared and the tests run under the OS
+    culture. Same idea as Skyline's TestRunner /locale.
+
 .PARAMETER VendorReader
     Build WITH vendor instrument-file reading. What that takes depends on the
     branch, and the switch resolves it from the frameworks Osprey declares:
@@ -165,7 +173,10 @@ param(
     [string]$CoverageOutputPath = "",
 
     [Parameter(Mandatory=$false)]
-    [switch]$VendorReader = $false
+    [switch]$VendorReader = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$Culture = $null
 )
 
 # Coverage is meaningless without running the tests - imply -RunTests
@@ -413,11 +424,14 @@ try {
         if (-not (Test-Path $tmpDir)) {
             New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
         }
-        $cacheDir = Join-Path $tmpDir '.inspectcode-cache'
+        # Keyed by checkout, so two sessions (or two worktrees) inspecting at once neither share
+        # a ReSharper cache nor overwrite each other's results file.
+        $checkoutName = Split-Path -Leaf $pwizRoot
+        $cacheDir = Join-Path $tmpDir (Join-Path '.inspectcode-cache' $checkoutName)
         if (-not (Test-Path $cacheDir)) {
             New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
         }
-        $inspectionOutput = Join-Path $tmpDir 'OspreyInspect.xml'
+        $inspectionOutput = Join-Path $tmpDir "OspreyInspect-$checkoutName.xml"
         $dotSettings = Join-Path $ospreyRoot 'Osprey.sln.DotSettings'
 
         if (-not (Test-Path $dotSettings)) {
@@ -635,6 +649,12 @@ try {
             Write-Host "  JSON:     $CoverageOutputPath" -ForegroundColor Gray
         }
 
+        if ($Culture) {
+            $env:OSPREY_TEST_CULTURE = $Culture
+            Write-Host "Test culture: $Culture (OSPREY_TEST_CULTURE)" -ForegroundColor Cyan
+        } else {
+            Remove-Item Env:OSPREY_TEST_CULTURE -ErrorAction SilentlyContinue
+        }
         $testStart = Get-Date
         if ($Coverage) {
             # Wrap vstest.console.exe with dotCover. Filters keep the Osprey.*
