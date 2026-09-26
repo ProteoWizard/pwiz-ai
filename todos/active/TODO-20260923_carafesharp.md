@@ -266,6 +266,17 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
   part B (training export) in progress there. Developer approved downloading the regression
   bundle (staging to `~/Downloads/Perftests`) and the CUDA libtorch packages.
 
+### 2026-09-25/26 (night session; local commits only, nothing pushed)
+- **PR #4717 Copilot fixes** are committed locally as `b70b34d0ab` on the PR branch (ahead 1). The replies are
+  drafted in `ai/.tmp/sessions/20260923-carafesharp/night/copilot-replies-draft.md`.
+  - The meta.json reader now follows Carafe's `ai.py` rule for raw backslashes. The old code threw on a key
+    containing `\users`, and read `\n` as a newline.
+  - Carafe's own Java reader, fastjson2 2.0.61, throws `unclosed.str '\G'` on its Windows meta.json. That is a
+    Carafe bug.
+  - `pwiz_tools/CarafeSharp/.*` now maps to no TeamCity targets instead of All.
+- **Speedups:** see Next steps item 4.
+- **Final verification of `762dedb`:** PENDING.
+
 ## Next steps
 
 1. `/code-review max` on the branch: done 2026-09-25. There were 13 finder angles, with the line-by-line angle split
@@ -298,7 +309,30 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       - The final search gives 31,104 / 28,240 / 4,326 at 0.57% combined FDP, vs 31,460 / 28,637 / 4,338 at 0.66%
         before, which is within run-to-run variation.
    3. [x] PR [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) opened against the port branch.
-   4. [ ] The speedups below, as a follow-up branched from this one.
+   4. [ ] The speedups below, as a follow-up branched from this one. **Implemented and measured in the night session
+      of 2026-09-25/26, as local commits only.**
+      - The branch is `Skyline/work/20260925_carafesharp_write_speed` in `D:\Dev\pwiz-carafesharp-train`. It has
+        no upstream.
+      - Commit `0ea1206839` adds the writer thread and the multi-row annotation INSERTs.
+      - Commit `762dedb9da` makes the writer use a quarter of the processors while it keeps up, and all of them
+        once a chunk waits.
+      - The branch is based on `01aee1bc6c`; rebase it onto the PR branch, which merges cleanly.
+      - **GPU determinism:** the baseline library step run twice gives identical blibs, so every A/B used strict
+        table identity, and every run was identical.
+      - **Stellar, 967,226 precursors:** 261 s → 200-205 s with `0ea1206`, then ~190 s with the adaptive cap.
+        Writing (75-90 s) is fully hidden behind prediction.
+      - **Astral, 6,170,973 precursors:** ~1492 s → ~1200 s with `0ea1206`, with 420-428 s of writing hidden.
+        MS2 rose 614 → ~777 s when all-core compression competed with prediction; that is what `762dedb`
+        addresses. Final numbers: see the Progress Log.
+      - **Tried and rejected, because they break identity or gain nothing:**
+        - RT batch 4096: 283k RTs change by at most 6.5e-6 min, no speedup.
+        - MS2 batch 1024: 727 spectra change by at most 2.4e-6, a few % gain.
+        - 40k-form chunks: 2x slower from GPU memory pressure, 3.9 of 4 GB.
+        - Pipelined featurization (launch batch k+1 before collecting k): identical output, no gain. The GPU trace
+          shows prediction is ~83% GPU-busy.
+      - The machine was shared all night, with CPU 60-90% busy. Timings are ABBA-interleaved and reported with
+        per-run CPU load.
+      - Handoff: `ai/.tmp/handoff-2026-09-26.md`. Scripts and logs: `ai/.tmp/sessions/20260923-carafesharp/night/`.
 
    **The speedups:** two library-writing changes in one commit set, both with byte-identical output.
    - A single writer thread fed by a bounded queue (1-2 chunks), so the blib and TSV writes for chunk k overlap

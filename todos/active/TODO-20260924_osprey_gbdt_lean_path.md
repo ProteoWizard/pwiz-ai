@@ -94,6 +94,12 @@ do not suit a linear SVM.
     (Expected Gbdt, Actual Percolator) when the classifier assignment is removed;
   - `regression.ps1` refuses `-CreateGolden` and warns on a compare run when `OSPREY_FDR_MODEL` is set.
 - [x] Opened [#4715](https://github.com/ProteoWizard/pwiz/pull/4715) against the port branch; Brendan asked to review and trigger Perf/Regression
+- [x] Copilot review (night of 2026-09-25): 2 comments.
+  - Stale `ModelDiagnosticsData.Accumulator.Build` doc: fixed in `95513e17d4`, **local and not pushed** (ahead 1).
+    Gate: 603/603 tests, inspection clean.
+  - "A loaded tree model has null `FoldWeights`": no change needed. The `PercolatorResults` constructor
+    initializes both lists to empty.
+  - The replies are drafted in `ai/.tmp/sessions/20260923-carafesharp/night/copilot-replies-draft.md`, not posted.
 - [ ] Brendan review + TeamCity Perf/Regression
 
 ## Parked review findings (developer, 2026-09-25: fix when gbdt feature work starts)
