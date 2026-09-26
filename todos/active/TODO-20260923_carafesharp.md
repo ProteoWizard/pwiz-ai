@@ -275,7 +275,12 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
     Carafe bug.
   - `pwiz_tools/CarafeSharp/.*` now maps to no TeamCity targets instead of All.
 - **Speedups:** see Next steps item 4.
-- **Final verification of `762dedb`:** PENDING.
+- **Final verification of `762dedb`:** identical blibs on Stellar and Astral.
+  - Stellar: 261 s → **190 s (1.37x)**.
+  - Astral: ~1492 s → **1132 s (1.32x)**, against 1221 s for `0ea1206` in the same period at the same CPU load.
+  - Writing is fully hidden: 0.0 s after prediction, and waits under 1 s.
+  - The draft PR body is in `ai/.tmp/sessions/20260923-carafesharp/night/speed-pr-body.md`. Open the PR after
+    the developer reviews it and #4717 settles.
 
 ## Next steps
 
@@ -323,7 +328,7 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
         Writing (75-90 s) is fully hidden behind prediction.
       - **Astral, 6,170,973 precursors:** ~1492 s → ~1200 s with `0ea1206`, with 420-428 s of writing hidden.
         MS2 rose 614 → ~777 s when all-core compression competed with prediction; that is what `762dedb`
-        addresses. Final numbers: see the Progress Log.
+        addresses: Astral 1132 s (1.32x) with it.
       - **Tried and rejected, because they break identity or gain nothing:**
         - RT batch 4096: 283k RTs change by at most 6.5e-6 min, no speedup.
         - MS2 batch 1024: 727 spectra change by at most 2.4e-6, a few % gain.
