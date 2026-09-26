@@ -268,7 +268,39 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
 
 ## Next steps
 
-1. `/code-review max` on the branch (developer, 2026-09-25), then fix the findings.
+1. `/code-review max` on the branch: done 2026-09-25. There were 13 finder angles, with the line-by-line angle split
+   four ways and "removed behavior" replaced by "fidelity to Carafe's source", since the branch is all additions.
+   Every candidate was verified, a gap sweep found nothing new, and 15 findings were reported. Candidates and
+   verdicts: `ai/.tmp/sessions/20260923-carafesharp/review-cs/`.
+
+   **Fixing now** (developer: "Let's. Start with those."):
+   - Stale Carafe `.pt` preferred after training.
+   - Output files: temp-then-rename, and the DecoyPairs catch.
+   - Export selection: hashes, `.d` runs, missing runs.
+   - Blib N-term acetyl mapping.
+   - Training fidelity: the instrument-name map, a global `rt_max`, NCE precedence, charge-1 z2 slots.
+   - `meta.json`: JMeta defaults, run keys, shared keys.
+   - `-I2L` without `-fast` throws, as Carafe does.
+   - The command line: `-ms`-based dispatch, `-flag=value`, `-seed`, `-ms2_model`, rejecting training-ignored options.
+   - Early validation.
+   - Tests: masking-parity keys, safetensors round trip, strict load, `EpochBatches`, split.
+   - Cleanup: the dead CommonUtil reference and dead options.
+   - Enum naming.
+
+   **Deferred follow-ups:**
+   - Training memory at scale: all exports are held in memory, about 15-26 GB for 40 Astral runs, and 18 unused
+     columns are required.
+   - Blib-writing speed: writing runs serially with prediction and takes 32% of an Astral run; also one INSERT per
+     annotation and the dense mod features.
+   - Latent robustness items that current inputs don't trigger:
+     - `ParquetColumns` same-size integer reinterpretation;
+     - endianness;
+     - `ModSitesText` culture;
+     - Adam and `PthReader` disposal;
+     - safetensors header validation;
+     - `Blob<T>` partial elements;
+     - per-ion slot counts;
+     - culture in the training logs.
 2. PR against the port branch (`osprey:` prefix, label `osprey`, #4707). The code does not depend on #4708;
    `train` reads the training export #4708 adds, so the PR notes that dependency.
 3. Follow-ups, not before the PR: `tcbuild.bat`/`tcbuild.sh` (a TeamCity config needs an admin); a README
