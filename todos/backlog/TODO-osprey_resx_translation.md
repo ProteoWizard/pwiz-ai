@@ -73,7 +73,10 @@ The work is only half the deliverable; the other half is evidence for or against
 4. **Before translating, finish the deferred RESX item**: CLI flags, `--task` values and file
    extensions still inline in some English resources (`--decoys-in-library`, `--parallel-files`,
    `--task PerFileScoring`, `.spectra.bin`) must become `{N}` arguments, or translators - human or
-   Claude - may translate a token the user has to type.
+   Claude - may translate a token the user has to type. Measured in Skyline: of 76 translated resources
+   that name a flag, 4 ja and 25 zh-Hans lost or translated it (`TODO-skyline_resx_argument_text.md`).
+   In the same step, replace the 11 `"--flag"` literals in 2 Osprey.Test files with the typed
+   `OspreyCommandArgs.ARG_*` instances and add a CodeInspectionTest guard for them.
 5. **Translate** all Osprey resources to ja and zh-Hans with glossary + style guide + TM in
    context, batched by file so related messages stay consistent. Keep placeholders, format
    specifiers and verbatim tokens identical. Emit in the translation company's CSV format

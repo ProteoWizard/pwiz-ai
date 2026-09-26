@@ -43,6 +43,19 @@ translated text and cannot drift from the parser.
 5. Regenerate `Documentation/Help/en/CommandLine.html` (and the ja / zh-CHS help if generated)
    and confirm it is byte-identical in English.
 
+## Follow-on PR (separate): argument literals in tests
+Tests that build command lines from string literals (`"--in=" + path`) should use the typed
+instances (`CommandArgs.ARG_IN + path`, the token builder), so renaming an argument cannot leave a
+test passing a flag the parser no longer knows. Counted 2026-09-26: Skyline/TestData 915 literals
+in 10 files (mostly CommandLineTest), Skyline/Test 109 in 9, TestPerf 56 in 4, TestFunctional 21
+in 10, TestConnected 4 in 1 - about 1,100; tests already use `CommandArgs.ARG_*` 305 times.
+Kept apart from the resource PR (Brendan raised either option): it is a large mechanical diff
+with a different review than a translation-affecting change. Guard: a CodeInspectionTest check
+for `"--[a-z]` literals in Skyline test projects, with an exemption tag for tests that
+deliberately pass an unknown or malformed flag. Osprey.Test has only 11 such literals in 2 files -
+fold those into the Osprey translation work (step 4 of `TODO-osprey_resx_translation.md`) and
+extend Osprey's CodeInspectionTest the same way.
+
 Related: Osprey follows the same rule after the RESX PR
 (`TODO-20260926_osprey_resx.md`; a few Osprey strings still inline `--decoys-in-library`,
 `--parallel-files`, `--task PerFileScoring` - step 4 of `TODO-osprey_resx_translation.md`).
