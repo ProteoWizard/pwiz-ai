@@ -79,6 +79,24 @@ naming convention `Run-SeaAd.ps1` resolves, so both sides stay in step:
 .\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode gendecoy   # strip decoys from that subset
 ```
 
+**The unsuffixed `target+decoy+entrapment` is Mike's original 2026-07-27 delivery, and it is
+NOT what the recent large Astral runs use.** Those (CHS, TDP-43, SEA-AD since late August) use
+`target+decoy+entrapment-20260817`, a later rebuild shared as
+`M:\home\brendanx\data\MacCoss\Osprey\AstralLib\target+decoy+entrapment-20260817.zip`. Extract
+it into the library root and pass it by name, since the runner's default still resolves the
+unsuffixed folder:
+
+```powershell
+.\Run-SeaAd.ps1 -LibraryDir "$env:OSPREY_SEAAD_LIB\target+decoy+entrapment-20260817"
+.\New-SeaAdLibrary.ps1 -Ratio 1.0 -DecoyMode gendecoy -Build 20260817   # its gendecoy arm
+```
+
+The 07-27 delivery also carries at least one decoy row merged with an identical target
+(`AQLKDTR`, ProteinID `decoy_...LZTR1...;sp|Q9Y250|LZTS1`) whose reversed decoy `TDKLQAR` is
+also present. Both load as the same decoy entry_id, and on the current build first-pass FDR
+aborts at 82 files with "Experiment-scope values disagree across observations of entry_id
+2147809020". The 08-17 rebuild does not have that row.
+
 A gendecoy variant derives from the libdecoy variant at the **same ratio** (built first if
 missing), so the two arms differ only in where the decoys come from. Selection is a seeded
 shuffle (default 2024), so the same ratio built on two machines picks the same quartets and
