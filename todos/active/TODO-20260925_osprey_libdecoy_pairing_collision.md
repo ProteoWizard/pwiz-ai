@@ -63,5 +63,9 @@ load with all 35 rows (`D:\test\osprey-runs\astral-entrap-3file\pairing-check-07
       library BEFORE pairing. Carries the pwiz-ai hook's Co-Authored-By trailer - amend it off
       before pushing (upstream commits have none). Needs Mike's PR on maccoss/osprey.
 - [ ] Proposal, not done: the 07-27 library also left 61,494 decoys unpaired (08-17: 1,628); a
-      stricter default `DecoyPairMinFraction` would have flagged that library too
+      stricter default `DecoyPairMinFraction` would have flagged that library too. Data: default
+      is 0.80; 07-27 paired 98.0% (84,066 unpaired targets), 08-17 paired 99.9% (2,247), so only
+      a threshold near 0.99 separates them
+- [x] Review sub-agent: no correctness defects; fixed Rust group order, per-decoy allocation,
+      stale comments (b75f4970d2). Loader-level refusal test dropped (no TSV fixture exists)
 - [ ] `/code-review`, then PR against the port branch
