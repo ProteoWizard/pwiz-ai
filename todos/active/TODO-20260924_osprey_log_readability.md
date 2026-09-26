@@ -603,8 +603,12 @@ code does", so they live in pwiz, not `ai/`.
 - [x] "sidecar"/"hydrate" in user-facing error, warning and verbose text (Brendan, 2026-09-26),
   `8422c59eca`: Debug 602 + inspection green, regression Stellar 17/17. TeamCity
   Perf/Regression triggered on `pull/4718` (Brendan approved): build 4190248.
-- [ ] Next: TeamCity 4190248 result, Copilot's comments on #4718 (`/pw-respond 4718`), Brendan's review. **CHS 446 (~20 h) only after the PR is posted** - it is now; use
-  a fresh snapshot of the final code.
+- [ ] Next: TeamCity 4190248 result, then Brendan squash-merges #4718 after Mike's review
+  (review requested 2026-09-26; Copilot declined - quota reached). Then the second PR (RESX,
+  locale split, fr-FR/ja-JP tests, full string review).
+- **CHS 446 run: deferred past the RESX/I18N PR** (Brendan, 2026-09-26). The SEA-AD 82-file
+  logs convinced him this PR opened no large reporting gaps (max 32 s, in a phase this PR did
+  not change; `FINDINGS.md` in the SEA-AD run folder).
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
 - [ ] RESX PR: add the user-correctable exceptions that still print a type, e.g. a blib that
@@ -622,7 +626,7 @@ code does", so they live in pwiz, not `ai/`.
     user would and check the exit code / `Error:` agreement.
   - `--verbose` runs on Stellar and Astral: read the verbose tier (it is user-facing too and
     goes to RESX in the second PR), note code-vocabulary lines worth rewording now.
-  - CHS 446 gap run (Step 1c) with a fresh net10.0 snapshot passed by `-Exe`.
+  - CHS 446 gap run (Step 1c): deferred past the RESX/I18N PR (see above).
   - `/code-review max`, then PR against `Skyline/work/20260612_net8_port`, TeamCity
     Perf/Regression (ask first). Ask Mike about `[ERROR]`/`[WARN]` log consumers.
 - [ ] **Second PR (Brendan, 2026-09-25: "big enough already")**: Step 4 RESX (plan above,
