@@ -287,8 +287,13 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
    - Cleanup: the dead CommonUtil reference and dead options.
    - Enum naming.
 
-   **Next, after the fixes land** (developer, 2026-09-25): two library-writing speedups in one change, both with
-   byte-identical output.
+   **Order** (developer, 2026-09-25):
+   1. Review fixes land and are verified (gate plus parity tests).
+   2. Rerun the Stellar end-to-end workflow.
+   3. Open the CarafeSharp PR (the port plus the review fixes).
+   4. Then the speedups below, as a follow-up.
+
+   **The speedups:** two library-writing changes in one commit set, both with byte-identical output.
    - A single writer thread fed by a bounded queue (1-2 chunks), so the blib and TSV writes for chunk k overlap
      the prediction of chunk k+1. Astral writing is 450 of 1419.5 s (`workflow-astral.log:515/523`).
    - Batched peak-annotation INSERTs (multi-row, prepared per peak count) with cached `SQLiteParameter`s.
