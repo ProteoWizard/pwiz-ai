@@ -53,7 +53,16 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       prediction of the M3 every-50 subset: 98.3% identical fragment lists, all differences at the
       1e-4 rounding floor; 15 s vs 159 s. Fine-tune of 20k RT + 15k MS2 rows: ~4 min on the GPU (RT
       R2 0.9977 on both devices), ~20 min on an uncontended CPU.
-- [ ] **M0** WSL/Linux CPU smoke run
+- [x] **M0** WSL/Linux CPU smoke run (2026-09-25, WSL Ubuntu, glibc 2.35, .NET SDK 10.0.112):
+      `Build-CarafeSharp.ps1 -RunTests` runs unchanged under PowerShell 7.6.6 installed as a dotnet global
+      tool (Osprey's `tcbuild.sh` pattern: no root, no apt), on a `git archive` copy in the WSL filesystem
+      (CarafeSharp plus `Shared/CommonUtil`, `Shared/Lib/Parquet`, `Shared/Lib/PwizTargetPlatform.*`,
+      `pwiz_tools/Directory.Build.*`, `global.json`): build succeeded, 45 tests / 37 passed / 8 skipped as on
+      Windows. Then CarafeSharp run from bash (`D:\test\carafesharp-runs\linux-smoke\smoke.sh`, 100 proteins):
+      stage-1 digest SHA-256 identical to Windows; prediction 2,955 precursors on both, same set, 50,322 of 50,376
+      TSV rows identical, the rest differ only at the 4th decimal of relative intensity (libtorch Windows vs
+      Linux builds); blib 2,955 spectra each. Linux end users run CarafeSharp from bash; PowerShell is only the
+      developer build wrapper.
 - [x] **M1** Proteome (`CarafeSharp.Proteome`, 27 classes): jfasta-compatible FASTA reader,
       compomics enzymes/digest, JavaRandom/JavaText, EntrapmentFastaBuilder (reverse/cycle decoys,
       similarity gate, shuffle and foreign entrapment, ratio), validator, reconciler, `-mz_filter`
@@ -69,8 +78,18 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
 - [x] **M2** Inference parity against Carafe's own prediction outputs (`CarafeParityTest`, opt-in via
       `CARAFESHARP_CARAFE_REFERENCE` / `CARAFESHARP_CARAFE_FINETUNED`): 4,000 precursors each, pretrained
       MS2 max |diff| 2.6e-6 (99.9th pct 8.9e-7, no cutoff flips), RT 2.4e-7, iRT 3.5e-5; Carafe's
-      fine-tuned ms2_model.pt/rt_model.pt load and match to 2.4e-6 / 1.8e-7. General mode, C+57 only -
-      variable mods (Oxidation, Phospho) still to be covered.
+      fine-tuned ms2_model.pt/rt_model.pt load and match to 2.4e-6 / 1.8e-7. General mode, C+57 only.
+      Variable modifications (2026-09-25): reference from Carafe origin/main (javac build,
+      `D:\test\carafesharp-runs\varmod-parity\run-carafe-main.sh`, 300 HeLa proteins, trypsin,
+      `-varMod 2,5,7,8,9 -maxVar 2`, 51,015 precursors, 45,646 modified: phospho S/T/Y, oxidation, protein
+      N-term acetyl). `CarafeParityTest`: MS2 max 3.6e-6 (99.9th pct 1.3e-6), RT 9.5e-7, iRT 1.5e-4, no cutoff
+      flips. `LibraryParityTest`: peptide forms identical (m/z included), 3.24M fragment m/z bit-identical,
+      5,102/5,102 assembled rows identical, end to end 51,011 precursors with 97.8% identical fragment lists and
+      blib precursor m/z and modifications identical. Found: Carafe's DIA-NN notation drops a protein N-term
+      acetyl when residue 1 is also modified (the plain and acetylated precursors share a ModifiedPeptide and
+      differ only in m/z); CarafeSharp reproduces it; its .blib records the acetyl. The test harness now keys
+      precursors by m/z too (`a9c2cc5eb7`). The older local Carafe jar is NOT a valid reference: it hands data
+      between Java and Python as TSV and loses precision.
 - [x] **M3** `predict` writes a blib (annotations, DecoyPairs, decoys and entrapment). Committed
       `b1913426d3` (background agent; verified here: 30 tests, inspection clean). Parity on the Stellar
       oracles: peptide forms and fragment m/z bit-identical, assembled rows character-identical from
@@ -82,7 +101,7 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       same exe). Skyline-daily 26.1.1.209 (SkylineCmd, `D:\test\carafesharp-runs\skyline-check`) opens the
       subset blib: 7,485 peptides, all 23,036 transitions picked from the library. Old June oracles predate maccoss/carafe#11 (M-clip under NoCut).
 - [x] **M4** Osprey part B: training export (companion TODO)
-- [ ] **M5** `train`: training set, masking policy, Adam fine-tune, metrics, model selection.
+- [x] **M5** `train`: training set, masking policy, Adam fine-tune, metrics, model selection.
       Trainer done on side branch `Skyline/work/20260923_carafesharp_train` (worktree
       `D:\Dev\pwiz-carafesharp-train`, from `0d209915ed`; merge back after M3): NumpyRandomState
       (legacy MT19937 + pandas `sample` semantics, verified against numpy 2.5/pandas 3.0),
@@ -146,7 +165,7 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       (June Carafe GUI numbers, older Osprey: 27,479 at 0.98% - not comparable.)
       CPU vs GPU fine-tune on the same data: MS2 PCC 0.9821/0.9823, COS 0.9835/0.9838, RT R2 0.9977 both.
 
-- [ ] **M6** `ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1`; Stellar then Astral end to end
+- [x] **M6** `ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1`; Stellar then Astral end to end
       Stellar done: all stages 1a-6 from hela-filtered.fasta with the CUDA build and the part-B Osprey
       (`D:\test\carafesharp-runs\stellar-workflow`, log `ai/.tmp/sessions/20260923-carafesharp/workflow-stellar.log`):
       1a 0.03 min, 2 2.1 min, 3 4.6 min, 4-5 7.3 min, 6 7.6 min. Training 23,169 precursors -> RT R2 0.9978,
@@ -168,8 +187,8 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       | corr_polish >= 0.6 | 84.0% / 202.6k / 16.4k | 86.6% / 562k / 50.1k |
       | Carafe smoothed best-ion (from exported XICs) >= 0.8 | 84.3% / 179.8k / 12.8k | 86.2% / 558k / 44.6k |
 
-      Prototypes: `py/carafe_policy_proto.py`, `py/carafe_corr_proto.py` (CARAFE_TABLES env). DECISION
-      PENDING (developer): the correlation default. corr_polish 0.7 tracks Carafe on both instruments.
+      Prototypes: `py/carafe_policy_proto.py`, `py/carafe_corr_proto.py` (CARAFE_TABLES env). The correlation
+      default was decided by the masking evaluation below: keep 0.8.
       Astral XIC export (pay-later, `--training-export-xics`) replaced the plain one; the plain copy is
       `osprey_train\Ast-..._55.training-noxics.parquet.bak`.
 
@@ -249,9 +268,8 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
 
 ## Next steps
 
-1. M3 (in progress, background agent): peptide-form enumeration parity vs `peptide_forms_*.parquet`,
-   fragment m/z parity vs `*_ms2_mz_df`, library assembly parity vs `carafe_spectral_library.tsv`,
-   `BlibLibraryWriter` (annotations per Osprey part A grammar, empty-string text columns,
-   mzObserved == peak m/z), Carafe-compatible `-lf_type DIA-NN|blib`, `-model_dir`.
-2. CUDA build (`-Torch cuda`) and a GPU vs CPU prediction comparison once M3 lands.
-3. Osprey regression gate on part A (Release exe in the worktree; do not rebuild Release while it runs).
+1. `/code-review max` on the branch (developer, 2026-09-25), then fix the findings.
+2. PR against the port branch (`osprey:` prefix, label `osprey`, #4707). The code does not depend on #4708;
+   `train` reads the training export #4708 adds, so the PR notes that dependency.
+3. Follow-ups, not before the PR: `tcbuild.bat`/`tcbuild.sh` (a TeamCity config needs an admin); a README
+   with Linux (bash) usage.
