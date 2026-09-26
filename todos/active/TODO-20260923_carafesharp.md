@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4707](https://github.com/ProteoWizard/pwiz/issues/4707)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch)
 - **Companion**: `ai/todos/active/TODO-20260923_osprey_carafe_export.md` (the Osprey-side PR this depends on)
 
 ## Objective
@@ -40,7 +40,7 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
 - **Evidence in Osprey, masking policy in CarafeSharp** (thresholds tunable without a re-search).
 - **Stage-1 parity is byte-identical** with Carafe `-build_entrapment_fasta`.
 - **No pwiz-sharp reference** from CarafeSharp (no spectrum reading), so the #4658 layout
-  hoist does not touch it. Only `pwiz_tools/Shared/CommonUtil` (command-line framework).
+  hoist does not touch it. It references nothing else in pwiz: the Shared/CommonUtil reference was unused and was removed in the review fixes.
 - Two PRs stacked on #4619: Osprey changes first (own regression gates), CarafeSharp after.
 
 ## Milestones
@@ -288,10 +288,17 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
    - Enum naming.
 
    **Order** (developer, 2026-09-25):
-   1. Review fixes land and are verified (gate plus parity tests).
-   2. Rerun the Stellar end-to-end workflow.
-   3. Open the CarafeSharp PR (the port plus the review fixes).
-   4. Then the speedups below, as a follow-up.
+   1. [x] Review fixes landed as 7 commits, `6a7eaadf90`..`01aee1bc6c`.
+      - `-ms2_model` is implemented, not rejected: fine-tuning starts from it and it is the metrics baseline.
+      - Gate: 48 tests (40 passed, 8 opt-in skipped), 0 inspection warnings.
+      - Every parity number is unchanged before and after. Logs are in `ai/.tmp/sessions/20260925-carafesharp-fixes/`.
+   2. [x] Stellar end-to-end rerun, CUDA build (`D:\test\carafesharp-runs\stellar-workflow-prep-pr`):
+      - Stage 1 SHA-256 is identical, the initial library is identical, and the training set is identical.
+      - The GPU fine-tune is not bit-reproducible: MS2 COS 0.9849 vs 0.9853, RT R2 0.9978.
+      - The final search gives 31,104 / 28,240 / 4,326 at 0.57% combined FDP, vs 31,460 / 28,637 / 4,338 at 0.66%
+        before, which is within run-to-run variation.
+   3. [x] PR [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) opened against the port branch.
+   4. [ ] The speedups below, as a follow-up branched from this one.
 
    **The speedups:** two library-writing changes in one commit set, both with byte-identical output.
    - A single writer thread fed by a bounded queue (1-2 chunks), so the blib and TSV writes for chunk k overlap
