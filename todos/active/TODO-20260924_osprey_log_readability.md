@@ -306,6 +306,15 @@ messages), mark the machine-channel and diagnostic strings `@"..."`, add the enu
 be done as the strings are moved rather than before: rewriting a string and resourcing it is
 one edit.
 
+**Locale split (Brendan, 2026-09-26).** Text written for a person (the log, `--help`, errors,
+the model-diagnostics HTML) uses the CURRENT culture: in fr-FR the thousands separator becomes a
+space and the decimal separator a comma. Text written for a program uses the INVARIANT culture:
+every output file (TSV, JSON, blib, parquet metadata, FDRBench input, `.osprey.task` keys) and
+every tagged machine-channel line (`[PATH]`, `[COUNT]`, `[TIMING]`, `[STAGE-WALL]`, `[TASK]`).
+Osprey has never been run under anything but en-US. fr-FR is the culture that exposes the split,
+because ja-JP and zh-CHS format numbers like en-US; test under fr-FR as well as ja-JP.
+The audit of every writer to a file is part of this step, not only the log.
+
 **Step 5: tests under a second culture.** The `OSPREY_TEST_CULTURE` switch, a seed `ja.resx`
 per project, `Build-Osprey.ps1 -RunTests` running twice, and every English-literal assertion
 in the coupling table converted.
@@ -636,7 +645,9 @@ code does", so they live in pwiz, not `ai/`.
 - `Build-Osprey.ps1 -RunTests -RunInspection` green with the six `.csproj.DotSettings` in
   place, i.e. zero `LocalizableElement` warnings and no un-resourced plain literal left in
   those projects.
-- `Build-Osprey.ps1 -RunTests` green under `OSPREY_TEST_CULTURE=ja-JP` as well as `en-US`.
+- `Build-Osprey.ps1 -RunTests` green under `OSPREY_TEST_CULTURE=ja-JP` and `fr-FR` as well as `en-US`.
+- `regression.ps1 -Dataset Stellar` green with Osprey run under `--culture fr-FR`: every output
+  file matches the en-US golden byte for byte (invariant), while the log shows fr-FR numbers.
 - `regression-parallel.ps1 -Dataset All` green with `--perf-stats` in the harness args and no
   prose probes left in `regression.ps1`; then green again with the harness launching Osprey
   under `--culture ja` (proves the gate reads only the machine channel).
