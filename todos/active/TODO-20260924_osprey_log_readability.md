@@ -609,13 +609,10 @@ code does", so they live in pwiz, not `ai/`.
 - **CHS 446 run: deferred past the RESX/I18N PR** (Brendan, 2026-09-26). The SEA-AD 82-file
   logs convinced him this PR opened no large reporting gaps (max 32 s, in a phase this PR did
   not change; `FINDINGS.md` in the SEA-AD run folder).
-  **Next session handoff**: For detailed startup protocol, read
-  `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
-- [ ] RESX PR: add the user-correctable exceptions that still print a type, e.g. a blib that
-  cannot be opened prints `Pipeline failed: ... SQLiteException ... CantOpen`.
-- [ ] Open wording question: drop "Computing second-pass FDR scores for N files." when the
-  "Second-pass FDR over N files: ..." line follows it (straight-through protein-compact).
-- [ ] **This PR: in-depth testing before opening it** (next session):
+- This session (2026-09-26) stays on #4718 for Mike's review fixes and `/pw-complete`. The RESX
+  work moved to its own branch and TODO (below).
+- [x] **This PR: in-depth testing** - done by the log review round, the SEA-AD 82-file run,
+  three `regression-parallel -Dataset All` runs and the code review above; kept for the record:
   - `regression-parallel.ps1 -Dataset All` (~46 min; last full run was on `e089e4f2e0`).
   - Exercise the reworded errors and warnings on purpose: missing input with no cache or
     intermediate file; `OSPREY_PASS2_QVALUE=bogus`; `OSPREY_STAGE7_STREAM=1`;
@@ -629,20 +626,11 @@ code does", so they live in pwiz, not `ai/`.
   - CHS 446 gap run (Step 1c): deferred past the RESX/I18N PR (see above).
   - `/code-review max`, then PR against `Skyline/work/20260612_net8_port`, TeamCity
     Perf/Regression (ask first). Ask Mike about `[ERROR]`/`[WARN]` log consumers.
-- [ ] **Second PR (Brendan, 2026-09-25: "big enough already")**: Step 4 RESX (plan above,
-  including the `GetLocalizedString` literal arrays and Skyline's `Warning:` / `Error:`
-  translations), Step 5 tests under a second culture, Step 6 guards (banned vocabulary in the
-  .resx; explicit format on every integer argument - see the N0 decision under Step 2).
-  Reword the CSV "Review" rows on resume/HPC/error paths as they are resourced.
-  **Error paths were never reviewed in PR 1** (Brendan, 2026-09-26): the log reviews read only
-  lines that printed, so warnings/errors/exceptions on paths no run reached still carry banned
-  words. PR 1 swept only "sidecar" and "hydrate" (Brendan's catch); a grep found ~100 more
-  literals with stubs / base_ids / compaction / survivors / Stage N / stratum / bundle, plus
-  entry/entries. Brendan's call: the full sweep happens as each string is resourced, with the
-  Step 6 guard over the .resx values as the enforcement.
-  Tighten `CommandLineErrorTest` (added in PR 1, asserts only untranslated tokens) to exact
-  messages: `string.Format(OspreyResources.X, arg)` against the same resource ID the
-  production code uses, as Skyline's `CommandLineTest` does (Brendan, 2026-09-25).
+- [ ] **Second PR (Brendan, 2026-09-25: "big enough already") MOVED to
+  `ai/todos/active/TODO-20260926_osprey_resx.md`** (branch `Skyline/work/20260926_osprey_resx`,
+  stacked on #4718): Steps 4-6 above, the locale split, the error-path vocabulary sweep, the
+  `CommandLineErrorTest` exact-message tightening. That TODO is now the plan of record; the
+  Steps 4-6 text above is history.
 
 ## Acceptance
 
