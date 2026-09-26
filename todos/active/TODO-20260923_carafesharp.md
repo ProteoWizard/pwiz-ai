@@ -287,11 +287,19 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
    - Cleanup: the dead CommonUtil reference and dead options.
    - Enum naming.
 
+   **Next, after the fixes land** (developer, 2026-09-25): two library-writing speedups in one change, both with
+   byte-identical output.
+   - A single writer thread fed by a bounded queue (1-2 chunks), so the blib and TSV writes for chunk k overlap
+     the prediction of chunk k+1. Astral writing is 450 of 1419.5 s (`workflow-astral.log:515/523`).
+   - Batched peak-annotation INSERTs (multi-row, prepared per peak count) with cached `SQLiteParameter`s.
+
+   Verify by rerunning the Stellar and Astral library steps: the `.blib` content must be identical (compare the
+   `RefSpectra`/peaks/annotations tables), with before/after timings recorded. Maybe later, if measured: RT
+   predicted over larger groups; float32 mod features and overlapped featurization.
+
    **Deferred follow-ups:**
    - Training memory at scale: all exports are held in memory, about 15-26 GB for 40 Astral runs, and 18 unused
      columns are required.
-   - Blib-writing speed: writing runs serially with prediction and takes 32% of an Astral run; also one INSERT per
-     annotation and the dense mod features.
    - Latent robustness items that current inputs don't trigger:
      - `ParquetColumns` same-size integer reinterpretation;
      - endianness;
