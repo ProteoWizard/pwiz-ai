@@ -329,9 +329,19 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
         order.
       - **Tried and rejected** (break identity or gain nothing): larger RT/MS2 batches, 40k-form chunks,
         pipelined featurization.
-      - [ ] Carafe 2.2.0 vs CarafeSharp end-to-end fine-tuning comparison, same Osprey build (0a0b744), one training
-        run, Carafe with msconvert: running; add the plot to #4719 and update the timing artifact
-        (https://claude.ai/artifact/2ki8qrEj9XqgU6Rts76GiK).
+      - [x] Carafe 2.2.0 vs CarafeSharp end-to-end (2026-09-26; `docs/03-performance.md`, commit `3bbe25011c`, PR
+        body, artifact https://claude.ai/artifact/2ki8qrEj9XqgU6Rts76GiK). Stages 1a-5, one training run, Osprey
+        0a0b744 for both: Stellar 17.7 -> 13.0 min (1.36x), Astral 80.9 -> 54.8 min (1.48x). Library step alone
+        (base model, same options, Stellar): Carafe 264/259 s, CarafeSharp 170/171 s (1.54x). Carafe = the jar
+        installed by the Carafe app (`AppData\Local\Carafe\app`); the repo's `target/carafe-2.2.0.jar` is older
+        and rejects `-decoy_prefix`.
+      - **No mzML** (the point of CarafeSharp): Osprey reads Thermo `.raw` when built with
+        `Build-Osprey.ps1 -VendorReader` (snapshot `D:\test\osprey-runs\_bin\carafe-export-0a0b744-vendor`). Its
+        spectra cache from the `.raw` is byte-identical to the vendor-peak-picked mzML's on Stellar and Astral (only
+        the header's source size/time differ). Until 2026-09-26 every run here read mzML, because the default
+        Osprey build has no vendor readers. `Run-CarafeSharpWorkflow.ps1` now defaults to `.raw`
+        (`-InputFormat raw|mzML`) and preflight rejects a non-vendor Osprey for `.raw` inputs.
+      - Follow-up for Osprey: reading the 8 GB Astral `.raw` took 899 s of per-file scoring vs 541 s from mzML.
 
    **The speedups:** two library-writing changes in one commit set, both with byte-identical output.
    - A single writer thread fed by a bounded queue (1-2 chunks), so the blib and TSV writes for chunk k overlap
