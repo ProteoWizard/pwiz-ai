@@ -28,6 +28,25 @@ The work is only half the deliverable; the other half is evidence for or against
    company's CSVs go through; `ai/docs/translation-guide.md` documents it, including "Reviewing
    translated CSVs: reviewer term changes are deliberate" (e.g. the zh-CHS reviewer's non-literal
    term for "imputation") - the glossary must record the REVIEWER's choice, not the literal one.
+3a. **Nick Shulman's DevTools in `pwiz_tools/Skyline/Executables/DevTools` - learn from and reuse
+   them before writing anything (Brendan, 2026-09-26).** They already reduced the translation
+   company's job from RESX files to CSVs of English + translation:
+   - `ResourcesOrganizer` (README.md there; Jamfile targets `GenerateLocalizationCsvFiles`,
+     `ImportLocalizationCsvFiles`, `FinalizeResxFiles`): reads every .resx into a SQLite db, emits
+     `localization.ja.csv` / `localization.zh-CHS.csv` with columns Name, English, Translation,
+     Issue ("English text changed", "Inconsistent translation" - its own consistency checks), and
+     FileCount/File, consolidating identical English across files into one row. Claude's output
+     should be exactly these CSVs filled in, imported with `ImportLocalizationCsvFiles`; the
+     `Issue` column and the consolidation are free consistency signals. Its db
+     (`LastReleaseResources.db`) also answers "what was added since the last release" for the
+     holdout evaluation in step 7.
+   - `TutorialLocalization` (`TutorialLocalizer.cs`, `LocalizationRecord.cs`): aligns each
+     tutorial's English and localized HTML element by element (XPath, via the `invariant.html`
+     in each language folder) into records of TutorialName, XPath, English, Localized,
+     OriginalEnglish. That is the tutorial parallel corpus for input 2, already aligned - use its
+     output rather than re-aligning HTML.
+   - Also there: `NormalizeResxWhitespace`, `SortRESX`, `AssortResources` - check before writing
+     any resx post-processing.
 4. **Git history of the `.ja.resx` / `.zh-*.resx` files** - translation-import commits followed by
    reviewer-edit commits may separate the translator's draft from the expert's final. If they do,
    that is the ground truth for the evaluation below.
