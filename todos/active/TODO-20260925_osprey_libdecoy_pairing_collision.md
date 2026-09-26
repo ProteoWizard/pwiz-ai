@@ -57,8 +57,11 @@ load with all 35 rows (`D:\test\osprey-runs\astral-entrap-3file\pairing-check-07
       manifest pairing, with the v4 cache rebuilt
 - [ ] `regression-parallel.ps1` (-Dataset All) before merge; the Astral leg (generated decoys) was skipped overnight
       via `regression-parallel.ps1` - the cache bump rebuilds every regression library cache once
-- [ ] Rust counterpart in `crates/osprey-io/src/pairing.rs` (Mike's repo) - same skip/refuse and
-      the same load-time check, or cross-impl parity breaks on any library with such rows
+- [x] Rust counterpart: LOCAL branch `fix/libdecoy-pairing-collision` in C:\proj\osprey, commit
+      `a4d29fb` (off main b9ec678). Same refuse + backstop, same message text; fmt/clippy/test
+      gate passed; test failed before the fix. No Rust cache bump: its .libcache holds the
+      library BEFORE pairing. Carries the pwiz-ai hook's Co-Authored-By trailer - amend it off
+      before pushing (upstream commits have none). Needs Mike's PR on maccoss/osprey.
 - [ ] Proposal, not done: the 07-27 library also left 61,494 decoys unpaired (08-17: 1,628); a
       stricter default `DecoyPairMinFraction` would have flagged that library too
 - [ ] `/code-review`, then PR against the port branch
