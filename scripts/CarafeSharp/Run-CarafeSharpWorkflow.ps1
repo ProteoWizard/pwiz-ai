@@ -176,7 +176,8 @@ if ($EntrapmentSource -eq 'natural') {
     if (-not (Test-Path $ForeignFasta)) { throw "ForeignFasta not found: $ForeignFasta" }
 }
 $needMzml = @('3', '6') | Where-Object { $StageList -contains $_ }
-$mzml = $MzmlNames | ForEach-Object { Join-Path $MzmlSourceDir $_ }
+# @() keeps a single run an array: indexing a lone string would take its first character.
+$mzml = @($MzmlNames | ForEach-Object { Join-Path $MzmlSourceDir $_ })
 if ($needMzml) {
     foreach ($m in $mzml) { if (-not (Test-Path $m)) { throw "mzML not found: $m (pass -MzmlSourceDir)" } }
 }
@@ -193,7 +194,7 @@ Write-Host "`n--- CarafeSharp/Osprey library workflow ---" -ForegroundColor Cyan
     WorkDir          = $WorkDir
     InputFasta       = $InputFasta
     MzmlSourceDir    = $MzmlSourceDir
-    TrainingRun      = $MzmlNames[$TrainFileIndex]
+    TrainingRun      = $trainMzml
     CarafeSharp      = "$CarafeSharpExe  ($(if ($cudaBuild) { 'CUDA build' } else { 'CPU build' }), -device $Device)"
     Osprey           = $OspreyExe
     Resolution       = "$($preset.Resolution) / $($preset.FragTol) $($preset.FragUnit)"

@@ -342,6 +342,30 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
    `RefSpectra`/peaks/annotations tables), with before/after timings recorded. Maybe later, if measured: RT
    predicted over larger groups; float32 mod features and overlapped featurization.
 
+   **Next: GPU memory planning** (developer, 2026-09-26). Carafe's Python/Java version ran out of the 4 GB of
+   vRAM on large FASTAs with a large model (Carafe 3's much larger RT model). Design agreed in discussion:
+   - GPU memory does not grow with the FASTA in CarafeSharp: chunks of 10,000 peptidoforms, batches of at most 512
+     (MS2) / 1,024 (RT) per exact length. The current models are small (MS2 4.0M parameters, RT 0.7M; a 512 x 35
+     MS2 batch needs ~0.2 GB); the 3.9 GB nvidia-smi shows is mostly the CUDA context and libtorch's cache. The
+     risks are a bigger model (activations grow with batch x length^2 for a transformer) and fine-tuning (3-4x the
+     memory of prediction).
+   - Budget: TorchSharp 0.106 exposes no CUDA memory API (checked its native exports), but `cudart64_12.dll`
+     ships in the libtorch CUDA package, so P/Invoke `cudaMemGetInfo` for free/total; budget = free - margin.
+   - Cost: a short startup calibration of each model on synthetic peptides (short and long lengths, small batch)
+     fits bytes ~ weights + batch x (a*L + b*L^2); works for any model, including Carafe 3's RT model.
+   - Plan batch sizes per length before predicting: keep today's where they fit, shrink only those that do not;
+     log the plan; an override flag reproduces another machine's plan.
+   - Safety net: catch CUDA out-of-memory, halve that length's batch, retry, keep it for the rest of the run,
+     warn once; a batch of 1 that does not fit fails with a message suggesting `-device cpu`.
+   - Fine-tuning: accumulate gradients over micro-batches that add up to the same effective batch, so the model
+     is unchanged up to rounding.
+   - Trade-off: a different batch size changes output bits (RT <= 6.5e-6 min, intensities <= 2.4e-6 measured),
+     so a small card with a big model gives libraries equal within float noise, not byte-identical; the plan
+     depends only on the card and the model, so output stays reproducible per machine, and byte-identical to
+     today where the default batches fit.
+   - Verify: an artificially small budget (e.g. 600 MB) on this machine, and a synthetic scaled-up RT model that
+     fails with fixed batches. The Carafe 3 RT model's checkpoint or architecture would make it concrete.
+
    **Deferred follow-ups:**
    - Training memory at scale: all exports are held in memory, about 15-26 GB for 40 Astral runs, and 18 unused
      columns are required.
