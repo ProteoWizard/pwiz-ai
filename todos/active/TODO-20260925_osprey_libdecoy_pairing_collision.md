@@ -52,7 +52,10 @@ load with all 35 rows (`D:\test\osprey-runs\astral-entrap-3file\pairing-check-07
 
 ## Remaining
 
-- [ ] `regression.ps1 -Dataset Stellar` on the branch (running 2026-09-25 ~22:50), then `-Dataset All`
+- [x] `regression.ps1 -Dataset Stellar` on the branch: PASSED (12 phases, 22:54, under load)
+- [x] StellarLibDecoy (18 phases) + StellarGenDecoyEntrap (12 phases): PASSED 23:55 - the legs that run
+      manifest pairing, with the v4 cache rebuilt
+- [ ] `regression-parallel.ps1` (-Dataset All) before merge; the Astral leg (generated decoys) was skipped overnight
       via `regression-parallel.ps1` - the cache bump rebuilds every regression library cache once
 - [ ] Rust counterpart in `crates/osprey-io/src/pairing.rs` (Mike's repo) - same skip/refuse and
       the same load-time check, or cross-impl parity breaks on any library with such rows
