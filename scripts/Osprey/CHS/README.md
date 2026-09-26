@@ -210,14 +210,13 @@ produce the CORRECT report, so no artifact and no gate can tell you it happened.
 at 446 files is 4h46m for the first pass and 69 min for the second, against minutes for the
 fold.
 
-**Assert the marker, not the wall clock.** Each pass logs the line that names the path it
-took:
+**Assert the marker, not the wall clock.** Each pass logs the route line that names the path
+it took (the runner passes `--perf-stats`, which these lines need; prose beside them is for a
+person and may be reworded):
 
 ```
-FirstPassFDR: every output but the model-diagnostics product is current;
-folding the report from the completed first pass.
-SecondPassFDR: every output but the model-diagnostics product is current;
-folding the pass-2 report from the completed second pass.
+[PATH] model-diagnostics: fold-pass1
+[PATH] model-diagnostics: fold-pass2
 ```
 
 Check for both within the first minutes and kill the run if either is missing. Wall clock
@@ -266,7 +265,7 @@ Every pre-Stage-7 artifact is hard-linked in, nothing but the inputs is on the c
 and the run resumes straight into the join. Read the `-WhatIf` link tally first: `0 missing`
 is the precondition, and a non-zero count means the bed does not cover this cohort.
 
-**Assert the marker.** Run with `--perf-stats`; a streamed join logs
+**Assert the marker.** The runner passes `--perf-stats` (unless `-NoPerfStats`); a streamed join logs
 
 ```
 [PATH] second-pass-join: per-run runs=446

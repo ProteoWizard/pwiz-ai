@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `413a6c6950` (regression-parallel All 70/70). Next: SEA-AD 82 files, then in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
+- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `f98c497844`; PR #4718 open; SEA-AD 82 files done. Next: `/code-review max 4718`, then in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: #4718 (steps 1-3; RESX is a second PR)
 
 **Origin**: Brendan, 2026-09-09, after noticing that log terms such as "projection" come from
 class names Claude assigned during development and mean nothing to a user. Reviewed line by
@@ -552,8 +552,43 @@ code does", so they live in pwiz, not `ai/`.
   - Wording question for Brendan: a library load now shows "Loading spectral library from
     <full path>..." directly followed by "Parsing <file name>..." (the parse heading was
     hidden before when fast or cached).
-- [ ] **Next: SEA-AD 82 files** (full run), then Brendan's review of everything, then
-  `/code-review max`, then the PR. **CHS 446 (~20 h) only after the PR is posted.**
+- [x] **SEA-AD 82 files, full cold run** (2026-09-25/26, 6h51m, exit 0): results identical to the
+  2026-08-20 run on the same library; peak private 25.7 GB; every distinct message read; one
+  bare count fixed (`f98c497844`); two 30-32 s gaps in first-pass "Assigning q-values" (pre-existing,
+  borderline). `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-logtag-progress-20260925_174500\FINDINGS.md`.
+- [x] PR #4718 opened (Brendan: PR, then `/code-review max` against it).
+- [x] `/code-review max 4718` (2026-09-26). The whole-PR review and a per-path rerun both died
+  on "Prompt is too long" in their coordinators (73-file diff); their finder and verifier
+  agents still reported, so triage was done by hand from ~45 raw candidates, each checked in
+  the code. Round 1 `f57b3a7b9b` (scored-peaks distinct count, tag-literal regex, entrapment
+  lines). Round 2 (uncommitted until the regression passes): stale deferred-heading docs;
+  regression.ps1 route keys defined once, dead `-replace ','`, crash on an -AllowNonZeroExit
+  leg no longer aborts the run; wrong remedies removed (Cannot resume, re-scored file mismatch,
+  first-pass seed, frozen model); FirstPassFDR completion line, SpectraCache banner, verbose
+  "this run" line, resume lines in decided vocabulary (incl. "skipping ... model
+  diagnostics"), skip lines no longer share the "Scoring file" prefix, one-file --task
+  reconciliation line; `{2:+F4;-F4;0}` printed "+F4"; "N of M scored target peptides"
+  (denominator had decoys); `LogTag.Format` internal; `[TRAIN]` pick-run notice now default
+  prose (user-set, changes results); `[DROP]` always (confirms OSPREY_DROP_BETWEEN_TASKS);
+  fragment-release lines `[MEM library-fragments]`; unique-precursor tally only under
+  --perf-stats; CountText replaces FormatCountOfTotal; exit-code constant; parse-time warnings
+  reach RunCommand's writer; ModelDiagnostics render failure has its own Error line;
+  CommandLineErrorTest isolated from exported OSPREY_* startup variables; --perf-stats help
+  lists all six tags. ai: dataset runners pass --perf-stats (new -NoPerfStats), CHS README
+  route checks on [PATH] lines, START line records perfstats.
+  - **Dropped, with reason:** @-marking consistency (RESX PR walks every site); pre-existing
+    bisect-abort buffering and trainer log sink (no production effect); CommandStatusWriter vs
+    SkylineRunner ErrorChecker prefix copy (cross-project link); OspreyEnvironment override
+    dictionary / settings snapshot (deliberate design - raise with Brendan); ScoringPipeline
+    settings blocks and verbose gap-fill-only settings; task-outcome type; mid-run exit code 2
+    (behavior change); scored-peaks HashSet (~70 MB beside the multi-GB row list).
+  - **For Brendan:** a non-fatal "failed to read the experiment-scope FDR sidecar" Error now
+    ends a completed run with exit 2 + `[PATH] exit-reconciled` (reconciliation working as
+    designed; the pre-existing question is whether that read should be an error that stops).
+  - **Second PR plan addition:** machine-channel lines (`[STAGE-WALL]`, `[TIMING]`,
+    `[TASK] :done`, `P0` counts) format with the current culture (de-DE writes `12,3s`); make
+    every tagged line invariant when the second-culture tests land.
+- [ ] Regression on the round-2 fixes, commit, push. **CHS 446 (~20 h) only after the PR is posted.**
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20260924_osprey_log_readability.md` before starting work.
 - [ ] RESX PR: add the user-correctable exceptions that still print a type, e.g. a blib that

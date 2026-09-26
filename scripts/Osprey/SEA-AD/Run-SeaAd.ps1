@@ -112,6 +112,11 @@
     Turn OFF the --model-diagnostics HTML report, which is on by default here. Leave it on
     unless you have a reason: it is the only place pass-1 entrapment FDP is reported today.
 
+.PARAMETER NoPerfStats
+    Leave out --perf-stats, which is on by default here so the log carries the [PATH] /
+    [COUNT] / [STAGE-WALL] lines the route checks and memory scripts read. Use it for a run
+    whose purpose is to read the default log a user sees.
+
 .PARAMETER Fresh
     Timestamp the output directory name. Use when repeating an arm you have already run:
     Osprey adopts per-file caches it finds in the output directory, so reusing one turns a
@@ -163,6 +168,7 @@ param(
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,
+    [switch]$NoPerfStats,
     [switch]$WhatIf
 )
 

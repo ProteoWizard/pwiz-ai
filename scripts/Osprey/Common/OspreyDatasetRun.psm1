@@ -274,6 +274,7 @@ function Invoke-OspreyDatasetRun {
         [switch]$Fresh,
         [switch]$Resume,
         [switch]$NoModelDiagnostics,
+        [switch]$NoPerfStats,
         [switch]$WhatIf
     )
 
@@ -536,6 +537,11 @@ function Invoke-OspreyDatasetRun {
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
+    # The [PATH] / [COUNT] / [STAGE-WALL] lines are the only route and count evidence a run
+    # leaves (the READMEs' route checks, Get-MemoryReport.ps1, Measure-CoAssignmentScaling.py
+    # read them), and they print only under --perf-stats. -NoPerfStats is for a run whose
+    # purpose is to read the default log a user sees.
+    if (-not $NoPerfStats) { $cliArgs += '--perf-stats' }
 
     # Which TREE the binary came from matters as much as which flags ran. A multi-hour run
     # against whatever a colleague happens to have built in a shared worktree measures their
@@ -960,7 +966,7 @@ function Invoke-OspreyDatasetRun {
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy csel='$SvmCTolerance' files=$($inputs.Count) threads=$Threads " +
-     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
+     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag perfstats=$(-not $NoPerfStats) " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
