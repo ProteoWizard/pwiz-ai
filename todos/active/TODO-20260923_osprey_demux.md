@@ -5,7 +5,18 @@
 - **Base**: `Skyline/work/20260612_net8_port` (stacked on PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
 - **Status**: In Progress. M0 and M1 (staggered DIA) in review by Brendan (#4710, requested 2026-09-25).
-  Next: M6 ZT Scan plus streaming ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)); M2-M5 not started.
+  M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
+  the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
+- **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416), pushed
+  2026-09-27 at d6366f4493 (8 commits; no PR yet; run /code-review before opening one). Its algorithms are
+  documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
+- **In flight (2026-09-27, `ai/.tmp/sessions/20260923-osprey-demux/model/Run-Followups.ps1`)**, DIA-NN arms under
+  `D:\test\osprey-runs\ztscan\`:
+  - `diann\W_wiff_scanning`: A1 .wiff, `--scanning-swath` (DIA-NN's proper ZT Scan baseline), ~09:30;
+  - `diann\W_wiff_scanning_3runs`: the three .wiff files, ~13:00;
+  - `slices\diann\full_cs_framed31_A1`: full A1 framed:3:1 without the floor (layout vs floor), ~14:00;
+  - `slices\diann\full_raw_plain`: the three acquired mzMLs, plain, the CV baseline for
+    `slices\diann\full_cs_centered5` (CV 0.139), ~17:00.
 - **Module**: `osprey`
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711)
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (M0 + M1)
