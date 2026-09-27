@@ -345,6 +345,17 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
         with Osprey 0a0b744 the project search picked C = 0.1, 1, 1 and gave 20,263 precursors (the known C coin
         flip); Stage 6 rerun with a vendor-enabled #4703 build (`csel-f9aa0dd-vendor`) gave 31,246 / 28,390 / 4,302
         at 0.61% combined FDP, matching the mzML runs (31,460 / 28,637 / 4,338 and 31,104 / 28,240 / 4,326).
+      - **When #4717 squash-merges:** #4719 is stacked on its branch, so restack it or its diff will show #4717
+        again. `<old base>` is the #4717 commit #4719 is built on (`b70b34d0ab` unless #4717 is merged in later):
+        ```
+        git fetch origin
+        git rebase --onto origin/Skyline/work/20260612_net8_port <old base> Skyline/work/20260925_carafesharp_write_speed
+        git push --force-with-lease origin Skyline/work/20260925_carafesharp_write_speed
+        gh pr edit 4719 --repo ProteoWizard/pwiz --base Skyline/work/20260612_net8_port
+        ```
+        GitHub retargets the base by itself if #4717's branch is deleted, but the rebase is still needed. Then
+        repoint the two plot links in the PR body (`raw/<sha>/pwiz_tools/CarafeSharp/docs/performance/...png`) at
+        the rebased head: the old SHAs are no longer on the branch after the force push.
       - Follow-up for Osprey: reading the 8 GB Astral `.raw` took 899 s of per-file scoring vs 541 s from mzML.
 
    **The speedups:** two library-writing changes in one commit set, both with byte-identical output.
