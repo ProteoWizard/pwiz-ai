@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260925_osprey_libdecoy_pairing_collision` (checkout `C:\proj\pwiz-work1`)
 - **Base**: `Skyline/work/20260612_net8_port` (d9a3245ffd)
 - **Created**: 2026-09-25 (night session, while A/B-testing pwiz #4703)
-- **Status**: In Review - PR #4720 (pwiz) and maccoss/osprey#70 (Rust) opened 2026-09-26
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#4720](https://github.com/ProteoWizard/pwiz/pull/4720); Rust [maccoss/osprey#70](https://github.com/maccoss/osprey/pull/70)
+- **PR**: [#4720](https://github.com/ProteoWizard/pwiz/pull/4720) (merged 2026-09-27 as 45a7f00a03); Rust [maccoss/osprey#70](https://github.com/maccoss/osprey/pull/70) (merged 2026-09-27 as 830ff75)
 
 ## Problem
 
@@ -70,3 +70,17 @@ load with all 35 rows (`D:\test\osprey-runs\astral-entrap-3file\pairing-check-07
       stale comments (b75f4970d2). Loader-level refusal test dropped (no TSV fixture exists)
 - [x] Rebased onto the port branch / Rust main, gates re-run, PRs opened 2026-09-26
 - Follow-up backlog: `ai/todos/backlog/TODO-carafe_osprey_library_contract.md`
+
+## Progress Log
+
+### 2026-09-27 - Merged
+
+pwiz #4720 merged as 45a7f00a03 into `Skyline/work/20260612_net8_port`, and maccoss/osprey#70 as
+830ff75 on `main`, the same day. Before merging, the port branch was merged in twice (Brendan's merge
+cb57f0b69f, then f1825515f8 resolving the `LibraryLoader.cs` conflict with #4718's `log` API); 604/604
+tests + clean inspection, and `regression.ps1 -Dataset StellarLibDecoy` PASSED on the merged branch
+against the #4703 goldens. TeamCity Perf/Regression was not run for #4720 (Brendan chose to merge on
+the local gates). Shipped: the refusal of a library whose manifest lists a decoy's sequence as a
+target (listing every row), the shared-entry_id backstop on fresh and cached loads, and library cache
+v4. Deferred: the pairing-threshold proposal, and the broader library contract in
+`ai/todos/backlog/TODO-carafe_osprey_library_contract.md`.
