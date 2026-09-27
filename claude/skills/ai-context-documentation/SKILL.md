@@ -24,6 +24,10 @@ Read **ai/docs/ai-repository-strategy.md** for:
 - Setup instructions
 - Rationale for the separate repository
 
+**Before the first edit under `ai/`, fetch and bring it up to date** - it can be far behind
+on machines not used for daily development. See "Update Before Editing ai/" in
+ai/docs/ai-repository-strategy.md.
+
 ## Creating New Documentation
 
 ### New Skill
