@@ -11,7 +11,7 @@
   `ai/.tmp/sessions/20260926-resx/REVIEW-rewordings.md`; PR body draft `.../pr-body.md`.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (pending) - `gh pr create --base Skyline/work/20260612_net8_port --label osprey`
+- **PR**: [#4721](https://github.com/ProteoWizard/pwiz/pull/4721) (base `Skyline/work/20260612_net8_port`, label osprey)
 
 **Origin**: the second half of `TODO-20260924_osprey_log_readability.md` (PR #4718 did steps 1-3:
 machine channel, gates, `Error:`/`Warning:`, rewording). Brendan, 2026-09-11: C# .NET has won;
@@ -274,3 +274,5 @@ over current stamps does nothing).
 - Rebased branch HEAD `4e229ddac7`: `regression-parallel -Dataset All` 70 PASS / 0 FAIL (44:42);
   `regression.ps1 -Dataset Stellar -Culture fr-FR` PASSED. Ready to force-push (origin holds the
   pre-rebase branch; no PR yet) and open against the port branch - waiting for Brendan's go-ahead.
+- 2026-09-27 (Sunday, Brendan approved): force-pushed `4e229ddac7`, opened #4721, triggered TeamCity
+  Osprey Perf/Regression build 4190689 on `pull/4721` (MacCoss TeamCity Agent 1).
