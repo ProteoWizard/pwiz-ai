@@ -63,11 +63,10 @@
     --threads CLI flag. Default 16.
 
 .PARAMETER CsSvmCTolerance
-    OSPREY_SVM_C_TOLERANCE for the C# run. Default '0', the strict-maximum C selection
-    that Rust main uses. Pass '' to run C# at its own default (the most regularized C
-    within 1% of the best), which is what a Rust build carrying the matching
-    select_c rule (maccoss/osprey, feature/svm-c-selection-tolerance) must be
-    compared against.
+    OSPREY_SVM_C_TOLERANCE for the C# run. Default '' (unset): C# at its own default, the most
+    regularized C within 1% of the best, which Rust main also uses since maccoss/osprey#69
+    (it has no opt-out). Pass '0' only to compare against a Rust build from before #69, which
+    kept the strict maximum.
 
 .PARAMETER SourceRoot
     The pwiz checkout whose C# Osprey build to compare, e.g. C:\proj\pwiz-work1. Default:
@@ -91,7 +90,7 @@ param(
     [switch]$AllowStaleBinaries,
     [string]$SourceRoot,
     [int]$Threads = 16,
-    [string]$CsSvmCTolerance = '0',
+    [string]$CsSvmCTolerance = '',
     [string]$Files = 'All'
 )
 
@@ -437,9 +436,9 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
                 '--work-dir', $csDir)
     $args2 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
-    # Rust main keeps the strict maximum of the inner-CV counts when it picks the first-pass
-    # SVM C; C# keeps the most regularized C within 1% of it unless told otherwise. Without
-    # this the two diverge at Stage 5 on every dataset. See -CsSvmCTolerance.
+    # Both implementations keep the most regularized first-pass SVM C within 1% of the best
+    # (C# #4703, Rust #69). An INHERITED value would still split them at Stage 5, so the
+    # variable is cleared unless -CsSvmCTolerance asks for a pre-#69 comparison.
     if ([string]::IsNullOrEmpty($CsSvmCTolerance)) {
         Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     } else {

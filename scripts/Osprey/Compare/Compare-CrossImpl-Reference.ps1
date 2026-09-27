@@ -102,10 +102,9 @@ if ($SkipCs -and (Test-Path (Join-Path $csDir 'output.blib'))) {
         # cs_cal_summary.txt (OspreyFileDiagnostics writes a hardcoded filename,
         # not per-stem). Output is per-file, so serializing does not change it.
         $env:OSPREY_MAX_PARALLEL_FILES = '1'
-        # Rust keeps the strict maximum of the inner-CV counts when it picks the first-pass SVM C;
-        # C# keeps the most regularized C within 1% of it unless told otherwise. Without this the
-        # two diverge at Stage 5 on every dataset.
-        $env:OSPREY_SVM_C_TOLERANCE = '0'
+        # Both implementations keep the most regularized first-pass SVM C within 1% of the best
+        # (C# #4703, Rust #69); an inherited OSPREY_SVM_C_TOLERANCE would split them at Stage 5.
+        Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
         & $ospreyShExe @cliArgs 2>&1 | Tee-Object -FilePath (Join-Path $csDir 'osprey-cs.log') | Out-Null
         $code = $LASTEXITCODE
     } finally {

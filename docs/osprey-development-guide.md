@@ -1292,11 +1292,11 @@ Patterns the pipeline now relies on:
   ties; matches the comment "first C as tiebreaker" that the Rust
   code didn't originally implement). `Iterator::max_by_key` returns
   the *last* tied element per stdlib docs — don't use it for
-  tie-sensitive selection. Manual scan with strict `>` is what Rust
-  uses, and what C# uses under `OSPREY_SVM_C_TOLERANCE=0`. C#'s default
-  keeps the most regularized C within 1% of the best count instead
-  (`PercolatorTrainer.SelectC`), so a C#-vs-Rust comparison must set
-  that variable; the `Compare/` scripts do.
+  tie-sensitive selection. The strict-`>` scan is now the tolerance-0
+  case: since pwiz #4703 and maccoss/osprey#69 both implementations keep
+  the most regularized C within 1% of the best count (C#
+  `PercolatorTrainer.SelectC`, Rust `svm::select_c`). The `Compare/`
+  scripts clear an inherited `OSPREY_SVM_C_TOLERANCE` so the two match.
 - **Non-conservative FDR formula `n_decoy / n_target`** for
   internal grid-search counting in
   `count_passing_targets_svm` — matches `compute_qvalues` on the
