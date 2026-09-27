@@ -166,9 +166,9 @@ list_computer_status(container_path="/home/development/Nightly x64")
 ```
 
 Questions to answer:
-- Same machine repeatedly crashing? → Hardware issue
-- Same test causing crash? → Test bug
-- Missing computers expected or unexpected?
+- Same machine repeatedly crashing, in **different** tests, with no other machine crashing those days? → **Failing hardware.** Flag it in the email **Summary** at 2 solo crash days within 30 days, so nobody debugs it as a Skyline bug. Read [ai/docs/failing-hardware-detection.md](../../ai/docs/failing-hardware-detection.md) and run `python ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py --since <90 days ago>`
+- Same test causing crash? → Test bug (or resource limit, if only one machine)
+- Missing computers expected or unexpected? (Hard reboots from failing hardware often post nothing)
 
 → Write findings to `suggested-actions-YYYYMMDD.md`
 

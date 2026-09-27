@@ -688,8 +688,9 @@ list_computer_status(container_path="/home/development/Nightly x64")
 ```
 
 **B. For crashed runs, analyze the pattern**
-- Same machine repeatedly? → Hardware issue
-- Same test causing crash? → Test bug
+- Same machine repeatedly, in unrelated tests? → Failing hardware. See
+  [failing-hardware-detection.md](failing-hardware-detection.md) and flag it in the Summary
+- Same test causing crash? → Test bug (or resource limit, if only one machine)
 - Same time of day? → External interference
 
 **→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
@@ -1057,13 +1058,21 @@ tail -50 ai/.tmp/testrun-log-XXXXX-testrunner.txt
 **Common exit codes**:
 | Exit Code | Meaning |
 |-----------|---------|
-| -1073741819 | ACCESS_VIOLATION (0xC0000005) - native memory corruption |
-| -1073740791 | Stack overflow |
-| -1 | General failure |
+| -1073741819 | ACCESS_VIOLATION (0xC0000005) - memory corruption; on one machine, often failing hardware |
+| -1073741795 | ILLEGAL_INSTRUCTION (0xC000001D) - almost always hardware |
+| -1073741571 | STACK_OVERFLOW (0xC00000FD) |
+| -1073740940 | HEAP_CORRUPTION (0xC0000374) |
+| -1073740791 | STACK_BUFFER_OVERRUN / fail-fast (0xC0000409) |
+| -1 | General failure / killed |
 
 **Pattern analysis**: Compare crashed runs for common factors:
-- Same machine? → Machine-specific issue (hardware, drivers, configuration)
-- Same test? → Test bug causing crash
+- **Only this machine, and a different test each time?** → **Failing hardware.** See
+  [failing-hardware-detection.md](failing-hardware-detection.md). Raise it in the email
+  Summary at 2 solo crash days within 30 days, *before* anyone debugs it as a Skyline bug.
+  Run `python ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py --since <date>` for the
+  machine's history and to see whether other machines crashed the same days.
+- Same test every time (even on one machine)? → Test bug or resource limit on that machine
+- Several machines the same day/build? → Software regression in that build
 - Same toolchain? → Compiler/runtime issue (e.g., VS 2026 vs VS 2022)
 - Same time of day? → Scheduled task interference
 

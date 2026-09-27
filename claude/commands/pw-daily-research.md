@@ -343,7 +343,13 @@ For missing computers or crashed runs:
 - Steps:
   1. list_computer_status(container_path="...")
   2. For crashed runs: save_run_log(run_id=XXXXX, part="testrunner")
-  3. Check if same machine repeatedly (hardware) or same test (test bug)
+  3. Check if same machine repeatedly (hardware) or same test (test bug). TestRunner
+     access violations on one machine, in a different test each time, with no other
+     machine crashing those days = failing hardware: flag it in the email Summary at
+     2 solo crash days within 30 days, before anyone debugs it as a Skyline bug. Also
+     count `Exit code: -1073741819` in failures of completed runs (launched native tools
+     crashing). See ai/docs/failing-hardware-detection.md and run
+     `python ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py --since <90 days ago>`
   4. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
 - Priority: HIGH
 ```

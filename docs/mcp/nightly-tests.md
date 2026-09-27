@@ -136,6 +136,12 @@ Test results data lives at:
 | `userid` | Foreign key to user table (computer name) |
 | `revision` | Sequential build number from TeamCity |
 | `flagged` | Whether the run was flagged for attention |
+| `log` | Full run log, **gzip-compressed** (`bytea`; `selectRows` returns it as a signed byte array). Stored from Oct 2017 |
+
+The `log` column makes fleet-wide log searches possible without `save_run_log` per run:
+`ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py` fetches early-ending runs' logs in
+batches and classifies TestRunner crashes per computer. See
+[failing-hardware-detection.md](../failing-hardware-detection.md).
 
 ### Custom Queries (Server-Side Views)
 

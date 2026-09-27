@@ -1628,6 +1628,8 @@ For developers not touching `maccoss/osprey`, skip this entirely.
 
 Set up this machine to run Skyline nightly tests. This downloads the latest test harness from TeamCity and configures a scheduled task.
 
+> **New or repaired hardware**: nightly testing is also the lab's hardware acceptance test. Run it 21 hours a day (one 9-hour standard run plus one 12-hour perf or leak-detection run) for at least 2 days before handing the machine to a developer. See [failing-hardware-detection.md](failing-hardware-detection.md#machine-acceptance-test).
+
 > **Existing mode**: Check if nightly tests are already configured:
 > ```powershell
 > # Check for existing scheduled task
