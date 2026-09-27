@@ -276,3 +276,6 @@ over current stamps does nothing).
   pre-rebase branch; no PR yet) and open against the port branch - waiting for Brendan's go-ahead.
 - 2026-09-27 (Sunday, Brendan approved): force-pushed `4e229ddac7`, opened #4721, triggered TeamCity
   Osprey Perf/Regression build 4190689 on `pull/4721` (MacCoss TeamCity Agent 1).
+- TeamCity Perf/Regression 4190689 on `pull/4721` @ `4e229ddac7`: SUCCESS.
+- Brendan's review round 1 (38 comments, first half of the PR) being addressed; TextUtil move to
+  CommonUtil split out as `ai/todos/backlog/TODO-commonutil_textutil.md` (his comment 13).
