@@ -297,7 +297,8 @@ net8 port characterized as `D:\test\ABI\ZTscan`). Per replicate:
 | `.timeseries.data` | 24 KB | SCIEX OS sidecar; not referenced by the SDKs ProteoWizard ships | no |
 
 Evidence for the DIA-NN attribution: the naming (`<run>.dia`, `<run>.dia.quant`) and the path string in the quant file;
-neither Clearcore2 nor the wiff2 SDK contains `.dia`, `dia.quant` or `timeseries.data`. Confirm with whoever ran it.
+neither Clearcore2 nor the wiff2 SDK contains `.dia`, `dia.quant` or `timeseries.data`. Mike (2026-09-27): these came
+from a collaborator and are not needed; our DIA-NN arms read the .wiff themselves.
 
 What is already known (TODO-20260612_net8_port.md, "2026-08-20/24: Sciex ZT Scan"):
 - 430 experiments x 699 cycles = 300,570 spectra: experiment 0 `TOF MS (400-900)`, 1..429 `TOF PI` quad bins.
@@ -405,4 +406,9 @@ Decisions (with Mike, 2026-09-25):
   - Full A1, centered:5: +1.7% over raw, with gains where dense and losses early in the gradient.
   - Osprey.DemuxTool reads .wiff2 and .raw directly, vendor-centroided. The SCIEX SDK read (about 8-9 ms
     per spectrum) is now the tool's floor; the solve runs under it.
+  - Morning of 2026-09-27: full A1 framed:3:1 with the floor lost 1.2% against plain (losses above
+    600 m/z), so the layout is open again. DIA-NN reads ZT Scan only from .wiff (not .wiff2), and its
+    README says ZT Scan must not go through mzML; the .wiff search is the proper DIA-NN baseline.
+  - The algorithms are documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md` on the branch
+    (d6366f4493); the measurement scripts are in `ai/scripts/Osprey/Demux`.
   - Report: [modeling-2026-09-26.md](TODO-20260923_osprey_demux/modeling-2026-09-26.md), "Night 2".
