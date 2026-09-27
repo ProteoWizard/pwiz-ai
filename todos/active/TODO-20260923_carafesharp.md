@@ -223,6 +223,40 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
       the correlation threshold is a small lever; 0.8 (Carafe's default) is as good as or slightly better
       than 0.7 despite keeping fewer spectra (fewer, cleaner spectra, as the developer expected). Keep 0.8.
 
+## Local testability before merge (Brendan's review, 2026-09-27)
+
+Brendan cannot review #4717 without running all of its tests himself, and today most of the
+evidence the port rests on runs only on this machine. In `pwiz-work1` on BRENDANX-UW8,
+`Build-CarafeSharp.ps1 -RunTests -RunInspection` ran 50 tests: 41 passed and 9 were Inconclusive -
+all 8 opt-in parity tests (no reference folders) and `TestPretrainedModelsPredict` (no
+`pretrained_models.zip`). No CI builds CarafeSharp: `vcs_trigger_and_paths_config.py` routes it
+to no configuration. Precedent is Osprey, which had no CI at first but was locally testable from
+the start. #4719 is tentatively approved, pending this.
+
+Brendan's machine has an NVIDIA RTX 4000 Ada (20 GB, driver CUDA 13.2), so the CUDA build and a
+CUDA test pass can run there too.
+
+**Plan** (the reference data goes where the Osprey regression data lives):
+
+- [ ] Share the reference data. Per the section below, plus what it does not list:
+  - `example_test_data\stellar\carafe-osprey-entrapment\` (`CARAFESHARP_CARAFE_REFERENCE`,
+    `CARAFESHARP_CARAFE_FINETUNED`, `CARAFESHARP_STAGE1_REFERENCE`)
+  - `example_test_data\stellar\carafe-osprey\`
+  - the 14 stage-1 reference builds, including the javac origin/main builds (`CARAFESHARP_STAGE1_BUILDS`)
+  - the Carafe origin/main variable-mod reference (`CARAFESHARP_LIBRARY_REFERENCES`)
+  - `example_test_data\astral\` Carafe outputs, for the end-to-end workflow
+  - The Stellar `_21` training export (`CARAFESHARP_OSPREY_TRAINING_EXPORT`) and the mzML can be
+    regenerated from the Osprey regression data.
+- [ ] Package it as a Perftests zip next to `osprey-testfiles-mzML-v2` on the Panorama
+      `perftests` folder (e.g. `carafesharp-testfiles.zip`), unpacking to `<Downloads>\Perftests\`.
+- [ ] Default the parity tests to that folder when the `CARAFESHARP_*` variables are unset, as
+      `regression.ps1` finds its data; keep the variables as overrides. With the data present,
+      "every test runs" becomes the normal state, not an opt-in.
+- [ ] `Build-CarafeSharp.ps1`: a switch to fetch or verify the test data and the pinned
+      `pretrained_models.zip`, and a CUDA test pass.
+- [ ] Later, not blocking merge: a TeamCity config that builds CarafeSharp and runs the tier-1
+      tests; point the `vcs_trigger_and_paths_config.py` entry at it.
+
 ## Reference data on this machine (developer's own Carafe runs)
 
 `D:\GitHub-Repo\maccoss\osprey\example_test_data\stellar\`:
