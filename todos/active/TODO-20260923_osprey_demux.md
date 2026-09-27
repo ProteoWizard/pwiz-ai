@@ -314,12 +314,18 @@ within one cycle, the shared solver. (An earlier "(b) search the reported bins u
 [TODO-20260923_osprey_demux/spec-status-2026-09-25.md](TODO-20260923_osprey_demux/spec-status-2026-09-25.md).
 
 Decisions (with Mike, 2026-09-25):
-- **Output bin width is the encoded bin, 1.18 Th**: the sensitivity of the ~11.8 Th transmission with the
-  specificity of a 1.18 Th bin. The solve deconvolves each precursor's signal, spread across the ~10 encoded bins
-  that transmit it, back into its one bin.
-- **Coupling across fragment channels and time (spec §6.5) is required for scanning data.** One fragment channel
-  has too few ions to place a precursor to 1.18 Th; pooling all its fragments and the cycles of its peak does.
-  Rough budget: kernel sigma ~5 Th, so placement ~5 Th / sqrt(pooled ions) - a few tens of ions for one bin.
+- ~~**Output bin width is the encoded bin, 1.18 Th**~~. Revised the same evening: Mike said it is fine not to
+  map each precursor to one 1.18 Th bin, and that about 3 x 1.18 Th centered on a bin would do. The modeling
+  (`TODO-20260923_osprey_demux/modeling-2026-09-26.md`) found one bin not recoverable per channel under counting
+  noise, and 3 bins centered on each bin close to the best a perfect demux allows at that width.
+- **Product ions only: no coupling across fragment channels (spec §6.5 is out).** Reverses an earlier same-day
+  decision. Grouping fragments into precursor components is the DIA-Umpire step, and the MS2 signal is far more
+  sensitive than a precursor-level grouping. Each fragment channel is solved on its own, across the events that
+  transmit it and, where needed, the cycles of its elution (§4.3).
+- **The msconvert mzML is centroided** (`peakPicking vendor`, `centroid spectrum`), but every centroid is written
+  with a zero-intensity point one TOF sampling step (~8 ppm) either side, so two thirds of the points are zeros.
+  Checked on six spectra of A1 cycle 350: no two nonzero points adjacent, exactly 2 zero flanks per centroid, and
+  ~90% of centroid m/z values off the sampling grid (interpolated). Channel extraction must drop the zeros.
 - **Validation against DIA-NN** runs locally (`--scanning-swath`, 2.3.2), on all three replicates.
 
 ## Findings during M1
@@ -374,3 +380,29 @@ Decisions (with Mike, 2026-09-25):
   regression ran throughout. Raw: 1/2/4/8/16 threads = 125.4/94.6/38.9/38.6/17.6 s. Re-run on a quiet machine.
 - 2026-09-25: requested Brendan's review of #4710 (TeamCity green on ab5c54c416, 0 unresolved threads). Opened #4714
   (ZT Scan + streaming); ZenoTOF data inventoried (see "ZT Scan (M6)").
+- 2026-09-25: back to the spec. Decisions with Mike: product ions only (no §6.5 coupling); ZT Scan output about
+  3 x 1.18 Th centered on a bin; the msconvert ZT Scan mzML is centroided with zero flanks.
+- 2026-09-25/26 (night session): synthetic modeling of both instruments and a real-data ZT Scan slice test with
+  DIA-NN. Report: [TODO-20260923_osprey_demux/modeling-2026-09-26.md](TODO-20260923_osprey_demux/modeling-2026-09-26.md).
+  - Per-channel demux cuts fold-change error by more than half in a realistic background. Eclipse is best with
+    the separable model; ZT Scan with per-sweep NNLS, Poisson weights, and 3- or 5-bin output.
+  - Real ZT Scan slice: own-bin output -50% identifications, 3 bins -12%, 5 bins equal to raw.
+  - The accuracy gain needs known-ratio data to confirm.
+- 2026-09-26: transmission calibrated from identified precursors: a symmetric trapezoid, nearly m/z-independent.
+  Signal start and end locate precursors. Next steps agreed with Mike (report, "Next steps"):
+  - Track 1: a 5-6 Th demux file layout, then full runs with DIA-NN and Osprey.
+  - Track 2: combine weak signal across sweeps.
+  - Then the C# port, and a request for known-ratio data.
+  - Waiting for the CarafeSharp testing to finish.
+- 2026-09-26/27 (night session 2): the C# port on local branch `Skyline/work/20260926_osprey_ztscan_persweep` (not
+  pushed), stacked on #4710: commits c7f20cdd74, 0f217a3331, f275c565aa, 6c5cb2f5ad, 4fe286e574, 90924fb009,
+  0dbd3641f3.
+  - One strategy for both instruments: per-channel NNLS with Poisson weights. ZT Scan writes the solved
+    intensities in a framed:3:1 layout; staggered data apportions the observed peaks.
+  - Eclipse, Osprey search: 40,009 precursors at 0.26% FDP (msconvert 38,411, #4710 39,355).
+  - ZT Scan slice, DIA-NN: framed:3:1 and centered:5 about +5% over raw at raw CV; tiled layouts lose at edges.
+    A 1-ion output floor adds 3-7% more at CV 0.113-0.119; framed:3:1 with it writes 0.23 GB per slice.
+  - Full A1, centered:5: +1.7% over raw, with gains where dense and losses early in the gradient.
+  - Osprey.DemuxTool reads .wiff2 and .raw directly, vendor-centroided. The SCIEX SDK read (about 8-9 ms
+    per spectrum) is now the tool's floor; the solve runs under it.
+  - Report: [modeling-2026-09-26.md](TODO-20260923_osprey_demux/modeling-2026-09-26.md), "Night 2".

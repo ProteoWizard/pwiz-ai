@@ -15,17 +15,17 @@ Keep the ion statistics of a wide isolation, and recover the precursor specifici
 ## Decisions (with Mike, 2026-09-25)
 
 1. **ZT Scan output bin width is the encoded bin, 1.18 Th.** The aim is the sensitivity of the ~11.8 Th transmission with the specificity of a 1.18 Th bin. Each precursor's signal is spread across the ~10 encoded bins that transmit it, and the solve deconvolves it back into the one bin its m/z falls in.
-2. **Coupling across fragment channels (§6.5) is required for scanning data**, not a later refinement. One fragment channel carries too few ions to place a precursor to 1.18 Th. All of a precursor's fragments share one position along the Q1 axis, and its elution profile across the cycles of its peak. The trilinear model (bin x fragment x time, §6.5.3) pools all of them.
+2. **Demux works on product ions only: no coupling across fragment channels (§6.5 is out).** Revised later on 2026-09-25; an earlier version of this decision made §6.5 required. Grouping fragment channels into precursor components by elution similarity is the DIA-Umpire step, even without MS1, and the MS2 signal is far more sensitive than anything a precursor-level grouping would rest on. Each fragment channel is solved on its own: `y = A x`, `x >= 0`, from that channel's measurements across the events that transmit it and, where needed, the cycles of its elution (§4.3).
 
-**Rough ion budget for 1.18 Th.** This is an estimate, not a measurement. Take the kernel as roughly Gaussian with a FWHM of 11.8 Th, so sigma is about 5 Th. The position of one isolated precursor is then known to about 5 Th divided by the square root of the ions pooled for it:
-* 25 ions: about 1.0 Th.
-* 100 ions: about 0.5 Th.
+**Rough ion budget for 1.18 Th, per product-ion channel.** This is an estimate, not a measurement. The measured transmission has a FWHM of about 10.5 Th; take sigma as about 4.5 Th. The position of one isolated source in a channel is then known to about 4.5 Th divided by the square root of that channel's ions across the events that see it:
+* 25 ions: about 0.9 Th.
+* 100 ions: about 0.45 Th.
 
-So one-bin placement needs a few tens of ions pooled across the precursor's fragments and across the cycles of its peak. That is well within reach on a counting detector once coupling pools them. Per fragment, per cycle, it is not.
+So one-bin placement needs a few tens of ions in the channel, summed over the ~10 to 16 events that transmit it, and more when it is placed per cycle rather than across the cycles of its peak.
 
 Two cautions:
-* **Separating two co-eluting precursors 1.18 Th apart is harder than placing one**, because it depends on their fragment patterns or elution profiles differing (§6.5). Precursors that co-elute exactly and share their fragments are not separable (§6.5.3, failure mode).
-* **The estimate should be replaced** by the conditioning study (step 3 of the order below), which uses the measured kernel.
+* **Two sources 1.18 Th apart in the same channel** (a fragment m/z shared by two co-eluting precursors) are harder to separate than one is to place. Per channel, only nonnegativity, sparsity and any difference in their elution across cycles separate them.
+* **The estimate should be replaced** by the conditioning study (step 3 of the order below), which uses the measured transmission.
 
 ## Status by section
 
@@ -47,7 +47,7 @@ Legend: **done**, **partial**, **no** (not built), **n/a** (not relevant yet).
 | §6.1, §6.2 | Weighted least squares; `alpha`; ion-count thresholds; censoring; charge floor | **no**: unweighted, no floors | partial; see "Noise and thresholds" |
 | §6.3 | Tier 0/1/2, exhaustive enumeration | **partial**. Covered-bins blocks are never full rank, so Tier 1 never fires: 100% active set measured | performance only |
 | §6.4 | Determinism | **done**: identical at 1 vs N threads | carries over |
-| §6.5 | Coupling across fragment channels (anchored two-stage) | **no** | likely essential; see "Revisions" |
+| §6.5 | Coupling across fragment channels (anchored two-stage) | **no** | **not used** (decision 2: product ions only) |
 | §7 | SIMD, tier-homogeneous batching | **deferred**: scalar demux is 10-13% of the parse | not needed yet |
 | §8 | Streaming: ring buffer, per-window spill | **no** (#4714) | required (8.6 GB per run) |
 | §8.4 | Sparsify with an ion floor; no relative threshold | **differs**: a 1e-6 relative round-off floor | needs an ion floor |
@@ -73,13 +73,13 @@ Gates:
      * a precisely known kernel, especially its edges;
      * sparsity, since few precursors contribute to any one fragment channel;
      * nonnegativity;
-     * pooling all of a precursor's fragments (§6.5).
-   * This is localization rather than resolution: a precursor's position is read from where its profile sits across the bins. The precision scales roughly as the kernel width over the square root of its ions, well below the kernel width.
+     * the channel's own course across the cycles of its elution (§4.3).
+   * This is localization rather than resolution: a source's position is read from where its profile sits across the bins. The precision scales roughly as the kernel width over the square root of the channel's ions, well below the kernel width.
    * The spec should:
      * state achievable position precision and two-precursor separation as a function of ions and kernel shape;
      * choose the output bin width from that;
      * gate it on synthetic data.
-2. **§6.5 should become required for scanning data, not a later refinement.** Per-channel NNLS has only one channel's ions to localize with. Coupling pools every fragment of the precursor onto one bin profile, and that pooling is how the narrow specificity is reached. The anchored two-stage form (§6.5.4) keeps the cost near per-channel.
+2. **§6.5 should be marked out of scope** (decision 2). Demux stays at the product-ion level; the spec's per-channel solve (§6.1 to §6.4) plus the per-channel time model (§4.3) is the design for every scheme, scanning included.
 3. **ZT Scan facts should be replaced with measured ones** (§2.1, §2.3, §7.4, §8.1, §12b). From the port branch's characterization of `250814_ZTScan_100spd_A_3_G1`:
    * 429 encoded bins of 1.18 Da, not 1.5 Th.
    * A 0.86 s sweep at about 588 Da/s within a 0.97 s cycle, not 858 Hz at 4000 Da/s.
@@ -142,25 +142,36 @@ Gates:
 
 ## Proposed order of work
 
+**Revised by the night-session modeling** (`modeling-2026-09-26.md`), which already answers step 3 in
+simulation:
+- **Step 5:** the roughness penalty spreads intensity across bins and is dropped. The useful time
+  structure is "a source does not move in m/z" (the separable model, best for Eclipse).
+- **ZT Scan:** per-sweep NNLS with Poisson weights and 3- or 5-bin output is the method.
+- **Step 5b** (the rho prior) is ruled out.
+
 1. **Detection and reading:**
    * the pwiz-sharp query and the acquisition sidecar;
    * Osprey reads `.wiff` and `.wiff2`, staging the plugin;
    * the demux-off guard for scanning runs.
 2. **Kernel calibration** on `A_3_G1`, then all three replicates: G5.1 to G5.5, with G5.3 re-derived. This measures the real kernel, and with it the conditioning question above.
-3. **The conditioning study at the chosen 1.18 Th** (revision 1): synthetic scanning data with the measured kernel, per-channel versus coupled, swept over ions. It measures placement precision and two-precursor separation.
+   * Inside Osprey, per file, from abundant MS2 fragment channels whose trace across a sweep is one isolated peak. MS2 only: the Python prototype (`Measure-ZtScanKernel.py`) chose probe m/z from MS1, which is not needed.
+   * The same calibration measures the §2.2 edge width for staggered data, so one code path builds every `A`.
+   * The §2.4 diagnostic (integrated profile against the nominal width) fails as written: about 11 Th measured (FWHM 10.5 Th) against the method's 5.9 Da Q1. The factor of two needs explaining, or the check a different reference.
+3. **The conditioning study at the chosen 1.18 Th** (revision 1): synthetic scanning data with the measured transmission, per product-ion channel, per cycle versus across the cycles of an elution, swept over ions. It measures placement precision and the separation of two sources in one channel.
 4. **Generalize the demux core.**
    * Acquisition models (stepped, scanning) supply the rows of `A` and gather the events.
    * The solver, output and cache stay shared.
    * Add Poisson weighting.
    * Add scanning versions of G1.1 to G1.8.
-5. **Coupling across channels and time** (§6.5, anchored two-stage), required for scanning data per decision 2. Step 3 measures how much it buys over per-channel.
+5. **The per-channel time model** (§4.3): each channel's bin values fit across cycles with a roughness penalty, if step 3 shows per-cycle solves flip between neighboring bins. Still one product-ion channel at a time.
+5b. **Borrowing across fragments without grouping them** (candidate, staggered and scanning alike). Model parameters are already estimated from all fragments and applied to each channel: the transmission shape (§2.4), per-event m/z offsets (§5.2), noise `alpha` (§6.2), time smoothness (§4.3). The candidate adds a shared prior on where signal is: `rho(bin, time)`, the fragment current per bin per time summed over the channels whose placement nonnegativity already fixes. It is used only in the directions a channel's own data cannot determine (the `k - 1` null directions), then plain NNLS on the chosen support so amplitudes are not shrunk. No components, no profile matching; each channel's time course stays free and channels stay independent given `rho`. Risk: a weak precursor next to an abundant one sharing a fragment m/z loses intensity to it. Gate against per-channel on synthetic data: placement, shared-fragment split, and the weak neighbor's quantitative error.
 6. **Streaming** (§8, #4714).
 7. **Metrics JSON** (#4713): ringing, `sigma_min`, mass balance, ion budget.
 8. **Validation:**
    * G6.4 and G6.5 against DIA-NN on the three runs;
    * G6.1 to G6.3 once benchmark or matched data exists: ZT Scan against Zeno SWATH on the same sample, or a three-proteome mix.
 
-**Deferred:** Orbitrap censoring and charge floor; SIMD; MSX (needs per-precursor fill times from the reader); comb; profile demux and centrix; the acquired-axis fit.
+**Deferred:** Orbitrap censoring and charge floor; SIMD; MSX (needs per-precursor fill times from the reader); comb; profile demux and centrix; the acquired-axis fit for staggered data (step 5 covers scanning).
 
 ## Open questions for the lab
 
