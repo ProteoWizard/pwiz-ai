@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260924_osprey_log_readability`
 - **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
 - **Created**: 2026-09-11 (spec); started 2026-09-24
-- **Status**: In Progress - Steps 1-3 (machine channel, gates, Error:/Warning:, all rewording incl. Brendan review fixes) done and pushed; last pwiz commit `f4a954e07a`; PR #4718 open; SEA-AD 82 files done; /code-review max triaged and fixed (regression 70/70). Next: Copilot comments, Brendan's review, TeamCity, then in-depth testing of THIS PR (see the checklist under Progress), then `/code-review max` and the PR. RESX (Steps 4-6) is a SECOND PR. Ask Mike about `[ERROR]`/`[WARN]` log consumers before the PR. Branch created off the port branch at `bba770990a`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
+- **Status**: Completed - steps 1-3 merged as #4718. Steps 4-6 (RESX, locale split, second-culture tests, guards) continue in `TODO-20260926_osprey_resx.md`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
 - **GitHub Issue**: (pending)
 - **Module**: `osprey`
-- **PR**: #4718 (steps 1-3; RESX is a second PR)
+- **PR**: [#4718](https://github.com/ProteoWizard/pwiz/pull/4718) (merged 2026-09-27 into `Skyline/work/20260612_net8_port` as `64ed45b29e`)
 
 **Origin**: Brendan, 2026-09-09, after noticing that log terms such as "projection" come from
 class names Claude assigned during development and mean nothing to a user. Reviewed line by
@@ -22,7 +22,9 @@ Supersedes `ai/todos/backlog/TODO-osprey_log_lines_are_user_facing_prose.md` (no
 pointing here). Related: `ai/todos/backlog/TODO-osprey_env_var_cataloging.md` (env vars named
 in log lines).
 
-**Companion files beside this TODO** (the spec is the four of them together):
+**Companion files** (the spec is the four of them together). The three below stay in
+`ai/todos/active/` after this TODO moved to `completed/`: `TODO-20260926_osprey_resx.md` still
+works from them.
 
 | File | What it is |
 |---|---|
@@ -603,9 +605,11 @@ code does", so they live in pwiz, not `ai/`.
 - [x] "sidecar"/"hydrate" in user-facing error, warning and verbose text (Brendan, 2026-09-26),
   `8422c59eca`: Debug 602 + inspection green, regression Stellar 17/17. TeamCity
   Perf/Regression triggered on `pull/4718` (Brendan approved): build 4190248.
-- [ ] Next: TeamCity 4190248 result, then Brendan squash-merges #4718 after Mike's review
-  (review requested 2026-09-26; Copilot declined - quota reached). Then the second PR (RESX,
-  locale split, fr-FR/ja-JP tests, full string review).
+- [x] TeamCity Perf/Regression 4190248 on `8422c59eca`: SUCCESS. All 8 PR checks green.
+- [x] Review log set for Mike (2026-09-26): 17 fresh runs on the PR tip plus the SEA-AD log, in
+  `M:\home\brendanx\data\MacCoss\Osprey\text\ForReview` (README.md, FINDINGS.md; local copy
+  `D:\test\osprey-runs\logreview-20260926\`). Copilot declined (quota); Brendan merged without
+  waiting for Mike's review - wording follow-ups go to the RESX PR.
 - **CHS 446 run: deferred past the RESX/I18N PR** (Brendan, 2026-09-26). The SEA-AD 82-file
   logs convinced him this PR opened no large reporting gaps (max 32 s, in a phase this PR did
   not change; `FINDINGS.md` in the SEA-AD run folder).
@@ -631,6 +635,20 @@ code does", so they live in pwiz, not `ai/`.
   stacked on #4718): Steps 4-6 above, the locale split, the error-path vocabulary sweep, the
   `CommandLineErrorTest` exact-message tightening. That TODO is now the plan of record; the
   Steps 4-6 text above is history.
+
+### 2026-09-27 - Merged
+
+PR #4718 merged into `Skyline/work/20260612_net8_port` as `64ed45b29e` (squash). Shipped: the
+user-facing rewording of the default, `--verbose` and `--model-diagnostics` console text in the
+decided vocabulary with separators and whole singular/plural sentences; the `LogTag` machine
+channel with gating, and `regression.ps1` plus the ai scripts reading only tagged lines; Skyline's
+`Error:` / `Warning:` prefixes with exit-code reconciliation; always-printed progress headings;
+in-process command-line error tests; canonical output paths and a longPathAware manifest.
+Verified: regression-parallel All 70/70 (three times), cross-impl 1e-9, SEA-AD 82 files with
+identical results, TeamCity Perf/Regression 4190248 green. Deferred to the stacked RESX PR
+(`TODO-20260926_osprey_resx.md`, branch `Skyline/work/20260926_osprey_resx` in pwiz-work2):
+Steps 4-6, the error-path vocabulary sweep (~100 literals), the locale split, and wording tweaks
+from Brendan's final read (e.g. "Unique decoy strings"). CHS 446 gap run deferred past that PR.
 
 ## Acceptance
 
