@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260924_osprey_svm_c_selection_port`
 - **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4704](https://github.com/ProteoWizard/pwiz/issues/4704)
 - **Module**: `osprey`
-- **PR**: [#4703](https://github.com/ProteoWizard/pwiz/pull/4703), base `Skyline/work/20260612_net8_port`
+- **PR**: [#4703](https://github.com/ProteoWizard/pwiz/pull/4703) (merged 2026-09-27 as 3b8dd2f398), base `Skyline/work/20260612_net8_port`
   (branch `Skyline/work/20260924_osprey_svm_c_selection_port`). Replaces #4701, opened against master and
   closed: Osprey needs the .NET 10 port to read RAW files.
 - **Rust PR**: [maccoss/osprey#69](https://github.com/maccoss/osprey/pull/69) (`feature/svm-c-selection-tolerance` @ `c1d039a`)
@@ -89,7 +89,7 @@ model on reconciled peaks, handles much worse.
 - [ ] When #69 merges: flip `Compare-EndToEnd-Crossimpl.ps1 -CsSvmCTolerance` default to '' and drop the
       `OSPREY_SVM_C_TOLERANCE=0` pins in `Compare-CrossImpl-Reference.ps1` / `Compare-EndToEnd-Bisect-Crossimpl.ps1`.
       Running the Rust exe outside cargo needs `%USERPROFILE%\vcpkg\installed\x64-windows\bin` (OpenBLAS) on PATH.
-- [ ] TeamCity Perf/Regression only on the PR candidate, and only after asking Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.
+- [x] TeamCity Perf/Regression PASSED 2026-09-27 (triggered by Brendan). Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.
 
 ## Follow-ups (not in this PR)
 
@@ -111,3 +111,63 @@ model on reconciled peaks, handles much worse.
 - Root-caused the bimodal Stellar result, prototyped the rule behind env vars in the gate worktree
   (uncommitted there), implemented it on this branch, unit tests + validity-key test added.
 - Goldens regenerated; `/code-review max` fixes applied; branch squashed to one commit (`f12bde87eb`).
+
+### 2026-09-26 - Review A/B at scale (Brendan's session)
+
+Same build (f9aa0dd9f0) in every arm; "strict" = `OSPREY_SVM_C_TOLERANCE=0`. Library: the SEA-AD
+08-17 rebuild (`sea-ad\lib\target+decoy+entrapment-20260817`). Runners: `Run-SeaAd.ps1`
+(`-SvmCTolerance`, `-SvmCValues`, `-LinkFrom`) and `ai/scripts/Osprey/AstralEntrap/Run-AstralEntrap.ps1`.
+Reader: `ai/scripts/Osprey/SEA-AD/tools/pass1_fdp.py`. Weights: `ai/.tmp/sessions/20260925-pr4703/compare_weights.py`.
+
+**3-file Astral (regression HeLa files) x SEA-AD entrapment library** - neutral:
+
+| Arm | Final C 1% / strict | Exp. @q=1% (true FDP) 1% vs strict | Matched 0.75% true FDP |
+|---|---|---|---|
+| LibDecoy pass 1 | 1,1,1 / 1,1,1 | 83,674 (0.760%) vs 83,836 (0.798%) | +0.1% |
+| LibDecoy pass 2 | | 102,615 (0.461%) vs 102,133 (0.453%) | -0.4% |
+| GenDecoy pass 1 | 0.1,1,1 / 1,1,1 | 92,951 (1.87%) vs 93,009 (1.90%) | +0.3% |
+| GenDecoy pass 2 | | 108,539 (1.41%) vs 108,433 (1.44%) | +0.1% |
+
+Scores differ even where the final C matches: `GridSearchC` runs on every training iteration.
+Dirs: `D:\test\osprey-runs\astral-entrap-3file\runs\astral3-3files-{libdecoy,gendecoy}-r1.0-protein-compact[-csel0]-lib0817-pr4703`.
+
+**82-file SEA-AD, library decoys** - three arms, experiment-level precursors at matched true FDP:
+
+| Pass | True FDP | 1% rule (C 1,1,0.1) | Strict (C 100,1,0.1) | Fixed C = 0.1 (all folds) |
+|---|---|---|---|---|
+| 2 | 0.65% | 51,385 | 51,405 | 52,457 |
+| 2 | 0.75% | 52,523 | 52,911 | 53,594 |
+| 2 | 1.00% | 55,177 | 55,548 | 55,677 |
+| 1 | 0.75% | 46,665 | 45,943 | 46,156 |
+| 2 @q=1% | reported | 58,780 (1.44%) | 57,995 (1.37%) | 59,275 (1.52%) |
+
+- The strict arm's pass 1 (45,943 at 0.7460%) reproduces the recorded pickrun3 baseline exactly.
+- The 1% rule is neutral at scale (pass 2 0.0 to -0.7% vs strict): no harm, no gain.
+- **Fixed C = 0.1 is best in pass 2 at matched FDP, +1.3-2.1% in the 0.65-0.75% range** - evidence for
+  Mike's hypothesis that stronger regularization transfers better to reconciled pass-2 peaks. It needed
+  an experimental `OSPREY_SVM_C_VALUES` override: local branch
+  `Skyline/work/20260926_osprey_svm_c_values_override` in `C:\proj\pwiz-work1` (b749ba8f39, NOT pushed).
+- Weights show the two solutions Mike described: C >= 1 folds put median-polish cosine at 2-3x the
+  SG-weighted cosine; at C = 0.1 the two are about equal (fold 1: 0.39 vs 0.38).
+- Inner-CV passing counts at SEA-AD are only ~1,200 of 150,050 training targets (0.5-0.8%), so the
+  fixed 1% band is well inside noise at this scale.
+- Dirs: `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact[-csel0|-cvals0.1]-lib0817-pr4703`.
+
+Side finding: on 3-file Astral, generated decoys run at 1.4-1.9% true FDP at q=1% vs library decoys
+at 0.46-0.76%.
+
+**Open follow-ups from the review:**
+- Fixed C = 0.1 (or a grid capped at C <= 1) deserves the same A/B on Astral 3-file and the Stellar legs
+  before it is proposed as a default; the override branch above is the lever.
+- A large Stellar cohort A/B once one can be searched (`OSPREY_SVM_C_TOLERANCE=0` vs default).
+- The mitigation caveat: the underlying problem is the frozen first-pass model transferring poorly to
+  reconciled pass-2 peaks.
+- The gbdt lean-path branch conflicts with this change; resolve with `CloneForTrainOnly()` and move the
+  two `BuildStreamingTrainConfig` assertions in `FdrTest.cs` to it.
+
+### 2026-09-27 - Merged
+
+PR #4703 merged as commit 3b8dd2f398 into `Skyline/work/20260612_net8_port` (Brendan approved and completed;
+TeamCity Perf/Regression passed). Shipped the 1%-tolerance C selection, `OSPREY_SVM_C_TOLERANCE`, and the
+regenerated goldens. Deferred: the perf gate on a quiet machine, the post-#69 cross-impl script flips, and
+the follow-ups above.
