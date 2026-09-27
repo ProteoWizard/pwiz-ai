@@ -3,17 +3,15 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260926_osprey_resx` (checkout `C:\proj\pwiz-work2`; created at
   `8422c59eca`, the #4718 tip, and pushed 2026-09-26)
-- **Base**: `Skyline/work/20260924_osprey_log_readability` - STACKED on PR #4718. When #4718
-  squash-merges into `Skyline/work/20260612_net8_port`, merge `origin/Skyline/work/20260612_net8_port`
-  into this branch (never rebase once a PR exists) and retarget the PR base to the port branch.
+- **Base**: `Skyline/work/20260612_net8_port` (PR #4619). Was stacked on #4718; after #4718 squash-merged
+  (64ed45b29e) the branch was rebased with `--onto` (2026-09-27, before any PR existed).
 - **Created**: 2026-09-26
 - **Status**: Steps 1-7 done and committed locally (not pushed); ready for Brendan's review, then
   push + `gh pr create` + TeamCity. Rewordings to review:
   `ai/.tmp/sessions/20260926-resx/REVIEW-rewordings.md`; PR body draft `.../pr-body.md`.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (pending) - `gh pr create --base Skyline/work/20260924_osprey_log_readability --label osprey`
-  while #4718 is open; base becomes the port branch after it merges.
+- **PR**: (pending) - `gh pr create --base Skyline/work/20260612_net8_port --label osprey`
 
 **Origin**: the second half of `TODO-20260924_osprey_log_readability.md` (PR #4718 did steps 1-3:
 machine channel, gates, `Error:`/`Warning:`, rewording). Brendan, 2026-09-11: C# .NET has won;
@@ -261,3 +259,18 @@ over current stamps does nothing).
   in some resourced sentences (`--decoys-in-library`, `--parallel-files`, `--task PerFileScoring`,
   `.spectra.bin`) - docs/21 asks for them as `{N}` arguments; translators must keep them verbatim
   until they move. `ai/docs/translation-guide.md` still says zh-CHS (master); the port branch is zh-Hans.
+
+**2026-09-27**
+- Rebased onto the port branch after #4718 (64ed45b29e), #4703 and #4720 merged: one conflict
+  (PercolatorTrainer's C-sweep heading gained #4703's selection rule as {1}). Backup ref
+  `resx-backup-20260927`. The LocalizableElement gate then flagged exactly #4703's new plain
+  literals; #4720's two load-time errors were written `@"..."` (invisible to the gate) and were
+  found by scanning the merged diff - both resourced in user terms (`4e229ddac7`). Rebased tree:
+  0 warnings, 606/606 in en-US / ja-JP / fr-FR.
+- Considered and NOT added: a guard over `@"..."` sentences in warning/error/throw calls - ~25
+  existing developer messages would need markers, and it would not have caught #4720 (a returned
+  error string). The ReSharper gate makes a plain literal fail, so a new message forces the
+  resource-or-`@` choice; docs/21 and 20-command-line.md define what `@` means.
+- Rebased branch HEAD `4e229ddac7`: `regression-parallel -Dataset All` 70 PASS / 0 FAIL (44:42);
+  `regression.ps1 -Dataset Stellar -Culture fr-FR` PASSED. Ready to force-push (origin holds the
+  pre-rebase branch; no PR yet) and open against the port branch - waiting for Brendan's go-ahead.
