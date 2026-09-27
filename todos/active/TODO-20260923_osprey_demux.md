@@ -46,6 +46,20 @@ the approved plan are summarized below.
   - a fixed NNLS iteration cap.
 - Cross-platform output is held to the 1e-9 gate, not byte identity.
 - Undemuxed staggered or MSX input is out of scope, as expected. With demux off, Osprey should detect such a scheme and stop with a message pointing at `--demux`.
+- **Upcoming Orbitrap data (Mike, 2026-09-27):** today's staggered runs are 50% overlap (k = 2). Planned
+  experiments use 33% and 25% overlap (k = 3, 4), the offset window sets acquired in successive cycles
+  rather than adjacent within one. This is in the spec: §4.1-4.2 (interleave, and interpolation error by
+  points per FWHM per window for k = 2-4), G4.1 (every Phase 1 gate rerun at k = 3 and 4), and §13 item 8
+  (the useful k is platform-specific; 25% on an Orbitrap may recover little in the AGC-limited regime).
+  What it means for the per-channel staggered path:
+  - each window recurs once per rotation of k sets, so interpolation spans the whole rotation, and each
+    window has k times fewer points per peak (the spec's cliff is between 3 and 2 per FWHM);
+  - bins narrow to width / k, and each bin is covered by k windows, like ZT Scan but with sharp edges,
+    so bins stay the right columns of A;
+  - cycle detection by window repetition treats the whole rotation as one cycle, which works but needs
+    a synthetic k = 3 / 4 alternate-cycle test;
+  - it reopens per-time interpolation vs the separable model (a source does not move in m/z) for the
+    Orbitrap, which only nearly tied at k = 2.
 
 ## Architecture
 
