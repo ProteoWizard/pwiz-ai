@@ -1,12 +1,12 @@
 # TODO-20260925_osprey_libdecoy_pairing_collision.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260925_osprey_libdecoy_pairing_collision` (LOCAL in `C:\proj\pwiz-work1`, not pushed)
+- **Branch**: `Skyline/work/20260925_osprey_libdecoy_pairing_collision` (checkout `C:\proj\pwiz-work1`)
 - **Base**: `Skyline/work/20260612_net8_port` (d9a3245ffd)
 - **Created**: 2026-09-25 (night session, while A/B-testing pwiz #4703)
-- **Status**: In Progress - code + unit tests done and committed locally; regression gate pending
+- **Status**: In Review - PR #4720 (pwiz) and maccoss/osprey#70 (Rust) opened 2026-09-26
 - **Module**: `osprey`
-- **PR**: none
+- **PR**: [#4720](https://github.com/ProteoWizard/pwiz/pull/4720); Rust [maccoss/osprey#70](https://github.com/maccoss/osprey/pull/70)
 
 ## Problem
 
@@ -68,4 +68,5 @@ load with all 35 rows (`D:\test\osprey-runs\astral-entrap-3file\pairing-check-07
       a threshold near 0.99 separates them
 - [x] Review sub-agent: no correctness defects; fixed Rust group order, per-decoy allocation,
       stale comments (b75f4970d2). Loader-level refusal test dropped (no TSV fixture exists)
-- [ ] `/code-review`, then PR against the port branch
+- [x] Rebased onto the port branch / Rust main, gates re-run, PRs opened 2026-09-26
+- Follow-up backlog: `ai/todos/backlog/TODO-carafe_osprey_library_contract.md`
