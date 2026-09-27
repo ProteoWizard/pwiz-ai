@@ -157,11 +157,14 @@ Side finding: on 3-file Astral, generated decoys run at 1.4-1.9% true FDP at q=1
 at 0.46-0.76%.
 
 **Open follow-ups from the review:**
-- Fixed C = 0.1 (or a grid capped at C <= 1) deserves the same A/B on Astral 3-file and the Stellar legs
-  before it is proposed as a default; the override branch above is the lever.
+- Fixed C = 0.1 (or a grid capped at C <= 1): ON HOLD (Mike, 2026-09-27 - hold off on the idea). The
+  override branch above stays local and unpushed; if revisited, run the same A/B on Astral 3-file and
+  the Stellar legs before proposing it as a default.
 - A large Stellar cohort A/B once one can be searched (`OSPREY_SVM_C_TOLERANCE=0` vs default).
 - The mitigation caveat: the underlying problem is the frozen first-pass model transferring poorly to
   reconciled pass-2 peaks.
+- Stale "Rust keeps the strict maximum" docs after maccoss/osprey#69 merged: corrected in PR #4722
+  (docs, error text, comments); cross-impl scripts unpinned in pwiz-ai 8a547c71.
 - The gbdt lean-path branch conflicts with this change; resolve with `CloneForTrainOnly()` and move the
   two `BuildStreamingTrainConfig` assertions in `FdrTest.cs` to it.
 
