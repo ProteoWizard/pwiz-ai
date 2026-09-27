@@ -79,6 +79,10 @@
     module strips the variable: exporting it yourself has no effect. Recorded in the banner,
     run.log and the directory name (-csel<value>).
 
+.PARAMETER SvmCValues
+    EXPERIMENTAL first-pass SVM C grid, exported as OSPREY_SVM_C_VALUES (a build that has the
+    override). '0.1' fixes C for every fold and iteration. Empty leaves Osprey's grid.
+
 .PARAMETER LinkFrom
     Optional. Hard-link the per-file caches from a COMPLETED run over the same file set so
     this run resumes without re-parsing or re-scoring. What is linked is scoped by -Task:
@@ -155,6 +159,7 @@ param(
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
     [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
     [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
+    [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,

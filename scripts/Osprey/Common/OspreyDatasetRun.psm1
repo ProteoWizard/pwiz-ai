@@ -253,6 +253,10 @@ function Invoke-OspreyDatasetRun {
         # reason as -QualifyBy: the arms differ in nothing else, and the variable is stripped
         # below. Lands in the banner, the run.log START/DONE lines and the directory name.
         [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
+        # EXPERIMENTAL first-pass C grid (OSPREY_SVM_C_VALUES), e.g. '0.1' fixes C. Empty leaves
+        # Osprey's grid. Same reasoning as -SvmCTolerance: a parameter, stripped otherwise, and
+        # recorded in the banner, run.log and the directory name (-cvals<value>).
+        [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',
         [string]$Tag = '',
         [string]$DataDir,
         [string]$LibraryDir,
@@ -470,6 +474,7 @@ function Invoke-OspreyDatasetRun {
         $qual = if ($QualifyBy -eq 'experiment') { '-qualifyexp' } else { '' }
         # Empty when unset, so existing arms keep their names.
         $csel = if ($SvmCTolerance) { "-csel$SvmCTolerance" } else { '' }
+        if ($SvmCValues) { $csel += "-cvals$($SvmCValues -replace ',', '_')" }
         $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$csel$Tag"
         if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
         $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
@@ -621,6 +626,9 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  svm C sel: {0}" -f $(if ($SvmCTolerance) {
                 "OSPREY_SVM_C_TOLERANCE=$SvmCTolerance - moves the first-pass model" }
                 else { "Osprey's default (OSPREY_SVM_C_TOLERANCE cleared)" }))
+    Write-Host ("  svm C grid: {0}" -f $(if ($SvmCValues) {
+                "OSPREY_SVM_C_VALUES=$SvmCValues (EXPERIMENTAL) - moves the first-pass model" }
+                else { "Osprey's default (OSPREY_SVM_C_VALUES cleared)" }))
     # Since pwiz #4507 (2026-09-12) every pass selection streams: pass 1 is emitted off the
     # per-file 1st-pass sidecars, so `1` no longer forces the resident pool and `both` really
     # writes .pass1 and .pass2. The two yellow banners that stood here - a resident-pool
@@ -917,7 +925,7 @@ function Invoke-OspreyDatasetRun {
     # cohort under the old rule behind a banner that claims defaults.
     foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
-                   'OSPREY_TRAIN_PICK_RUN', 'OSPREY_SVM_C_TOLERANCE',
+                   'OSPREY_TRAIN_PICK_RUN', 'OSPREY_SVM_C_TOLERANCE', 'OSPREY_SVM_C_VALUES',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
                    'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
                    'OSPREY_PROTEIN_COMPACT_QUALIFY',
@@ -940,6 +948,7 @@ function Invoke-OspreyDatasetRun {
     $env:OSPREY_PROTEIN_COMPACT_QUALIFY = $QualifyBy
     # Only when given: unset is Osprey's own default, and the variable was stripped above.
     if ($SvmCTolerance) { $env:OSPREY_SVM_C_TOLERANCE = $SvmCTolerance }
+    if ($SvmCValues) { $env:OSPREY_SVM_C_VALUES = $SvmCValues }
 
     $log = Join-Path $OutDir 'run.log'
     # NEVER truncate an existing run.log - rotate it to run-<stamp>.log first. A run.log is the
@@ -965,7 +974,7 @@ function Invoke-OspreyDatasetRun {
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy csel='$SvmCTolerance' files=$($inputs.Count) threads=$Threads " +
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag perfstats=$(-not $NoPerfStats) " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
@@ -982,7 +991,7 @@ function Invoke-OspreyDatasetRun {
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy csel='$SvmCTolerance' parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })
