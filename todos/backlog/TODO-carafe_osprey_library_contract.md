@@ -50,12 +50,17 @@ The 07-27 library, for scale: 98.0% paired, 61,494 unpaired decoys, 84,066 unpai
 2. **Make it executable, once.** A shared validator (a small library both CarafeSharp and Osprey
    reference) that returns EVERY violation, grouped by class - not the first (Skyline experience:
    first-only hides the class of defect behind most failures).
-3. **CarafeSharp calls it before writing** and fails the build of a library that violates it.
-   Carafe's generator fixes: stop merging identical target/decoy sequences into one row, write
-   the `Decoy` column, write clean accessions (or the manifest's), pair every decoy.
-4. **Osprey calls it at load.** For a CarafeSharp-produced library (identified by a provenance
-   stamp CarafeSharp writes), every violation is an error. For third-party libraries, keep today's
-   repairs but REPORT them as a summary, so tolerance is visible rather than silent.
+3. **CarafeSharp produces a contract library behind an explicit argument** (e.g. an Osprey
+   output mode), so other Carafe users who rely on today's output - `_pepNNNNN` accessions and
+   the rest - keep it unchanged. In that mode CarafeSharp calls the validator before writing and
+   refuses to write a library that violates it: no identical target/decoy sequences merged into
+   one row, the `Decoy` column written, clean accessions, every decoy paired.
+4. **Osprey calls it at load and FAILS when the contract is not met**, listing every violation
+   by class (Brendan, 2026-09-26: "we should have an agreed contract where Osprey simply fails
+   when it is not met. Otherwise, we just don't know what the Carafe code really meant to
+   produce."). Osprey stops repairing silently; the repairs in the table above become
+   violations. Whether third-party libraries get any tolerance, and if so only behind an explicit
+   opt-in that is logged, is an open question below - never a silent default.
 5. **A round-trip test** in the Osprey or CarafeSharp suite: build a small library with
    CarafeSharp from a FASTA fixture, load it in Osprey, assert zero warnings and 100% pairing.
 6. **Tighten the thresholds last**, once CarafeSharp output is clean: e.g. `DecoyPairMinFraction`
@@ -69,3 +74,5 @@ The 07-27 library, for scale: 98.0% paired, 61,494 unpaired decoys, 84,066 unpai
 - Whether the Rust Carafe (Python) path gets the same contract, or CarafeSharp becomes the only
   supported producer for Osprey.
 - Provenance stamp format: a header comment in the TSV, a sidecar, or a blib metadata field.
+- Third-party libraries (DIA-NN, Spectronaut, older Carafe): fail like everything else, or a
+  logged opt-in that restores today's repairs for them only.
