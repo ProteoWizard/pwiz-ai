@@ -163,8 +163,8 @@ at 0.46-0.76%.
 - A large Stellar cohort A/B once one can be searched (`OSPREY_SVM_C_TOLERANCE=0` vs default).
 - The mitigation caveat: the underlying problem is the frozen first-pass model transferring poorly to
   reconciled pass-2 peaks.
-- Stale "Rust keeps the strict maximum" docs after maccoss/osprey#69 merged: corrected in PR #4722
-  (docs, error text, comments); cross-impl scripts unpinned in pwiz-ai 8a547c71.
+- Stale "Rust keeps the strict maximum" docs after maccoss/osprey#69 merged: corrected in PR #4722, merged
+  2026-09-27 as 2b3dc0ca56 (docs, error text, comments); cross-impl scripts unpinned in pwiz-ai 8a547c71.
 - The gbdt lean-path branch conflicts with this change; resolve with `CloneForTrainOnly()` and move the
   two `BuildStreamingTrainConfig` assertions in `FdrTest.cs` to it.
 
