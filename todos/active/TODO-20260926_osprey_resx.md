@@ -292,3 +292,9 @@ over current stamps does nothing).
   calibration, inherited from Rust's MzCalibration so ApplyCalibration can read the stored mean without
   the config. It is redundant - `--resolution` fixes it for the whole experiment - but removing it is a
   file-format change on both C# and Rust sides.
+- `3fd20aa7fb` (Brendan: follow Skyline on user-viewable exceptions vs IsProgrammingDefect): moved
+  IsProgrammingDefect to `pwiz.Common.SystemUtil.CommonExceptionUtil` (Skyline's ExceptionUtil forwards;
+  Skyline build verified); Osprey's two top-level sinks print user-actionable failures as the message
+  alone, defects whole; SpectraCacheException / RehydrateFailedException derive from
+  UserMessageException; `CodeInspectionTest.TestUserExceptionsUseResources` fails a literal message on
+  any non-defect exception type. 607/607 en and fr-FR, 0 warnings.
