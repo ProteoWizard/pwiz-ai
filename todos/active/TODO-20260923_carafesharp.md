@@ -292,8 +292,10 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
-- Masking A/B by IDs (developer's request): Stellar A vs B indistinguishable (0.12%, within seed noise);
-  Astral arms running. Status: `ai/.tmp/agent-carafesharp-maskexp-status.md`.
+- Masking A/B by IDs (developer's request), FINAL: no difference beyond noise.
+  - Experiment precursors A-B: Stellar -0.18% [-1.22, +0.87] (3 seeds each); Astral -0.39% [-3.05, +2.26] (2 / 3 seeds).
+  - B's library carries more weak fragments (Astral 14.84/precursor vs 13.78, Carafe 14.86); entrapment FDP 0.41-0.68%.
+  - Results: `ai/.tmp/sessions/20260927-carafesharp-maskexp/results/`; recorded in 02-masking.md (abd591cd83).
 
 ## Reference data on this machine (developer's own Carafe runs)
 
