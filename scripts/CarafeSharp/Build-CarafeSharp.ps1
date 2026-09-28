@@ -6,9 +6,13 @@
     CarafeSharp.Test unit tests and a ReSharper inspection. CarafeSharp is net10.0 only, so
     the dotnet CLI builds it on Windows and Linux alike; no Visual Studio MSBuild is needed.
 
-    The libtorch native runtime is chosen at build time (-Torch). The CPU and CUDA packages
-    ship identically named native files and cannot share an output folder, so switching
-    backends does a clean rebuild of the projects that carry them.
+    In a checkout that has pwiz_tools/CarafeSharp/build.ps1, the build and the tests go
+    through it (CPU and CUDA builds then have separate output folders, and the test outcomes
+    are checked); this script adds the CRLF fix and the inspection. Older checkouts build here.
+
+    The libtorch native runtime is chosen at build time (-Torch). In an older checkout the CPU
+    and CUDA packages share one output folder, so switching backends does a clean rebuild of the
+    projects that carry them.
 .PARAMETER Configuration
     Debug or Release (default: Release).
 .PARAMETER RunTests
@@ -20,6 +24,10 @@
     warning. Requires JetBrains.ReSharper.GlobalTools.
 .PARAMETER Torch
     libtorch backend: cpu (default) or cuda (CUDA 12.8, about 4 GB of native files).
+.PARAMETER TestCategory
+    Run only this test category (e.g. Astral, Cuda); needs build.ps1 in the checkout.
+.PARAMETER RequireData
+    Fail when a test did not run (no test data); needs build.ps1 in the checkout.
 .PARAMETER Summary
     Suppress detailed build output.
 .PARAMETER SourceRoot
@@ -38,6 +46,8 @@ param(
     [switch]$RunInspection = $false,
     [ValidateSet("cpu", "cuda")]
     [string]$Torch = "cpu",
+    [string]$TestCategory = $null,
+    [switch]$RequireData = $false,
     [switch]$Summary = $false,
     [string]$SourceRoot = $null
 )
@@ -85,40 +95,52 @@ if (Test-Path $fixCrlfScript) {
     }
 }
 
-# A backend switch leaves the other backend's native files in bin/, where they would be
-# loaded instead of the ones this build restored. Record the backend and clean on change.
-$backendStamp = Join-Path $carafeRoot "CarafeSharp/obj/torch-backend-$Configuration.txt"
-if ((Test-Path $backendStamp) -and ((Get-Content $backendStamp -Raw).Trim() -ne $Torch)) {
-    Write-Host "libtorch backend changed to $Torch; cleaning native outputs." -ForegroundColor Yellow
-    foreach ($project in @('CarafeSharp', 'CarafeSharp.Test')) {
-        $binDir = Join-Path $carafeRoot "$project/bin/$Platform/$Configuration"
-        if (Test-Path $binDir) {
-            Remove-Item -Recurse -Force $binDir
+$verbosity = if ($Summary) { "quiet" } else { "minimal" }
+
+# A checkout with its own pwiz_tools/CarafeSharp/build.ps1 builds and tests through it: there a
+# CUDA build has its own bin-cuda/obj-cuda folders, and the test outcomes are checked. Older
+# checkouts (before build.ps1) build here, as they always did.
+$inRepoBuild = Join-Path $carafeRoot 'build.ps1'
+if (Test-Path -LiteralPath $inRepoBuild) {
+    pwsh -NoProfile -File $inRepoBuild -Configuration $Configuration -Torch $Torch -Verbosity $verbosity -NoTests
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+} else {
+    # A backend switch leaves the other backend's native files in bin/, where they would be
+    # loaded instead of the ones this build restored. Record the backend and clean on change.
+    $backendStamp = Join-Path $carafeRoot "CarafeSharp/obj/torch-backend-$Configuration.txt"
+    if ((Test-Path $backendStamp) -and ((Get-Content $backendStamp -Raw).Trim() -ne $Torch)) {
+        Write-Host "libtorch backend changed to $Torch; cleaning native outputs." -ForegroundColor Yellow
+        foreach ($project in @('CarafeSharp', 'CarafeSharp.Test')) {
+            $binDir = Join-Path $carafeRoot "$project/bin/$Platform/$Configuration"
+            if (Test-Path $binDir) {
+                Remove-Item -Recurse -Force $binDir
+            }
         }
     }
-}
 
-$verbosity = if ($Summary) { "quiet" } else { "minimal" }
-Write-Host "Building: CarafeSharp.sln ($Configuration|$Platform, libtorch $Torch)" -ForegroundColor Cyan
-$buildStart = Get-Date
-$buildArgs = @(
-    'build', $slnPath,
-    "-c", $Configuration,
-    "-p:Platform=$Platform",
-    "-p:CarafeSharpTorch=$Torch",
-    "-v:$verbosity",
-    "-nologo"
-)
-& dotnet $buildArgs
-$buildExit = $LASTEXITCODE
-$buildDuration = (Get-Date) - $buildStart
-if ($buildExit -ne 0) {
-    Write-Host "Build FAILED (exit $buildExit) after $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
-    exit $buildExit
+    Write-Host "Building: CarafeSharp.sln ($Configuration|$Platform, libtorch $Torch)" -ForegroundColor Cyan
+    $buildStart = Get-Date
+    $buildArgs = @(
+        'build', $slnPath,
+        "-c", $Configuration,
+        "-p:Platform=$Platform",
+        "-p:CarafeSharpTorch=$Torch",
+        "-v:$verbosity",
+        "-nologo"
+    )
+    & dotnet $buildArgs
+    $buildExit = $LASTEXITCODE
+    $buildDuration = (Get-Date) - $buildStart
+    if ($buildExit -ne 0) {
+        Write-Host "Build FAILED (exit $buildExit) after $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
+        exit $buildExit
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backendStamp) | Out-Null
+    Set-Content -Path $backendStamp -Value $Torch
+    Write-Host "Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
 }
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backendStamp) | Out-Null
-Set-Content -Path $backendStamp -Value $Torch
-Write-Host "Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
 
 if ($RunInspection) {
     $dotSettings = Join-Path $carafeRoot 'CarafeSharp.sln.DotSettings'
@@ -166,6 +188,23 @@ if ($RunInspection) {
         exit 1
     }
     Write-Host "Code inspection passed - zero warnings/errors" -ForegroundColor Green
+}
+
+if ($RunTests -and (Test-Path -LiteralPath $inRepoBuild)) {
+    # build.ps1 picks the backend's test folder and category filter, and with -RequireData fails
+    # on a test that did not run (dotnet test reports an inconclusive test as a pass).
+    $testArgs = @('-Configuration', $Configuration, '-Torch', $Torch, '-NoBuild')
+    if ($TestName) {
+        $testArgs += @('-TestName', $TestName)
+    }
+    if ($TestCategory) {
+        $testArgs += @('-TestCategory', $TestCategory)
+    }
+    if ($RequireData) {
+        $testArgs += '-RequireData'
+    }
+    pwsh -NoProfile -File $inRepoBuild @testArgs
+    exit $LASTEXITCODE
 }
 
 if ($RunTests) {

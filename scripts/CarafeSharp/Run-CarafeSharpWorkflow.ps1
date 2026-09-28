@@ -153,13 +153,22 @@ if (-not $WorkDir) {
 # Tools
 # ---------------------------------------------------------------------------
 $projectRoot = Get-ProjectRoot
+$carafeSharpName = if ($IsWindows) { 'CarafeSharp.exe' } else { 'CarafeSharp' }
 if (-not $CarafeSharpExe) {
-    $CarafeSharpExe = if ($env:CARAFESHARP_EXE) { $env:CARAFESHARP_EXE }
-                      else { Join-Path $projectRoot 'pwiz\pwiz_tools\CarafeSharp\CarafeSharp\bin\x64\Release\net10.0\CarafeSharp.exe' }
+    if ($env:CARAFESHARP_EXE) {
+        $CarafeSharpExe = $env:CARAFESHARP_EXE
+    } else {
+        # build.ps1 puts a CUDA build in bin-cuda and a CPU build in bin: take the one -Device
+        # asks for, else the other (an older checkout keeps either kind in bin).
+        $carafeProject = Join-Path $projectRoot 'pwiz/pwiz_tools/CarafeSharp/CarafeSharp'
+        $binFolders = if ($Device -eq 'gpu') { @('bin-cuda', 'bin') } else { @('bin', 'bin-cuda') }
+        $candidates = @($binFolders | ForEach-Object { Join-Path $carafeProject "$_/x64/Release/net10.0/$carafeSharpName" })
+        $CarafeSharpExe = @($candidates | Where-Object { Test-Path -LiteralPath $_ }) + $candidates | Select-Object -First 1
+    }
 }
 if (-not (Test-Path $CarafeSharpExe)) {
-    throw ("CarafeSharp.exe not found at '$CarafeSharpExe'. Build it: " +
-           'pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 (add -Torch cuda for the GPU)')
+    throw ("CarafeSharp not found at '$CarafeSharpExe'. Build it: " +
+           'pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 (add -Torch cuda for the GPU), or pass -CarafeSharpExe')
 }
 if (-not $OspreyExe) { $OspreyExe = if ($env:OSPREY_EXE) { $env:OSPREY_EXE } else { Get-OspreyExe } }
 if (-not (Test-Path $OspreyExe)) {
@@ -177,7 +186,8 @@ if (($MzmlNames | Where-Object { $_ -match '\.raw$' }) -and
     throw ("$OspreyExe cannot read Thermo .raw: it was built without the vendor readers. Build Osprey with " +
            'ai/scripts/Osprey/Build-Osprey.ps1 -VendorReader, or pass -InputFormat mzML.')
 }
-$cudaBuild = Test-Path (Join-Path (Split-Path -Parent $CarafeSharpExe) 'runtimes\win-x64\native\torch_cuda.dll')
+$cudaLibrary = if ($IsWindows) { 'runtimes/win-x64/native/torch_cuda.dll' } else { 'runtimes/linux-x64/native/libtorch_cuda.so' }
+$cudaBuild = Test-Path -LiteralPath (Join-Path (Split-Path -Parent $CarafeSharpExe) $cudaLibrary)
 
 # ---------------------------------------------------------------------------
 # Stages
