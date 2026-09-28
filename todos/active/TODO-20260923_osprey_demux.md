@@ -8,8 +8,9 @@
   M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
   the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
 - **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416),
-  pushed. No PR yet; run /code-review before opening one. Its algorithms are documented in
-  `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
+  pushed to d2f9811fd4; six newer commits (a62aa3f782 .. dcc2cd4cb9, the night of 2026-09-27/28) are local
+  on SCARFELL in `C:\Dev\pwiz-osprey-demux`, not pushed. No PR yet; run /code-review before opening one. Its
+  algorithms are documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
 
 ## Handoff (2026-09-27): moving the work to another machine
 
@@ -41,12 +42,11 @@ the old machine except the in-flight results listed last.
 **Where the results stand**
 - Eclipse (Orbitrap staggered, 50% overlap): apportioned per-channel demux gives 40,009 precursors at
   0.26% FDP, against msconvert's 38,411 and #4710's 39,355. Done unless the k = 3 / 4 data changes it.
-- ZT Scan identifications: on the slice, centered:7 with `--position-mz` gives 2,893 targets per run,
-  1.7% more than DIA-NN's own scanning mode and 8.8% more than the acquired data. On whole runs, with
-  DIA-NN's settings pinned, centered:5 is 1.4% short of scanning mode on the `.wiff`.
-- ZT Scan quantitation is the open gap: over three whole runs the per-sweep demux's CV is 0.135,
-  against 0.112 for the acquired data and 0.089 for DIA-NN's scanning mode (DIA-NN's own settings on
-  every arm).
+- ZT Scan identifications (updated 2026-09-28, see the night's section below): on whole runs,
+  centered:7 `--position-mz` with DIA-NN pinned finds 4.0-6.6% more targets than DIA-NN's scanning mode
+  on the `.wiff`. The ID gap is closed.
+- ZT Scan quantitation is the open gap: CV 0.119 against 0.112 acquired and 0.088 for DIA-NN on the
+  `.wiff` (was 0.135 with DIA-NN's own settings and centered:5).
 - `--source-positions` (each channel's sources placed once per block, each sweep solved over just
   those) is the answer being tested for that gap. In the Python prototype it moved the share of an
   identified precursor's fragment signal landing in its own bin from 0.52 to 0.69.
@@ -83,21 +83,86 @@ on the new machine if they did not finish, with the scripts named):
   DIA-NN's scanning mode; quantitative precision is the remaining gap.** Files:
   `D:\test\osprey-runs\ztscan\full\cs_centered7_posmz` (about 16 GB each) on the old machine.
 
-**Next, in order**
-1. Quantitation. Rerun the stopped pinned slice searches first. If source positions recover once
-   DIA-NN's settings are pinned, take them to whole runs (`Run-FullC7Posmz.ps1` with
-   `--source-positions` added); if not, try `MinSourceFraction = 0` (expose it on the command line),
-   then `--source-l1` in place of the drop rule. The target is scanning mode's CV, 0.089. Also worth
-   separating: whether the CV gap is in the demultiplexed values themselves or in how DIA-NN quantifies
-   a centered:7 spectrum, which carries neighbors' fragments (compare CV by precursor m/z density).
-2. The non-negative lasso on the source-finding fit (`--source-l1`; spec §5.4d puts its scale in the
-   Poisson weights): try a few values on the slice against the merge / drop rule.
-3. If quantitation still lags: grouping fragments by precursor (the prototype over-merged: correlate
-   only within each seed's elution window, tighten the position gate, cap the group size), and the
-   anchored per-candidate extraction as an Osprey scoring feature (+4% at 5% FDR in the prototype).
-4. Orbitrap k = 3 / 4 (see Decisions): a synthetic alternate-cycle test, then per-time vs separable.
-5. Toward Osprey itself: stage the `.wiff2` reader for Osprey.exe, calibrate the kernel per file in C#,
-   and give the per-channel demultiplexer a descriptor in the demultiplexed cache under `--demux`.
+The old machine's slice re-searches were stopped unfinished; its whole-run search finished (above), but
+its whole-run mzML were not copied to Z: (logs only). SCARFELL reran the whole-run arm from scratch and
+got exactly the same numbers (below), and ran the slice arms again, pinned.
+
+## Night of 2026-09-27/28 on SCARFELL: the lasso, and the centroiding gap
+
+Goal (Mike): close the ID and quant gap to DIA-NN reading the `.wiff` itself; try the L1 / lasso. Full
+timeline with every number: `ai/.tmp/night-session-budget.md` on SCARFELL. Results are in the doc on the
+branch ("Sparsity: the lasso", "Centroiding and the TOF grid"); scripts in `ai/scripts/Osprey/Demux`.
+
+**Commits on the follow-on branch, local on SCARFELL, not pushed:** a62aa3f782 `--sweep-l1`,
+`--sweep-l1-refit`, `--min-source-fraction`; 2506acc4de `--sweep-l1-z`; ba9fb73506 `--block-support-z`;
+8b479d8ac4 `EventCentroider`, `--centroid events`, `--profile`; 474c740a1c MS2-only event centroiding
+and the doc; dcc2cd4cb9 the whole-run results in the doc. Each passed build, 611-612 unit tests and a
+clean inspection. With every new option off, A1's slice is byte-identical to d2f9811.
+
+**Setup and baseline**
+- SCARFELL reproduces the old machine exactly: centered:7 `--position-mz` on the slice gives 2,770 / 2,950 /
+  2,959 (arm `cs_centered7_posmz_scarfell`).
+- **Pin DIA-NN on the slice too** (`--window 6 --mass-acc 14 --mass-acc-ms1 17`): 2,909 / 3,067 / 3,094,
+  CV 0.093, against DIA-NN scanning mode on the acquired slice 2,768 / 2,807 / 2,958, CV 0.100. The demux
+  already beats scanning mode on the acquired slice data on both counts.
+- Compare arms precursor by precursor (`paired_cv.py`): the median CV moves with DIA-NN's own choices
+  (pinning alone: paired +0.0015, 46.5% improved, with 9% quantity shifts).
+
+**The lasso does not help** (all on the slice, pinned, paired against the baseline; details in the doc):
+fixed L 2 / 6, z-scaled L z 2 / 3 (relaxed), block-level support z 2 / 3, and `--source-positions` with no
+drop fraction (2,593 / 2,818 / 2,543). None improves IDs or CV. Why: a fixed L in the Poisson-weighted fit is
+a z threshold that varies with the background; per-sweep selection flickers positions between sweeps (CV
+up); per-block selection removes the flicker but pushes left-out signal onto neighbours (about -10% IDs).
+`--counts-per-ion 50` is neutral too.
+
+**Where the gap really is: the data DIA-NN reads from the `.wiff`**
+- New arm `full_raw_scanning_3runs` (DIA-NN `--scanning-swath` on the acquired whole-run mzML). Whole
+  runs, CV on 19,656 shared: `.wiff` scanning 0.090, mzML scanning 0.103, mzML plain 0.113. The scanning
+  algorithm is 0.010 of the 0.023; the `.wiff` data path is 0.013, uniform across RT, m/z and abundance.
+  IDs: `.wiff` 29,552 / 30,285 / 30,882, mzML scanning 29,373 / 29,872 / 30,485 (about 1%).
+- SCIEX vendor centroiding (msconvert's and our reader's) drops every one-sample 100-count profile event
+  (19.5% of profile intensity; part of them are fragment ions, 1.55x above chance), and a kept centroid
+  carries 0.25 of its profile peak's area. Calibration is not the difference (within 0.3 ppm).
+- **The ZT Scan TOF profile is one exact grid**, uniform in sqrt(m/z) (step 9.786595e-5; 9.8 ppm per sample
+  at 400 m/z, 7.4 at 700), identical across spectra, sweeps and runs. TOF peak sigma 1.2-1.5 samples.
+  Spec §5.4c-d's precondition holds on ZT Scan.
+- Crude event centroids (`--centroid events`) without demux: CV better (0.093 vs 0.097, 53.5% improved),
+  IDs worse, and worse demultiplexed; MS1 was centroided the crude way too (DIA-NN wanted 31-38 ppm MS1
+  tolerances). Reruns with MS2-only event centroids were in flight at the end: arms `raw_events_ms2`
+  and `c7pz_events_ms2` (controls `raw_plain`, `cs_centered7_posmz_scarfell_w6`, DIA-NN `--window 6`).
+- First joint prototype (`joint_prototype.py`, A kron B NNLS, Gaussian B, no L1), placement on 341
+  identified precursors: 0.48 / 0.84 own / +/-1, against 0.51 / 0.87 channel solve on vendor centroids and
+  0.43 / 0.81 per-sample profile demux (§5.4c). Per-sample is clearly worst, as §5.4d argues.
+- **Whole runs, centered:7 `--position-mz`, DIA-NN pinned** (`full_c7pz_scarfell`, `--window 6 --mass-acc 17
+  --mass-acc-ms1 19`): **31,512 / 31,506 / 32,117 targets at 0.79-0.89% FDP, 4.0-6.6% more than DIA-NN's
+  scanning mode on the `.wiff`** (29,552 / 30,285 / 30,882, 0.90-0.96%); 24,600 precursors in all three runs
+  against 23,589, identical to the old machine's `full_cs_centered7_posmz_fixed`. **The ID gap is
+  closed.** CV 0.119 on 17,948 shared (acquired 0.112, mzML scanning 0.102,
+  `.wiff` 0.088; centered:5 unpinned was 0.134). By abundance the demux equals the acquired data at the top
+  quartile (0.093) and is 0.010 worse at the bottom, growing with m/z: the solve's counting noise on weak
+  signal. The `.wiff`'s lead (0.013-0.018 in every quartile) is the data path, which the demux inherits.
+
+**Next, in order.** Quantitation has two separate problems: the demux's counting noise on weak signal
+(0.010 at the lowest abundance quartile, nothing at the top), and the vendor centroids' missing signal
+(0.013-0.018 everywhere). The joint solve addresses both.
+1. The joint solve (spec §5.4d) on the profile grid, which Mike prefers: add the Poisson-scaled L1 in
+   (position x m/z) space (NNLS on the normal equations with A^T W y - lambda, per-column lambda from
+   sqrt((A^T W A)_jj) as `--sweep-l1-z` does), the measured peak shape by m/z instead of a Gaussian, and a
+   sub-sample grid for the fragment position; then score it against the channel solve on placement AND
+   on a DIA-NN slice file, since placement of strong fragments cannot show the joint solve's gain on
+   near-isobaric fragments of different precursors. The L1 is in `joint_prototype.py` (`joint-z2`,
+   exact through the Cholesky factor of the weighted Gram) but takes about 2 min per precursor in
+   Python under load: 10 precursors gave own-bin 0.65 against 0.64 unpenalized, too few to judge. It
+   needs coordinate descent on the Kronecker structure, or C#, before a full evaluation.
+2. Read `raw_events_ms2` / `c7pz_events_ms2`. If full-area MS2 helps DIA-NN with MS1 left alone, the
+   centroids are worth fixing even before the joint solve (a peak model instead of adjacency).
+3. Profile reading is the bottleneck: the SDK takes about an hour per replicate for the slice under load.
+   Copy the `.wiff2`/`.wiff.scan` to local disk, and read each spectrum's profile once into a cache.
+4. Separate the demux's own noise from how DIA-NN quantifies a centered:7 spectrum, which carries its
+   neighbors' fragments (the old machine's suggestion): CV by local precursor density, and a
+   quantification from the demultiplexed values themselves at DIA-NN's identified apexes.
+5. Still open from before: fragment grouping, the anchored per-candidate extraction as an Osprey feature,
+   Orbitrap k = 3 / 4, and wiring the demultiplexer into Osprey's `--demux`.
 6. /code-review max before any PR; the PR goes to #4710's branch, or to the port branch once #4710 merges.
 - **Module**: `osprey`
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711)
