@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: In Progress
+- **Status**: Changes required - see "Review 2026-09-28": split the PR and re-architect part B as a PerFileRescoring product (no fifth stage)
 - **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
 - **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (base `Skyline/work/20260612_net8_port`)
@@ -22,6 +22,103 @@ Give CarafeSharp everything it needs from Osprey so that only Osprey reads raw d
   shared-fragment logic. CarafeSharp applies the masking thresholds.
 
 With the new options off, every existing output must be byte-identical (regression.ps1 at 1e-9).
+
+## Review 2026-09-28 (Brendan) - required before merge
+
+PR #4708 builds, passes 612 tests with clean inspection, and is output-neutral on TSV
+libraries (checked on the Stellar subset: 177 precursors either way). But part B adds an
+optional fifth stage to the pipeline, which the architecture does not need and the pay-later
+principle (P16 in `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`) exists to avoid. The
+PR must be split and part B re-architected to follow the `--model-diagnostics` pattern.
+
+### R1. Split into two PRs
+- **PR A - blib annotations** (#4705 part A): `BlibPeakAnnotations`, `BlibLoader`,
+  `PeptideFragmentMass`/`FragmentLadder` extraction, mod-text snapping, `;libext=ann`, and their
+  tests. Independently useful and small enough to review on its own.
+- **PR B - training export**, stacked on A (its b/y ladder uses `PeptideFragmentMass`),
+  re-architected per R2-R5.
+
+### R2. The training export is a PerFileRescoring product, not a stage
+Follow `--model-diagnostics` / `--task ModelDiagnostics` exactly - the pattern proven on the
+CHS 446-run cohort (flag added to a finished run: 1:51:53, 37 GB peak, report identical to
+the flag-up-front run; see `completed/TODO-20260906_osprey_stage7_lean_row.md` and
+`TODO-20260910_osprey_mdiag_resident_removal.md`).
+
+| | ModelDiagnostics (existing) | TrainingExport (required) |
+|---|---|---|
+| Flag | `--model-diagnostics` | `--training-export` |
+| Declared output under the flag | `.1st-pass`/`.2nd-pass.model-diagnostics.json` (FirstPassFDR / SecondPassFDR `Outputs`) | `<stem>.training.parquet` (PerFileRescoring `Outputs`, per run) |
+| Flag up front | Each FDR task folds while its data is in hand | PerFileRescoring writes the export while the run's `.spectra.bin` (already streamed for rescoring), reconciled boundaries and 2nd-pass run q are in hand |
+| Flag added to a finished run | `OnlyDiagnosticsProductOutstanding` -> `FoldDiagnosticsOnly` / `FoldPass2DiagnosticsOnly` (`FirstPassFdrTask.cs`, `SecondPassFdrTask.cs`); "Nothing is re-run" | "only the export is outstanding" -> an export-only arm per run: reads that run's own durable artifacts, writes only the parquet, no re-scoring |
+| Other tasks | PerFileScoring, PerFileRescoring skip | PerFileScoring, FirstPassFDR, SecondPassFDR skip |
+| `--task X` | selector, never a stage (`ModelDiagnosticsTask`) | selector running the canonical pipeline with `--training-export` set |
+| HPC | no new node type | no new node type - rides the existing per-file PerFileRescoring nodes |
+
+Why: an appended optional fan-out after the final join makes NextFlow schedule optional work
+on another round of nodes, each re-loading the library, reconciled parquet and `.spectra.bin`
+that PerFileRescoring already had; it serializes behind the last join; it adds an
+"optional stage" membership concept (`IsEnabled`) and per-run stamps listing every run's
+inputs. Selection needs nothing from SecondPassFDR: targets and claimants are chosen by
+2nd-pass RUN q, from the per-run sidecar the Stage 6 worker writes.
+
+Remove: `TrainingExportTask` as a pipeline stage (keep it as a selector), `IsEnabled`, the
+fifth entry in `OspreyTasks.Pipeline`. Keep: `TrainingEvidence`, the parquet writer/codec and
+their tests - they move under PerFileRescoring unchanged.
+
+### R3. No new sidecar in the scoring path
+Drop `run-info.json` and the `RunInfoCollector` work added to every default parse. Capturing
+it at parse time is the fan-out-memory trap P16 describes: a cohort cached before this change
+never gets it, and `IN_SCAN_RANGE` then silently marks every ion in range. Derive per-window
+MS2 scan ranges from the observed m/z extent in `.spectra.bin` (conservative: outside the
+observed extent = unknown, not an observed zero). Instrument / NCE / dissociation: parquet
+footer keys from the source when present, empty otherwise.
+
+### R4. Decisions the rework must make explicit
+- Experiment-level q-values and PEP exist only after SecondPassFDR and per-run files are
+  write-once: drop them from the export; the consumer joins `output.2nd-pass.fdr_experiment.bin`
+  by entry_id.
+- Transfer pass-2 (`OSPREY_PASS2_QVALUE=transfer`) and runs where Stage 6 re-scored nothing
+  write the per-run 2nd-pass sidecar in Stage 7, so PerFileRescoring has no 2nd-pass run q
+  there: either refuse `--training-export` in those modes with a clear error, or select by
+  1st-pass run q and say so in the footer.
+
+### R5. Documentation - make the missed principle explicit (in PR B)
+- `00-pipeline-architecture.md`: generalize P16 from diagnostics to OPTIONAL PRODUCTS - the
+  work goes to the existing task that already holds its inputs (experiment-wide reductions to
+  the FDR joins, per-run evidence over spectra to PerFileRescoring), declared as an output
+  under its flag, with an "only this product outstanding" arm; never a new stage.
+- Add the list above of why an appended optional stage is wrong (HPC scheduling, reloads,
+  serialization behind the join, membership/stamp complexity).
+- Reconcile P16's corollary ("diagnostics work belongs in the FDR tasks, never in the fan-out")
+  and the rule against flag-conditional fan-out sidecars with R2: what they forbid is a product
+  that can only come from fan-out MEMORY; a product the fan-out can re-derive from its own
+  durable inputs on a pay-later resume is the same pattern.
+- Update "Two selectable tasks that are not pipeline tasks" to describe the fold arms and the
+  selector-runs-the-canonical-pipeline behavior (it currently says only "processes nothing").
+- Remove the "non-degenerate version - a fifth canonical stage after SecondPassFDR" paragraph
+  from the `ModelDiagnosticsTask.cs` class doc; it contradicts P16 and invites this design.
+- Revert this PR's doc edits that describe a fifth stage (docs 00, 14, 15, 20, 22).
+
+### R6. Tests
+Pipeline legs in `Osprey.Test/SubsetPipelineTest.cs` (from #4360, in-process on a committed
+data subset, seconds per run): straight-through with `--training-export`; the same command
+re-run with the flag added to a finished directory (assert PerFileScoring/FirstPassFDR/
+SecondPassFDR skip, no re-scoring, parquet byte-identical to the flag-up-front run);
+`--task TrainingExport`.
+
+### R7. Part A review items
+- `DecoyGenerator.cs:716-727` still overwrites stacked mods (`modMasses[newPos] = m.MassDelta`);
+  use `PeptideFragmentMass.ModMassesByPosition`. Changes TSV decoys (N-term acetyl + Met ox), so
+  it needs a key term and a Rust check.
+- `BlibLoader.ProbeOnce` caches `false` on any exception; cache only successes.
+- a/c/x/z ion names are counted as "unreadable" (`BlibPeakAnnotations.cs:105-108`).
+- Version `;libext=ann` (e.g. `ann2`) like `blib_reader:2`.
+- Annotation cursor `ORDER BY RefSpectraID, peakIndex, id` sorts the whole table unindexed;
+  `ORDER BY RefSpectraID, id` suffices. Time the precision probe on a large blib.
+- Blibs without annotations (including Osprey's own output) still give decoys identical to
+  their targets; `BlibWriter` should write `RefSpectraPeakAnnotations` (follow-up). The #4360
+  branch turns the resulting `LinearDiscriminant` crash into a plain error.
+- `docs/01-decoy-generation.md:191` still places `CalculateFragmentMz` in `DecoyGenerator`.
 
 ## Verified facts (on `origin/Skyline/work/20260612_net8_port` @ `40312c7979`)
 
