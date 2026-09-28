@@ -1,11 +1,14 @@
-# TODO-osprey_resx_translation.md - Claude-drafted ja / zh-Hans translations of Osprey, straight to expert review
+# TODO-20260928_osprey_resx_translation.md - Claude-drafted ja / zh-Hans translations of Osprey, straight to expert review
 
 ## Branch Information
-- **Branch**: (not started) - `Skyline/work/YYYYMMDD_osprey_resx_translation`
-- **Base**: `Skyline/work/20260612_net8_port` (after the RESX PR from `TODO-20260926_osprey_resx.md`
-  merges; stack on it if it has not)
+- **Branch**: `Skyline/work/20260928_osprey_resx_translation` (checkout `C:\proj\pwiz-work1`;
+  created at `de1bbf1e33`, the port-branch tip, and pushed 2026-09-28)
+- **Base**: `Skyline/work/20260612_net8_port` (the RESX PR #4721 merged into it 2026-09-28)
 - **Module**: `osprey`
-- **Created**: 2026-09-26 (Brendan's request at the end of the RESX session)
+- **Created**: 2026-09-26 (Brendan's request at the end of the RESX session); started 2026-09-28
+- **Status**: In Progress
+- **GitHub Issue**: (none)
+- **PR**: (pending)
 
 ## The question this answers
 Skyline's translations came out of a rigorous process: glossary generated from source material,
