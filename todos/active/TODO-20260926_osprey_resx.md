@@ -6,12 +6,10 @@
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619). Was stacked on #4718; after #4718 squash-merged
   (64ed45b29e) the branch was rebased with `--onto` (2026-09-27, before any PR existed).
 - **Created**: 2026-09-26
-- **Status**: Steps 1-7 done and committed locally (not pushed); ready for Brendan's review, then
-  push + `gh pr create` + TeamCity. Rewordings to review:
-  `ai/.tmp/sessions/20260926-resx/REVIEW-rewordings.md`; PR body draft `.../pr-body.md`.
+- **Status**: Completed - merged 2026-09-28
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4721](https://github.com/ProteoWizard/pwiz/pull/4721) (base `Skyline/work/20260612_net8_port`, label osprey)
+- **PR**: [#4721](https://github.com/ProteoWizard/pwiz/pull/4721) (merged 2026-09-28 into `Skyline/work/20260612_net8_port`)
 
 **Origin**: the second half of `TODO-20260924_osprey_log_readability.md` (PR #4718 did steps 1-3:
 machine channel, gates, `Error:`/`Warning:`, rewording). Brendan, 2026-09-11: C# .NET has won;
@@ -311,3 +309,17 @@ over current stamps does nothing).
   declarations; TextUtil.ReadLines; LogKey.Format(key, value). 608/608 en/ja-JP/fr-FR, 0 warnings;
   Stellar PASSED (before the final parsing-only fix). 7 threads resolved; the kept `--help <section>`
   message and the [STAGE-WALL] label explanation left open for Brendan.
+
+### 2026-09-28 - Merged
+
+PR #4721 squash-merged into `Skyline/work/20260612_net8_port` as `de1bbf1e33` after TeamCity Perf/Regression
+4191120 passed on the head (`efd801b53c`). Shipped: 802+ user-facing strings in six per-assembly .resx
+(plus the help usage resx keyed by argument name), LocalizableElement enforced on every Osprey project,
+the culture split (human text current culture; files and tagged lines invariant), `--culture`,
+`OSPREY_TEST_CULTURE`, `regression.ps1 -Culture`, Osprey TextUtil / OspreyArgNames, `--name=value` for every
+argument, and Skyline's exception split (`CommonExceptionUtil.IsProgrammingDefect`, shared with Skyline).
+Deferred: translations (own PR - `ai/todos/backlog/TODO-osprey_resx_translation.md`), argument text inside
+resources (`TODO-skyline_resx_argument_text.md`), TextUtil move to CommonUtil
+(`TODO-commonutil_textutil.md`), the redundant `unit` field in `.calibration.json`, and FormatDuration's
+"1 days". Two review threads (kept `--help <section>` message, [STAGE-WALL] labels) were left open with
+answers at merge.
