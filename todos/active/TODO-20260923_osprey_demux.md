@@ -70,15 +70,26 @@ on the new machine if they did not finish, with the scripts named):
     a fragment channel with a strong one loses that fragment; the placement check saw only identified,
     mostly strong precursors; the file is 13% smaller);
   - DIA-NN chose an 8 ppm fragment tolerance for this arm, against 12-14 ppm for the others.
-  Re-searches with the slice settings pinned (`--window 6 --mass-acc 14 --mass-acc-ms1 17`) are running
-  for this arm and for centered:7 `--position-mz`: arms `cs_centered7_posmz_src_pinned` and
-  `cs_centered7_posmz_pinned`. If pinning does not recover it, test `MinSourceFraction = 0` (expose it
-  on the command line) before anything else, then `--source-l1` in place of the drop rule.
+  The pinned re-searches (arms `cs_centered7_posmz_src_pinned` and `cs_centered7_posmz_pinned`, with
+  `--window 6 --mass-acc 14 --mass-acc-ms1 17`) and the centered:5 source-positions arm were stopped
+  unfinished to free the old machine; rerun them on the new one (`Search-Slices.ps1 -Extra '<pinned>'`
+  on the existing slice files, or `Run-CsSlices.ps1` to remake them).
+- **Whole runs, centered:7 `--position-mz`, DIA-NN settings pinned (`--window 6 --mass-acc 17
+  --mass-acc-ms1 19`): 31,512 / 31,506 / 32,117 targets, FDP 0.79-0.89%.** That is 4-7% more than DIA-NN's
+  scanning mode on the `.wiff` (29,552 / 30,285 / 30,882, FDP 0.90-0.96%) and 13-15% more than the
+  acquired data. CV on the 18,035 precursors all four arms found in all three runs: 0.119, against
+  0.089 for scanning mode, 0.112 acquired, 0.135 for centered:5 with DIA-NN's own settings. 24,600
+  precursors are quantified in all three runs (scanning mode 23,589). **Identifications now beat
+  DIA-NN's scanning mode; quantitative precision is the remaining gap.** Files:
+  `D:\test\osprey-runs\ztscan\full\cs_centered7_posmz` (about 16 GB each) on the old machine.
 
 **Next, in order**
-1. Read the two in-flight arms. If source positions improve the slice's IDs or CV, run them on whole
-   runs: `Run-FullC7Posmz.ps1` with `--source-positions` added, pinned settings, three replicates.
-   The target is the CV of DIA-NN's scanning mode, 0.089.
+1. Quantitation. Rerun the stopped pinned slice searches first. If source positions recover once
+   DIA-NN's settings are pinned, take them to whole runs (`Run-FullC7Posmz.ps1` with
+   `--source-positions` added); if not, try `MinSourceFraction = 0` (expose it on the command line),
+   then `--source-l1` in place of the drop rule. The target is scanning mode's CV, 0.089. Also worth
+   separating: whether the CV gap is in the demultiplexed values themselves or in how DIA-NN quantifies
+   a centered:7 spectrum, which carries neighbors' fragments (compare CV by precursor m/z density).
 2. The non-negative lasso on the source-finding fit (`--source-l1`; spec §5.4d puts its scale in the
    Poisson weights): try a few values on the slice against the merge / drop rule.
 3. If quantitation still lags: grouping fragments by precursor (the prototype over-merged: correlate
