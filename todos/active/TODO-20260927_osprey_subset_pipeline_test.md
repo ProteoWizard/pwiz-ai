@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260927_osprey_subset_pipeline_test`
-- **Base**: `Skyline/work/20260612_net8_port` (stacked on open PR #4619; retarget to `master` once #4619 merges)
+- **Base**: `Skyline/work/20260612_net8_port` (PR goes `--base` the port branch; update via `git merge origin/Skyline/work/20260612_net8_port`)
 - **Checkout**: `C:\proj\pwiz-work1` (all Build-*/Run-* calls need `-SourceRoot C:/proj/pwiz-work1`)
 - **Created**: 2026-09-27
 - **Status**: In Progress
