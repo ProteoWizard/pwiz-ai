@@ -279,3 +279,9 @@ over current stamps does nothing).
 - TeamCity Perf/Regression 4190689 on `pull/4721` @ `4e229ddac7`: SUCCESS.
 - Brendan's review round 1 (38 comments, first half of the PR) being addressed; TextUtil move to
   CommonUtil split out as `ai/todos/backlog/TODO-commonutil_textutil.md` (his comment 13).
+- Review round 1 (Brendan, 38 comments, PR up to SpectrumBuilder): `7298f09398` - Osprey.Core/TextUtil
+  (mirrors Skyline TextUtil), EXT constants on owning classes, m/z not Th, Skyline exception rule
+  (IOException/InvalidDataException user text resourced; defects -> InvalidOperationException),
+  DRY resources, empty localized resx deleted. Gate en/ja-JP/fr-FR 606/606, 0 warnings; Stellar
+  regression PASSED. 36 threads replied + resolved; comments 8 (thin ja seed) and 9 (zh-CHS vs
+  zh-Hans) answered and left open for Brendan. Second half of the PR not yet reviewed.
