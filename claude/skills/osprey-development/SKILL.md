@@ -273,11 +273,13 @@ The **Osprey Windows .NET Perf/Regression Tests** config runs `tctest.bat`, i.e.
 and does NOT start on PR open or push, but it must run before human review /
 merge.
 
-**It runs EVERY mode on ALL FOUR datasets** - no `-Skip*` switch is passed, so
-whatever `regression.ps1` gains, this config runs. That is modes 1, 1b, 2, 3, 4,
-5 and 6 today. (This paragraph said "mode1/2/3" for months after modes 4-6 were
-added; if you are about to quote a mode list from here, check `tctest.bat`
-instead - the invocation is one line and cannot go stale.)
+**It runs ALL FOUR datasets with no `-Skip*` switch**, so whatever `regression.ps1`
+gains, this config runs - but NOT every mode on every dataset: each dataset's
+`SkipModes` entry in the regression.ps1 dataset table cuts legs (e.g. mode 3 is not
+run on StellarGenDecoyEntrap, mode 2 not on Astral, modes 7-11 run only on
+StellarLibDecoy). Read the mode list from that table and `tctest.bat`, not from
+here; this paragraph has been stale twice. #4728 plans moving the pipeline-mechanics
+legs to `SubsetPipelineTest`.
 
 "Four datasets" is **two acquisitions searched four ways**, not four acquisitions:
 `stellar` (3 mzML, unit) and `astral` (3 mzML, hram), 6 distinct files total. The
