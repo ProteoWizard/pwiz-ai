@@ -17,6 +17,15 @@ company mediating feedback for consistency. Can Claude produce the first draft A
 consistency itself, so Osprey goes straight to the expert review phase with no translation company?
 The work is only half the deliverable; the other half is evidence for or against that claim.
 
+## Decisions (Brendan, 2026-09-28)
+- Glossary + style guide location: `pwiz_tools/Shared/Translation/` (shared with Skyline).
+- The translation company's original glossary / style guide exists outside the repo; Brendan
+  will provide it (location pending). Use it as an input to step 1, not a replacement for the
+  corpus evidence - reviewer edits in the RESX outrank it.
+- Reviewers review in the translation company's CSV format (`localization.ja.csv` /
+  `localization.zh-CHS.csv`), not a new Artifact. Step 8 extends that CSV (notes / confidence /
+  glossary-term columns) rather than inventing a new surface.
+
 ## Inputs (all in the pwiz tree)
 1. **Skyline RESX pairs** - every `X.resx` with `X.ja.resx` / `X.zh-Hans.resx` beside it. Measured
    2026-09-26: 7,225 ja and 7,236 zh-Hans English->translation pairs (script:
@@ -108,3 +117,64 @@ The work is only half the deliverable; the other half is evidence for or against
   complete; placeholder / conformance tests green; unit tests green under ja-JP; Stellar logs in ja
   and zh-Hans read end to end.
 - An evaluation write-up with the holdout numbers, sent to Brendan with the reviewer package.
+
+## Progress
+
+**2026-09-28** (Brendan away for the afternoon; autonomous, decisions recorded here)
+- Branch created in `C:\proj\pwiz-work1` at `de1bbf1e33` (port-branch tip, #4721 merged) and pushed.
+- **Correction to this TODO**: the "exact matches were already seeded" claim is stale - `42586e94f2`
+  removed the sparse seed files (Brendan: first Osprey translation is its own PR with full files).
+  Osprey now has 812 resources in 8 `.resx` (the 797/6 figure predates `OspreyCommandArgUsage.resx`);
+  only ~10 of them have an exact reviewed match anywhere in Skyline, so the TM contributes terms
+  and phrasing, not whole strings.
+- **Inputs gathered** (session folder `ai/.tmp/sessions/20260928-resxtr/`, not committed):
+  - Brendan's two glossaries (ja 72177 2014-01, zh summary 2014-05) plus, from `G:\My Drive\Localization`:
+    the ja Term Base 2016-04 (latest + Yasushi's edits), the zh glossary 2014-05-23 final-reviewed and
+    2014-06-03, three zh reviewer-marked glossaries, the Acclaro zh style guide (a tutorial template;
+    only its numerals / spacing rules survive text recovery), LS and Dynamic Language review
+    instructions, ja/zh `.tmx` TMs, and the translator-draft vs reviewed rounds for 24.1 and 25.1.
+    `archive/` + `extract_archive.py` (xlsx/xls/docx -> tsv/txt).
+  - RESX corpus: every Skyline `X.resx` / `.ja.resx` / `.zh-Hans.resx` pair, including form text
+    members: 9,888 ja and 10,058 zh reviewed pairs (`corpus.py` -> `corpus-resx.tsv`).
+  - Tutorial corpus: 3,923 ja / 3,894 zh aligned paragraphs (`tutorial_corpus.py`), aligned exactly
+    as `DevTools/TutorialLocalization` does (`<lang>/invariant.html` vs `<lang>/index.html` by XPath).
+- **Port-branch pipeline defects found** (the translation tooling had not been run since the .NET 10
+  retarget):
+  - `TutorialLocalization/Jamfile.jam`: `msbuild` without `/restore` fails NETSDK1004 since the project
+    gained a PackageReference - FIXED (added `/restore`). The tool then still dies at run time:
+    `lib\CsvHelper.dll` needs `Microsoft.Bcl.HashCode`, absent from the net10 output - NOT fixed here
+    (DevTools packaging; the aligner was re-implemented in the session script instead).
+  - ResourcesOrganizer `GenerateLocalizationCsvFiles.bat` / `ImportLocalizationCsvFiles.bat` hardcode
+    `zh-CHS`; the tool names output files after that string, so on the port branch the import would
+    create new `*.zh-CHS.resx` beside the real `*.zh-Hans.resx` - FIXED to `zh-Hans` (CSV name becomes
+    `localization.zh-Hans.csv`). `UpdateResxFiles.bat` and `LastReleaseResources.db` (whose Chinese
+    rows are keyed `zh-CHS`) are NOT changed: migrating the release baseline belongs to the next
+    Skyline translation round - follow-up for Brendan.
+  - Five non-Skyline tool resx still named `.zh-CHS.resx` (SkylineBatch, MPPExport, SProCoP, SkyGadget,
+    Turnover); untouched.
+- **Glossary + style guide drafted** in `pwiz_tools/Shared/Translation/` (`glossary.tsv`,
+  `style-guide.md`): ~150 terms, each with ja / zh-Hans, `reviewed` (Skyline's reviewers settled it,
+  with counts) or `new` (first proposal for an Osprey-only term), conflicts and notes. Derived rules
+  with measured shares (e.g. ja `「{0}」` 93%, zh `“{0}”` 85%; zh spaces CJK<->Latin 3,367:58, ja does
+  not 3,784:32; `エラー：`/`错误：` 163/163). Reviewer choices kept even where non-literal: zh
+  `耐受性` for tolerance (24/24), `划定` for imputation, `编号` for accession; ja `単離ウィンドウ`,
+  `繰り返し測定`, `Q値`. Decision: acquisition "run" = ja `ラン` (tutorial usage), Osprey invocation =
+  `実行`; zh `运行` for both. Osprey-only terms flagged low-confidence for the reviewers:
+  reconciliation, peak co-assignment, entrapment, calibrator, fold.
+- **Step 4 delegated** to a subagent in this checkout (CLI flags / task names / extensions -> `{N}`
+  arguments, test literals -> typed args, CodeInspectionTest guard). In progress.
+- **Step 7 evaluation set up**: holdout = the Skyline 24.1 + 25.1 translation rounds, 520 ja / 521 zh
+  strings with the professional pre-review draft (archive `*-LS.csv`, 24.1 reviewer sheets) and the
+  reviewed final (checked-in RESX). Reviewers changed 116/520 ja drafts but only 24/521 zh drafts
+  (zh 25.1 final == LS draft for all 193 strings). Two blind subagents (session model, Opus 5.5)
+  translate it with only the glossary, style guide and a TM that excludes every holdout string;
+  `eval_score.py` scores exact match, similarity, placeholders, glossary and style conformance,
+  and confidence calibration. Caveats to report with the numbers: the finals were edited FROM the
+  professional draft (anchoring favors it on exact match), and the glossary was built from a corpus
+  that included the 526 holdout English strings (~5%).
+- **Pipeline plan for the Osprey drafts**: write Claude's translations as the standard CSV with
+  `Issue = New resource`, import with `ImportLocalizationCsvFiles` (creates `Osprey*.ja.resx` /
+  `.zh-Hans.resx` with `Needs Review:New resource` comments - the same state as any unreviewed
+  Skyline string), then `GenerateLocalizationCsvFiles` hands the reviewers their usual CSV with the
+  drafts pre-filled. Verified by reading `ResourcesFile.ImportLocalizationRecords`,
+  `ResourcesDatabase.ExportResx` / `ExportLocalizationCsv`.
