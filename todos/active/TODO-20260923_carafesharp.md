@@ -265,6 +265,36 @@ CUDA test pass can run there too.
 - [ ] Later, not blocking merge: a TeamCity config that builds CarafeSharp and runs the tier-1
       tests; point the `vcs_trigger_and_paths_config.py` entry at it.
 
+**Status 2026-09-28 (night session; plan `i-would-like-to-starry-gizmo.md`).** Pushed to #4717 (b70b34d0ab..ad0ac68a31)
+and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
+- [x] Pretrained models committed (`models/alphapeptdeep-v1`, Carafe 2.2's v1, SHA-256 pinned), copied beside the exe.
+- [x] `testdata.json` + `TestData.cs`: packages under `<Downloads>/Perftests`, `CARAFESHARP_*` overrides, missing data fails once any exists.
+- [x] `build.ps1` / `build.sh` / `build.bat`: CPU and CUDA (separate bin-cuda), GPU preflight, `-RequireData`, `-Coverage`; a `Cuda` test.
+- [x] No-data unit tests: statement coverage 94.0-99.6% per assembly; bug found and fixed (stage-1 partial FASTA).
+- [x] `/code-review max` on the new commits: 15 findings, 13 fixed (b1ef439a9b), 2 follow-ups below.
+- [x] `docs/04-testing.md`; `Build-CarafeSharp.ps1` delegates to build.ps1; `New-CarafeSharpTestData.ps1` from testdata.json, with the manifest as the zip's last entry.
+- [x] Gates on ad0ac68a31, all passing:
+  - dev-data CPU suite 68/68 with -RequireData;
+  - Astral category 4/4;
+  - Cuda test (GTX 1650);
+  - inspection 0;
+  - WSL2 Ubuntu 22.04: build.sh from a fresh sparse clone, 60 passed + 8 inconclusive with no data, and 68/68 with the data read from /mnt/d.
+- [x] Zips built locally from testdata.json (D:\test\carafesharp-testdata-zips):
+  - testfiles-v1: 1,518,099,270 B, SHA-256 dc1a04c2...;
+  - astral-v1: 4,794,773,084 B, SHA-256 d2453218....
+
+  Both were extracted with Expand-ZipNoOverwrite into a path with spaces on C:, with 0 checksum
+  mismatches; the CPU suite ran 68/68 from there and Astral 4/4. The default <Downloads>/Perftests root works.
+- [ ] export-v1: regenerate from .raw with the landed #4708 Osprey (a dry-run zip from the June mzML export
+  is in carafesharp-testdata-zips-dryrun, NOT for publishing). Then upload all three with approval and fill
+  testdata.json's url/sha256/size.
+- [ ] Golden regression.ps1 (section 5), WSL2 verification (section 7), final Carafe comparison (section 8).
+- Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
+  mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
+  reference TSV twice (read once with a combined predicate).
+- Masking A/B by IDs (developer's request): Stellar A vs B indistinguishable (0.12%, within seed noise);
+  Astral arms running. Status: `ai/.tmp/agent-carafesharp-maskexp-status.md`.
+
 ## Reference data on this machine (developer's own Carafe runs)
 
 `D:\GitHub-Repo\maccoss\osprey\example_test_data\stellar\`:
