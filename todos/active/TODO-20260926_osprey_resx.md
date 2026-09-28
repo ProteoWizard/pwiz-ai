@@ -303,3 +303,11 @@ over current stamps does nothing).
   catch-all): SpectraCacheException -> IOException; UnknownTask/UnknownByproductException ->
   InvalidOperationException (defects); RehydrateFailedException stays UserMessageException. No
   IOException catch lies on the SpectraCacheException throw path. 607/607, 0 warnings.
+- TeamCity Perf/Regression 4191104 @ `fb699e77bc`: SUCCESS.
+- Review round 2 (9 comments) `efd801b53c`: `--name=value` accepted for every value-taking argument
+  (inline value validated as the argument's own); `--task`/`--culture` found via the Argument code
+  (FindValue/MatchToken/TakeValue); help descriptions in `OspreyCommandArgUsage.resx` keyed by argument
+  name (Skyline style) with argument text as {N}; `Osprey.Core/OspreyArgNames` shared with the argument
+  declarations; TextUtil.ReadLines; LogKey.Format(key, value). 608/608 en/ja-JP/fr-FR, 0 warnings;
+  Stellar PASSED (before the final parsing-only fix). 7 threads resolved; the kept `--help <section>`
+  message and the [STAGE-WALL] label explanation left open for Brendan.
