@@ -107,3 +107,10 @@ the ported code.
   (ai/.tmp/night4360/sharpness-impact.md). Needs a design decision - see ai/.tmp/handoff-20260928.md.
 - Next: decide peak-sharpness approach; /code-review against the port branch (not master); open PR with
   --base Skyline/work/20260612_net8_port --label osprey.
+- 2026-09-28: the --parallel-files race is issue #4706 (Mike, assigned to Brendan). This branch covers its whole
+  scope: thread-local scratch (0287715d21), stress test TestFrozenModelScorerIsThreadSafe, comment fixes
+  (0287715d21, 599a2df27b), and SubsetPipelineTest --parallel-files legs (stronger than a regression leg: the
+  subset reproduces the race every time). PR body: `Fixes #4360` and `Fixes #4706`.
+- Mike's PRs: #4708 merges cleanly with this branch (619/619 tests pass); #4715 removes --fdr-method (move the
+  gbdt leg to OSPREY_FDR_MODEL, which #4715 should read via GetVariable per access). Merge order: #4708, #4715,
+  this branch, #4710.
