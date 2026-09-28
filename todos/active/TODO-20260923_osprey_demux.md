@@ -43,8 +43,13 @@ the old machine except the in-flight results listed last.
 - Eclipse (Orbitrap staggered, 50% overlap): apportioned per-channel demux gives 40,009 precursors at
   0.26% FDP, against msconvert's 38,411 and #4710's 39,355. Done unless the k = 3 / 4 data changes it.
 - ZT Scan identifications (updated 2026-09-28, see the night's section below): on whole runs,
-  centered:7 `--position-mz` with DIA-NN pinned finds 4.0-6.6% more targets than DIA-NN's scanning mode
-  on the `.wiff`. The ID gap is closed.
+  centered:7 `--position-mz` with DIA-NN pinned finds 28,171 / 28,188 / 28,729 peptides (FDP 0.89-1.00%)
+  against 26,475 / 27,174 / 27,635 (1.01-1.07%) for DIA-NN's scanning mode on the `.wiff`: +3.7-6.4% per run,
+  22,197 against 21,341 in all three runs, 35,140 against 33,370 in any (`ids_summary.py`). Precursors
+  +4.0-6.6%. **Mike's criterion (2026-09-28): detect as many peptides as DIA-NN on the `.wiff` or more;
+  somewhat worse precision is acceptable. Met.** Checks running: the `.wiff` searched with the same pinned
+  settings (`ztscan\diann\W_wiff_scanning_3runs_pinned`), and the demux files at 14 / 17 ppm
+  (`slices\diann\full_c7pz_scarfell_ma14`).
 - ZT Scan quantitation is the open gap: CV 0.119 against 0.112 acquired and 0.088 for DIA-NN on the
   `.wiff` (was 0.135 with DIA-NN's own settings and centered:5).
 - `--source-positions` (each channel's sources placed once per block, each sweep solved over just

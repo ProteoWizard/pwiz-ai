@@ -51,7 +51,7 @@ its output with DIA-NN, and hold the Python prototypes the C# was built from.
 |---|---|
 | `Run-CsSlices.ps1 -Exe <tool> -Layouts centered:7,centered:5 [-Extra '<tool flags>'] [-Suffix _x]` | The tool on the slice (sweeps 247-371, 500-700 m/z) of the three runs' mzML, one DIA-NN arm per layout: `slices\cs_<layout><suffix>` and `slices\diann\cs_<layout><suffix>`. |
 | `Search-Slices.ps1 -Arm <name> -Mzml <a,b,c> [-Extra '<DIA-NN flags>'] [-ScanningSwath]` | One DIA-NN search, the same library and flags as every arm, into `slices\diann\<arm>`. |
-| `Search-Wiff.ps1 -Arm <name> -Runs <stems> [-Extension .wiff]` | DIA-NN `--scanning-swath` on the vendor `.wiff` (needs the SCIEX DLL copy above), into `ztscan\diann\<arm>`. |
+| `Search-Wiff.ps1 -Arm <name> -Runs <stems> [-Extension .wiff] [-Extra '<DIA-NN flags>']` | DIA-NN `--scanning-swath` on the vendor `.wiff` (needs the SCIEX DLL copy above), into `ztscan\diann\<arm>`. |
 | `Run-FullZtScan.ps1 -Layout centered:5` | Whole runs from `.wiff2`, one after another, then a three-run search. |
 | `Run-FullC7Posmz.ps1` | Whole runs from `.wiff2` in parallel with centered:7 and `--position-mz`, then a three-run search at pinned settings. |
 | `Run-SliceArm.ps1 -Exe <tool> -Name <arm> [-Flags '<tool flags>'] [-DiannExtra '<DIA-NN flags>']` | One slice arm from the mzML with its own flags and optional pinned DIA-NN settings; arms are independent, so several can run at once. The pinned slice settings are `--window 6 --mass-acc 14 --mass-acc-ms1 17`. |
@@ -70,6 +70,7 @@ its output with DIA-NN, and hold the Python prototypes the C# was built from.
 | `Compare-DemuxParity.py` | Spectrum-level agreement of two demultiplexed mzML files (keyed on scan and `demux=k`). |
 | `Measure-ZtScanKernel.py <run.mzML> <out_prefix> [rt_min rt_max]` | The quadrupole transmission from MS1 probes; writes the kernel the tool reads. |
 | `Measure-ZtScanEdges.py`, `Measure-ZtScanTransmission.py` | Checks of the kernel from identified precursors' fragments. |
+| `ids_summary.py [--rt lo hi] <arm>=<report> ...` | Target precursors and peptides per run with their entrapment FDP, and peptides found in every run and in any run. |
 | `paired_cv.py --rt <lo> <hi> <arm>=<report> ...` | Arms compared precursor by precursor (median paired change in CV, share improved), on those every arm finds in every run. A median CV alone moves with DIA-NN's choices. |
 | `region_cv.py`, `abundance_cv.py <arm>=<report> ...` | Whole-run CV by RT and m/z cell, and by abundance quartile. |
 | `peak_stats.py <n> <label>=<mzML> ...` | Peaks per spectrum and the share under 1 and 5 ions, over the same spectra of several slice files. |

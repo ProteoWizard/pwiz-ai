@@ -8,7 +8,8 @@ param(
     [switch]$Plain,
     [int]$Threads = 8,
     [int]$WaitForPid = 0,
-    [string]$Diann = ''
+    [string]$Diann = '',
+    [string]$Extra = ''  # extra DIA-NN flags, space-separated (e.g. pinned settings)
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Demux-Roots.ps1')
@@ -24,6 +25,7 @@ foreach ($stem in ($Runs -split ',')) { $argv += @('--f', "$dataRoot\ZenoTOF8600
 $argv += @('--lib', $lib, '--threads', "$Threads", '--verbose', '1', '--qvalue', '0.01', '--matrices',
     '--out', (Join-Path $outDir 'report.parquet'), '--temp', (Join-Path $outDir 'tmp'))
 if (-not $Plain) { $argv += '--scanning-swath' }
+if ($Extra) { $argv += ($Extra -split ' ') }
 $sw = [Diagnostics.Stopwatch]::StartNew()
 & $Diann @argv *> (Join-Path $outDir 'diann.log')
 $sw.Stop()
