@@ -7,16 +7,70 @@
 - **Status**: In Progress. M0 and M1 (staggered DIA) in review by Brendan (#4710, requested 2026-09-25).
   M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
   the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
-- **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416), pushed
-  2026-09-27 at d6366f4493 (8 commits; no PR yet; run /code-review before opening one). Its algorithms are
-  documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
-- **In flight (2026-09-27, `ai/.tmp/sessions/20260923-osprey-demux/model/Run-Followups.ps1`)**, DIA-NN arms under
-  `D:\test\osprey-runs\ztscan\`:
-  - `diann\W_wiff_scanning`: A1 .wiff, `--scanning-swath` (DIA-NN's proper ZT Scan baseline), ~09:30;
-  - `diann\W_wiff_scanning_3runs`: the three .wiff files, ~13:00;
-  - `slices\diann\full_cs_framed31_A1`: full A1 framed:3:1 without the floor (layout vs floor), ~14:00;
-  - `slices\diann\full_raw_plain`: the three acquired mzMLs, plain, the CV baseline for
-    `slices\diann\full_cs_centered5` (CV 0.139), ~17:00.
+- **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416),
+  pushed. No PR yet; run /code-review before opening one. Its algorithms are documented in
+  `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
+
+## Handoff (2026-09-27): moving the work to another machine
+
+Read this first on the new machine. Everything needed is on the remotes; nothing below depends on
+the old machine except the in-flight results listed last.
+
+**Where things are**
+- Code: the follow-on branch above. Its commits, oldest first:
+  - c7f20cdd74 the per-sweep weighted ZT Scan demultiplexer, histogram channels, layouts, the tool;
+  - 0f217a3331 the staggered path, vendor `.wiff2` / `.raw` reading;
+  - f275c565aa the sparse Gram build, the incremental NNLS factor and warm start (~3x faster solve);
+  - 6c5cb2f5ad apportioned staggered output (this is what beat msconvert on Eclipse);
+  - 4fe286e574 framed layouts; 90924fb009 `--apportion` and `--min-out`;
+  - 0dbd3641f3 read the next batch while solving; d6366f4493 the doc;
+  - 89401fdf71 `--position-mz`; 1517e4803c `--source-positions` and `--source-l1`;
+  - d2f9811fd4 the doc updated with them.
+- The algorithms, options, and every result table: `pwiz_tools/Osprey/docs/22-demultiplexing.md` on the
+  branch. The modeling and the day's experiments: `TODO-20260923_osprey_demux/modeling-2026-09-26.md`,
+  "Day of 2026-09-27".
+- Scripts, kernels, and machine setup (the data to copy with sizes, building the tool, DIA-NN's SCIEX
+  DLLs, pinned DIA-NN settings): `ai/scripts/Osprey/Demux/README.md`. The scripts there are copies of
+  the session's; their data roots are `D:\demux-test-data` and `D:\test\osprey-runs`.
+- The old local branch `Skyline/work/20260925_osprey_ztscan_demux` (WIP ba0b22546b, the superseded
+  pooled-sweep version) exists only on the old machine and is not needed.
+
+**Where the results stand**
+- Eclipse (Orbitrap staggered, 50% overlap): apportioned per-channel demux gives 40,009 precursors at
+  0.26% FDP, against msconvert's 38,411 and #4710's 39,355. Done unless the k = 3 / 4 data changes it.
+- ZT Scan identifications: on the slice, centered:7 with `--position-mz` gives 2,893 targets per run,
+  1.7% more than DIA-NN's own scanning mode and 8.8% more than the acquired data. On whole runs, with
+  DIA-NN's settings pinned, centered:5 is 1.4% short of scanning mode on the `.wiff`.
+- ZT Scan quantitation is the open gap: over three whole runs the per-sweep demux's CV is 0.135,
+  against 0.112 for the acquired data and 0.089 for DIA-NN's scanning mode (DIA-NN's own settings on
+  every arm).
+- `--source-positions` (each channel's sources placed once per block, each sweep solved over just
+  those) is the answer being tested for that gap. In the Python prototype it moved the share of an
+  identified precursor's fragment signal landing in its own bin from 0.52 to 0.69.
+
+**In flight on the old machine at handoff** (outputs under `D:\test\osprey-runs\ztscan\` there; rerun
+on the new machine if they did not finish, with the scripts named):
+- Slice, `--source-positions --position-mz`, centered:7 and centered:5: arms
+  `slices\diann\cs_centered7_posmz_src` and `cs_centered5_posmz_src`
+  (`Run-CsSlices.ps1 -Layouts centered:7,centered:5 -Extra '--position-mz --source-positions' -Suffix _posmz_src`).
+  Compare with `cs_centered7_posmz` (2,770 / 2,950 / 2,959, CV 0.095 on the slice).
+- Whole runs, centered:7 `--position-mz`, three replicates, DIA-NN settings pinned: arm
+  `slices\diann\full_cs_centered7_posmz_fixed` (`Run-FullC7Posmz.ps1`). Compare its CV with the table above.
+- The results of both are recorded below if they finished before the move.
+
+**Next, in order**
+1. Read the two in-flight arms. If source positions improve the slice's IDs or CV, run them on whole
+   runs: `Run-FullC7Posmz.ps1` with `--source-positions` added, pinned settings, three replicates.
+   The target is the CV of DIA-NN's scanning mode, 0.089.
+2. The non-negative lasso on the source-finding fit (`--source-l1`; spec §5.4d puts its scale in the
+   Poisson weights): try a few values on the slice against the merge / drop rule.
+3. If quantitation still lags: grouping fragments by precursor (the prototype over-merged: correlate
+   only within each seed's elution window, tighten the position gate, cap the group size), and the
+   anchored per-candidate extraction as an Osprey scoring feature (+4% at 5% FDR in the prototype).
+4. Orbitrap k = 3 / 4 (see Decisions): a synthetic alternate-cycle test, then per-time vs separable.
+5. Toward Osprey itself: stage the `.wiff2` reader for Osprey.exe, calibrate the kernel per file in C#,
+   and give the per-channel demultiplexer a descriptor in the demultiplexed cache under `--demux`.
+6. /code-review max before any PR; the PR goes to #4710's branch, or to the port branch once #4710 merges.
 - **Module**: `osprey`
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711)
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (M0 + M1)

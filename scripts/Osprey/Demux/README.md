@@ -1,17 +1,81 @@
-# ZT Scan demultiplexing scripts
+# ZT Scan and staggered demultiplexing scripts
 
-These scripts measure the SCIEX ZT Scan transmission and compare DIA-NN searches of demultiplexed
-output. They support `pwiz_tools/Osprey/docs/22-demultiplexing.md` ("The per-channel
-demultiplexer") and TODO-20260923_osprey_demux.md. They need Python with numpy, pandas, pyarrow
-and pyteomics.
+Research scripts for the per-channel demultiplexer (`pwiz_tools/Osprey/docs/22-demultiplexing.md`,
+"The per-channel demultiplexer"; TODO-20260923_osprey_demux.md). They drive `Osprey.DemuxTool`, search
+its output with DIA-NN, and hold the Python prototypes the C# was built from.
+
+## Setting up a machine
+
+- **Data roots, hard-coded in the scripts:** `D:\demux-test-data` (the vendor files) and
+  `D:\test\osprey-runs` (everything written). On a machine with other drives, edit them, or map the
+  same paths. The files needed:
+
+  | Path | Size | What |
+  |---|---|---|
+  | `D:\demux-test-data\ZenoTOF8600-ZTScan\250814_ZTScan_100spd_A_{1_A1,2_D1,3_G1}.{wiff2,wiff,wiff.scan}` | about 8.7 GB each | ZT Scan runs (`.wiff2` for the tool, `.wiff` for DIA-NN; both use the `.wiff.scan`) |
+  | `D:\demux-test-data\Eclipse-staggered\Ecl_2022_0705_Beads_EV13_SAXN_12mz_10.raw`, `..._EV14_SAXN_12mz_17.raw` | 1.2 GB each | Orbitrap staggered runs (the `.mzML` beside them, 2.3 GB each, are msconvert's demultiplexed reference) |
+  | `D:\demux-test-data\Eclipse-staggered\carafe_spectral_library+decoy+entrapment.tsv` | 12.7 GB | their Carafe library |
+  | `D:\test\osprey-runs\ztscan\library\ztscan_carafe_lib.parquet` | 0.7 GB | the ZT Scan DIA-NN library (Carafe, with `_p_target` entrapment) |
+  | `D:\test\osprey-runs\ztscan\mzml\*.mzML` | about 21 GB each | msconvert's vendor-centroided mzML of the ZT Scan runs, read by the slice runners and the Python prototypes |
+
+  The `.wiff.dia` and `.wiff.dia.quant` files beside the ZT Scan data came from a collaborator and
+  are not needed.
+- **The tool:** build the branch with the vendor readers,
+  `pwsh -File ai/scripts/Osprey/Build-Osprey.ps1 -SourceRoot <checkout> -VendorReader -Configuration Release`,
+  and copy `pwiz_tools/Osprey/Osprey.DemuxTool/bin/x64/Release/net10.0` to a snapshot folder
+  (`D:\test\osprey-runs\_bin\<tag>`), so a running job never locks the build tree. The `.wiff2`
+  reader's SQLite natives are staged into its `wiff2` subfolder by the build.
+- **DIA-NN 2.3.2** (`C:\DIA-NN\2.3.2`) searches mzML as installed. To read the SCIEX `.wiff`, copy the
+  install to `D:\test\osprey-runs\_bin\diann-2.3.2-sciex` and copy into it every DLL whose name contains
+  `Clearcore` or `Sciex` from `pwiz-sharp\vendor-assemblies\Sciex\vendor_api\ABI` (the DIA-NN README's
+  instruction, with that folder standing in for a ProteoWizard install). DIA-NN does not read `.wiff2`.
+- **DIA-NN splits its command line at `--`**, so no path it is given may contain `--` (a session
+  scratch path like `D--Dev` does).
+- **Pin DIA-NN's settings on demultiplexed files:** `--window 6 --mass-acc 17 --mass-acc-ms1 19` for
+  whole runs (the acquired A1 run's own choices). Left to choose, DIA-NN measures narrower peaks on a
+  demultiplexed file and picks a smaller window and wider tolerance, which cost about 5% of the
+  identifications.
+- Python: numpy, pandas, pyarrow, scipy, scikit-learn, pyteomics, psims.
+
+## Drivers (PowerShell)
+
+`pwsh -File` cannot pass an array: give lists comma-separated.
 
 | Script | What it does |
 |---|---|
-| `Measure-ZtScanKernel.py <run.mzML> <out_prefix> [rt_min rt_max]` | Measures the quadrupole transmission from the data. The probes are intense MS1 peaks, whose own m/z survives unfragmented in every encoded bin that transmits them. Writes `<out_prefix>.profile.tsv`, the kernel `Osprey.DemuxTool --kernel` reads. |
-| `Measure-ZtScanEdges.py <raw.mzML> <report.parquet> <library.parquet> [n] [frac]` | An independent check from DIA-NN identifications: where each precursor's fragments start and stop along the sweep, relative to the precursor m/z. |
-| `Compare-ZtScanSlices.py --rt <lo> <hi> <arm>=<report.parquet> ...` | Per arm and run: target precursors at 1% and the entrapment FDP. Then the replicate CV of `Precursor.Quantity`, per arm and on the set every arm shares. For a whole run, pass `--rt 0 30`. |
-| `Region-Gains.py <base report.parquet> <arm report.parquet>` | Target precursors gained or lost, by precursor m/z and retention time. |
+| `Run-CsSlices.ps1 -Exe <tool> -Layouts centered:7,centered:5 [-Extra '<tool flags>'] [-Suffix _x]` | The tool on the slice (sweeps 247-371, 500-700 m/z) of the three runs' mzML, one DIA-NN arm per layout: `slices\cs_<layout><suffix>` and `slices\diann\cs_<layout><suffix>`. |
+| `Search-Slices.ps1 -Arm <name> -Mzml <a,b,c> [-Extra '<DIA-NN flags>'] [-ScanningSwath]` | One DIA-NN search, the same library and flags as every arm, into `slices\diann\<arm>`. |
+| `Search-Wiff.ps1 -Arm <name> -Runs <stems> [-Extension .wiff]` | DIA-NN `--scanning-swath` on the vendor `.wiff` (needs the SCIEX DLL copy above), into `ztscan\diann\<arm>`. |
+| `Run-FullZtScan.ps1 -Layout centered:5` | Whole runs from `.wiff2`, one after another, then a three-run search. |
+| `Run-FullC7Posmz.ps1` | Whole runs from `.wiff2` in parallel with centered:7 and `--position-mz`, then a three-run search at pinned settings. |
+| `Run-EclipseSearch.ps1 -Name <arm> -Tool <tool>` | The Eclipse runs through `--scheme staggered`, then an Osprey search. |
+| `Run-TimingAB.ps1 -Old <tool> -New <tool>` | Two tool builds on the same short range, timed, outputs diffed (`Diff-Mzml.py`). |
 
-The kernel used so far is `D:\test\osprey-runs\ztscan\kernel\A1_rt3-8.profile.tsv`, measured on
-the A1 run at 3-8 min, from an mzML of the centroided spectra. Entrapment ids carry `_p_target`
-in `Protein.Ids`, as in the Carafe library these searches used.
+## Analysis
+
+| Script | What it does |
+|---|---|
+| `Compare-ZtScanSlices.py --rt <lo> <hi> <arm>=<report.parquet> ...` | Targets at 1% and entrapment FDP per arm and run, then replicate CV per arm and on the shared set. For whole runs, `--rt 0 30`. |
+| `Region-Gains.py <base report> <arm report>` | Targets gained or lost by precursor m/z and RT. |
+| `Lost-Precursors.py` | Precursors one arm finds and another misses. |
+| `Compare-DemuxParity.py` | Spectrum-level agreement of two demultiplexed mzML files (keyed on scan and `demux=k`). |
+| `Measure-ZtScanKernel.py <run.mzML> <out_prefix> [rt_min rt_max]` | The quadrupole transmission from MS1 probes; writes the kernel the tool reads. |
+| `Measure-ZtScanEdges.py`, `Measure-ZtScanTransmission.py` | Checks of the kernel from identified precursors' fragments. |
+
+`kernels/A1_rt3-8.profile.tsv` is the kernel every run so far used (A1, 3-8 min, 10,168 probes);
+`kernels/A1_calibrated.tsv` is the fragment-based one, by m/z range.
+
+## Python prototypes
+
+Each reads the msconvert mzML directly; `ztscan_real.py` holds the shared reader, channel finder and
+writer. Bin centers are the spectra's reported isolation targets (393.43972 + 1.181433 b); FIRST in
+`ztscan_real.py` is bin 0's lower edge, not a center.
+
+| Script | What it tests |
+|---|---|
+| `demux_model.py` | The simulation behind the solver and layout choices (peptides in a realistic background, Poisson counts). |
+| `ztscan_real.py` | The first real-data prototype (per-sweep, separable), writing slice mzML. |
+| `anchored_prototype.py` | Library candidates' fragments extracted with the candidate's exact transmission column, against the acquired spectra and the blind demux, under the same scoring. |
+| `position_test.py` | How precisely a fragment's Q1 profile gives its precursor m/z with no candidate. |
+| `pairs_test.py` | Complementary b/y pairs: presence, the precursor mass they give, and the competition for a partner. |
+| `kernelpos.py`, `kernelpos2.py` | Placing each channel's sources once per block (the C# `--source-positions`), with the placement check. |
