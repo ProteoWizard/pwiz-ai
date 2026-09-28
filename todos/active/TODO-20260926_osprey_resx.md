@@ -298,3 +298,8 @@ over current stamps does nothing).
   alone, defects whole; SpectraCacheException / RehydrateFailedException derive from
   UserMessageException; `CodeInspectionTest.TestUserExceptionsUseResources` fails a literal message on
   any non-defect exception type. 607/607 en and fr-FR, 0 warnings.
+- `fb699e77bc` (Brendan: never root our own exceptions on Exception; choose IOException for file/parse
+  problems, InvalidDataException for invalid state after deserialization, UserMessageException only as the
+  catch-all): SpectraCacheException -> IOException; UnknownTask/UnknownByproductException ->
+  InvalidOperationException (defects); RehydrateFailedException stays UserMessageException. No
+  IOException catch lies on the SpectraCacheException throw path. 607/607, 0 warnings.
