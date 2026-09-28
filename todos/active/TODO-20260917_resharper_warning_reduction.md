@@ -20,7 +20,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **101 warnings, 0 errors** on #4685 as of 2026-09-25. Wave 3 moved to
+  **72 warnings, 0 errors** on #4685 as of 2026-09-28. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -64,25 +64,27 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after the doc-comment and namespace fixes (`ac6a36a17c`) | 0 | 147 |
 | #4685 after the constant `?.` / `??` fixes (`7049b83324`) | 0 | 111 |
 | #4685 after the unread fields and singletons (`79b26ba191`) | 0 | 105 |
-| #4685 today, after the CA1416 annotation (`8f1527a771`) | 0 | **101** |
+| #4685 after the CA1416 annotation (`8f1527a771`) | 0 | 101 |
+| #4685 after merging the base forward (`ba5bb9e763`, 17 commits) | 0 | 90 |
+| #4685 today, after the first annotation-family pass (`37e39d0700`) | 0 | **72** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 101, in full (measured 2026-09-25 on #4685 at `8f1527a771`)
+### The 72, in full (measured 2026-09-28 on #4685 at `37e39d0700`)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
 
 | Inspection | Count | What it is | Route to zero |
 |---|---|---|---|
-| `CSharpWarnings::CS0618` | 42 | Use of obsolete symbol | wave 1 here; wave 4 here; wave 3's share arrives through the base once the other branch merges |
-| `ConditionIsAlwaysTrueOrFalse` | 32 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
+| `CSharpWarnings::CS0618` | 33 | Use of obsolete symbol | wave 1 here; wave 4 here. **Wave 3's share already arrived** through the base merge, taking this from 42 |
+| `ConditionIsAlwaysTrueOrFalse` | 16 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
 | ~~`LocalizableElement`~~ | ~~25~~ 0 | Element is localizable | **done, wave 5** - see below |
 | ~~`ConstantConditionalAccessQualifier`~~ | ~~23~~ 0 | `?.` qualifier known null or non-null | **done** - see below |
 | `CSharpWarnings::CS0672` | 20 | Member overrides obsolete member | wave 1 (the `OnClosing`/`OnClosed` pairs) |
 | ~~`ConstantNullCoalescingCondition`~~ | ~~13~~ 0 | `??` condition known null or non-null | **done** - see below |
 | ~~`InvalidXmlDocComment`~~ | ~~7~~ 0 | Invalid XML doc comment | **done** - see below |
-| `HeuristicUnreachableCode` | 7 | Heuristically unreachable code | pairs with the always-false conditions |
+| `HeuristicUnreachableCode` | 3 | Heuristically unreachable code | pairs with the always-false conditions |
 | ~~`CheckNamespace`~~ | ~~6~~ 0 | Namespace does not match file location | **done, all 6 suppressed** - the rename it asks for would break every one; see below |
 | ~~`CA1416`~~ | ~~4~~ 0 | Platform compatibility | **done** - see below |
 | ~~`NotAccessedField.Local`~~ | ~~3~~ 0 | Private field never read | **done** - 2 deleted, 1 kept; see below |
@@ -93,8 +95,8 @@ group the report by `TypeId`.
 
 Two notes on getting this to zero rather than to "small":
 
-- **39 of the 111 are what is left of the annotation family** - `ConditionIsAlwaysTrueOrFalse`
-  (32) and `HeuristicUnreachableCode` (7); the other two members are now done. These flag our
+- **19 of the 72 are what is left of the annotation family** - `ConditionIsAlwaysTrueOrFalse`
+  (16) and `HeuristicUnreachableCode` (3); the other two members are now done. These flag our
   own defensive null checks as provably unnecessary, on the strength of .NET 10 annotations
   net472 never had. Each one is either dead code to delete or a guard to keep with a
   suppression; they cannot be swept. **The measured split from the 36 already worked is
@@ -585,6 +587,64 @@ class: the rest of `CommonTextUtil` is platform-neutral and is what Linux actual
 
 Verified: 0 errors and no CA1416 anywhere in the build log; `tcinspect` **101/0** with nothing
 else moved; `Test.dll` 421 incl. `TestEncryptString` - 0 failures.
+
+### Annotation family, first pass: 101 -> 90 -> 72 (`37e39d0700`, 2026-09-28)
+
+**Merge the base forward and RE-MEASURE before working a finding list.** The 17-commit base
+merge alone took 101 -> 90, and it moved the composition, not just the total:
+
+- **The 4 findings I had triaged as "wave 3's, do not touch" disappeared on their own**, because
+  wave 3's `HttpWebRequest` migration landed on the port branch. They were
+  `WebResponse.GetResponseStream()` null checks in `Program.cs` (535/586/592) and
+  `Nightly.cs:1424`. Triaging by OWNER rather than by category is what kept that from being
+  wasted work and a merge conflict.
+- `CS0618` fell 42 -> 33 for the same reason.
+- **`LocalizableElement` came BACK from 0 to 2** - a category this branch had already cleared.
+  `CommandStatusWriter.ERROR_PREFIXES` gained escaped `ja`/`zh-CHS` error prefixes. They are
+  deliberately literals, not resources (PortableUtil has no `.resx`, and a log reader must
+  recognise an error from ANY language, not the current UI culture), and `@"..."` is not
+  available because the `\uXXXX` escapes ARE the content. Suppressed with disable/restore.
+  **A cleared category can regress from the base; check the whole list, not just your targets.**
+
+Of the 35 annotation findings then remaining, 16 were decided on evidence and are done here.
+
+**The `SortDescriptions` cluster (6)** - `RowFilter.GetListSortDescriptionCollection` returns
+`new ListSortDescriptionCollection()` when empty, never null. For the three that go through
+WinForms `BindingSource.SortDescriptions` (which returns the underlying list's only when it is
+an `IBindingListView`, so NOT a free guarantee), every public `BindingListSource` constructor
+funnels through one private ctor that does `base.DataSource = new BindingListView(...)`. Chased
+that before deleting rather than trusting the annotation.
+
+**pwiz-sharp guards (9)** - dead `chromatogram == null` checks plus their unreachable
+`return null` bodies (non-nullable `GetChromatogram`), and a `SelectedIons == null` half
+(`{ get; } = new()`).
+
+**Two of those were NOT deletes, and this is the third time this shape has appeared.**
+`MsDataFileImpl` 1550/1560 guarded `window.CvParam(...) != null`, but `ParamContainer.CvParam`
+returns `new CVParam()` when the term is absent - never null - and `implicit operator double`
+maps an empty value to **0.0**. So a missing scan-window limit was not skipped: it recorded
+**0**, won the `<` comparison, and gave the spectrum a scan window of **(0, 0)**. Fixed to
+`!IsEmpty`, the idiom the same file already uses three frames down. Deleting the guard would
+have cleared the warning and KEPT the bug. Mitigating: `ScanWindows` elements carry both limits
+in well-formed mzML, so it needs malformed input; and **the legacy wrapper has the identical
+`!= null` check**, so the port copied it faithfully and the idiom changed underneath it.
+
+Fixing 1550/1560 also resolved 1571 (`scanWindowUpperLimit.HasValue`), which had followed from
+the dead guards - a reminder that this family's findings are not independent.
+
+**Kept (1)**: `GcRootReporter:189` ClrMD `method.Type`, suppressed for the same reason as the
+two in `HangDetection`/`LogFileMonitor` - it walks a process being dumped for a leak.
+
+Verified: `build.bat --no-tests` 0 errors; `tcinspect` **72/0**, `ConditionIsAlwaysTrueOrFalse`
+29->16, `HeuristicUnreachableCode` 6->3, `LocalizableElement` 2->0, `CS0618`/`CS0672` unmoved;
+`Test.dll` 421, `TestData.dll` 178, and `TestDocumentGridExport` + `TestClusteredHeatMap` +
+`TestCandidatePeaks` for the sort paths - all 0 failures.
+
+**The remaining 19 are the deliberate leftovers** - the D and F groups, which need reading
+site by site rather than a rule. Two to look at carefully, because both smell like the
+`CvParam` shape above: `BoundComboBoxColumn:119` (`null == DataPropertyName`, which returns
+`string.Empty`) and `PanoramaFilePicker:461` (`SubItems[1] != null`, where the indexer throws
+rather than returning null, so the real risk is the index).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
