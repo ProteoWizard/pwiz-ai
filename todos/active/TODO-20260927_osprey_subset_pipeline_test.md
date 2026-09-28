@@ -98,3 +98,12 @@ the ported code.
   Rust needs the same change. Full `regression-parallel -Dataset All` with the fix running in worktree
   C:\proj\pwiz-sharpfix (log ai/.tmp/night4360/regression-sharpfix.log) for the entrapment FDP evidence.
 - Dead code: LibCosineScorer (0%) and BatchScorer (0%) are referenced only by ScoringTest.
+- FIXED (07cb4563fb): SecondPassFDR threw when Stage 6 re-scored nothing (single-file search with one charge per
+  peptide). FIXED (856448f99d): .blib library without b/y annotations -> plain error; LinearDiscriminant.Fit returns
+  null (Rust parity). TestSubsetNothingRescoredAndBlibLibrary covers both. Stellar regression PASS.
+- Coverage now 83.3% (611 tests). Subset tests ~46 s total.
+- Peak-sharpness: fix + TestSubsetTruncatedReplicate on LOCAL branch `nightlywork/reconciled-peak-sharpness`
+  (bbf588e4eb). Full regression with fix: only goldens move; FDP flat; but Stellar -2.7% real detections lost
+  (ai/.tmp/night4360/sharpness-impact.md). Needs a design decision - see ai/.tmp/handoff-20260928.md.
+- Next: decide peak-sharpness approach; /code-review against the port branch (not master); open PR with
+  --base Skyline/work/20260612_net8_port --label osprey.
