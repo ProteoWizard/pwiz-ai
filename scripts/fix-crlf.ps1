@@ -23,6 +23,13 @@ function Test-BinaryFile {
     return $true
   }
 
+  # A file .gitattributes pins to LF (eol=lf, e.g. *.sh) must stay LF: a CRLF shell script
+  # fails under Linux with "bad interpreter" or "$'\r': command not found".
+  $eol = git check-attr eol -- $filePath 2>$null
+  if ($eol -match 'eol:\s+lf') {
+    return $true
+  }
+
   # Check common binary file extensions
   $binaryExtensions = @('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.zip',
                         '.7z', '.gz', '.tar', '.skyd', '.mzml', '.mzxml', '.raw',
