@@ -31,6 +31,25 @@ optional fifth stage to the pipeline, which the architecture does not need and t
 principle (P16 in `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`) exists to avoid. The
 PR must be split and part B re-architected to follow the `--model-diagnostics` pattern.
 
+### How to pick this up (a new Claude session, Mike's or Brendan's)
+1. Pull pwiz-ai, then load `/osprey-development` and `/version-control`. Read this whole
+   "Review 2026-09-28" section first. Where it conflicts with the original plan below (Steps 3
+   and 4, "run metadata" and "TrainingExportTask"), THIS section wins.
+2. Read, before touching code: `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` P15 and
+   P16 (the pay-later / resume model); `Osprey.Tasks/ModelDiagnosticsTask.cs`; and the fold
+   arms `OnlyDiagnosticsProductOutstanding` / `FoldDiagnosticsOnly` in `FirstPassFdrTask.cs`
+   and `FoldPass2DiagnosticsOnly` in `SecondPassFdrTask.cs`. R2 asks for the same mechanism in
+   PerFileRescoring, so understand that one first.
+3. Prerequisite: the #4360 PR (branch `Skyline/work/20260927_osprey_subset_pipeline_test`,
+   `SubsetPipelineTest` + `Osprey.Test/TestData/*.zip`) is expected to merge into the port branch
+   first. Once it has, `git merge origin/Skyline/work/20260612_net8_port` into this work (never
+   rebase a branch with an open PR). R6 builds on those tests.
+4. Checkout: Mike's session uses his worktree (`D:\Dev\pwiz-osprey-export`). A Brendan session
+   adopts the branch with `/pw-adopt 4708`. Either way, cut PR A from it first (R1), then PR B
+   stacked on PR A.
+5. Work R1 -> R9 in order. A PR is ready for review only when every item is done or
+   explicitly answered in its description, and the Gates at the end of this TODO pass.
+
 ### R1. Split into two PRs
 - **PR A - blib annotations** (#4705 part A): `BlibPeakAnnotations`, `BlibLoader`,
   `PeptideFragmentMass`/`FragmentLadder` extraction, mod-text snapping, `;libext=ann`, and their
@@ -99,12 +118,29 @@ footer keys from the source when present, empty otherwise.
   from the `ModelDiagnosticsTask.cs` class doc; it contradicts P16 and invites this design.
 - Revert this PR's doc edits that describe a fifth stage (docs 00, 14, 15, 20, 22).
 
-### R6. Tests
-Pipeline legs in `Osprey.Test/SubsetPipelineTest.cs` (from #4360, in-process on a committed
-data subset, seconds per run): straight-through with `--training-export`; the same command
-re-run with the flag added to a finished directory (assert PerFileScoring/FirstPassFDR/
-SecondPassFDR skip, no re-scoring, parquet byte-identical to the flag-up-front run);
-`--task TrainingExport`.
+### R6. Tests - required, not optional
+#4708 as posted has no test that runs the training export through the pipeline:
+`TrainingExportTaskTest` covers only `PairTargets`, and the parity and pay-later claims rest on
+one manual Stellar run. Neither PR is ready without the tests below.
+- **PR B pipeline legs** in `Osprey.Test/SubsetPipelineTest.cs` (from #4360; in-process via
+  `InProcessOsprey.Run` on the committed Stellar/Astral subsets, a few seconds per run):
+  - straight-through with `--training-export`: parquet written for every run, rows > 0, parity
+    count equal to the exported count;
+  - the SAME command re-run with `--training-export` added to a finished directory that ran
+    without it: assert PerFileScoring, FirstPassFDR and SecondPassFDR log
+    "skipping (outputs valid)", no `[PATH] rescore-file` / `score-file` line, and each parquet is
+    byte-identical to the flag-up-front run's;
+  - `--task TrainingExport` on a finished directory: same assertions;
+  - the HRAM (Astral) subset, which exercises the ppm and MS1 paths the unit-resolution data
+    does not;
+  - whatever R4 decides for transfer pass-2 and no-rescore runs (the single-file leg in
+    `TestSubsetNothingRescoredAndBlibLibrary` is a no-rescore run).
+- **PR A tests**: a unit test that a decoy of a peptide with stacked modifications at one
+  position (N-term acetyl + oxidized Met) carries both mass deltas on every recomputed fragment
+  (fails on the current `DecoyGenerator`); the `ProbeOnce` failure-not-cached case; a/c/x/z
+  names counted separately from unreadable ones; and a pipeline leg that searches an ANNOTATED
+  blib built from the subset library, showing its decoys now differ from their targets.
+- Red before green: each fix above gets a test that fails without it, and the PR says so.
 
 ### R7. Part A review items
 - `DecoyGenerator.cs:716-727` still overwrites stacked mods (`modMasses[newPos] = m.MassDelta`);
@@ -119,6 +155,28 @@ SecondPassFDR skip, no re-scoring, parquet byte-identical to the flag-up-front r
   their targets; `BlibWriter` should write `RefSpectraPeakAnnotations` (follow-up). The #4360
   branch turns the resulting `LinearDiscriminant` crash into a plain error.
 - `docs/01-decoy-generation.md:191` still places `CalculateFragmentMz` in `DecoyGenerator`.
+
+### R8. Code coverage must show the new code is exercised
+Run `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` and
+`ai/scripts/Osprey/Summarize-Coverage.ps1` on each PR's final state, and put in its test plan:
+- overall Osprey coverage before and after (it must not drop; it was 83.3% on the #4360
+  branch);
+- the statement coverage of every NEW type (`BlibPeakAnnotations`, `FragmentLadder`,
+  `PeptideFragmentMass`, `TrainingEvidence`, `TrainingExportParquet`, `ParquetBlobCodec`, the
+  export arm in PerFileRescoring, ...): each at least 80%, with any uncovered block named and
+  justified (e.g. an I/O error path);
+- coverage of the CHANGED lines in existing types (`BlibLoader`, `DecoyGenerator`,
+  `PerFileRescoreTask`), from the dotCover snapshot.
+Coverage that comes only from unit tests of pieces, with nothing through the pipeline, does not
+meet R6 even when the percentage is high.
+
+### R9. Part B smaller items
+- The "mp_cosine parity N/N" line counts peaks with no fit as matches
+  (`TrainingEvidence.cs:99-101`); log the fitted count beside it.
+- Decide and document the exit code when one run's export fails after the blib is written; as
+  posted it sets exit 1 and stops the remaining runs (`TrainingExportTask.cs:209-214`).
+- Run `Test-PerfGate.ps1 -Dataset Stellar` if anything on the default path still changes after
+  R3 (as posted, `RunInfoCollector` adds per-spectrum work to every parse).
 
 ## Verified facts (on `origin/Skyline/work/20260612_net8_port` @ `40312c7979`)
 
@@ -167,7 +225,7 @@ SecondPassFDR skip, no re-scoring, parquet byte-identical to the flag-up-front r
 - Tests: `BlibLibraryInputTest` (grammar table, typing, rejection, cache round trip, blib-vs-DIA-NN-TSV
   parity), `TestBlibDecoyPairs`, `TestAnnotatedBlibDecoyGeneration`, `FragmentLadderTest`, validity-key test.
 
-## Step 3 - run metadata
+## Step 3 - run metadata (SUPERSEDED by R3: no run-info.json)
 
 - `<stem>.run-info.json` beside `.spectra.bin`, written in `ScoringTaskShared.EnsureSpectraCache`
   through FileSaver before the cache: instrument model/vendor/serial/analyzer, run start, MS1/MS2
@@ -175,7 +233,7 @@ SecondPassFDR skip, no re-scoring, parquet byte-identical to the flag-up-front r
   histograms, source fingerprint (size, mtime ms). `.spectra.bin` unchanged.
 - rt_max and the isolation range come from `SpectraWindowIndex` (AllMs2Rts, IsolationWindows).
 
-## Step 4 - part B: TrainingExportTask
+## Step 4 - part B: TrainingExportTask (SUPERSEDED by R2: a PerFileRescoring product, not a stage)
 
 - Optional fifth fan-out task after SecondPassFDR (`TASK_NAME = "TrainingExport"`, appended to
   HpcTask; `IsIncluded = cfg.TrainingExport.Enabled && ...`; `--task TrainingExport` selects a
@@ -291,4 +349,6 @@ SecondPassFDR skip, no re-scoring, parquet byte-identical to the flag-up-front r
 - `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
 - `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`, then `-Dataset All` (options off, 1e-9)
 - `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar`
+- `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` + `Summarize-Coverage.ps1`, numbers in the PR test plan (R8)
+- `SubsetPipelineTest` legs for the export (R6) pass, and each fix's test fails without its fix
 - TeamCity Perf/Regression only on the finished PR candidate, and only after asking. Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.
