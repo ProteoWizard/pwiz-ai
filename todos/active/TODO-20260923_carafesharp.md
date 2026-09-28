@@ -38,14 +38,18 @@ the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
   non-zero offsets, PyBridge #18) and its `load_py` clobbers `requires_grad`. CarafeSharp has
   its own `PthReader` (Razorvine.Pickle) and `SafetensorsFile`.
 - **Evidence in Osprey, masking policy in CarafeSharp** (thresholds tunable without a re-search).
-- **An ion with no peak inside Osprey's calibrated tolerance is missing, and is trained with that low or
-  zero intensity** (developer, 2026-09-27). This is an intended difference from Carafe 2.2.0. Carafe
-  matches within the user's `-itol`, takes a peak at the window's edge (Stellar: 0.35-0.40 Th off,
-  95% charge 2), and then usually masks it. A peak outside the calibrated window is not that
-  fragment's intensity. Such ions stay in the library, like every ion. No Osprey export change is
-  needed. The effect: about 26k (Stellar) and 89k (Astral) slots are trained as 0 where Carafe masks
-  them, and the final library has about 1 fewer weak fragment per precursor (carafe-compare report,
-  stage 4).
+- **CarafeSharp predicts the intensity the instrument will measure and Osprey will extract**
+  (developer, 2026-09-28).
+  - **What that means:** the training target is what Osprey extracted within its calibrated tolerance,
+    whatever the instrument did to the peak (merged 2+ isotopes, centroiding at high m/z on a Stellar).
+    An ion with no peak inside that window trains as low or zero: it is not an m/z Osprey will use.
+  - **Masking** is only for interference: the shared-peak and co-elution checks.
+  - **Intended difference from Carafe 2.2.0,** which matches within `-itol`. The wider window adds
+    interference and peaks Osprey never uses, and Carafe's correlation rule usually masks them.
+  - **Effect:** about 26k (Stellar) and 89k (Astral) slots are trained as 0 where Carafe masks them.
+    The library has about 1 fewer weak fragment per precursor, and IDs are unchanged (masking A/B,
+    2026-09-28).
+  - No Osprey export change is needed.
 - **Stage-1 parity is byte-identical** with Carafe `-build_entrapment_fasta`.
 - **No pwiz-sharp reference** from CarafeSharp (no spectrum reading), so the #4658 layout
   hoist does not touch it. It references nothing else in pwiz: the Shared/CommonUtil reference was unused and was removed in the review fixes.
