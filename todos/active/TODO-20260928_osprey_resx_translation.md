@@ -178,3 +178,79 @@ The work is only half the deliverable; the other half is evidence for or against
   Skyline string), then `GenerateLocalizationCsvFiles` hands the reviewers their usual CSV with the
   drafts pre-filled. Verified by reading `ResourcesFile.ImportLocalizationRecords`,
   `ResourcesDatabase.ExportResx` / `ExportLocalizationCsv`.
+- **Step 4 done** (subagent) `e051007f6a`: 104 English values now take CLI flags, `--task` names,
+  file extensions/patterns, stored column/metadata names, cvParam accessions and build commands as
+  `{N}` arguments from constants (new `Osprey.Core/OspreyTaskNames.cs`; `OspreyArgNames` gained
+  OUTPUT_DIR/CACHE_DIR/PARALLEL_FILES/VERBOSE); keys unchanged. New guard
+  `CodeInspectionTest.TestArgumentTextComesFromArguments` (no `--flag` literal naming a declared
+  argument in any Osprey .cs; no flag or known extension in an English resx value) - its first run
+  found 22 violations, all fixed. Gates: 609/609 en/ja-JP/fr-FR, inspection 0, Stellar regression PASSED.
+- `e472274c39`: glossary + style guide + the two tool fixes committed.
+- **Evaluation results** (`ai/.tmp/sessions/20260928-resxtr/eval/NOTES.md`, `score.ja.md`, `score.zh.md`):
+  | | ja Claude | ja pro | zh Claude | zh pro |
+  |---|---|---|---|---|
+  | exact match with reviewed final | 23.8% | 77.7% | 28.0% | 95.4% |
+  | char similarity to final | 0.792 | 0.957 | 0.765 | 0.990 |
+  | glossary conformance (final ja 93.5%, zh 93.2%) | 95.8% | 94.0% | 95.4% | 93.0% |
+  | style checks (final ja 99.0%, zh 97.7%) | 99.9% | 98.1% | 100% | 98.1% |
+  | reviewer-changed strings: Claude == final | 3/116 | - | 9/24 | - |
+  | reviewer-changed strings: Claude closer than pro | 18/116 | - | 11/24 | - |
+  Reading: exact match is anchored to the professional draft (finals were edited FROM it; zh reviewers
+  changed 24/521). Claude is more consistent than both the professional draft AND the reviewed final
+  on glossary and style, and pre-empts the mechanical class of reviewer edits (zh: 9/24 exact). Its
+  clearest systematic miss is expanding terse labels/column names; the finals also contain errors
+  Claude avoided (ja "standard error" -> 標準エラー). Acceptability itself is unmeasured until the
+  reviewers grade the blind A/B sample (`eval/blind-grading.{ja,zh-Hans}.csv`, 40 pairs each, half
+  from reviewer-changed strings; key in `blind-grading-key.*.csv`). The blind zh translator also
+  corrected the style guide: zh renders m/z as 质荷比 (181/181), ja keeps m/z (161/181).
+- **Osprey drafts**: two subagents (Opus 5.5, full TM + Osprey source read-only + brief + glossary),
+  812 strings each. ja 719 high / 92 medium / 1 low; zh 684 / 102 / 26 (all 26 low are the three
+  low-confidence `new` terms: entrapment, peak co-assignment, calibrator). Consistency pass
+  (`validate_translations.py`): 0 hard failures, 0 inconsistent, glossary ja 96.0% / zh 98.2%
+  (Skyline's own reviewed finals: ~95%); every remaining glossary miss was read - all legitimate
+  senses the checker cannot tell apart (verb "run" / Osprey invocation -> 実行; verb "score" -> 评分;
+  "failed" -> 无法). One real fix applied: "Reading {0}" -> `{0}を読み取り中`. The validator run on the
+  reviewed Skyline corpus found 125 same-English-different-translation cases in Skyline itself.
+- **Imported through the real pipeline**: `to_localization_csv.py` -> `ImportLocalizationCsvFiles`
+  (812/812 matched per language) -> 16 new `Osprey*.ja.resx` / `.zh-Hans.resx`, each entry commented
+  `Needs Review:New resource`. Two pipeline facts learned: (1) `ExportResx` drops a "New resource"
+  entry whose value equals the English, so the 9 deliberately identical strings (Mokapot, Percolator,
+  ppm, `Osprey v{0}`...) import with an empty Issue; (2) the import re-serializes 8 unrelated Skyline
+  localized files (character entities -> literal characters) - reverted each time.
+- **New test** `Osprey.Test/OspreyLocalizedResourcesTest.cs` (Skyline's LocalizedResourcesTest for
+  Osprey): every Osprey resource class found by scan; ja and zh-Hans satellites complete; format-item
+  sets identical; `CommandStatusWriter.IsErrorLine` agrees with the English.
+- **Two test defects exposed by the first real ja/zh run** (invisible while no satellites existed):
+  `IOTest.TestReconciliationFileFormatVersionMismatchRejected` asserted an English literal (now the
+  formatted resource); `TestProgressReporterHeartbeat` looked for ASCII `(` (now the marker read from
+  the resource - ja/zh write a full-width parenthesis). Gates: 610/610 in en-US (inspection 0),
+  ja-JP and zh-CN; fr-FR 610/610 before the test-only fix.
+- **Reviewer package** (`ai/.tmp/sessions/20260928-resxtr/reviewer-package/`): the stock
+  `GenerateLocalizationCsvFiles` output filtered to Osprey (768 ja / 769 zh rows - identical English
+  across files consolidates), standard columns first so a returned file imports unchanged, plus
+  `Claude confidence`, `Claude note`, `Glossary terms`; sorted low -> medium -> high.
+- Open for Brendan: (1) zh flags arriving as `{N}` are bare, not in “ ” as Skyline's zh CLI help
+  does - one global decision; (2) the long corrupt-charge IO error still says "stage" (docs/21 bans
+  it) - English fix; (3) zh tolerance unit label `m/z` -> 质荷比 per the reviewed glossary, printed
+  after a number; (4) `UpdateResxFiles.bat` + `LastReleaseResources.db` still key zh as zh-CHS.
+- **Read both Stellar logs end to end** (`regression.ps1 -Dataset Stellar -Culture ja` / `zh-Hans`, both
+  PASSED every mode = no translated text reaches an output file). Found what a table check cannot:
+  `Generating {0} decoys...` where `{0}` is the decoy METHOD (both languages had put a counter on it;
+  scanned all bare-placeholder counters - the only such case); a dangling ", {0} files" clause; ja space
+  before FDR after a localized `{3}`; and a code gap - `ProgressReporter` appended a hardcoded `...` to
+  every heading, so zh could not use `…`. New resource `ProgressReporter_ProgressReporter__0____`
+  (`{0}...`; zh `{0}…`); 5 test assertions now format through it. zh re-run PASSED with the fixes visible.
+- `Documentation/Help/ja` and `zh-Hans/CommandLine.html` now generated beside `en` (as Skyline does);
+  `TestCommandLineHelpDocumentation` loops the three languages. The page intro/title are still
+  hardcoded English in `GenerateUsageHtml` (open item).
+- `d0a29a6b0c` (pushed): 16 localized resx, the new test, the two test fixes, the heading resource, help
+  pages. Gates on the final tree: 610/610 en-US (inspection 0), ja-JP, zh-CN, fr-FR.
+- Satellites confirmed in `Osprey/bin/x64/Release/net10.0/{ja,zh-Hans}/` (Osprey has no ZIP/MSI step;
+  the SDK output is the distribution).
+- Reviewer CSVs regenerated from the committed resx with the stock tool: 768 ja / 770 zh rows, 100%
+  coverage (`check_coverage.py`).
+- **Report for Brendan**: https://claude.ai/artifact/CLEeB1GSpGt2EpuDKxuRVn (answer, evaluation table,
+  examples, Osprey results, reviewer package, open decisions, file map).
+- **Status**: drafts complete and gated; waiting on Brendan for the open decisions, for sending the
+  reviewer CSVs + blind grading sheets to the ja/zh reviewers, and for PR timing (no PR opened;
+  `/code-review` and the TeamCity Perf/Regression gate not yet run - both belong at PR time).
