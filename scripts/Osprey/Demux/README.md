@@ -6,27 +6,33 @@ its output with DIA-NN, and hold the Python prototypes the C# was built from.
 
 ## Setting up a machine
 
-- **Data roots, hard-coded in the scripts:** `D:\demux-test-data` (the vendor files) and
-  `D:\test\osprey-runs` (everything written). On a machine with other drives, edit them, or map the
-  same paths. The files needed:
+- **Data roots:** the *data root* holds the vendor files and the *run root* everything written. Set
+  them per machine with the environment variables `DEMUX_DATA_ROOT` and `DEMUX_RUN_ROOT`, read by
+  `Demux-Roots.ps1` (dot-sourced by every driver) and `demux_roots.py` (imported by the Python
+  scripts). Unset, they are the original machine's `D:\demux-test-data` and `D:\test\osprey-runs`.
+  On SCARFELL the data root is `Z:\demux-test-data` on the network share, and the run root is local
+  at `C:\temp\osprey-runs`, because a whole-run demux writes about 20 GB of mzML per run and DIA-NN
+  reads it back. Finished arms move to `Z:\test\osprey-runs`, which also holds the original machine's
+  outputs. The inputs kept under the run root (the library and the mzML below) are copied there
+  from Z:. The files needed:
 
   | Path | Size | What |
   |---|---|---|
-  | `D:\demux-test-data\ZenoTOF8600-ZTScan\250814_ZTScan_100spd_A_{1_A1,2_D1,3_G1}.{wiff2,wiff,wiff.scan}` | about 8.7 GB each | ZT Scan runs (`.wiff2` for the tool, `.wiff` for DIA-NN; both use the `.wiff.scan`) |
-  | `D:\demux-test-data\Eclipse-staggered\Ecl_2022_0705_Beads_EV13_SAXN_12mz_10.raw`, `..._EV14_SAXN_12mz_17.raw` | 1.2 GB each | Orbitrap staggered runs (the `.mzML` beside them, 2.3 GB each, are msconvert's demultiplexed reference) |
-  | `D:\demux-test-data\Eclipse-staggered\carafe_spectral_library+decoy+entrapment.tsv` | 12.7 GB | their Carafe library |
-  | `D:\test\osprey-runs\ztscan\library\ztscan_carafe_lib.parquet` | 0.7 GB | the ZT Scan DIA-NN library (Carafe, with `_p_target` entrapment) |
-  | `D:\test\osprey-runs\ztscan\mzml\*.mzML` | about 21 GB each | msconvert's vendor-centroided mzML of the ZT Scan runs, read by the slice runners and the Python prototypes |
+  | `<data root>\ZenoTOF8600-ZTScan\250814_ZTScan_100spd_A_{1_A1,2_D1,3_G1}.{wiff2,wiff,wiff.scan}` | about 8.7 GB each | ZT Scan runs (`.wiff2` for the tool, `.wiff` for DIA-NN; both use the `.wiff.scan`) |
+  | `<data root>\Eclipse-staggered\Ecl_2022_0705_Beads_EV13_SAXN_12mz_10.raw`, `..._EV14_SAXN_12mz_17.raw` | 1.2 GB each | Orbitrap staggered runs (the `.mzML` beside them, 2.3 GB each, are msconvert's demultiplexed reference) |
+  | `<data root>\Eclipse-staggered\carafe_spectral_library+decoy+entrapment.tsv` | 12.7 GB | their Carafe library |
+  | `<run root>\ztscan\library\ztscan_carafe_lib.parquet` | 0.7 GB | the ZT Scan DIA-NN library (Carafe, with `_p_target` entrapment) |
+  | `<run root>\ztscan\mzml\*.mzML` | about 21 GB each | msconvert's vendor-centroided mzML of the ZT Scan runs, read by the slice runners and the Python prototypes |
 
   The `.wiff.dia` and `.wiff.dia.quant` files beside the ZT Scan data came from a collaborator and
   are not needed.
 - **The tool:** build the branch with the vendor readers,
   `pwsh -File ai/scripts/Osprey/Build-Osprey.ps1 -SourceRoot <checkout> -VendorReader -Configuration Release`,
   and copy `pwiz_tools/Osprey/Osprey.DemuxTool/bin/x64/Release/net10.0` to a snapshot folder
-  (`D:\test\osprey-runs\_bin\<tag>`), so a running job never locks the build tree. The `.wiff2`
+  (`<run root>\_bin\<tag>`), so a running job never locks the build tree. The `.wiff2`
   reader's SQLite natives are staged into its `wiff2` subfolder by the build.
 - **DIA-NN 2.3.2** (`C:\DIA-NN\2.3.2`) searches mzML as installed. To read the SCIEX `.wiff`, copy the
-  install to `D:\test\osprey-runs\_bin\diann-2.3.2-sciex` and copy into it every DLL whose name contains
+  install to `<run root>\_bin\diann-2.3.2-sciex` and copy into it every DLL whose name contains
   `Clearcore` or `Sciex` from `pwiz-sharp\vendor-assemblies\Sciex\vendor_api\ABI` (the DIA-NN README's
   instruction, with that folder standing in for a ProteoWizard install). DIA-NN does not read `.wiff2`.
 - **DIA-NN splits its command line at `--`**, so no path it is given may contain `--` (a session

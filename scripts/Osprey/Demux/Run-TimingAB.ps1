@@ -8,9 +8,10 @@ param(
     [int]$Threads = 4
 )
 $ErrorActionPreference = 'Stop'
-$out = 'D:\test\osprey-runs\ztscan\timing'
+. (Join-Path $PSScriptRoot 'Demux-Roots.ps1')
+$out = Join-Path $runRoot 'ztscan\timing'
 New-Item -ItemType Directory -Force $out | Out-Null
-$wiff = 'D:\demux-test-data\ZenoTOF8600-ZTScan\250814_ZTScan_100spd_A_1_A1.wiff2'
+$wiff = Join-Path $dataRoot 'ZenoTOF8600-ZTScan\250814_ZTScan_100spd_A_1_A1.wiff2'
 $kernel = Join-Path $PSScriptRoot 'kernels\A1_rt3-8.profile.tsv'
 foreach ($arm in @(@{ Name = 'new'; Exe = $New }, @{ Name = 'old'; Exe = $Old })) {
     $mzml = Join-Path $out "$($arm.Name).mzML"

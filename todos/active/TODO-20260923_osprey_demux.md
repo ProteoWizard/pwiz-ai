@@ -31,7 +31,10 @@ the old machine except the in-flight results listed last.
   "Day of 2026-09-27".
 - Scripts, kernels, and machine setup (the data to copy with sizes, building the tool, DIA-NN's SCIEX
   DLLs, pinned DIA-NN settings): `ai/scripts/Osprey/Demux/README.md`. The scripts there are copies of
-  the session's; their data roots are `D:\demux-test-data` and `D:\test\osprey-runs`.
+  the session's. Their data roots come from `DEMUX_DATA_ROOT` and `DEMUX_RUN_ROOT`, defaulting to the
+  old machine's `D:\demux-test-data` and `D:\test\osprey-runs`. On the new machine (SCARFELL,
+  2026-09-27) the data root is `Z:\demux-test-data` and the run root is local, `C:\temp\osprey-runs`;
+  the old machine's run folder is moving to `Z:\test\osprey-runs`, and finished arms go there too.
 - The old local branch `Skyline/work/20260925_osprey_ztscan_demux` (WIP ba0b22546b, the superseded
   pooled-sweep version) exists only on the old machine and is not needed.
 
@@ -74,7 +77,8 @@ on the new machine if they did not finish, with the scripts named):
 - **Module**: `osprey`
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711)
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (M0 + M1)
-- **Worktree**: `D:\Dev\pwiz-osprey-demux`
+- **Worktree**: `D:\Dev\pwiz-osprey-demux` (old machine); `C:\Dev\pwiz-osprey-demux` on the new one,
+  checked out at the follow-on branch
 
 ## Objective
 

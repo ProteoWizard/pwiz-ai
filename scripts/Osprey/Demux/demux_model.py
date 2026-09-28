@@ -31,6 +31,8 @@ from scipy.interpolate import Akima1DInterpolator
 from scipy.optimize import lsq_linear, nnls
 from scipy.stats import exponnorm
 
+from demux_roots import DATA_ROOT
+
 PROTON = 1.007276
 WATER = 18.010565
 AA = dict(mass.std_aa_mass)
@@ -38,7 +40,7 @@ AA['C'] += 57.021464  # carbamidomethyl
 ALLOWED = set('ACDEFGHIKLMNPQRSTVWY')
 FRAG_LO, FRAG_HI = 150.0, 1400.0
 
-FASTA = r'D:\demux-test-data\ZenoTOF8600-ZTScan\uniprot_human_march2026_yeastENO1_contam_ADpeps.fasta'
+FASTA = os.path.join(DATA_ROOT, 'ZenoTOF8600-ZTScan', 'uniprot_human_march2026_yeastENO1_contam_ADpeps.fasta')
 KERNEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'kernels', 'A1_rt3-8.profile.tsv')
 
 

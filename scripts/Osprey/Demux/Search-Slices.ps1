@@ -1,5 +1,5 @@
 # DIA-NN searches of ZT Scan slices: one arm per call, the three replicates together, the same
-# library and DIA-NN 2.3.2 as the full-run arms. Output: D:\test\osprey-runs\ztscan\slices\diann\<arm>
+# library and DIA-NN 2.3.2 as the full-run arms. Output: <run root>\ztscan\slices\diann\<arm> (Demux-Roots.ps1)
 param(
     [Parameter(Mandatory)] [string]$Arm,
     [Parameter(Mandatory)] [string]$Mzml,  # comma-separated: pwsh -File cannot pass an array
@@ -8,9 +8,10 @@ param(
     [int]$Threads = 4
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Demux-Roots.ps1')
 $diann = 'C:\DIA-NN\2.3.2\diann.exe'
-$lib = 'D:\test\osprey-runs\ztscan\library\ztscan_carafe_lib.parquet'
-$outDir = Join-Path 'D:\test\osprey-runs\ztscan\slices\diann' $Arm
+$lib = Join-Path $runRoot 'ztscan\library\ztscan_carafe_lib.parquet'
+$outDir = Join-Path $runRoot "ztscan\slices\diann\$Arm"
 New-Item -ItemType Directory -Force (Join-Path $outDir 'tmp') | Out-Null
 $argv = @()
 foreach ($f in ($Mzml -split ',')) { $argv += @('--f', $f) }

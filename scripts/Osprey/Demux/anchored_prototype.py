@@ -35,15 +35,17 @@ from scipy.optimize import nnls
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from demux_roots import RUN_ROOT  # noqa: E402
 from ztscan_real import FIRST, KERNEL, STEP, read_slice, transmission_rows  # noqa: E402
 
-MZML = r'D:\test\osprey-runs\ztscan\mzml\250814_ZTScan_100spd_A_1_A1.mzML'
-LIB = r'D:\test\osprey-runs\ztscan\library\ztscan_carafe_lib.parquet'
-RT_REPORT = r'D:\test\osprey-runs\ztscan\diann\C_plain\report.parquet'
+ZTSCAN = os.path.join(RUN_ROOT, 'ztscan')
+MZML = os.path.join(ZTSCAN, 'mzml', '250814_ZTScan_100spd_A_1_A1.mzML')
+LIB = os.path.join(ZTSCAN, 'library', 'ztscan_carafe_lib.parquet')
+RT_REPORT = os.path.join(ZTSCAN, 'diann', 'C_plain', 'report.parquet')
 REFERENCE = {'DIA-NN plain': RT_REPORT,
-             'DIA-NN scanning (.wiff)': r'D:\test\osprey-runs\ztscan\diann\W_wiff_scanning\report.parquet'}
-DEMUX_REPORT = r'D:\test\osprey-runs\ztscan\slices\diann\full_cs_centered5_A1\report.parquet'
-OUT = r'D:\test\osprey-runs\ztscan\anchored'
+             'DIA-NN scanning (.wiff)': os.path.join(ZTSCAN, 'diann', 'W_wiff_scanning', 'report.parquet')}
+DEMUX_REPORT = os.path.join(ZTSCAN, 'slices', 'diann', 'full_cs_centered5_A1', 'report.parquet')
+OUT = os.path.join(ZTSCAN, 'anchored')
 CYCLES = (248, 372)     # the slice's sweeps (1-based cycle ids)
 BINS = (70, 281)        # encoded bins read: the candidates' bins +/- (CONTEXT + REACH)
 MZ_RANGE = (510.0, 690.0)

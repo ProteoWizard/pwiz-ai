@@ -33,10 +33,11 @@ import pyarrow.parquet as pq
 from scipy.optimize import nnls
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from demux_roots import RUN_ROOT  # noqa: E402
 from ztscan_real import (ID, KERNEL, NBINS, STEP, channels_of, group_peaks, merge_close,  # noqa: E402
                          read_slice, transmission_rows, write_mzml)
 
-LIB = r'D:\test\osprey-runs\ztscan\library\ztscan_carafe_lib.parquet'
+LIB = os.path.join(RUN_ROOT, 'ztscan', 'library', 'ztscan_carafe_lib.parquet')
 GRID = 0.1
 GAP = 0.3
 FLOOR = 0.5
@@ -293,7 +294,7 @@ def main():
     ap.add_argument('--cycles', type=int, nargs=2, required=True)
     ap.add_argument('--mz', type=float, nargs=2, required=True)
     ap.add_argument('--layouts', nargs='+', default=['tiled:1', 'tiled:2', 'centered:3', 'framed:3:1'])
-    ap.add_argument('--report', default=r'D:\test\osprey-runs\ztscan\diann\C_plain\report.parquet')
+    ap.add_argument('--report', default=os.path.join(RUN_ROOT, 'ztscan', 'diann', 'C_plain', 'report.parquet'))
     ap.add_argument('--write', action='store_true', help='write the kernelpos mzML layouts')
     ap.add_argument('--block', type=int, default=12)
     ap.add_argument('--cycle-pad', type=int, default=4)
