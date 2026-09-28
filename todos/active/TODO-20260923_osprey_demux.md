@@ -47,9 +47,9 @@ the old machine except the in-flight results listed last.
   against 26,475 / 27,174 / 27,635 (1.01-1.07%) for DIA-NN's scanning mode on the `.wiff`: +3.7-6.4% per run,
   22,197 against 21,341 in all three runs, 35,140 against 33,370 in any (`ids_summary.py`). Precursors
   +4.0-6.6%. **Mike's criterion (2026-09-28): detect as many peptides as DIA-NN on the `.wiff` or more;
-  somewhat worse precision is acceptable. Met.** Checks running: the `.wiff` searched with the same pinned
-  settings (`ztscan\diann\W_wiff_scanning_3runs_pinned`), and the demux files at 14 / 17 ppm
-  (`slices\diann\full_c7pz_scarfell_ma14`).
+  somewhat worse precision is acceptable. Met.** The demux files at the slice's 14 / 17 ppm give fewer
+  (27,506 / 27,776 / 27,858 peptides, `slices\diann\full_c7pz_scarfell_ma14`): keep 17 / 19 on whole runs.
+  Running: the `.wiff` searched with the same pinned settings (`ztscan\diann\W_wiff_scanning_3runs_pinned`).
 - ZT Scan quantitation is the open gap: CV 0.119 against 0.112 acquired and 0.088 for DIA-NN on the
   `.wiff` (was 0.135 with DIA-NN's own settings and centered:5).
 - `--source-positions` (each channel's sources placed once per block, each sweep solved over just
@@ -148,6 +148,24 @@ up); per-block selection removes the flicker but pushes left-out signal onto nei
   quartile (0.093) and is 0.010 worse at the bottom, growing with m/z: the solve's counting noise on weak
   signal. The `.wiff`'s lead (0.013-0.018 in every quartile) is the data path, which the demux inherits.
 
+**The joint solve in C# (started 2026-09-28 afternoon)**
+- 9a3575e52f `JointDemultiplexer` + `TofGrid` + `--joint` / `--joint-z` / `--joint-relaxed`; f2b837f317 12x faster.
+  Model y_i[k] = sum_j A_ij sum_q B[k - q] beta_j[q] on the exact TOF grid, Gaussian B (sigma by m/z), Poisson
+  weights (first from the data smoothed by B, then reweighted once), z-scaled L1 (default z = 2). Solver:
+  block coordinate descent per grid point, exact NNLS over that point's active positions (plain coordinate
+  descent could not separate neighbouring positions' near-collinear transmission columns: 21% of a source
+  stayed in neighbours after 50 passes), active set grown from the factored gradient, overlapping 2,048-sample
+  chunks. Tests: exact recovery, near-isobaric fragments of two precursors 2 samples apart resolved, noise.
+- Input: profile dumps (`Osprey.DemuxTool --raw --profile`); the slice dumps are
+  `C:\temp\osprey-runs\ztscan\profile\<stem>_slice_profile.mzML` (sweeps 243-375 as 0-132, 475-725 m/z, 5.4 GB).
+- Speed: one sweep of A1's slice (11 blocks) 70 s at 10 threads, against about 1 s for the channel solve on
+  centroids. Output on that sweep: 7,326 peaks per spectrum (channel 5,885), 3.2x the ions (full profile
+  areas), 33% of peaks under one ion (channel 63%).
+- Running: the whole slice for DIA-NN, arm `slices\c7_joint` (`ai/.tmp/sessions/20260927-054c052f/Launch-JointSlice.ps1`,
+  dump sweeps 4:128 = 247-371, centered:7, DIA-NN `--window 6`); compare with `cs_centered7_posmz_scarfell_w6`.
+- Speed next: coefficients every other grid sample (neighbours are 0.87 correlated through B), per-point active
+  lists instead of scanning every column, and profile read once into a cache.
+
 **Next, in order.** Quantitation has two separate problems: the demux's counting noise on weak signal
 (0.010 at the lowest abundance quartile, nothing at the top), and the vendor centroids' missing signal
 (0.013-0.018 everywhere). The joint solve addresses both.
@@ -163,8 +181,10 @@ up); per-block selection removes the flicker but pushes left-out signal onto nei
    signal (the full profile area). The L1 helps the joint solve; on placement it is now comparable to the
    channel solve. 78 min in Python for 341 precursors: C# (coordinate descent on the Kronecker
    structure) before a whole slice.
-2. Read `raw_events_ms2` / `c7pz_events_ms2`. If full-area MS2 helps DIA-NN with MS1 left alone, the
-   centroids are worth fixing even before the joint solve (a peak model instead of adjacency).
+2. Done: MS2-only event centroids (MS1 vendor) are worse raw (2,344 / 2,583 / 2,465 peptides against
+   2,652 / 2,686 / 2,621, paired CV +0.0075) and demultiplexed (2,849 / 2,713 / 2,802 against 2,875 / 2,880 /
+   3,017, +0.0070). Keeping single events and full areas is not enough with adjacency grouping; the peak model
+   has to be in the solve. Do not polish the adjacency centroider.
 3. Profile reading is the bottleneck: the SDK takes about an hour per replicate for the slice under load.
    Copy the `.wiff2`/`.wiff.scan` to local disk, and read each spectrum's profile once into a cache.
 4. Separate the demux's own noise from how DIA-NN quantifies a centered:7 spectrum, which carries its
@@ -217,6 +237,14 @@ the approved plan are summarized below.
     a synthetic k = 3 / 4 alternate-cycle test;
   - it reopens per-time interpolation vs the separable model (a source does not move in m/z) for the
     Orbitrap, which only nearly tied at k = 2.
+
+- **ZT Scan goal and next step (Mike, 2026-09-28):** detect as many peptides as DIA-NN given the `.wiff`,
+  or more; somewhat worse precision is acceptable (met on whole runs, see the night's section). Next: solve
+  centroids and demultiplexing together on the profile grid (spec §5.4d), in C#.
+- **Skyline must be able to read the demultiplexed data (Mike, 2026-09-28).** Inside Osprey, `--demux` must
+  also write the demultiplexed spectra to a file Skyline reads (mzMLb, or mzML), and the blib Osprey writes
+  must point at that file, not at the vendor file, so the search results open in Skyline on the spectra
+  they were scored on.
 
 ## Architecture
 
