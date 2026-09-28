@@ -114,3 +114,9 @@ the ported code.
 - Mike's PRs: #4708 merges cleanly with this branch (619/619 tests pass); #4715 removes --fdr-method (move the
   gbdt leg to OSPREY_FDR_MODEL, which #4715 should read via GetVariable per access). Merge order: #4708, #4715,
   this branch, #4710.
+- 2026-09-28: `/code-review max 4727` (15 findings). Withdrew the no-rescore second-pass fix (it let Stage 7
+  trust stale per-run 2nd-pass files) -> issue #4729. Replaced the blib-annotation refusal with a check of
+  the generated decoys: warn on any decoy with no fragment distinct from its target, refuse above 1%
+  (full Stellar 0/242,814, Astral 1/1,565,450). Fixed test isolation (OSPREY_DUMP_* restore after
+  --diagnostics, explicit --parallel-files 1 baseline, MeanBestN set directly, per-dataset recovery floor,
+  top-6 m/z cache cleared per command line). Regression follow-up: issue #4728.
