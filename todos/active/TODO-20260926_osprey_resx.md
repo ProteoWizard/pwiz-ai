@@ -285,3 +285,10 @@ over current stamps does nothing).
   DRY resources, empty localized resx deleted. Gate en/ja-JP/fr-FR 606/606, 0 warnings; Stellar
   regression PASSED. 36 threads replied + resolved; comments 8 (thin ja seed) and 9 (zh-CHS vs
   zh-Hans) answered and left open for Brendan. Second half of the PR not yet reviewed.
+- `42586e94f2`: removed all six sparse .ja/.zh-Hans files (Brendan: the first Osprey translation is its
+  own PR with full files, Skyline standard - untranslated strings carry the English plus a comment).
+  zh-Hans confirmed for .NET 10. Threads 8 and 9 resolved.
+- Follow-up (Brendan's question, not this PR): `.calibration.json` stores `unit` ("ppm"/"Th") per mass
+  calibration, inherited from Rust's MzCalibration so ApplyCalibration can read the stored mean without
+  the config. It is redundant - `--resolution` fixes it for the whole experiment - but removing it is a
+  file-format change on both C# and Rust sides.
