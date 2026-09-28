@@ -61,6 +61,20 @@ on the new machine if they did not finish, with the scripts named):
   `slices\diann\full_cs_centered7_posmz_fixed` (`Run-FullC7Posmz.ps1`). Compare its CV with the table above.
 - The results of both are recorded below if they finished before the move.
 
+**Results that landed after the handoff was written**
+- Slice, centered:7 `--position-mz --source-positions`: 2,391 / 2,423 / 2,359 targets, FDP 0.75-1.07%,
+  CV 0.130 on 1,504 shared, against 2,770 / 2,950 / 2,959 and CV 0.093 without source positions.
+  **Source positions as implemented are worse on both counts**, although the prototype's placement
+  check improved. Suspects:
+  - the drop rule (sources under 5% of their channel's total are discarded, so a weak precursor sharing
+    a fragment channel with a strong one loses that fragment; the placement check saw only identified,
+    mostly strong precursors; the file is 13% smaller);
+  - DIA-NN chose an 8 ppm fragment tolerance for this arm, against 12-14 ppm for the others.
+  Re-searches with the slice settings pinned (`--window 6 --mass-acc 14 --mass-acc-ms1 17`) are running
+  for this arm and for centered:7 `--position-mz`: arms `cs_centered7_posmz_src_pinned` and
+  `cs_centered7_posmz_pinned`. If pinning does not recover it, test `MinSourceFraction = 0` (expose it
+  on the command line) before anything else, then `--source-l1` in place of the drop rule.
+
 **Next, in order**
 1. Read the two in-flight arms. If source positions improve the slice's IDs or CV, run them on whole
    runs: `Run-FullC7Posmz.ps1` with `--source-positions` added, pinned settings, three replicates.
