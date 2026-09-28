@@ -377,7 +377,7 @@ When extending these scripts, the canonical Rust root is
 ## Long runs lock Osprey.exe - snapshot the binary first
 
 **Windows locks a running executable.** A long Osprey run holds
-`Osprey\bin\x64\Release\net8.0\Osprey.exe` open for its whole duration, so MSBuild cannot
+`Osprey\bin\x64\Release\net10.0\Osprey.exe` open for its whole duration, so MSBuild cannot
 relink and **every build fails until the run ends**. On an overnight regression or a
 multi-hour large-file run that blocks all code work - you cannot respond to review
 feedback, cannot try a fix, cannot even build to check a compile error. Sessions have
@@ -387,7 +387,7 @@ not build.
 **Copy the binaries somewhere off the build tree and run the long job from the copy.**
 
 ```powershell
-$src  = 'C:\proj\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0'
+$src  = 'C:\proj\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0'
 $snap = 'D:\test\osprey-runs\_bin\master-snapshot'
 New-Item -ItemType Directory -Path $snap -Force | Out-Null
 Copy-Item "$src\*" $snap -Recurse -Force
@@ -1292,8 +1292,11 @@ Patterns the pipeline now relies on:
   ties; matches the comment "first C as tiebreaker" that the Rust
   code didn't originally implement). `Iterator::max_by_key` returns
   the *last* tied element per stdlib docs — don't use it for
-  tie-sensitive selection. Manual scan with strict `>` is what both
-  tools now use.
+  tie-sensitive selection. The strict-`>` scan is now the tolerance-0
+  case: since pwiz #4703 and maccoss/osprey#69 both implementations keep
+  the most regularized C within 1% of the best count (C#
+  `PercolatorTrainer.SelectC`, Rust `svm::select_c`). The `Compare/`
+  scripts clear an inherited `OSPREY_SVM_C_TOLERANCE` so the two match.
 - **Non-conservative FDR formula `n_decoy / n_target`** for
   internal grid-search counting in
   `count_passing_targets_svm` — matches `compute_qvalues` on the
@@ -1592,7 +1595,7 @@ unaffected. Drive it via:
 pwsh -File ai/scripts/Osprey/Profile-Osprey.ps1 -Dataset Astral -MemoryProfile
 ```
 
-This forces `net8.0`, sets `OSPREY_LOG_MEMORY=1`, runs ONE file through
+This runs the Release net10.0 build, sets `OSPREY_LOG_MEMORY=1`, runs ONE file through
 Stage 1-4 scoring under `dotMemory start --use-api`, and writes a `.dmw`
 to `ai/.tmp`. It is a **scoped diagnosis run, not the batch** -- memory is
 stable file-to-file, so one file captures the whole per-file envelope;
@@ -1723,10 +1726,21 @@ EOF
 
 ### Base branch while the .NET 10 port (PR #4619) is open
 
-C# Osprey PRs currently base on **`Skyline/work/20260612_net8_port`** (Matt's .NET 10
-port, pwiz#4619), not `master`. The port branch is the team's integration branch for
+**All C# Osprey work starts from and returns to `Skyline/work/20260612_net8_port`**
+(Matt's .NET 10 port, pwiz#4619); Osprey is no longer developed on `master`. Branch
+from `origin/Skyline/work/20260612_net8_port` in whichever checkout holds that branch on
+the machine (`pwiz` itself on some, a sibling checkout on others) and update by merging
+that branch, not master.
+The port branch is the team's integration branch for
 nightly testing and is expected to become master once the release question is settled;
 merge-vs-squash of #4619 itself is Brendan's call.
+
+**Osprey is .NET 10 (net10.0) only, and stays that way.** The branch name says `net8` for
+history; the port targets .NET 10. Unlike Skyline and ProteoWizard, Osprey has no reason
+to ship as .NET Framework 4.7.2 or .NET 8.0, so net472 and net8.0 are not coming back.
+Scripts and docs name `Release\net10.0`; a `net8.0` or `net472` folder under a checkout's
+`bin/` or `obj/` is a stale build to delete, never a fallback. (Master still declares
+`net472;net8.0` until #4619 merges; nothing new is built there.)
 
 Why not master: master's `Osprey Windows .NET` build is red on every new ephemeral
 TeamCity agent (`pwiz-windows-i-*`) - its `tcbuild.bat` wants a globally installed
@@ -1738,6 +1752,9 @@ in** (merge, never rebase, once the PR has review history).
 - New branches: `gh pr create --base Skyline/work/20260612_net8_port`; `/pw-complete`
   works with the base and tracking branch swapped for master. Squash subjects are still
   `osprey: ... (#N)`.
+- MARS (`maccoss/mars`) vendors `Osprey.ML/GradientBoostedTrees.cs` and `XorShift64`
+  (`dotnet/scripts/sync-osprey-ml.ps1`). Re-sync it from a port-branch checkout, never
+  master: the squared-error objective MARS trains with (#4595) is only on the port branch.
 - Build **x64** in Visual Studio: the solution's Any CPU configuration fails there
   because VS never builds out-of-solution project references (`ProteowizardWrapper`
   and pwiz-sharp are not in `Osprey.sln`); command-line `msbuild` is fine either way.
@@ -1746,8 +1763,8 @@ in** (merge, never rebase, once the PR has review history).
 - `Osprey Linux .NET` was red on the port branch itself while the Linux agent was being
   provisioned; check `pull/4619` before reading it as a signal about your PR.
 
-**Delete this subsection** when #4619 merges and all Osprey work returns to master with
-no net472 work remaining.
+**Delete this subsection** when #4619 merges and all Osprey work returns to master, but
+keep the net10.0-only paragraph: move it to the top of this guide.
 
 ## Differences from Skyline's WORKFLOW.md
 

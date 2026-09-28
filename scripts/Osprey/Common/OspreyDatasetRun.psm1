@@ -247,6 +247,16 @@ function Invoke-OspreyDatasetRun {
         # two finished runs indistinguishable. Lands in the banner, the run.log START line and
         # the default output-directory name. Only meaningful with -Pass2Mode protein-compact.
         [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
+        # First-pass SVM C-selection tolerance (OSPREY_SVM_C_TOLERANCE, pwiz #4703). Empty (the
+        # default) leaves the variable unset so Osprey uses its own default; '0' is the strict
+        # maximum of the inner-CV counts. A parameter, not an inherited variable, for the same
+        # reason as -QualifyBy: the arms differ in nothing else, and the variable is stripped
+        # below. Lands in the banner, the run.log START/DONE lines and the directory name.
+        [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
+        # EXPERIMENTAL first-pass C grid (OSPREY_SVM_C_VALUES), e.g. '0.1' fixes C. Empty leaves
+        # Osprey's grid. Same reasoning as -SvmCTolerance: a parameter, stripped otherwise, and
+        # recorded in the banner, run.log and the directory name (-cvals<value>).
+        [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',
         [string]$Tag = '',
         [string]$DataDir,
         [string]$LibraryDir,
@@ -268,6 +278,7 @@ function Invoke-OspreyDatasetRun {
         [switch]$Fresh,
         [switch]$Resume,
         [switch]$NoModelDiagnostics,
+        [switch]$NoPerfStats,
         [switch]$WhatIf
     )
 
@@ -301,17 +312,19 @@ function Invoke-OspreyDatasetRun {
     # -SourceRoot names a checkout; the exe is at its usual place inside it. Prefer this to
     # -Exe when you want a specific TREE, e.g. a pinned worktree rather than a shared one that
     # other sessions are actively building in. See the banner warning below.
-    $EXE_UNDER_ROOT = 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
+    # net10.0, the one framework Osprey builds (same value as OSPREY_TARGET_FRAMEWORK in
+    # Dataset-Config.ps1). A leftover Release\net8.0 folder is a stale build, never a fallback.
+    $EXE_UNDER_ROOT = 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey.exe'
     if ($SourceRoot -and -not $Exe) {
         if (-not (Test-Path $SourceRoot)) { throw "-SourceRoot does not exist: '$SourceRoot'." }
         $Exe = Join-Path $SourceRoot $EXE_UNDER_ROOT
         if (-not (Test-Path $Exe)) {
-            throw "No Release/net8.0 Osprey.exe under -SourceRoot '$SourceRoot'. Build it there first."
+            throw "No Release/net10.0 Osprey.exe under -SourceRoot '$SourceRoot'. Build it there first."
         }
     }
     $repoExe = Join-Path $PSScriptRoot "..\..\..\..\pwiz\$EXE_UNDER_ROOT"
     $ospreyExe = Resolve-DatasetLocation -Explicit $Exe -EnvName 'OSPREY_EXE' `
-        -Fallbacks @($repoExe) -What 'Osprey.exe (build Release/net8.0 first)' `
+        -Fallbacks @($repoExe) -What 'Osprey.exe (build Release/net10.0 first)' `
         -DatasetName $dsName -Readme $readme
 
     # Windows locks a running .exe, so a multi-hour run out of the BUILD TREE blocks every build
@@ -459,7 +472,10 @@ function Invoke-OspreyDatasetRun {
         $agg = if ($ExperimentAgg) { "-$ExperimentAgg" } else { '' }
         # Empty on the shipped 'run' default, so this does not rename a single existing arm.
         $qual = if ($QualifyBy -eq 'experiment') { '-qualifyexp' } else { '' }
-        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$Tag"
+        # Empty when unset, so existing arms keep their names.
+        $csel = if ($SvmCTolerance) { "-csel$SvmCTolerance" } else { '' }
+        if ($SvmCValues) { $csel += "-cvals$($SvmCValues -replace ',', '_')" }
+        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$csel$Tag"
         if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
         $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
     }
@@ -526,6 +542,11 @@ function Invoke-OspreyDatasetRun {
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
+    # The [PATH] / [COUNT] / [STAGE-WALL] lines are the only route and count evidence a run
+    # leaves (the READMEs' route checks, Get-MemoryReport.ps1, Measure-CoAssignmentScaling.py
+    # read them), and they print only under --perf-stats. -NoPerfStats is for a run whose
+    # purpose is to read the default log a user sees.
+    if (-not $NoPerfStats) { $cliArgs += '--perf-stats' }
 
     # Which TREE the binary came from matters as much as which flags ran. A multi-hour run
     # against whatever a colleague happens to have built in a shared worktree measures their
@@ -602,6 +623,12 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  qualify  : {0}" -f $(if ($QualifyBy -eq 'experiment') {
                 'EXPERIMENT-wide q (OSPREY_PROTEIN_COMPACT_QUALIFY) - shrinks the protein-compact stratum' }
                 else { 'per-run q (default, the union over runs)' }))
+    Write-Host ("  svm C sel: {0}" -f $(if ($SvmCTolerance) {
+                "OSPREY_SVM_C_TOLERANCE=$SvmCTolerance - moves the first-pass model" }
+                else { "Osprey's default (OSPREY_SVM_C_TOLERANCE cleared)" }))
+    Write-Host ("  svm C grid: {0}" -f $(if ($SvmCValues) {
+                "OSPREY_SVM_C_VALUES=$SvmCValues (EXPERIMENTAL) - moves the first-pass model" }
+                else { "Osprey's default (OSPREY_SVM_C_VALUES cleared)" }))
     # Since pwiz #4507 (2026-09-12) every pass selection streams: pass 1 is emitted off the
     # per-file 1st-pass sidecars, so `1` no longer forces the resident pool and `both` really
     # writes .pass1 and .pass2. The two yellow banners that stood here - a resident-pool
@@ -893,9 +920,12 @@ function Invoke-OspreyDatasetRun {
     # is nowhere in Osprey's log: an inherited '0' would silently train the old way and be
     # unrecoverable after the fact, exactly the pick-model failure described below. If a
     # sampler A/B is ever wanted, add a switch and set this in both directions.
+    # OSPREY_SVM_C_TOLERANCE is stripped for the same reason: an inherited 0 (the pre-#4703
+    # strict-maximum C selection) would train the cohort under the old rule behind a banner
+    # that claims defaults. -SvmCTolerance sets it on purpose.
     foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
-                   'OSPREY_TRAIN_PICK_RUN',
+                   'OSPREY_TRAIN_PICK_RUN', 'OSPREY_SVM_C_TOLERANCE', 'OSPREY_SVM_C_VALUES',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
                    'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
                    'OSPREY_PROTEIN_COMPACT_QUALIFY',
@@ -916,6 +946,9 @@ function Invoke-OspreyDatasetRun {
     # so an arm that exported only its ON value would leave the OFF arm running on whatever the
     # shell happened to hold.
     $env:OSPREY_PROTEIN_COMPACT_QUALIFY = $QualifyBy
+    # Only when given: unset is Osprey's own default, and the variable was stripped above.
+    if ($SvmCTolerance) { $env:OSPREY_SVM_C_TOLERANCE = $SvmCTolerance }
+    if ($SvmCValues) { $env:OSPREY_SVM_C_VALUES = $SvmCValues }
 
     $log = Join-Path $OutDir 'run.log'
     # NEVER truncate an existing run.log - rotate it to run-<stamp>.log first. A run.log is the
@@ -941,8 +974,8 @@ function Invoke-OspreyDatasetRun {
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
-     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' files=$($inputs.Count) threads=$Threads " +
+     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag perfstats=$(-not $NoPerfStats) " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
@@ -958,7 +991,7 @@ function Invoke-OspreyDatasetRun {
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })

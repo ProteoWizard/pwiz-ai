@@ -301,7 +301,15 @@ backfill_nightly_history()
 backfill_exception_history()
 ```
 
-These are additive and non-destructive - they merge new data into existing history files without losing prior records.
+**These REBUILD rather than merge.** `backfill_nightly_history` re-queries every folder and
+writes a fresh history, so the run data it produces covers exactly the window it was given -
+passing `since_date` narrows the file to that window rather than adding to what is there.
+Recorded fixes and issues ARE carried across (and any that no longer match an entry are kept
+under `_orphaned_fixes`), but nothing else is.
+
+Prefer the default window. The previous contents rotate to `history/backups/` on every write,
+so a narrowed backfill is recoverable - that is how the 2026-09-22 loss of all seven recorded
+fixes was recovered, before the re-application step behind them was implemented.
 
 **Output files updated:**
 - `ai/.tmp/history/nightly-history.json` - Test failures, leaks, hangs with fingerprints
@@ -680,8 +688,9 @@ list_computer_status(container_path="/home/development/Nightly x64")
 ```
 
 **B. For crashed runs, analyze the pattern**
-- Same machine repeatedly? → Hardware issue
-- Same test causing crash? → Test bug
+- Same machine repeatedly, in unrelated tests? → Failing hardware. See
+  [failing-hardware-detection.md](failing-hardware-detection.md) and flag it in the Summary
+- Same test causing crash? → Test bug (or resource limit, if only one machine)
 - Same time of day? → External interference
 
 **→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
@@ -739,6 +748,26 @@ exercises. Tests named "AgilentFormatsTest" or "WatersLockmassChromatogramTest" 
 leaking because of Agilent or Waters code — they leak because of the shared regression.
 Without an explicit list, downstream reporting may see vendor names in test names and
 incorrectly categorize them as chronic vendor-specific leaks.
+
+## Which checkout to read source from
+
+The nightly folders are **branches**, and each has its own checkout on disk. Read source
+from the checkout matching the folder the failure came from - the stack trace, the line
+numbers and `git log` all differ between them.
+
+| Nightly folder | Branch | Read source from |
+|---|---|---|
+| Nightly x64, Performance Tests | master | `C:\proj\pwiz` |
+| Release Branch, Release Branch Performance Tests | release | `C:\proj\skyline_26_1` |
+| Integration, Integration with Perf Tests, Integration Leak Detection | `Skyline/work/20260612_net8_port` (PR #4619) | `C:\proj\integration` |
+
+**Name the checkout you read in the finding.** A diagnosis that does not say which tree it
+came from cannot be checked, and the two trees disagree about exactly the files that fail:
+the port branch has `pwiz-sharp/`, a different SkylineTester and test runner, and its own
+`SkylineNightly`. `C:\proj\pwiz` is kept on master by the scheduled reports; do not check
+out a branch in it - see the guarded fast-forward in `Invoke-DailyReport.ps1`.
+
+---
 
 ### Investigate Leaks
 
@@ -1029,13 +1058,21 @@ tail -50 ai/.tmp/testrun-log-XXXXX-testrunner.txt
 **Common exit codes**:
 | Exit Code | Meaning |
 |-----------|---------|
-| -1073741819 | ACCESS_VIOLATION (0xC0000005) - native memory corruption |
-| -1073740791 | Stack overflow |
-| -1 | General failure |
+| -1073741819 | ACCESS_VIOLATION (0xC0000005) - memory corruption; on one machine, often failing hardware |
+| -1073741795 | ILLEGAL_INSTRUCTION (0xC000001D) - almost always hardware |
+| -1073741571 | STACK_OVERFLOW (0xC00000FD) |
+| -1073740940 | HEAP_CORRUPTION (0xC0000374) |
+| -1073740791 | STACK_BUFFER_OVERRUN / fail-fast (0xC0000409) |
+| -1 | General failure / killed |
 
 **Pattern analysis**: Compare crashed runs for common factors:
-- Same machine? → Machine-specific issue (hardware, drivers, configuration)
-- Same test? → Test bug causing crash
+- **Only this machine, and a different test each time?** → **Failing hardware.** See
+  [failing-hardware-detection.md](failing-hardware-detection.md). Raise it in the email
+  Summary at 2 solo crash days within 30 days, *before* anyone debugs it as a Skyline bug.
+  Run `python ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py --since <date>` for the
+  machine's history and to see whether other machines crashed the same days.
+- Same test every time (even on one machine)? → Test bug or resource limit on that machine
+- Several machines the same day/build? → Software regression in that build
 - Same toolchain? → Compiler/runtime issue (e.g., VS 2026 vs VS 2022)
 - Same time of day? → Scheduled task interference
 

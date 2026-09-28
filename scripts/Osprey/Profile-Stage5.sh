@@ -12,7 +12,7 @@ RUSTDIR=$BASE/stage1to4/rust
 OUT=/home/brendanx/test/osprey-runs/stellar/_profile_stage5
 mkdir -p "$OUT"
 
-OSPREY_BIN=/mnt/c/proj/pwiz/pwiz_tools/Osprey/Osprey/bin/x64/Release/net8.0/Osprey
+OSPREY_BIN=/mnt/c/proj/pwiz/pwiz_tools/Osprey/Osprey/bin/x64/Release/net10.0/Osprey
 OSPREY_RUST=/mnt/c/proj/osprey/target/release/osprey
 DOTTRACE=/home/brendanx/.dotnet/tools/dottrace
 SAMPLY=/home/brendanx/.cargo/bin/samply

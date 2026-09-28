@@ -59,13 +59,13 @@ $configCandidates = @(
 )
 foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
 
-# Prefer the Osprey net8.0 build's copy: cross-platform (Linux/WSL
+# Prefer the Osprey Release build's copy: cross-platform (Linux/WSL
 # bin includes runtimes/linux-x64/native/SQLite.Interop.dll alongside),
 # always present when Osprey itself has been built, and decoupled
 # from Skyline Debug build state. Fall back to the Skyline Debug path
 # for environments where only Skyline is built.
 $pwizRoot = Get-PwizRoot
-$ospReleaseBin = Join-Path $pwizRoot 'pwiz_tools/Osprey/Osprey/bin/x64/Release/net8.0'
+$ospReleaseBin = Split-Path -Parent (Get-OspreyExe)
 $candidates = @(
     (Join-Path $ospReleaseBin 'System.Data.SQLite.dll'),
     (Join-Path $pwizRoot 'pwiz_tools/Skyline/bin/x64/Debug/System.Data.SQLite.dll')
@@ -77,7 +77,7 @@ foreach ($c in $candidates) {
 if (-not $dll) {
     Write-Host "Missing System.Data.SQLite.dll. Tried:" -ForegroundColor Red
     foreach ($c in $candidates) { Write-Host "  $c" -ForegroundColor DarkRed }
-    Write-Host "Build Osprey first: pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -TargetFramework net8.0" -ForegroundColor Yellow
+    Write-Host "Build Osprey first: pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Release" -ForegroundColor Yellow
     exit 2
 }
 # System.Data.SQLite uses P/Invoke to "SQLite.Interop.dll". It does NOT
@@ -91,11 +91,16 @@ $dllDir = Split-Path $dll -Parent
 $rid = if ($IsLinux) { 'linux-x64' } else { 'win-x64' }
 $nativeSrc = Join-Path $dllDir "runtimes/$rid/native/SQLite.Interop.dll"
 $nativeDst = Join-Path $dllDir 'SQLite.Interop.dll'
-# Always overwrite: if a previous run on a different OS placed the
-# wrong-architecture binary here, P/Invoke would fail with
-# "incorrect format" (Windows trying to load an ELF, or vice versa).
-# Force-copy from the current-OS runtimes/ source on every invocation.
-if (Test-Path $nativeSrc) {
+# Overwrite whenever the copy differs: if a previous run on a different OS placed the
+# wrong-architecture binary here, P/Invoke would fail with "incorrect format" (Windows
+# trying to load an ELF, or vice versa). But ONLY when it differs: a running Osprey.exe
+# (a regression lane, a long run) holds this same file open, and an unconditional
+# overwrite then failed the whole comparison with "being used by another process" -
+# reported as a blib FAIL although no blib was compared. regression-parallel.ps1 fixed
+# the same collision for its own copy on 2026-09-05.
+if ((Test-Path $nativeSrc) -and
+    (-not (Test-Path $nativeDst) -or
+     (Get-FileHash $nativeSrc).Hash -ne (Get-FileHash $nativeDst).Hash)) {
     Copy-Item $nativeSrc $nativeDst -Force
 }
 Add-Type -Path $dll

@@ -221,7 +221,7 @@ failure does NOT read as a build failure:
 
 ```
 WARN: failed to prune <TestResults dir>: The process cannot access the file
-      '...\Osprey\bin\x64\Release\net8.0\SQLite.Interop.dll' because it is being used by
+      '...\Osprey\bin\x64\Release\net10.0\SQLite.Interop.dll' because it is being used by
       another process.
 ```
 
@@ -234,7 +234,7 @@ in seventeen minutes on a step that takes seconds.
 a definitive check and costs nothing:
 
 ```powershell
-$dll = '<bin>\Release\net8.0\SQLite.Interop.dll'
+$dll = '<bin>\Release\net10.0\SQLite.Interop.dll'
 Rename-Item $dll "$dll.locktest"
 Rename-Item "$dll.locktest" $dll
 ```

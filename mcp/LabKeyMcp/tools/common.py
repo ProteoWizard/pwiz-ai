@@ -226,31 +226,129 @@ def get_daily_dir(date_str: str) -> Path:
     return daily_dir
 
 
+def get_daily_state_dir() -> Path:
+    """Root for accumulated daily state that CANNOT be regenerated from LabKey.
+
+    Defaults to ai/.tmp/daily, which is gitignored and local to one machine. Set
+    PWIZ_DAILY_STATE_DIR to put it somewhere backed up instead - a network share
+    whose snapshots IT can restore, e.g. M:\\home\\<user>\\daily. The per-date
+    report folders stay local either way: those are regenerable, and the daily
+    automation reads them back seconds after writing them.
+
+    A configured directory that cannot be created is an ERROR, not a reason to
+    fall back to the local default. Falling back silently would split the state
+    across two locations, and the newer half would be the one nobody backs up.
+
+    Returns:
+        Path to the daily state root (created if needed)
+    """
+    configured = os.environ.get("PWIZ_DAILY_STATE_DIR")
+    if configured:
+        state_dir = Path(configured)
+        try:
+            state_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise RuntimeError(
+                f"PWIZ_DAILY_STATE_DIR is set to {state_dir}, which cannot be created "
+                f"or reached ({e}). Fix the path or unset the variable; refusing to "
+                f"fall back to the local default and split the state in two."
+            ) from e
+        return state_dir
+    return get_tmp_dir() / "daily"
+
+
 def get_daily_history_dir() -> Path:
-    """Get the ai/.tmp/daily/history directory for persistent state files.
+    """Get the daily/history directory for persistent state files.
 
     Contains accumulated state that cannot be regenerated from the LabKey
     database: exception-history.json (with filed issues, recorded fixes),
     nightly-history.json (with fix annotations), computer-status.json
     (with deactivation records and alarms).
 
+    Location follows get_daily_state_dir().
+
     Returns:
-        Path to ai/.tmp/daily/history directory (created if needed)
+        Path to the daily/history directory (created if needed)
     """
-    history_dir = get_tmp_dir() / "daily" / "history"
+    history_dir = get_daily_state_dir() / "history"
     history_dir.mkdir(parents=True, exist_ok=True)
     return history_dir
+
+
+def save_json_state(path: Path, data, keep: int = 10) -> Path:
+    """Write one of the irreplaceable state files atomically, keeping prior copies.
+
+    Two failure modes this exists to prevent, both observed on 2026-09-21:
+
+    1. A truncating `open(path, 'w')` followed by a crash leaves the file empty or
+       half-written, with no prior copy anywhere.
+    2. A caller that rebuilds the file from a narrower query than the one that built
+       it replaces a year of accumulated records with a week of them. That is a
+       legitimate operation to want; it is not one to perform irreversibly.
+
+    Writes to a temp file in the same directory and os.replace()s it into place, so
+    a reader never sees a partial file. The previous contents rotate to
+    <name>.<UTC timestamp>.json in a backups/ subdirectory, pruned to `keep`.
+
+    Args:
+        path: Destination file
+        data: JSON-serializable object
+        keep: How many rotated copies to retain (0 disables rotation)
+
+    Returns:
+        The path written
+    """
+    import shutil
+    from datetime import datetime, timezone
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if keep > 0 and path.exists() and path.stat().st_size > 0:
+        backups = path.parent / "backups"
+        backups.mkdir(exist_ok=True)
+        # Millisecond resolution plus a uniquifier: several writes can land in the
+        # same second (record_test_fix is typically called once per affected test,
+        # in a burst), and a colliding name would overwrite the copy just made -
+        # silently reducing the rotation depth to one per second.
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%f")[:-3] + "Z"
+        target = backups / f"{path.stem}.{stamp}{path.suffix}"
+        dedupe = 0
+        while target.exists():
+            dedupe += 1
+            target = backups / f"{path.stem}.{stamp}-{dedupe}{path.suffix}"
+        try:
+            shutil.copy2(path, target)
+        except OSError as e:
+            # A rotation that fails must not block the write, but must be audible.
+            logger.warning(f"Could not rotate {path.name} before overwrite: {e}")
+        else:
+            existing = sorted(backups.glob(f"{path.stem}.*{path.suffix}"))
+            for stale in existing[:-keep]:
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
+
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+    os.replace(tmp_path, path)
+    return path
 
 
 def get_daily_summaries_dir() -> Path:
     """Get the ai/.tmp/daily/summaries directory for daily summary JSONs.
 
     Contains daily-summary-YYYYMMDD.json files used by analyze_daily_patterns.
+    These accumulate one file per day and are the trend history behind pattern
+    analysis, so they follow get_daily_state_dir() alongside history/ rather than
+    living with the regenerable per-date report folders.
 
     Returns:
-        Path to ai/.tmp/daily/summaries directory (created if needed)
+        Path to the daily/summaries directory (created if needed)
     """
-    summaries_dir = get_tmp_dir() / "daily" / "summaries"
+    summaries_dir = get_daily_state_dir() / "summaries"
     summaries_dir.mkdir(parents=True, exist_ok=True)
     return summaries_dir
 

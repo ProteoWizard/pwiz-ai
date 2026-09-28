@@ -56,10 +56,9 @@ full run exit 0. Pass `-ExcludePattern ''` to include it and watch Osprey log it
 ## Vendor raw without a vendor build
 
 `EnsureSpectraCache` consults the `.spectra.bin` cache **before** it dispatches on file
-extension, so pointing **any** build - including **net8.0, with no ProteoWizard at all** -
+extension, so pointing **any** build - including **net10.0, with no ProteoWizard at all** -
 at these `.raw` files reuses the caches. `TestVendorCacheUsableWithoutVendorReader` pins that
-ordering. Prefer net8.0: nothing in Stages 1-7 needs ProteoWizard once the caches exist, and
-net8.0 has the better GC for a run this size.
+ordering. Nothing in Stages 1-7 needs ProteoWizard once the caches exist.
 
 **A missing or stale cache fails LOUDLY**, with an error naming
 `/p:OspreyVendorReader=true`. That error means **"the cache is not where Osprey looked"** -

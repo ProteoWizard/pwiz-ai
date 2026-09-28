@@ -1,0 +1,354 @@
+# TODO-20260923_osprey_carafe_export.md
+
+## Branch Information
+- **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
+- **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
+- **Created**: 2026-09-23
+- **Status**: Changes required - see "Review 2026-09-28": split the PR and re-architect part B as a PerFileRescoring product (no fifth stage)
+- **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
+- **Module**: `osprey`
+- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (base `Skyline/work/20260612_net8_port`)
+- **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`
+
+## Objective
+
+Give CarafeSharp everything it needs from Osprey so that only Osprey reads raw data:
+
+- **Part A - blib library input fidelity.** Osprey reads fragment ion annotations and library
+  decoys/entrapment from a .blib library, so a CarafeSharp blib searches as well as a DIA-NN TSV.
+- **Part B - training export.** A new optional task writes, per run, the observed intensities
+  of the full theoretical b/y ladder of every confidently identified target precursor plus
+  per-ion interference evidence from Osprey's own peak boundaries, median polish and
+  shared-fragment logic. CarafeSharp applies the masking thresholds.
+
+With the new options off, every existing output must be byte-identical (regression.ps1 at 1e-9).
+
+## Review 2026-09-28 (Brendan) - required before merge
+
+PR #4708 builds, passes 612 tests with clean inspection, and is output-neutral on TSV
+libraries (checked on the Stellar subset: 177 precursors either way). But part B adds an
+optional fifth stage to the pipeline, which the architecture does not need and the pay-later
+principle (P16 in `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`) exists to avoid. The
+PR must be split and part B re-architected to follow the `--model-diagnostics` pattern.
+
+### How to pick this up (a new Claude session, Mike's or Brendan's)
+1. Pull pwiz-ai, then load `/osprey-development` and `/version-control`. Read this whole
+   "Review 2026-09-28" section first. Where it conflicts with the original plan below (Steps 3
+   and 4, "run metadata" and "TrainingExportTask"), THIS section wins.
+2. Read, before touching code: `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` P15 and
+   P16 (the pay-later / resume model); `Osprey.Tasks/ModelDiagnosticsTask.cs`; and the fold
+   arms `OnlyDiagnosticsProductOutstanding` / `FoldDiagnosticsOnly` in `FirstPassFdrTask.cs`
+   and `FoldPass2DiagnosticsOnly` in `SecondPassFdrTask.cs`. R2 asks for the same mechanism in
+   PerFileRescoring, so understand that one first.
+3. Prerequisite: the #4360 PR (branch `Skyline/work/20260927_osprey_subset_pipeline_test`,
+   `SubsetPipelineTest` + `Osprey.Test/TestData/*.zip`) is expected to merge into the port branch
+   first. Once it has, `git merge origin/Skyline/work/20260612_net8_port` into this work (never
+   rebase a branch with an open PR). R6 builds on those tests.
+4. Checkout: Mike's session uses his worktree (`D:\Dev\pwiz-osprey-export`). A Brendan session
+   adopts the branch with `/pw-adopt 4708`. Either way, cut PR A from it first (R1), then PR B
+   stacked on PR A.
+5. Work R1 -> R9 in order. A PR is ready for review only when every item is done or
+   explicitly answered in its description, and the Gates at the end of this TODO pass.
+
+### R1. Split into two PRs
+- **PR A - blib annotations** (#4705 part A): `BlibPeakAnnotations`, `BlibLoader`,
+  `PeptideFragmentMass`/`FragmentLadder` extraction, mod-text snapping, `;libext=ann`, and their
+  tests. Independently useful and small enough to review on its own.
+- **PR B - training export**, stacked on A (its b/y ladder uses `PeptideFragmentMass`),
+  re-architected per R2-R5.
+
+### R2. The training export is a PerFileRescoring product, not a stage
+Follow `--model-diagnostics` / `--task ModelDiagnostics` exactly - the pattern proven on the
+CHS 446-run cohort (flag added to a finished run: 1:51:53, 37 GB peak, report identical to
+the flag-up-front run; see `completed/TODO-20260906_osprey_stage7_lean_row.md` and
+`TODO-20260910_osprey_mdiag_resident_removal.md`).
+
+| | ModelDiagnostics (existing) | TrainingExport (required) |
+|---|---|---|
+| Flag | `--model-diagnostics` | `--training-export` |
+| Declared output under the flag | `.1st-pass`/`.2nd-pass.model-diagnostics.json` (FirstPassFDR / SecondPassFDR `Outputs`) | `<stem>.training.parquet` (PerFileRescoring `Outputs`, per run) |
+| Flag up front | Each FDR task folds while its data is in hand | PerFileRescoring writes the export while the run's `.spectra.bin` (already streamed for rescoring), reconciled boundaries and 2nd-pass run q are in hand |
+| Flag added to a finished run | `OnlyDiagnosticsProductOutstanding` -> `FoldDiagnosticsOnly` / `FoldPass2DiagnosticsOnly` (`FirstPassFdrTask.cs`, `SecondPassFdrTask.cs`); "Nothing is re-run" | "only the export is outstanding" -> an export-only arm per run: reads that run's own durable artifacts, writes only the parquet, no re-scoring |
+| Other tasks | PerFileScoring, PerFileRescoring skip | PerFileScoring, FirstPassFDR, SecondPassFDR skip |
+| `--task X` | selector, never a stage (`ModelDiagnosticsTask`) | selector running the canonical pipeline with `--training-export` set |
+| HPC | no new node type | no new node type - rides the existing per-file PerFileRescoring nodes |
+
+Why: an appended optional fan-out after the final join makes NextFlow schedule optional work
+on another round of nodes, each re-loading the library, reconciled parquet and `.spectra.bin`
+that PerFileRescoring already had; it serializes behind the last join; it adds an
+"optional stage" membership concept (`IsEnabled`) and per-run stamps listing every run's
+inputs. Selection needs nothing from SecondPassFDR: targets and claimants are chosen by
+2nd-pass RUN q, from the per-run sidecar the Stage 6 worker writes.
+
+Remove: `TrainingExportTask` as a pipeline stage (keep it as a selector), `IsEnabled`, the
+fifth entry in `OspreyTasks.Pipeline`. Keep: `TrainingEvidence`, the parquet writer/codec and
+their tests - they move under PerFileRescoring unchanged.
+
+### R3. No new sidecar in the scoring path
+Drop `run-info.json` and the `RunInfoCollector` work added to every default parse. Capturing
+it at parse time is the fan-out-memory trap P16 describes: a cohort cached before this change
+never gets it, and `IN_SCAN_RANGE` then silently marks every ion in range. Derive per-window
+MS2 scan ranges from the observed m/z extent in `.spectra.bin` (conservative: outside the
+observed extent = unknown, not an observed zero). Instrument / NCE / dissociation: parquet
+footer keys from the source when present, empty otherwise.
+
+### R4. Decisions the rework must make explicit
+- Experiment-level q-values and PEP exist only after SecondPassFDR and per-run files are
+  write-once: drop them from the export; the consumer joins `output.2nd-pass.fdr_experiment.bin`
+  by entry_id.
+- Transfer pass-2 (`OSPREY_PASS2_QVALUE=transfer`) and runs where Stage 6 re-scored nothing
+  write the per-run 2nd-pass sidecar in Stage 7, so PerFileRescoring has no 2nd-pass run q
+  there: either refuse `--training-export` in those modes with a clear error, or select by
+  1st-pass run q and say so in the footer.
+
+### R5. Documentation - make the missed principle explicit (in PR B)
+- `00-pipeline-architecture.md`: generalize P16 from diagnostics to OPTIONAL PRODUCTS - the
+  work goes to the existing task that already holds its inputs (experiment-wide reductions to
+  the FDR joins, per-run evidence over spectra to PerFileRescoring), declared as an output
+  under its flag, with an "only this product outstanding" arm; never a new stage.
+- Add the list above of why an appended optional stage is wrong (HPC scheduling, reloads,
+  serialization behind the join, membership/stamp complexity).
+- Reconcile P16's corollary ("diagnostics work belongs in the FDR tasks, never in the fan-out")
+  and the rule against flag-conditional fan-out sidecars with R2: what they forbid is a product
+  that can only come from fan-out MEMORY; a product the fan-out can re-derive from its own
+  durable inputs on a pay-later resume is the same pattern.
+- Update "Two selectable tasks that are not pipeline tasks" to describe the fold arms and the
+  selector-runs-the-canonical-pipeline behavior (it currently says only "processes nothing").
+- Remove the "non-degenerate version - a fifth canonical stage after SecondPassFDR" paragraph
+  from the `ModelDiagnosticsTask.cs` class doc; it contradicts P16 and invites this design.
+- Revert this PR's doc edits that describe a fifth stage (docs 00, 14, 15, 20, 22).
+
+### R6. Tests - required, not optional
+#4708 as posted has no test that runs the training export through the pipeline:
+`TrainingExportTaskTest` covers only `PairTargets`, and the parity and pay-later claims rest on
+one manual Stellar run. Neither PR is ready without the tests below.
+- **PR B pipeline legs** in `Osprey.Test/SubsetPipelineTest.cs` (from #4360; in-process via
+  `InProcessOsprey.Run` on the committed Stellar/Astral subsets, a few seconds per run):
+  - straight-through with `--training-export`: parquet written for every run, rows > 0, parity
+    count equal to the exported count;
+  - the SAME command re-run with `--training-export` added to a finished directory that ran
+    without it: assert PerFileScoring, FirstPassFDR and SecondPassFDR log
+    "skipping (outputs valid)", no `[PATH] rescore-file` / `score-file` line, and each parquet is
+    byte-identical to the flag-up-front run's;
+  - `--task TrainingExport` on a finished directory: same assertions;
+  - the HRAM (Astral) subset, which exercises the ppm and MS1 paths the unit-resolution data
+    does not;
+  - whatever R4 decides for transfer pass-2 and no-rescore runs (the single-file leg in
+    `TestSubsetNothingRescoredAndBlibLibrary` is a no-rescore run).
+- **PR A tests**: a unit test that a decoy of a peptide with stacked modifications at one
+  position (N-term acetyl + oxidized Met) carries both mass deltas on every recomputed fragment
+  (fails on the current `DecoyGenerator`); the `ProbeOnce` failure-not-cached case; a/c/x/z
+  names counted separately from unreadable ones; and a pipeline leg that searches an ANNOTATED
+  blib built from the subset library, showing its decoys now differ from their targets.
+- Red before green: each fix above gets a test that fails without it, and the PR says so.
+
+### R7. Part A review items
+- `DecoyGenerator.cs:716-727` still overwrites stacked mods (`modMasses[newPos] = m.MassDelta`);
+  use `PeptideFragmentMass.ModMassesByPosition`. Changes TSV decoys (N-term acetyl + Met ox), so
+  it needs a key term and a Rust check.
+- `BlibLoader.ProbeOnce` caches `false` on any exception; cache only successes.
+- a/c/x/z ion names are counted as "unreadable" (`BlibPeakAnnotations.cs:105-108`).
+- Version `;libext=ann` (e.g. `ann2`) like `blib_reader:2`.
+- Annotation cursor `ORDER BY RefSpectraID, peakIndex, id` sorts the whole table unindexed;
+  `ORDER BY RefSpectraID, id` suffices. Time the precision probe on a large blib.
+- Blibs without annotations (including Osprey's own output) still give decoys identical to
+  their targets; `BlibWriter` should write `RefSpectraPeakAnnotations` (follow-up). The #4360
+  branch turns the resulting `LinearDiscriminant` crash into a plain error.
+- `docs/01-decoy-generation.md:191` still places `CalculateFragmentMz` in `DecoyGenerator`.
+
+### R8. Code coverage must show the new code is exercised
+Run `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` and
+`ai/scripts/Osprey/Summarize-Coverage.ps1` on each PR's final state, and put in its test plan:
+- overall Osprey coverage before and after (it must not drop; it was 83.3% on the #4360
+  branch);
+- the statement coverage of every NEW type (`BlibPeakAnnotations`, `FragmentLadder`,
+  `PeptideFragmentMass`, `TrainingEvidence`, `TrainingExportParquet`, `ParquetBlobCodec`, the
+  export arm in PerFileRescoring, ...): each at least 80%, with any uncovered block named and
+  justified (e.g. an I/O error path);
+- coverage of the CHANGED lines in existing types (`BlibLoader`, `DecoyGenerator`,
+  `PerFileRescoreTask`), from the dotCover snapshot.
+Coverage that comes only from unit tests of pieces, with nothing through the pipeline, does not
+meet R6 even when the percentage is high.
+
+### R9. Part B smaller items
+- The "mp_cosine parity N/N" line counts peaks with no fit as matches
+  (`TrainingEvidence.cs:99-101`); log the fitted count beside it.
+- Decide and document the exit code when one run's export fails after the blib is written; as
+  posted it sets exit 1 and stops the remaining runs (`TrainingExportTask.cs:209-214`).
+- Run `Test-PerfGate.ps1 -Dataset Stellar` if anything on the default path still changes after
+  R3 (as posted, `RunInfoCollector` adds per-spectrum work to every parse).
+
+## Verified facts (on `origin/Skyline/work/20260612_net8_port` @ `40312c7979`)
+
+- `BlibLoader.DecodeBlibPeaks` makes every fragment IonType.Unknown (ordinal i+1, charge 1);
+  `DecoyGenerator.RecalculateFragments` copies non-B/Y fragments, so generated decoys of a
+  blib keep the target's m/z. `BlibWriter` creates `RefSpectraPeakAnnotations` empty.
+- Skyline reads `RefSpectraPeakAnnotations` for every blib (`BiblioSpecLite.ReadPeakAnnotations`):
+  it `Assume.Fail`s when `mzObserved` differs from the peak m/z by >1e-7 and calls GetString on
+  every text column (NULL throws). No existing writer names peptide fragments - the grammar is ours.
+- `LibraryDeduplicator` renumbers ids 0..n-1 by (ModifiedSequence, Charge), so RefSpectraID-keyed
+  data must be resolved to (peptideModSeq, charge) inside BlibLoader.
+- Osprey captures no NCE or instrument metadata. The net8 `MsDataFileImpl`
+  (`pwiz_tools/Shared/ProteowizardWrapper.PwizSharp`) exposes `GetInstrumentConfigInfoList()`,
+  `MsPrecursor.PrecursorCollisionEnergy`, `DissociationMethod`, `GetSpectrumMetadata(i)`;
+  `SpectrumFileReader.AddSpectrum` drops them.
+- `scan_number` in parquet is the 0-based source spectrum index (no nativeID anywhere).
+- `FdrEntry.StartRt/EndRt/ApexRt` are exact window-spectrum RTs; reconciled parquet has final
+  boundaries, `.2nd-pass.fdr_scores.bin` run q, `<blib>.2nd-pass.fdr_experiment.bin` experiment q/PEP.
+- All four regression datasets use TSV libraries, so part A needs its own tests.
+
+## Step 1 - output-neutral refactors (own commit; full regression + perf gate)
+
+- `Osprey.Core/PeptideFragmentMass.cs`: move `DecoyGenerator.STANDARD_AA_MASSES`, `PROTON_MASS`,
+  `H2O_MASS`, `CalculateFragmentMz`; DecoyGenerator delegates. New `Osprey.Core/FragmentLadder.cs`
+  (b/y z1/z2, AlphaPeptDeep slot order p*4+t, t in [b_z1,b_z2,y_z1,y_z2]; NaN when z > min(zprec,2)).
+- `ScoringPipeline`: extract `DoubleCountingTolerance(ms2Cal, cfg, ...)` and `DoubleCountingRtNeighborhood(ms2Rts)`.
+- `TukeyMedianPolish.FragmentR2` (MinFragmentR2 calls it).
+- `SpectraWindowIndex.BuildFromCache(loadMs1: false)` overload.
+- Move `PerFileRescoreTask.LoadSpectraForRescore` / `LoadMassCalibrations` to `ScoringTaskShared`.
+- Parquet blob encoders internal/shared (`ParquetBlobCodec`); `SearchIdentity.FileIdentityTerm`.
+
+## Step 2 - part A (Osprey.IO/BlibLoader.cs, LibraryLoader.cs, new BlibPeakAnnotations.cs, BlibDecoyPairs.cs)
+
+- Annotation grammar `<ion><ordinal>[-<loss>]` (a/b/c/x/y/z; loss H2O | NH3 | H3PO4 | decimal
+  mass snapped within 0.005 Da); `charge` column wins, lenient `^2`/`++`/`+2` suffix when 0/NULL.
+  Validate each against recomputed m/z (max(0.02 Da, 20 ppm)); failures stay Unknown and are counted.
+  Merge-join `SELECT RefSpectraID, peakIndex, id, name, charge, adduct, mzTheoretical ... ORDER BY
+  RefSpectraID, peakIndex, id` with the spectra cursor. Absent/empty table = unchanged behavior.
+- Writer rules (doc 13): text columns empty strings never NULL; `mzObserved` == peak m/z exactly.
+- `LibraryCompositionHash`: append `blib_reader:2` only for blib sources. Validity key suffix
+  `;libext=ann[,pairs]` only for annotated/paired blibs (never touch SearchParameterHash/LibraryIdentityHash).
+- `DecoyPairs(RefSpectraID, IsDecoy, IsEntrapment, PairID, Method)` (Carafe fork, pair semantics):
+  keyed by (modseq, charge); library-decoy mode order = prefix marking -> DecoyPairs -> recount ->
+  manifest -> composition; `PairingStats.NPairedViaLibraryTable`, logged only when > 0. Generated
+  mode: one warning, no change. `BlibDecoyPairs.ReadEntrapmentKeys` for the export.
+- Tests: `BlibLibraryInputTest` (grammar table, typing, rejection, cache round trip, blib-vs-DIA-NN-TSV
+  parity), `TestBlibDecoyPairs`, `TestAnnotatedBlibDecoyGeneration`, `FragmentLadderTest`, validity-key test.
+
+## Step 3 - run metadata (SUPERSEDED by R3: no run-info.json)
+
+- `<stem>.run-info.json` beside `.spectra.bin`, written in `ScoringTaskShared.EnsureSpectraCache`
+  through FileSaver before the cache: instrument model/vendor/serial/analyzer, run start, MS1/MS2
+  counts, MS2 scan window (first ~200 spectra), dissociation-method and collision-energy
+  histograms, source fingerprint (size, mtime ms). `.spectra.bin` unchanged.
+- rt_max and the isolation range come from `SpectraWindowIndex` (AllMs2Rts, IsolationWindows).
+
+## Step 4 - part B: TrainingExportTask (SUPERSEDED by R2: a PerFileRescoring product, not a stage)
+
+- Optional fifth fan-out task after SecondPassFDR (`TASK_NAME = "TrainingExport"`, appended to
+  HpcTask; `IsIncluded = cfg.TrainingExport.Enabled && ...`; `--task TrainingExport` selects a
+  one-task list). Not Stage 7 (SecondPassFDR is a join with no spectra; adding outputs there
+  would re-run the join) and not Stage 6 (no experiment q/PEP yet). Pay-later: adding the flag to
+  a finished run runs only this task.
+- CLI (OspreyCommandArgs, Argument instances): `--training-export`, `--training-export-max-q`
+  (default --run-fdr), `--training-export-claimant-q 0.01`, `--training-export-xics`.
+- Output `<stem>.training.parquet` (ZSTD, FileSaver, validity sidecar; zero-row file when empty).
+  Validity key = base + fdrsidecar version + `pass2exp=` file identity of the experiment sidecar +
+  `;trainexport=1;maxq=;claimq=;xics=`; omits the -i-subset reconciliation hash (P4).
+- Per precursor: entry/base id, is_decoy, is_entrapment, peptide_kind, sequence, modified sequence,
+  mod positions/masses/unimod ids, charge, precursor m/z, library RT, proteins, file, scan_number,
+  apex/start/end RT, n_peak_scans, isolation bounds, bounds_area, coelution_sum, 2nd-pass score,
+  run and experiment q, PEP, apex TIC, explained intensity, n ions observed, median-polish summary
+  (converged, iterations, overall, cosine, residual MAD, core source), boundary medians,
+  claimant and DDC-neighbor counts.
+- Per ion (4*(L-1) slots): m/z, flags (applicable, in scan range, matched at apex, core, library
+  annotated), observed apex intensity and mass error, library relative intensity, finite-scan count,
+  XIC start/end/max, correlation to the polish profile and to the reference XIC, polish row effect,
+  R2, positive-residual max, apex residual, outlier z, apex ratio, relative intensity,
+  shared_apex/shared_coelute counts, min claimant q, better-claimant flags. Optional XIC matrix.
+- Median polish reuses Osprey's fit: core = `TopFragmentExtractor.ExtractFragmentXics` over the
+  final boundaries -> `TukeyMedianPolish.Compute(core, rts, 10, 0.01)`, byte-identical to
+  CoelutionScorer; every ladder ion is projected on (Overall, ColEffects). Built-in check:
+  `mp_cosine` equals the reconciled parquet's `median_polish_cosine` for every row.
+- Shared evidence: apex scope (same apex scan and peak index - Carafe semantics) and co-elution
+  scope (claimant's [start,end] contains the apex and its ladder is within the calibrated
+  tolerance - Osprey semantics); DeduplicateDoubleCounting neighbor count.
+- Tests: TrainingEvidenceTest, TrainingExportParquetTest, RunInfoFileTest, membership/CLI/
+  validity-key updates; regression.ps1 mode 13 (pay-later, resume, relay task, zero mp_cosine
+  mismatches). Docs 00, 13, 14, 15, 19, 20 and new 21-training-export.md.
+
+## Progress Log
+
+### 2026-09-23
+- Worktree `D:\Dev\pwiz-osprey-export` from `origin/Skyline/work/20260612_net8_port` @ `bba770990a`.
+- This machine has only VS 2022 (MSBuild 17.14), which cannot load the .NET 10 SDK the #4619
+  branch needs (MSBuild 18). `ai/scripts/Osprey/Build-Osprey.ps1` now falls back to the SDK's own
+  msbuild and test runner in that case. Baseline on the branch: 598 tests pass.
+- Step 1 (partial): `Osprey.Core/PeptideFragmentMass.cs` - residue masses, PROTON/H2O and
+  `CalculateFragmentMz` moved verbatim out of DecoyGenerator, which delegates (TheoreticalLadder too).
+- Step 2 (part A, annotations): `Osprey.IO/BlibPeakAnnotations.cs` (grammar; one annotation per
+  peak - no loss first, then lowest charge; m/z validated at max(0.02 Th, 20 ppm); b/y only),
+  merge-joined in `BlibLoader.LoadSpectra` through a second ordered cursor; one summary log line;
+  `LibraryCompositionHash` gains `blib_reader:2` for blib sources only. Test
+  `BlibLibraryInputTest` (grammar table, typing, rejection, preference, plain blib unchanged,
+  generated decoys recompute annotated m/z).
+- **Scope change (proposed):** DecoyPairs support deferred. Osprey's existing
+  `--decoy-pairing-manifest` path already pairs Carafe-style libraries and is regression-tested;
+  CarafeSharp writes `decoy_` accessions plus the FDRBench manifest exactly as Carafe does.
+- Part A committed `cdbab8c8ac` (600 tests, inspection clean). Developer approved the regression
+  bundle download (14.3 GB actual, `~/Downloads/Perftests`). `regression.ps1 -Dataset Stellar -NoBuild`
+  from a detached gate worktree `D:\Dev\pwiz-osprey-gate` at `cdbab8c8ac` (Release built there, so
+  part B edits in the main worktree cannot leak in): **PASSED** all modes (1, 1c, 2, 3, 4, 5, 6).
+  Note: `regression.ps1`'s own build step uses VS MSBuild, so on a VS 2022 machine build Release
+  with `Build-Osprey.ps1 -Configuration Release -SourceRoot <tree>` first and pass `-NoBuild`.
+- Build race on the #4619 branch: two configurations of pwiz-sharp's `Vendor.Common` build in
+  parallel and both run `VendorPinsGenerator`, so one fails to write its dll ("being used by another
+  process"). Rerunning the build succeeds. Worth reporting on #4619.
+- Part B `0a0b74432a`: `regression.ps1 -Dataset All -NoBuild` from the gate worktree (Release
+  built there) **PASSED**: 42 phases over Stellar, StellarLibDecoy, StellarGenDecoyEntrap and Astral,
+  3.9 h wall on a contended machine (log `ai/.tmp/sessions/20260923-carafesharp/gate-all.log`).
+- Part A in use: a CarafeSharp blib (968,437 spectra, 16.9M peaks) loads with 0 annotation
+  failures; Skyline-daily 26.1.1 (SkylineCmd) opens CarafeSharp blibs with peak annotations.
+  Part B in use: exports on Stellar _21 (Carafe TSV and CarafeSharp blib libraries), mp_cosine
+  parity 23,036/23,036 and 23,105/23,105; CarafeSharp trains on them (85% slot agreement with Carafe).
+- Found while comparing libraries: the Stellar experiment-level count is bimodal (about 21k or
+  28-30k at the same FDP) on 1e-4 library changes; see the CarafeSharp TODO. Separate task.
+- Not done yet: the perf gate (`Test-PerfGate.ps1 -Dataset Stellar`, needs an uncontended machine).
+
+### 2026-09-24
+- `/code-review max` (11 finder angles, 9 verifiers, sweep; diff `ai/.tmp/sessions/20260923-carafesharp/export-review.diff`):
+  15 reported, all fixed in the review commit, then the branch was squashed to ONE commit `255ad17504`
+  (backup ref `backup/export-pre-squash-25b8316`). The fixes:
+  - `ModMassesByPosition` sums stacked mods (N-term + residue 0); DecoyGenerator's own last-wins map is untouched
+    (matches Rust and the goldens; decoy b ions of such targets still lose the N-term mass - a separate, gated change).
+  - `;libext=ann` task-key term and `blib_reader:2` libcache term only for blibs whose annotation table has rows;
+    `blib_mods:2` libcache term for blibs with low-precision or 100-200 mod text (re-parse once).
+  - Blib mod masses: absolute-Cys reading only on unsigned C text; snap tolerance max(0.01, half the last digit).
+  - `--task TrainingExport` validates upstream footers (`ValidateScoresParquetGroup` overload) and refuses a row whose
+    sequence/charge differ from its library entry.
+  - Per-run export key (`OspreyTask.OutputValidityKey`): reconciled parquet, 2nd-pass sidecar, run-info identities;
+    stale run-info (fingerprint vs `.spectra.bin` header) ignored; relay must keep mtimes (`cp -p`).
+  - 2nd-pass records paired by (entry_id, apex-RT bits); collisions throw.
+  - NaN custom loss rejected; separate out-of-range annotation counter; log line only when the export runs.
+  - Shared `TukeyMedianPolish.SCORING_*` polish arguments; parity test now runs the real CoelutionScorer.
+  - Projected reconciled read (`LoadTrainingExportRows`) and `RetainFragmentsFor` on pay-later loads.
+  - run-info v2: per-isolation-window MS2 scan ranges, UTC start time, `\n` JSON; v1 still read.
+  - `ddc_neighbor_n` asks pairs in the dedup's order; `DoubleCountingTolerance` delegates to `CalibratedTolerance`.
+  - Style, ASCII dashes, stale docs (four tasks -> five; NThreads windows resident).
+  Gate: 606/606 tests, 0 inspection warnings.
+- Open questions for the developer: drop `ddc_neighbor_n` (about 0 by construction, unread by CarafeSharp)?
+- End-to-end on Stellar _21 with the annotated CarafeSharp blib (`D:\test\osprey-runs\export-smoke-255ad17`): straight-through
+  mp_cosine parity 23,169/23,169; pay-later skipped all four upstream tasks and wrote data identical to the
+  straight-through export; `--task TrainingExport` re-run skipped as current; run-info v2 with 125 window ranges.
+- `regression.ps1 -Dataset All` (options off): PASSED (`ai/.tmp/sessions/20260923-carafesharp/export-regression-all.log`).
+- PR #4708 opened against the port branch.
+- Copilot review (7 threads) addressed in `481e75680a`: `;libmods=2` task-key term for blibs whose mod text the
+  new reader parses differently; `;calib=`/`;spectra=` in the per-run export key; malformed caret charge
+  suffixes rejected; structurally damaged run-info reads as absent; docs/14 v2. Not changed: `double.IsFinite`
+  (net10.0-only build); DecoyGenerator's last-wins stacked-mod map (pre-existing, mirrors Rust).
+- Follow-ups: DecoyGenerator stacked mods at one position (change C# and Rust together); `ddc_neighbor_n`
+  removal is #4709 (developer: leave for now, low priority). Remaining here: perf gate (needs a quiet machine).
+
+## Risks
+- (Resolved) Skyline loads peptide fragment annotations from a CarafeSharp blib.
+- Osprey XICs take the closest peak unsmoothed; Carafe the max within tolerance with Savitzky-Golay.
+  Carafe's 0.8 correlation threshold may need retuning (XIC blobs allow recomputing).
+- NCE semantics differ by vendor (Thermo NCE, Sciex eV, stepped HCD) - export the histogram.
+
+## Gates
+- `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
+- `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`, then `-Dataset All` (options off, 1e-9)
+- `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar`
+- `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` + `Summarize-Coverage.ps1`, numbers in the PR test plan (R8)
+- `SubsetPipelineTest` legs for the export (R6) pass, and each fix's test fails without its fix
+- TeamCity Perf/Regression only on the finished PR candidate, and only after asking. Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.

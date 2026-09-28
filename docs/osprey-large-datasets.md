@@ -175,8 +175,9 @@ Deleting raw after a verified conversion drops the CHS whole-set peak to ~3,571 
 fits - but the mzML detour is avoidable entirely, and the staging recipe in the next section
 is what these numbers should be budgeted against now.
 
-**A vendor-enabled build reads `.raw` directly.** The net8.0 exe cannot, but the net472 build
-with `pwiz_data_cli` can (`_bin\26.1.1.233-vendor-20260822` or later on BRENDANX-UW8), so a
+**A vendor-enabled build reads `.raw` directly.** A default net10.0 build cannot (its vendor
+readers compile without the SDKs), but one built with `Build-Osprey.ps1 -VendorReader` can,
+as could the older net472 `pwiz_data_cli` snapshot `_bin\26.1.1.233-vendor-20260822`, so a
 Thermo dataset needs no msconvert pass and no mzML copy at all - cheaper on disk and on time
 than converting. `ai/scripts/Osprey/SEA-AD/Convert-SeaAdRaw.ps1` and `convert-one.cmd` stay the
 recipe for the cases that still need mzML (a non-vendor build, or a format the vendor reader

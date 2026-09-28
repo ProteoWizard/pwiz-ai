@@ -1,0 +1,675 @@
+# TODO-20260924_osprey_log_readability.md - make Osprey's user-facing text read for a mass spectrometrist, and move it to RESX
+
+## Branch Information
+- **Branch**: `Skyline/work/20260924_osprey_log_readability`
+- **Base**: `Skyline/work/20260612_net8_port` (the PR #4619 .NET 10 port branch; the PR targets it, not master)
+- **Created**: 2026-09-11 (spec); started 2026-09-24
+- **Status**: Completed - steps 1-3 merged as #4718. Steps 4-6 (RESX, locale split, second-culture tests, guards) continue in `TODO-20260926_osprey_resx.md`. The CSV line numbers are for master `794cb6a5d8`; locate each site by its text.
+- **GitHub Issue**: (pending)
+- **Module**: `osprey`
+- **PR**: [#4718](https://github.com/ProteoWizard/pwiz/pull/4718) (merged 2026-09-27 into `Skyline/work/20260612_net8_port` as `64ed45b29e`)
+
+**Origin**: Brendan, 2026-09-09, after noticing that log terms such as "projection" come from
+class names Claude assigned during development and mean nothing to a user. Reviewed line by
+line on 2026-09-09..11 against master `794cb6a5d8` (#4646). On 2026-09-11 Brendan widened the
+scope: do the whole thing in one sprint, **including moving Osprey's user-facing text to RESX
+files**. Rationale, in his words: C# .NET has won; Osprey is to be a solid companion to Skyline
+and will be fully integrated into it within the year; BiblioSpec will follow (converted to C#
+.NET with its user-facing text in RESX); the time when our command-line tools were allowed to
+stay all English is over.
+
+Supersedes `ai/todos/backlog/TODO-osprey_log_lines_are_user_facing_prose.md` (now a stub
+pointing here). Related: `ai/todos/backlog/TODO-osprey_env_var_cataloging.md` (env vars named
+in log lines).
+
+**Companion files** (the spec is the four of them together). The three below stay in
+`ai/todos/active/` after this TODO moved to `completed/`: `TODO-20260926_osprey_resx.md` still
+works from them.
+
+| File | What it is |
+|---|---|
+| `TODO-20260924_osprey_log_readability-spec.html` | The review page: glossary with decisions, Table A (user-facing lines by confusion, with rewrites), B1 (developer lines leaking into the default log), B2 (gated diagnostics inventory), C (warnings written for a developer). Open in a browser. Same content as the published artifact `https://claude.ai/code/artifact/c51944d7-39b3-4208-9432-92160c6a2fca`. |
+| `TODO-20260924_osprey_log_readability-lines.csv` | One row per emitting call site (583), with priority, the flag that exposes it, current text, flagged terms, why, suggested text and action. Line numbers are for master `794cb6a5d8`. This is also the worklist for the RESX move: every default-tier row becomes a resource. |
+| `TODO-20260924_osprey_log_readability-terms.csv` | The term sheet with Brendan's decisions in the "Brendan decision so far" column. |
+
+The HTML is the readable form; the CSV is the checklist to work down. Where they disagree,
+the HTML is newer.
+
+## Summary
+
+Osprey's console log is its only user interface, and roughly a third of the lines a user sees
+in an ordinary run use vocabulary that exists only inside the codebase: sidecar, compaction,
+survivors, hydrate, stratum, base_id, fold, bundle, stubs, projection. Some lines print C#
+method names (`[PATH] First-pass streaming ingest (RunStreamingFirstPass)`), some announce the
+default behaviour by an environment-variable assignment the user never made
+(`OSPREY_PASS2_QVALUE=protein-compact: ...`), and the second-pass progress headings narrate the
+code structure (seed, collect, stream, patch, reload) rather than what the user is waiting for.
+
+The gating of developer output is in good shape: `[COUNT]`/`[TIMING]`/`[BENCH]`/`[STAGE-WALL]`
+are behind `--perf-stats`, `[MEM ...]` behind `OSPREY_LOG_MEMORY`, bisection dumps behind
+`-d`/`OSPREY_DUMP_*`, implementer detail behind `--verbose`. The problem is inside the default
+tier.
+
+The work has four parts, in this order: **gate** the developer lines that leak (no wording
+decisions needed); **move every script and test that keys off prose onto tagged machine
+lines**, so prose can change and be translated without breaking a gate; **rewrite** the
+user-facing lines with the decided vocabulary; and **move the user-facing text to RESX** with
+the same enforcement Skyline uses, so it can be translated to Japanese and Chinese with
+Skyline's existing pipeline. The first two parts are what make the last two safe.
+
+## Evidence (master `794cb6a5d8`, tests excluded)
+
+| Tier | Call sites | Exposed by |
+|---|---:|---|
+| default log | 399 | every run |
+| perf stats | 83 | `--perf-stats` (`[COUNT]` `[TIMING]` `[BENCH]` `[STAGE-WALL]`) |
+| model diagnostics | 35 | `--model-diagnostics` |
+| bisection dumps | 31 | `-d`, `OSPREY_DUMP_*`, `OSPREY_DIAG_*` |
+| verbose | 20 | `--verbose` |
+| FDRBench / entrapment | 12 | `--fdrbench` |
+| memory probes | 3 | `OSPREY_LOG_MEMORY` |
+
+Inside the 399 default lines: 47 contain a C# method, class, task or variable name; 53 say
+"sidecar"; 15 name an `OSPREY_*` variable; about 120 use at least one codebase-only term.
+Only 3 of 583 sites format a count with a thousands separator.
+
+Two real logs were read end to end: the 3-file Stellar run
+`D:\test\osprey-runs\defectb2-stellar.log` and the 82-file Astral run
+`D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-s7offB-20260831_115149\run.log`.
+In the 82-file log, 82 of 369 lines are the same developer note repeated once per file
+("Loaded N FDR stubs (features not loaded - not read on this path)").
+
+## Decided vocabulary (Brendan, 2026-09-09..11)
+
+Use this as the rename map. The full table with meanings is the glossary on the spec page.
+
+| Never in user text | Say instead |
+|---|---|
+| sidecar | **intermediate file** ("intermediate" is the key word: not the end result). Name the file where it helps. |
+| entry / entries, base_id(s) | **precursor candidates** (targets + decoys); "candidates" replaces "entries" and "library entries" everywhere |
+| compaction / compact | say what was kept: "kept N of M precursor candidates for cross-run reconciliation" |
+| survivors / survivor pool / retained set | precursor candidates carried forward (no objection recorded; open) |
+| stratum, protein-compact stratum | **precursor candidates from proteins with 2 or more detections**; "protein-compact subset" only where the flag itself is named. "Detections" = passed the current cutoff, without saying which. |
+| hydrate / rehydrate | load / reload from intermediate files (open) |
+| fold (verb) | one run at a time. Not liked even as a developer term. |
+| projection | (the last progress heading using it was removed by #4646; the `[PATH]` line moves to perf-stats) |
+| bundle / envelope | **cross-run reconciliation files**. "Reconciliation plan" was opaque; "results" is reserved for end results a user looks at. |
+| stubs | "Loading FDR values from intermediate files" (one heading, not one line per file) |
+| scalars | first-pass scores (open) |
+| frozen model / no retrain | **drop**. Records what the code no longer does; diagnostic channel only if a test needs it. |
+| use_cwt / forced / gap-fill / action(s) | **peaks re-picked / peak boundaries imputed / missing peaks** (Skyline's peak-boundary-imputation vocabulary; in a count, just "missing peaks") |
+| Stage 1-4 / 5 / 6 / 7 | never a stage number. The `--task` names are fine: the CLI help documents them. |
+| resident, byproduct, interned, parquet index | diagnostic output if a test needs it, else drop |
+| worker / fan-out / join | per-file run / merge (open) |
+| boundary file pair | intermediate files (do not add "that the next task needs") |
+| `OSPREY_*` on a default path | never. Name a variable only when the user set it; env vars are developer-facing. |
+| enum `ToString()` (UnitResolution, DiannTsv, Reverse, percolator) | Skyline's `GetLocalizedString(this Enum)` extension over a `LOCALIZED_VALUES` array of resource strings (`Skyline/Model/Export.cs`) |
+
+Kept as they are: **coelution** (known DIA term; Skyline has a "coelution score"),
+**reconciliation / cross-run reconciliation** ("cross-run" carries the meaning; TRIC is the
+nearest published concept), **Percolator**, **`[TASK] Name:starting` markers** (Brendan likes
+them; the names are the `--task` values).
+
+Rules that fell out of the review:
+
+1. A noun swap is not a fix for a data-structure word ("stratum" -> "set" is equally opaque).
+   The line must state the effect on the results, in one clause: which candidates get new
+   q-values, what was kept, what will be imputed.
+2. "results" means end results the user looks at. Anything written beside an input for a
+   later step is an "intermediate file"; do not stack the two words.
+3. Every count carries a thousands separator (`{0:N0}`). Global, not per line.
+4. A line whose only purpose is to record which code path ran, or how memory is managed, is
+   diagnostic output behind `--verbose`, `--perf-stats` or `OSPREY_LOG_MEMORY`, never user text.
+5. No C# identifier, no task name outside the `[TASK]` marker, no environment variable and no
+   stage number in a default-tier line.
+6. No possessive apostrophe on an inanimate noun; use the noun attributively (Brendan,
+   2026-09-24). "precursor candidate q-values", not "precursor candidates' q-values" - the
+   plural possessive in particular trips readers ("ASMS user meeting", never "users' meeting").
+7. A count states its denominator where the reader needs scale: "N of M precursor candidates".
+   Never print two counts that look like the same quantity (a follow-up line counting
+   precursor q-values vs the headline counting precursor records read as a contradiction).
+
+## Two kinds of line
+
+This is the design decision that makes the rewrite safe now and the translation possible.
+
+**Prose** is for the person watching the run. It lives in RESX, may change in any PR, and is
+translated. **Tagged lines** (`[TASK]`, `[COUNT]`, `[TIMING]`, `[BENCH]`, `[STAGE-WALL]`,
+`[PATH]`, `[MEM ...]`) are the machine channel: ASCII, verbatim `@"..."` literals, never
+resourced, never translated, and the only thing a script or test may key off. Write this into
+`pwiz_tools/Osprey/docs/20-command-line.md` as a "Log format" section:
+
+- **A script or test that reads the log keys off tagged lines only.** A prose probe is a
+  defect to fix in the consumer, not a reason to freeze the prose.
+- **Tag format is `[TAG] key: value` or `[TAG] key=value`.** Adding a tag or key is fine;
+  renaming one means updating the consumers in the same PR.
+- **The tags are gated** (`--perf-stats` for the stat tags, `OSPREY_LOG_MEMORY` for `[MEM]`),
+  except `[TASK]`, which is a section header and stays in the default log. `[PATH]` and
+  `[TRAIN]` are not in `OspreyOutput.IsStatLine` today and so leak into the default log; add
+  them, and have every gate that needs them pass `--perf-stats`.
+- **Route assertions get a `[PATH]` line each.** `regression.ps1` asserts which route a run
+  took by grepping prose ("Second-pass join: folding over N run(s)", "worker's written answer
+  for all N file(s)", "folding the report from the completed first pass", "ALL-RUNS
+  reconciliation bundle", "a consumer asked for the whole-run survivor pool"). Each becomes a
+  `[PATH] <route-key>` line emitted where the prose is today, e.g.
+  `[PATH] stage7-join: fold-per-run`, `[PATH] pass2-per-file: worker-answers 82/82`,
+  `[PATH] mdiag: fold-pass1`, `[PATH] all-runs-bundle: refused`.
+- **Counts a gate asserts get a `[COUNT]` line**, e.g.
+  `[COUNT] library-fragments-released: N of M (K retained for rescore+gap-fill)`.
+- **In code, the marker is the string prefix.** Verbatim `@"..."` on a `LogInfo` call means
+  "machine channel or developer-only, not for translation"; a plain `"..."` literal is a
+  localization warning (see enforcement below). Today the `@` prefix is used on both kinds
+  of line at random; after this work it carries meaning.
+
+## RESX: scope, mechanics, enforcement
+
+**What is user-facing (goes to RESX).** Every string a user can see without setting an
+environment variable or passing `-d`: the default tier (`LogInfo`, `LogWarning`, `LogError`,
+`ProgressReporter` headings, the `[WARN]`/`[ERROR]` prefixes themselves), the `--verbose`
+tier (it is a documented CLI flag and its calibration statistics are for a careful user),
+the `--model-diagnostics` console lines, `--help` text (argument and group descriptions,
+already `Func<string>` so a resource drops straight in; the generated
+`Documentation/Help/en/CommandLine.html` already carries an `en` in its path), and the
+exception messages that reach the user through `Fatal error: {0}` / `Pipeline failed: {0}`
+when they describe a user-correctable condition: file not found, unreadable or empty library,
+missing column at row N, unsupported format version, incompatible daily build. Roughly 65
+such throws sit in `Osprey.IO` and `Osprey/` today.
+
+**What stays verbatim English.** Tagged machine lines; `OSPREY_*`-gated and `-d` diagnostics
+(`OspreyFileDiagnostics`, `PercolatorDiagnosticsDump`, `[BISECT]`, `[MEM]`); internal-invariant
+exceptions (`InvalidOperationException` in `Osprey.ML`, `Matrix`, the reconciliation planner)
+per STYLEGUIDE "Non-Localizable Text"; `ToString()` overrides; file names, flag names, env-var
+names and format-version tokens inside otherwise-resourced strings stay as `{0}` arguments.
+
+**Mechanics (SDK-style, multi-TFM `net472;net8.0`).**
+- One `Resources.resx` per assembly that emits user text: `Osprey.Core`, `Osprey.IO`,
+  `Osprey.Scoring`, `Osprey.FDR`, `Osprey.Tasks`, `Osprey` (exe). Name them after the
+  assembly to keep the generated classes distinct (`OspreyTasksResources`, ...), as Skyline
+  does with `ModelResources`, `MenusResources`, `CommonMsDataResources`. The `Chromatography`,
+  `ML` and `Diagnostics` assemblies emit no user prose and get none.
+- Check in the `.Designer.cs` (generated by VS's `PublicResXFileCodeGenerator`; SDK projects
+  need the `<EmbeddedResource Update=...><Generator>` / `<Compile Update=...><DependentUpon>`
+  items so VS regenerates on save). `dotnet build` on Linux compiles the checked-in Designer
+  and builds the `ja` / `zh-CHS` satellite assemblies from `.ja.resx` / `.zh-CHS.resx`
+  automatically; the installer and the standalone ZIP must ship the satellite folders.
+- Resource keys follow Skyline's convention `Class_Method_Message_text_with_underscores`
+  so ReSharper's "Move to resource" produces them and the translators' CSV reads well.
+- `string.Format` stays; the resource holds the format string with `{0}` placeholders.
+  Counts use `{0:N0}` (rule 3) inside the resource string.
+- Enums: `GetLocalizedString(this Resolution)` etc. over `LOCALIZED_VALUES`, plus
+  `Helpers.EnumFromLocalizedString` for the CLI parse direction where the value is user-typed
+  (CLI values themselves stay English: `--resolution unit|hram|auto` is a token, not prose).
+- Culture at runtime: mirror Skyline's internal `--culture <name>` argument
+  (`CommandArgs.ARG_INTERNAL_CULTURE`, sets `CurrentCulture` and `CurrentUICulture`) so a run
+  can be forced to `ja` for testing and screenshots. Default is the OS UI culture, as in
+  Skyline.
+
+**Enforcement, using what Skyline already has.**
+- `Osprey.sln.DotSettings` already inherits `LocalizableElement = WARNING` from Skyline, but
+  no Osprey project opts in, which is why the zero-warning inspection gate passes today with
+  plain literals everywhere. Add a `<Project>.csproj.DotSettings` beside each of the six
+  projects above with the two lines `Skyline.csproj.DotSettings` carries:
+  `Localization/Localizable = Yes` and `Localization/LocalizableInspector = Pessimistic`.
+  From then on `Build-Osprey.ps1 -RunInspection` (the existing pre-commit gate) fails on any
+  plain `"..."` literal that is not resourced, and `@"..."` is the deliberate exemption for
+  the machine channel and diagnostics. Do this on a branch where the 583 call sites have
+  been walked, or the gate goes red on every one of them at once.
+- Add the per-project DotSettings in the same commit that resources the last string in that
+  project, so the gate never has a red interval.
+- Translation-proof tests (TESTING.md): every `Osprey.Test` assertion on prose moves to the
+  resource constant, or to a tagged line, or to a flag/file name. Add a locale switch to the
+  Osprey test project (an `AssemblyInitialize` that reads `OSPREY_TEST_CULTURE`, since Osprey
+  runs under `vstest.console` rather than Skyline's `TestRunner /locale`) and have
+  `Build-Osprey.ps1 -RunTests` run the suite once more under `ja-JP` before a commit that
+  touches resources. A `ja.resx` with a handful of machine-translated strings is enough to
+  make an English-literal assertion fail; the real translations come through the pipeline.
+
+**Translation pipeline.** No tooling change: `MakeResourcesDb.bat` already adds every
+`.resx` under `pwiz_tools` with an exclusion list, so `pwiz_tools/Osprey/**/*.resx` joins
+`IncrementalUpdateResxFiles` / `FinalizeResxFiles` and `LastReleaseResources.db` as soon as
+the files exist (`ai/docs/translation-guide.md`). Osprey's first translations will arrive with
+the next Skyline translation round; until then the `ja`/`zh-CHS` files fall back to English.
+
+**BiblioSpec.** Out of scope here, but the same two-kinds-of-line rule and the same
+DotSettings enforcement apply when it is converted; this TODO is the template.
+
+## Coupling inventory: everything that reads log text today
+
+Found by grepping `Osprey.Test`, `pwiz_tools/Osprey/*.ps1`, `ai/scripts`. Every row either
+moves to the machine channel or is confirmed format-only. With RESX in scope this table is not
+optional: a prose probe that survives will break the first time a run is launched under `ja`.
+
+### `pwiz_tools/Osprey/regression.ps1` (the correctness gate; runs with `--timestamp --memstamp`, NOT `--perf-stats`)
+
+| Probe (line) | Text it matches | Disposition |
+|---|---|---|
+| task cache map (1044-1069) | `[TASK] <Name>:starting`, `[TASK] <Name>:skipping (outputs valid)` | keep; `[TASK]` is machine channel and stays as is |
+| cold-work probes (1044-1045) | `Scoring file ` / `Re-scoring file ` (case-sensitive prefix of the per-file lines) | prose a user reads, and it will be translated. Add `[PATH] score-file N/M` / `[PATH] rescore-file N/M` and move the probe |
+| library-fragment release (1051-1054, 1290s) | regex over `Released library fragments for N of M entries (K base_ids retained for <scope>)` | B1 demotion target. Emit `[COUNT] library-fragments-released: ...` under `--perf-stats`; regression passes `--perf-stats`; prose goes behind `OSPREY_LOG_MEMORY` |
+| no-all-runs-bundle (1197, 1227-1290) | `ALL-RUNS reconciliation bundle` in the guard's error text; anchor `Threads:` from the banner | `[PATH] all-runs-bundle: refused` / `: built`; the banner anchor becomes a `[TASK]`-style start marker (`Threads:` will be translated) |
+| mode 3 fold split (2132-2205) | `Second-pass worker verification ACTIVE`, `worker's written answer for all \d+ file\(s\)`, `Second-pass join: folding over \d+ run\(s\)`, `Second-pass (worker verification ACTIVE\|fold )` | A20/A22 targets. Replace with `[PATH]` lines |
+| mode 10 alt arms (2333) | `OSPREY_PASS2_QVALUE=transfer:`, `Experiment aggregation: mean-best-2 ACTIVE` | assert `[PATH] pass2-qvalue: transfer` and `[PATH] experiment-agg: mean-best-2` |
+| mode 11 pay-later report (3134-3152) | `folding the report from the completed first pass`, `folding the pass-2 report from the completed second pass`, `[STAGE-WALL] second-pass-fdr`, `Running protein-level FDR`, `Re-scoring file ` | A28 targets. `[PATH] mdiag: fold-pass1` / `fold-pass2`; the forbidden-work probes move to `[STAGE-WALL]`/`[PATH]` |
+| pooled-survivor check (2815) | `a consumer asked for the whole-run survivor pool` | C2. `[PATH] survivor-pool: materialized` |
+
+### `ai/scripts`
+
+| Script | Text it matches | Disposition |
+|---|---|---|
+| `perfviz.py` | `LINE_RE` (timestamp + memstamp columns), `TASK_RE` `\[TASK\] (\w+):(starting\|done\|skipping)`, `FAIL_RE` `\[ERROR\]\|Unhandled exception\|Pipeline failed` | `[TASK]`/`[ERROR]` stay ASCII. "Pipeline failed" and "Unhandled exception" are prose: emit `[ERROR] pipeline-failed:` as the machine prefix and keep the human sentence after it |
+| `Osprey/Test-PerfGate.ps1`, `Osprey/Measure-Pipeline.ps1` | `[STAGE-WALL]` names `stage1to4 stage5 stage6 stage7 second-pass-fdr blib`; `[TIMING] Percolator/Simple FDR`, `[TIMING] First-pass protein FDR` | unaffected (perf-stats channel; stage numbers in machine keys are fine) |
+| `Osprey/Get-MemoryReport.ps1` | `[MEM <label>]`; `[STAGE-WALL]`; prose `Coelution analysis complete. N total scored entries across N files`; `Total pipeline: Ns` | the coelution line is A23. Add `[COUNT] scored-candidates: N across M files` and move the probe; `Total pipeline` is already `[TIMING]` |
+| `Osprey/SEA-AD/Measure-Stage6Rescore.ps1` | `[MEM reconciliation-resident]`, `[MEM stage7-inherited]` etc. | unaffected |
+| `Osprey/Run-Osprey.ps1 -Summary` | a prose pattern list (`calibrated frag`, `Coelution search RT`, `Applying MS2`, `First-pass RT tolerance`, `Refined RT tolerance`, `Wrote feature`, `precursors at`, `Coelution analysis complete`, `MS2 calibration (pass`, `Confident peptides`, `Coelution scored`, `Analysis complete`) | a convenience filter, not a gate. Rebase it on `[TASK]`/`[COUNT]` lines or drop it |
+| `Osprey/Common/OspreyDatasetRun.psm1`, dataset runners | no log-text parsing | unaffected |
+
+### `Osprey.Test`
+
+| Test | What it asserts | Disposition |
+|---|---|---|
+| `ProgramTests.cs` (~40 asserts) | CLI validation errors: flag names (`--task PerFileScoring`, `--library and --output`, `2+ files`, `No input files`, `unknown task`), version-guard text (`different daily build`, `incompatible release identity`, `search_hash mismatch`) | flag names are tokens and stay. Everything else asserts the resource constant (`AssertEx.Contains(err, OspreyResources.X)`) |
+| `ResidentPoolGuardTest.cs:342-344` | `O(files x entries)`, `per-run survivor loader`, `cannot admit this path` from `ScoringTaskShared.AllRunsBundleGuardError` (`ScoringTaskShared.cs:805-811`) and `PerFileScoringTask.cs:2257-2260` | developer prose not on the spec's Table C; add as C13 and rewrite. Assert the guard fired via `[PATH] all-runs-bundle: refused` or a return value, not the wording |
+| `MultiProgressReporterTest.cs`, `ProgressReporterTest.cs` | progress *format*: `<activity>...`, `  N%`, `[1] 10%  [2] 20%`, `[TIMING]` filtered | format-only; the `...` suffix and percent layout are not resourced |
+| `FdrTest.cs:1520-1590`, `ModelDiagnosticsDataTest.cs` | model-diagnostics *report* text (`Model sanity check`, `(unexpected direction)`, `Reason` strings) | report content, not the log. In scope for RESX only if the report is user-facing (it is: `--model-diagnostics` is a CLI option). Same translation-proof rule |
+| `CodeInspectionTest.cs` | no rule about strings today | the DotSettings opt-in above is the enforcement; a banned-word rule is still worth adding for vocabulary (below) |
+
+## Implementation plan
+
+Work from the CSV, `Priority` column, in this order. Each step is independently green.
+
+**Step 1: machine channel and gates (no wording decisions).**
+- Add `[PATH]` and `[TRAIN]` to `OspreyOutput.IsStatLine`.
+- Add the `[PATH]` route lines and `[COUNT]` lines from the coupling inventory, next to the
+  prose they replace.
+- `regression.ps1`: pass `--perf-stats` (add to `$memStampArgs`), move every probe in the
+  table to the tagged line, keep the `[TASK]` probes. `Get-MemoryReport.ps1`: same for the
+  coelution count. `perfviz.py`: `[ERROR] pipeline-failed:`. `Run-Osprey.ps1 -Summary`: rebase
+  or drop.
+- Demote the B1 lines (spec page, Table B1) to `--verbose` or `OSPREY_LOG_MEMORY`. This alone
+  removes about a third of the default-tier jargon and a quarter of the 82-file log.
+- `ProgressReporter`: no change; the heading/percent format is what the tests pin.
+
+**Step 2: the High rows (A1-A13).** Thirteen rows, all in every default run. A1, A2 and A11 are
+what a new user hits in the first run that reaches the second pass. Use the decided wording in
+the CSV verbatim. A4 is resolved on master by #4646 and is listed only to keep "projection"
+banned.
+
+**Step 3: Medium and Low rows (A14-A31) and Table C.** A14 (`[TASK]`) is decided "keep".
+Table C is the warnings written for a developer: keep the one user sentence each already
+contains, move mechanism, issue numbers and method names into a code comment beside the call.
+Add C13 (`AllRunsBundleGuardError`, `PerFileScoringTask.cs:2257`).
+
+**Step 4: RESX.** Per project, in dependency order `Core`, `IO`, `Scoring`, `FDR`, `Tasks`,
+exe: create the resx, move every default-tier and `--verbose` string (the CSV rows with
+`Visible when` = default or `--verbose`, plus `--help` text and the user-correctable exception
+messages), mark the machine-channel and diagnostic strings `@"..."`, add the enum
+`GetLocalizedString` extensions, add the project's `.csproj.DotSettings`, and run
+`Build-Osprey.ps1 -RunTests -RunInspection` before moving to the next project. Steps 2-3 can
+be done as the strings are moved rather than before: rewriting a string and resourcing it is
+one edit.
+
+**Locale split (Brendan, 2026-09-26).** Text written for a person (the log, `--help`, errors,
+the model-diagnostics HTML) uses the CURRENT culture: in fr-FR the thousands separator becomes a
+space and the decimal separator a comma. Text written for a program uses the INVARIANT culture:
+every output file (TSV, JSON, blib, parquet metadata, FDRBench input, `.osprey.task` keys) and
+every tagged machine-channel line (`[PATH]`, `[COUNT]`, `[TIMING]`, `[STAGE-WALL]`, `[TASK]`).
+Osprey has never been run under anything but en-US. fr-FR is the culture that exposes the split,
+because ja-JP and zh-CHS format numbers like en-US; test under fr-FR as well as ja-JP.
+The audit of every writer to a file is part of this step, not only the log.
+
+**Step 5: tests under a second culture.** The `OSPREY_TEST_CULTURE` switch, a seed `ja.resx`
+per project, `Build-Osprey.ps1 -RunTests` running twice, and every English-literal assertion
+in the coupling table converted.
+
+**Step 6: guard against vocabulary regrowth.** A `CodeInspectionTest` rule that scans the
+English `.resx` values (not code, now that the strings live there) for the banned tokens:
+`sidecar`, `entry`/`entries`, `bundle`, `stratum`, `base_id`, `hydrat`, `compaction`, `survivor`, `stubs`, `scalars`,
+`frozen`, `projection`, `byproduct`, `interned`, `resident`, `Stage [1-7]`, `OSPREY_[A-Z_]+`
+and any `\w+\.cs` / `\w+Task\b` / `Run\w+\(` identifier. The review found ~120 such lines;
+without a guard they return one feature at a time, because the class name is the nearest word
+to hand for whoever is inside the class.
+
+**Docs.** The "Log format" section in `pwiz_tools/Osprey/docs/20-command-line.md` (two kinds
+of line, tag list, gating, consumer rule, the `@` convention, the vocabulary table), and a
+short "Localization" section pointing at `ai/docs/translation-guide.md`. These are "what the
+code does", so they live in pwiz, not `ai/`.
+
+## Progress
+
+**2026-09-24**
+- [x] Branch created off the port branch (`bba770990a`), TODO moved to active.
+- [x] Step 1a: `[PATH]` and `[TRAIN]` added to `OspreyOutput.IsStatLine` (`02bfb8d29e`).
+  No script or test read either tag, so nothing else changed. The "Ignoring the persisted
+  1st-pass model" line (CSV row "Keep") lost its `[TRAIN]` tag so it stays visible; it is now
+  plain prose and goes to RESX in Step 4. `MultiProgressReporterTest` covers both tags.
+  Build-Osprey -RunTests -RunInspection green (598 tests).
+- [x] Step 1b (`c5947b788b` + fix `db620525ce`; `regression-parallel -Dataset All` green after the fix):
+  - **`LogTag` design (Brendan, 2026-09-24).** Every `[TAG]` prefix comes from
+    `Osprey.Core/LogTag.cs`: gated machine tags (COUNT, TIMING, BENCH, STAGE_WALL, PATH, TRAIN
+    under `--perf-stats`; `Mem(label)` under `OSPREY_LOG_MEMORY`), TASK always, and category tags
+    (WARN, ERROR, MODEL_DIAGNOSTICS, ENTRAPMENT, BISECT, DIAG, FDR, LIB_LOAD, DROP) always
+    emitted and followed by prose. `LogKey` in the same file holds the route/count keys the gate
+    reads. Code writing a tagged line takes an `IOspreyLog` (option A, chosen over an
+    `Action<string>` extension method); `PipelineContext` implements it; `OspreyLog.Write` is
+    the one emission decision; `OspreyLog.Out` / `None` / `FromDelegate` adapt other sinks. The
+    `IsStatLine` / `StatFilteringTextWriter` string filter is deleted;
+    `CodeInspectionTest.TestLogTagsComeFromLogTag` fails on a tag written as a literal.
+  - Behaviour change: the three unconditional `[MEM pass2-fold: ...]` probes in
+    `SecondPassFdrTask.FoldPass2DiagnosticsOnly` now need `OSPREY_LOG_MEMORY` (spec rule 4).
+  - Verified by an A/B log diff on Stellar (3 files), base `02bfb8d29e` vs the refactor, in
+    `D:\test\osprey-runs\logtag-ab\` (snapshots in `D:\test\osprey-runs\_bin\logtag-{base,new}`).
+    Default log identical apart from two timing-deferred progress headings. `--perf-stats` log:
+    every baseline tagged line present and unchanged except `[TIMING] Per-window` (slowest
+    window varies), plus only the new `[PATH]`/`[COUNT]` lines.
+  - `regression.ps1` passes `--perf-stats`; every route/count probe reads a `[PATH]`/`[COUNT]`
+    line, including three the inventory missed (`requires the RESIDENT pre-compaction`,
+    `Loading scored entries`, `enrichment of the pass-1 report`). The mode 11 probe
+    `Folding experiment-q floors` was dead (no emitter since #4522) and is removed.
+    `Loading scored entries` was a deferred progress heading; its `[PATH] scored-entries: load`
+    twin always prints. The first `-Dataset All` run went 69 PASS / 2 FAIL on exactly that:
+    mode 11 cells A and D emitted it. The load has a resident arm (O(files) stubs) and a lean
+    arm (calibration + footers); the line now names the arm and mode 11 forbids only
+    `resident`. Rerun confirmed cells A, D and the main pay-later leg all take `lean`;
+    StellarLibDecoy 27/27, other lane 26/26.
+  - `Get-MemoryReport.ps1` reads `[COUNT] scored-candidates` (prose fallback kept for pre-change
+    logs only). `perfviz.py` unchanged: Osprey failures already carry `[ERROR]`.
+    `Run-Osprey.ps1` gained `-Exe`; its Stellar dataset config is stale against the current
+    `D:\test\osprey-runs\stellar` layout (open, not fixed here). `-Summary` prose filter still
+    to rebase or drop.
+  - `docs/20-command-line.md` has the "Log format" section.
+- [x] Step 1c: demoted the B1 lines (`2512333e94`). Default logs, developer logging off, before vs after:
+    Stellar max gap 5 s -> 5 s (248 -> 230 lines), Astral 16 s -> 16 s (437 -> 428), 0 gaps >= 30 s
+    either side; only the demoted lines left, every result count unchanged. Logs in
+    `D:\test\osprey-runs\logtag-gaps\`. Regression not rerun: no probe reads the demoted prose.
+  - **Keep rule (Brendan, 2026-09-24):** Mike reinstated count lines after the June console
+    cleanup (`TODO-20260623_ospreysharp_console_output`), and issue #4387 records what he keys
+    off: experiment-level precursor/peptide counts at 1% FDR, the per-file calibration summary
+    (RT tolerance, MS1/MS2 with n= matches), Percolator training progress. Any line reporting a
+    result count, a calibration outcome or training progress stays in the default log. Only
+    code-path, intermediate-file and memory-bookkeeping lines move, and only after `git log -S`
+    shows who wrote them. All B1 lines trace to our branch work (#4213..#4642) except
+    `Interned library strings` (Mike, #4381): kept default; reworded by Brendan 2026-09-24 to
+    "Unique library strings: N / M total (P% reduced)" (`4e77d51a52`).
+  - **Gap rule:** no demotion may open a reporting gap with developer logging off. Measured
+    with `ai/scripts/perfviz.py --gap-threshold 30` on default logs (`--timestamp --memstamp`,
+    no `--perf-stats`, no `--verbose`), before vs after, on Stellar and Astral.
+  - **CHS 446 prediction:** stripping every now-gated line (1,820) from the 2026-09-14 developer-off
+    log `chs-seer\runs\_oracle-floors4662\run.log` leaves max gap 27 s, 0 gaps >= 30 s.
+  - **CHS 446 actual run: DEFERRED** to the end of the sprint or a night session (Brendan:
+    ~20 h). Ready command (dry-run verified, 1,784 files link, 0 missing, version pinned
+    26.1.1.243); rebuild the snapshot from the final code first:
+    `Run-Chs.ps1 -DataDir D:/test/osprey-runs/chs-seer/raw -LibraryDir "D:/test/osprey-runs/sea-ad/lib/target+decoy+entrapment-20260817" -LinkFrom D:/test/osprey-runs/chs-seer/runs/chs-446files-libdecoy-r1.0-protein-compact-stage5stream -Exe D:/test/osprey-runs/_bin/<snapshot>/Osprey.exe -NoModelDiagnostics -Tag <tag>`
+    Compare with `perfviz.py` against `chs-446files-libdecoy-r1.0-protein-compact-stages567-n4646\run.log`
+    (same link source and settings, 14h58m). A cold run including scoring is ~20 h.
+- [x] Step 2 (`792c06da6d`): A1-A13 rewritten (A3/A4 were already done; A5 `Interned library
+  strings` is Mike's, wording kept). A13 uses `GetLocalizedString` extensions over literal
+  `LOCALIZED_VALUES` (Step 4 swaps in resources); `SearchIdentity` keeps enum `ToString()` for the
+  cache hash. Same commit: `N0` on every integer count in the Stellar/Astral default logs (Brendan:
+  "until I added the comma above, at first glance, I thought the number was 25,349"), and the
+  experiment-q floors line reworded with its `[FDR]` tag removed (`LogTag.FDR` deleted).
+  Default logs `D:\test\osprey-runs\logtag-gaps\{stellar,astral}-step2.log`, `stellar-n0.log`.
+  - **N0 decision (Brendan, 2026-09-24):** explicit `{n:N0}` per count, not an implicit
+    formatter: an implicit rule would also hit IDs, memstamp columns and the invariant machine
+    lines. Enforcement belongs in Step 6: a Roslyn-based check that every integer argument of a
+    log / progress / exception format carries an explicit format (`N0`, `D`, ...).
+    `ai/.tmp/sessions/20260924-01355z/fmtfix/` has the start of that scanner.
+  - **Tag rule (Brendan):** `[TASK]` is the only tag in the default log.
+- [x] Step 2b (`e089e4f2e0`; `-Dataset All` 70 PASS / 0 FAIL): Skyline's `Error:` / `Warning:` convention (Brendan, 2026-09-24: "not a
+  developer-side line... explicitly for the user... follow the Skyline example, [which] has
+  worked for many years and for Japanese and Chinese").
+  - `LogTag.WARN`/`ERROR` retired; `Program.LogError` writes `Error: `, `LogWarning` `Warning: `
+    (English literals until Step 4 resources them).
+  - Shared `CommandStatusWriter`: `ERROR_PREFIXES` (`Error:`, ja, zh-CHS, as ASCII escapes) and
+    `IsErrorLine` (prefix at line start or after a tab, i.e. after the stamp columns), ported
+    from SkylineRunner's `ErrorChecker`; `DefaultIsErrorMessage` now matches all three. Skyline
+    installs its own predicate, so this changes nothing there (Skyline itself not rebuilt).
+  - `Program.Main` reconciles exit code and error lines both ways, as Skyline's
+    `CommandLine.Run`: error under exit 0 -> exit 2 (`EXIT_CODE_RAN_WITH_ERRORS`); non-zero with
+    no error line -> "Error: Failure occurred. Exiting...". Either writes
+    `[PATH] exit-reconciled`. No-args usage now writes an `Error:` line. Tested by
+    `ProgramTests.TestErrorLinesAndExitCodeAgree` (detector in 3 languages + `GetExitAgreement`).
+  - `regression.ps1`: `Assert-ExitAgreesWithLog` on every leg (both run helpers), Skyline's
+    `ValidateRunExitStatus` equivalent; throws on `[PATH] exit-reconciled`, error under exit 0,
+    or non-zero exit without an error line.
+  - `perfviz.py` failure pattern matches `Error:` in all three languages (keeps `[ERROR]` for old
+    logs). `docs/20-command-line.md` Log format section documents the prefixes and exit codes.
+  - **Ask Mike** whether any of his pipelines (or the NextFlow POC) grep Osprey logs for
+    `[ERROR]` / `[WARN]` before this merges.
+- [x] Step 3a (`e45885b4e7`, pushed): A15-A31, B1 and C1-C13 applied, plus the
+  same-kind lines found beside them (resume errors, retained-summary errors, transfer and
+  protein-compact warnings, the OSPREY_STAGE7_STREAM error). Build/tests/inspection green (600);
+  regression Stellar and StellarLibDecoy (incl. modes 8, 10, 11) PASS. Default logs
+  `D:\test\osprey-runs\logtag-gaps\{stellar,astral}-step3a.log` (snapshot `_bin\logtag-step3a`
+  from net10.0): results unchanged, only `Interned library strings` left on the banned list,
+  0 bare counts, max gap 5 s / 15 s. Open wording questions for Brendan: drop the short
+  "Computing second-pass FDR scores" heading when the "Second-pass FDR over N files" line
+  follows it; shorter A17 dedup line.
+  - Spec wording corrected where the code disagreed: A17 dedup is WITHIN one isolation window
+    (same polarity, apex within ~5 cycles, >= half of top-6 fragments shared), not "overlapping
+    windows"; A18 multi-charge consensus is per file (re-score at the best charge state's
+    boundaries). C1 lost its remedy ("run as --task SecondPassFDR" could not be confirmed
+    after the streaming admission became disk-derived). Transfer-mode warnings said "falling
+    back to the retrain", which no longer exists (the caller throws); fixed with the doc comment.
+    Remedies that said "beside each input" say "for each input" (they follow --output-dir).
+  - Step 1b missed two prose probes in regression.ps1: mode 2 `are absent but have a spectra
+    cache` and mode 8 `Rescore resume:`. Both now read new `[PATH] input-source:` /
+    `[PATH] rescore-resume:` lines (`LogKey.ROUTE_INPUT_SOURCE`, `ROUTE_RESCORE_RESUME`).
+  - `ResidentPoolGuardTest` no longer asserts C13 wording (3 English literals dropped).
+  - `FdrMethod.GetLocalizedString()`; docs/21-user-facing-text.md gained rules 6-7 and the
+    "say what happened" rule, and its stale "no enum helper yet" line is gone.
+- [x] A5 reworded (`4e77d51a52`, Brendan 2026-09-24): "Unique library strings: 1,433,253 /
+  5,241,881 total (72.7% reduced)". His note: not every line needs to state an action was
+  taken; a plain outcome is fine. Recorded in docs/21 ("Outcomes, not mechanisms").
+  Osprey is net10.0 only for good (Brendan): no reason to ship net472 or net8.0, unlike
+  Skyline/pwiz; recorded in the osprey-development skill and guide.
+  - **Tooling trap found and fixed (2026-09-24, Brendan: "staying with net10.0, no intention of
+    going back"):** ~15 `ai/scripts/Osprey` scripts, `OspreyDatasetRun.psm1` and the skill
+    hard-coded `Release\net8.0`, which on pwiz-work1 held a stale 2026-09-16 build; a first
+    Stellar log ran from it by mistake and was deleted. Now one constant
+    (`OSPREY_TARGET_FRAMEWORK = 'net10.0'` in `Dataset-Config.ps1`, read by `Get-OspreyExe` /
+    `Get-OspreyTargetFramework`), the `-Framework net8.0|net472` switches are gone,
+    `Build-Osprey.ps1` defaults to net10.0, and the stale net8.0/net472 bin/obj folders (280,
+    835 MB) were deleted from pwiz-work1 and pwiz-work2. Test-PerfGate and Measure-SpectraCache
+    still read each root's declared TFM, since a perf baseline may predate the port.
+- [x] Brendan's line-by-line review of the step-3a logs (2026-09-24/25), each its own commit:
+  `2642d86a44` "Unique library strings" / "Unique decoy strings" (the decoy pool reduces less
+  by construction: "DECOY_"+modseq never collapses onto the plain sequence); `c719e587db`
+  first-pass scoring block in "precursor candidate peaks", "First-pass scoring complete"
+  (not "Coelution scoring"); `f50b50a25a` saved model line gives the path; `5438e76cfc` cut
+  the late "Running First-pass Percolator on N" heading (read as a second Percolator pass);
+  `08a787614f` "Wrote N library spectra with M peaks across R runs" (M = per-run peaks).
+- [x] Step 3b (`4225f40994`, pushed; regression Stellar PASS): library load in "library precursors"
+  / "precursor candidates", Percolator training/scoring in peaks, the per-file rescore block
+  (peaks to re-score, missing peaks found / integrated, written peaks vs first-pass peaks),
+  "Cross-run reconciliation re-scored N peaks" (planned-action count moved to
+  `[COUNT] rescored-peaks`, read by SEA-AD/Measure-Stage6Rescore.ps1), calibration refit and
+  protein-FDR peptide lines (`FdrLevel.GetLocalizedString`). docs/21 gained "Files written" and
+  "Peaks, candidates, library". Logs `D:\test\osprey-runs\logtag-gaps\{stellar,astral}-step3b.log`
+  (snapshot `_bin\logtag-step3b`): 0 banned terms, 0 bare counts, no "entries" in the Stellar
+  default log, max gap 6 s / 24 s, results unchanged (Stellar 4,238 groups / 27,321 spectra;
+  Astral 8,924 / 117,265).
+- [x] In-process command-line error tests (`2c3eb484fd`, pushed; 601 tests, inspection green).
+  Before this, the ~45 CLI tests called `ParseArgs` / `ValidateArgs` / `ResolveTask` alone and
+  none ran `Main`, so the `Error:` line, the exit code and the file checks in `Run` were
+  untested. `Program.RunCommand(args, CommandStatusWriter)` mirrors Skyline's
+  `CommandLineRunner.RunCommand` (debuggable, no child process); `CommandLineErrorTest` covers
+  15 errors without data (no args, bad/missing `--task`, unknown flag, `--threads bad`, missing
+  `--input-list`, task missing `-l`, missing input, missing library, unwritable `--log-file`,
+  `--task ModelDiagnostics` with no analysis, `OSPREY_PASS2_QVALUE=bogus`,
+  `OSPREY_STAGE7_STREAM=1`, the `hpc-merge` warning), asserting exit 1, exactly one `Error:`
+  line, the typed token, and no `System.` type. `OspreyEnvironment` reads every variable
+  through an override dictionary (`OverrideVariables`); the startup-checked values are now
+  properties that re-read. **Guidance (Brendan):** a caller must not assume an
+  `OspreyEnvironment` read is free - read once outside any loop and pass a plain value down;
+  depending on an instant response couples to the class's implementation.
+- [x] Log review round (2026-09-25, uncommitted until the final gates below pass; review folder
+  `D:\test\osprey-runs\logreview-20260925\`, `FINDINGS.md` there is the index). Every log from
+  the task splits, a one-file search and all 70 regression legs read end to end, then fixed:
+  - Behavior: false "No precursor candidates were scored" warning on every per-run worker
+    (pre-existing; per-run load now reports it is per-run); "+ 0 decoys" on SecondPassFDR and
+    library-supplied decoys counted as targets; per-file worker never printed "Analysis
+    complete"; `--task SecondPassFDR --model-diagnostics` refusal printed an exception + stack
+    (now one `Error:` line, exit 1, same `[PATH]` key); one-file search narrated cross-run
+    reconciliation that cannot happen; `--model-diagnostics` "...is missing, so the first pass is
+    re-run" on every COLD run (now only when an earlier analysis exists); verbose tolerance lines
+    repeated per rescoring sub-pass at column 0.
+  - Wording: every "(s)", "1 files", bare count and code word in default, `--model-diagnostics`
+    and `--verbose` text (headings that print only when slow included, found in code).
+    `Osprey.Core/CountText.Format` picks whole singular/plural sentences (Skyline's
+    `count == 1 ? X : Format(Y)`), so each becomes two resources in the RESX PR.
+  - Brendan's decisions: a true one-file search (one input, no `--task`;
+    `ScoringTaskShared.IsSingleFileSearch`) never says "cross-run reconciliation" - a
+    `--task PerFileRescoring` worker does; "Classifying N precursor candidates for first-pass /
+    second-pass model diagnostics"; keep "Computing second-pass FDR scores for N files."; keep
+    k-fold ("3-fold cross-validation" is the proteomics standard, Noble lab).
+  - Paths: `--output-dir`/`--cache-dir`/`-o` and the input directory are canonicalized with
+    `Path.GetFullPath` (a script's `D:/x` gave `D:/x\file` everywhere); input/library paths stay as
+    typed (echoed, and input names go into the blib). No hash or stamp reads a directory.
+  - Long paths: `Osprey/app.manifest` with `longPathAware`. Measured: a 306-char blib path fails
+    at the native SQLite open (`CantOpen`) without it and succeeds with it (LongPathsEnabled=1).
+    .NET 10's managed IO already handled every other long path.
+  - Machine channel: co-assignment self-checks moved to `[COUNT] coassign-*`, phases to
+    `[PATH] coassign-phase`; `Measure-CoAssignmentScaling.py` reads both forms.
+  - Scripts: `regression(-parallel).ps1 -ExtraOspreyFlags verbose,model-diagnostics`;
+    `Compare-EndToEnd-Crossimpl.ps1 -SourceRoot` (it silently compared `C:\proj\pwiz`);
+    `Compare-Blib-Crossimpl.ps1` copies SQLite.Interop.dll only when it differs (an unconditional
+    copy failed with the file held open by a running Osprey and read as a blib FAIL);
+    `Measure-Stage6Rescore.ps1` accepts thousands separators.
+  - Verified before the final changes: regression 70/70 three times, verbose+model-diagnostics
+    regression 70/70, Stellar cross-impl PASS at 1e-9. Tests 602.
+- [x] Final gates on the last build (`_bin\logtag-final2`), committed as `13373c6b4f` (pushed):
+  default regression 70/70; cross-impl at 1e-9 PASS on Stellar (27,321 precursors) and
+  StellarLibraryDecoy (27,963); task splits, one-file search and `-d` run all exit 0 with only
+  the `-d` dump lines left flagged. Verbose+model-diagnostics regression on this build 70/70
+  (`after\verbose-diagnostics\regression\summary.log`; legs not yet copied into the review folder).
+- [x] **ProgressReporter rule for a CLI log** (`413a6c6950`, pushed; agreed with Brendan,
+  2026-09-25): (1) the heading prints immediately, always; (2) percent lines no sooner than one
+  report interval, then at most one per interval; (3) the closing 100% only if the step ran at
+  least `MinPercentTime` (1.0 s) and did not already show 100%; (4) `LogWaitTime` REMOVED;
+  (5) the `--parallel-files` multi-file display unchanged. A step under 1 s shows only its
+  heading. History: #4582 (`TODO-20260814_osprey_stage7_progress_reporting.md`) added
+  `LogWaitTime` after Skyline's LongWaitDlg to remove "content-free heading/100% pairs" and
+  deferred the HEADING too - Brendan had asked only about the pair. Headings then came and went
+  between runs of the same data, and a route check keyed on one could not fire at 3 files
+  (`TODO-20260910_osprey_mdiag_resident_removal.md` F6/F13). Do NOT reintroduce a hidden heading:
+  a CLI log is read afterwards. Changed `ProgressReporter.cs`, `ProgressReporterTest.cs`, a stale
+  comment in `RescoreHydration.cs`. Debug 602 tests + inspection green; NOT yet regression-tested.
+  Verified: `regression-parallel -Dataset All` 70/70 (46 min, lane logs in
+  `D:\test\osprey-runs\logtag-progress\regression\`). Headings per log compared with the
+  13:44-13:59 run (`ai/.tmp/sessions/20260925-01355z/heading_repeats.py`): no heading repeats
+  more often than before; 19 headings are newly visible, each once per log. One carried a
+  banned word ("Loading scored entries"), renamed "Reading first-pass results for N files".
+  The one-shot `WriteHeading` guard went with the deferral. Snapshot `_bin\logtag-progress`.
+  - Wording question for Brendan: a library load now shows "Loading spectral library from
+    <full path>..." directly followed by "Parsing <file name>..." (the parse heading was
+    hidden before when fast or cached).
+- [x] **SEA-AD 82 files, full cold run** (2026-09-25/26, 6h51m, exit 0): results identical to the
+  2026-08-20 run on the same library; peak private 25.7 GB; every distinct message read; one
+  bare count fixed (`f98c497844`); two 30-32 s gaps in first-pass "Assigning q-values" (pre-existing,
+  borderline). `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-logtag-progress-20260925_174500\FINDINGS.md`.
+- [x] PR #4718 opened (Brendan: PR, then `/code-review max` against it).
+- [x] `/code-review max 4718` (2026-09-26). The whole-PR review and a per-path rerun both died
+  on "Prompt is too long" in their coordinators (73-file diff); their finder and verifier
+  agents still reported, so triage was done by hand from ~45 raw candidates, each checked in
+  the code. Round 1 `f57b3a7b9b` (scored-peaks distinct count, tag-literal regex, entrapment
+  lines). Round 2 (uncommitted until the regression passes): stale deferred-heading docs;
+  regression.ps1 route keys defined once, dead `-replace ','`, crash on an -AllowNonZeroExit
+  leg no longer aborts the run; wrong remedies removed (Cannot resume, re-scored file mismatch,
+  first-pass seed, frozen model); FirstPassFDR completion line, SpectraCache banner, verbose
+  "this run" line, resume lines in decided vocabulary (incl. "skipping ... model
+  diagnostics"), skip lines no longer share the "Scoring file" prefix, one-file --task
+  reconciliation line; `{2:+F4;-F4;0}` printed "+F4"; "N of M scored target peptides"
+  (denominator had decoys); `LogTag.Format` internal; `[TRAIN]` pick-run notice now default
+  prose (user-set, changes results); `[DROP]` always (confirms OSPREY_DROP_BETWEEN_TASKS);
+  fragment-release lines `[MEM library-fragments]`; unique-precursor tally only under
+  --perf-stats; CountText replaces FormatCountOfTotal; exit-code constant; parse-time warnings
+  reach RunCommand's writer; ModelDiagnostics render failure has its own Error line;
+  CommandLineErrorTest isolated from exported OSPREY_* startup variables; --perf-stats help
+  lists all six tags. ai: dataset runners pass --perf-stats (new -NoPerfStats), CHS README
+  route checks on [PATH] lines, START line records perfstats.
+  - **Dropped, with reason:** @-marking consistency (RESX PR walks every site); pre-existing
+    bisect-abort buffering and trainer log sink (no production effect); CommandStatusWriter vs
+    SkylineRunner ErrorChecker prefix copy (cross-project link); OspreyEnvironment override
+    dictionary / settings snapshot (deliberate design - raise with Brendan); ScoringPipeline
+    settings blocks and verbose gap-fill-only settings; task-outcome type; mid-run exit code 2
+    (behavior change); scored-peaks HashSet (~70 MB beside the multi-GB row list).
+  - **For Brendan:** a non-fatal "failed to read the experiment-scope FDR sidecar" Error now
+    ends a completed run with exit 2 + `[PATH] exit-reconciled` (reconciliation working as
+    designed; the pre-existing question is whether that read should be an error that stops).
+  - **Second PR plan addition:** machine-channel lines (`[STAGE-WALL]`, `[TIMING]`,
+    `[TASK] :done`, `P0` counts) format with the current culture (de-DE writes `12,3s`); make
+    every tagged line invariant when the second-culture tests land.
+- [x] Round-2 fixes committed as `f4a954e07a` (pushed): Debug 602 tests + inspection green,
+  `regression-parallel -Dataset All` 70/70 in 52 min on snapshot `_bin\logtag-review1`
+  (lane logs `D:\test\osprey-runs\logtag-review1\regression\`).
+- [x] "sidecar"/"hydrate" in user-facing error, warning and verbose text (Brendan, 2026-09-26),
+  `8422c59eca`: Debug 602 + inspection green, regression Stellar 17/17. TeamCity
+  Perf/Regression triggered on `pull/4718` (Brendan approved): build 4190248.
+- [x] TeamCity Perf/Regression 4190248 on `8422c59eca`: SUCCESS. All 8 PR checks green.
+- [x] Review log set for Mike (2026-09-26): 17 fresh runs on the PR tip plus the SEA-AD log, in
+  `M:\home\brendanx\data\MacCoss\Osprey\text\ForReview` (README.md, FINDINGS.md; local copy
+  `D:\test\osprey-runs\logreview-20260926\`). Copilot declined (quota); Brendan merged without
+  waiting for Mike's review - wording follow-ups go to the RESX PR.
+- **CHS 446 run: deferred past the RESX/I18N PR** (Brendan, 2026-09-26). The SEA-AD 82-file
+  logs convinced him this PR opened no large reporting gaps (max 32 s, in a phase this PR did
+  not change; `FINDINGS.md` in the SEA-AD run folder).
+- This session (2026-09-26) stays on #4718 for Mike's review fixes and `/pw-complete`. The RESX
+  work moved to its own branch and TODO (below).
+- [x] **This PR: in-depth testing** - done by the log review round, the SEA-AD 82-file run,
+  three `regression-parallel -Dataset All` runs and the code review above; kept for the record:
+  - `regression-parallel.ps1 -Dataset All` (~46 min; last full run was on `e089e4f2e0`).
+  - Exercise the reworded errors and warnings on purpose: missing input with no cache or
+    intermediate file; `OSPREY_PASS2_QVALUE=bogus`; `OSPREY_STAGE7_STREAM=1`;
+    `OSPREY_ALLOW_UNFIXED_RESIDENT=hpc-merge`; a resume with some `.1st-pass.*` files deleted;
+    a partial rescore resume; `--task` splits (PerFileScoring / FirstPassFDR / PerFileRescoring /
+    SecondPassFDR) to read every "--task X complete" line; `--task ModelDiagnostics` on a
+    completed analysis; transfer mode (`OSPREY_PASS2_QVALUE=transfer`). Read each message as a
+    user would and check the exit code / `Error:` agreement.
+  - `--verbose` runs on Stellar and Astral: read the verbose tier (it is user-facing too and
+    goes to RESX in the second PR), note code-vocabulary lines worth rewording now.
+  - CHS 446 gap run (Step 1c): deferred past the RESX/I18N PR (see above).
+  - `/code-review max`, then PR against `Skyline/work/20260612_net8_port`, TeamCity
+    Perf/Regression (ask first). Ask Mike about `[ERROR]`/`[WARN]` log consumers.
+- [ ] **Second PR (Brendan, 2026-09-25: "big enough already") MOVED to
+  `ai/todos/active/TODO-20260926_osprey_resx.md`** (branch `Skyline/work/20260926_osprey_resx`,
+  stacked on #4718): Steps 4-6 above, the locale split, the error-path vocabulary sweep, the
+  `CommandLineErrorTest` exact-message tightening. That TODO is now the plan of record; the
+  Steps 4-6 text above is history.
+
+### 2026-09-27 - Merged
+
+PR #4718 merged into `Skyline/work/20260612_net8_port` as `64ed45b29e` (squash). Shipped: the
+user-facing rewording of the default, `--verbose` and `--model-diagnostics` console text in the
+decided vocabulary with separators and whole singular/plural sentences; the `LogTag` machine
+channel with gating, and `regression.ps1` plus the ai scripts reading only tagged lines; Skyline's
+`Error:` / `Warning:` prefixes with exit-code reconciliation; always-printed progress headings;
+in-process command-line error tests; canonical output paths and a longPathAware manifest.
+Verified: regression-parallel All 70/70 (three times), cross-impl 1e-9, SEA-AD 82 files with
+identical results, TeamCity Perf/Regression 4190248 green. Deferred to the stacked RESX PR
+(`TODO-20260926_osprey_resx.md`, branch `Skyline/work/20260926_osprey_resx` in pwiz-work2):
+Steps 4-6, the error-path vocabulary sweep (~100 literals), the locale split, and wording tweaks
+from Brendan's final read (e.g. "Unique decoy strings"). CHS 446 gap run deferred past that PR.
+
+## Acceptance
+
+- `Build-Osprey.ps1 -RunTests -RunInspection` green with the six `.csproj.DotSettings` in
+  place, i.e. zero `LocalizableElement` warnings and no un-resourced plain literal left in
+  those projects.
+- `Build-Osprey.ps1 -RunTests` green under `OSPREY_TEST_CULTURE=ja-JP` and `fr-FR` as well as `en-US`.
+- `regression.ps1 -Dataset Stellar` green with Osprey run under `--culture fr-FR`: every output
+  file matches the en-US golden byte for byte (invariant), while the log shows fr-FR numbers.
+- `regression-parallel.ps1 -Dataset All` green with `--perf-stats` in the harness args and no
+  prose probes left in `regression.ps1`; then green again with the harness launching Osprey
+  under `--culture ja` (proves the gate reads only the machine channel).
+- `Test-PerfGate.ps1 -Dataset Stellar` runs (it only reads `[STAGE-WALL]`).
+- Re-read the 3-file Stellar default log and an 82-file second-pass log against the banned
+  list: zero hits in the default tier. The 82-file log shrinks by the 82 per-file stub lines.
+- `MakeResourcesDb.bat` picks up the Osprey resx files (run it once and check the database).
+- The standalone ZIP and the MSI include the `ja` and `zh-CHS` satellite folders.
+
+## Shape of the PR
+
+Two PRs (Brendan, 2026-09-25). This one: steps 1-3 (machine channel, gates, Skyline
+`Error:`/`Warning:`, rewording). The second: steps 4-6 (RESX, second-culture tests, guards).
+Run `/code-review max` before opening each, and ask before triggering the TeamCity
+Perf/Regression config.

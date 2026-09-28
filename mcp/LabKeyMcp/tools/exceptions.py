@@ -20,6 +20,7 @@ from .common import (
     get_server_context,
     get_tmp_dir,
     get_daily_history_dir,
+    save_json_state,
     DEFAULT_SERVER,
     DEFAULT_CONTAINER,
     EXCEPTION_SCHEMA,
@@ -258,12 +259,11 @@ def _apply_issue_annotations(history: dict, issues: dict) -> int:
 
 def _save_exception_history(history: dict, report_date: str):
     """Save exception history to file."""
-    import json
     history['_last_updated'] = report_date
     history_path = _get_history_path()
 
-    with open(history_path, 'w', encoding='utf-8') as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+    # Atomic write with rotation - holds filed issues and recorded fixes.
+    save_json_state(history_path, history)
 
     logger.info(f"Saved exception history to {history_path}")
 

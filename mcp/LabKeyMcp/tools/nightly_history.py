@@ -15,6 +15,7 @@ from labkey.query import QueryFilter
 from .common import (
     get_server_context,
     get_daily_history_dir,
+    save_json_state,
     DEFAULT_SERVER,
 )
 from .stacktrace import normalize_stack_trace
@@ -26,14 +27,25 @@ HISTORY_FILE = 'nightly-history.json'
 HISTORY_SCHEMA_VERSION = 1
 BACKFILL_DEFAULT_DAYS = 365  # One year of history
 
-# Test folders to query during backfill
+# Test folders to query during backfill.
+# These MUST match the container paths on the server exactly. A name that does not
+# exist returns no rows and reports no error, so the folder is silently absent from
+# the history - query_test_history finds nothing for its tests, and record_test_fix
+# rejects them with "not found in failure history". Keep in sync with the folder
+# lists in nightly.py, which are the ones the daily report itself queries.
 TEST_FOLDERS = [
     "/home/development/Nightly x64",
     "/home/development/Release Branch",
     "/home/development/Performance Tests",
-    "/home/development/Release Branch Perf",
+    "/home/development/Release Branch Performance Tests",
     "/home/development/Integration",
-    "/home/development/Integration with Perf",
+    "/home/development/Integration with Perf Tests",
+    # Leak Detection is a newer folder variant that currently exists only for the
+    # Integration branch. Expect "Nightly x64 Leak Detection" and "Release Branch
+    # Leak Detection" to appear as PR #4619 reaches master and then ships (26.2 or
+    # 27.1); add them here when they do, or their leaks stay out of the history the
+    # same way the two misnamed folders above did.
+    "/home/development/Integration Leak Detection",
 ]
 
 
@@ -113,12 +125,12 @@ def _load_nightly_history() -> dict:
 
 def _save_nightly_history(history: dict, report_date: str):
     """Save nightly history to file."""
-    import json
     history['_last_updated'] = report_date
     history_path = _get_history_path()
 
-    with open(history_path, 'w', encoding='utf-8') as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+    # Atomic write, previous contents rotated to history/backups/ - this file holds
+    # fix annotations that exist nowhere else and cannot be rebuilt from LabKey.
+    save_json_state(history_path, history)
 
     logger.info(f"Saved nightly history to {history_path}")
 
@@ -162,6 +174,21 @@ def register_tools(mcp):
             preserved_failure_fixes = _extract_fix_annotations(old_history, 'test_failures')
             preserved_leak_fixes = _extract_fix_annotations(old_history, 'test_leaks')
             preserved_hang_fixes = _extract_fix_annotations(old_history, 'test_hangs')
+
+            # Carry forward annotations orphaned by an EARLIER backfill, whose window
+            # excluded the test. Without this they would be lost on the following run,
+            # which just moves the data loss one day later.
+            for orphan in (old_history.get('_orphaned_fixes') or []):
+                o_section, o_test = orphan.get('section'), orphan.get('test')
+                o_fp, o_fix = orphan.get('fingerprint'), orphan.get('fix')
+                if not (o_section and o_test and o_fix):
+                    continue
+                if o_section == 'test_failures' and o_fp:
+                    preserved_failure_fixes.setdefault((o_test, o_fp), o_fix)
+                elif o_section == 'test_leaks':
+                    preserved_leak_fixes.setdefault(o_test, o_fix)
+                elif o_section == 'test_hangs':
+                    preserved_hang_fixes.setdefault(o_test, o_fix)
 
             total_preserved = len(preserved_failure_fixes) + len(preserved_leak_fixes) + len(preserved_hang_fixes)
             if total_preserved > 0:
@@ -255,8 +282,37 @@ def register_tools(mcp):
                     logger.warning(f"Error querying {container_path}: {e}")
                     continue
 
-            # Re-apply preserved fix annotations
-            # TODO: Implement fix reapplication
+            # Re-apply preserved fix annotations. A backfill rebuilds every section from
+            # the server, so without this the recorded fixes - which exist nowhere else and
+            # cannot be re-derived from LabKey - are destroyed on every run.
+            reapplied = 0
+            orphaned = []
+            for (fix_test, fix_fp), fix_data in preserved_failure_fixes.items():
+                fp_entry = (history['test_failures'].get(fix_test) or {}).get('by_fingerprint', {}).get(fix_fp)
+                if fp_entry is not None:
+                    fp_entry['fix'] = fix_data
+                    reapplied += 1
+                else:
+                    orphaned.append({'section': 'test_failures', 'test': fix_test,
+                                     'fingerprint': fix_fp, 'fix': fix_data})
+            for fix_section, fix_source in (('test_leaks', preserved_leak_fixes),
+                                            ('test_hangs', preserved_hang_fixes)):
+                for fix_test, fix_data in fix_source.items():
+                    entry = history[fix_section].get(fix_test)
+                    if entry is not None:
+                        entry['fix'] = fix_data
+                        reapplied += 1
+                    else:
+                        orphaned.append({'section': fix_section, 'test': fix_test,
+                                         'fingerprint': None, 'fix': fix_data})
+
+            # A fix for a test that did not fail inside this backfill's window has no entry
+            # to attach to. Keep it rather than drop it - a quiet test is the normal outcome
+            # of a fix working, so this is exactly the annotation worth surviving.
+            if orphaned:
+                history['_orphaned_fixes'] = orphaned
+            if total_preserved:
+                logger.info(f"Re-applied {reapplied} fix annotations, {len(orphaned)} orphaned")
 
             # Save history
             today = datetime.now().strftime("%Y-%m-%d")

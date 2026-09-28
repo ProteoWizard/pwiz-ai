@@ -159,7 +159,7 @@ $ErrorActionPreference = 'Stop'
 $readme = Join-Path $PSScriptRoot 'README.md'
 
 $LAB_SHARE_MZML = 'M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml'
-$REPO_EXE = Join-Path $PSScriptRoot '..\..\..\..\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
+$REPO_EXE = Join-Path $PSScriptRoot '..\..\..\..\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey.exe'
 
 # Same resolution contract as Run-SeaAd.ps1: a location you NAME must exist, so a typo
 # fails here instead of silently searching the wrong tree.
@@ -178,7 +178,7 @@ function Resolve-Location {
     throw "Could not resolve the SEA-AD $What. Set `$env:$EnvName or pass the parameter; see $readme."
 }
 
-if ($SourceRoot) { $Exe = Join-Path $SourceRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe' }
+if ($SourceRoot) { $Exe = Join-Path $SourceRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey.exe' }
 $ospreyExe = Resolve-Location -Explicit $Exe -EnvName 'OSPREY_EXE' -Fallbacks @($REPO_EXE) -What 'Osprey.exe'
 $dataDir   = Resolve-Location -Explicit $DataDir -EnvName 'OSPREY_SEAAD_DIR' -Fallbacks @($LAB_SHARE_MZML) -What 'mzML directory'
 $libRoot   = Resolve-Location -Explicit $LibraryDir -EnvName 'OSPREY_SEAAD_LIB' -Fallbacks @() -What 'library directory'
@@ -397,8 +397,8 @@ foreach ($n in $counts) {
         $wallSt = Invoke-OspreyTask -CliArgs $aSt -LogName $logSt -LogMemory
 
         $linesSt = Get-Content (Join-Path $phaseDir $logSt)
-        $writtenSt = ($linesSt | Select-String -Pattern 'Wrote (\d+) library spectra' |
-                      ForEach-Object { [int]$_.Matches.Groups[1].Value } | Select-Object -Last 1)
+        $writtenSt = ($linesSt | Select-String -Pattern 'Wrote ([\d,]+) library spectra' |
+                      ForEach-Object { [int]($_.Matches.Groups[1].Value -replace ',', '') } | Select-Object -Last 1)
         # Peak PRIVATE bytes from the --memstamp trace. Column 1 is
         # GC.GetTotalMemory(false) and column 2 is Process.PrivateMemorySize64
         # (CommandStatusWriter.cs:138-139) - private, NOT working set, which is exactly the
@@ -445,8 +445,8 @@ foreach ($n in $counts) {
     # Post-GC live-set probe: the number that answers "will this fit".
     $resident = ($lines | Select-String -Pattern '\[MEM reconciliation-resident\] managed_heap=([\d.]+) GB' |
                  ForEach-Object { [double]$_.Matches.Groups[1].Value } | Measure-Object -Maximum).Maximum
-    # Guard against the no-op: a real rescore always reports its entry count.
-    $rescored = ($lines | Select-String -Pattern 'Reconciliation rescore: (\d+) entries' |
+    # Guard against the no-op: a real rescore always reports its peak count (--perf-stats line).
+    $rescored = ($lines | Select-String -Pattern '\[COUNT\] rescored-peaks: total=(\d+)' |
                  ForEach-Object { [int]$_.Matches.Groups[1].Value } | Select-Object -Last 1)
     $results += [pscustomobject]@{
         Files = $n; ResidentGB = $resident; Rescored = $rescored; WallSec = [int]$wall.TotalSeconds
@@ -487,8 +487,8 @@ foreach ($n in $counts) {
     $lines7 = Get-Content (Join-Path $phaseDir $log7)
     # Guard against a silent no-op the same way the Stage-6 point does: a real Stage 7
     # always reports what it wrote to the blib.
-    $written = ($lines7 | Select-String -Pattern 'Wrote (\d+) library spectra' |
-                ForEach-Object { [int]$_.Matches.Groups[1].Value } | Select-Object -Last 1)
+    $written = ($lines7 | Select-String -Pattern 'Wrote ([\d,]+) library spectra' |
+                ForEach-Object { [int]($_.Matches.Groups[1].Value -replace ',', '') } | Select-Object -Last 1)
     $stage7Results += [pscustomobject]@{
         Files       = $n
         InheritedGB = Get-ProbeGB -Lines $lines7 -Label 'stage7-inherited'

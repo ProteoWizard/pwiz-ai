@@ -65,8 +65,6 @@ param(
     [switch]$SkipRust,
     [switch]$SkipCs,
     [int]$Threads = 16,
-    [ValidateSet('net472','net8.0')]
-    [string]$Framework = 'net8.0',
     [string]$CsExe,
     [string]$RustExe
 )
@@ -84,7 +82,7 @@ if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2
 }
-$ospreyShExe = if ($CsExe) { $CsExe } else { Get-OspreyExe -Framework $Framework }
+$ospreyShExe = if ($CsExe) { $CsExe } else { Get-OspreyExe }
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2
@@ -184,10 +182,14 @@ function Run-Side {
     # Only Stage 7 dump enabled in Pass 1 (it doesn't produce a file
     # otherwise). All other boundary files are written naturally.
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
+    # Both implementations keep the most regularized first-pass SVM C within 1% of the best
+    # (C# #4703, Rust #69); an inherited OSPREY_SVM_C_TOLERANCE would split them at Stage 5.
+    Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     try {
         $r = Invoke-Tool -Exe $Exe -WorkDir $Dir -CliArgs $cliArgs -LogName $logName
     } finally {
         Remove-Item Env:OSPREY_DUMP_STAGE7_PROTEIN_FDR -ErrorAction SilentlyContinue
+        Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     }
     $prec = Get-PrecursorCount -LogPath $r.logPath
     Write-Host ("  {0} wall: {1}; precursors: {2}" -f $SideName, (Format-Duration $r.wall), $prec) -ForegroundColor Green

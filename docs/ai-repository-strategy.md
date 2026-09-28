@@ -64,12 +64,38 @@ claude
 ```bash
 # From your project root - update AI content
 cd ai
-git pull origin main
+git pull --ff-only origin master
 cd ..
 
 # Work on any project - Claude Code sees everything
 # Edit pwiz\..., skyline_26_1\..., etc.
 ```
+
+### Update Before Editing ai/
+
+**Do not assume `ai/` is current.** A machine that is not used for daily development (a
+nightly-test box, a machine back from repair) can be thousands of commits behind. The
+skills and commands a session loads come from that same checkout, so a stale `ai/` also
+means the session may be following stale instructions.
+
+Before the first edit under `ai/`:
+
+```bash
+git -C ai fetch origin
+git -C ai status -sb          # shows [behind N] / [ahead N]
+```
+
+- **Clean and behind**: `git -C ai pull --ff-only origin master`, then re-read any skill,
+  command or doc you are about to edit from the updated files.
+- **Local changes present**: do not pull over them. Report how far behind the checkout is
+  and ask whether the changes are in progress (most likely the same developer's, from
+  another session on this machine) before updating.
+
+This is separate from the rebase-on-push rule in version-control-guide.md, which handles
+a remote that moved *while* you worked. Measured 2026-09-27: SKYLINE-DEV6's `ai/` was
+3,316 commits behind. The edits still landed cleanly, but they had been written against a
+daily-report command that upstream had already split into `pw-daily-research` / `-email` /
+`-review`, and had to be redone there.
 
 ### Working with Multiple Checkouts
 

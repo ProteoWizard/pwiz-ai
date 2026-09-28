@@ -263,8 +263,8 @@ switch ($Tool) {
         $toolPrefix      = 'cs_'      # dump file prefix: cs_*.tsv
         $toolWorkSubdir  = 'cs'       # workdir subdir: <stage>/cs/
         $toolBinName     = "Osprey$exeSuffix"
-        $toolBin         = Join-Path $projRoot "pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\$toolBinName"
-        $toolBuildHint   = 'pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -TargetFramework net8.0'
+        $toolBin         = Join-Path $projRoot "pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\$toolBinName"
+        $toolBuildHint   = 'pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -TargetFramework net10.0'
     }
     'Rust' {
         $toolName        = 'Rust'

@@ -44,8 +44,7 @@
     single-file scoring; stage5-start-live / first-pass-fdr-live /
     reconciliation-floor for multi-file joins). Answers "what is being
     HELD and who holds it", the complement to the printf [MEM ...]
-    sizing layer. Forces net8.0 (the memory-run runtime) unless
-    -TargetFramework is given, and requires dotMemory installed via
+    sizing layer. Requires dotMemory installed via
     ai/scripts/Install-DotMemory.ps1. This is a SCOPED diagnosis run --
     NOT the full 82-file / 6-8 h batch, which stays the [MEM ...]
     layer's job. Emits the workspace and stops; open it in the dotMemory
@@ -129,9 +128,6 @@ param(
     # default; the allocator RANKING is representative even at a few windows.
     [switch]$TrackAllocations,
 
-    [ValidateSet("net472", "net8.0")]
-    [string]$TargetFramework = "net472",
-
     # Profile an ARBITRARY Osprey invocation instead of a packaged single-file dataset:
     # the complete argument list to hand Osprey, e.g. a resume in an existing 446-run
     # directory. Dataset resolution, the -Stage gate and - critically - the score-cache
@@ -171,7 +167,8 @@ if (-not (Test-Path $testDir)) {
 $mzml = Join-Path $testDir $ds.SingleFile
 $library = Join-Path $testDir $ds.Library
 $tempBlib = Join-Path $testDir "_profile_output.blib"
-$csharpBin = Get-OspreyExe -Framework $TargetFramework
+$TargetFramework = Get-OspreyTargetFramework
+$csharpBin = Get-OspreyExe
 if ($Exe) { $csharpBin = $Exe }
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
@@ -197,12 +194,7 @@ $aiTmpDir = Join-Path $aiRoot ".tmp"
 # Emits the .dmw and stops for a human to open in the dotMemory GUI.
 # -----------------------------------------------------------------------------
 if ($MemoryProfile) {
-    # net8.0 is the memory-run runtime (Server GC + the net8.0-only GCMemoryInfo
-    # fields the [MEM ...] lines print); force it unless the caller was explicit.
-    if (-not $PSBoundParameters.ContainsKey('TargetFramework')) {
-        $TargetFramework = 'net8.0'
-    }
-    $csharpBin = Get-OspreyExe -Framework $TargetFramework
+    $csharpBin = if ($Exe) { $Exe } else { Get-OspreyExe }
     if (-not (Test-Path $csharpBin)) {
         Write-Error "Osprey ($TargetFramework) not built: $csharpBin"
         exit 1

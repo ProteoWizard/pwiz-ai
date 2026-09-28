@@ -37,6 +37,7 @@ description: Use this skill when looking at nightly test results or investigatin
 ## Anomaly Detection
 
 - **Short duration** (< expected) = crash or premature termination
+- **TestRunner access violations on one machine, in different tests each time** = likely failing hardware. Flag it early, before anyone debugs it as a Skyline bug → ai/docs/failing-hardware-detection.md
 - **Full duration + low test count** = hang
 - **Stddev-based**: 3σ/4σ from trained mean flags anomalies
 

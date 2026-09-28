@@ -1,7 +1,12 @@
 """How the model-diagnostics peak co-assignment panel scales with the run count.
 
-Every Osprey run log is already a memory trace of this phase. The panel logs its
-own completion:
+Every Osprey run log is already a memory trace of this phase. Under --perf-stats the
+panel logs its phase starts and its completion on the machine channel:
+
+    [PATH] coassign-phase: scan files=N   (then reduce, then join)
+    [COUNT] coassign-detected: pass=P rows=R files=N seconds=T
+
+Logs from before 2026-09-25 carry the older prose form, which is still matched:
 
     [MODEL-DIAGNOSTICS] peak co-assignment (pass P): R detected rows over N file(s) in Ts
 
@@ -41,11 +46,25 @@ import os
 import re
 import sys
 
+# The tagged lines (Osprey run with --perf-stats) come first; the prose alternatives match
+# logs written before the co-assignment lines moved to the machine channel (2026-09-25), which
+# is every log this script was first pointed at. Do not add new prose patterns: key new
+# measurements on a [COUNT] / [PATH] line instead.
 DONE = re.compile(
+    r'\[COUNT\] coassign-detected: pass=(\d) rows=(\d+) files=(\d+) seconds=([\d.]+)')
+DONE_PROSE = re.compile(
     r'peak co-assignment \(pass (\d)\): ([\d,]+) detected rows over (\d+) file\(s\) in ([\d.]+)s')
-SCAN = re.compile(r'Peak co-assignment: scanning 1st-pass sidecars over (\d+) file')
-REDUCE = re.compile(r'peak co-assignment: reducing the experiment boundary over')
-JOIN = re.compile(r'Peak co-assignment: joining apex RT over (\d+) file')
+SCAN = re.compile(r'\[PATH\] coassign-phase: scan files=(\d+)'
+                  r'|Peak co-assignment: scanning 1st-pass sidecars over (\d+) file')
+REDUCE = re.compile(r'\[PATH\] coassign-phase: reduce'
+                    r'|peak co-assignment: reducing the experiment boundary over')
+JOIN = re.compile(r'\[PATH\] coassign-phase: join files=(\d+)'
+                  r'|Peak co-assignment: joining apex RT over (\d+) file')
+
+
+def match_done(line):
+    """The panel's completion line in either form, or None."""
+    return DONE.search(line) or DONE_PROSE.search(line)
 MEM = re.compile(r'^\[[\d/]+ [\d:]+\]\t(\d+)\t(\d+)\t')
 STAMP = re.compile(r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\]')
 PAYLOAD = re.compile(r'<script[^>]*type="application/json"[^>]*>(.*?)</script>', re.S)
@@ -92,7 +111,7 @@ def phases_in_log(path):
             i = len(lines) - 1
             if SCAN.search(line) and start is None:
                 start = i
-            m = DONE.search(line)
+            m = match_done(line)
             if m:
                 # No scan marker means an older build that did not report phase 1;
                 # fall back to a window generous enough to cover it.

@@ -49,8 +49,10 @@ The staged cohort is **plates 0059-0061: 256 files, 1,019.5 GB**.
 
 ## Staging: download and cache, pipelined
 
-Osprey reads the `.raw` directly through a **vendor-enabled build**
-(`_bin\26.1.1.233-vendor-20260822` or later, net472 with `pwiz_data_cli`), so no msconvert
+Osprey reads the `.raw` directly through a **vendor-enabled build** (net10.0 built with
+`Build-Osprey.ps1 -VendorReader`, which reaches pwiz-sharp's vendor readers through
+ProteowizardWrapper; before the .NET 10 port this was the net472 `pwiz_data_cli` snapshot
+`_bin\26.1.1.233-vendor-20260822`), so no msconvert
 pass and no mzML copy is needed - which also makes it cheaper on disk than the mzML route.
 
 Download with `../Get-PanoramaFiles.ps1` (resumable, skips complete files by size), and cache
@@ -208,14 +210,13 @@ produce the CORRECT report, so no artifact and no gate can tell you it happened.
 at 446 files is 4h46m for the first pass and 69 min for the second, against minutes for the
 fold.
 
-**Assert the marker, not the wall clock.** Each pass logs the line that names the path it
-took:
+**Assert the marker, not the wall clock.** Each pass logs the route line that names the path
+it took (the runner passes `--perf-stats`, which these lines need; prose beside them is for a
+person and may be reworded):
 
 ```
-FirstPassFDR: every output but the model-diagnostics product is current;
-folding the report from the completed first pass.
-SecondPassFDR: every output but the model-diagnostics product is current;
-folding the pass-2 report from the completed second pass.
+[PATH] model-diagnostics: fold-pass1
+[PATH] model-diagnostics: fold-pass2
 ```
 
 Check for both within the first minutes and kill the run if either is missing. Wall clock
@@ -264,16 +265,17 @@ Every pre-Stage-7 artifact is hard-linked in, nothing but the inputs is on the c
 and the run resumes straight into the join. Read the `-WhatIf` link tally first: `0 missing`
 is the precondition, and a non-zero count means the bed does not cover this cohort.
 
-**Assert the marker.** A streamed join logs
+**Assert the marker.** The runner passes `--perf-stats` (unless `-NoPerfStats`); a streamed join logs
 
 ```
-Second-pass join: folding over 446 run(s), ... (no all-runs survivor pool)
+[PATH] second-pass-join: per-run runs=446
 ```
 
-and a resident one logs `Stage 7 is taking the RESIDENT join` plus
-`Rebuilding first-pass survivors from 446 file(s)`. The output is IDENTICAL either way - that
-is the whole design - so the log line is the only evidence, exactly as it is for the P16 folds
-above. `regression.ps1` asserts the same marker per leg at Stellar scale.
+and a resident one logs `[PATH] survivor-pool: materialized runs=446`. The output is IDENTICAL
+either way - that is the whole design - so the log line is the only evidence, exactly as it is
+for the P16 folds above. `regression.ps1` asserts the same `[PATH]` keys per leg at Stellar
+scale. (Before 2026-09-25 these were prose lines, "Second-pass join: folding over N run(s)"
+and "Materializing survivors"; logs from then carry only those.)
 
 ### The library directory is part of `search_hash` - pin it from the SOURCE run
 

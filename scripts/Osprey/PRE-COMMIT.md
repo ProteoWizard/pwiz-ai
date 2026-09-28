@@ -4,8 +4,9 @@ Required validation before committing Osprey changes.  The project
 holds zero ReSharper warnings.  Catching issues here takes a couple of
 minutes; catching them after commit requires a cleanup commit later.
 
-The inspection runs `jb inspectcode` once per target framework
-(net472 and net8.0) and unions the results.  That is deliberate: a
+The inspection runs `jb inspectcode` once per declared target framework
+and unions the results (one pass on net10.0; an older tree that still
+multi-targets runs net472 and net8.0).  That is deliberate: a
 single all-frameworks pass analyzes each file in both preprocessor
 contexts at once, and inline `// ReSharper disable` suppressions are
 then honored nondeterministically - the gate reported 0 or 9 warnings

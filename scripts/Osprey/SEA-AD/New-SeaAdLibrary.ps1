@@ -47,6 +47,10 @@ param(
     [Parameter(Mandatory)][string]$Ratio,
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$LibraryRoot,
+    # Which delivered r=1.0 set to derive from: empty is 'target+decoy+entrapment', and a value
+    # such as '20260817' is 'target+decoy+entrapment-20260817'. The tag carries into every
+    # derived name, so variants of two builds never share a folder.
+    [string]$Build = '',
     [int]$Seed = 2024,
     [string]$Python,
     [switch]$Force,
@@ -72,12 +76,13 @@ if (-not $Python) { throw "Python not found on PATH. Pass -Python <path to pytho
 
 function Get-VariantPath {
     param([string]$Mode, [string]$R)
+    $b = if ($Build) { "-$Build" } else { '' }
     $name = if ($Mode -eq 'gendecoy') {
-        "target+entrapment-r$R-gendecoy"
+        "target+entrapment-r$R$b-gendecoy"
     } elseif ($R -eq '1.0') {
-        'target+decoy+entrapment'
+        "target+decoy+entrapment$b"
     } else {
-        "target+decoy+entrapment-r$R"
+        "target+decoy+entrapment$b-r$R"
     }
     Join-Path $LibraryRoot $name
 }
