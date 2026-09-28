@@ -8,7 +8,7 @@
   M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
   the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
 - **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416),
-  pushed to d2f9811fd4; six newer commits (a62aa3f782 .. dcc2cd4cb9, the night of 2026-09-27/28) are local
+  pushed to d2f9811fd4; seven newer commits (a62aa3f782 .. 045c71d0c9, the night of 2026-09-27/28) are local
   on SCARFELL in `C:\Dev\pwiz-osprey-demux`, not pushed. No PR yet; run /code-review before opening one. Its
   algorithms are documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
 
@@ -96,7 +96,7 @@ branch ("Sparsity: the lasso", "Centroiding and the TOF grid"); scripts in `ai/s
 **Commits on the follow-on branch, local on SCARFELL, not pushed:** a62aa3f782 `--sweep-l1`,
 `--sweep-l1-refit`, `--min-source-fraction`; 2506acc4de `--sweep-l1-z`; ba9fb73506 `--block-support-z`;
 8b479d8ac4 `EventCentroider`, `--centroid events`, `--profile`; 474c740a1c MS2-only event centroiding
-and the doc; dcc2cd4cb9 the whole-run results in the doc. Each passed build, 611-612 unit tests and a
+and the doc; dcc2cd4cb9 and 045c71d0c9 the whole-run and joint results in the doc. Each code commit passed build, 611-612 unit tests and a
 clean inspection. With every new option off, A1's slice is byte-identical to d2f9811.
 
 **Setup and baseline**
@@ -130,9 +130,10 @@ up); per-block selection removes the flicker but pushes left-out signal onto nei
   IDs worse, and worse demultiplexed; MS1 was centroided the crude way too (DIA-NN wanted 31-38 ppm MS1
   tolerances). Reruns with MS2-only event centroids were in flight at the end: arms `raw_events_ms2`
   and `c7pz_events_ms2` (controls `raw_plain`, `cs_centered7_posmz_scarfell_w6`, DIA-NN `--window 6`).
-- First joint prototype (`joint_prototype.py`, A kron B NNLS, Gaussian B, no L1), placement on 341
-  identified precursors: 0.48 / 0.84 own / +/-1, against 0.51 / 0.87 channel solve on vendor centroids and
-  0.43 / 0.81 per-sample profile demux (§5.4c). Per-sample is clearly worst, as §5.4d argues.
+- First joint prototype (`joint_prototype.py`, A kron B NNLS, Gaussian B), placement on 341 identified
+  precursors: 0.48 / 0.84 own / +/-1 without L1 and 0.49 / 0.85 (median own 0.35) with the z = 2 Poisson L1,
+  against 0.51 / 0.87 (0.34) for the channel solve on vendor centroids and 0.43 / 0.81 for per-sample profile
+  demux (§5.4c). Per-sample is clearly worst, as §5.4d argues.
 - **Whole runs, centered:7 `--position-mz`, DIA-NN pinned** (`full_c7pz_scarfell`, `--window 6 --mass-acc 17
   --mass-acc-ms1 19`): **31,512 / 31,506 / 32,117 targets at 0.79-0.89% FDP, 4.0-6.6% more than DIA-NN's
   scanning mode on the `.wiff`** (29,552 / 30,285 / 30,882, 0.90-0.96%); 24,600 precursors in all three runs
@@ -151,9 +152,12 @@ up); per-block selection removes the flicker but pushes left-out signal onto nei
    sub-sample grid for the fragment position; then score it against the channel solve on placement AND
    on a DIA-NN slice file, since placement of strong fragments cannot show the joint solve's gain on
    near-isobaric fragments of different precursors. The L1 is in `joint_prototype.py` (`joint-z2`,
-   exact through the Cholesky factor of the weighted Gram) but takes about 2 min per precursor in
-   Python under load: 10 precursors gave own-bin 0.65 against 0.64 unpenalized, too few to judge. It
-   needs coordinate descent on the Kronecker structure, or C#, before a full evaluation.
+   exact through the Cholesky factor of the weighted Gram; `--half 8` windows give the same numbers as
+   16 and are 4x cheaper). On all 341 precursors: joint-z2 0.49 / 0.85 own / +/-1, median own 0.35, against
+   joint 0.48 / 0.84 / 0.33 and the vendor channel solve 0.51 / 0.87 / 0.34, while carrying about 4x the
+   signal (the full profile area). The L1 helps the joint solve; on placement it is now comparable to the
+   channel solve. 78 min in Python for 341 precursors: C# (coordinate descent on the Kronecker
+   structure) before a whole slice.
 2. Read `raw_events_ms2` / `c7pz_events_ms2`. If full-area MS2 helps DIA-NN with MS1 left alone, the
    centroids are worth fixing even before the joint solve (a peak model instead of adjacency).
 3. Profile reading is the bottleneck: the SDK takes about an hour per replicate for the slice under load.

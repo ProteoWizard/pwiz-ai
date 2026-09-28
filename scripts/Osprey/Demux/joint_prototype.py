@@ -108,13 +108,13 @@ def gaussian_basis(n):
 
 
 def score_precursor(task):
-    (fragments, cycles, pb, rows, cols, A, window_profile, window_vendor, r0, active) = task
+    (fragments, cycles, pb, rows, cols, A, window_profile, window_vendor, r0, active, half) = task
     shares = {m: np.zeros(len(OFFSETS)) for m in METHODS}
     own_cols = {d: int(np.where(cols == pb + d)[0][0]) for d in OFFSETS}
-    B_full = gaussian_basis(2 * HALF + 1)
+    B_full = gaussian_basis(2 * half + 1)
     for fm in fragments:
         kc = int(round((np.sqrt(fm) - r0) / ROOT_STEP))
-        ks = np.arange(kc - HALF, kc + HALF + 1)
+        ks = np.arange(kc - half, kc + half + 1)
         mz_of = (r0 + ks * ROOT_STEP) ** 2
         in_channel = np.abs(mz_of - fm) / fm * 1e6 <= CHANNEL_PPM
         in_score = np.abs(mz_of - fm) / fm * 1e6 <= SCORE_PPM
@@ -169,6 +169,7 @@ def main():
     ap.add_argument('--workers', type=int, default=6)
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--methods', default=','.join(METHODS), help='comma-separated subset of ' + ', '.join(METHODS))
+    ap.add_argument('--half', type=int, default=HALF, help='window half-width, grid samples')
     args = ap.parse_args()
     active = [m for m in METHODS if m in args.methods.split(',')]
     t0 = time.time()
@@ -216,7 +217,7 @@ def main():
     total = {m: np.zeros(len(OFFSETS)) for m in METHODS}
     per = {m: [] for m in METHODS}
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
-        for k, shares in enumerate(ex.map(run_task, [(t, r0, set(active)) for t in tasks])):
+        for k, shares in enumerate(ex.map(run_task, [(t, r0, set(active), args.half) for t in tasks])):
             for m in active:
                 total[m] += shares[m]
                 if shares[m].sum() > 0:
@@ -233,7 +234,7 @@ def main():
 
 
 def run_task(args):
-    (fragments, cycles, pb, rows, cols, A, prof, vend), r0, active = args
+    (fragments, cycles, pb, rows, cols, A, prof, vend), r0, active, half = args
 
     def window_profile(c, rws, ks):
         Y = np.zeros((len(rws), len(ks)))
@@ -255,7 +256,7 @@ def run_task(args):
             out[i] = ions[sel].sum()
         return out
 
-    return score_precursor((fragments, cycles, pb, rows, cols, A, window_profile, window_vendor, r0, active))
+    return score_precursor((fragments, cycles, pb, rows, cols, A, window_profile, window_vendor, r0, active, half))
 
 
 if __name__ == '__main__':
