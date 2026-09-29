@@ -223,6 +223,82 @@ No regression test (developer's call - not a critical bug). Note for anyone re-c
 tests pass identically before and after the fix, so none of them covers this behavior. Reproducing it needs a
 document whose labeled points sit on a large marker cloud, which `Rat_Plasma.sky` is not.
 
+## 2026-09-29 - Label layout sweep, one plot at a time
+
+`TestPerf/LabelLayoutSweep.cs` (diagnostic tool, off unless `SKYLINE_LABEL_SWEEP=1`) now sweeps the volcano
+plot and the Relative Abundance plot **separately**, since both drive the same `LabelLayoutRunner` and with
+both open no row can be attributed. A `PlotTarget` abstraction holds the per-plot differences (how to open,
+size, redraw, and where the labeling rules live); the sweep opens one, sweeps 3 rule sets x 4 window sizes x
+3 zooms, closes it, then does the other. `LabelLayout.SamplerReport` now reports the `GraphPane` as well, so
+each row is checked against the pane under test.
+
+Full clean run: 72 rows, 558 s, 0 failures, every pruner invariant held.
+Output: `ai/.tmp/sessions/20260929-labelsweep/label-layout-sweep.csv` (+ `sweep-run.log`).
+
+### Results at zoom 1.0 (full data range)
+
+| plot | rules | chart | candidates | sampler kept | visible | coverage |
+|---|---|---|---|---|---|---|
+| volcano | saved | 1000x700 | 125 | 40 | 19 | 16.03% |
+| volcano | saved | 1280x900 | 125 | 69 | 40 | 16.36% |
+| volcano | saved | 1680x1050 | 125 | 104 | 72 | 18.43% |
+| volcano | saved | 1920x1200 | 125 | 125 | 91 | 17.29% |
+| rel-abundance | saved-all-labeled | 1000x700 | 26 | 26 | 16 | 7.29% |
+| rel-abundance | saved-all-labeled | 1920x1200 | 26 | 26 | 17 | 2.06% |
+| rel-abundance | label-everything | 1000x700 | 4844 | 74 | 43 | 19.62% |
+| rel-abundance | label-everything | 1920x1200 | 4844 | 249 | 118 | 14.56% |
+
+**The volcano behaves as the fix intended.** The sampler stops being the constraint as the chart grows
+(40/125 at 1000x700 up to 125/125 at 1920x1200), the pruner takes it from there, and coverage holds steady
+near 16-18% against `MAX_LABEL_AREA_RATIO = 0.3` - roughly half the pipeline's own area target.
+
+**Relative Abundance has the opposite shape and is where to look next.** With 26 candidates all passing the
+sampler, quadrupling the chart area buys one extra label (16 -> 17) and coverage collapses 7.29% -> 2.06%.
+With 4844 candidates the sampler keeps 1.5-5% and coverage still falls as the chart grows (19.6% -> 14.6%).
+The binding constraint there is local clustering under the pruner's non-overlap rule, not global chart area,
+which matches the original "most of the plot was empty" report.
+
+### Two handoff notes corrected
+
+* A `MatchRgbHexColor` with an empty `Expression` is **not** filtered out. `MatchExpression.Parse("")`
+  returns an expression with no match options and `Matches` returns true when the option list is empty, so
+  it matches every point: the `label-everything` rule set produced 127 labels on the volcano and all 4844 on
+  Relative Abundance.
+* On the volcano `saved` and `saved-all-labeled` are identical in all 12 pairs - its one saved rule already
+  has `Labeled = true`. On Relative Abundance neither saved rule is labeled, so `saved` creates exactly one
+  label (the selected protein, labeled unconditionally).
+
+### Product observation, not part of this PR
+
+`SkylineWindow.ShowGraphPeakArea(false)` only calls `graph.Hide()`, and `GraphSummary.HideOnClose = true`
+(`GraphSummary.Designer.cs:79`), so a hidden Peak Areas graph keeps its pane subscribed to
+`Settings.Default.PropertyChanged`. Toggling "avoid label overlap" therefore runs a full simulated-annealing
+layout on a graph nobody can see - the sweep caught it as sampler reports arriving from
+`AreaRelativeAbundanceGraphPane` while the volcano was under test. The sweep works around it by closing the
+form for real (`HideOnClose = false; Close()`). Worth deciding separately whether the product should gate
+`StartLabelLayoutAsync` on pane visibility.
+
+### Three defects the sweep had, all found by running it
+
+1. **Zoom compounded.** The fraction was applied to the live axis scale and `ZoomOutAll` was trusted to reset
+   at zoom 1.0, but the volcano pins `MinAuto/MaxAuto = false` (`FoldChangeVolcanoPlot.cs:479`) so zooming
+   out restores nothing. The view shrank monotonically across the whole sweep (125 candidates down to 1 by
+   the seventh combination). Now the auto-scaled range is captured once at `Open()` and every fraction is
+   measured from that.
+2. **Linear zoom math on a log axis.** The Relative Abundance y axis spans 1e4 to 1e12; halving that range
+   linearly leaves only the top decade, and at fraction 1.0 it computed `min ~ 0`, invalid for `LogScale`.
+   Now narrowed in log space.
+3. **Measurement raced the layout.** The wait was "a layout exists and is non-empty", which is satisfied by
+   the *previous* run's layout while the current run has already re-shown every sampled label at its
+   unplaced position - reading as a pile of overlapping labels and failing the invariant check. The runner
+   installs a **new** `LabelLayout` instance per run and prunes in the same UI callback
+   (`GraphPane.ApplyLabelLayout`, `GraphPane.cs:1556`), so the wait is now for a different instance, plus a
+   settle check that no later run supersedes it.
+
+Bounded waits throughout (`READY_WAIT_MS` 60 s, `SAMPLER_WAIT_MS` 15 s, `LAYOUT_WAIT_MS` 60 s) via
+`TryWaitForConditionUI`. A combination that legitimately yields no labels is now a recorded zero row with a
+reason line instead of a 360 s timeout.
+
 ## Notes
 
 - The annealer already soft-avoids markers via the density grid
