@@ -20,7 +20,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **72 warnings, 0 errors** on #4685 as of 2026-09-28. Wave 3 moved to
+  **5 warnings, 0 errors** on #4685 as of 2026-09-29. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -66,25 +66,36 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after the unread fields and singletons (`79b26ba191`) | 0 | 105 |
 | #4685 after the CA1416 annotation (`8f1527a771`) | 0 | 101 |
 | #4685 after merging the base forward (`ba5bb9e763`, 17 commits) | 0 | 90 |
-| #4685 today, after the first annotation-family pass (`37e39d0700`) | 0 | **72** |
+| #4685 after the first annotation-family pass (`37e39d0700`) | 0 | 72 |
+| #4685 after the rest of the annotation family (`159a0bd27b`) | 0 | 53 (projected) |
+| #4685 after **#4697 merged in** (`17fa34a5da`) - CI-measured | 0 | 20 |
+| #4685 today, after the orphaned usings and wave 4 (`96a874fa0f`) | 0 | **5** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 72, in full (measured 2026-09-28 on #4685 at `37e39d0700`)
+### The 5, in full (measured 2026-09-29 on #4685 at `96a874fa0f`)
 
 Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
 group the report by `TypeId`.
 
+**All five are `CSharpWarnings::CS0618`, and none of them is a cleanup decision:**
+
+| Site | Count | Why it is still here |
+|---|---|---|
+| `SkylineNightly/TeamCityNightlyAuth.cs:152,156` | 4 | `ServicePointManager` TLS pinning for TeamCity artifact downloads. **#4697 missed this one** - its body claimed the class "and its three call sites", and this is a fourth, in another project. Counted twice per line because the file is linked into BOTH `SkylineNightly` and `SkylineNightlyShim`. #4697 itself flagged that `ServicePointManager` is NOT inert on net10 for the legacy stack, so removing it changes handshake behaviour against their server - a product call |
+| `Shared/CommonMsData/RemoteApi/Ardia/ArdiaClient.cs:204` | 1 | `WebRequest.Create`, deliberately left by wave 3: the file documents that `HttpClient` adds `charset=utf-8` and the Ardia delete API answers 400. Migrating needs `TestArdia*` credentials, and Ardia is frozen pending Thermo funding |
+
 | Inspection | Count | What it is | Route to zero |
 |---|---|---|---|
-| `CSharpWarnings::CS0618` | 33 | Use of obsolete symbol | wave 1 here; wave 4 here. **Wave 3's share already arrived** through the base merge, taking this from 42 |
-| `ConditionIsAlwaysTrueOrFalse` | 16 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
+| ~~`ConditionIsAlwaysTrueOrFalse`~~ | ~~32~~ 0 | Expression is always true or false | **done** - see below |
+| ~~`CSharpWarnings::CS0672`~~ | ~~20~~ 0 | Member overrides obsolete member | **done, #4697** (the `OnClosing`/`OnClosed` pairs) |
+| ~~`RedundantUsingDirective`~~ | ~~8~~ 0 | Using not required | **done** - regressed from 0 when #4697 orphaned them; see below |
 | ~~`LocalizableElement`~~ | ~~25~~ 0 | Element is localizable | **done, wave 5** - see below |
 | ~~`ConstantConditionalAccessQualifier`~~ | ~~23~~ 0 | `?.` qualifier known null or non-null | **done** - see below |
-| `CSharpWarnings::CS0672` | 20 | Member overrides obsolete member | wave 1 (the `OnClosing`/`OnClosed` pairs) |
+| ~~`CSharpWarnings::CS0618`~~ | ~~42~~ 5 | Use of obsolete symbol | waves 3 and 4 and #4697 took it to the 5 above |
 | ~~`ConstantNullCoalescingCondition`~~ | ~~13~~ 0 | `??` condition known null or non-null | **done** - see below |
 | ~~`InvalidXmlDocComment`~~ | ~~7~~ 0 | Invalid XML doc comment | **done** - see below |
-| `HeuristicUnreachableCode` | 3 | Heuristically unreachable code | pairs with the always-false conditions |
+| ~~`HeuristicUnreachableCode`~~ | ~~7~~ 0 | Heuristically unreachable code | **done** - always paired with the always-false conditions |
 | ~~`CheckNamespace`~~ | ~~6~~ 0 | Namespace does not match file location | **done, all 6 suppressed** - the rename it asks for would break every one; see below |
 | ~~`CA1416`~~ | ~~4~~ 0 | Platform compatibility | **done** - see below |
 | ~~`NotAccessedField.Local`~~ | ~~3~~ 0 | Private field never read | **done** - 2 deleted, 1 kept; see below |
@@ -95,11 +106,11 @@ group the report by `TypeId`.
 
 Two notes on getting this to zero rather than to "small":
 
-- **19 of the 72 are what is left of the annotation family** - `ConditionIsAlwaysTrueOrFalse`
-  (16) and `HeuristicUnreachableCode` (3); the other two members are now done. These flag our
+- **The annotation family is fully cleared.** All four members are at zero. These flagged our
   own defensive null checks as provably unnecessary, on the strength of .NET 10 annotations
-  net472 never had. Each one is either dead code to delete or a guard to keep with a
-  suppression; they cannot be swept. **The measured split from the 36 already worked is
+  net472 never had. Each one was either dead code to delete or a guard to keep with a
+  suppression; they could not be swept. **The measured split from the 36 worked in the first
+  pass is
   32 delete / 2 real bug / 2 keep**, so expect the bulk to be genuine and a real minority
   not to be.
 - The 1,833 warnings the `.editorconfig` severities removed are **demoted, not fixed**. If
@@ -640,11 +651,74 @@ Verified: `build.bat --no-tests` 0 errors; `tcinspect` **72/0**, `ConditionIsAlw
 `Test.dll` 421, `TestData.dll` 178, and `TestDocumentGridExport` + `TestClusteredHeatMap` +
 `TestCandidatePeaks` for the sort paths - all 0 failures.
 
-**The remaining 19 are the deliberate leftovers** - the D and F groups, which need reading
-site by site rather than a rule. Two to look at carefully, because both smell like the
-`CvParam` shape above: `BoundComboBoxColumn:119` (`null == DataPropertyName`, which returns
-`string.Empty`) and `PanoramaFilePicker:461` (`SubItems[1] != null`, where the indexer throws
-rather than returning null, so the real risk is the index).
+### Annotation family, second pass: 72 -> 53 (`159a0bd27b`, 2026-09-28)
+
+The last 19, worked site by site. **16 deletions, 3 intent-preserving fixes** - and the three
+are the same shape that has now appeared five times: a guard that can never fire, so a
+degenerate value flows on instead of being skipped.
+
+- `AuditLogEntry:361` - `loggedSkylineDocumentHash != null`, where the value comes from
+  `ReadElementString`, which returns `""` for an empty element. An empty `<document_hash/>` set
+  `DocumentHash` from `Convert.FromBase64String("")` and fed it to `VerifyHashValues()`. **The
+  same file already used the right idiom 30 lines earlier** (`!string.IsNullOrEmpty`).
+- `PanoramaFilePicker:461` - `SubItems[1] != null` **throws** when there is no second subitem,
+  i.e. in exactly the case it meant to skip; the body does not even read it. -> `Count > 1`.
+- `BoundComboBoxColumn:119` - `null == DataPropertyName`, which returns `string.Empty`, so an
+  unbound column was not caught. -> `string.IsNullOrEmpty`.
+
+Two gates the developer set were worth setting. `DataSourceUtil.IsDataSource(string)` does NOT
+tolerate null (`new FileInfo(path)` throws), so the two `entry != null` deletions were safe only
+because the CALLER (`Directory.EnumerateFileSystemEntries`) never yields null - a caller
+guarantee, not a callee one. And `BoundDataGridView` re-indexed `Columns[e.ColumnIndex]` on the
+next line, so deleting its dead guard alone would have orphaned `column` and traded one warning
+for another.
+
+### Wave 4 was never a uniform swap, which is why it stalled (`96a874fa0f`, 2026-09-29)
+
+The five `EscapeUriString` sites split two ways and the right answer is OPPOSITE for each half.
+
+**The two `NormalizationMethod` sites -> `EscapeDataString`.** The blocker ("is the encoding
+persisted in .sky?") is answered by the round-trip, not by inspecting documents: write is
+`surrogate_` + escape(name) + `?label=` + escape(label); read is `Split('?', 2)` ->
+**`Uri.UnescapeDataString`** -> `HttpUtility.ParseQueryString`. **The read side has ALWAYS used
+`UnescapeDataString`**, which decodes `%XX` whichever escaper wrote it, so old documents (fewer
+escapes, nothing to decode) and new ones both parse - and an older Skyline reads a new document
+too, since its read side is the same. Loading always re-derives `Name` through the constructor,
+so `Equals` (which compares `Name`) never straddles encodings. It also **fixes a latent bug**:
+that name is built like a query string, and `EscapeUriString` leaves `?` and `=` unescaped, so a
+surrogate name containing either broke the delimiters `ParseRatioToSurrogate` splits on.
+
+**`SkylineFiles:4175` and `PanoramaPublishUtil:377` must NOT be swapped.** Both escape a WHOLE
+URI or path: `folderPath` is `panoramaSavedUri.AbsolutePath`, so `EscapeDataString` would encode
+its `/` and the `Contains` match could never succeed; the other escapes a full absolute URI,
+where encoding `://` would fail the `IsWellFormedUriString(..., Absolute)` check on the next
+line. Swapping either is a silent functional break that compiles and passes inspection. Both now
+carry `#pragma warning disable SYSLIB0013` with the reason; retiring them properly means
+composing the `Uri` from parts, which needs real Panorama testing.
+
+### The `RedundantUsingDirective` regression, and what it says
+
+#4697 took the count down but put 8 findings BACK in a category the mechanical sweep had
+cleared, plus 2 in another. All ten are second-order effects of its three migrations:
+5 `System.ComponentModel` (the `CancelEventArgs` -> `FormClosingEventArgs` change), 2
+`System.Net` (the `ServicePointManager` removal), and 2 dead `nightlyDirectory ?? throw` guards
+(`Assembly.CodeBase`, nullable, -> `AppContext.BaseDirectory`, never null). **A merge can
+reopen a category you closed; re-measure the whole list, never just your targets.**
+
+Verified: `build.bat --no-tests` 0 errors and **no SYSLIB0013 anywhere in the build log** (the
+pragmas clean the build warning too, not just the inspection); `tcinspect` **5/0**; `Test.dll`
+421, `TestData.dll` 178, `TestSurrogateStandards` + `TestUpdateGlobalStandard` (the direct
+`RatioToSurrogate` coverage) - all 0 failures.
+
+## Done: 2,412 findings and 403 errors, down to 5 warnings and 0 errors
+
+**None of the 5 is a cleanup decision** - see the table above. Four are the `ServicePointManager`
+use #4697 missed in `TeamCityNightlyAuth`, which is TLS pinning for TeamCity downloads and a
+product call; one is the Ardia `WebRequest.Create` that wave 3 deliberately left, needing
+`TestArdia*` credentials against a frozen component.
+
+**Still open, and the only thing between here and a review request**: the `.editorconfig` scope
+question from `/code-review max` (item 2 under "Open items"), unaddressed since it was raised.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
