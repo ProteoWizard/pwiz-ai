@@ -185,11 +185,89 @@ up); per-block selection removes the flicker but pushes left-out signal onto nei
   byte-identical output), all three runs at once on a busy machine. Next: parallel vendor reads.
 - ff7e429fb4 also fixed a confound in the joint arms: MS1 passed through as profile (83k points against
   32k vendor centroids) and MS2 were labelled profile. The joint path now takes vendor MS1 centroids from a
-  vendor file; run it from the `.wiff2` (copies in `C:	emp\demux-test-data\ZenoTOF8600-ZTScan`), not the
+  vendor file; run it from the `.wiff2` (copies in `C:\temp\demux-test-data\ZenoTOF8600-ZTScan`), not the
   profile dumps. Arm `slices\c7_joint` (old solver, dump input) is confounded.
-- Running overnight 2026-09-28: `c7_joint_v4` (`sessions/.../Run-JointWiffEval.ps1`: sweeps 247-371,
-  500-700, from the `.wiff2`), DIA-NN `--window 6` and pinned 14/17, against `cs_centered7_posmz_scarfell_w6`
-  / `_pinned` (`sessions/.../Compare-JointArms.ps1`). A slice DIA-NN search takes ~2.5 h.
+- **Is the joint solve worth it? Yes, on the slice (night of 2026-09-28/29).** Arms from the `.wiff2`
+  (`sessions/.../Run-JointWiffEval.ps1`: sweeps 247-371, precursors 500-700, MS1 vendor-centroided like the
+  control), DIA-NN as the channel controls `cs_centered7_posmz_scarfell_w6` / `_pinned`
+  (`sessions/.../Compare-JointArms.ps1`, `ids_summary.py`, `paired_cv.py`, `abundance_cv.py`):
+
+  | arm (`--window 6`) | precursors A1 / D1 / G1 | FDP | peptides all / any | CV (shared) |
+  |---|---|---|---|---|
+  | channel, vendor centroids | 2,885 / 2,890 / 3,027 | 0.35-1.31% | 2,197 / 3,743 | 0.094 |
+  | joint 81c153dfc2 (`c7_joint_v4`) | 3,396 / 3,407 / 3,426 | 0.47-1.22% | 2,522 / 4,386 | 0.119 |
+  | joint + 12 ppm cross-position merge (`c7_joint_v4_m12`) | 3,334 / 3,318 / 3,427 | 0.64-1.13% | 2,469 / 4,334 | 0.098 |
+
+  Pinned (14 / 17 ppm): joint 3,513 / 3,421 / 3,336 against 2,909 / 3,067 / 3,094. The merge arm's CV by
+  abundance quartile is 0.129 / 0.108 / 0.093 / 0.073 against the channel's 0.118 / 0.103 / 0.090 / 0.073.
+  What the night established:
+  - **MS1 must be centroided for DIA-NN:** the same joint MS2 with profile MS1 (`c7_joint_v4_ms1prof`) loses
+    10-15% of its IDs (2,945 / 3,266 / 2,835); profile MS1 does not change the CV. Yet profile MS1
+    quantifies better (DIA-NN's Ms1.Area CV 0.101 against 0.123 for vendor centroids).
+  - **The joint MS2 is the better signal:** fragment areas straight from the spectra (top-6 library
+    fragments over the `.wiff`'s elution windows, no DIA-NN; `sessions/.../fragment_area_cv.py`) have CV
+    0.093 against 0.099 for the channel, better in every quartile; cosine to the library 0.923 against 0.905,
+    fragment co-elution 0.81 against 0.74 (`fragment_extract.py`; a +0.2 Th shifted control finds nothing).
+  - **What DIA-NN saw instead was split fragments:** 40% of a joint fragment's instances were two or more
+    peaks within 15 ppm (channel 19%), neighbouring positions' centroids of one fragment, which the layout
+    merged only within 5 ppm (`MERGE_PPM`, set for the channel solve's shared channel m/z). Taking the largest
+    peak instead of the sum erased the joint's advantage (0.107 against 0.104). Merging within 12 ppm left 10%
+    and brought DIA-NN's CV from 0.119 to 0.098. This is Centrix's final step (merge centroids closer than
+    sigma, "spurious close doublets"; github.com/maccoss/centrix) - the spec meant it to be reused.
+  - DIA-NN tightens its tolerance for the joint centroids (12 ppm against 17 for the channel), which also
+    narrows its integration (by 0.36 sweeps on average; not when both are pinned at 14 ppm).
+  - Arm `slices\c7_joint` (old solver, profile MS1 from the dumps) is confounded; still, its CV (0.095) is
+    better than 81c153dfc2's before the merge, for reasons not yet understood (`c7_joint_v4_g16`, 16-bin
+    blocks, tests the block size).
+
+**Joint solve speed: everything tried or proposed (2026-09-28/29)**
+
+Benchmark: one A1 sweep (sweep 300), precursors 560-600 (48 bins), one thread pinned to a P-core with the
+machine otherwise quiet (`sessions/.../Bench-Joint.ps1`, `--solve-profile`); quality against the same sweep
+solved to convergence (`--joint-param MaxRounds=40 MaxPasses=400 ...`, `joint_diff.py`). Original 46.6 s, now
+8.6 s. A whole run: 699 sweeps of 430 bins, ~77 thread-s a sweep, so ~1-1.5 h at 10 threads; the channel
+solve is ~7 thread-s a sweep. Acquisition at 100 spd is 14.4 min: another ~5-10x is needed.
+
+Done, in 81c153dfc2 (each measured on the benchmark):
+
+| change | effect |
+|---|---|
+| positions at zero leave the active set after every pass | 2x; blocks 15 -> 3 positions |
+| objective tracked from each block step's exact decrease | objective phase 5.9 -> 0.2 s |
+| only grid points with data within a peak's reach; coefficients point-major; flat per-column rows | 1.55x, byte-identical |
+| re-solve a point only when a neighbour moved by more than the tolerance; gradient checks only near such moves | ~10% |
+| 48-bin blocks for `--joint` (16-bin blocks solve 36 positions to keep 16) | 1.6x; fewer block edges |
+| block steps over-relaxed by 1.7 (a block overshot past its optimum is re-solved) | same speed; distance to the converged solution 0.083 -> 0.055 |
+
+Tried and dropped: admitting only the top-k violators per point (more rounds, no gain); looser tolerances
+(ToleranceIons 0.01-0.03, RelativeTolerance 1e-3, MaxRounds 3: 10-15% faster but further from convergence).
+
+Where the time goes now: the first pass of round 0 (about 21 positions activated per grid point), then each
+of ~8 rounds a gradient check over the active region plus a pass; 25 passes per chunk. The second,
+reweighted solve is ~40% of the total (9.2 s against 13.8 s without it). 88% of the ions sit in interacting
+groups of 51-200 coefficients.
+
+Not yet tried, most promising first:
+1. **Centrix-style regions:** segment the grid into signal regions (threshold, merge small gaps, extend by
+   the peak reach) and solve each to convergence on its own, instead of rounds over a whole chunk.
+2. **Centrix-style selective second pass:** refit only the regions whose weights (lambda) changed by more
+   than ~20%, warm-started; the rest keep pass 1. Aims at the ~40% the reweighted solve costs.
+3. **Decide the positions once per block of sweeps:** a fragment's precursor position does not change over its
+   elution; choose the support from the 12 sweeps pooled (12x the counts), then solve each sweep's amplitudes
+   on it. Estimated 5-10x; may also reduce the spread of ions over neighbouring positions.
+4. **Tighter inner loops:** SIMD for the 11-tap dot products and residual updates, bounds-check-free spans,
+   closed-form 2x2 / 3x3 block solves (now ~13k cycles for ~1.5k flops per block). 2-3x.
+5. Seed the active set from the channel solve's support (fewer rounds).
+6. Exact solve per interaction group (dense NNLS with the cross-grid-point terms): the converged answer,
+   about speed-neutral given the large groups.
+7. Smaller peak support (PeakHalfWidth 5 -> 4, ~20% of the convolution work); 96-bin blocks (~1.2x).
+8. Unweighted solve (as Centrix) for a Toeplitz / Kronecker Gram; loses the Poisson weights. Coefficients every
+   other grid sample (half the unknowns, neighbours 0.58 correlated) - model error for peaks between them.
+9. GPU: chunks and blocks are independent.
+
+I/O around the solve (separate from it): the writer re-centroided every spectrum to get its header (fixed,
+ff7e429fb4); the vendor reads were serial (4 threads, aac2026874: 3.95x, identical peaks). Opening a run takes
+~80 s. Still open: mzMLb or an in-memory hand-off to Osprey instead of a 17-19 GB mzML per run.
 
 **Next, in order.** Quantitation has two separate problems: the demux's counting noise on weak signal
 (0.010 at the lowest abundance quartile, nothing at the top), and the vendor centroids' missing signal
