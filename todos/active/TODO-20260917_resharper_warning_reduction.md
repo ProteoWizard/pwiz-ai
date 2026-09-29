@@ -20,7 +20,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **5 warnings, 0 errors** on #4685 as of 2026-09-29. Wave 3 moved to
+  **0 warnings, 0 errors** on #4685 as of 2026-09-29 - the goal is met. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -69,21 +69,26 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after the first annotation-family pass (`37e39d0700`) | 0 | 72 |
 | #4685 after the rest of the annotation family (`159a0bd27b`) | 0 | 53 (projected) |
 | #4685 after **#4697 merged in** (`17fa34a5da`) - CI-measured | 0 | 20 |
-| #4685 today, after the orphaned usings and wave 4 (`96a874fa0f`) | 0 | **5** |
+| #4685 after the orphaned usings and wave 4 (`96a874fa0f`) | 0 | 5 |
+| #4685 today, after the dead TLS pinning and the Ardia pragma (`c01385e72a`) | 0 | **0** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 5, in full (measured 2026-09-29 on #4685 at `96a874fa0f`)
+### Nothing left (measured 2026-09-29 on #4685 at `c01385e72a`)
 
-Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
-group the report by `TypeId`.
+`tcinspect.ps1` reports `Code inspection: success - No inspections at WARNING or above`, which is
+the FIRST time the script has taken its success path, so the GitHub check goes green rather than
+red. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1`.
 
-**All five are `CSharpWarnings::CS0618`, and none of them is a cleanup decision:**
+The last 5 were both `CS0618`, and neither was a cleanup decision:
 
-| Site | Count | Why it is still here |
+| Site | Count | Resolution |
 |---|---|---|
-| `SkylineNightly/TeamCityNightlyAuth.cs:152,156` | 4 | `ServicePointManager` TLS pinning for TeamCity artifact downloads. **#4697 missed this one** - its body claimed the class "and its three call sites", and this is a fourth, in another project. Counted twice per line because the file is linked into BOTH `SkylineNightly` and `SkylineNightlyShim`. #4697 itself flagged that `ServicePointManager` is NOT inert on net10 for the legacy stack, so removing it changes handshake behaviour against their server - a product call |
-| `Shared/CommonMsData/RemoteApi/Ardia/ArdiaClient.cs:204` | 1 | `WebRequest.Create`, deliberately left by wave 3: the file documents that `HttpClient` adds `charset=utf-8` and the Ardia delete API answers 400. Migrating needs `TestArdia*` credentials, and Ardia is frozen pending Thermo funding |
+| `SkylineNightly/TeamCityNightlyAuth.cs:152,156` | 4 | **Deleted.** `ConfigureSecurityProtocol`'s only consumer was the `HttpClient` created three lines below its call, and `ServicePointManager` does not affect `HttpClient` - so wave 3's migration of these projects to `HttpClient` had already made the pinning inert. #4697's caveat ("NOT inert for the legacy stack, 7 files still on WebRequest/WebClient") no longer applied: a grep for `WebRequest`/`WebClient`/`ServicePointManager` across `SkylineNightly` and `SkylineNightlyShim` returns nothing outside the deleted method. It was also the last consumer of `using System.Net;` in that file - checked BEFORE editing this time, instead of discovering it on the re-inspect. #4697 had missed this fourth call site, in a different project from the three its body named |
+| `Shared/CommonMsData/RemoteApi/Ardia/ArdiaClient.cs:204` | 1 | **`#pragma warning disable SYSLIB0014`.** Stays on purpose, for the reason the file already documents at lines 188-190: `HttpClient` adds `charset=utf-8` to Content-Type and the delete API answers 400. The comment records what retiring it takes - an `HttpContent` with a `CharSet`-less `MediaTypeHeaderValue`, verified against the endpoint with `TestArdia*` credentials - against a component frozen pending Thermo funding |
+
+Both pragmas (these plus the two `SYSLIB0013` ones) clear the **build** warning as well as the
+inspection: `SYSLIB0013` and `SYSLIB0014` are now absent from the build log entirely.
 
 | Inspection | Count | What it is | Route to zero |
 |---|---|---|---|
@@ -92,7 +97,7 @@ group the report by `TypeId`.
 | ~~`RedundantUsingDirective`~~ | ~~8~~ 0 | Using not required | **done** - regressed from 0 when #4697 orphaned them; see below |
 | ~~`LocalizableElement`~~ | ~~25~~ 0 | Element is localizable | **done, wave 5** - see below |
 | ~~`ConstantConditionalAccessQualifier`~~ | ~~23~~ 0 | `?.` qualifier known null or non-null | **done** - see below |
-| ~~`CSharpWarnings::CS0618`~~ | ~~42~~ 5 | Use of obsolete symbol | waves 3 and 4 and #4697 took it to the 5 above |
+| ~~`CSharpWarnings::CS0618`~~ | ~~42~~ 0 | Use of obsolete symbol | **done** - waves 3 and 4, #4697, the dead TLS pinning, and one pragma |
 | ~~`ConstantNullCoalescingCondition`~~ | ~~13~~ 0 | `??` condition known null or non-null | **done** - see below |
 | ~~`InvalidXmlDocComment`~~ | ~~7~~ 0 | Invalid XML doc comment | **done** - see below |
 | ~~`HeuristicUnreachableCode`~~ | ~~7~~ 0 | Heuristically unreachable code | **done** - always paired with the always-false conditions |
@@ -710,15 +715,32 @@ pragmas clean the build warning too, not just the inspection); `tcinspect` **5/0
 421, `TestData.dll` 178, `TestSurrogateStandards` + `TestUpdateGlobalStandard` (the direct
 `RatioToSurrogate` coverage) - all 0 failures.
 
-## Done: 2,412 findings and 403 errors, down to 5 warnings and 0 errors
+## Done: 2,412 findings and 403 errors, down to ZERO of each
 
-**None of the 5 is a cleanup decision** - see the table above. Four are the `ServicePointManager`
-use #4697 missed in `TeamCityNightlyAuth`, which is TLS pinning for TeamCity downloads and a
-product call; one is the Ardia `WebRequest.Create` that wave 3 deliberately left, needing
-`TestArdia*` credentials against a frozen component.
+The goal in the title is met on #4685. `tcinspect` returns `success`, so the check is green.
 
-**Still open, and the only thing between here and a review request**: the `.editorconfig` scope
-question from `/code-review max` (item 2 under "Open items"), unaddressed since it was raised.
+**What the count never showed, and is the real return on this work**: the annotation family and
+the dead-guard hunt turned up **six genuine defects**, every one of which had been invisible
+because the guard or fallback that hid it could never execute:
+
+1. `EditPeakScoringModelDlg` - the wrong-sign coefficient tooltip **never appeared**, because
+   `ToolTipText` reads back as empty rather than null, so `??` kept the empty string.
+2. `HangDetection` - the `<no text>` placeholder never appeared in a hang report, same cause.
+3. `MsDataFileImpl` scan windows - a missing CV param recorded a scan window of **(0, 0)**
+   instead of being skipped, because `CvParam` returns an empty `CVParam`, never null, and an
+   empty one converts to `0.0`.
+4. `AuditLogEntry` - an empty `<document_hash/>` set a hash of zero bytes and fed it to
+   `VerifyHashValues()`.
+5. `PanoramaFilePicker` - a `SubItems[1] != null` guard **threw** in exactly the case it was
+   written to skip.
+6. MS Amanda ignored the DDA search page's max-variable-mods entirely (PR #4712).
+
+Plus two test defects: the DiaUmpire vendor test could not pass twice (its cleanup glob missed
+`-diaumpire_pin.tsv`), and `DiaUmpireTutorialTest` carried a dead field that LOOKED like a
+seventh defect and was not - see the correction above, which is the more useful lesson.
+
+**The one thing still open before a review request**: the `.editorconfig` scope question from
+`/code-review max` (item 2 under "Open items"), unaddressed since it was raised.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
