@@ -61,8 +61,9 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
 - [x] Code review round 4 (`/code-review max`, 2026-09-28) and Copilot rounds 4-5 - see Progress Log
 - [ ] Human review - merged without one, on the developer's decision
 - [ ] Reply to support thread once fix ships (in a Skyline-daily release)
-- [ ] Port to the .NET 10 branch: cherry-pick `10aac2d948` onto a new `Skyline/work/<date>_net10_cmdline_invariant_values`
-      branch off `Skyline/work/20260612_net8_port`, PR into that branch; run the culture tests under .NET 10 (ICU)
+- [x] Port to the .NET 10 branch: [#4742](https://github.com/ProteoWizard/pwiz/pull/4742)
+      (`Skyline/work/20260929_net10_cmdline_invariant_values` into `Skyline/work/20260612_net8_port`)
+- [ ] Master follow-up [#4743](https://github.com/ProteoWizard/pwiz/pull/4743): zh-CHS parent check + soft hyphen escape
 
 ## Settings-list arguments
 
@@ -163,6 +164,19 @@ isotope enrichment arguments accept invariant names as well as localized ones in
 `ArgumentBase.AcceptedValues` for values accepted beyond the localized `Values`; and a public `--culture`
 argument that applies to its own command only. Deferred: the Follow-up items above (#4696 filed for three of
 them), the support-thread reply once a release carries the fix, and the .NET 10 port (task above).
+
+### 2026-09-29 - .NET 10 port and master follow-up
+
+- Port PR #4742: cherry-picked `10aac2d948`. Conflicts: the port's `ArgumentBase` (`operator +(ArgumentBase, object)`,
+  moved to `Shared/CommonUtil/CommandLine`), the internal `--culture` example renamed to zh-Hans, and a whole-file
+  conflict in `CommandLineTest.cs` because the port stores it LF and master CRLF (took the port's file and applied
+  the PR's diff converted to LF). Help rows regenerated (`Help/zh-Hans`, per the port's rename in `dc12600f3a`).
+- On .NET 10, `zh-CHS` is not in `CultureInfo.GetCultures` (parent `zh-Hans` is), so the #4669 known-culture check
+  rejected it. `GetKnownCulture` now also accepts a culture whose parent is known; new `zh-CHS` test case red
+  without it, green with it on net10.0-windows. Same code in master follow-up #4743 so later merges stay clean.
+- Master had a literal U+00AD in `ConsoleCultureArgumentTest` where the escape was intended: Claude's Edit/Write
+  tools decode a typed backslash-u escape in their input into the character. Fixed on both branches by byte-level replacement.
+- Not addressed (pre-existing): `Util/Adduct.cs:1206` has a U+00AD inside the adduct name "CH3CO2".
 
 ## Files Modified
 
