@@ -384,9 +384,6 @@ Found (pre-existing, not yet filed): a library with no protein information canno
 second-pass FDR (no protein has 2 detections -> empty stratum -> "Second-pass FDR cannot run");
 the test blib now carries proteins via `BlibWriter.AddProteinMapping`. Next: R10.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260928_osprey_blib_annotations.md` before starting work.
-
 ### 2026-09-28 (Mike session) - #4708 reworked as a PerFileRescoring product (R2-R5, R9)
 
 In `D:\Dev\pwiz-osprey-export`, branch `Skyline/work/20260923_osprey_carafe_export` (stacked on
@@ -431,3 +428,41 @@ fixes), local until pushed.
   PerFileRescoring export methods 97-100%. Numbers are in the #4708 test plan.
 - Gate on the merged head: 631/631, zero inspection warnings. Filed #4731-#4734 (issue drafts).
 - Still open: perf gate on a quiet machine; TeamCity (ask Brendan).
+
+### 2026-09-28 (Brendan session, evening + night) - R10 done, #4730 merge candidate
+- **R10**, pushed as d2aa967af6 (Mike merged it into #4708) and 2e88e21746 (review fixes, NOT yet in
+  #4708 - merging it will conflict in `Program.ValidateArgs` again, where the export check moved to
+  the top of the method):
+  - `Osprey.IO/BlibSpectrum.FromLibraryEntry` is the one LibraryEntry-to-blib-rows composition
+    (Brendan: no second copy), used by the search output (`BlibOutputWriter.PrepareSpectra`, in
+    parallel), `--export-library` (`LibraryBlibWriter`, parallel blocks of 10,000) and the old
+    convenience overload; `BlibWriter.AddSpectrum(BlibSpectrum, ...)` writes it.
+  - Peaks sorted by m/z (Brendan: better for Skyline; Skyline `ReadPeaks` keeps stored order).
+    Modseq from `Modifications`, masses as `+0.0###` (keeps printed precision: `K[+114.0]` stays,
+    Skyline matches at the printed precision); an entry whose text has more mod tokens than parsed
+    mods keeps its own text (no two precursors share a key). One `RefSpectraPeakAnnotations` row per
+    b/y peak whose recomputed m/z matches (ordinal < length; custom losses printed with >= 4
+    decimals); `mzObserved` = peak m/z exactly (Skyline asserts 1e-7).
+  - `;blibout=2` (`BlibSpectrum.FORMAT_VERSION`) in the SecondPassFDR key, unconditional.
+  - Export: one RetentionTimes row per spectrum (rt, NULL start/end); column-only decoys get the
+    first decoy prefix on their accessions; progress; locked output -> `BlibOutputException`;
+    validated and dispatched before input checks; refuses `--export-library` == `--library`.
+  - Fixed the output blib keeping `[UniMod:N]` text for ids outside the writer's table (Skyline's
+    `MassModification.Parse` accepts only numbers).
+- Goldens: only `tables/PeakDigest.tsv` recaptured (every spectrum re-sorted); `blib_summary.tsv`
+  recapture was last-digit sum-order noise, restored.
+- Rust parity PR maccoss/osprey#72 (`fix/sort-blib-peaks`, stable m/z sort in `add_spectrum`):
+  Stellar `Compare-EndToEnd-Crossimpl -Files All` OVERALL PASS, 0/31,720 peak blobs divergent.
+  Running Rust needs `C:\vcpkg\installed\x64-windows\bin` on PATH (0xC0000135 otherwise).
+- Second `/code-review max`: 15 findings, 10 fixed; dropped as pre-existing/out of scope: wrong
+  masses for UniMod 28/122/214/312/385/747 in `DiannTsvLoader.UnimodIdToMass` (and Rust);
+  HPC join adopts worker parquets by footer only (under version override); one-decimal unknown blib
+  mods not refined from the Modifications table; the reader-version probe gating design; export
+  journal mode. NEEDS BRENDAN: BiblioSpec `BlibMaker::transferPeakAnnotations`
+  (BlibMaker.cpp:1025-1039) formats text columns unquoted, so BlibBuild cannot merge ANY annotated
+  blib (CarafeSharp's too, now Osprey's) - fix is `sqlite3_snprintf` + `%Q`; needs a BiblioSpec
+  build, separate pwiz PR.
+- Gates (final): 621/621 en/ja-JP/fr-FR, inspection clean; coverage 83.4% (BlibSpectrum 99%,
+  LibraryBlibWriter 98.1%, BlibPeakAnnotations 100%, FragmentLadder 100%, BlibWriter 90.8%,
+  Program 88.1%, BlibOutputWriter 87.2%, BlibLoader 81.2%). regression-parallel All and TeamCity
+  Perf/Regression (build 4192947): see the night-session report.

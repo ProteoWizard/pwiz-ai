@@ -1702,7 +1702,9 @@ Differences from Skyline WORKFLOW.md:
   and `git show` applies the checkout smudge, so neither is a raw-bytes view.
   Use `git cat-file blob <sha>:<path> | tr -cd '\r' | wc -c` (or `| od -c |
   head`, `| file -`).
-- **No `Co-Authored-By: Claude` trailer** unless Mike opts in.
+- **`Co-Authored-By: Claude <noreply@anthropic.com>` trailer**, the same line as pwiz (Mike's
+  and Brendan's merged Rust commits carry it since #68, and `Deny-HarnessAttribution.ps1`
+  requires it). Still no `Claude-Session:` line, model name or emoji.
 - **Reasonable prose is fine.** The Skyline 10-line cap is a
   Skyline-team convention.
 - **Cross-references** to related PRs are welcome
