@@ -466,3 +466,16 @@ fixes), local until pushed.
   LibraryBlibWriter 98.1%, BlibPeakAnnotations 100%, FragmentLadder 100%, BlibWriter 90.8%,
   Program 88.1%, BlibOutputWriter 87.2%, BlibLoader 81.2%). regression-parallel All and TeamCity
   Perf/Regression (build 4192947): see the night-session report.
+
+**PR B (#4708), 2026-09-28 night session:**
+- Perf gate PASSED: `Test-PerfGate.ps1 -Dataset Stellar`, a5d15e6a4f against #4730's head d2aa967af6 (a new
+  baseline worktree `D:/Dev/pwiz-perfbase-4730`; the shared pwiz-perfbase was left alone). Median total wall
+  5:02 vs 5:00, +0.2% (per repeat +0.2 / +2.8 / -1.6), no stage flagged. Verdict:
+  `ai/.tmp/perf-gate/20260929-060001Z/verdict.md`.
+- Merged #4730's 2e88e21746 (ae0b22806d): conflicts in `Program.ValidateArgs` (kept #4730's `--export-library`
+  check at the top, then `TrainingExportError`) and `OspreyResources.resx` (both sides' strings). 631/631,
+  inspection clean, pushed. PR body updated (perf + consumer check).
+- Consumer check: the Stellar `_21` export this build wrote from the .raw (22,761 rows, second-pass run q)
+  gives CarafeSharp's masking parity 85.0%, and CarafeSharp's 68 tests pass on it (#4717 reads format 2).
+- Remaining: TeamCity Perf/Regression (ask first); #4729 (Brendan's) still blocks the single-run leg's
+  SecondPassFDR.
