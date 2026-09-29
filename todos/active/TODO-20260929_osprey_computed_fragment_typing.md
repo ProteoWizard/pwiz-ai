@@ -256,3 +256,28 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
 - Perf gate skipped: decoy generation runs once per library, and the refactor replaces a
   per-decoy O(mods x length) position scan with the remap already done, rather than adding work.
 - Committed 73d29b8b44, pushed. `/code-review max` running.
+
+### 2026-09-29 - NIST measurement for decision 5 (PR 2 tolerance)
+Harness `ai/.tmp/sessions/20260929-8a15/measure_nist_typing.py` (results `nist_msp_typing.txt`,
+`nist_sptxt_typing.txt` beside it): primary b/y at z <= min(prec, 2), nearest match, a tie
+(distances within 0.05) left Unknown; compared with the library's primary b/y (z <= 2) labels.
+"Extra" = typed b/y on a peak the library calls a loss, isotope or `?` (random-match cost).
+
+| tol (Th) | msp agree | msp disagree | msp extra | sptxt agree | sptxt disagree | sptxt extra |
+|---|---|---|---|---|---|---|
+| 0.02 | 12.26% | 14 | 0.00% | 12.00% | 6 | 0.01% |
+| 0.2 | 73.22% | 5 | 0.01% | 71.51% | 151 | 0.08% |
+| 0.5 | 96.18% | 4 | 0.18% | 93.29% | 368 | 0.41% |
+| **0.6** | **98.89%** | **4** | **0.32%** | **94.95%** | **449** | **0.76%** |
+| 0.7 | 98.94% | 4 | 1.17% | 96.05% | 631 | 1.39% |
+| 1.0 | 98.94% | 4 | 7.54% | 98.91% | 714 | 7.18% |
+
+- msp: 67,470 spectra, 10.37M peaks, 1.77M with a primary label. NIST labels stop at +/-0.607 Th
+  from our m/z (p50 0.098, p99 0.566) - the mass arithmetic matches theirs. sptxt (SpectraST's
+  own re-annotation of the same spectra) labels out to 1.0 Th (p95 0.58, p99 0.92).
+- Disagreements are near zero at every tolerance; the ~1% the msp never reaches is the tie rule
+  (e.g. NIST's own `b6/-0.02,b12^2/-0.02` - identical m/z, both listed).
+- 0.6 Th is the knee: agreement plateaus and extra quadruples per 0.1 Th beyond it. Proposed
+  unit-resolution tolerance: 0.6 Th. Proposed library rule: the peak m/z's SIGNIFICANT printed
+  precision (trailing zeros ignored - the sptxt pads 427.2 to 427.2000) of 1 decimal or fewer
+  means unit resolution (0.6 Th); otherwise max(0.02 Th, 20 ppm). Awaiting Brendan's call.
