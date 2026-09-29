@@ -6,7 +6,8 @@
 - **Module**: `skyline`
 - **Created**: 2026-09-28
 - **Status**: PR open; waiting for Nick to confirm the new values on other machines (NICKSH)
-- **PR**: #4740 (base `Skyline/work/20260612_net8_port`)
+- **PR**: #4740 closed 2026-09-29 in favor of chambm's #4738 (same TestDiaTtofDiaUmpireTutorial.json
+  byte-for-byte, plus the FullFileset re-record and CleanUpPersistentDir in a `finally`)
 
 ## Progress (2026-09-29, MACS2)
 
