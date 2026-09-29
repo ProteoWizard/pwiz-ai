@@ -280,3 +280,17 @@ The work is only half the deliverable; the other half is evidence for or against
 - `ff1c1350dd` (pushed). Gates: 610/610 en-US (inspection 0), ja-JP, zh-CN, fr-FR; Stellar regression
   PASSED. Also confirmed on `d0a29a6b0c` before these changes: 610/610 under ja-JP and zh-CN.
 - Reviewer CSVs regenerated (826 strings; 100% coverage).
+- `fa808438b4` (Brendan: "--library and --output" is not translation-safe): the translated "{0} and {1}"
+  fragment resource is gone; `RequiresError` has one- and two-argument overloads with their own
+  sentences ("{0} requires {1}." / "{0} requires {1} and {2}."); the three tests assert the whole
+  formatted message. Open idea (not done): a guard flagging resources that are only placeholders plus
+  a conjunction (the fragment-composition class).
+- Help-page test: `TestCommandLineHelpDocumentation` already regenerates en/ja/zh-Hans, overwrites stale
+  pages and fails naming them. Differs from Skyline's `HelpDocumentationContentTest`, which fails with
+  "Rerun test with IsRecordMode=>true" and only writes in record mode - offered to match it exactly.
+- `749bec4ef1` (Brendan: completeness puts a translation requirement on every developer; Skyline lets
+  English grow): `OspreyLocalizedResourcesTest` now checks only translations that exist (missing entry or
+  missing satellite = skipped, like Skyline's `if (localizedValue == null) return;`); placeholder and
+  error-line checks kept; a non-vacuous guard fails if no ja or zh-Hans translation was checked at all.
+  Mutation-tested: an English-only resource passes; a ja `{0}` -> `{9}` fails naming the entry.
+  Gates 610/610 en-US (inspection 0), ja-JP, zh-CN.
