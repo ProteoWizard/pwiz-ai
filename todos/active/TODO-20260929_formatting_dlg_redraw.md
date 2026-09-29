@@ -125,6 +125,26 @@ Still unconfirmed by a human: that the flash is visibly gone. Use a document wit
 it - `ExtracellularVesicalMagNet.sky` with both formatting rules ticked, not a small document like
 `BSA-Training.sky`.
 
+## Not a bug: OK-ing the dialog updates both plots when rules changed
+
+Checked during the same session. **Confirmed by the developer that it does not happen when nothing is
+changed**, so there is nothing to fix here.
+
+The OK path is a different mechanism from the constructor bug above, which is why the `_initializing` guard
+does not touch it. `FoldChangeVolcanoPlot.ShowFormattingDialog` on OK calls
+
+```csharp
+EditGroupComparisonDlg.ChangeGroupComparisonDef(true, GroupComparisonModel, GroupComparisonDef);
+```
+
+which goes to `Program.MainWindow.ModifyDocument(...)` - a **document** change, and every graph in Skyline
+refreshes on those. `GroupComparisonModel.ApplyChangesToDocument` returns the document unmodified when the
+definition is unchanged, which is why the no-edit case is already clean.
+
+So a rule edit refreshing the Relative Abundance plot is ordinary architecture, not a defect, even though
+that plot shares nothing with the volcano's rules. Making panes ignore document changes they do not care
+about is a large architectural change and is not warranted by this.
+
 ## pwiz3 checkout note
 
 That checkout had never been brought current: its `pwiz_data_cli.dll` dated from 2021-09-28, so
