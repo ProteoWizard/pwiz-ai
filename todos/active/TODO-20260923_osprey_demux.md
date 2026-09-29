@@ -8,8 +8,7 @@
   M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
   the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
 - **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416),
-  pushed to f2b837f317 (2026-09-28); 81c153dfc2 and ff7e429fb4 (2026-09-28 evening) are local on SCARFELL in
-  `C:\Dev\pwiz-osprey-demux`, not pushed. No PR yet; run /code-review before opening one. Its
+  pushed to 1c94fd6a57 (2026-09-29), checked out on SCARFELL in `C:\Dev\pwiz-osprey-demux`. No PR yet; run /code-review before opening one. Its
   algorithms are documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
 
 ## Handoff (2026-09-27): moving the work to another machine
