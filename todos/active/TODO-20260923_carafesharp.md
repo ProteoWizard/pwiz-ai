@@ -305,7 +305,19 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   Phospho: trains in general mode like Carafe's general mode (TestPhosphoTrainingRows, 2ebf6288f2); Carafe's
   `-mode phosphorylation` (phos models, H3PO4 neutral-loss channels, site-probability filter) is not ported;
   two of its parts need Osprey evidence it does not export (neutral-loss ions, localization scores).
-- [ ] Golden regression.ps1 (section 5), WSL2 verification (section 7), final Carafe comparison (section 8).
+- [x] Final Carafe comparison (section 8, 2026-09-29 night): both arms re-run on Stellar and Astral with the #4708
+  Osprey (`D:\test\carafesharp-runs\e2e-final`); `docs/05-carafe-comparison.md` rewritten (#4717 837dfd057e),
+  published for Brendan at https://claude.ai/artifact/DNXEQD1iq4Xp4a8bKwuLUT. Stellar 3-run search: 31,158 / 28,422 /
+  4,285 at 0.62% combined FDP.
+- [x] Golden regression (section 5), on `nightlywork/carafesharp-regression` (local; merge into #4717 after the
+  export-v1 upload): Stellar golden recreated from export-v1 (724e449d25, CPU 12 min; a second Windows run is all
+  SAME); `-Export` (04be4e098f); training-table hashes ignore line endings (f81d9a0d67, 370b8e509d); docs 84504b04ca.
+- [x] Linux from .raw (section 7): Osprey #4708 built in WSL2 (`~/osprey-wsl`, sparse: Osprey, Shared, pwiz-sharp,
+  libraries/7zz, pwiz/data/common/*.obo, pwiz_aux vendor archives + UIMF) read the `_21` .raw in 332 s: the same
+  22,761 precursors; `score` and 4 polish statistics differ in the last digit. CarafeSharp's regression on Linux passed
+  on that export and on the packaged one; both runs' training tables match the Windows golden's in content, and their
+  models are byte-identical to each other.
+- [ ] Linux CUDA leg: needs the Linux libtorch CUDA packages (about 4 GB, not cached in WSL); ask before downloading.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
