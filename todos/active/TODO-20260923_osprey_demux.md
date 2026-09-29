@@ -8,8 +8,8 @@
   M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
   the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
 - **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416),
-  pushed to d2f9811fd4; seven newer commits (a62aa3f782 .. 045c71d0c9, the night of 2026-09-27/28) are local
-  on SCARFELL in `C:\Dev\pwiz-osprey-demux`, not pushed. No PR yet; run /code-review before opening one. Its
+  pushed to f2b837f317 (2026-09-28); 81c153dfc2 and ff7e429fb4 (2026-09-28 evening) are local on SCARFELL in
+  `C:\Dev\pwiz-osprey-demux`, not pushed. No PR yet; run /code-review before opening one. Its
   algorithms are documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
 
 ## Handoff (2026-09-27): moving the work to another machine
@@ -158,13 +158,38 @@ up); per-block selection removes the flicker but pushes left-out signal onto nei
   chunks. Tests: exact recovery, near-isobaric fragments of two precursors 2 samples apart resolved, noise.
 - Input: profile dumps (`Osprey.DemuxTool --raw --profile`); the slice dumps are
   `C:\temp\osprey-runs\ztscan\profile\<stem>_slice_profile.mzML` (sweeps 243-375 as 0-132, 475-725 m/z, 5.4 GB).
-- Speed: one sweep of A1's slice (11 blocks) 70 s at 10 threads, against about 1 s for the channel solve on
-  centroids. Output on that sweep: 7,326 peaks per spectrum (channel 5,885), 3.2x the ions (full profile
-  areas), 33% of peaks under one ion (channel 63%).
-- Running: the whole slice for DIA-NN, arm `slices\c7_joint` (`ai/.tmp/sessions/20260927-054c052f/Launch-JointSlice.ps1`,
-  dump sweeps 4:128 = 247-371, centered:7, DIA-NN `--window 6`); compare with `cs_centered7_posmz_scarfell_w6`.
-- Speed next: coefficients every other grid sample (neighbours are 0.87 correlated through B), per-point active
-  lists instead of scanning every column, and profile read once into a cache.
+- Output on sweep 301: 7,326 peaks per spectrum (channel 5,885), 3.2x the ions (full profile areas), 33% of
+  peaks under one ion (channel 63%).
+- 81c153dfc2 (2026-09-28 evening) 5.4x faster: one A1 sweep, precursors 560-600, one pinned P-core, 46.6 s -> 8.6 s.
+  Zero coefficients leave the active set after each pass (blocks 15 -> 3 positions); only grid points with
+  data within a peak's reach are solved (exact: a coefficient covering no data only adds misfit), and again
+  only when a neighbour moved; coefficients stored grid point by grid point; 48-bin blocks by default with
+  `--joint` (16-bin blocks solve 36 positions to keep 16); block steps over-relaxed by 1.7. Tuning switches:
+  `--solve-profile`, `--joint-param Name=Value`, `--group-bins`. Benchmark: `sessions/.../Bench-Joint.ps1`.
+- **Convergence matters:** against the same sweep solved to convergence (hundreds of passes; plain and
+  over-relaxed agree to |log2| 0.0004), the old default's peaks were off by ion-weighted mean |log2 ratio|
+  0.08-0.11 (mass moved between neighbouring positions); now 0.055. Final objectives are NOT comparable
+  across runs (the reweighted pass's weights come from each run's own first solution); compare peaks
+  (`sessions/.../joint_diff.py`).
+- Why it costs more than the spec suggests: per iteration it is as cheap as §5.4d says, but the problem is
+  badly conditioned twice over, neighbouring grid points 0.87 correlated (TOF peak ~3 samples wide) and
+  neighbouring positions sharing ~90% of their bins (10.5 Th window over 1.14 Th bins). 88% of the ions sit
+  in interacting groups of 51-200 coefficients, whose largest position holds only 31-42% of their ions.
+  Cost now: ~77 thread-s per 430-bin sweep, ~1-1.5 h per run (699 sweeps) at 10 threads; the channel solve
+  is ~7 thread-s per sweep. Next idea if the joint solve is worth it: decide the positions once per block
+  of sweeps (12 sweeps pooled), then solve each sweep's amplitudes on that fixed support.
+- **Whole-run wall time is the SCIEX library, not disk:** SSD 2.1 GB/s write, 1.6 GB/s read; NAS 265 MB/s.
+  Per spectrum, one thread: profile decode 2.6 ms, vendor centroiding +4.5-8.5 ms; opening a run 80 s.
+  The channel pipeline's 6 h per file = one serial vendor read+centroid (2.6 s per sweep) plus the writer
+  asking again for every header, which re-centroided each spectrum (2.7 s per sweep; fixed in ff7e429fb4,
+  byte-identical output), all three runs at once on a busy machine. Next: parallel vendor reads.
+- ff7e429fb4 also fixed a confound in the joint arms: MS1 passed through as profile (83k points against
+  32k vendor centroids) and MS2 were labelled profile. The joint path now takes vendor MS1 centroids from a
+  vendor file; run it from the `.wiff2` (copies in `C:	emp\demux-test-data\ZenoTOF8600-ZTScan`), not the
+  profile dumps. Arm `slices\c7_joint` (old solver, dump input) is confounded.
+- Running overnight 2026-09-28: `c7_joint_v4` (`sessions/.../Run-JointWiffEval.ps1`: sweeps 247-371,
+  500-700, from the `.wiff2`), DIA-NN `--window 6` and pinned 14/17, against `cs_centered7_posmz_scarfell_w6`
+  / `_pinned` (`sessions/.../Compare-JointArms.ps1`). A slice DIA-NN search takes ~2.5 h.
 
 **Next, in order.** Quantitation has two separate problems: the demux's counting noise on weak signal
 (0.010 at the lowest abundance quartile, nothing at the top), and the vendor centroids' missing signal
