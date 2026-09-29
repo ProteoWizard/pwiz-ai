@@ -8,7 +8,8 @@
   M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
   the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
 - **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416),
-  pushed to 1c94fd6a57 (2026-09-29), checked out on SCARFELL in `C:\Dev\pwiz-osprey-demux`. No PR yet; run /code-review before opening one. Its
+  pushed to 1c94fd6a57 (2026-09-29; local since: 0f6cb3a2f8, 995fa89766, 63cf71f3fc, 009659cbe7, b6bae12c32),
+  checked out on SCARFELL in `C:\Dev\pwiz-osprey-demux`. No PR yet; run /code-review before opening one. Its
   algorithms are documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
 
 ## Handoff (2026-09-27): moving the work to another machine
@@ -266,6 +267,37 @@ Not yet tried, most promising first:
 8. Unweighted solve (as Centrix) for a Toeplitz / Kronecker Gram; loses the Poisson weights. Coefficients every
    other grid sample (half the unknowns, neighbours 0.58 correlated) - model error for peaks between them.
 9. GPU: chunks and blocks are independent.
+
+**Afternoon of 2026-09-29: steps 1-3, and what sets the solve's work**
+- Steps 1-3 as agreed: 0f6cb3a2f8 counts per ion from the data (`IonCalibration`, spec 6.2; MS2 99.665 per
+  file, fit 1.00; MS1 per spectrum, 5.9-19.3, following the TIC; no m/z dependence); 995fa89766 `--ms1 joint`
+  (MS1 on its own TOF grid, step 9.786586E-05, 0.45 of a sample off MS2's); 63cf71f3fc `--peak-shape measured`
+  (`TofPeakShape`: MS2 B[0] 0.48 at 222 m/z to 0.37 at 887, against the Gaussian's 0.34-0.26); 009659cbe7 the
+  MS1 kernels (5 spectra in 100 m/z bins gave 64 isolated peaks and fell back to the Gaussian; 30 spectra in
+  200 m/z bins give 394: sigma 1.62 at 475 m/z, 1.70 at 660, wider than MS2's 1.44).
+- Slice arms in flight (`Run-JointWiffEval.ps1`, compare with `c7_joint_v4_sig`): `c7_joint_sig_shape`
+  (measured MS2 shape, vendor MS1), `c7_joint_all` (plus `--ms1 joint` with measured MS1 kernels),
+  `c7_joint_fast` (as `sig_shape`, with `MaxRounds=3 RelativeTolerance=1e-3`).
+- **The measured kernel brings the solve near convergence:** one sweep against itself solved to convergence
+  (`bench\admit_ref`), ion-weighted mean |log2 ratio| 0.013; with the Gaussian it was 0.055.
+- **The work is set by the stopping rules, not by the start.** Item 3 above, tried: each sweep's active set
+  seeded from the block's 12 sweeps pooled (`bench\pool12_*`), or each sweep started from the previous
+  sweep's solution (`warm12_*`): the same 8.5 rounds and 28-30 passes, no faster; the converged solve also ends
+  after 8.4 rounds with a cap of 40. Keeping to the pooled support without growing it is slower (blocks of 5.8
+  positions) and 0.149 from the per-sweep solve. Dropped (`sessions/.../pool-support.diff`,
+  `warm-rowgram-counts.diff`).
+- Where a pass goes (`--solve-profile`, b6bae12c32): block gradients, Hessian, NNLS, update about 30 / 30 /
+  12 / 12%. A block's positions span 25 positions (other precursors, not neighbours) and share half their
+  rows: b6bae12c32 computes each row's term once (62 -> 30 per block, byte-identical). Caching each point's
+  Hessian (64% hits) and smaller chunks (256-512 samples) saved nothing, so it is not cache capacity. SCARFELL
+  timings are unreliable while arms run (their threads share the P-cores' L1/L2); A/B on P-cores freed by
+  setting the arms' affinity.
+- Stopping rules against the converged solve (one sweep; block solves, |log2|): default 1.96M, 0.013;
+  `RelativeTolerance=3e-4` 1.61M, 0.016; `1e-3` 1.26M, 0.022; plus `MaxRounds=3` 1.03M, 0.041 and 37% fewer
+  gradient checks (`c7_joint_fast` tests it on IDs); `ToleranceIons=0.01` little; an admission threshold of
+  0.2 ions little (7.5 rounds) at 0.038 (not kept); no reweighting 0.244 (a different objective);
+  `RefitLambdaChange=0.5` 0.114 (keep 0.2). Next if the loose rules hold on IDs: make them the default (~1.7x),
+  then float32 kernels (8 lanes), a coloured parallel pass, or the GPU.
 
 I/O around the solve (separate from it): the writer re-centroided every spectrum to get its header (fixed,
 ff7e429fb4); the vendor reads were serial (4 threads, aac2026874: 3.95x, identical peaks). Opening a run takes
