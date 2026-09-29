@@ -1,9 +1,15 @@
-# TODO-osprey_computed_fragment_typing.md
+# TODO-20260929_osprey_computed_fragment_typing.md
 
-## Branch Information (Future)
-- **Replaces**: PR #4730, which is closed once both PRs below are open (see "Closing #4730")
+## Branch Information
+- **Branch (PR 1)**: `Skyline/work/20260929_osprey_stacked_mod_decoys` (checkout `C:\proj\pwiz-work1`)
+- **Branch (PR 2)**: (not yet created)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
+- **Created**: 2026-09-29
+- **Status**: In Progress - PR 1 built and unit-tested; regression-parallel All running
 - **Module**: `osprey`
+- **PR (PR 1)**: (pending)
+- **PR (PR 2)**: (pending)
+- **Replaces**: PR #4730, which is closed once both PRs below are open (see "Closing #4730")
 - **Source of the code**: #4730's head, `Skyline/work/20260928_osprey_blib_annotations` @ 2e88e21746
   (checkout `C:\proj\pwiz-work1` on Brendan's machine)
 - **Related**: #4708 (Mike, part B, stacked on #4730 - must re-stack on PR 2); maccoss/osprey#71
@@ -218,4 +224,19 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
 
 ## Progress Log
 
-(none yet)
+### 2026-09-29 - PR 1 carved out
+- Branched `Skyline/work/20260929_osprey_stacked_mod_decoys` from port @ 553a145871 in pwiz-work1
+  (the #4730 checkout's branch is untouched on origin).
+- Taken verbatim from #4730 @ 2e88e21746 (port had not changed any of them since #4730's merge
+  base): `PeptideFragmentMass.cs`, `DecoyGenerator.cs`, `PerFileScoringTask.cs`,
+  `DecoyConstructionTest.cs`, `docs/01-decoy-generation.md`. Two comment edits drop the
+  "blib annotation reader" wording (PeptideFragmentMass summary, docs/01).
+- Hand-carried, annotation terms left out: `LibraryLoader.LibrarySuppliesDecoys` made public
+  (moved above the private helpers); `OspreyTask.DECOY_MODS_TERM` appended in the base
+  `ValidityKey` when Osprey generates decoys; `TaskValidityKeyTest` leg
+  `AssertGeneratedDecoysKeyOnTheStackedModFix` (every task keys on it for generated decoys; neither
+  `DecoysInLibrary` nor `DecoyMethod.FromLibrary` does).
+- Build-Osprey Debug -RunTests -RunInspection: 616/616 pass, inspection 0 warnings.
+- Noted, not in scope: the test host prints an unhandled NRE at exit from
+  `OspreyDiagnostics.cs:107` (`ProcessExit` handler dereferences `s_sink` after a later
+  `Initialize` set it null). Pre-existing on the port branch; file untouched here.
