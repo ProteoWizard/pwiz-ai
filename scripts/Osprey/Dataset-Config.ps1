@@ -54,8 +54,7 @@
 
 .EXAMPLE
     . "$PSScriptRoot\Dataset-Config.ps1"
-    $exe = Get-OspreyExe                 # C# Osprey, net8.0 by default
-    $exe = Get-OspreyExe -Framework net472
+    $exe = Get-OspreyExe                 # C# Osprey, Release net10.0
     $rust = Get-OspreyRustExe                 # primary Rust osprey checkout
     $rustUp = Get-OspreyRustExe -Upstream     # maccoss/osprey clone
 #>
@@ -64,6 +63,16 @@
 # works no matter where the calling script lives.  Computed at
 # dot-source time (PSCommandPath is the path to this file).
 $script:Osprey_DatasetConfigDir = Split-Path -Parent $PSCommandPath
+
+# The one target framework the C# Osprey builds, and so the one bin/ folder these scripts
+# run. Osprey is net10.0 only from the .NET 10 port (PR #4619) on; net8.0 and net472 are
+# not coming back, and a leftover bin/x64/Release/net8.0 in a checkout is a stale build
+# that a hard-coded path would run silently.
+$script:OSPREY_TARGET_FRAMEWORK = 'net10.0'
+
+function Get-OspreyTargetFramework {
+    return $script:OSPREY_TARGET_FRAMEWORK
+}
 
 function Get-ProjectRoot {
     <#
@@ -108,14 +117,15 @@ function Get-OspreyUpstreamRoot {
 
 function Get-OspreyExe {
     <#
-    Path to the built C# Osprey executable.  -Framework picks
-    net8.0 (default) or net472.  Adds .exe on Windows.
+    Path to the built C# Osprey executable (Release, net10.0) under -SourceRoot, or
+    under Get-PwizRoot when it is omitted. Adds .exe on Windows.
     For the Rust osprey exe use Get-OspreyRustExe.
     #>
-    param([ValidateSet('net8.0','net472')] [string]$Framework = 'net8.0')
+    param([string]$SourceRoot)
     $exeSuffix = if ($IsWindows -or $null -eq $IsWindows) { '.exe' } else { '' }
-    return Join-Path (Get-PwizRoot) `
-        ("pwiz_tools/Osprey/Osprey/bin/x64/Release/$Framework/Osprey$exeSuffix")
+    $root = if ($SourceRoot) { $SourceRoot } else { Get-PwizRoot }
+    return Join-Path $root `
+        ("pwiz_tools/Osprey/Osprey/bin/x64/Release/$script:OSPREY_TARGET_FRAMEWORK/Osprey$exeSuffix")
 }
 
 function Get-OspreyRustExe {

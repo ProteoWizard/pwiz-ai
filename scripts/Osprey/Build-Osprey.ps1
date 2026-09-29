@@ -44,22 +44,30 @@
     Osprey.sln builds every target framework the projects declare, so a
     solution build compiles all of them regardless of this value.
 
-    Which frameworks exist depends on the branch: Osprey multi-targeted
-    net472;net8.0 until the ProteoWizard .NET 8 port (issue #4497) made it
-    net8.0 only. Rather than pin a default that is wrong on one side of that,
-    both this parameter and the ReSharper inspection's per-framework passes are
-    reconciled against what pwiz_tools/Osprey/Directory.Build.props DECLARES.
+    Osprey targets net10.0 only from the .NET 10 port (PR #4619) on, and that is
+    the default. Older trees (master before #4619 merges, a pinned perf baseline)
+    still declare net472;net8.0, so both this parameter and the ReSharper
+    inspection's per-framework passes are reconciled against what
+    pwiz_tools/Osprey/Directory.Build.props DECLARES.
 
     Declared, not discovered from bin/: switching to a branch that dropped a
     framework leaves the old bin/<tfm>/ output in place, and a test run against
     a stale assembly passes while testing code that is no longer in the tree.
     That is a silent green, which is worse than the error it would replace.
 
+.PARAMETER Culture
+    Run the unit tests under this culture (e.g. ja-JP, fr-FR) by setting
+    OSPREY_TEST_CULTURE for the test process; Osprey.Test applies it in its
+    AssemblyInitialize. ja-JP catches an assertion on English text instead of a
+    resource; fr-FR catches a number written for a program in the current
+    culture. Omitted, the variable is cleared and the tests run under the OS
+    culture. Same idea as Skyline's TestRunner /locale.
+
 .PARAMETER VendorReader
     Build WITH vendor instrument-file reading. What that takes depends on the
     branch, and the switch resolves it from the frameworks Osprey declares:
 
-      net8.0 only (issue #4497)  -> /p:IAgreeToVendorLicenses=true, which lets
+      net10.0 (or net8.0) only   -> /p:IAgreeToVendorLicenses=true, which lets
         pwiz-sharp extract its encrypted vendor SDK archives. Nothing to stage:
         pwiz-sharp is a managed ProjectReference. Without the switch the vendor
         readers still compile, and a .raw fails at run time with "Thermo .raw
@@ -156,7 +164,7 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("net472", "net8.0", "net10.0")]
-    [string]$TargetFramework = "net472",
+    [string]$TargetFramework = "net10.0",
 
     [Parameter(Mandatory=$false)]
     [switch]$Coverage = $false,
@@ -165,7 +173,10 @@ param(
     [string]$CoverageOutputPath = "",
 
     [Parameter(Mandatory=$false)]
-    [switch]$VendorReader = $false
+    [switch]$VendorReader = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$Culture = $null
 )
 
 # Coverage is meaningless without running the tests - imply -RunTests
@@ -200,8 +211,8 @@ if ($SourceRoot) {
 $Platform = "x64"
 $ospreyRoot = Join-Path $pwizRoot 'pwiz_tools/Osprey'
 $slnPath = Join-Path $ospreyRoot 'Osprey.sln'
-# Projects place outputs under a TFM subdirectory: bin/x64/Release/net8.0/
-# (and bin/x64/Release/net472/ on a branch that still multi-targets). Which ones
+# Projects place outputs under a TFM subdirectory: bin/x64/Release/net10.0/
+# (net8.0 and net472 on an older tree that still multi-targets). Which ones
 # this branch actually builds comes from Directory.Build.props - see the
 # TargetFramework parameter notes for why this is not read off disk.
 $testBinDir = Join-Path $ospreyRoot "Osprey.Test/bin/$Platform/$Configuration"
@@ -279,8 +290,19 @@ try {
         exit 1
     }
 
+    # The .NET 10 SDK (net10.0 Osprey, the ProteoWizard .NET port) requires MSBuild 18, which
+    # ships with Visual Studio 2026. Under Visual Studio 2022 (MSBuild 17.x) every SDK-style
+    # project fails to resolve Microsoft.NET.Sdk, so on such a machine build with the SDK's own
+    # MSBuild (dotnet msbuild, what the Linux path already uses) and test with dotnet test.
+    $useDotnetMsbuild = $false
+    $vsMsbuildVersion = (& $msbuildPath -version -nologo 2>$null | Select-Object -Last 1)
+    if ($resolvedTfm -like 'net1*' -and $vsMsbuildVersion -match '^(\d+)\.' -and [int]$matches[1] -lt 18) {
+        $useDotnetMsbuild = $true
+        Write-Host "Visual Studio MSBuild $vsMsbuildVersion cannot load the .NET 10 SDK; building with dotnet msbuild." -ForegroundColor Yellow
+    }
+
     if (-not $Summary) {
-        Write-Host "Using MSBuild: $msbuildPath" -ForegroundColor Cyan
+        Write-Host "Using MSBuild: $(if ($useDotnetMsbuild) { 'dotnet msbuild' } else { $msbuildPath })" -ForegroundColor Cyan
         Write-Host ""
     }
 
@@ -369,7 +391,11 @@ try {
         }
     }
 
-    & $msbuildPath @buildArgs
+    if ($useDotnetMsbuild) {
+        & dotnet msbuild @buildArgs
+    } else {
+        & $msbuildPath @buildArgs
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Build failed with exit code $LASTEXITCODE" -ForegroundColor Red
         exit $LASTEXITCODE
@@ -398,11 +424,14 @@ try {
         if (-not (Test-Path $tmpDir)) {
             New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
         }
-        $cacheDir = Join-Path $tmpDir '.inspectcode-cache'
+        # Keyed by checkout, so two sessions (or two worktrees) inspecting at once neither share
+        # a ReSharper cache nor overwrite each other's results file.
+        $checkoutName = Split-Path -Leaf $pwizRoot
+        $cacheDir = Join-Path $tmpDir (Join-Path '.inspectcode-cache' $checkoutName)
         if (-not (Test-Path $cacheDir)) {
             New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
         }
-        $inspectionOutput = Join-Path $tmpDir 'OspreyInspect.xml'
+        $inspectionOutput = Join-Path $tmpDir "OspreyInspect-$checkoutName.xml"
         $dotSettings = Join-Path $ospreyRoot 'Osprey.sln.DotSettings'
 
         if (-not (Test-Path $dotSettings)) {
@@ -427,7 +456,7 @@ try {
         # The per-framework results are unioned below, so extra passes cost time but
         # lose no coverage: each pass reports its own branch of an #if, and together
         # they report exactly what a single all-frameworks pass reports. On a
-        # single-target branch (net8.0 only, issue #4497) that is one pass and the
+        # single-target tree (net10.0 only, PR #4619) that is one pass and the
         # race cannot arise at all.
         #
         # Read from Directory.Build.props rather than hardcoded, because the set
@@ -620,6 +649,12 @@ try {
             Write-Host "  JSON:     $CoverageOutputPath" -ForegroundColor Gray
         }
 
+        if ($Culture) {
+            $env:OSPREY_TEST_CULTURE = $Culture
+            Write-Host "Test culture: $Culture (OSPREY_TEST_CULTURE)" -ForegroundColor Cyan
+        } else {
+            Remove-Item Env:OSPREY_TEST_CULTURE -ErrorAction SilentlyContinue
+        }
         $testStart = Get-Date
         if ($Coverage) {
             # Wrap vstest.console.exe with dotCover. Filters keep the Osprey.*
@@ -638,6 +673,17 @@ try {
                 "--"
             ) + $targetArgs
             & $dotCoverExe $coverArgs
+            $testExitCode = $LASTEXITCODE
+        } elseif ($useDotnetMsbuild) {
+            # Visual Studio 2022's vstest cannot host a net10.0 test assembly either.
+            $dotnetTestArgs = @('test', $testDll, '--nologo')
+            if ($TestName) {
+                Write-Host "Running test: $TestName" -ForegroundColor Cyan
+                $dotnetTestArgs += @('--filter', "Name~$TestName")
+            } else {
+                Write-Host "Running all Osprey unit tests..." -ForegroundColor Cyan
+            }
+            & dotnet $dotnetTestArgs
             $testExitCode = $LASTEXITCODE
         } elseif ($TestName) {
             Write-Host "Running test: $TestName" -ForegroundColor Cyan

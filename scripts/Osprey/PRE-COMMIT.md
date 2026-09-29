@@ -4,8 +4,9 @@ Required validation before committing Osprey changes.  The project
 holds zero ReSharper warnings.  Catching issues here takes a couple of
 minutes; catching them after commit requires a cleanup commit later.
 
-The inspection runs `jb inspectcode` once per target framework
-(net472 and net8.0) and unions the results.  That is deliberate: a
+The inspection runs `jb inspectcode` once per declared target framework
+and unions the results (one pass on net10.0; an older tree that still
+multi-targets runs net472 and net8.0).  That is deliberate: a
 single all-frameworks pass analyzes each file in both preprocessor
 contexts at once, and inline `// ReSharper disable` suppressions are
 then honored nondeterministically - the gate reported 0 or 9 warnings
@@ -68,12 +69,14 @@ gate (speed not degraded).
 
 The self-contained, straight-through end-to-end regression.  No Rust
 checkout required -- it compares against a committed Osprey golden
-(`osprey-regression.data/`) plus a resume self-consistency leg, both at
-1e-9.  This is the same harness TeamCity runs overnight on Osprey
-PRs.
+(`osprey-regression.data/`) at 1e-9.  This is the same harness TeamCity
+runs overnight on Osprey PRs.  Pipeline behavior (resume, rehydrate, the
+HPC chain, sidecars, diagnostics) is covered by `SubsetPipelineTest` in
+the unit tests, which run first; a new check of pipeline behavior goes
+there, not into a new regression leg (#4728).
 
 ```powershell
-# Stellar (mode 1 vs golden, mode 2 resume, mode 5 Stage-5 rehydrate): the routine per-change gate
+# Stellar (mode 1 vs golden, warm re-run, fragment release): the routine per-change gate, after the unit tests
 pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar
 
 # Stellar + Astral: before a behavior/perf-sensitive merge

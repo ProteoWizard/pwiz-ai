@@ -72,6 +72,17 @@
     and the output-directory name. At 82 files the run-level union is 12.95% false where the
     experiment-wide q is 0.79%, which is the whole point of the arm.
 
+.PARAMETER SvmCTolerance
+    First-pass SVM C-selection tolerance, exported as OSPREY_SVM_C_TOLERANCE (pwiz #4703).
+    Empty (the default) leaves Osprey's own default; '0' is the strict maximum of the inner-CV
+    counts that Percolator and mokapot use. Like -QualifyBy it is a parameter because the
+    module strips the variable: exporting it yourself has no effect. Recorded in the banner,
+    run.log and the directory name (-csel<value>).
+
+.PARAMETER SvmCValues
+    EXPERIMENTAL first-pass SVM C grid, exported as OSPREY_SVM_C_VALUES (a build that has the
+    override). '0.1' fixes C for every fold and iteration. Empty leaves Osprey's grid.
+
 .PARAMETER LinkFrom
     Optional. Hard-link the per-file caches from a COMPLETED run over the same file set so
     this run resumes without re-parsing or re-scoring. What is linked is scoped by -Task:
@@ -104,6 +115,11 @@
 .PARAMETER NoModelDiagnostics
     Turn OFF the --model-diagnostics HTML report, which is on by default here. Leave it on
     unless you have a reason: it is the only place pass-1 entrapment FDP is reported today.
+
+.PARAMETER NoPerfStats
+    Leave out --perf-stats, which is on by default here so the log carries the [PATH] /
+    [COUNT] / [STAGE-WALL] lines the route checks and memory scripts read. Use it for a run
+    whose purpose is to read the default log a user sees.
 
 .PARAMETER Fresh
     Timestamp the output directory name. Use when repeating an arm you have already run:
@@ -142,6 +158,8 @@ param(
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
     [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
+    [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
+    [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
@@ -155,6 +173,7 @@ param(
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,
+    [switch]$NoPerfStats,
     [switch]$WhatIf
 )
 

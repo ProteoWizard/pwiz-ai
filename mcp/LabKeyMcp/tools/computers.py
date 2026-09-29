@@ -28,6 +28,7 @@ import labkey
 from .common import (
     get_server_context,
     get_daily_history_dir,
+    save_json_state,
     get_labkey_session,
     _server_url,
     DEFAULT_SERVER,
@@ -83,10 +84,8 @@ def _load_status_history() -> dict:
 def _save_status_history(history: dict):
     """Save computer status history to JSON file."""
     history_file = _get_history_file()
-    history_file.write_text(
-        json.dumps(history, indent=2, default=str),
-        encoding="utf-8"
-    )
+    # Atomic write with rotation - holds deactivation records and alarms.
+    save_json_state(history_file, history)
 
 
 def _get_user_id(

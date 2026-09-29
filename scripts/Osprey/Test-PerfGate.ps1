@@ -70,7 +70,7 @@
     regressions are reported as warnings, never gate failures. Default 5.
 
 .PARAMETER SkipBuild
-    Use the existing Release/net8.0 binaries under each root (skip the two builds).
+    Use the existing Release/net10.0 binaries under each root (skip the two builds).
     Only safe when both binaries are already current.
 
 .PARAMETER Threads
@@ -229,9 +229,9 @@ function Get-OspreyTfm {
         $m = [regex]::Match((Get-Content -LiteralPath $props -Raw),
                             '<TargetFrameworks?>([^<]+)</TargetFrameworks?>')
         if ($m.Success) {
-            # NOT the first entry: the pinned baseline still declares net472;net8.0 and
-            # net472 is listed first, but this harness has always measured the modern
-            # runtime. Take the highest net<N>.0 and ignore .NET Framework entirely.
+            # NOT the first entry: an older baseline declares net472;net8.0 with net472
+            # first, but this harness has always measured the modern runtime. Take the
+            # highest net<N>.0 and ignore .NET Framework entirely.
             # @() so a single match stays an array - indexing [-1] into a bare string
             # returns its last CHARACTER ('0'), which silently yields a bogus exe path.
             $modern = @($m.Groups[1].Value -split ';' |
@@ -241,7 +241,7 @@ function Get-OspreyTfm {
             if ($modern.Count -gt 0) { return $modern[-1] }
         }
     }
-    return 'net8.0'
+    return 'net10.0'
 }
 
 function Get-OspreyBin {
@@ -272,10 +272,11 @@ if (-not $SkipBuild) {
     $buildScript = Join-Path $scriptDir 'Build-Osprey.ps1'
     foreach ($key in $variants.Keys) {
         $root = $variants[$key].Root
-        # Build-Osprey.ps1 reads the branch's declared TFM off disk and corrects a
-        # request the branch does not target, so net8.0 here is a floor, not a pin.
-        Write-Host ("Building {0} (Release/{1}): {2}" -f $key, (Get-OspreyTfm $root), $root) -ForegroundColor Cyan
-        & $buildScript -SourceRoot $root -Configuration Release -TargetFramework net8.0 -Summary
+        # Each root builds its OWN declared framework (Get-OspreyTfm), so a baseline still
+        # on net8.0 and a net10.0 branch each get the build they actually target.
+        $tfm = Get-OspreyTfm $root
+        Write-Host ("Building {0} (Release/{1}): {2}" -f $key, $tfm, $root) -ForegroundColor Cyan
+        & $buildScript -SourceRoot $root -Configuration Release -TargetFramework $tfm -Summary
         if ($LASTEXITCODE -ne 0) { throw "Build failed for ${key} at $root (exit $LASTEXITCODE)" }
     }
 }

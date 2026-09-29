@@ -16,6 +16,7 @@ ai/scripts/Osprey/
   PRE-COMMIT.md                 pre-commit + pre-PR validation gates
 
   Build-Osprey.ps1         build the .sln (+ optional tests/inspection/coverage)
+  Update-OspreyResxDesigners.ps1  regenerate each Osprey .resx Designer.cs (ResGen)
   Summarize-Coverage.ps1        summarize a dotCover JSON report (whole-project)
   Run-Osprey.ps1                run Osprey or Rust osprey on a dataset
   Run-FdrBench.ps1              FDRBench entrapment-calibration driver
@@ -39,6 +40,8 @@ ai/scripts/Osprey/
     Run-CarafeOspreyWorkflow.ps1  6-stage Carafe + Osprey library build
     tools/                      natural-entrapment generator, m/z occupancy
 
+  SubsetData/                   regenerate Osprey.Test's small real-data zips (README.md)
+
   Compare/                      cross-impl bridge (used rarely now)
     README.md                   when/how to use the cross-impl gate
     Build-OspreyRust.ps1
@@ -61,8 +64,16 @@ pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1
 # Build + run all unit tests
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests
 
-# Build + ReSharper inspection (zero-warning gate)
+# Build + ReSharper inspection (zero-warning gate). Results go to
+# ai/.tmp/OspreyInspect-<checkout>.net10.0.xml, one file per checkout.
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunInspection
+
+# Unit tests under another culture (OSPREY_TEST_CULTURE): ja-JP proves assertions read
+# resources, fr-FR proves program-read numbers are invariant
+pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests -Culture fr-FR
+
+# After editing a .resx outside Visual Studio
+pwsh -File ./ai/scripts/Osprey/Update-OspreyResxDesigners.ps1 -SourceRoot <checkout>
 ```
 
 See [PRE-COMMIT.md](PRE-COMMIT.md) for the full pre-commit gate.
@@ -217,6 +228,10 @@ pwsh -File ./ai/scripts/Osprey/Combine-Stage5-Profile.ps1 -CsharpDtp ... -RustJs
 | Stellar | `D:\test\osprey-runs\stellar\` | `hela-filtered-SkylineAI_spectral_library.tsv` | `unit` | 20, 21, 22 |
 | Astral  | `D:\test\osprey-runs\astral\`  | `SkylineAI_spectral_library.tsv` | `hram` | 49, 55, 60 |
 | AstralLibraryDecoy | `D:\test\osprey-runs\astral-libdecoy\` | `SkylineAI_entrapment_carafe_spectral_library.tsv` | `hram` | 49, 55, 60 |
+
+For unit tests, `Osprey.Test/TestData` holds `StellarSubset.zip` and `AstralSubset.zip`: one
+isolation window x a few minutes of these runs, which `SubsetPipelineTest` runs through the whole
+pipeline in-process in seconds. `SubsetData/build_subset.py` regenerates them.
 
 Override the base via `-TestBaseDir`, `$env:OSPREY_TEST_BASE_DIR`,
 or rely on the default.  Stellar requires `--resolution unit`;

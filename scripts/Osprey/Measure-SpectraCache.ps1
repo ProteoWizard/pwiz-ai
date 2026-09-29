@@ -51,7 +51,7 @@
     Per-run logs and the markdown report. Default ai\.tmp\spectra-cache\<UTC stamp>\.
 
 .EXAMPLE
-    # Recapture the net8.0 conversion numbers on whatever this tree targets now.
+    # Recapture the conversion numbers on whatever this tree targets now.
     pwsh -File ./ai/scripts/Osprey/Measure-SpectraCache.ps1 -SourceRoot C:\proj\pwiz-osprey
 #>
 #requires -Version 7
@@ -99,7 +99,7 @@ function Get-OspreyTfm {
             if ($modern.Count -gt 0) { return $modern[-1] }
         }
     }
-    return 'net8.0'
+    return 'net10.0'
 }
 
 $tfm = Get-OspreyTfm $SourceRoot
@@ -135,10 +135,8 @@ Write-Host ""
 if (-not $SkipBuild) {
     foreach ($cfg in $configs) {
         Write-Host ("Building {0} ({1})" -f $cfg, $tfm) -ForegroundColor Cyan
-        # net8.0 is a floor, not a pin: Build-Osprey.ps1 reads the declared TFM off disk
-        # and corrects a request the branch does not target.
         & (Join-Path $scriptDir 'Build-Osprey.ps1') -SourceRoot $SourceRoot `
-            -Configuration $cfg -TargetFramework net8.0 -Summary
+            -Configuration $cfg -TargetFramework $tfm -Summary
         if ($LASTEXITCODE -ne 0) { throw "Build failed for $cfg (exit $LASTEXITCODE)" }
     }
 }

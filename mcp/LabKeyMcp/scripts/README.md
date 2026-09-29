@@ -40,6 +40,22 @@ mcp__labkey__save_run_metrics_csv(start_date="1y", granularity="run")
 
 See comments in the script for detailed documentation.
 
+### scan_testrunner_crashes.py
+
+Scans the stored logs of every early-ending run in the six nightly folders for TestRunner
+process crashes (`Process TestRunner had nonzero exit code`). Per computer, it separates
+crashes on shared-build days (3+ computers) from solo crashes, and labels solo streaks
+`HARDWARE PATTERN` (unrelated tests) or `SAME-TEST PATTERN`.
+
+```bash
+python ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py --since 2026-06-01
+python ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py --since 2017-10-01 --out ai/.tmp/crash-scan.csv
+```
+
+Uses `tools.common.make_authenticated_request` (auth via `_netrc`). A 3-month scan takes
+about a minute; the full history since 2017 (~2,800 runs) a few minutes. Interpretation:
+[failing-hardware-detection.md](../../../docs/failing-hardware-detection.md).
+
 ## Related Documentation
 
 - [Nightly Tests MCP Tools](../../../docs/mcp/nightly-tests.md)

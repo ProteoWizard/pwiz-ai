@@ -86,7 +86,7 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $PSCommandPath
 $projectRoot = (Resolve-Path (Join-Path $scriptDir '..\..\..')).Path   # ai/scripts/Osprey -> root
 $pwizRoot = Join-Path $projectRoot 'pwiz'
-$ospreyBinDir = Join-Path $pwizRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0'
+$ospreyBinDir = Join-Path $pwizRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0'
 $ospreyExe = Join-Path $ospreyBinDir 'Osprey.exe'
 $buildScript = Join-Path $scriptDir 'Build-Osprey.ps1'
 $summarizeScript = Join-Path $scriptDir 'Summarize-Coverage.ps1'
@@ -122,7 +122,7 @@ function Resolve-DotCover {
 
 # ----------------------------------------------------------------------------
 if (-not (Test-Path $ospreyExe)) {
-    throw "Osprey.exe not found at $ospreyExe -- build Release/net8.0 first (Build-Osprey.ps1)."
+    throw "Osprey.exe not found at $ospreyExe -- build Release/net10.0 first (Build-Osprey.ps1)."
 }
 $dotCover = Resolve-DotCover
 $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
@@ -142,9 +142,9 @@ $snapshots = [System.Collections.Generic.List[string]]::new()
 if (-not $SkipUnit) {
     Write-Host "[unit] tests under dotCover ..." -ForegroundColor Cyan
     $unitJson = Join-Path $OutDir 'unit.json'
-    # Match the net8.0 Release binaries the regression leg runs, so the merged
-    # snapshot is one coherent build (not net472 unit + net8.0 pipeline).
-    & $buildScript -Coverage -Configuration Release -TargetFramework net8.0 -CoverageOutputPath $unitJson | Out-Host
+    # Match the net10.0 Release binaries the regression leg runs, so the merged
+    # snapshot is one coherent build.
+    & $buildScript -Coverage -Configuration Release -TargetFramework net10.0 -CoverageOutputPath $unitJson | Out-Host
     $unitSnap = Join-Path $OutDir 'unit.dcvr'
     if (-not (Test-Path $unitSnap)) { throw "Unit coverage snapshot not found at $unitSnap" }
     $snapshots.Add($unitSnap)

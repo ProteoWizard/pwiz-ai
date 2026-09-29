@@ -839,10 +839,21 @@ pip install "mcp<2" labkey Pillow
 
 > **Existing mode**: Check if build artifacts already exist (from your pwiz checkout):
 > ```powershell
-> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe"
+> # master (Boost.Build) - the artifact is Skyline-daily.exe, not Skyline.exe
+> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe"
 > Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe"
+>
+> # .NET 10 port branch (PR #4619) - a different output tree entirely
+> Test-Path "pwiz\pwiz_tools\Skyline\bin\Release\net10.0-windows\Skyline-daily.exe"
 > ```
-> If both exist and the user confirms the build is recent, skip to Phase 5.
+> If they exist and the user confirms the build is recent, skip to Phase 5.
+>
+> **Check the branch before the path.** A port-branch checkout builds to
+> `bin\Release\net10.0-windows\`, so the `bin\x64\` probes
+> return False on a perfectly good build - and an `x64` tree that IS present there is stale
+> pre-port output rather than a current build. Observed 2026-09-20: a port-branch checkout
+> held `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe` dated five months before its
+> actual port-branch binaries, with 888 MB of Boost output behind it.
 
 ### 4.1 Vendor License Agreement
 
@@ -1180,9 +1191,12 @@ git config --global core.autocrlf  # Should be: true
 # Repository cloned (run from your project root)
 Test-Path pwiz\pwiz_tools\Skyline\Skyline.sln  # Should be: True
 
-# Build artifacts exist (from bs.bat in Phase 4)
+# Build artifacts exist (from bs.bat in Phase 4) - master (Boost.Build)
 Test-Path pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe  # Should be: True
 Test-Path pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe  # Should be: True
+
+# On the .NET 10 port branch (PR #4619) check this instead - the x64 tree is not used
+Test-Path pwiz\pwiz_tools\Skyline\bin\Release\net10.0-windows\Skyline-daily.exe  # Should be: True
 ```
 
 ---
@@ -1614,6 +1628,8 @@ For developers not touching `maccoss/osprey`, skip this entirely.
 
 Set up this machine to run Skyline nightly tests. This downloads the latest test harness from TeamCity and configures a scheduled task.
 
+> **New or repaired hardware**: nightly testing is also the lab's hardware acceptance test. Run it 21 hours a day (one 9-hour standard run plus one 12-hour perf or leak-detection run) for at least 2 days before handing the machine to a developer. See [failing-hardware-detection.md](failing-hardware-detection.md#machine-acceptance-test).
+
 > **Existing mode**: Check if nightly tests are already configured:
 > ```powershell
 > # Check for existing scheduled task
@@ -1861,7 +1877,9 @@ The setup is complete when:
 3. `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe` exists
    (the standard build brands the artifact `Skyline-daily.exe`, **not** `Skyline.exe` — checking
    for `Skyline.exe` reports a false failure on a perfectly good build; `TestRunner.exe` should
-   be there too)
+   be there too). **On the .NET 10 port branch the path is
+   `pwiz\pwiz_tools\Skyline\bin\Release\net10.0-windows\Skyline-daily.exe`** - the `x64` tree belongs to
+   the Boost build and is absent, or stale, on that branch.
 4. Visual Studio can build the solution without errors
 5. A real test passes, run through the AI script rather than `TestRunner.exe` directly:
    ```powershell

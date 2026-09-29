@@ -77,6 +77,7 @@ param(
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,
+    [switch]$NoPerfStats,
     [switch]$WhatIf
 )
 

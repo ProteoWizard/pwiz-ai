@@ -377,7 +377,7 @@ When extending these scripts, the canonical Rust root is
 ## Long runs lock Osprey.exe - snapshot the binary first
 
 **Windows locks a running executable.** A long Osprey run holds
-`Osprey\bin\x64\Release\net8.0\Osprey.exe` open for its whole duration, so MSBuild cannot
+`Osprey\bin\x64\Release\net10.0\Osprey.exe` open for its whole duration, so MSBuild cannot
 relink and **every build fails until the run ends**. On an overnight regression or a
 multi-hour large-file run that blocks all code work - you cannot respond to review
 feedback, cannot try a fix, cannot even build to check a compile error. Sessions have
@@ -387,7 +387,7 @@ not build.
 **Copy the binaries somewhere off the build tree and run the long job from the copy.**
 
 ```powershell
-$src  = 'C:\proj\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0'
+$src  = 'C:\proj\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0'
 $snap = 'D:\test\osprey-runs\_bin\master-snapshot'
 New-Item -ItemType Directory -Path $snap -Force | Out-Null
 Copy-Item "$src\*" $snap -Recurse -Force
@@ -1292,8 +1292,11 @@ Patterns the pipeline now relies on:
   ties; matches the comment "first C as tiebreaker" that the Rust
   code didn't originally implement). `Iterator::max_by_key` returns
   the *last* tied element per stdlib docs — don't use it for
-  tie-sensitive selection. Manual scan with strict `>` is what both
-  tools now use.
+  tie-sensitive selection. The strict-`>` scan is now the tolerance-0
+  case: since pwiz #4703 and maccoss/osprey#69 both implementations keep
+  the most regularized C within 1% of the best count (C#
+  `PercolatorTrainer.SelectC`, Rust `svm::select_c`). The `Compare/`
+  scripts clear an inherited `OSPREY_SVM_C_TOLERANCE` so the two match.
 - **Non-conservative FDR formula `n_decoy / n_target`** for
   internal grid-search counting in
   `count_passing_targets_svm` — matches `compute_qvalues` on the
@@ -1592,7 +1595,7 @@ unaffected. Drive it via:
 pwsh -File ai/scripts/Osprey/Profile-Osprey.ps1 -Dataset Astral -MemoryProfile
 ```
 
-This forces `net8.0`, sets `OSPREY_LOG_MEMORY=1`, runs ONE file through
+This runs the Release net10.0 build, sets `OSPREY_LOG_MEMORY=1`, runs ONE file through
 Stage 1-4 scoring under `dotMemory start --use-api`, and writes a `.dmw`
 to `ai/.tmp`. It is a **scoped diagnosis run, not the batch** -- memory is
 stable file-to-file, so one file captures the whole per-file envelope;
@@ -1699,7 +1702,9 @@ Differences from Skyline WORKFLOW.md:
   and `git show` applies the checkout smudge, so neither is a raw-bytes view.
   Use `git cat-file blob <sha>:<path> | tr -cd '\r' | wc -c` (or `| od -c |
   head`, `| file -`).
-- **No `Co-Authored-By: Claude` trailer** unless Mike opts in.
+- **`Co-Authored-By: Claude <noreply@anthropic.com>` trailer**, the same line as pwiz (Mike's
+  and Brendan's merged Rust commits carry it since #68, and `Deny-HarnessAttribution.ps1`
+  requires it). Still no `Claude-Session:` line, model name or emoji.
 - **Reasonable prose is fine.** The Skyline 10-line cap is a
   Skyline-team convention.
 - **Cross-references** to related PRs are welcome
@@ -1723,10 +1728,21 @@ EOF
 
 ### Base branch while the .NET 10 port (PR #4619) is open
 
-C# Osprey PRs currently base on **`Skyline/work/20260612_net8_port`** (Matt's .NET 10
-port, pwiz#4619), not `master`. The port branch is the team's integration branch for
+**All C# Osprey work starts from and returns to `Skyline/work/20260612_net8_port`**
+(Matt's .NET 10 port, pwiz#4619); Osprey is no longer developed on `master`. Branch
+from `origin/Skyline/work/20260612_net8_port` in whichever checkout holds that branch on
+the machine (`pwiz` itself on some, a sibling checkout on others) and update by merging
+that branch, not master.
+The port branch is the team's integration branch for
 nightly testing and is expected to become master once the release question is settled;
 merge-vs-squash of #4619 itself is Brendan's call.
+
+**Osprey is .NET 10 (net10.0) only, and stays that way.** The branch name says `net8` for
+history; the port targets .NET 10. Unlike Skyline and ProteoWizard, Osprey has no reason
+to ship as .NET Framework 4.7.2 or .NET 8.0, so net472 and net8.0 are not coming back.
+Scripts and docs name `Release\net10.0`; a `net8.0` or `net472` folder under a checkout's
+`bin/` or `obj/` is a stale build to delete, never a fallback. (Master still declares
+`net472;net8.0` until #4619 merges; nothing new is built there.)
 
 Why not master: master's `Osprey Windows .NET` build is red on every new ephemeral
 TeamCity agent (`pwiz-windows-i-*`) - its `tcbuild.bat` wants a globally installed
@@ -1738,6 +1754,9 @@ in** (merge, never rebase, once the PR has review history).
 - New branches: `gh pr create --base Skyline/work/20260612_net8_port`; `/pw-complete`
   works with the base and tracking branch swapped for master. Squash subjects are still
   `osprey: ... (#N)`.
+- MARS (`maccoss/mars`) vendors `Osprey.ML/GradientBoostedTrees.cs` and `XorShift64`
+  (`dotnet/scripts/sync-osprey-ml.ps1`). Re-sync it from a port-branch checkout, never
+  master: the squared-error objective MARS trains with (#4595) is only on the port branch.
 - Build **x64** in Visual Studio: the solution's Any CPU configuration fails there
   because VS never builds out-of-solution project references (`ProteowizardWrapper`
   and pwiz-sharp are not in `Osprey.sln`); command-line `msbuild` is fine either way.
@@ -1746,8 +1765,8 @@ in** (merge, never rebase, once the PR has review history).
 - `Osprey Linux .NET` was red on the port branch itself while the Linux agent was being
   provisioned; check `pull/4619` before reading it as a signal about your PR.
 
-**Delete this subsection** when #4619 merges and all Osprey work returns to master with
-no net472 work remaining.
+**Delete this subsection** when #4619 merges and all Osprey work returns to master, but
+keep the net10.0-only paragraph: move it to the top of this guide.
 
 ## Differences from Skyline's WORKFLOW.md
 
@@ -1983,8 +2002,8 @@ it. When a PR is otherwise ready (review findings settled, the
 `Osprey Windows .NET` unit build green), it must run before human review / merge.
 
 **Every dataset, and on each one the modes its SkipModes leaves.** No `-Skip*`
-switch is passed (`-SkipResume`, `-SkipWarmRerun`, `-SkipRehydrate`,
-`-SkipHpcChain` all default false), so the config runs whatever `regression.ps1`
+switch is passed (`-SkipResume`, `-SkipWarmRerun`, `-SkipHpcChain` all default
+false), so the config runs whatever `regression.ps1`
 currently defines per dataset - which since 2026-09-12 is deliberately NOT every
 mode everywhere. Do not maintain a mode list here: this sentence read "mode1/2/3"
 for months after modes 4-6 were added, and was quoted back as fact.
@@ -2018,21 +2037,31 @@ dataset's `SkipModes` now carries that decision for every mode, not just mode 2,
 mode emits NO summary line - a designed omission is not a SKIP. **SKIP now means a `-Skip*`
 switch was passed**, i.e. the run was not a full one.
 
+**And since 2026-09-29 (#4728): pipeline behavior is not a leg here at all.** Resume,
+rehydrate, rescore-resume, the alternate pass-2 arm, diagnostics regeneration and pay-later
+(modes 5 and 7-11) moved to `Osprey.Test\SubsetPipelineTest.cs`, which runs them on subset
+data on every commit, each red-checked against the defect its leg was written for. What
+stays is results at real-data scale: goldens, FDR bounds, and mode 3's chain against
+straight-through at full size. A new check of pipeline behavior goes in the subset tests;
+the rule is at the top of `regression.ps1`.
+
 | dataset | what it is FOR | runs | cut |
 |---|---|---|---|
-| `StellarLibDecoy` | the recommended product path, and the cheapest full-coverage config | everything | - |
-| `Stellar` | the default product path (generated decoys, unit, no diagnostics) | 1, 1c, 2, 3, 4, 5, 6 | 8, 9 |
-| `StellarGenDecoyEntrap` | the decoy-construction oracle | 1, 1b, 1c, 2, 4, 6, 12 | 3, 5, 7, 8, 9, 11 |
-| `Astral` | hram scoring and the gap-fill rows only hram produces | 1, 1b, 1c, 3, 4, 6 | 2, 5, 7, 8, 9, 11 |
+| `StellarLibDecoy` | the recommended product path, and the cheapest full-coverage config | 1, 1b, 1c, 2, 3, 4, 6 | - |
+| `Stellar` | the default product path (generated decoys, unit, no diagnostics) | 1, 1c, 4, 6 | 2, 3 |
+| `StellarGenDecoyEntrap` | the decoy-construction oracle | 1, 1b, 1c, 2, 4, 6, 12 | 3 |
+| `Astral` | hram scoring and the gap-fill rows only hram produces | 1, 1b, 1c, 3, 4, 6 | 2 |
 
-Summary-line counts on a green `-Dataset All`: **Stellar 17, StellarLibDecoy 27,
-StellarGenDecoyEntrap 12, Astral 14.** A short count is what distinguishes an aborted run.
-Mode 2 stays on `StellarGenDecoyEntrap` because it carries the second half of mode 12 (the
-FDRBench resume identity); mode 3 stays on Astral because it is the only leg that ships hram's
-gap-fill rows across a process boundary. Wall time went from 65 min to ~44 min on the dev box,
-with the lanes rebalanced to Astral+StellarGenDecoyEntrap | Stellar+StellarLibDecoy.
+Summary-line counts on a green `-Dataset All`: **Stellar 5, StellarLibDecoy 17,
+StellarGenDecoyEntrap 12, Astral 14** (48 total). A short count is what distinguishes an
+aborted run. Mode 2 stays on `StellarGenDecoyEntrap` because it carries the second half of
+mode 12 (the FDRBench resume identity); mode 3 stays on Astral because it is the only leg
+that ships hram's gap-fill rows across a process boundary, at a scale no subset reproduces.
+Measured 2026-09-29 on the dev box: 33:41 wall, lanes 1,288 s (Stellar+StellarLibDecoy) and
+2,020 s (Astral+StellarGenDecoyEntrap). The Astral lane is the wall; the Stellar-only smoke
+test went from 839 s of legs to ~260 s.
 
-The accounting below predates the cut and is kept for the asymmetries that are about the
+The accounting below predates both cuts and is kept for the asymmetries that are about the
 DATASETS rather than the mode list - which library each is searched against, which tier-2
 bound applies, and what reads a leg's log.
 
@@ -2077,11 +2106,12 @@ release fired on every leg that HOLDS the library, and it inspects **eight** leg
 four KINDS its header lists - the `--task PerFileRescoring` kind expands to one check per
 file stem (three of them), and `resume.log` (mode 2) and `rehydrate.log` (mode 5) are
 among the rest. Its check list is gated on `SkipModes` for exactly this reason, and it
-reports its leg count on PASS so a shrinking set is visible. Under the sparse matrix a green
-`-Dataset All` shows `PASS (8 leg(s))` on Stellar and StellarLibDecoy, `PASS (6 leg(s))` on
-Astral (no resume, no rehydrate) and `PASS (2 leg(s))` on StellarGenDecoyEntrap (straight and
-resume only - it runs no HPC chain and no rehydrate). Cutting a mode therefore silently
-shrinks mode 6's evidence too; that count is how you see it.
+reports its leg count on PASS so a shrinking set is visible. Since #4728 a green
+`-Dataset All` shows `PASS (7 leg(s))` on StellarLibDecoy, `PASS (6 leg(s))` on Astral,
+`PASS (2 leg(s))` on StellarGenDecoyEntrap and `PASS (1 leg(s))` on Stellar (straight only).
+The own-sidecar rehydrate's release moved with mode 5: `SubsetPipelineTest` asserts it,
+#4650 count oracle included. Cutting a mode therefore silently shrinks mode 6's evidence
+too; that count is how you see it, and the cut's subset twin must pick up what it read.
 
 `StellarGenDecoyEntrap` is the only leg that can catch a decoy-construction
 regression: it is the sole configuration where `DecoyGenerator` runs AND an

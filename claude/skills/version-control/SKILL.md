@@ -228,6 +228,10 @@ for pwiz feature branches) by passing `--rebase` explicitly for pwiz-ai work.
 If the rebase hits a conflict (rare for `ai/`), resolve it, `git rebase --continue`,
 then push. Do not fall back to a merge to avoid the conflict.
 
+This covers a remote that moved while you worked. Bringing a stale checkout current
+*before* editing is a separate step - see "Update Before Editing ai/" in
+ai/docs/ai-repository-strategy.md.
+
 ## PR Description Format
 
 Title and label carry the module — see "Module Tagging" above:

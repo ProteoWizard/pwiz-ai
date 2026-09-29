@@ -49,7 +49,7 @@ output is older than that side's newest source file, naming both timestamps.
 `-AllowStaleBinaries` overrides it when the mismatch is deliberate.
 
 The freshness check compares against the newest build output *beside* the exe,
-not the exe itself: on net8.0 `Osprey.exe` is only the apphost stub and
+not the exe itself: on .NET (net10.0) `Osprey.exe` is only the apphost stub and
 `Osprey.dll` the entry assembly, so a change confined to a dependency project
 (`Osprey.Core`, `.Scoring`, `.FDR`, `.Tasks`, ...) rebuilds only that dll and
 leaves both untouched.  Timestamping the exe alone reports a false "stale"
@@ -97,3 +97,19 @@ fresh failure surfaces and the end-to-end gate doesn't tell you
 which stage diverged, those scripts are the next step in.  They are
 sprint-specific and not maintained; expect to rebuild them rather
 than treat them as supported.
+
+## Demultiplexed spectra (not cross-impl)
+
+`Compare-DemuxSpectra.py --reference <a.spectra.bin> --test <b.demux.spectra.bin>` pairs two sets
+of demultiplexed MS2 spectra by parent retention time and bin center and reports cosine
+similarity, total-intensity ratio and exclusive-peak intensity, overall, by bin and for the
+worst pairs. Its first use is spectrum-level G7.1 of the Osprey demux work: Osprey's
+`--demux auto` against msconvert's `demultiplex optimization=overlap_only`, the latter read into
+a plain cache by `--task SpectraCache`. Unlike `Compare-SpectraCache.ps1` it measures closeness,
+not byte parity. See TODO-20260923_osprey_demux.md.
+
+`Measure-StaggerConsistency.py --reference NAME=<cache> --input NAME=<cache> ...` is the
+library-free accuracy proxy for k=2 staggered demux. Each bin is sampled alternately through its
+two parent windows, so a biased split between bins shows as a zig-zag in the bin's fragment
+chromatograms. Events (bin, fragment channel, apex) are found once in the reference output and
+measured identically in every input; lower zigzag means the two parent windows agree better.

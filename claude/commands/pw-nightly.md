@@ -29,5 +29,6 @@ This queries all 6 test folders and saves a full report to `ai/.tmp/nightly-repo
 
 - **Stack trace patterns**: `save_test_failure_history(test_name, start_date, container_path)`
 - **Full test logs**: `save_run_log(run_id)`
+- **Crashed runs** (`short` anomaly): if TestRunner died with an access violation on one machine and in a different test each time, suspect **failing hardware** and say so up front. See **ai/docs/failing-hardware-detection.md**
 
 For detailed workflow and examples, see **ai/docs/mcp/nightly-tests.md**.

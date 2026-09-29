@@ -62,6 +62,17 @@
 .PARAMETER Threads
     --threads CLI flag. Default 16.
 
+.PARAMETER CsSvmCTolerance
+    OSPREY_SVM_C_TOLERANCE for the C# run. Default '' (unset): C# at its own default, the most
+    regularized C within 1% of the best, which Rust main also uses since maccoss/osprey#69
+    (it has no opt-out). Pass '0' only to compare against a Rust build from before #69, which
+    kept the strict maximum.
+
+.PARAMETER SourceRoot
+    The pwiz checkout whose C# Osprey build to compare, e.g. C:\proj\pwiz-work1. Default:
+    Get-PwizRoot (<project root>\pwiz, or $env:PWIZ_ROOT). Same meaning as Build-Osprey.ps1's
+    -SourceRoot: without it a sibling checkout's build is silently not the one compared.
+
 .PARAMETER AllowStaleBinaries
     Skip the binary-freshness guard. This script RUNS PREBUILT BINARIES and
     builds neither side, so by default it refuses to run when either exe is
@@ -77,9 +88,9 @@ param(
     [switch]$SkipRust,
     [switch]$SkipCs,
     [switch]$AllowStaleBinaries,
+    [string]$SourceRoot,
     [int]$Threads = 16,
-    [ValidateSet('net472','net8.0')]
-    [string]$Framework = 'net8.0',
+    [string]$CsSvmCTolerance = '',
     [string]$Files = 'All'
 )
 
@@ -94,12 +105,17 @@ $configCandidates = @(
 )
 foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
 
+# Every C#-side path below (exe, freshness roots, regression data helper, workdir) goes
+# through Get-PwizRoot, so pointing it at -SourceRoot moves all of them together. Process-
+# scoped: the caller's environment is untouched.
+if ($SourceRoot) { $env:PWIZ_ROOT = (Resolve-Path $SourceRoot).Path }
+
 $ospreyExe = Get-OspreyRustExe
 if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe (Rust) not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2
 }
-$ospreyShExe = Get-OspreyExe -Framework $Framework
+$ospreyShExe = Get-OspreyExe
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2
@@ -137,7 +153,7 @@ function Get-NewestSourceFile {
 }
 
 # The newest build output beside the exe -- NOT the exe itself.
-# On net8.0 `Osprey.exe` is only the apphost stub and `Osprey.dll` is the entry
+# On .NET (net10.0) `Osprey.exe` is only the apphost stub and `Osprey.dll` is the entry
 # assembly; a change confined to a dependency project (Osprey.Core, .Scoring,
 # .FDR, .Tasks, ...) rebuilds ONLY that dll and leaves both of those untouched.
 # Timestamping the exe therefore reports "stale" immediately after a successful
@@ -311,12 +327,11 @@ function Invoke-Tool {
 
 function Get-PrecursorCount {
     param([string]$LogPath)
-    # Rust logs "Wrote N precursors"; C# logs "Wrote N library spectra to
-    # output.blib" (reworded by the 2026-06 console-output pass -- an optional
-    # qualifier word can sit between the count and "spectra"). Both forms refer
-    # to the same blib RefSpectra row count.
-    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d+)\s+(?:\w+\s+)?(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
-    if ($m -and $m.Matches.Count -gt 0) { return [int]$m.Matches[0].Groups[1].Value }
+    # Rust logs "Wrote N precursors"; C# logs "Wrote N library spectra with M peaks
+    # across R runs to output.blib", N with thousands separators since 2026-09-24.
+    # Both N refer to the same blib RefSpectra row count.
+    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d[\d,]*)\s+(?:\w+\s+)?(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
+    if ($m -and $m.Matches.Count -gt 0) { return [int]($m.Matches[0].Groups[1].Value -replace ',', '') }
     return -1
 }
 
@@ -421,10 +436,19 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
                 '--work-dir', $csDir)
     $args2 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
+    # Both implementations keep the most regularized first-pass SVM C within 1% of the best
+    # (C# #4703, Rust #69). An INHERITED value would still split them at Stage 5, so the
+    # variable is cleared unless -CsSvmCTolerance asks for a pre-#69 comparison.
+    if ([string]::IsNullOrEmpty($CsSvmCTolerance)) {
+        Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
+    } else {
+        $env:OSPREY_SVM_C_TOLERANCE = $CsSvmCTolerance
+    }
     try {
         $r = Invoke-Tool -Exe $ospreyShExe -WorkDir $csDir -CliArgs $args2 -LogName 'osprey-cs.log'
     } finally {
         Remove-Item Env:OSPREY_DUMP_STAGE7_PROTEIN_FDR -ErrorAction SilentlyContinue
+        Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     }
     $csWall = $r.wall
     $csPrec = Get-PrecursorCount -LogPath $r.logPath

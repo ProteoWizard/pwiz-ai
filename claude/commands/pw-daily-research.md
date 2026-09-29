@@ -190,7 +190,10 @@ For each exception in the **"Needs Attention"** section of the exception report:
 ### Exception: [fingerprint] - [signature]
 - Exception ID: [id]
 - Report: exceptions-report-YYYYMMDD.md
-- Version: [version] — check code in the relevant pwiz checkout (release branch or master)
+- Version: [version] — check code in the checkout matching the failure's folder
+  (master → `C:\proj\pwiz`, release → `C:\proj\skyline_26_1`,
+  Integration → `C:\proj\integration`); see "Which checkout to read source from"
+  in ai/docs/daily-report-guide.md
 - Steps:
   1. get_exception_details(exception_id=XXXXX)
   2. Read code at stack trace location — understand the actual failure mechanism,
@@ -340,7 +343,13 @@ For missing computers or crashed runs:
 - Steps:
   1. list_computer_status(container_path="...")
   2. For crashed runs: save_run_log(run_id=XXXXX, part="testrunner")
-  3. Check if same machine repeatedly (hardware) or same test (test bug)
+  3. Check if same machine repeatedly (hardware) or same test (test bug). TestRunner
+     access violations on one machine, in a different test each time, with no other
+     machine crashing those days = failing hardware: flag it in the email Summary at
+     2 solo crash days within 30 days, before anyone debugs it as a Skyline bug. Also
+     count `Exit code: -1073741819` in failures of completed runs (launched native tools
+     crashing). See ai/docs/failing-hardware-detection.md and run
+     `python ai/mcp/LabKeyMcp/scripts/scan_testrunner_crashes.py --since <90 days ago>`
   4. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
 - Priority: HIGH
 ```
