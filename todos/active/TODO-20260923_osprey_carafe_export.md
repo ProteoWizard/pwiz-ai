@@ -416,3 +416,18 @@ fixes), local until pushed.
 - Still open for #4708: R6 pipeline legs (after Brendan's #4730 push brings #4727's
   `SubsetPipelineTest`; then merge #4730 into this branch), R8 coverage (dotCover blocked on this
   machine), perf gate on a quiet machine, TeamCity (ask Brendan).
+
+### 2026-09-28 (Mike session, later) - #4708 R6 and R8 done, merged with #4730
+
+- Merged the port branch (#4727) and then Brendan's pushed #4730 (d2aa967af6, R10) into #4708;
+  one conflict (Program.ValidateArgs: `--export-library` check kept first, then the export check).
+  Pushed a5d15e6a4f; GitHub reports it mergeable. #4708 stays a draft.
+- R6: `Osprey.Test/SubsetPipelineTest.TrainingExport.cs` (SubsetPipelineTest made partial): Stellar
+  up front / pay-later / repeat / `--task TrainingExport` / second pass outstanding / failure and
+  retry; Astral HRAM; a `--task PerFileRescoring` node; library decoys + entrapment; the one-run
+  no-rescore case (pass 1 + warning, stable; accepts #4729's SecondPassFDR error until it is fixed).
+- R8 (needs VS 2026; `pwiz_tools/Osprey/build.ps1 -Coverage`, dotCover 2023.3.3): overall 83.3% on
+  #4730 + #4727 vs 84.0% with #4708; `TrainingExportWriter` 87.3%, `TrainingEvidence` 98.3%,
+  PerFileRescoring export methods 97-100%. Numbers are in the #4708 test plan.
+- Gate on the merged head: 631/631, zero inspection warnings. Filed #4731-#4734 (issue drafts).
+- Still open: perf gate on a quiet machine; TeamCity (ask Brendan).
