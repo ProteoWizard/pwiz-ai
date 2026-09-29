@@ -386,3 +386,33 @@ the test blib now carries proteins via `BlibWriter.AddProteinMapping`. Next: R10
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260928_osprey_blib_annotations.md` before starting work.
+
+### 2026-09-28 (Mike session) - #4708 reworked as a PerFileRescoring product (R2-R5, R9)
+
+In `D:\Dev\pwiz-osprey-export`, branch `Skyline/work/20260923_osprey_carafe_export` (stacked on
+the pushed #4730 head f7f28dd1a9; NOT yet merged with Brendan's unpushed #4730 work). Commits
+b76267f9f9 (R2-R4), 9a59d07c3f (R5 docs, key fix, tests), f636fb2b6f (`/code-review max`
+fixes), local until pushed.
+- R2: the export is a declared output of PerFileRescoring, written in flight after the per-run
+  second pass or by an export-only arm (`OnlyTrainingExportsOutstanding`); `--task
+  TrainingExport` is a selector; the pipeline is four stages again.
+- R3: no run-info.json; per-window scan range from the spectra (`ObservedMzRange`); instrument
+  and activation footer keys from the data file when present (first 200 MS2 spectra).
+- R4: format v2 without experiment q/PEP; run q from the worker's pass-2 sidecar (its stamp AND
+  its decoys file - the driver stamps every existing declared output, so the stamp alone can be
+  a SecondPassFDR file), else pass 1 with `run_q_pass=1` and a warning; transfer refused.
+- R5: P17 in docs/00; fifth-stage text removed from docs 14/15/20/22, help, ModelDiagnosticsTask;
+  doc 13's leftover copy of part A's sections removed.
+- R9: fitted parity count; failure policy (others still export, task fails before the blib, a
+  re-run retries only the failed exports - measured); OOM propagates, defects keep their stack.
+- Verified: 617/617 + zero inspection; Stellar 3-run exports byte-identical flag-up-front vs
+  pay-later (pay-later 15 s, three upstream tasks skipped, nothing re-scored); blib tables equal
+  with and without the flag (only `LibInfo` differs); single-run analysis selects on pass 2 and is
+  stable over three invocations; failure injection + retry byte-identical.
+- `/code-review max`: 15 findings, all fixed. Pre-existing issues it found are drafted, NOT filed,
+  in `ai/.tmp/sessions/20260927-osprey-export/issue-drafts.md` (driver stamps outputs a task did not
+  write; a no-work run keeps PerFileRescoring never current; stamp bytes grow as runs squared;
+  pwiz-sharp VendorPinsGenerator CS2012 build race).
+- Still open for #4708: R6 pipeline legs (after Brendan's #4730 push brings #4727's
+  `SubsetPipelineTest`; then merge #4730 into this branch), R8 coverage (dotCover blocked on this
+  machine), perf gate on a quiet machine, TeamCity (ask Brendan).
