@@ -197,8 +197,11 @@ up); per-block selection removes the flicker but pushes left-out signal onto nei
   | channel, vendor centroids | 2,885 / 2,890 / 3,027 | 0.35-1.31% | 2,197 / 3,743 | 0.094 |
   | joint 81c153dfc2 (`c7_joint_v4`) | 3,396 / 3,407 / 3,426 | 0.47-1.22% | 2,522 / 4,386 | 0.119 |
   | joint + 12 ppm cross-position merge (`c7_joint_v4_m12`) | 3,334 / 3,318 / 3,427 | 0.64-1.13% | 2,469 / 4,334 | 0.098 |
+  | **joint + sigma merge (12f7d84d04, `c7_joint_v4_sig`)** | **3,431 / 3,578 / 3,332** | 0.66-0.84% | **2,536 / 4,452** | **0.094** (channel 0.094) |
 
-  Pinned (14 / 17 ppm): joint 3,513 / 3,421 / 3,336 against 2,909 / 3,067 / 3,094. The merge arm's CV by
+  Pinned (14 / 17 ppm): joint 3,513 / 3,421 / 3,336 against 2,909 / 3,067 / 3,094; with the sigma merge
+  3,330 / 3,652 / 3,328, peptides 2,516 / 4,457, CV 0.093 against the channel's 0.096 on 2,064 shared (paired
+  -0.004, 54% better): **the joint solve with the sigma merge beats the channel solve on IDs and precision.** The merge arm's CV by
   abundance quartile is 0.129 / 0.108 / 0.093 / 0.073 against the channel's 0.118 / 0.103 / 0.090 / 0.073.
   What the night established:
   - **MS1 must be centroided for DIA-NN:** the same joint MS2 with profile MS1 (`c7_joint_v4_ms1prof`) loses
