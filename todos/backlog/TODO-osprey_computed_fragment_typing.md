@@ -1,16 +1,21 @@
 # TODO-osprey_computed_fragment_typing.md
 
 ## Branch Information (Future)
-- **Branch**: Not yet created - will be `Skyline/work/YYYYMMDD_osprey_computed_fragment_typing`,
-  cut from the head of `Skyline/work/20260928_osprey_blib_annotations` (#4730, 2e88e21746)
+- **Replaces**: PR #4730, which is closed once both PRs below are open (see "Closing #4730")
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
 - **Module**: `osprey`
-- **Replaces**: PR #4730 (to be abandoned, with a review saying why - see "Deliverables")
-- **Related**: #4708 (Mike, part B, stacked on #4730); maccoss/osprey#72 (Rust peak sort);
-  #4736 (UniMod); `TODO-carafe_osprey_library_contract.md`; `TODO-20260923_osprey_carafe_export.md`
-- **Objective**: Osprey types library fragment peaks itself, from m/z, the way Skyline does - it
-  never takes fragment ion types from a library's annotations. Library annotations, where a
-  format has them, are only a cross-check that warns when Osprey disagrees.
+- **Source of the code**: #4730's head, `Skyline/work/20260928_osprey_blib_annotations` @ 2e88e21746
+  (checkout `C:\proj\pwiz-work1` on Brendan's machine)
+- **Related**: #4708 (Mike, part B, stacked on #4730 - must re-stack on PR 2); maccoss/osprey#71
+  (Rust, stacked-mod decoys) and #72 (Rust, sorted blib peaks); #4736 (UniMod);
+  `TODO-carafe_osprey_library_contract.md`; `TODO-20260923_osprey_carafe_export.md`
+- **Objective**: A full replacement for #4730 as two PRs, so #4730 can be closed without losing
+  anything worth keeping:
+  1. **PR 1 - stacked-modification decoy fix**: small, independent, ready.
+  2. **PR 2 - Osprey-computed fragment typing and BLIB writing**: Osprey types library fragment
+     peaks itself, from m/z, the way Skyline does, and never takes ion types from a library's
+     annotations; plus the BLIB writing that is worth keeping (`--export-library`, one shared
+     LibraryEntry-to-blib composition, m/z-sorted peaks), without annotation rows.
 
 ## Why (Brendan, 2026-09-29)
 
@@ -20,6 +25,9 @@
 
 > "I think it is far better to have the software work out the peak annotations that to simply
 > accept library annotations."
+
+> "there are things in it we will want to keep, like the ability to export anything we can load
+> into libcache as a .blib file."
 
 Background, established 2026-09-28/29:
 - `RefSpectraPeakAnnotations` exists in BLIB for small molecules (LipidCreator, Skyline's own
@@ -44,7 +52,47 @@ Background, established 2026-09-28/29:
   Not needed once Osprey writes none, but still a BiblioSpec bug for small-molecule libraries
   (fix: `sqlite3_snprintf` + `%Q`); separate pwiz PR if pursued.
 
-## Design decisions (Brendan, 2026-09-29)
+## PR 1 - stacked-modification decoy fix
+
+**The bug.** Two modifications on one residue - typically an N-terminal acetyl and an oxidized
+first Met, `(UniMod:1)M(UniMod:35)...`, both of which the loaders put at position 0. When
+`DecoyGenerator` recomputed a decoy fragment's m/z it built its position-to-mass map with
+`modMasses[newPos] = m.MassDelta`, so the second modification REPLACED the first. Every decoy ion
+spanning that residue lost one modification's mass (42.0106 Da light for acetyl) while the decoy's
+precursor m/z stayed right: decoys with fragments no real peptide makes, easier to beat than a
+proper decoy, biasing target-decoy competition for acetylated N-termini.
+
+**The fix** (Mike, #4730 commit 152da04268): the map comes from
+`PeptideFragmentMass.ModMassesByPosition(RemapModifications(target.Modifications, positionMapping))`,
+which SUMS masses per position - the same helper the target side uses.
+
+Contents:
+- `Osprey.Core/PeptideFragmentMass.cs` - extracted from `DecoyGenerator` (pure code motion; TSV
+  decoys byte-identical apart from the fix)
+- `Osprey.Scoring/DecoyGenerator.cs` - the fix, decoy modifications remapped once, and the move of
+  fragment m/z to `PeptideFragmentMass`
+- `;decoymods=2` (`OspreyTask.DECOY_MODS_TERM`) in every task key when Osprey generates decoys, and
+  `LibraryLoader.LibrarySuppliesDecoys` as the one definition of "the library supplies decoys"
+  (`PerFileScoringTask` uses it)
+- `Osprey.Test/DecoyConstructionTest.DecoyFragmentCarriesStackedModifications` (red before green:
+  b8 42.0105 Da light without the fix); the `TaskValidityKeyTest` legs for `;decoymods=2`
+- `docs/01-decoy-generation.md` (CalculateFragmentMz's new home; the stacked-mod rule)
+- Rust companion: maccoss/osprey#71 (open)
+
+Tasks:
+- [ ] Branch from the port branch; bring over the files above from #4730, nothing annotation-related
+- [ ] Gates: Build-Osprey Debug -RunTests -RunInspection; `regression-parallel.ps1 -Dataset All`
+      (regression libraries carry only UniMod:4, so goldens should not move - confirm); perf gate if
+      the `DecoyGenerator` refactor touches the hot path
+- [ ] Cross-impl check with #71 on a library that HAS stacked mods (none in the parity datasets -
+      build a small one), plus the standard Stellar gate
+- [ ] PR, `/code-review max`, TeamCity Perf/Regression (ask), merge; then #71
+
+## PR 2 - Osprey-computed fragment typing and BLIB writing
+
+Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
+
+### Design decisions (Brendan, 2026-09-29)
 
 1. **Osprey computes the typing.** At library load, each peak is typed by m/z against the
    peptide's own ions, computed with `PeptideFragmentMass.CalculateFragmentMz` (stacked
@@ -76,22 +124,40 @@ Background, established 2026-09-28/29:
    Osprey's typing computed alongside for the cross-check. Zero disagreements on the subset and a
    full Astral TSV is the evidence for moving TSVs to Osprey's typing too.
 
-## Keep from #4730 / drop
+### Contents (from #4730, reworked where noted)
 
-Keep: Mike's residue- and precision-aware blib modification parsing; the stacked-modification
-decoy fix (`PeptideFragmentMass.ModMassesByPosition`); `PeptideFragmentMass`; `FragmentLadder`
-(#4708 builds on it); the R7 items not about annotations; `BlibSpectrum` as the one
-LibraryEntry-to-blib-rows composition; m/z-sorted peaks (Rust: maccoss/osprey#72);
-`--export-library` with its RetentionTimes rows, decoy marking, argument checks; the `[UniMod:N]`
-output fix and printed-precision masses; `;blibout` key term.
+- **Blib reading**: Mike's residue- and precision-aware modification parsing
+  (`BlibLoader.IdentifyModification`, `PrintedDecimals`, `IsPrecisionSensitive`,
+  `MODIFICATION_READER_VERSION`, `;libmods=2` / `blib_mods:2`); `FileVersionProbe` (fail-closed
+  cached probes); typing every blib from m/z (NEW - replaces `BlibPeakAnnotations.Apply` as the
+  typing source); a blib-typing key term and `.libcache` term (NEW - replaces `;libext=ann2` /
+  `blib_reader:2`)
+- **Cross-check**: `BlibPeakAnnotations` reworked as the comparison reader (keeps its grammar,
+  a/c/x/z counted apart, malformed rows passed over, non-finite m/z rejected, the `RefSpectraID,
+  rowid` cursor order); the warning (NEW); TSV columns compared too (NEW)
+- **`FragmentLadder`** (+ `FragmentLadderTest`): candidate ions for the typing; #4708 builds on it
+- **BLIB writing** (R10 minus annotations): `BlibSpectrum` as the one LibraryEntry-to-blib-rows
+  composition (m/z-sorted peaks; modseq from `Modifications` with printed precision, unresolved
+  mods keep library text; per-residue `Modifications` rows) WITHOUT `Annotate`/`BlibPeakAnnotation`
+  or the annotations index; `BlibWriter.AddSpectrum(BlibSpectrum, ...)`, nullable
+  `AddRetentionTime` bounds; `BlibOutputWriter.PrepareSpectra`; `;blibout` SecondPassFDR key term
+  (bump to 3 if PR 2's rows differ from #4730's); the `[UniMod:N]` output fix
+- **`--export-library`**: `LibraryBlibWriter` (RetentionTimes rows with NULL bounds, decoy prefix on
+  column-only decoys, progress, parallel blocks), `OspreyConfig.ExportLibraryBlib`,
+  `OspreyCommandArgs.ARG_EXPORT_LIBRARY` + usage resx, `Program` (validated and dispatched before
+  input checks, refuses to overwrite `--library`, `BlibOutputException` for file failures),
+  `CommandLine.html`, resources
+- **Goldens**: the four `tables/PeakDigest.tsv` (every spectrum re-sorted); Rust companion
+  maccoss/osprey#72 (peak sort; Stellar cross-impl PASS, 0/31,720 blobs divergent)
+- **Tests** (rewritten against computed typing): `BlibLibraryInputTest` (typing, cross-check,
+  writer round trip, mzObserved not needed once no rows are written), `SubsetPipelineTest`
+  (export round trip, output blib searches back, and an UNannotated BiblioSpec-style blib now
+  searches with real decoys instead of being refused by #4727's check), `TaskValidityKeyTest`,
+  `IOTest`, `BlibComparer` ignored tables
+- **Docs**: `docs/13-blib-output-schema.md` (typing; empty annotation table as BiblioSpec writes
+  it), `docs/14-intermediate-files.md` (key terms), `OspreyEnvironment` comment
 
-Drop: the annotation WRITER (`BlibSpectrum.Annotate`, `BlibWriter.AddSpectrum` annotation inserts,
-`BlibPeakAnnotation`, the annotations index) - output blibs back to ~half the #4730 size; annotations
-as a TYPING source (`BlibPeakAnnotations.Apply` in `BlibLoader`); `;libext=ann2` / `blib_reader:2`
-(replace with a blib-typing key and `.libcache` term, since every blib library now reads differently);
-the annotation-specific tests, rewritten against computed typing.
-
-## Validation data
+### Validation data
 
 - Subset TSV (predicted, exact m/z, explicit columns): `Osprey.Test/TestData/StellarSubset.zip`,
   `AstralSubset.zip` - expect zero disagreements.
@@ -104,37 +170,51 @@ the annotation-specific tests, rewritten against computed typing.
   Compare only primary b/y z<=2 NIST annotations; parser lives in a measurement harness, not Osprey.
   Decides the unit-resolution tolerance (decision 5).
 
-## Tasks
+### Tasks
 
-- [ ] Branch from #4730's head; typing function (candidate primary b/y ions, nearest-match with
-      tie rule, tolerance by decision 5) in Osprey.IO next to `BlibLoader`
-- [ ] `BlibLoader` types every blib from m/z; annotation rows read only for the cross-check
+- [ ] Branch (stacked on PR 1, or after it merges); bring over the Contents above from #4730
+- [ ] Typing function (candidate primary b/y ions from `FragmentLadder`, nearest match with the tie
+      rule, tolerance by decision 5) in Osprey.IO next to `BlibLoader`; `BlibLoader` types every blib
 - [ ] Cross-check warning (resx, counts with denominators; examples under `--verbose`) for blib and TSV
 - [ ] Remove the annotation writer; output and export blibs carry an empty table (as BiblioSpec)
 - [ ] Key/cache terms for the changed blib reading; `TaskValidityKeyTest`
-- [ ] Tests: typing unit tests (stacked mods, ambiguity tie, charge limit, no losses); subset TSV
-      and an exported blib type identically to the TSV columns (zero disagreements); exported blib
-      still searches identically to the TSV; Osprey output blib searches back; an UNannotated
-      BiblioSpec-style blib now searches with real decoys (was refused by #4727's check)
+- [ ] Tests as listed; typing unit tests (stacked mods, ambiguity tie, charge limit, no losses)
 - [ ] Measurements: agreement on subset TSV, CarafeSharp 483k blib, NIST msp/sptxt; output blib
-      sizes vs #4730
+      sizes vs #4730 (expect ~half)
 - [ ] Gates: Build-Osprey Debug -RunTests -RunInspection, ja-JP/fr-FR, coverage, regression-parallel
-      All (goldens: PeakDigest only, as #4730), TeamCity Perf/Regression (ask)
-- [ ] Docs: 13-blib-output-schema (typing, empty annotation table), decoy-generation doc
+      All (goldens: PeakDigest only), Stellar cross-impl with #72, TeamCity Perf/Regression (ask)
+- [ ] PR, `/code-review max`, merge; then #72
 
-## Deliverables
+## Dropped from #4730 (not carried into either PR)
 
-- [ ] The replacement PR (title along the lines of "osprey: Typed library fragments from m/z ...")
-- [ ] A review on #4730 recommending it be abandoned for internal calculation: output blibs double
-      in size (numbers above) and a small-molecule table becomes part of every Osprey blib; point
-      to the replacement, which keeps Mike's parsing, decoy fix, `PeptideFragmentMass`,
-      `FragmentLadder`
-- [ ] Tell Mike: #4708 must re-stack on the replacement; CarafeSharp can stop writing annotations
-      (Mike's call - saves ~8M rows / ~400 MB and a writer thread on the 483k library)
-- [ ] Later, separate: Rust port of the typing (blib libraries are not in the parity datasets);
-      issue for consolidating C# BLIB read/write (Skyline `BlibDb`/`BiblioSpecLite`, Osprey
-      `BlibWriter`/`BlibLoader`/`BlibSpectrum`) into `pwiz_tools/Shared/BiblioSpec` (not yet filed -
-      Brendan asked for the write-up)
+- Annotation rows in every Osprey output and export blib (`BlibSpectrum.Annotate`,
+  `BlibPeakAnnotation`, `BlibWriter` annotation inserts, `idx_peakannotations_refid`)
+- Library annotations as a typing source (`BlibPeakAnnotations.Apply` in `BlibLoader`)
+- `;libext=ann2` and `blib_reader:2` (superseded by the blib-typing terms)
+- The docs text for writers "that target Osprey" by writing annotations (docs/13)
+
+## Closing #4730
+
+- [ ] Both PRs open; every Contents item above accounted for (compare `git diff --stat` of #4730
+      against the two PRs)
+- [ ] Review on #4730 recommending it be closed in favor of the two PRs: output blibs double in size
+      (numbers above) and a small-molecule table becomes part of every Osprey blib; Osprey computes
+      fragment typing as Skyline does; Mike's parsing, decoy fix, `PeptideFragmentMass`,
+      `FragmentLadder` and the BLIB export all carry over
+- [ ] Tell Mike: #4708 re-stacks on PR 2; CarafeSharp can stop writing annotations (his call - saves
+      ~8M rows / ~400 MB and a writer thread on the 483k library)
+- [ ] Close #4730 (Mike or Brendan)
+
+## Later, separate
+
+- Rust port of the typing (blib libraries are not in the parity datasets)
+- Issue for consolidating C# BLIB read/write (Skyline `BlibDb`/`BiblioSpecLite`, Osprey
+  `BlibWriter`/`BlibLoader`/`BlibSpectrum`) into `pwiz_tools/Shared/BiblioSpec` (not yet filed -
+  Brendan asked for the write-up)
+- Pre-existing issues #4730's first review found, "to be filed" in its description - confirm filed:
+  decoys move N-terminal modifications to an internal residue (C# and Rust);
+  `DiannTsvLoader.StripFlankingChars` mangles sequences with two decimal bracket masses; the second
+  of two adjacent TSV bracket mods lands on residue 0
 
 ## Progress Log
 
