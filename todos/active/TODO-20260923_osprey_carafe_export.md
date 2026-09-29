@@ -156,6 +156,24 @@ one manual Stellar run. Neither PR is ready without the tests below.
   branch turns the resulting `LinearDiscriminant` crash into a plain error.
 - `docs/01-decoy-generation.md:191` still places `CalculateFragmentMz` in `DecoyGenerator`.
 
+### R10. BLIB writing belongs in PR A (#4730) - decided 2026-09-28 (Brendan)
+Brendan is taking #4730 to merge. Instead of a test-only helper that builds an annotated blib
+(the first R6 leg did exactly that, in `SubsetPipelineTest.WriteSubsetLibraryBlib`), #4730 gets
+the production utilities, and the tests use them:
+1. **Osprey writes fully annotated output blibs.** `BlibWriter` writes one
+   `RefSpectraPeakAnnotations` row per peak whose ion type is known, in the grammar
+   `BlibPeakAnnotations` reads (`y5`, `b3-H2O`, charge column, `mzTheoretical`), plus proteins.
+   An Osprey output blib then searches as a library with real decoys (today it is refused by the
+   #4727 decoy check, every decoy copying its target).
+2. **Any loaded library can be persisted as a fully compatible BLIB** (targets, fragments with
+   annotations, proteins, library RT, modifications in blib mass form): a library-to-blib utility,
+   exposed as a command-line option, readable by Skyline and re-importable by Osprey.
+3. **Tests use the utilities**: TSV -> BLIB -> search equals the TSV search (tight tolerance);
+   Osprey's own output blib searches back; the refusal leg keeps an unannotated blib.
+Future, NOT in #4730: a shared BLIB writer/reader in `pwiz_tools/Shared/BiblioSpec` used by Skyline
+and Osprey, and BLIB replacing `.libcache` as the library cache (Nick's Skyline BLIB-reader work
+made a private cache unnecessary there; measure load time vs `.libcache` on full Astral first).
+
 ### R8. Code coverage must show the new code is exercised
 Run `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` and
 `ai/scripts/Osprey/Summarize-Coverage.ps1` on each PR's final state, and put in its test plan:
@@ -352,3 +370,19 @@ meet R6 even when the percentage is high.
 - `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` + `Summarize-Coverage.ps1`, numbers in the PR test plan (R8)
 - `SubsetPipelineTest` legs for the export (R6) pass, and each fix's test fails without its fix
 - TeamCity Perf/Regression only on the finished PR candidate, and only after asking. Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.
+
+### 2026-09-28 (Brendan session) - #4730 taken to merge
+
+Mike split part A out as #4730 (R1, R7 done, own `/code-review max`, CI green). Brendan decided to
+finish #4730 here and leave #4708 (part B, R2-R6) to Mike. In `C:\proj\pwiz-work1`, branch
+`Skyline/work/20260928_osprey_blib_annotations` (NOT pushed, 3 commits ahead of origin):
+merged the port branch (brings #4727: `SubsetPipelineTest`, `InProcessOsprey`, subset zips) with no
+conflicts, and added `TestSubsetAnnotatedBlibLibrary` (d06c03edc2): an annotated blib of the
+subset library gives first-pass counts identical to the TSV (128/154/143) and passes; the
+unannotated version is refused. Full gate on the merged state: 620 tests, inspection clean.
+Found (pre-existing, not yet filed): a library with no protein information cannot finish
+second-pass FDR (no protein has 2 detections -> empty stratum -> "Second-pass FDR cannot run");
+the test blib now carries proteins via `BlibWriter.AddProteinMapping`. Next: R10.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260928_osprey_blib_annotations.md` before starting work.
