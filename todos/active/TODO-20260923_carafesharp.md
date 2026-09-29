@@ -318,7 +318,17 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   22,761 precursors; `score` and 4 polish statistics differ in the last digit. CarafeSharp's regression on Linux passed
   on that export and on the packaged one; both runs' training tables match the Windows golden's in content, and their
   models are byte-identical to each other.
-- [ ] Linux CUDA leg: needs the Linux libtorch CUDA packages (about 4 GB, not cached in WSL); ask before downloading.
+- [x] Linux CUDA leg (2026-09-29, developer approved the download): WSL2 GTX 1650, `build.sh -Torch cuda` Cuda test
+  passed; `regression.ps1 -Torch cuda` passed against the CPU golden (sampled cosine median 0.99981, 3.6 min).
+- [x] pyro-Glu (ids 27, 28) supported (#4717 d98fc9a9bf): alphabase `^Any_N-term` names, .blib on residue 1, TSV
+  refused, training mapper maps it; m/z exact vs Carafe, predictions within 2e-5 of Carafe's Python given the names.
+  #4719 4af488ad12, 73/73.
+- [x] Masking question (developer, 2026-09-29): across 403,267 ions both tools matched, Carafe's correlation and
+  corr_polish mostly agree (1+ medians 0.894 / 0.873; 2+ 0.399 / 0.361). The illustrated extremes were chosen as the
+  worst disagreements. AVFDETYPDPVR: two components; Carafe's refined window covered only the rising edge and its best
+  ion (b10++) belongs to the second one. Open lead: zeros in Osprey's XICs (peaks at the calibrated window's edge drop in
+  and out) raise corr_polish failures (1+ 11.9% -> 27.6%, 2+ 42.3% -> 56.5% from no zeros to 2+ zeros).
+  Scripts: `ai/.tmp/sessions/20260927-osprey-export/maskviz/corr_global.py`, `corr_audit.py`.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
