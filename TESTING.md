@@ -38,6 +38,74 @@ See [ai/CRITICAL-RULES.md](CRITICAL-RULES.md) for the full list. Key rules:
 - Consolidating 4 separate tests into 1 can save 15+ seconds
 - Prefer unit tests when UI is not required
 
+## Diagnostic Sweeps - Tools, Not Tests
+
+Some questions need the real UI driven over a matrix of states - window sizes, zoom levels, settings
+combinations - to produce a table a developer reads. That is a **diagnostic tool**, not a regression test,
+and it lives in a test project only because `AbstractFunctionalTestEx` is the way to drive Skyline. It
+asserts nothing about the numbers it reports.
+
+Decide which one you are writing. A tool that asserts its own output becomes a test that fails whenever
+the product legitimately changes; a test that asserts nothing is dead weight in the nightly run. When the
+developer has said the behavior is not worth pinning - too heavy, too UI-dependent, no single right answer -
+write the tool and say so in its class comment.
+
+Rules for a diagnostic tool in a test project:
+
+* **Off by default, gated on an environment variable.** `if (string.IsNullOrEmpty(
+  Environment.GetEnvironmentVariable(ENV_ENABLED))) return;` as the first line, so the nightly run pays
+  only the cost of entering and leaving the method. Verify that cost - a disabled sweep should return in
+  seconds, not load a document.
+* **`[NoNightlyTesting]` and `[NoParallelTesting]`**, with the matching `TestExclusionReason`.
+* **Take its inputs from environment variables too** - the document and the output path - so it can be
+  pointed at a repro without editing code.
+* **Write a CSV a developer can open**, and trace one line per combination as it goes, so a run that dies
+  partway still leaves the rows before it readable.
+* **Assert only the invariants that must hold regardless of the numbers.** Reporting coverage while
+  checking "no two visible labels overlap" is the right split: the matrix informs, the invariant catches
+  regressions.
+
+### Bound every wait
+
+A sweep visits combinations that legitimately produce nothing. `WaitForConditionUI` fails the test after
+`WAIT_TIME` (360 s), so a legitimate empty cell becomes a six-minute hang and then a failure. Use
+`TryWaitForConditionUI(millis, func)`, which returns false instead, record the empty result as a row, and
+print why it was empty. A blank cell with no explanation is worse than no sweep.
+
+### Wait for THIS run, not for any result
+
+Work that runs on a worker thread and installs its result on the UI thread needs a wait keyed to the
+current run, not to "a result exists". Waiting for a non-empty result returns the **previous** run's while
+the current one is mid-flight, and mid-flight state is often invalid by design - partially placed, not yet
+pruned, not yet filtered. Key the wait on something that identifies this run: a new result instance, a
+sequence number, a completion flag cleared before the trigger. Then confirm it settles, so a later run
+does not supersede the one measured.
+
+### Offscreen where possible
+
+A sweep that demands `-ShowUI` takes over the developer's machine for its whole run. Offscreen mode only
+repositions the main window, so almost everything works there. The trap is `ResizeFormOnScreen`, which
+returns **before resizing** when `Program.SkylineOffscreen` is set, because the `FormEx.ForceOnScreen` it
+calls afterwards would drag a deliberately offscreen window back onto the desktop. If window size is one of
+your axes, set the frame size yourself and skip only `ForceOnScreen` - do not change
+`ResizeFormOnScreen`, whose early return is deliberate for screenshot tests.
+
+Then **prove the axis did something**: a resize that silently fails reports N identical rows as though they
+were N measurements. Check that the measured geometry actually varied and warn if it did not.
+
+### Product hooks for diagnostics go behind `#if DEBUG`
+
+When a tool needs a number the product does not expose - an intermediate stage's count, a decision that
+later code discards - a hook is legitimate, but it must not reach the shipped executable. Wrap the hook and
+its call site in `#if DEBUG` (`LabelLayout.SamplerReport` and its annealing CSV log are the examples), and
+have the tool report that it needs a Debug build when the hook is compiled out. Keep both configurations
+building warning-free: an `#if` that leaves unreachable code or an unassigned field trades a runtime cost
+for a warning.
+
+Prefer exposing the value on an existing object over a static hook. Reach for the static only when the
+value is unavailable otherwise - typically when the interesting case is the one where the object is never
+produced.
+
 ## Common Patterns
 
 ### Functional Test Structure
