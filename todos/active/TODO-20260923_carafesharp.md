@@ -296,8 +296,10 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   Zip `D:\test\carafesharp-testdata-zips\carafesharp-export-v1.zip`, 67,127,081 B, SHA-256
   1e2071d453c6fe963b93ea70ea803c06d138f0452358ccb8baeb5f0714d76fb2; 68/68 with -RequireData from the extracted
   zip (path with spaces); a missing MANIFEST fails. #4719 70/70 after merging.
-- [ ] Upload carafesharp-export-v1.zip (needs the developer's approval), then fill testdata.json's
-  url/sha256/size (url pattern as the other two: `.../%40files/perftests/carafesharp-export-v1.zip`).
+- [x] carafesharp-export-v1.zip uploaded by the developer (2026-09-29); an anonymous download matches
+  (67,127,081 B, 1e2071d4...). testdata.json filled (#4717 d8c39922f3). The regression branch merged into #4717
+  (f2eb050dee; 69/69 with -RequireData, the golden check run PASSED) and #4717 into #4719 (d1d9745b40; 71/71, and
+  #4719's own regression run is SAME on every exact comparison). Brendan told on #4717 (comment 5893153501).
 - [x] PTM follow-ups (2026-09-28 night): Carafe CANNOT predict id 28 (Gln->pyro-Glu of Q) or 27: it names them
   `Gln->pyro-Glu@Q` / `Glu->pyro-Glu@E`, alphabase has only the `^Any N-term` forms, so peptdeep raises
   KeyError (verified with the installed 2.2.0). CarafeSharp's refusal is parity. A recipe to support both
@@ -309,8 +311,7 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   Osprey (`D:\test\carafesharp-runs\e2e-final`); `docs/05-carafe-comparison.md` rewritten (#4717 837dfd057e),
   published for Brendan at https://claude.ai/artifact/DNXEQD1iq4Xp4a8bKwuLUT. Stellar 3-run search: 31,158 / 28,422 /
   4,285 at 0.62% combined FDP.
-- [x] Golden regression (section 5), on `nightlywork/carafesharp-regression` (local; merge into #4717 after the
-  export-v1 upload): Stellar golden recreated from export-v1 (724e449d25, CPU 12 min; a second Windows run is all
+- [x] Golden regression (section 5), from `nightlywork/carafesharp-regression`, now merged into #4717: Stellar golden recreated from export-v1 (724e449d25, CPU 12 min; a second Windows run is all
   SAME); `-Export` (04be4e098f); training-table hashes ignore line endings (f81d9a0d67, 370b8e509d); docs 84504b04ca.
 - [x] Linux from .raw (section 7): Osprey #4708 built in WSL2 (`~/osprey-wsl`, sparse: Osprey, Shared, pwiz-sharp,
   libraries/7zz, pwiz/data/common/*.obo, pwiz_aux vendor archives + UIMF) read the `_21` .raw in 332 s: the same
