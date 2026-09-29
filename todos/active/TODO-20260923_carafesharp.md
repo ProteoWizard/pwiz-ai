@@ -289,9 +289,22 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
 
   Both were extracted with Expand-ZipNoOverwrite into a path with spaces on C:, with 0 checksum
   mismatches; the CPU suite ran 68/68 from there and Astral 4/4. The default <Downloads>/Perftests root works.
-- [ ] export-v1: regenerate from .raw with the landed #4708 Osprey (a dry-run zip from the June mzML export
-  is in carafesharp-testdata-zips-dryrun, NOT for publishing). Then upload all three with approval and fill
-  testdata.json's url/sha256/size.
+- [x] export-v1 regenerated (2026-09-28 night): the #4708 Osprey a5d15e6a4f (vendor reader, snapshot
+  `D:\test\osprey-runs\_bin\prB-a5d15e6a4f-vendor`) searched the Stellar `_21` .raw with the June settings
+  (`D:\test\osprey-runs\carafe-export-v2-raw`, 9 min): 22,761 rows, format 2, second-pass run q.
+  CarafeSharp reads formats 1 and 2 (6b9288f6fa). Masking parity 85.0%, 12,378 kept by both (June 85.0% / 12,404).
+  Zip `D:\test\carafesharp-testdata-zips\carafesharp-export-v1.zip`, 67,127,081 B, SHA-256
+  1e2071d453c6fe963b93ea70ea803c06d138f0452358ccb8baeb5f0714d76fb2; 68/68 with -RequireData from the extracted
+  zip (path with spaces); a missing MANIFEST fails. #4719 70/70 after merging.
+- [ ] Upload carafesharp-export-v1.zip (needs the developer's approval), then fill testdata.json's
+  url/sha256/size (url pattern as the other two: `.../%40files/perftests/carafesharp-export-v1.zip`).
+- [x] PTM follow-ups (2026-09-28 night): Carafe CANNOT predict id 28 (Gln->pyro-Glu of Q) or 27: it names them
+  `Gln->pyro-Glu@Q` / `Glu->pyro-Glu@E`, alphabase has only the `^Any N-term` forms, so peptdeep raises
+  KeyError (verified with the installed 2.2.0). CarafeSharp's refusal is parity. A recipe to support both
+  correctly anyway is in `ai/.tmp/agent-carafe-mod28-status.md` (name, site-0 blib position, notations, tests).
+  Phospho: trains in general mode like Carafe's general mode (TestPhosphoTrainingRows, 2ebf6288f2); Carafe's
+  `-mode phosphorylation` (phos models, H3PO4 neutral-loss channels, site-probability filter) is not ported;
+  two of its parts need Osprey evidence it does not export (neutral-loss ions, localization scores).
 - [ ] Golden regression.ps1 (section 5), WSL2 verification (section 7), final Carafe comparison (section 8).
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
