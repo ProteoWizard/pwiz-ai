@@ -58,6 +58,28 @@ place that any future change could destabilise again.
    teardown of curves or labels.
 3. Any other change (document, formatting, results index, replicate display) still does a full rebuild.
 
+## Tried and rejected: excluding selected labels from the layout, on its own
+
+Point 1 of the design was implemented alone, to see how much it bought: `StartLabelLayoutAsync` was fed
+`_labeledPoints.Where(lp => !lp.IsSelected)` instead of `_labeledPoints`, at all four call sites. Built
+clean, measured with the same harness:
+
+| | unexpected labels per selection change |
+|---|---|
+| before | +3/-1, +4/-4, +3/-3, +3/-5, +3/-3 |
+| after | +2/-1, +1/-4, +4/-1, +5/-6, +4/-1 |
+
+**No improvement.** Excluding selected points does not make the candidate set constant - it changes which
+points are in it. Each selection change still moves one point out of the set and another in, and because
+the keep test normalizes by `maxHash`, the maximum over the candidate set, one membership change still
+rescales the decision for every label at once.
+
+The change was reverted. The lesson: **stabilizing the layout's inputs does not work while the layout is
+recomputed at all.** Any ±1 in the candidate set perturbs `maxHash`. The only inputs-based fix that would
+hold is normalizing the hash by a constant (`uint.MaxValue`) instead of the sample maximum, which changes
+the absolute keep rate and so re-opens the tuning that PR #4495 settled. Not worth it - go straight to not
+recomputing.
+
 ## Implementation notes gathered so far
 
 * `SummaryRelativeAbundanceGraphPane.UpdateGraph(bool selectionChanged)` already receives a
