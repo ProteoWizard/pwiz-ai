@@ -211,3 +211,8 @@ Commits (each twin red-checked by re-introducing a documented defect in the prod
   message (fix in squash), duplicated subset analyses (suite ~50 s), PS vs C# sidecar
   comparer unification (separate refactor), unused -NoTrainedModel (pre-existing).
 * PR #4739 opened. Next: Copilot review via /pw-respond; TeamCity Perf/Regression (ask first).
+* b22ca3e680: artifact names in SubsetPipelineTest built from product EXT constants
+  (Brendan's catch); ModelDiagnosticsReport.EXT_PASS1/EXT_PASS2 made public.
+* TeamCity: Perf/Regression green in 53 min; Osprey Windows .NET green in 9 min at 84.1%
+  statement coverage. All 5 PR checks green, MERGEABLE. No Copilot review posted.
+  Ready for human review, then /pw-complete (squash subject <= 10 lines).
