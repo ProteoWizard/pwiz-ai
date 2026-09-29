@@ -43,6 +43,8 @@
 .PARAMETER ExportSource
     What Osprey read to write the training export: raw (the default, and the only kind to publish)
     or mzML (the June export, for dry runs).
+.PARAMETER ExportProvenance
+    Appended to the export package's README: the Osprey build and command that wrote the export.
 .PARAMETER StageOnly
     Assemble and verify the trees, but do not zip.
 #>
@@ -56,6 +58,7 @@ param(
     [string]$TrainingExport = 'D:\test\osprey-runs\carafe-june-train\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.training.parquet',
     # What Osprey read to write the export. Publish only a .raw export; mzML is for dry runs.
     [ValidateSet('raw', 'mzML')] [string]$ExportSource = 'raw',
+    [string]$ExportProvenance,
     [switch]$StageOnly
 )
 
@@ -128,6 +131,7 @@ The Osprey training export (--training-export) of Stellar HeLa run _21, read fro
 masking and isolated fine-tune tests start from. Kept apart from the Carafe references because it
 changes whenever Osprey's export does. Unpack into <Downloads>\Perftests\. MANIFEST.sha256 lists
 every file and is the zip's last entry.
+$(if ($ExportProvenance) { "`n$ExportProvenance`n" })
 "@
 }
 
