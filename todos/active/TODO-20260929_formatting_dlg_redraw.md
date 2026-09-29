@@ -6,9 +6,9 @@
 - **Base**: `master` (`05b8c93b3a`)
 - **Created**: 2026-09-29
 - **Status**: In Progress
-- **GitHub Issue**: none yet
-- **PR**: none yet
-- **Commit**: `b2116a5de5` (local, not pushed)
+- **GitHub Issue**: none
+- **PR**: [#4745](https://github.com/ProteoWizard/pwiz/pull/4745)
+- **Commit**: `b2116a5de5`
 
 ## Objective
 
@@ -121,9 +121,7 @@ fix; the binary timestamp is the thing to check):
 | `TestPeakAreaRelativeAbundanceGraph` | pass | - |
 | `TestLabelLayoutDeterminism` | pass | - |
 
-Still unconfirmed by a human: that the flash is visibly gone. Use a document with enough label work to see
-it - `ExtracellularVesicalMagNet.sky` with both formatting rules ticked, not a small document like
-`BSA-Training.sky`.
+Developer confirmed interactively (2026-09-29) that the flash is gone with the dialog open.
 
 ## Not a bug: OK-ing the dialog updates both plots when rules changed
 
