@@ -161,6 +161,24 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
 - **Docs**: `docs/13-blib-output-schema.md` (typing; empty annotation table as BiblioSpec writes
   it), `docs/14-intermediate-files.md` (key terms), `OspreyEnvironment` comment
 
+### #4708 (Mike, training export) - what it needs from here (checked 2026-09-29)
+
+- Uses only `FragmentLadder` (`Build`, `SlotOf`, `SlotCount`, `ChargeOf`; PR 2) and
+  `PeptideFragmentMass.CalculateFragmentMz` (PR 1). Nothing from annotation reading/writing,
+  `BlibSpectrum`, `--export-library` or the key terms. So it re-stacks on PR 2, not PR 1.
+- Gate for PR 2: a LOCAL merge of #4708's head onto PR 2 (scratch branch, never pushed - it is
+  Mike's branch), Build-Osprey -RunTests, incl. `TrainingEvidenceTest` and
+  `SubsetPipelineTest.TrainingExport`.
+- Semantic overlap to settle with Mike: `TrainingEvidence.MapLibrary` sends a typed fragment to
+  its slot and flags it `LIBRARY_ANNOTATED`; an `IonType.Unknown` one gets its OWN nearest-m/z
+  match (`NearestSlot`, no tie rule) flagged `LIBRARY_MZ_MATCHED`. Once PR 2 types every blib
+  fragment at load, blib fragments arrive typed: every one would be flagged `LIBRARY_ANNOTATED`
+  ("the library holds this ion by annotation", docs/22) although Osprey computed it, and
+  `NearestSlot` becomes a second typing rule. Options: PR 2 records the typing's source on the
+  fragment (library-stated vs computed) and `MapLibrary` keeps its two flags meaning what docs/22
+  says; or the flags are redefined. The export schema is Carafe's input - Mike's call.
+  `TrainingEvidenceTest` lines ~392-433 pin the unannotated-blib behavior and will fail as-is.
+
 ### Validation data
 
 - Subset TSV (predicted, exact m/z, explicit columns): `Osprey.Test/TestData/StellarSubset.zip`,
