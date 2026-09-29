@@ -1,5 +1,14 @@
 # Opening the formatting dialog for one dot plot redraws the other one
 
+## Branch Information
+- **Branch**: `Skyline/work/20260929_formatting_dlg_redraw` (pwiz3 as of 2026-09-29)
+- **Module**: `skyline`
+- **Base**: `master` (`05b8c93b3a`)
+- **Created**: 2026-09-29
+- **Status**: In Progress
+- **GitHub Issue**: none yet
+- **PR**: none yet
+
 ## Objective
 
 With both the volcano plot and the Relative Abundance (protein abundance) plot open, opening the formatting
