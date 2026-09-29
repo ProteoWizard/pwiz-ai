@@ -86,12 +86,10 @@ Contents:
 - Rust companion: maccoss/osprey#71 (open)
 
 Tasks:
-- [ ] Branch from the port branch; bring over the files above from #4730, nothing annotation-related
-- [ ] Gates: Build-Osprey Debug -RunTests -RunInspection; `regression-parallel.ps1 -Dataset All`
-      (regression libraries carry only UniMod:4, so goldens should not move - confirm); perf gate if
-      the `DecoyGenerator` refactor touches the hot path
-- [ ] Cross-impl check with #71 on a library that HAS stacked mods (none in the parity datasets -
-      build a small one), plus the standard Stellar gate
+- [x] Branch from the port branch; bring over the files above from #4730, nothing annotation-related
+- [x] Gates: Build-Osprey Debug -RunTests -RunInspection; `regression-parallel.ps1 -Dataset All`
+      (goldens did not move; one unreproduced calibration AV - see log); perf gate skipped (not hot path)
+- [x] Cross-impl check with #71 on a library that HAS stacked mods (PASS; negative control FAILs)
 - [ ] PR, `/code-review max`, TeamCity Perf/Regression (ask), merge; then #71
 
 ## PR 2 - Osprey-computed fragment typing and BLIB writing
@@ -240,3 +238,21 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
 - Noted, not in scope: the test host prints an unhandled NRE at exit from
   `OspreyDiagnostics.cs:107` (`ProcessExit` handler dereferences `s_sink` after a later
   `Initialize` set it null). Pre-existing on the port branch; file untouched here.
+- Cross-impl vs maccoss/osprey#71 on a stacked-mod Stellar variant (5,900 precursors rewritten to
+  `_(UniMod:1)M(UniMod:35)..._`, precursor and b-ion m/z shifted; built by
+  `ai/.tmp/sessions/20260929-8a15/make_stacked_mod_library.py` into
+  `D:\test\osprey-runs\stackedmods\stellar`, mzMLs hard-linked): 3-file end-to-end PASS at 1e-9,
+  30,296 precursors both. Negative control, unfixed Rust `main` vs this C#: FAIL, Rust 31,135
+  (+839, 2.8%) - the buggy decoys are easier to beat. Rust's DIA-NN parser ignores a LEADING
+  `[UniMod:1]` bracket (C# handles it); the `(UniMod:1)` form works in both. `C:\proj\osprey`
+  restored to `fix/sort-blib-peaks` and rebuilt.
+- regression-parallel All: 58 PASS / 0 FAIL, but the StellarGenDecoyEntrap straight run died at
+  13:13:49 with `AccessViolationException` in `Calibrator.ScoreResolvedCalibrationEntry`
+  (untouched; no unsafe code; stack in the Application event log Id 1026 - the run dir was pruned
+  by the re-run's retention). Re-run of StellarGenDecoyEntrap alone: all PASS incl. vs golden.
+  Loop of the crashing command (cold, exit after calibration, 2 lanes x 16 threads, snapshot exe):
+  20/20 clean in ~22 min (`D:\test\osprey-runs\stress-cal-av\summary-*.log`). Only Osprey AV in
+  30 days of event log. Not reproduced; recorded in the PR test plan.
+- Perf gate skipped: decoy generation runs once per library, and the refactor replaces a
+  per-decoy O(mods x length) position scan with the remap already done, rather than adding work.
+- Committed 73d29b8b44, pushed. `/code-review max` running.
