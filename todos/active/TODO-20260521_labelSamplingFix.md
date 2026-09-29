@@ -299,6 +299,43 @@ Bounded waits throughout (`READY_WAIT_MS` 60 s, `SAMPLER_WAIT_MS` 15 s, `LAYOUT_
 `TryWaitForConditionUI`. A combination that legitimately yields no labels is now a recorded zero row with a
 reason line instead of a 360 s timeout.
 
+### The hook is Debug only (developer's call)
+
+`LabelLayout.SamplerReport` is wrapped in `#if DEBUG`, as is its one call site in `LabelLayoutRunner`, so it
+is compiled out of the shipped executable. This matches what `LabelLayout.cs` already does with its
+annealing CSV log. Consequence: **the sweep needs a Debug build**; in Release the test prints that and
+returns. Verified Release builds warning-free with the hook absent and Debug builds warning-free with it
+present.
+
+### The sweep no longer needs -ShowUI
+
+`ResizeFormOnScreen` returns before resizing when `Program.SkylineOffscreen` is set, because the
+`FormEx.ForceOnScreen` that follows would drag a deliberately offscreen window back onto the desktop. That
+is why the sweep previously demanded `-ShowUI` and took over the developer's screen for its whole run.
+Offscreen mode only repositions the main window (`Program.cs:389`), so the resize itself is valid either
+way: `PlotTarget.Resize` now sets the frame size directly when offscreen and skips only `ForceOnScreen`.
+`ResizeFormOnScreen` itself is left alone - its early return is deliberate for screenshot tests.
+
+Added `VerifySizeAxisApplied`, which warns if every window size measured the same chart, so a resize that
+silently fails can never be reported as data.
+
+Runs, all passing, all 72 rows:
+
+| build | mode | wall time |
+|---|---|---|
+| Release | onscreen | 558 s |
+| Debug | onscreen | 988 s |
+| Debug | offscreen | 951 s |
+
+The volcano rows are identical in all three. The Relative Abundance rows differ by a few labels offscreen
+(`saved-all-labeled` 17/21/20/18 vs 16/19/16/17; `label-everything` 40/67/95/113 vs 43/64/91/118) because
+its floating frame's chart rectangle comes out a few pixels different. That is the same legitimate
+geometry sensitivity the multi-language work above established, not a defect, and every trend is unchanged -
+including `saved-all-labeled` refusing to scale across a 3x area increase.
+
+CSVs: `label-layout-sweep.csv` (Release onscreen), `-debug.csv`, `-offscreen.csv` in
+`ai/.tmp/sessions/20260929-labelsweep/`.
+
 ## Notes
 
 - The annealer already soft-avoids markers via the density grid
