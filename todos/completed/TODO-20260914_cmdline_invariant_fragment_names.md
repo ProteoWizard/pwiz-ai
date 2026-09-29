@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260914_cmdline_invariant_fragment_names`
 - **Base**: `master`
 - **Created**: 2026-09-14
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4668](https://github.com/ProteoWizard/pwiz/issues/4668)
 - **Module**: `skyline`
-- **PR**: [#4669](https://github.com/ProteoWizard/pwiz/pull/4669)
+- **PR**: [#4669](https://github.com/ProteoWizard/pwiz/pull/4669) (merged 2026-09-29)
 
 ## Objective
 
@@ -42,7 +42,7 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
       ConsoleArgumentInvalidValuesTest, CommandLineUsageTest, CommandLineUsageDescriptionsTest,
       ConsoleArgumentValidationTest, ConsoleSettingsArgumentsTest, TestSkylineCmd, TestJsonToolServer
 - [x] Code review (3 rounds) and Copilot rounds 1-2 ([#4669](https://github.com/ProteoWizard/pwiz/pull/4669))
-- [ ] Copilot round 3 (2026-09-23): `Values != null` gate bypassed `AcceptedValues` in
+- [x] Copilot round 3 (2026-09-23): `Values != null` gate bypassed `AcceptedValues` in
       `ArgumentBase.GetArgumentTextWithValue` and `NameValuePair.IsMatch`; both now gate on
       `IsValidValue`, with `ValuesForError` keeping the rejection message non-null. Latent today
       (no argument declares `AcceptedValues` alone). Test: `ValidateValueSources` covers all four
@@ -58,8 +58,11 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
   - Two of my own regressions, both caught by tests, not by reasoning: restricting `Values` to the display
     languages rejected `--culture=en-US`, which `SkylineCmdTest` passes on every invocation; and
     `CultureNotFoundException` never fires for well-formed names, so `not-a-culture` was accepted silently
-- [ ] Human review
-- [ ] Reply to support thread once fix ships
+- [x] Code review round 4 (`/code-review max`, 2026-09-28) and Copilot rounds 4-5 - see Progress Log
+- [ ] Human review - merged without one, on the developer's decision
+- [ ] Reply to support thread once fix ships (in a Skyline-daily release)
+- [ ] Port to the .NET 10 branch: cherry-pick `10aac2d948` onto a new `Skyline/work/<date>_net10_cmdline_invariant_values`
+      branch off `Skyline/work/20260612_net8_port`, PR into that branch; run the culture tests under .NET 10 (ICU)
 
 ## Settings-list arguments
 
@@ -124,8 +127,52 @@ The fix on this branch makes the arguments work in any culture, so no workaround
   decide whether it also belongs in the usage/help output and the generated `CommandLine.html`;
   and a test should assert it changes message language, not just that it parses.
 
+## Progress Log
+
+### 2026-09-28 - Final review rounds
+
+- Copilot: `ARG_CULTURE + "en-US"` threw although parsing accepted it. Tried honoring `HasValueChecking` in
+  `ArgumentBase.GetArgumentTextWithValue` again - reverted for the same reason as before
+  (`ConsoleArgumentInvalidValuesTest`). Fixed with `AcceptedValues = GetKnownCultureNames` (1ecb1b598c).
+- `/code-review max` returned 15 findings. Fixed (6311e7b3d4):
+  - `CommandLine.Run` saves and restores `LocalizationHelper` and thread cultures around each command, so
+    `--culture` no longer leaks through the in-process MCP / Immediate Window. It restores the thread cultures
+    directly, not through `InitThread`, which would break commands run inside `CallWithCulture`. Verified red
+    with the restore removed.
+  - `SetCulture` validates the resolved `CultureInfo.Name` (catching `CultureNotFoundException`), so
+    other spellings of a known name are accepted and a soft hyphen in the value is a usage error.
+  - Multi-process import children get `--culture` when the UI culture differs from the original (the parent
+    matches the localized error prefix). No test covers multi-process import.
+  - `DISPLAY_LANGUAGE_NAMES` is `Lazy` (was ~115 ms per SkylineCmd run); `ParseKey` throws with
+    `ValuesForError`; `_culture` added to `CommandArgUsage.Designer.cs`.
+  - `--culture` kept setting formats as well as language (`SkylineCmdTest` relies on it), now documented in help.
+  - Tests: a non-default "Test enrichment" makes the enrichment document assertions able to fail;
+    `ValidateValueSources` hard-codes expected lists and compares whole messages.
+- Dropped: console encoding with `--culture` under SkylineRunner / `--batch-commands`; case and Turkish-I
+  matching in sibling args (pre-existing); localized help listing localized values (by design); defaults
+  keyed by resource text (`--full-scan-isolation-scheme`, `--import-search-irts`, `--reintegrate-model-name`,
+  already in Follow-up above).
+- Copilot: regenerated `CommandLine.html` (en/ja/zh-CHS) for the new `_culture` text (1ac1c4b476).
+- TeamCity: `en_US` is not resolved on every Windows version (agent rejected it, local machine accepted it);
+  the test now uses a case change, `EN-us` (e4ea0e20b7).
+
+### 2026-09-29 - Merged
+
+PR #4669 merged as commit 10aac2d948. Shipped: the fragment finder, CE/DP/CoV/optimization library and
+isotope enrichment arguments accept invariant names as well as localized ones in any UI language;
+`ArgumentBase.AcceptedValues` for values accepted beyond the localized `Values`; and a public `--culture`
+argument that applies to its own command only. Deferred: the Follow-up items above (#4696 filed for three of
+them), the support-thread reply once a release carries the fix, and the .NET 10 port (task above).
+
 ## Files Modified
 
+- `pwiz_tools/Shared/PortableUtil/CommandLine/ArgumentBase.cs`
+- `pwiz_tools/Shared/PortableUtil/CommandLine/NameValuePair.cs`
 - `pwiz_tools/Skyline/CommandArgs.cs`
+- `pwiz_tools/Skyline/CommandArgUsage.resx`, `CommandArgUsage.Designer.cs`
+- `pwiz_tools/Skyline/CommandLine.cs`
+- `pwiz_tools/Skyline/Documentation/Help/{en,ja,zh-CHS}/CommandLine.html`
 - `pwiz_tools/Skyline/Model/DocSettings/TransitionSettings.cs`
+- `pwiz_tools/Skyline/Model/Results/ChromatogramCache.cs`
+- `pwiz_tools/Skyline/TestData/CommandLineRefineTest.cs`
 - `pwiz_tools/Skyline/TestData/CommandLineTest.cs`
