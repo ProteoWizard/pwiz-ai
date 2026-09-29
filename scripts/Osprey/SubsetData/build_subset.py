@@ -85,7 +85,11 @@ def main():
                  os.path.join(work, p['libdecoy_prefix'] + '.tsv'),
                  os.path.join(work, p['libdecoy_prefix'] + '-pairing.tsv'),
                  '--mz-lo', '%.2f' % mz_lo, '--mz-hi', '%.2f' % mz_hi])
-        shutil.copyfile(os.path.join(HERE, p['readme']), os.path.join(work, 'README.txt'))
+        # LF whatever the checkout's line endings, so the zip does not depend on git's autocrlf.
+        with open(os.path.join(HERE, p['readme'])) as src:
+            readme = src.read()
+        with open(os.path.join(work, 'README.txt'), 'w', newline='\n') as dst:
+            dst.write(readme)
 
         # Fixed timestamps and sorted names, so the same inputs give a byte-identical zip.
         with zipfile.ZipFile(a.out_zip, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
