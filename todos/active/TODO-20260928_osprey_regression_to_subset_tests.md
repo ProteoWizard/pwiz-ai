@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4728](https://github.com/ProteoWizard/pwiz/issues/4728)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4739](https://github.com/ProteoWizard/pwiz/pull/4739) (base `Skyline/work/20260612_net8_port`)
 - **Checkout**: `C:\proj\pwiz-osprey`
 
 ## Objective
@@ -197,3 +197,17 @@ Commits (each twin red-checked by re-introducing a documented defect in the prod
 * pwiz-ai: skill (routing rule, correctness gate), PRE-COMMIT.md, dev guide switch list.
   Guide sections with per-leg counts (~line 2062 table, ~2094 mode 6 leg counts) still to
   refresh from the final run.
+
+### 2026-09-29 - review, PR
+
+* Final `-Dataset All`: 48 PASS / 0 FAIL / 0 SKIP, 33:41 wall. regression.html regenerated
+  (85d9024baa). Per-dataset legs: Stellar 257 s, LD 1,032 s, GE 446 s, Astral 1,575 s.
+* `/code-review max` (15 findings). Fixed in 5ed4510cec: resume legs back under the pass-2
+  worker verifier; diagnostics products deleted before the rehydrate re-emit; regenerated
+  report compared byte-exact; refusal contract (one Error:, no exception); ambient
+  OSPREY_ALLOW_UNFIXED_RESIDENT / OSPREY_PASS2_QVALUE blanked; survivor-pool key not value;
+  BlibComparer compiled against $PSHOMEef; Compare-BlibFull totals first; stale docs.
+  Dropped: hand-typed artifact names (#4727 style, renames fail loudly), 11-line commit
+  message (fix in squash), duplicated subset analyses (suite ~50 s), PS vs C# sidecar
+  comparer unification (separate refactor), unused -NoTrainedModel (pre-existing).
+* PR #4739 opened. Next: Copilot review via /pw-respond; TeamCity Perf/Regression (ask first).
