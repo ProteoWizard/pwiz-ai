@@ -62,7 +62,8 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
 - [x] Human review - closed by the developer (2026-09-29)
 - [x] Reply to support thread once fix ships - closed by the developer (2026-09-29)
 - [x] Port to the .NET 10 branch: [#4742](https://github.com/ProteoWizard/pwiz/pull/4742)
-      (`Skyline/work/20260929_net10_cmdline_invariant_values` into `Skyline/work/20260612_net8_port`)
+      (`Skyline/work/20260929_net10_cmdline_invariant_values` into `Skyline/work/20260612_net8_port`,
+      merged 2026-09-29 as `aec29a7127`)
 - [x] Master follow-up [#4743](https://github.com/ProteoWizard/pwiz/pull/4743): zh-CHS parent check + soft hyphen escape
       (merged 2026-09-29 as `05b8c93b3a`)
 
@@ -182,6 +183,13 @@ them), the support-thread reply once a release carries the fix, and the .NET 10 
   ("Setting values is not supported for native dialog Dialog:Save As") on cloud agent
   `pwiz-windows-i-026de422cfdbcaf43`; unrelated to this change (#4735 passed on MacCoss TeamCity Agent 1).
   Re-run 4193863 queued on MacCoss TeamCity Agent 1.
+
+### 2026-09-29 - Port merged
+
+Re-run 4193863 passed on MacCoss TeamCity Agent 1 with no failed tests (TestNativeMessageBox included), confirming
+the first failure was the cloud agent's environment. The Wine .NET Docker build, red only through its snapshot
+dependency on the first run, passed on re-run 4193938. PR #4742 merged into `Skyline/work/20260612_net8_port` as
+`aec29a7127`. All work for #4669 is complete on master and the .NET 10 branch.
 
 ## Files Modified
 
