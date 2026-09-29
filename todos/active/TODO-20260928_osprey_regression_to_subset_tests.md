@@ -168,3 +168,32 @@ SubsetPipelineTest.
   it now regenerates StellarSubset.zip byte-identically.
 * Uncommitted on the pwiz branch: regression.ps1, regression.html, BlibGolden.ps1,
   Write-RegressionMatrix.ps1, BlibComparer.cs, SubsetPipelineTest.cs.
+
+### 2026-09-29 (cont.) - re-scoped to decision clarity, option 2 (one coherent PR)
+
+Goal restated by Brendan: a future session asking "unit test or regression.ps1?" must find
+the answer in the code, not just a comment - regression.ps1 full of cheap mechanics legs
+teaches the wrong pattern. Criterion is mechanics vs scale, not cost. Keep at full scale:
+mode 3 (LD + Astral), one full-size resume (GE mode 2, carries mode 12's resume half), goldens
+and bounds. Free checks on output a leg already produces (modes 4, 6) stay.
+
+Commits (each twin red-checked by re-introducing a documented defect in the product):
+* fa4f18f753 Stellar cut, routing rule (regression.ps1 header, regression.html rule box,
+  SubsetPipelineTest class doc), C# comparer, chain sidecar/verifier checks, Astral chain.
+  Red-checks: phase-4 verifier forced on -> split assertion; tampered pass-1, pass-2 and
+  experiment sidecars -> each named.
+* 1f92c8a028 modes 8, 9 -> TestSubsetRescoreResume. Red: `any` gate (downstream guard
+  refuses) and pass2Done=true (0 re-scored).
+* ffaf2345c3 mode 10 -> file-set checks on the subset transfer arm. Red: transfer skips the
+  experiment sidecar. #4665 resident-gap row kept, Legs text updated.
+* 26d236f81a modes 5, 7, 11 -> TestSubsetDiagnosticsWithoutReanalysis + streamed-join and
+  fragment-release (#4650 oracle) on the subset rehydrate. Red: silent-degrade refusal,
+  forced re-analysis, rehydrate release removed. Removed Test-NoAllRunsBundle,
+  Invoke-PartialRescoreInvalidation, Invoke-SecondPassOnlyInvalidation, -SkipRehydrate,
+  -SkipAltPass2, -TaskName, -AllowNonZeroExit, the AltPass2 key and dead markers.
+  regression.ps1 about -1,000 lines.
+* Unit tests 618/618, inspection clean. Final `-Dataset All` running
+  (lane logs TestResults\regression-lane-*-20260929_084333.log).
+* pwiz-ai: skill (routing rule, correctness gate), PRE-COMMIT.md, dev guide switch list.
+  Guide sections with per-leg counts (~line 2062 table, ~2094 mode 6 leg counts) still to
+  refresh from the final run.
