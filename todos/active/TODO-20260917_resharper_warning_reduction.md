@@ -242,12 +242,29 @@ or round-tripping breaks for any name containing a reserved character.
    plan are gone (both died with the pre-build fix), the severity tuning, sweep and waves 2
    and 5 are described, and the forbidden `Generated with [Claude Code]` line and session URL
    are removed. The missing `skyline` module label was added at the same time.
-2. **`.editorconfig` scope, raised by `/code-review max` and not yet addressed** - the blanket
-   `[*.cs]` at repo root reaches `pwiz_tools/Osprey`, `Bumbershoot`, `MSConvertGUI`, `SeeMS`
-   and `Skyline/Executables`, each of which keeps its own `.sln.DotSettings` that does not
-   suppress these inspections. `WFO1000 = none` also contradicts `pwiz-sharp/.editorconfig`'s
-   `= warning` with near-identical prose. Narrowing the scope to the Skyline tree is the
-   smaller claim and the easier review.
+2. ~~**`.editorconfig` scope**~~ **DONE 2026-09-29** (`f4946afc18`). The repo-root `[*.cs]` is now
+   `[pwiz_tools/{Skyline,Shared,SeeMS,MSConvertGUI}/**.cs]`.
+   - **`Shared` has to be in scope, and a `pwiz_tools/Skyline/.editorconfig` would NOT have
+     worked**: 11 of `Skyline.sln`'s 28 projects live in `pwiz_tools/Shared` (including the
+     vendored `zedgraph` the `WFO1000` note names), and EditorConfig matches on the file's path
+     on disk, not on which project compiles it. Scoping to the Skyline directory alone would
+     have reopened a large share of the 1,833 demotions. Nesting at `pwiz_tools/` instead would
+     have swept Osprey and Bumbershoot straight back in.
+   - `SeeMS` and `MSConvertGUI` are included on purpose - they are not in `Skyline.sln`, so they
+     do not affect this check, but they hit the same WinForms noise for the same reasons.
+   - Out of scope, deliberately: `pwiz_tools/Osprey` (252 `.cs`) and `pwiz_tools/Bumbershoot`
+     (234). Those are the ONLY C# trees the narrowing drops - every other `pwiz_tools`
+     subdirectory has no `.cs` at all.
+   - **The other half of the review finding was simply wrong, and it is worth knowing why.**
+     It claimed `WFO1000 = none` contradicted `pwiz-sharp/.editorconfig`'s `= warning`. It never
+     did: **`pwiz-sharp/.editorconfig` line 1 is `root = true`**, so EditorConfig stops walking
+     up there and the repo-root file has never reached anything under `pwiz-sharp`. The two
+     values govern disjoint trees. The near-identical prose is not duplication of a conflict -
+     pwiz-sharp has its OWN ported SeeMS and MsConvertGUI, so the same rule is documented once
+     per copy. pwiz-sharp's `= warning` is also load-bearing: WFO1000 ships at Error in the
+     .NET 9+ WinForms SDK, so without the demotion its WinForms builds would fail.
+   - Verified: `tcinspect` still `success - No inspections at WARNING or above`, so nothing
+     inside `Skyline.sln` reopened.
 3. **#4697 carries two documented open questions** (both in its PR body): the owned-forms
    close cascade calls only `OnFormClosing`, never the legacy `OnClosing`, so four sites -
    `ViewLibraryDlg`, `AlignmentForm`, `UndoRedoButtons`, `SkylineWindow` - may want an
@@ -739,8 +756,9 @@ Plus two test defects: the DiaUmpire vendor test could not pass twice (its clean
 `-diaumpire_pin.tsv`), and `DiaUmpireTutorialTest` carried a dead field that LOOKED like a
 seventh defect and was not - see the correction above, which is the more useful lesson.
 
-**The one thing still open before a review request**: the `.editorconfig` scope question from
-`/code-review max` (item 2 under "Open items"), unaddressed since it was raised.
+**Nothing is open on #4685 any more.** The `.editorconfig` scope question - the last outstanding
+`/code-review max` finding - is closed (item 2 under "Open items"), and half of it turned out not
+to be a defect at all. The branch is ready for a human review request.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
