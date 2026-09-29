@@ -326,9 +326,19 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
 - [x] Masking question (developer, 2026-09-29): across 403,267 ions both tools matched, Carafe's correlation and
   corr_polish mostly agree (1+ medians 0.894 / 0.873; 2+ 0.399 / 0.361). The illustrated extremes were chosen as the
   worst disagreements. AVFDETYPDPVR: two components; Carafe's refined window covered only the rising edge and its best
-  ion (b10++) belongs to the second one. Open lead: zeros in Osprey's XICs (peaks at the calibrated window's edge drop in
-  and out) raise corr_polish failures (1+ 11.9% -> 27.6%, 2+ 42.3% -> 56.5% from no zeros to 2+ zeros).
-  Scripts: `ai/.tmp/sessions/20260927-osprey-export/maskviz/corr_global.py`, `corr_audit.py`.
+  ion (b10++) belongs to the second one. Zeros in Osprey's XICs raise corr_polish failures (1+ 11.9% -> 27.6%, 2+
+  42.3% -> 56.5% from no zeros to 2+ zeros). Holes: 1+ Osprey 31.5% / Carafe 28.7%; 2+ 54.6% / 34.1%. Carafe's are
+  not a better measurement: it centers each XIC on the library spectrum's peak m/z, not the theoretical one, so its
+  window follows whatever peak is there (holes grow 29.8% -> 42.2% with the offset).
+  - RESOLVED, not a CarafeSharp defect (developer, 2026-09-29): a null test on 800 Stellar 2+ precursors (a null
+    m/z a few Th away, clear of the ladder) finds 2+ fragments barely above null: a peak at the apex 56.4% vs 60.1%,
+    well-correlated 9.0% vs 6.7%. 1+ fragments stand clear: 92.9% vs 67.4%, 50.6% vs 8.0%. So 2+ matches of 2+
+    precursors on the Stellar are mostly interference; Carafe's extra weak 2+ library fragments are learned from it.
+    Recorded in 05-carafe-comparison.md (#4717 f6441873c7) and both artifacts.
+  - Masking artifact has a "Carafe masks more" group: AYVSTLMGVPGR, DDSFFGETSHNYHK (Carafe's refined windows wider,
+    16 vs 6 and 14 vs 7 scans), VFQVEYAMK (b3+ XIC centered 0.34 Th off, missing the real peak).
+  Scripts: `ai/.tmp/sessions/20260927-osprey-export/maskviz/` (`corr_global.py`, `corr_audit.py`, `holes_global.py`,
+  `null_ions.py`).
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
