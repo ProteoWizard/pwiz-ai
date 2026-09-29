@@ -254,3 +254,29 @@ The work is only half the deliverable; the other half is evidence for or against
 - **Status**: drafts complete and gated; waiting on Brendan for the open decisions, for sending the
   reviewer CSVs + blind grading sheets to the ja/zh reviewers, and for PR timing (no PR opened;
   `/code-review` and the TeamCity Perf/Regression gate not yet run - both belong at PR time).
+
+**2026-09-29** - Brendan's decisions on the open items
+1. zh flags: follow Skyline (quote them). `flag_args.py` parses every call site for placeholders filled
+   from `OspreyArgNames` / `ARG_*` / `TaskText` / `ArgumentText`, plus the `--help` `DescriptionArgs`;
+   56 zh values now wrap those `{N}` in “ ” (group titles and the appended-sentence `{3}` of
+   ProcessFile_Loaded excluded as false positives; RequiresError `{1}` left bare because its value can
+   be the already-quoted "--library and --output"). Help-page prose passes flags inside `<code>`, so no
+   quotes there.
+2. New terms: wait until the review round.
+3. The "stage" message (`ParquetScoreCache_RequireCharge...`) reworded to one sentence + remedy:
+   "{0} is damaged: row {1} ({3} {2}) has a charge of 0, which is not a possible precursor charge.
+   Delete the file and run {4} again to rewrite it." - `{4}` = `--task PerFileRescoring` for a
+   `.scores-reconciled.parquet`, else `--task PerFileScoring`; the mechanism (write race, 2026-09-17)
+   moved to a code comment. Key unchanged (RESX PR convention).
+4. CommandLine.html: all prose (title, meta description, intro, HPC section, example comments, closing
+   paragraph) moved to 13 `OspreyResources` entries with markup/flags/file names as arguments, like
+   Skyline's translated page; intro now "a peptide-centric DIA search tool from the MacCoss lab", the
+   C#/.NET 8/Rust sentence dropped; the `--help` banner "(.NET port of Osprey)" dropped for the same
+   reason (flagged to Brendan); possessives removed from the closing paragraph (docs/21). ja/zh drafted
+   by the coordinator, imported "Needs Review".
+5. Issue for Nick: [#4737](https://github.com/ProteoWizard/pwiz/issues/4737) (LastReleaseResources.db
+   zh-CHS rows - verified 36,892 ja / 36,892 zh-CHS, UpdateResxFiles.bat, TutorialLocalization
+   Microsoft.Bcl.HashCode crash, import re-serialization churn, zh-CHS tool stragglers).
+- `ff1c1350dd` (pushed). Gates: 610/610 en-US (inspection 0), ja-JP, zh-CN, fr-FR; Stellar regression
+  PASSED. Also confirmed on `d0a29a6b0c` before these changes: 610/610 under ja-JP and zh-CN.
+- Reviewer CSVs regenerated (826 strings; 100% coverage).
