@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260928_osprey_regression_to_subset_tests`
 - **Base**: `Skyline/work/20260612_net8_port` (where #4727's SubsetPipelineTest landed; not master)
 - **Created**: 2026-09-28
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4728](https://github.com/ProteoWizard/pwiz/issues/4728)
 - **Module**: `osprey`
-- **PR**: [#4739](https://github.com/ProteoWizard/pwiz/pull/4739) (base `Skyline/work/20260612_net8_port`)
+- **PR**: [#4739](https://github.com/ProteoWizard/pwiz/pull/4739) (merged 2026-09-29 into `Skyline/work/20260612_net8_port`)
 - **Checkout**: `C:\proj\pwiz-osprey`
 
 ## Objective
@@ -32,11 +32,11 @@ one real HPC chain (mode 3 on LD) as the guard against statics leaking between p
 - [ ] ~~Gap-fill variant; then drop Astral mode 3~~ - DROPPED by decision 2026-09-29, see
   "Decisions". Astral mode 3 STAYS at full scale; the truncated-replicate fixture collapses on
   the current peak_sharpness score (see "peak_sharpness evidence").
-- [ ] Red-check the new chain assertions (force the chain's verifier on; tamper one pass-2
+- [x] Red-check the new chain assertions (force the chain's verifier on; tamper one pass-2
   sidecar record) before relying on them
-- [ ] SubsetPipelineTest: rescore-cut resume and crash-resume (`[PATH] rescore-resume:`, reconciled-parquet count, blib at 1e-9); then drop LD modes 8 and 9 (166 s)
-- [ ] SubsetPipelineTest: file-set and `[PATH]` marker checks on transfer / mean-best-2 arm; then drop LD mode 10 (234 s)
-- [ ] SubsetPipelineTest: re-emit diagnostics on rehydrate; pay-later with all four diagnostics products deleted; then drop LD modes 5, 7 and 11 (116 s)
+- [x] SubsetPipelineTest: rescore-cut resume and crash-resume (`[PATH] rescore-resume:`, reconciled-parquet count, blib at 1e-9); then drop LD modes 8 and 9 (166 s)
+- [x] SubsetPipelineTest: file-set and `[PATH]` marker checks on transfer / mean-best-2 arm; then drop LD mode 10 (234 s)
+- [x] SubsetPipelineTest: re-emit diagnostics on rehydrate; pay-later with all four diagnostics products deleted; then drop LD modes 5, 7 and 11 (116 s)
 - [ ] SubsetPipelineTest: per-phase fragment release (mode 6) incl. #4650 count equality; no `[PATH] all-runs-bundle:`; data-dir fingerprint before/after (no-copy)
 - [ ] Optional: stripped-decoy subset library for mode 12; then drop LD mode 2 (162 s), keep GE mode 2
 - [x] Quick win: switch kept self-consistency legs from PowerShell `Compare-BlibFull` to C# `BlibComparer` (#4727)
@@ -216,3 +216,16 @@ Commits (each twin red-checked by re-introducing a documented defect in the prod
 * TeamCity: Perf/Regression green in 53 min; Osprey Windows .NET green in 9 min at 84.1%
   statement coverage. All 5 PR checks green, MERGEABLE. No Copilot review posted.
   Ready for human review, then /pw-complete (squash subject <= 10 lines).
+
+### 2026-09-29 - Merged
+
+PR #4739 merged as commit 1f4694449b into `Skyline/work/20260612_net8_port`. Shipped: Stellar
+modes 2, 3, 5 and StellarLibDecoy modes 5, 7-11 moved to SubsetPipelineTest, each twin
+red-checked; mode 3 (LD + Astral), GE mode 2 and all goldens/bounds kept at full scale; the
+routing rule in regression.ps1, regression.html, SubsetPipelineTest and the osprey skill;
+Compare-BlibFull on the C# BlibComparer. Gate 48 PASS, TeamCity Perf/Regression 53 min, unit
+coverage 84.1%. Deferred by decision: Astral mode 3 cut and the gap-fill fixture (blocked on
+peak_sharpness, evidence above for the feature-set competition); lane rebalance (no wall gain
+while Astral mode 3 stays); the per-phase fragment release beyond the rehydrate, the no-copy
+fingerprint and the optional stripped-decoy subset for mode 12 (not needed for the cuts made).
+No follow-up issues filed.
