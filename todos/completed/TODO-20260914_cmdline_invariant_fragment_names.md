@@ -59,11 +59,12 @@ https://skyline.ms/home/support/announcements-thread.view?rowId=75563
     languages rejected `--culture=en-US`, which `SkylineCmdTest` passes on every invocation; and
     `CultureNotFoundException` never fires for well-formed names, so `not-a-culture` was accepted silently
 - [x] Code review round 4 (`/code-review max`, 2026-09-28) and Copilot rounds 4-5 - see Progress Log
-- [ ] Human review - merged without one, on the developer's decision
-- [ ] Reply to support thread once fix ships (in a Skyline-daily release)
+- [x] Human review - closed by the developer (2026-09-29)
+- [x] Reply to support thread once fix ships - closed by the developer (2026-09-29)
 - [x] Port to the .NET 10 branch: [#4742](https://github.com/ProteoWizard/pwiz/pull/4742)
       (`Skyline/work/20260929_net10_cmdline_invariant_values` into `Skyline/work/20260612_net8_port`)
-- [ ] Master follow-up [#4743](https://github.com/ProteoWizard/pwiz/pull/4743): zh-CHS parent check + soft hyphen escape
+- [x] Master follow-up [#4743](https://github.com/ProteoWizard/pwiz/pull/4743): zh-CHS parent check + soft hyphen escape
+      (merged 2026-09-29 as `05b8c93b3a`)
 
 ## Settings-list arguments
 
@@ -177,6 +178,10 @@ them), the support-thread reply once a release carries the fix, and the .NET 10 
 - Master had a literal U+00AD in `ConsoleCultureArgumentTest` where the escape was intended: Claude's Edit/Write
   tools decode a typed backslash-u escape in their input into the character. Fixed on both branches by byte-level replacement.
 - Not addressed (pre-existing): `Util/Adduct.cs:1206` has a U+00AD inside the adduct name "CH3CO2".
+- #4743 merged to master as `05b8c93b3a`. #4742's first Skyline Windows .NET build failed `TestNativeMessageBox`
+  ("Setting values is not supported for native dialog Dialog:Save As") on cloud agent
+  `pwiz-windows-i-026de422cfdbcaf43`; unrelated to this change (#4735 passed on MacCoss TeamCity Agent 1).
+  Re-run 4193863 queued on MacCoss TeamCity Agent 1.
 
 ## Files Modified
 
