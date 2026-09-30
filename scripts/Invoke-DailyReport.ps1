@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Runs Claude Code daily report and emails results.
 
