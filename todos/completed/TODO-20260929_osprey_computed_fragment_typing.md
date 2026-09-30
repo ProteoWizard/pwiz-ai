@@ -2,13 +2,13 @@
 
 ## Branch Information
 - **Branch (PR 1)**: `Skyline/work/20260929_osprey_stacked_mod_decoys` (checkout `C:\proj\pwiz-work1`)
-- **Branch (PR 2)**: (not yet created)
+- **Branch (PR 2)**: `Skyline/work/20260929_osprey_computed_fragment_typing` (deleted after merge)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
 - **Created**: 2026-09-29
-- **Status**: In Progress - PR 1 open (#4746), TeamCity Perf/Regression build 4194189 queued; PR 2 not started
+- **Status**: Completed
 - **Module**: `osprey`
 - **PR (PR 1)**: [#4746](https://github.com/ProteoWizard/pwiz/pull/4746) (merged 2026-09-30 as 07314d47ea)
-- **PR (PR 2)**: [#4749](https://github.com/ProteoWizard/pwiz/pull/4749) (base retargeted to the port branch after #4746 merged)
+- **PR (PR 2)**: [#4749](https://github.com/ProteoWizard/pwiz/pull/4749) (merged 2026-09-30 as ea1d1dc2df)
 - **Replaces**: PR #4730, which is closed once both PRs below are open (see "Closing #4730")
 - **Source of the code**: #4730's head, `Skyline/work/20260928_osprey_blib_annotations` @ 2e88e21746
   (checkout `C:\proj\pwiz-work1` on Brendan's machine)
@@ -235,38 +235,13 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
       ~8M rows / ~400 MB and a writer thread on the 483k library)
 - [ ] Close #4730 (Mike or Brendan)
 
-## After PR 2 - resume-invalidation fixes (Brendan, 2026-09-29: "fix #2 and #3 after PR 2")
+## After PR 2 - resume-invalidation fixes
 
-**REMIND BRENDAN when #4746 and PR 2 are both merged**, then do this as its own PR.
-From #4746's `/code-review max`; pre-existing, not caused by either PR. Each lets a resume reuse
-an output whose validity key no longer matches, so any future key term is silently bypassed:
-- [ ] **#2 PerFileRescoring self-gate**: `PerFileRescoreTask.Pass2SidecarCurrent`
-      (`PerFileRescoreTask.cs` ~1710) accepts a `.2nd-pass.fdr_scores.bin` by FORMAT only, returns
-      `RefillOnly` (~491), and `AnalysisPipeline.WriteTaskSidecars` (~224-242) then stamps the old
-      Stage 6 outputs with the new key. Fix: also require
-      `PerFileResumeDriver.IsCurrent(pass2Path, Name, ValidityKey(ctx))`. Reach it via
-      `--task PerFileRescoring` after re-running Stages 1-5, and `--task ModelDiagnostics`.
-- [ ] **#3 SecondPassFDR transfer-mode gate**: `Pass2FdrSidecar.cs` ~206
-      (`recomputed = anyRescoreWork && (missingPass2 > 0 || workerDidPerFileHalf)`) judges
-      existing pass-2 files by format (`Pass2SidecarWriter.IsCurrent -> IsCurrentFormat`). Under
-      `OSPREY_PASS2_QVALUE=transfer`, a key change reloads old pass-2 values, re-stamps them, then
-      throws "No second-pass experiment-scope records were published" (`Pass2FdrSidecar.cs` ~1490)
-      on every later run until the `.2nd-pass` files are deleted by hand.
-- [ ] Tests in `SubsetPipelineTest` (the pipeline-mechanics home): change a key, resume, assert
-      the stage re-runs instead of adopting.
-- Not doing #1 (the `--task` join validates scores parquets by footer version/hashes only; a
-  fix needs a footer marker mirrored in Rust).
+Moved to `todos/backlog/TODO-osprey_resume_validity_gates.md` on 2026-09-30.
 
 ## Later, separate
 
-- Rust port of the typing (blib libraries are not in the parity datasets)
-- Issue for consolidating C# BLIB read/write (Skyline `BlibDb`/`BiblioSpecLite`, Osprey
-  `BlibWriter`/`BlibLoader`/`BlibSpectrum`) into `pwiz_tools/Shared/BiblioSpec` (not yet filed -
-  Brendan asked for the write-up)
-- Pre-existing issues #4730's first review found, "to be filed" in its description - confirm filed:
-  decoys move N-terminal modifications to an internal residue (C# and Rust);
-  `DiannTsvLoader.StripFlankingChars` mangles sequences with two decimal bracket masses; the second
-  of two adjacent TSV bracket mods lands on residue 0
+Moved to `todos/backlog/TODO-osprey_resume_validity_gates.md` on 2026-09-30.
 
 ## Progress Log
 
@@ -322,6 +297,20 @@ an output whose validity key no longer matches, so any future key term is silent
   SkylineCmd (`ai/.tmp/sessions/20260929-8a15/skyline-linenum/`). Not filed - Brendan to decide.
 - regression-parallel All on the strict loader: 70 PASS / 0 FAIL. PR #4746 opened; TeamCity
   Perf/Regression 4194189 triggered (Brendan approved).
+
+### 2026-09-30 - Merged
+
+PR #4749 squash-merged into Skyline/work/20260612_net8_port as ea1d1dc2df (#4746 before it as
+07314d47ea). Shipped: blib peaks typed from m/z within the search fragment tolerance (Skyline's
+rules; RefSpectraPeakAnnotations neither read nor written), --export-library, printed-precision
+blib modification matching with one UniMod table from Skyline's UniModData.cs (six ids
+corrected), refusals for -o over the library and unflagged decoy accessions. Gates: Windows,
+Linux and Perf/Regression 4194862 SUCCESS at f35c4dca94; local regression 48/0; cross-impl with
+maccoss/osprey#72 (merged) at ab654217c6. #4708 retargeted onto the port branch (needs a no-op
+-s ours merge after its Perf run); #4730 commented for closing. Deferred to
+`todos/backlog/TODO-osprey_resume_validity_gates.md`: resume gaps #2/#3, the StripFlankingChars
+bracket bug, BLIB read/write consolidation write-up. Cross-impl on the final head against Rust
+main runs once #4708 is on the port branch.
 
 ### 2026-09-30 - #4746 merged
 
