@@ -323,6 +323,30 @@ an output whose validity key no longer matches, so any future key term is silent
 - regression-parallel All on the strict loader: 70 PASS / 0 FAIL. PR #4746 opened; TeamCity
   Perf/Regression 4194189 triggered (Brendan approved).
 
+### 2026-09-29 - PR 2 first commit (ab654217c6)
+Branch `Skyline/work/20260929_osprey_computed_fragment_typing`, stacked on #4746, pushed (no PR yet).
+- #4730's diff applied 3-way minus PR 1's files; conflicts in LibraryLoader, SubsetPipelineTest.
+- `Osprey.Core/FragmentTyping.cs`: candidates from `FragmentLadder` (primary b/y, z 1..min(prec,2),
+  no losses), nearest within `config.FragmentTolerance` (ppm taken at the candidate m/z, as
+  `FragmentToleranceConfig.WithinTolerance`), tie = two candidates within 1e-3 Th of the nearest
+  distance -> Unknown. `Compute` returns the tied ions too.
+- `Osprey.IO/FragmentTypeCheck.cs`: agree / isobaric / differ / outside, one summary line
+  (warning only when differ > 0), first 10 differing peaks under `--verbose`. Blib rows and TSV
+  columns both feed it; TSV columns remain the TSV typing (decision 7).
+- `BlibLoader(FragmentToleranceConfig)` types every blib; annotation rows only feed the check.
+- Writing: `BlibSpectrum`/`BlibWriter`/`LibraryBlibWriter` write NO annotation rows (table empty).
+- Keys: ONE `;blibreader=2` base term for every blib search + `.libcache` `blib_reader:2,<tol>,<unit>`
+  (`BlibLoader.READER_VERSION`). Dropped #4730's `FileVersionProbe`, `HasPeakAnnotations`,
+  `HasPrecisionSensitiveModifications`, `;libext`, `;libmods`: they re-keyed only affected blibs,
+  and every blib is now affected. Tolerance is in SearchParameterHash already.
+- Subset TSV (Stellar, 0.5 Th): 7,154 of 7,160 stated b/y agree, 0 differ, 6 isobaric (b2/b4^2 of
+  IQQLTEEIGR, LQQIAAAVENK; b2 of ELEIGQAGSQR, VQVQDNEGCPVEALVK). Consequence: an exported blib
+  leaves those 6 untyped, so its search is no longer identical to the TSV search (test now asserts
+  >= 90% of the TSV precursors, like the back-search leg). Per decision 4 (tie -> Unknown).
+- Build-Osprey Debug -RunTests -RunInspection: 624/624, 0 warnings. regression-parallel All running.
+- CarafeSharp 483k blib: not on this machine (TODO-20260923_carafesharp names D:\test paths that do
+  not exist here) - measurement pending the file.
+
 ### 2026-09-29 - Brendan's answers
 - `;decoymods=2`: DROP - removed (919f6ff6ea); docs/01 says a directory resumed across the fix
   keeps its old decoys. TeamCity 4194189 (on d5fe68fd07) still covers the outputs; not re-run.
