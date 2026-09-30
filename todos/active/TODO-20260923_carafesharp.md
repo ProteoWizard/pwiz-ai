@@ -438,6 +438,20 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
 - [x] Nightly trigger (Matt's #4717 comment, 2026-09-30): `pwiz_tools/CarafeSharp/.*` no-op added to
   `scripts/misc/nightly_trigger_and_paths_config.py` too (6ced1ad1fd), so a CarafeSharp PR no longer queues the
   nightly Skyline perf suite.
+- [x] Saved fine-tuned models (#4717 704b3e2159, 2026-09-30; for Nick's model selection in Skyline, and the
+  command line). Developer's decisions: extension `.carafemodel`; every training run writes
+  `carafe_fine_tuned_model.carafemodel` into `-o`; with `-model` the command line's m/z window and fragment range
+  apply, and NCE, instrument and rt_max come from the training run unless given (rt_max because the fine-tuned RT
+  model predicts on the training gradient). `-model_info <file>` prints the training description. The manifest
+  records each run's instrument, fragmentation and collision-energy histograms, NCE, RT range, isolation and MS2
+  windows, fragment tolerance, precursors by charge, Osprey version and hashes; the training data's size, charges,
+  peptide lengths and modifications; settings; held-out metrics. Format and usage: `docs/06-saved-models.md`
+  (written for CarafeSharp, its GUI and Skyline). Classes: `CarafeModelFile`, `CarafeModelTraining` (Proteome).
+  - Over the training library's window the saved model reproduces it byte for byte (358/358); over a wider window
+    intensities differ by <= 8.6e-7 (float32 rounding with a batch's other peptides), so the chained leg's check
+    compares m/z, RT and fragments exactly and intensities within 1e-5.
+  - Skyline (Nick): reads `manifest.json` from the zip to list models (Skyline is .NET Framework, so it cannot
+    reference the net10 CarafeSharp assemblies), and runs `CarafeSharp -model` to predict.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
