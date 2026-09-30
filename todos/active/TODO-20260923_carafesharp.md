@@ -7,7 +7,8 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4707](https://github.com/ProteoWizard/pwiz/issues/4707)
 - **Module**: `osprey`
-- **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch)
+- **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch). Since 2026-09-30 it
+  also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR.
 - **Companion**: `ai/todos/active/TODO-20260923_osprey_carafe_export.md` (the Osprey-side PR this depends on)
 
 ## Objective
@@ -339,6 +340,9 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
     16 vs 6 and 14 vs 7 scans), VFQVEYAMK (b3+ XIC centered 0.34 Th off, missing the real peak).
   Scripts: `ai/.tmp/sessions/20260927-osprey-export/maskviz/` (`corr_global.py`, `corr_audit.py`, `holes_global.py`,
   `null_ions.py`).
+- [x] Nightly trigger (Matt's #4717 comment, 2026-09-30): `pwiz_tools/CarafeSharp/.*` no-op added to
+  `scripts/misc/nightly_trigger_and_paths_config.py` too (6ced1ad1fd), so a CarafeSharp PR no longer queues the
+  nightly Skyline perf suite.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
@@ -469,17 +473,10 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
         with Osprey 0a0b744 the project search picked C = 0.1, 1, 1 and gave 20,263 precursors (the known C coin
         flip); Stage 6 rerun with a vendor-enabled #4703 build (`csel-f9aa0dd-vendor`) gave 31,246 / 28,390 / 4,302
         at 0.61% combined FDP, matching the mzML runs (31,460 / 28,637 / 4,338 and 31,104 / 28,240 / 4,326).
-      - **When #4717 squash-merges:** #4719 is stacked on its branch, so restack it or its diff will show #4717
-        again. `<old base>` is the #4717 commit #4719 is built on (`b70b34d0ab` unless #4717 is merged in later):
-        ```
-        git fetch origin
-        git rebase --onto origin/Skyline/work/20260612_net8_port <old base> Skyline/work/20260925_carafesharp_write_speed
-        git push --force-with-lease origin Skyline/work/20260925_carafesharp_write_speed
-        gh pr edit 4719 --repo ProteoWizard/pwiz --base Skyline/work/20260612_net8_port
-        ```
-        GitHub retargets the base by itself if #4717's branch is deleted, but the rebase is still needed. Then
-        repoint the two plot links in the PR body (`raw/<sha>/pwiz_tools/CarafeSharp/docs/performance/...png`) at
-        the rebased head: the old SHAs are no longer on the branch after the force push.
+      - **Folded into #4717 (2026-09-30), Brendan's request.** #4719 contained all of #4717, so #4717's branch was
+        fast-forwarded to #4719's head (`271e08e052`); #4717's body took #4719's summary, results and test plan,
+        and GitHub marked #4719 merged into it. No restack is needed any more. The worktree `D:\Dev\pwiz-carafesharp-train` and the
+        `Skyline/work/20260925_carafesharp_write_speed` branch are left for cleanup.
       - Follow-up for Osprey: reading the 8 GB Astral `.raw` took 899 s of per-file scoring vs 541 s from mzML.
 
    **The speedups:** two library-writing changes in one commit set, both with byte-identical output.
