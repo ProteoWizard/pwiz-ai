@@ -318,3 +318,26 @@ The work is only half the deliverable; the other half is evidence for or against
   `Encoding.GetEncoding("utf-8")`; all .cs incl. tests, comments ignored, exemption `// UTF8 BOM OK:`.
   Mutation-tested (a File.WriteAllText with Encoding.UTF8 is reported with file:line; nothing else
   matches). Gates 612/612 en-US (inspection 0), ja-JP, zh-CN, fr-FR.
+
+**2026-09-30** - merged the port branch (#4725, #4749, #4746, #4742, #4739, #4735, #4727)
+- `c6bc37a76e` merge: 2 conflicts (BlibLoader constants - upstream #4749 removed the mod-mass constants and
+  added CYSTEINE_RESIDUE_MASS, this branch added TABLE_REF_SPECTRA; Designer regenerated). The branch's new
+  guards caught upstream code written before them: `TestArgumentTextComesFromArguments` flagged 4 (the new
+  `--export-library` usage said "as a .blib file" -> `{1}` from `LibrarySource.EXT_BLIB`; 3 test messages
+  spelling `--verbose` / `--task X` -> typed text). Help pages ja/zh-Hans regenerated (new `--export-library`
+  row shows English). 632/632 in en-US (inspection 0), ja-JP, zh-CN, fr-FR.
+- Translation impact of the merge: 22 NEW English strings (fragment-typing check, DIA-NN line/column
+  errors, blib unknown-modification report, decoy-usability checks, `--export-library`) - untranslated,
+  and the relaxed test passes as agreed; 2 REMOVED (DiannTsvLoader row errors) leaving orphaned ja/zh
+  entries; 0 English changes under an already-translated key.
+- `a9ea0e1086` (Brendan: always flag translations with no English): `OspreyLocalizedResourcesTest` now fails
+  on any ja / zh-Hans key whose English resource is gone (never fires on added English; a developer who
+  removes or renames a key deletes its translations in the same change). Existing tools only drop orphans
+  when someone runs an import. Its first run listed exactly the 4 (2 keys x 2 languages); removed via
+  the pipeline import. 632/632 in 4 cultures.
+- Gap to remember (not addressed): if a future merge CHANGES the English of a translated key, the old
+  translation stays attached and nothing flags it - ResourcesOrganizer's "English text changed" compares
+  against `LastReleaseResources.db`, which has no Osprey rows until the next release baseline includes
+  them. Options: include Osprey in that baseline (Nick, #4737 context), or record the English each
+  translation was made from (e.g. in the resx comment) and have the test compare.
+- Next translation pass: the 22 new strings, through the same drafting + validation + import flow.
