@@ -323,6 +323,34 @@ an output whose validity key no longer matches, so any future key term is silent
 - regression-parallel All on the strict loader: 70 PASS / 0 FAIL. PR #4746 opened; TeamCity
   Perf/Regression 4194189 triggered (Brendan approved).
 
+### 2026-09-29 - PR 2 typing rework (a728f1a652) - CURRENT STATE / RESUME HERE
+Brendan's rules after reviewing the 6 subset "isobar" peaks (b2 = b4^2 of IQQLTEEIGR etc.):
+1. A library-stated primary b/y ion within the search tolerance is ACCEPTED, even over Osprey's
+   choice (isotope labels can resolve isobars Osprey cannot). Loss / a,c,x,z / z>2 / out of
+   tolerance -> not possible -> Osprey types the peak.
+2. Osprey's own typing, most intense peak first; each ion types ONE peak (Skyline's
+   SpectrumRanker IsSeen(predictedMz) rule).
+3. Preference: nearest (1e-3 Th = equal), then LOWER CHARGE, then y before b, then shorter ion.
+   Never leave a peak with a candidate in reach untyped ("Unknown says not a peptide fragment").
+- Implemented in `FragmentTyping` + new `FragmentCandidates` (Core); check categories now
+  agree / library's choice / differ (out of tolerance) / outside; warning only on differ.
+- Subset TSV: Osprey's own typing reproduces all 7,160 stated types; exported blib search is
+  IDENTICAL to the TSV search again (AssertSameSearch restored). 624/624, inspection 0.
+- NIST .msp (0.5 Th): nearest+tie->Unknown 97.13% agree/1,298 ties; +lower-charge tie-break
+  97.19%/290 ties, disagree unchanged 77; Skyline's charge-FIRST order worse (145; 590 at 0.6 Th).
+  Harness `ai/.tmp/sessions/20260929-8a15/measure_nist_typing.py` (modes; results nist_msp_*.txt).
+- regression-parallel All on ab654217c6: 70/0 (typing rework touches only blib libraries; none in
+  regression). #4708 diff applied 3-way on a728f1a652 in a scratch branch: builds, 634/634 pass
+  (scratch branch deleted). MapLibrary flag semantics for loaded blibs still Mike's call.
+- PR 1 #4746: TeamCity 4194189 was 35% at last check (passing so far) - check result.
+- NEXT: `/code-review max` on PR 2 was launched in background (diff vs PR 1 branch) - if its result
+  is lost, re-run it (cd pwiz-work1 first). Then triage, open PR 2 with body
+  `ai/.tmp/sessions/20260929-8a15/pr2-body.md` (UPDATE it: typing rules changed - library ions
+  accepted, lower-charge ties, one peak per ion; exported blib search identical; drop the
+  "isobaric"/90% text), base = Skyline/work/20260929_osprey_stacked_mod_decoys, label osprey.
+  Ask Brendan before TeamCity. Then: review on #4730 recommending close; tell Mike (#4708
+  re-stack, MapLibrary flags); after both PRs merge, REMIND Brendan of resume fixes #2/#3.
+
 ### 2026-09-29 - PR 2 first commit (ab654217c6)
 Branch `Skyline/work/20260929_osprey_computed_fragment_typing`, stacked on #4746, pushed (no PR yet).
 - #4730's diff applied 3-way minus PR 1's files; conflicts in LibraryLoader, SubsetPipelineTest.
