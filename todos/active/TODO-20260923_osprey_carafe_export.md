@@ -4,13 +4,12 @@
 - **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: Merged into #4717 (2026-09-30, Brendan's request for one PR to test): #4717's d3b12cd989 takes
-  this branch at 23389009a0, and #4708 is closed. #4749 (Osprey types blib fragments from m/z) replaced #4730
-  and landed on the base; the export flags those types `LIBRARY_MZ_MATCHED` (c0c7428206). Further Osprey work
-  for this goes to #4717's branch, `Skyline/work/20260923_carafesharp`.
+- **Status**: In review - #4708 reopened 2026-09-30 (folding it into #4717 was a misunderstanding;
+  Brendan asked only for #4717 + #4719 to combine). Base = the port branch, head 23389009a0; #4717 is
+  stacked on this branch. Brendan is finishing it (workflow page, test plan refresh) for /pw-complete.
 - **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
-- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708), closed; continues in [#4717](https://github.com/ProteoWizard/pwiz/pull/4717)
+- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (reopened); [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) stacked on it
 - **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`
 
 ## Objective

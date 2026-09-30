@@ -25,6 +25,12 @@ an output whose validity key no longer matches, so any future key term is silent
       `OSPREY_PASS2_QVALUE=transfer`, a key change reloads old pass-2 values, re-stamps them, then
       throws "No second-pass experiment-scope records were published" (`Pass2FdrSidecar.cs` ~1490)
       on every later run until the `.2nd-pass` files are deleted by hand.
+- [ ] **Training export reads a stale pass-2 sidecar** (#4708 review D1): `TrainingExportWriter.RunQPath`
+      selects `.2nd-pass.fdr_scores.bin` when `Pass2FdrSidecar.HasWorkerStamp` (stamp file present, key not
+      checked) and the decoys file exist. A run that no longer reaches the pass-2 worker (no Stage 6 work, no
+      readable model) keeps an earlier invocation's sidecar and decoys file, and the driver re-stamps them
+      with the new key, so an `IsCurrent` check alone would not catch it. Fix with #2: when PerFileRescoring
+      re-runs a run and does not rewrite its worker pass-2 files, delete the stale ones.
 - [ ] Tests in `SubsetPipelineTest` (the pipeline-mechanics home): change a key, resume, assert
       the stage re-runs instead of adopting.
 - Not doing #1 (the `--task` join validates scores parquets by footer version/hashes only; a
