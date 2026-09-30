@@ -97,18 +97,18 @@ source line: `ai/.tmp/sessions/20260927-osprey-export/coverage-uncovered-lines.t
 `dotCover report /ReportType=DetailedXML` (in Git Bash set `MSYS_NO_PATHCONV=1`, or `/Source=` becomes a path)
 and `coverage_lines.py` beside it.
 
-**Test gaps (2026-09-30), for Brendan's coverage review.** Most of the 111 uncovered statements are argument
-checks, `ToString` and the CUDA path (a CPU run). The ones that are behavior:
-1. Train, then predict the final library in one call (`-tf all` with `-db`): `ModelTrainer.Run` 128-131,
-   `LibraryGenerator` 297-298, `Program.Run` 75-76. Only the regression and the end-to-end runs reach it, and it
-   holds a review fix (the final library uses this run's models, not stale checkpoints in `-o`).
-2. The training run's instrument overriding the library's (`CarafeModelDirectory.ApplyTrainingRunOverrides` 216).
-3. `meta.json`'s `use_finetuned_for_prediction` as a number, string, array or object, and a malformed
-   `meta.json` (`CarafeModelDirectory.IsTruthy`, `ReadUseFineTunedMs2`).
-4. Phospho notation in the EncyclopeDIA and default peptide styles (`ModifiedPeptideNotation.ResidueNotation`
-   191-210; the UniMod style is tested).
-5. `ModelTrainer`'s log lines: the first-pass run-q WARNING (90), the selection warnings (80-81), `-no_masking` (118).
-6. `LibraryChunkWriter` 134, 146, 168: a rethrow and an early return on the writer's failure paths.
+**Test gaps (2026-09-30), for Brendan's coverage review.** Items 1-6, the behavior among the 111 uncovered
+statements, are covered by #4717's 4a0de4e019 (`TestModelTrainerPredictsLibrary`, and additions to
+`TestModelDirectory`, `TestModifiedPeptideNotation`, `TestLibraryWriterThread`): training into a library
+from this run's model (fails with `PreferSafetensors` reverted), the training run's instrument,
+`use_finetuned_for_prediction` as Python's `bool()`, phospho notation (checked against Carafe's `AIGear.java`),
+the trainer's warnings, and a second `Dispose`. After them: 74/74, and 94.2-99.6% per assembly with and without
+the data (CarafeSharp 98.3%, Proteome 99.0% with it); `docs/04-testing.md` has both columns (fd4185456f).
+Left uncovered on purpose: argument checks, `ToString`, the CUDA path, and a defensive rethrow in
+`LibraryChunkWriter.Add` that one thread cannot reach.
+
+The golden regression passed on the merged head d3b12cd989, every exact comparison SAME; the Osprey golden
+passed on TeamCity (Perf/Regression, 77da8e6465, Osprey files identical to #4717's).
 
 Beyond statement coverage:
 - **The chained leg** (digest, initial library, Osprey search with `--training-export`, fine-tune, final library)
