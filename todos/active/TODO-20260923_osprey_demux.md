@@ -298,6 +298,32 @@ Not yet tried, most promising first:
   0.2 ions little (7.5 rounds) at 0.038 (not kept); no reweighting 0.244 (a different objective);
   `RefitLambdaChange=0.5` 0.114 (keep 0.2). Next if the loose rules hold on IDs: make them the default (~1.7x),
   then float32 kernels (8 lanes), a coloured parallel pass, or the GPU.
+- **Slice results (pinned 14 / 17 ppm; peptides in all three runs; CV on shared precursors):**
+
+  | arm | precursors A1 / D1 / G1 | peptides all / any | CV |
+  |---|---|---|---|
+  | Gaussian + sigma merge, vendor MS1 (`c7_joint_v4_sig`) | 3,330 / 3,652 / 3,328 | 2,516 / 4,457 | 0.096 |
+  | measured MS2 shape (`c7_joint_sig_shape`) | 3,010 / 3,500 / 3,449 | 2,435 / 4,276 | 0.103 |
+  | measured MS2 + `--ms1 joint`, measured MS1 kernels (`c7_joint_all`) | 3,389 / 3,492 / 3,544 | **2,613** / 4,408 | 0.109 |
+  | measured MS2, `MaxRounds=3 RelativeTolerance=1e-3` (`c7_joint_fast`) | 3,211 / 3,306 / 3,369 | 2,451 / 4,199 | 0.118 |
+
+  With `--window 6` (DIA-NN chooses the tolerance) the measured shape loses 8% (2,303 peptides in all runs,
+  CV 0.104 against 0.095): DIA-NN tightens to 10 ppm (14 for the Gaussian).
+  - **The measured kernel splits fragments:** straight from the spectra (`fragment_area_cv.py`), 27.0% of
+    library fragments have 2+ peaks within 15 ppm against 13.6%; fragment-area CV 0.0969 against 0.0954. The
+    extra pairs are 2-3 grid samples apart, median intensity ratio 0.48 (`sessions/.../split_spacing.py`),
+    just outside the 1-sigma merge. On the benchmark sweep a 2-sigma merge leaves 0.142 close pairs per peak
+    (measured) and 0.122 (Gaussian), against 0.304 and 0.209 at 1 sigma. Arms `c7_joint_shape_m2`,
+    `c7_joint_sig_m2` (2-sigma merges) and `c7_joint_sig_ms1` (Gaussian, `--ms1 joint`) are running.
+  - **Joint MS1 helps IDs** (+7% peptides in all runs over the same MS2 with vendor MS1, pinned), not CV.
+  - **Looser stopping rules cost precision, not IDs:** CV +0.013-0.017. The unconverged split between
+    neighbouring positions differs run to run. Keep the default; test whether tighter convergence helps CV.
+  - Also tried on one sweep and dropped: skipping rows with no data in a peak's reach (exact, but only 13% of
+    gradient-check terms are empty: single-ion noise is everywhere); Poisson weights from the previous
+    sweep's fit, solved once (a third fewer block solves, but 0.170 from converged against 0.010; diff in
+    `sessions/.../prior-weights.diff`); `PeakHalfWidth=4` (no fewer block solves, twice the error).
+  - Untested: a narrower layout (`centered:5` / `centered:3`) with the joint solve. DIA-NN picks candidates
+    at 1.18 Th but each spectrum carries 8.3 Th of positions, so fragments interfere up to 3 bins away.
 
 I/O around the solve (separate from it): the writer re-centroided every spectrum to get its header (fixed,
 ff7e429fb4); the vendor reads were serial (4 threads, aac2026874: 3.95x, identical peaks). Opening a run takes
