@@ -402,6 +402,30 @@ real disagreement. Whoever moves that branch forward should also decide which br
 **Still open on #4697's description**: it says it is "Stacked on
 `Skyline/work/20260917_resharper_inspection_noise` ... which is the base of this PR". That
 branch no longer exists and its base is now `Skyline/work/20260918_inspection_in_build`.
+(Moot since #4697 merged into #4685 as `17fa34a5da`, but the body is still wrong if read.)
+
+### 2026-09-28 to 09-30: 101 -> 0, and the Copilot round
+
+Detail for each step is in its own section below; this is the sequence.
+
+- **09-28** Merged the base forward (`ba5bb9e763`, 17 commits): 101 -> 90 on the merge alone,
+  and it MOVED the composition - the 4 findings triaged as wave 3's vanished, and
+  `LocalizableElement` regressed 0 -> 2. Then the first annotation-family pass
+  (`37e39d0700`), 90 -> 72.
+- **09-28** Second annotation pass (`159a0bd27b`), the last 19 worked site by site: 16
+  deletions, 3 intent-preserving fixes. 72 -> 53 projected.
+- **09-29** #4697 merged into #4685 (`17fa34a5da`) while away, which is why the projection was
+  wrong: CI measured **20**, not 53. #4697 cleared all 20 `CS0672` but put 8
+  `RedundantUsingDirective` and 2 `??` BACK from zero.
+- **09-29** Those 10 plus wave 4 (`96a874fa0f`), 20 -> 5. Then the dead TLS pinning and the
+  Ardia pragma (`c01385e72a`): **5 -> 0.** `tcinspect` returns `success` for the first time.
+- **09-29** `.editorconfig` scope narrowed (`f4946afc18`) - the last open `/code-review max`
+  finding, and half of it turned out not to be a defect (pwiz-sharp has `root = true`).
+- **09-30** Copilot review of #4685, 13 comments: **2 fixed, 8 refuted, 3 confirmed-deferred**
+  (`f54676b6b6`). Inspection still `success` afterwards.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
 
 ### The `Redundant*` sweep: 178 -> 160, all 8 categories to zero
 
@@ -812,6 +836,3 @@ The two fixes: `Path.TrimEndingDirectorySeparator` for the drive-root path bug #
 for consistency with the ClrMD guards in `HangDetection`/`GcRootReporter` - a fair catch on my own
 inconsistency, since I had argued elsewhere that a framework annotation is not our guarantee and a
 diagnostic path deserves the guard.
-
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
