@@ -4,13 +4,13 @@
 - **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: #4730 will NOT merge (Brendan, 2026-09-29): annotations double every Osprey blib and
-  make a small-molecule table part of them. Replacement planned in
-  `todos/backlog/TODO-osprey_computed_fragment_typing.md` (Osprey types fragments from m/z, as
-  Skyline does); #4708 must re-stack on it. Earlier status: Changes required - see "Review 2026-09-28": split the PR and re-architect part B as a PerFileRescoring product (no fifth stage)
+- **Status**: Merged into #4717 (2026-09-30, Brendan's request for one PR to test): #4717's d3b12cd989 takes
+  this branch at 23389009a0, and #4708 is closed. #4749 (Osprey types blib fragments from m/z) replaced #4730
+  and landed on the base; the export flags those types `LIBRARY_MZ_MATCHED` (c0c7428206). Further Osprey work
+  for this goes to #4717's branch, `Skyline/work/20260923_carafesharp`.
 - **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
-- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (base `Skyline/work/20260612_net8_port`)
+- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708), closed; continues in [#4717](https://github.com/ProteoWizard/pwiz/pull/4717)
 - **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`
 
 ## Objective

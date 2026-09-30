@@ -8,8 +8,9 @@
 - **GitHub Issue**: [#4707](https://github.com/ProteoWizard/pwiz/issues/4707)
 - **Module**: `osprey`
 - **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch). Since 2026-09-30 it
-  also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR.
-- **Companion**: `ai/todos/active/TODO-20260923_osprey_carafe_export.md` (the Osprey-side PR this depends on)
+  also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR,
+  and Osprey's training export, formerly #4708 (closed; merged in by d3b12cd989), so Brendan can test the whole workflow in one PR.
+- **Companion**: `ai/todos/active/TODO-20260923_osprey_carafe_export.md` (the Osprey side, now in this PR)
 
 ## Objective
 
