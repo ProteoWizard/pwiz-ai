@@ -342,7 +342,7 @@ Brendan's rules after reviewing the 6 subset "isobar" peaks (b2 = b4^2 of IQQLTE
 - regression-parallel All on ab654217c6: 70/0 (typing rework touches only blib libraries; none in
   regression). #4708 diff applied 3-way on a728f1a652 in a scratch branch: builds, 634/634 pass
   (scratch branch deleted). MapLibrary flag semantics for loaded blibs still Mike's call.
-- PR 1 #4746: TeamCity 4194189 was 35% at last check (passing so far) - check result.
+- PR 1 #4746: TeamCity 4194189 SUCCESS (2026-09-29). pr2-body.md updated for the typing rework.
 - NEXT: `/code-review max` on PR 2 was launched in background (diff vs PR 1 branch) - if its result
   is lost, re-run it (cd pwiz-work1 first). Then triage, open PR 2 with body
   `ai/.tmp/sessions/20260929-8a15/pr2-body.md` (UPDATE it: typing rules changed - library ions
