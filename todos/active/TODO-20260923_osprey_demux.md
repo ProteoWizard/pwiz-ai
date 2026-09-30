@@ -8,7 +8,7 @@
   M6 ZT Scan ([#4714](https://github.com/ProteoWizard/pwiz/issues/4714)): the per-channel demultiplexer is on
   the follow-on branch below, evaluated through `Osprey.DemuxTool`, not yet wired into `--demux`. M2-M5 not started.
 - **Follow-on branch**: `Skyline/work/20260926_osprey_ztscan_persweep`, stacked on #4710's head (ab5c54c416),
-  pushed to 1c94fd6a57 (2026-09-29; local since: 0f6cb3a2f8, 995fa89766, 63cf71f3fc, 009659cbe7, b6bae12c32),
+  pushed to 1c94fd6a57 (2026-09-29; 22 local commits since, through eb9e893553 on 2026-09-30),
   checked out on SCARFELL in `C:\Dev\pwiz-osprey-demux`. No PR yet; run /code-review before opening one. Its
   algorithms are documented in `pwiz_tools/Osprey/docs/22-demultiplexing.md`, "The per-channel demultiplexer".
 
@@ -427,6 +427,54 @@ ff7e429fb4); the vendor reads were serial (4 threads, aac2026874: 3.95x, identic
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (M0 + M1)
 - **Worktree**: `D:\Dev\pwiz-osprey-demux` (old machine); `C:\Dev\pwiz-osprey-demux` on the new one,
   checked out at the follow-on branch
+
+## Day of 2026-09-30 on SCARFELL: speed, precision, and one pipeline
+
+**Speed** (A1 sweeps 324-431, 16 threads, joint solve): the solve is memory-bandwidth bound, so the chunk
+size is what moves it. 2048-point chunks 1,263 s, 1024 1,189 s, 512 1,159 s, 256 1,153 s; queuing the next
+batch before waiting (e2a9a7199c) plus preallocation 1,058 s at 512. 20 threads: 1,150 s, no gain.
+`ChunkSamples` default is now 512 (a96c614e0d).
+
+**Slice arms** (sweeps 247-371, 500-700 m/z, centered:7 unless named, 512-point chunks, DIA-NN pinned at
+`--window 6 --mass-acc 14 --mass-acc-ms1 17`; `ids_summary.py`, `paired_cv.py --rt 4.1 5.9`):
+
+| Arm | Precursors A1 / D1 / G1 | Peptides, all runs / any | Median CV |
+|---|---|---|---|
+| 2048-point chunks (`c7_joint_m2_ms1_pinned`) | 3,586 / 3,775 / 3,589 | 2,698 / 4,698 | 0.090 |
+| 512-point chunks (`c7_joint_c512_pinned`) | 3,670 / 3,821 / 3,752 | 2,785 / 4,821 | 0.091-0.093 |
+| Gaussian sigma x 0.8 (`sig080`) | - | 2,578 | 0.094 |
+| Gaussian sigma x 0.67 (`sig067`) | - | 2,533 | 0.097 |
+| centered:5 (`c5_joint_c512_pinned`) | 3,443 / 3,612 / 3,716 | 2,680 / 4,597 | 0.0917 vs 0.0932 (2,479 shared) |
+
+- A narrower peak model is worse, and centered:5 loses 3.8% of the peptides at an unchanged CV: the default
+  sigma table and centered:7 stay. D1's FDP was 1.15% in the 512 arm; watch it. The sigma x 1.2 arm
+  (`c7_joint_sig120_c512_pinned`) is running.
+- **Mass accuracy is not the matching problem, precision is.** Accuracy (offset from library m/z) is +4.4 ppm
+  in every arm, the instrument's calibration. Precision (sweep-to-sweep spread of a fragment's m/z): joint
+  5.66 ppm, centroid solve 5.59, acquired 6.03. The joint solve's centroids snap to the TOF grid: 36.1% lie
+  within 0.05 samples of a grid point, against 12.2% for the centroid solve (`mass_accuracy.py`).
+
+**One pipeline (Mike's decisions, `TODO-20260923_osprey_demux/pipeline-design-2026-09-30.md`).** Each step
+gated byte-identically on the tool's reference outputs (`Capture-DemuxGoldens.ps1`: ZT joint, ZT joint at
+512, ZT centroid solve, Eclipse EV13 staggered):
+- 09f393fd7d, 32b00d275c, dea1c73b77: the scanning demux on `DemuxPipeline` + `DemuxPlan` behind
+  `IDemuxSource`; ZT Scan detected from the data (`DemuxSchemeDetector.DetectScanning`: 64+ bins of at
+  most 3 Th per cycle and the strongest points persisting across bins; the tool exits without `--scheme` on
+  anything else).
+- 6b89e21901: staggered on the same driver (`StaggeredDemuxPlan`); the whole Eclipse EV13 file 350 s
+  against 830 s, on a differently loaded machine.
+- eb9e893553: **`--demux auto` runs the weighted staggered demultiplexer by default**
+  (`WeightedDemultiplexer`); the overlap demultiplexer is `OSPREY_DEMUX_ENGINE=msconvert`, to be removed.
+  Algorithm version 4, so demultiplexed caches rebuild. Through Osprey, EV13's demultiplexed cache carries
+  every peak of the tool's output byte for byte (121,121,741 m/z and intensities); only the metadata
+  differs (scan numbers kept per parent, precursor m/z at the bin center, window edges within 1e-13 Th).
+  Demultiplexing took 93.7 s against a 136.6 s parse under load (the msconvert engine: 18.8 s).
+  The EV13 + EV14 search is running (`C:\temp\osprey-runs\eclipse-staggered\search-osprey-weighted`),
+  to set against 40,009 precursors at 0.26% FDP.
+- Next: ZT Scan through Osprey needs the profile (the joint solve reads it; `.spectra.bin` holds centroids),
+  the kernel, and the .wiff2 reader for Osprey.exe; then the Stellar staggered profile (needs data), then
+  the rest of the spec. Step 3 changes `DemuxCacheBuilder`, which #4710 adds: agree the order with Brendan
+  before pushing.
 
 ## Objective
 
