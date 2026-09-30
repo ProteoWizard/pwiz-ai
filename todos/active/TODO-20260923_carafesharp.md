@@ -452,6 +452,16 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
     compares m/z, RT and fragments exactly and intensities within 1e-5.
   - Skyline (Nick): reads `manifest.json` from the zip to list models (Skyline is .NET Framework, so it cannot
     reference the net10 CarafeSharp assemblies), and runs `CarafeSharp -model` to predict.
+- [x] Instrument classes LIT and CID (#4717 170497a150 Osprey, 27a0ba6595 CarafeSharp, 2026-09-30; developer's
+  request: Stellar and Tribrid LIT as an instrument, and resonance CID (Thermo's CID) distinguished from HCD after
+  fine-tuning). Developer's decisions: LIT and CID each get a slot (5, 6); a run mixing classes is refused
+  (`-ms_instrument` overrides). The MS2 one-hot has 8 slots fixed by the pretrained weights: 5 trained by peptdeep,
+  7 = unknown, so these were the last two free slots. Pretrained slots 5-7 were never trained (init scale, cosine
+  -0.14 with Lumos; measured with Carafe's `~/.carafe/.venv` torch), so a model without CarafeSharp's
+  `carafesharp.instrument_slots` safetensors record starts LIT and CID as a copy of Lumos. Osprey's footer gained
+  `osprey.ms2_mass_analyzers` (pwiz's per-scan configuration analyzer). Stellar golden: metrics, tables and library
+  SAME; only the MS2 model hash moved. Open: no CID or Tribrid LIT data here to fine-tune a CID/LIT model on beyond
+  the Stellar HCD subset.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
