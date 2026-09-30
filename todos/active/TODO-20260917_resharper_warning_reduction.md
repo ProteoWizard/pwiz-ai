@@ -265,11 +265,33 @@ or round-tripping breaks for any name containing a reserved character.
      .NET 9+ WinForms SDK, so without the demotion its WinForms builds would fail.
    - Verified: `tcinspect` still `success - No inspections at WARNING or above`, so nothing
      inside `Skyline.sln` reopened.
-3. **#4697 carries two documented open questions** (both in its PR body): the owned-forms
-   close cascade calls only `OnFormClosing`, never the legacy `OnClosing`, so four sites -
-   `ViewLibraryDlg`, `AlignmentForm`, `UndoRedoButtons`, `SkylineWindow` - may want an
-   `e.CloseReason` guard; and `ServicePointManager` is NOT inert on net10 for the legacy
-   stack, which wave 3 is what actually retires.
+3. **The owned-form close cascade - CONFIRMED REAL on three of four sites, deferred to its own
+   branch (2026-09-30).** #4697 raised this in its PR body as an open question; Copilot's review
+   of #4685 then found the same thing independently on three of them. Ownership verified at each,
+   so the cascade genuinely reaches all three and `OnFormClosing` fires even on a shutdown the
+   owner later CANCELS:
+   - `AlignmentForm` - `SkylineGraphs.cs:2948` does `form.Show(this)` from `SkylineWindow`.
+     `OnFormClosing` calls `_cancellationTokenSource.Cancel()` unguarded, and `UpdateRows` only
+     replaces the token when the row set changes, so a cancelled shutdown leaves the token
+     **permanently cancelled** and alignment work dead for the session. Worst of the three.
+   - `UndoRedoButtons`/`UndoRedoList` - shown via `Show(dropDownButton.Owner)`, the hosting
+     `ToolStrip`, which WinForms resolves to its top-level form. `DenyListClosing` sets
+     `e.Cancel = true` UNCONDITIONALLY, so **Skyline refuses to close** while an undo/redo
+     dropdown is open. Narrow (handler is subscribed only while the list shows) but nasty.
+   - `ViewLibraryDlg` - owned explicitly (`{ Owner = this }` at `Skyline.cs:1849`,
+     `{ Owner = Owner }` at `PeptideSettingsUI.cs:1304`). `OnFormClosing` unsubscribes the
+     ion/loss handlers, so a cancelled shutdown leaves the dialog open with them gone. **The fix
+     is already demonstrated in the same file**: its `OnHandleDestroyed` unsubscribes
+     `SpectralLibraryList.ListChanged`, which is where this cleanup belongs.
+   - `SkylineWindow` - #4697's fourth site. **Copilot did NOT flag it**, so it would be missed by
+     anyone working only from the review. Still unexamined.
+
+   Deliberately NOT fixed on #4685: it is a shutdown-behaviour change needing functional testing,
+   not review-response cleanup. The three GitHub threads are left **unresolved** on purpose so the
+   human reviewer sees them.
+4. **`ServicePointManager` is NOT inert on net10 for the legacy stack** - was #4697's other open
+   question. Now moot for the nightly projects: wave 3 moved them to `HttpClient`, so the pinning
+   in `TeamCityNightlyAuth` was dead and is deleted (`c01385e72a`).
 
 ## Hazards found the hard way
 
@@ -759,6 +781,37 @@ seventh defect and was not - see the correction above, which is the more useful 
 **Nothing is open on #4685 any more.** The `.editorconfig` scope question - the last outstanding
 `/code-review max` finding - is closed (item 2 under "Open items"), and half of it turned out not
 to be a defect at all. The branch is ready for a human review request.
+
+### Copilot review of #4685, 2026-09-30 (`f54676b6b6`)
+
+13 inline comments: **2 fixed, 8 refuted, 3 confirmed-and-deferred** (item 3 under "Open items").
+
+**8 of the 13 rested on one false premise** - seven "this cast removal prevents compilation" and
+one "this test fails even for a correct layout". All were evaluated as if `IntPtr` were not
+`nint`, i.e. .NET Framework semantics. On this target (`LangVersion latest`, single
+`net10.0-windows`) the C# 11 numeric-`IntPtr` feature makes `int` -> `IntPtr` implicit. Refuted
+with evidence, not argument: the branch builds with 0 errors, CI build 4193222 ran the full suite
+green (1802 tests), and `TestChromPeakOffsets` - the exact test named - passes with 0 failures.
+**This is the same mistake made earlier in this work and corrected by checking `LangVersion`;**
+8 of the 8 trace to the mechanical sweep commit `d99bae0e24`, only `User32:420` to the later pass.
+
+**Nearly mis-refuted one of them.** The `StructSizeTest` claim was first checked against
+`TestCurrentStructSizes`, but line 45 is inside `TestChromPeakOffsets` - a different
+`[TestMethod]`. Both pass, but only the second is evidence. Check WHICH test covers the flagged
+line before citing a green run.
+
+**`build.bat` did not compile either file this round** - `SkylineNightlyShim` and `SkylineTester`
+are both outside its target set, so its 0-error result said nothing about the two fixes. A bare
+`dotnet build` of `SkylineTester` is no good either: it drags in `Skyline.csproj` and fails with
+~395 `MSB3030` copy errors for native/vendor artifacts only the staged build produces (0
+`error CS` among them). **The inspection's solution build is the gate for these projects** - it
+compiles both, and `tcinspect` stayed at `success` after the fixes.
+
+The two fixes: `Path.TrimEndingDirectorySeparator` for the drive-root path bug #4697 introduced
+(`C:\` -> the drive-relative `C:`), and the `GetFrames()` null check restored under a suppression
+for consistency with the ClrMD guards in `HangDetection`/`GcRootReporter` - a fair catch on my own
+inconsistency, since I had argued elsewhere that a framework annotation is not our guarantee and a
+diagnostic path deserves the guard.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
