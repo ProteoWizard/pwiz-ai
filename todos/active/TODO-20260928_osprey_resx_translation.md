@@ -294,3 +294,16 @@ The work is only half the deliverable; the other half is evidence for or against
   error-line checks kept; a non-vacuous guard fails if no ja or zh-Hans translation was checked at all.
   Mutation-tested: an English-only resource passes; a ja `{0}` -> `{9}` fails naming the entry.
   Gates 610/610 en-US (inspection 0), ja-JP, zh-CN.
+- **BOM audit** (Brendan, 2026-09-30): `validate-bom-compliance.ps1 -PwizRoot C:/proj/pwiz-work1` found 12
+  Osprey files with a UTF-8 BOM - the 8 English .resx already had it on the port branch (the RESX PR's
+  session `resx.py` wrote `utf-8-sig`), and 4 .cs were added by THIS session's Python patch scripts, also
+  `utf-8-sig`. ResourcesOrganizer-written localized .resx have none. Root cause for any future script:
+  never write `utf-8-sig` (Python) or `Encoding.UTF8` (.NET) to a source file.
+- `344ac4333c`: `CodeInspectionTest.TestNoUtf8Bom` (Skyline's `InspectUtf8Bom` for Osprey) scans the Osprey
+  tree (.cs .resx .csproj .sln .props .targets .DotSettings .config .xml .xsd .wxs .manifest .json .md .html
+  .tsv .txt .ps1 .bat .sh .py .jam; skips bin/obj/TestResults/.vs), strips each BOM keeping timestamps,
+  and fails listing the files. First run fixed exactly the 12 (BOM-only diffs). Gates 611/611 en-US
+  (inspection 0), ja-JP, zh-CN, fr-FR. Re-audit: pwiz clean.
+- Left for their owners (pwiz-ai, not this branch): `ai/scripts/Invoke-DailyReport.ps1`,
+  `Invoke-PRReport.ps1`, and the two `TODO-20260924_osprey_log_readability-*.csv` still carry BOMs
+  (a BOM on a CSV may be deliberate - Excel needs it to show CJK).
