@@ -115,10 +115,17 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
    DIA-NN TSV states (`FragmentLossType`, `DecoyGenerator.cs:751`).
 4. **Ambiguity**: a peak within tolerance of two primary ions takes the nearest m/z; a tie at the
    library's precision leaves it Unknown rather than guessing.
-5. **Tolerance** follows the library, not the search: max(0.02 Th, 20 ppm) (the tolerance #4730
-   checks annotations with) suits predicted and HRAM libraries, whose peaks sit at theoretical m/z.
-   Empirical unit-resolution libraries (NIST ion trap annotations show errors up to ~0.5 Th) need a
-   wider one, as Skyline's ion match tolerance is; decide from the NIST measurement below.
+5. **Tolerance is the search's fragment tolerance** (`config.FragmentTolerance`: 0.5 Th for
+   `--resolution unit`, ppm - default 10 - for hram, or what the user sets). DECIDED 2026-09-29,
+   superseding "follows the library" and the 1-decimal heuristic. Brendan: "a library match
+   tolerance that differs from what the search software does can be very confusing to users,
+   especially when it is wider than the chromatogram extraction tolerance" - a user sees y6
+   matched in the spectrum at 20 ppm while extraction at 10 ppm shows nothing for y6. Internal
+   consistency keeps that confusion to a minimum; Skyline uses one ion match tolerance (default
+   0.5 m/z) the same way. NIST at 0.5 Th: 96.2% agree, 4 disagree in 1.77M, 0.18% extra.
+   Open detail: typing runs once per library at load, before any run's MS2 calibration narrows
+   extraction to |mean|+3SD per file, so the configured tolerance is the upper bound of what
+   extraction uses, not always equal to it. Say so in the docs; do not type per run.
 6. **Cross-check warning.** When a library states annotations (blib rows, TSV columns), compare
    with Osprey's typing: agree / disagree (library names a primary b/y the typing does not match) /
    outside Osprey's model (losses, isotopes, a/c/x/z, charge > 2, unreadable - reported, not a
@@ -227,6 +234,28 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
 - [ ] Tell Mike: #4708 re-stacks on PR 2; CarafeSharp can stop writing annotations (his call - saves
       ~8M rows / ~400 MB and a writer thread on the 483k library)
 - [ ] Close #4730 (Mike or Brendan)
+
+## After PR 2 - resume-invalidation fixes (Brendan, 2026-09-29: "fix #2 and #3 after PR 2")
+
+**REMIND BRENDAN when #4746 and PR 2 are both merged**, then do this as its own PR.
+From #4746's `/code-review max`; pre-existing, not caused by either PR. Each lets a resume reuse
+an output whose validity key no longer matches, so any future key term is silently bypassed:
+- [ ] **#2 PerFileRescoring self-gate**: `PerFileRescoreTask.Pass2SidecarCurrent`
+      (`PerFileRescoreTask.cs` ~1710) accepts a `.2nd-pass.fdr_scores.bin` by FORMAT only, returns
+      `RefillOnly` (~491), and `AnalysisPipeline.WriteTaskSidecars` (~224-242) then stamps the old
+      Stage 6 outputs with the new key. Fix: also require
+      `PerFileResumeDriver.IsCurrent(pass2Path, Name, ValidityKey(ctx))`. Reach it via
+      `--task PerFileRescoring` after re-running Stages 1-5, and `--task ModelDiagnostics`.
+- [ ] **#3 SecondPassFDR transfer-mode gate**: `Pass2FdrSidecar.cs` ~206
+      (`recomputed = anyRescoreWork && (missingPass2 > 0 || workerDidPerFileHalf)`) judges
+      existing pass-2 files by format (`Pass2SidecarWriter.IsCurrent -> IsCurrentFormat`). Under
+      `OSPREY_PASS2_QVALUE=transfer`, a key change reloads old pass-2 values, re-stamps them, then
+      throws "No second-pass experiment-scope records were published" (`Pass2FdrSidecar.cs` ~1490)
+      on every later run until the `.2nd-pass` files are deleted by hand.
+- [ ] Tests in `SubsetPipelineTest` (the pipeline-mechanics home): change a key, resume, assert
+      the stage re-runs instead of adopting.
+- Not doing #1 (the `--task` join validates scores parquets by footer version/hashes only; a
+  fix needs a footer marker mirrored in Rust).
 
 ## Later, separate
 
