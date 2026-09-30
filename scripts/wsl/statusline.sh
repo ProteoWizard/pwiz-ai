@@ -28,14 +28,15 @@
 #   {
 #     "statusLine": {
 #       "type": "command",
-#       "command": "bash <your-root>/ai/scripts/statusline.sh"
+#       "command": "bash <your-root>/ai/scripts/wsl/statusline.sh"
 #     }
 #   }
 
 set -u
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ai_root="$(dirname -- "$script_dir")"
+# This script lives in ai/scripts/wsl/, so the ai/ root is two levels up.
+ai_root="$(dirname -- "$(dirname -- "$script_dir")")"
 tmp_dir="$ai_root/.tmp"
 
 input_json="$(cat)"

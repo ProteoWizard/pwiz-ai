@@ -135,7 +135,7 @@ Use the bash port instead of `statusline.ps1`. In `~/.claude/settings.json`:
 ```json
 "statusLine": {
   "type": "command",
-  "command": "bash /home/<linuxuser>/dev/ai-dev/ai/scripts/statusline.sh"
+  "command": "bash /home/<linuxuser>/dev/ai-dev/ai/scripts/wsl/statusline.sh"
 }
 ```
 
