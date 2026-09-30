@@ -62,6 +62,7 @@ This directory contains comprehensive, detailed documentation for LLM-assisted d
 - **[labkey/](labkey/)** - LabKey module documentation
 - **[labkey-setup/](labkey-setup/)** - LabKey Server setup guides and scripts
 - **[archive/](archive/)** - Archived older documentation versions
+- **[websites/](websites/)** - Documentation for managing MacCoss Lab websites
 
 ## Core vs Detailed Documentation
 
