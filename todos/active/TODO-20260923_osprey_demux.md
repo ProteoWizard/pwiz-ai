@@ -325,6 +325,22 @@ Not yet tried, most promising first:
   - Untested: a narrower layout (`centered:5` / `centered:3`) with the joint solve. DIA-NN picks candidates
     at 1.18 Th but each spectrum carries 8.3 Th of positions, so fragments interfere up to 3 bins away.
 
+**Whole runs through the joint solve (2026-09-30):** A1, D1, G1 with `--merge-sigmas 2 --ms1 joint`
+(`full\joint_m2_ms1`), searched as the other whole-run arms (DIA-NN 2.3.2, 16 threads, `--window 6
+--mass-acc 17 --mass-acc-ms1 19`, arm `slices\diann\full_joint_m2_ms1`; `sessions/.../Compare-Whole.ps1`):
+
+| Arm | Precursors A1 / D1 / G1 | FDP | Peptides in all runs / any | CV (20,957 shared) |
+|---|---|---|---|---|
+| DIA-NN scanning mode on the `.wiff` | 30,567 / 30,323 / 31,016 | 0.96-1.04% | 21,591 / 33,956 | 0.091 |
+| per-channel solve (`full_c7pz_scarfell`) | 31,512 / 31,506 / 32,117 | 0.79-0.89% | 22,197 / 35,140 | 0.123 |
+| **joint solve** | **36,314 / 36,169 / 36,627** | 0.81-0.84% | **25,622 / 39,984** | **0.106** |
+
+**+19% over DIA-NN on the `.wiff`, +15% over the per-channel solve; half the CV gap to the `.wiff` closed**
+(joint against channel on their 23,390 shared: 0.108 against 0.126, 61% of precursors better). Time per
+file: demux 107 min (A1 alone at 16 threads; 89 min each for two side by side at 8 threads), DIA-NN 2.4 min
+loading and 25 min searching; DIA-NN on the `.wiff` spends 50 min loading (the SCIEX library, not a
+demux: its scanning analysis starts after it) and 46 searching.
+
 **Night of 2026-09-29/30: CPU speed of the joint solve, unchanged output**
 - **1.36x on 12 sweeps** (A1 dump sweeps 57-68, precursors 560-600, measured shape, one thread on a cleared
   P-core): b6bae12c32 114-120 s, 6ae9643df7 82.5-87 s, both 0.0101 from the converged solve (`bench\ref12_ref`).
@@ -356,7 +372,16 @@ Not yet tried, most promising first:
   with `RelativeTolerance=1e-3` 38.8 s (0.019), 4 points with it 43.9 s (0.014). Worth a slice arm if tighter
   convergence improves the CV.
 - Where the current build's time goes (12 Gaussian sweeps): passes 66%, gradient check 23%, weights 8%; each
-  grid point in reach is solved about 12 times per sweep.
+  grid point in reach is solved about 12 times per sweep. On a whole run (A1): passes 53%, checks 31%,
+  weights 11%, 96 thread-s a sweep.
+- **618708e3fa exact screening:** within a descent no coefficient's gradient exceeds its value at zero
+  (weights fixed, model non-negative), so the first check screens the coefficients the data alone cannot
+  activate and the later checks skip them; rows are slid only for the columns tested. Byte-identical; 12
+  sweeps 22% fewer check slides and 28% fewer check sums. Screening the reweighted descent as well costs its
+  extra data-only check (211M slides against 212M unscreened). A hard ion threshold per grid point would
+  save more but changes the output (a slice arm, as `--min-out`).
+- Also tried and dropped: admitting near-violators early (`AdmitMargin`): rounds unchanged, 5-13% more block
+  solves.
 - **Slice, 2-sigma merge + joint MS1 (`c7_joint_m2_ms1`, `--window 6`):** 3,447 / 3,788 / 3,532 precursors,
   2,651 peptides in all runs and 4,640 in any (the most of any arm; channel 2,197 / 3,743, Gaussian 2-sigma
   2,610 / 4,508), CV 0.095 against 0.092 for the 2-sigma merge alone. Pinned (14 / 17 ppm): 3,586 / 3,775 /
