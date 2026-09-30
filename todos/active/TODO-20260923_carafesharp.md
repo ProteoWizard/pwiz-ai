@@ -28,6 +28,98 @@ shared-fragment evidence; every library is .blib; results should come out close 
 Approved plan: `C:\Users\maccoss\.claude\plans\i-would-like-to-starry-gizmo.md` (machine-local);
 the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
 
+## How to build and test (current as of 2026-09-30; #4717 carries the port, the writer and Osprey's export)
+
+The user-facing version is `pwiz_tools/CarafeSharp/docs/04-testing.md` and #4717's "How to build and test"
+section. This one adds what is specific to this machine and to the review.
+
+**Pre-commit gates** (run both on #4717; `D:\Dev\pwiz` is its checkout, the scripts' default `-SourceRoot`):
+```
+$env:CARAFESHARP_TESTDATA = 'D:\test\carafesharp export check'
+pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests -RunInspection -RequireData   # 73/73, inspection 0
+pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection       # 638/638, inspection 0
+```
+- `Build-CarafeSharp.ps1` wraps the in-repo `pwiz_tools/CarafeSharp/build.ps1` (`build.sh` on Linux, `build.bat`),
+  adding the CRLF fix and the ReSharper inspection. Options: `-Torch cuda`, `-TestCategory Astral|Cuda`,
+  `-TestName`, `-RequireData` (needed: `dotnet test` counts Inconclusive as a pass), `-Coverage`.
+- Without `CARAFESHARP_TESTDATA` the parity tests look in `C:\Users\maccoss\Downloads\Perftests`, which does
+  NOT hold the packages on this machine, so 8 tests do not run and `-RequireData` fails.
+- Astral: `build.ps1 -TestCategory Astral -RequireData` (4 tests, about 12 min) needs the Astral package:
+  point `CARAFESHARP_TESTDATA` at `D:\test\carafesharp-testdata-pkg`.
+
+**Test data** (Panorama, anyone can download):
+<https://panoramaweb.org/_webdav/MacCoss/software/%40files/perftests/>; URLs, sizes and SHA-256 in
+`pwiz_tools/CarafeSharp/testdata.json`.
+- `carafesharp-testfiles-v1.zip` 1.5 GB (5.6 GB extracted), `carafesharp-testfiles-astral-v1.zip` 4.8 GB
+  (22 GB), `carafesharp-export-v1.zip` 67 MB (Osprey's format 2 export of Stellar `_21`, from the .raw).
+- Extracted here: `D:\test\carafesharp export check` (testfiles + export, from the published zips, path with
+  spaces: the gate's root), `D:\test\carafesharp-testdata-pkg` (all three), `D:\test\carafesharp-testdata-dev`.
+- Built by `ai/scripts/CarafeSharp/New-CarafeSharpTestData.ps1` from `D:\test\carafesharp-testdata-staging`.
+  Never republish under the same name (extraction never overwrites): a change gets a new version and a new
+  `testdata.json` entry. The upload is the developer's: the auto-mode classifier blocks Claude's upload.
+
+**Golden regression** (category `Regression`, not in the default pass): `pwsh -File
+pwiz_tools/CarafeSharp/regression.ps1` (12 min on this i9 CPU), `-Torch cuda`, `-Export <parquet>` (another
+export; its hash is INFO), `-CompareRun <folder>`, `-CreateGolden` (clean tree; `-Force` to replace). Golden:
+`regression.data/stellar` (format 3: training-table hashes ignore line endings). Runs land in
+`TestResults/regression`. Only the isolated leg exists; the chained leg (digest, search, fine-tune) is open.
+
+**CUDA** here: GTX 1650 (Turing, compute 7.5), driver 591.86. `-Torch cuda` builds into `bin-cuda` and the
+CUDA pass sets `CARAFESHARP_REQUIRE_CUDA=1`. GPU fine-tuning is not bit-reproducible; the CPU one is.
+
+**Linux (WSL2 Ubuntu 22.04):**
+- `~/carafesharp-wsl`: blobless partial clone of `file:///mnt/d/Dev/pwiz`, sparse (CarafeSharp,
+  `Shared/Lib/Parquet`, `pwiz-sharp/scripts`); fetch the branch into it before a Linux run.
+- `~/osprey-wsl`: sparse worktree for Osprey (Osprey, Shared, pwiz-sharp, `libraries/7zz`,
+  `pwiz/data/common/*.obo`, the `pwiz_aux` vendor archives and UIMF); `git -c submodule.recurse=false`.
+- A non-login shell needs `export PATH=$HOME/.dotnet/tools:$PATH DOTNET_ROOT=/usr/lib/dotnet` for pwsh.
+- Point `SKYLINE_DOWNLOAD_PATH` at the Windows Downloads so nothing downloads twice. Read SQLite results
+  from a copy on `D:` (over `\wsl.localhost` they report "database is locked").
+
+**Osprey side** (the training export): `--training-export` writes `<stem>.training.parquet` per run
+(contract: `pwiz_tools/Osprey/docs/22-training-export.md`). For `.raw` input build Osprey with the vendor
+readers: `Build-Osprey.ps1 -VendorReader` (in-repo: `build.ps1 -IAgreeToVendorLicenses`), and snapshot the
+exe to `D:\test\osprey-runs\_bin\<tag>` before a long run. Osprey's own gates are in
+`TODO-20260923_osprey_carafe_export.md` ("Gates"). End to end: `ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1`
+(`.raw` by default, `-InputFormat mzML`).
+
+**CI:** no TeamCity config builds CarafeSharp. `scripts/misc/vcs_trigger_and_paths_config.py` and
+`nightly_trigger_and_paths_config.py` route `pwiz_tools/CarafeSharp/.*` to no build (Matt's request), so
+the CarafeSharp gate above is the only one; the Osprey PR configs (Windows and Linux .NET) cover the Osprey
+files. The Osprey Perf/Regression run is manual: Brendan triggers it. We have no TeamCity access (its guest
+REST API shows build status, read only); an agent-connection cancel retries by itself, so check before pushing.
+
+**Coverage:** `build.ps1 -Coverage` (dotCover 2023.3.3 from `.config/dotnet-tools.json`, Windows only);
+the `.dcvr` and a JSON report go to `TestResults`. On #4717's d3b12cd989 with the data (73 tests, 2026-09-30):
+CarafeSharp 95.4%, Core 94.2%, IO 98.8%, Models 97.5%, Proteome 98.3%, Training 99.6% of statements (5,421 of
+5,532). The regression runs as a subprocess, so it is not in these numbers. Every uncovered statement with its
+source line: `ai/.tmp/sessions/20260927-osprey-export/coverage-uncovered-lines.txt`, from
+`dotCover report /ReportType=DetailedXML` (in Git Bash set `MSYS_NO_PATHCONV=1`, or `/Source=` becomes a path)
+and `coverage_lines.py` beside it.
+
+**Test gaps (2026-09-30), for Brendan's coverage review.** Most of the 111 uncovered statements are argument
+checks, `ToString` and the CUDA path (a CPU run). The ones that are behavior:
+1. Train, then predict the final library in one call (`-tf all` with `-db`): `ModelTrainer.Run` 128-131,
+   `LibraryGenerator` 297-298, `Program.Run` 75-76. Only the regression and the end-to-end runs reach it, and it
+   holds a review fix (the final library uses this run's models, not stale checkpoints in `-o`).
+2. The training run's instrument overriding the library's (`CarafeModelDirectory.ApplyTrainingRunOverrides` 216).
+3. `meta.json`'s `use_finetuned_for_prediction` as a number, string, array or object, and a malformed
+   `meta.json` (`CarafeModelDirectory.IsTruthy`, `ReadUseFineTunedMs2`).
+4. Phospho notation in the EncyclopeDIA and default peptide styles (`ModifiedPeptideNotation.ResidueNotation`
+   191-210; the UniMod style is tested).
+5. `ModelTrainer`'s log lines: the first-pass run-q WARNING (90), the selection warnings (80-81), `-no_masking` (118).
+6. `LibraryChunkWriter` 134, 146, 168: a rethrow and an early return on the writer's failure paths.
+
+Beyond statement coverage:
+- **The chained leg** (digest, initial library, Osprey search with `--training-export`, fine-tune, final library)
+  is not automated, so nothing tests Osprey's export feeding CarafeSharp except the packaged export. With both
+  in one PR this is the main missing test. A small one could use Osprey's committed
+  `pwiz_tools/Osprey/Osprey.Test/TestData/StellarSubset.zip`, with no download.
+- **No CI runs CarafeSharp** (no TeamCity config; the triggers route it to nothing). Needs a config from the
+  TeamCity owners (Brendan, Matt).
+- **Model-folder writes are not atomic** (review follow-up): a rerun into an existing `-o` can mix two runs'
+  models. A fix and its test.
+
 ## Decisions
 
 - **Neural nets in TorchSharp, natively** (developer's choice over a Python bridge):

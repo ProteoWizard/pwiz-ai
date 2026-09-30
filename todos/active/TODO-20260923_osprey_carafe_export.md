@@ -367,7 +367,10 @@ meet R6 even when the percentage is high.
 - NCE semantics differ by vendor (Thermo NCE, Sciex eV, stepped HCD) - export the histogram.
 
 ## Gates
-- `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
+Since 2026-09-30 this work is on #4717 (`D:\Dev\pwiz`, the scripts' default `-SourceRoot`), so run these
+there, with the CarafeSharp gate; the full build and test process, test data and WSL setup are in
+`TODO-20260923_carafesharp.md`, "How to build and test".
+- `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` (638/638 on #4717's d3b12cd989)
 - `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`, then `-Dataset All` (options off, 1e-9)
 - `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar`
 - `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` + `Summarize-Coverage.ps1`, numbers in the PR test plan (R8)
