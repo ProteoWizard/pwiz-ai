@@ -62,7 +62,10 @@ pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -
 pwiz_tools/CarafeSharp/regression.ps1` (12 min on this i9 CPU), `-Torch cuda`, `-Export <parquet>` (another
 export; its hash is INFO), `-CompareRun <folder>`, `-CreateGolden` (clean tree; `-Force` to replace). Golden:
 `regression.data/stellar` (format 3: training-table hashes ignore line endings). Runs land in
-`TestResults/regression`. Only the isolated leg exists; the chained leg (digest, search, fine-tune) is open.
+`TestResults/regression`. `-Leg Chained` (a943ca409b): builds Osprey, searches its committed Stellar subset
+with `--training-export`, trains CarafeSharp on the exports, and checks each tool's part with no golden; no test
+data, about 2 min. 2026-09-30: exports of 118/159/159 precursors, second-pass run q, 107 MS2 spectra and 179 RT
+forms trained, a 358-precursor library; identical on a rerun; one export removed fails it.
 
 **CUDA** here: GTX 1650 (Turing, compute 7.5), driver 591.86. `-Torch cuda` builds into `bin-cuda` and the
 CUDA pass sets `CARAFESHARP_REQUIRE_CUDA=1`. GPU fine-tuning is not bit-reproducible; the CPU one is.
@@ -111,10 +114,9 @@ The golden regression passed on the merged head d3b12cd989, every exact comparis
 passed on TeamCity (Perf/Regression, 77da8e6465, Osprey files identical to #4717's).
 
 Beyond statement coverage:
-- **The chained leg** (digest, initial library, Osprey search with `--training-export`, fine-tune, final library)
-  is not automated, so nothing tests Osprey's export feeding CarafeSharp except the packaged export. With both
-  in one PR this is the main missing test. A small one could use Osprey's committed
-  `pwiz_tools/Osprey/Osprey.Test/TestData/StellarSubset.zip`, with no download.
+- [x] **The chained leg** is `regression.ps1 -Leg Chained` (a943ca409b), on Osprey's committed Stellar subset.
+  The full chain on a real run (digest and initial library too) is left for later: it needs the Osprey
+  test files and hours on the CPU.
 - **No CI runs CarafeSharp** (no TeamCity config; the triggers route it to nothing). Needs a config from the
   TeamCity owners (Brendan, Matt).
 - **Model-folder writes are not atomic** (review follow-up): a rerun into an existing `-o` can mix two runs'
