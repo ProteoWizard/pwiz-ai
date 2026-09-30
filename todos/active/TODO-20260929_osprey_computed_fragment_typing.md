@@ -7,8 +7,8 @@
 - **Created**: 2026-09-29
 - **Status**: In Progress - PR 1 open (#4746), TeamCity Perf/Regression build 4194189 queued; PR 2 not started
 - **Module**: `osprey`
-- **PR (PR 1)**: [#4746](https://github.com/ProteoWizard/pwiz/pull/4746)
-- **PR (PR 2)**: (pending)
+- **PR (PR 1)**: [#4746](https://github.com/ProteoWizard/pwiz/pull/4746) (merged 2026-09-30 as 07314d47ea)
+- **PR (PR 2)**: [#4749](https://github.com/ProteoWizard/pwiz/pull/4749) (base retargeted to the port branch after #4746 merged)
 - **Replaces**: PR #4730, which is closed once both PRs below are open (see "Closing #4730")
 - **Source of the code**: #4730's head, `Skyline/work/20260928_osprey_blib_annotations` @ 2e88e21746
   (checkout `C:\proj\pwiz-work1` on Brendan's machine)
@@ -322,6 +322,16 @@ an output whose validity key no longer matches, so any future key term is silent
   SkylineCmd (`ai/.tmp/sessions/20260929-8a15/skyline-linenum/`). Not filed - Brendan to decide.
 - regression-parallel All on the strict loader: 70 PASS / 0 FAIL. PR #4746 opened; TeamCity
   Perf/Regression 4194189 triggered (Brendan approved).
+
+### 2026-09-30 - #4746 merged
+
+PR #4746 squash-merged into Skyline/work/20260612_net8_port as 07314d47ea: the stacked-modification
+decoy fix, the strict DIA-NN TSV loader, PeptideFragmentMass. Its Perf/Regression re-run (4194805)
+was dropped by Brendan: 4194189 passed at d5fe68fd, and the head b2ffe1196a had Windows/Linux green,
+local regression 48/0 and cross-impl PASS. #4749 retargeted onto the port branch (branch left as
+is: port tree == #4746 head tree, and #4749 already contains it; merging would only move its head
+off the queued Perf run 4194827). #4746 branch deleted local + remote; C:/proj/pwiz-4746 worktree
+removed. Deferred from #4746: resume gaps #2/#3 (separate PR after #4749), StripFlankingChars.
 
 ### 2026-09-30 night session - PRs opened and stacked - CURRENT STATE / RESUME HERE
 Stack (bottom to top), each branch containing the head below it (merges only, no force-push):
