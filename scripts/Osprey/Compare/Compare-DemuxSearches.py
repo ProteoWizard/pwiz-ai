@@ -25,6 +25,7 @@ Example:
 
 import argparse
 import csv
+import glob
 import os
 import re
 import sys
@@ -64,8 +65,15 @@ def named(value):
 
 
 def read_stats(directory):
+    # Named after the search's -o: output.stats.tsv for -o output.blib, results.stats.tsv for results.blib.
+    path = os.path.join(directory, "output.stats.tsv")
+    if not os.path.exists(path):
+        found = sorted(glob.glob(os.path.join(directory, "*.stats.tsv")))
+        if len(found) != 1:
+            raise FileNotFoundError(f"expected one *.stats.tsv in {directory}, found {len(found)}")
+        path = found[0]
     rows = {}
-    with open(os.path.join(directory, "output.stats.tsv"), newline="") as f:
+    with open(path, newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
             rows[row["Run"]] = (int(row["Precursors"]), int(row["Peptides"]), int(row["Proteins"]))
     return rows

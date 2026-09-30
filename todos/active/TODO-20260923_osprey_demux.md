@@ -469,8 +469,10 @@ gated byte-identically on the tool's reference outputs (`Capture-DemuxGoldens.ps
   every peak of the tool's output byte for byte (121,121,741 m/z and intensities); only the metadata
   differs (scan numbers kept per parent, precursor m/z at the bin center, window edges within 1e-13 Th).
   Demultiplexing took 93.7 s against a 136.6 s parse under load (the msconvert engine: 18.8 s).
-  The EV13 + EV14 search is running (`C:\temp\osprey-runs\eclipse-staggered\search-osprey-weighted`),
-  to set against 40,009 precursors at 0.26% FDP.
+  **EV13 + EV14 through Osprey: 39,956 precursors at 0.26% FDP, 34,483 peptides at 0.30%, 52 entrapment
+  hits** (below 1000.70 m/z; `Compare-DemuxSearches.py`), against 40,009 / 34,501 / 52 for Osprey searching
+  the tool's mzML: the same result within run noise, +4.0% over msconvert. 44 min for both files
+  (`C:\temp\osprey-runs\eclipse-staggered\search-osprey-weighted`).
 - Next: ZT Scan through Osprey needs the profile (the joint solve reads it; `.spectra.bin` holds centroids),
   the kernel, and the .wiff2 reader for Osprey.exe; then the Stellar staggered profile (needs data), then
   the rest of the spec. Step 3 changes `DemuxCacheBuilder`, which #4710 adds: agree the order with Brendan
