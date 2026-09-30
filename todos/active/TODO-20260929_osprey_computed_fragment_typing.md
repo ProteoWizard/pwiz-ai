@@ -5,9 +5,9 @@
 - **Branch (PR 2)**: (not yet created)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
 - **Created**: 2026-09-29
-- **Status**: In Progress - PR 1 built and unit-tested; regression-parallel All running
+- **Status**: In Progress - PR 1 open (#4746), TeamCity Perf/Regression build 4194189 queued; PR 2 not started
 - **Module**: `osprey`
-- **PR (PR 1)**: (pending)
+- **PR (PR 1)**: [#4746](https://github.com/ProteoWizard/pwiz/pull/4746)
 - **PR (PR 2)**: (pending)
 - **Replaces**: PR #4730, which is closed once both PRs below are open (see "Closing #4730")
 - **Source of the code**: #4730's head, `Skyline/work/20260928_osprey_blib_annotations` @ 2e88e21746
@@ -90,7 +90,8 @@ Tasks:
 - [x] Gates: Build-Osprey Debug -RunTests -RunInspection; `regression-parallel.ps1 -Dataset All`
       (goldens did not move; one unreproduced calibration AV - see log); perf gate skipped (not hot path)
 - [x] Cross-impl check with #71 on a library that HAS stacked mods (PASS; negative control FAILs)
-- [ ] PR, `/code-review max`, TeamCity Perf/Regression (ask), merge; then #71
+- [x] PR (#4746), `/code-review max`
+- [ ] TeamCity Perf/Regression (4194189), merge; then #71
 
 ## PR 2 - Osprey-computed fragment typing and BLIB writing
 
@@ -274,6 +275,24 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
 - Perf gate skipped: decoy generation runs once per library, and the refactor replaces a
   per-decoy O(mods x length) position scan with the remap already done, rather than adding work.
 - Committed 73d29b8b44, pushed. `/code-review max` running.
+
+### 2026-09-29 - PR 1 review round, strict TSV loader, PR opened
+- `/code-review max`: 14 findings; fixed 10 (c693e95f4a), dropped 1, 3 pre-existing resume gaps
+  (HPC join footer-only check; PerFileRescore `Pass2SidecarCurrent` format-only; SecondPassFDR
+  transfer-mode gate) left for Brendan's call. The `;decoymods=2` comment was wrong - no resume
+  check reads the build version - so the term re-runs every generated-decoy directory once; kept,
+  pending Brendan's decision (keep / drop / gate on a library probe in PR 2).
+- Brendan: no guessed values from a library ("prefer a hard failure"). DIA-NN TSV loader rewritten
+  (d5fe68fd07): every column present must parse; charge/ordinal 0, unknown type/loss/decoy flag,
+  empty cells and unknown modifications (previously DROPPED) are errors; the whole file is read
+  and every error reported `(line N, column C) ...` (1-based file lines, header = line 1, blank
+  lines counted - Skyline's CLI format), first 100 listed. `tsv_reader:2` in the .libcache
+  composition. Rust still lenient (follow-up question open).
+- Skyline's `--import-transition-list` reports data lines one low when the list has a header
+  (Import.cs:631 resets `_linesSeen` after the header bump at 513-514/582-583); verified with
+  SkylineCmd (`ai/.tmp/sessions/20260929-8a15/skyline-linenum/`). Not filed - Brendan to decide.
+- regression-parallel All on the strict loader: 70 PASS / 0 FAIL. PR #4746 opened; TeamCity
+  Perf/Regression 4194189 triggered (Brendan approved).
 
 ### 2026-09-29 - NIST measurement for decision 5 (PR 2 tolerance)
 Harness `ai/.tmp/sessions/20260929-8a15/measure_nist_typing.py` (results `nist_msp_typing.txt`,
