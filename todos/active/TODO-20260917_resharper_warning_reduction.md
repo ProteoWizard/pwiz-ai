@@ -11,6 +11,10 @@ the way it already runs on net472.
     severity/sweep/clipboard work below.
   - `Skyline/work/20260922_form_close_obsolete_apis` - [#4697](https://github.com/ProteoWizard/pwiz/pull/4697),
     **stacked on #4685**. Obsolete Form close methods, ServicePointManager, Assembly.CodeBase.
+  - `Skyline/work/20260930_owned_form_close_cascade` - [#4750](https://github.com/ProteoWizard/pwiz/pull/4750),
+    **stacked on #4685** (`d5bed42226`). The owned-form close cascade (item 3 below). Stacked
+    because the defect exists ONLY on #4685: it arrived with #4697's `OnClosing` ->
+    `OnFormClosing` rename and has not reached the base.
   - `Skyline/work/20260925_dda_search_fixes` - [#4712](https://github.com/ProteoWizard/pwiz/pull/4712),
     **also stacked on #4685** (two of its commits edit lines #4685 introduced). The three product
     and test defects the `NotAccessedField.Local` findings exposed, combined from the three
@@ -73,6 +77,51 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 today, after the dead TLS pinning and the Ardia pragma (`c01385e72a`) | 0 | **0** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
+
+### The red `Skyline code inspection` check on #4685 is ONE BAD AGENT, not a regression and not a flake (2026-09-30)
+
+`gh pr checks 4685` shows `Skyline code inspection  fail - inspectcode exited with code 4` at
+`f54676b6b6`, which reads like the zero has been lost. It has not: **`inspectcode` never gets as far
+as analyzing.** Its own solution build fails, and `tcinspect.ps1` treats any non-zero `inspectcode`
+exit as `error` before it ever reads the report.
+
+**Called a flake at first, and that was wrong** - the developer re-ran it and it failed again.
+Re-running will keep failing, because the cause is persistent state on one build agent:
+
+| Build | Commit | Agent | Inspection |
+|---|---|---|---|
+| #389 (4195218) | `f54676b6b6` | **-0adf59cd4d8f84520** | **error, exit 4** |
+| #386 (4195026) | `f54676b6b6` | **-0adf59cd4d8f84520** | **error, exit 4** |
+| #374 (4193726) | `f4946afc18` | -09d014c1d20635833 | success, 0 inspections |
+| #372 (4193636) | `c01385e72a` | -081fe6d4d689fdb5f | success, 0 inspections |
+| #371 (4193605) | `96a874fa0f` | -09d014c1d20635833 | ran fine, reported 5 real warnings |
+| #366 (4193222) | `17fa34a5da` | -0e12417989960283e | success, 20 warnings |
+
+**2 of 2 failures on `pwiz-windows-i-0adf59cd4d8f84520`; 4 of 4 clean runs on three other agents.**
+The two failures have *different* proximate errors, which is the tell - it is not one stuck file but
+a dirty output tree:
+
+- #386: `MSB3021: Unable to copy file "...IoModuleGCMSRawDataRepository.dll" to
+  "bin\x64\Release\net10.0-windows\..." Access to the path ... is denied.`
+- #389: `CS0579: Duplicate 'System.Reflection.AssemblyCompanyAttribute' attribute` in
+  `SkylineTester\obj\x64\Release\net10.0-windows\SkylineTester.AssemblyInfo.cs` - the SDK's
+  generated `AssemblyInfo.cs` colliding with a stale one left in `obj`.
+
+Both are under `x64\Release\net10.0-windows`. **That is the part worth keeping**: those directories
+belong to projects the inspection's solution build is the ONLY thing that compiles - `SkylineTester`
+above all, which `build.bat` deliberately does not build (see the Copilot-round notes below). So
+nothing else on the agent ever cleans them, and once one goes stale it stays stale.
+
+The code is fine, on three independent measurements: #374 on another agent, a local `tcinspect.ps1`
+run over `f54676b6b6` **plus** the cascade fix (`success`, **0 `<Issue>` elements**), and #389's own
+test steps passing.
+
+**Two ways to fix it, developer's call:**
+1. Clean that agent - delete `pwiz_tools/Skyline/SkylineTester/{obj,bin}` in its `C:\pwiz` checkout,
+   or turn on "Clean all files before build" for the config once and let it run there.
+2. Make the check not care which agent it lands on - have `tcinspect.ps1` remove
+   `SkylineTester/obj` and `SkylineTester/bin/x64` before the solution build. Costs seconds and
+   removes a whole class of red checks that look exactly like losing the zero.
 
 ### Nothing left (measured 2026-09-29 on #4685 at `c01385e72a`)
 
@@ -265,30 +314,160 @@ or round-tripping breaks for any name containing a reserved character.
      .NET 9+ WinForms SDK, so without the demotion its WinForms builds would fail.
    - Verified: `tcinspect` still `success - No inspections at WARNING or above`, so nothing
      inside `Skyline.sln` reopened.
-3. **The owned-form close cascade - CONFIRMED REAL on three of four sites, deferred to its own
-   branch (2026-09-30).** #4697 raised this in its PR body as an open question; Copilot's review
-   of #4685 then found the same thing independently on three of them. Ownership verified at each,
-   so the cascade genuinely reaches all three and `OnFormClosing` fires even on a shutdown the
-   owner later CANCELS:
-   - `AlignmentForm` - `SkylineGraphs.cs:2948` does `form.Show(this)` from `SkylineWindow`.
-     `OnFormClosing` calls `_cancellationTokenSource.Cancel()` unguarded, and `UpdateRows` only
-     replaces the token when the row set changes, so a cancelled shutdown leaves the token
-     **permanently cancelled** and alignment work dead for the session. Worst of the three.
-   - `UndoRedoButtons`/`UndoRedoList` - shown via `Show(dropDownButton.Owner)`, the hosting
-     `ToolStrip`, which WinForms resolves to its top-level form. `DenyListClosing` sets
-     `e.Cancel = true` UNCONDITIONALLY, so **Skyline refuses to close** while an undo/redo
-     dropdown is open. Narrow (handler is subscribed only while the list shows) but nasty.
-   - `ViewLibraryDlg` - owned explicitly (`{ Owner = this }` at `Skyline.cs:1849`,
-     `{ Owner = Owner }` at `PeptideSettingsUI.cs:1304`). `OnFormClosing` unsubscribes the
-     ion/loss handlers, so a cancelled shutdown leaves the dialog open with them gone. **The fix
-     is already demonstrated in the same file**: its `OnHandleDestroyed` unsubscribes
-     `SpectralLibraryList.ListChanged`, which is where this cleanup belongs.
-   - `SkylineWindow` - #4697's fourth site. **Copilot did NOT flag it**, so it would be missed by
-     anyone working only from the review. Still unexamined.
+3. **The owned-form close cascade - MEASURED, and 2 of the 4 sites are real. Fixed in
+   [#4750](https://github.com/ProteoWizard/pwiz/pull/4750) (2026-09-30).** #4697 raised this in its PR
+   body as an open question and Copilot's review of #4685 found three sites independently. Rather
+   than reason about WinForms semantics again, they were **measured** with a 5-case net10 WinForms
+   repro (`ai/.tmp/sessions/20260930-c6440483/cascade/`). What it establishes:
+   - An owned form's `OnFormClosing` fires with `reason=FormOwnerClosing` **BEFORE the owner's
+     own `OnFormClosing`**, so its teardown has already run when the owner cancels. The form is
+     left open (`IsDisposed=False`) with the teardown applied.
+   - **The legacy `OnClosing` override is NOT called by the cascade** - only `OnFormClosing` is.
+     So #4697's rename genuinely introduced this on the net10 line; it is **not** a master bug,
+     which is why the fix branch stacks on #4685 rather than going to master.
+   - `Show(someChildControl)` does resolve `Owner` to that control's top-level form, so
+     `UndoRedoList` really is in `SkylineWindow.OwnedForms`.
+   - An owned form that cancels propagates `e.Cancel = true` into the owner's `OnFormClosing`,
+     **and the owner can clear it** - after which the close proceeds normally.
 
-   Deliberately NOT fixed on #4685: it is a shutdown-behaviour change needing functional testing,
-   not review-response cleanup. The three GitHub threads are left **unresolved** on purpose so the
-   human reviewer sees them.
+   The enumeration matters more than the three sites Copilot happened to find: the cascade reaches
+   EVERY owned form, so all of `SkylineWindow`'s modeless owned forms were checked.
+
+   | Owned form | Teardown reached by the cascade | Verdict |
+   |---|---|---|
+   | `AlignmentForm` (`SkylineGraphs.cs:2948`) | cancels `_cancellationTokenSource` | **REAL - worst** |
+   | `ViewLibraryDlg` (`Skyline.cs:1849`, `PeptideSettingsUI.cs:1304`) | unsubscribes the ion/loss handlers | **REAL** |
+   | `UndoRedoList` (via `Show(dropDownButton.Owner)`) | `DenyListClosing` cancels unconditionally | **NOT a defect** - see below |
+   | `AllChromatogramsGraph` (`Skyline.cs:4006`) | `OnFormClosed` only, which a cancelled close never raises | safe |
+   | `DocumentationViewer` (`Skyline.cs:2984`) | none | safe |
+   | DigitalRune `FloatingWindow` (floating dock panes) | the docking library never references `FormClosing` at all, and `FloatingWindow` does not forward it, so a floating `DockableFormEx` never sees the cascade | safe |
+   | `SkylineWindow` itself | it is the owner, not an owned form | safe - see below |
+
+   **`SkylineWindow` is not the only owner, so the other owners were checked too.** The cascade is
+   a general hazard, and `DockableFormEx.OnFormClosing` sets `_isClosingOrDisposing` (which
+   `SafeBeginInvoke` consults, so a stuck `true` silently stops background UI updates) - its
+   `if (!e.Cancel)` guard cannot see a cancel that happens after it. It turns out not to matter:
+   every form that owns another one here has **no cancel path at all**. `EditGroupComparisonDlg`
+   (owner of `foldChangeGrid`) and `FoldChangeForm` (owner of `foldChangeSettings`) have no
+   `OnFormClosing` and never set `e.Cancel`; `CreateMatchExpressionDlg` (owner of
+   `MatchExpressionListDlg`) has none either - its `_cancellationTokenSource.Cancel()` is in
+   `FilterRows`, not a close handler; `VolcanoPlotFormattingDlg` and `EditCustomThemeDlg` have
+   none. `VolcanoPlotPropertiesDlg` is the one form with a `FormClosing` handler that could have
+   cancelled, and it does not - it restores settings - and it owns nothing. So `DockableFormEx`
+   needs no change today, but the guard there is weaker than it looks and is worth remembering if
+   an owner ever gains a cancel.
+
+   **Correction 1: `AlignmentForm`'s mechanism was recorded wrongly here, and the wrong mechanism
+   leads to the wrong fix.** The note above said the token is left "permanently cancelled". It is
+   not: `UpdateRows` calls `Cancel()` and then **replaces** the token on every call where the row
+   set differs, and `AlignedRetentionTimes` participates in `DataRow.Equals`, so a completed
+   alignment guarantees the rows differ next time. Every `AlignDataRow` therefore gets a FRESH
+   token. The real mechanism is one level down: `AlignDataRowAsync` **rethrows**
+   `OperationCanceledException`, `ProducerConsumerWorker.Consume` catches it and calls
+   `SetException` -> `Abort()` -> `Clear()` + `DoneAdding()`, which pushes a `null` per consumer
+   thread and **ends every consumer thread permanently**. `_exception` is never cleared and only
+   the constructor calls `RunAsync`, so `_rowUpdateQueue` is dead for the life of the form: later
+   `Add()` calls enqueue work nothing will ever run, and the grid sits on "Waiting for retention
+   time alignment" forever. Anyone "fixing" this by recreating the token would have changed
+   nothing. The window is narrower than the old note implies (cancellation must catch alignment
+   in flight) but the damage is total and permanent.
+
+   **Correction 2: `UndoRedoButtons` is NOT a defect - Copilot's finding is refuted.** The claim
+   was that Skyline "refuses to close" while an undo/redo dropdown is open. It does not:
+   `SkylineWindow.OnFormClosing` **starts with `e.Cancel = false`** (`Skyline.cs:1145`), which
+   discards the owned form's cancel, and the repro's case F confirms the close then proceeds and
+   both forms dispose. That line is not new - it is on master at `Skyline.cs:1150`, so it predates
+   #4697 - and `UndoRedoButtons` is constructed in exactly one place (`Skyline.cs:148`), so
+   `SkylineWindow` is its only owner. Net behaviour versus master is identical, because on master
+   the legacy `Closing` event was never raised by the cascade at all. It was still **hardened**,
+   because the non-bug is accidental rather than designed: `DenyListClosing` now skips
+   `CloseReason.FormOwnerClosing`, so it no longer depends on `Skyline.cs:1145` staying there, and
+   no longer truncates the cascade (a cancel makes WinForms `break` out of the owned-forms loop,
+   silently skipping the remaining owned forms' `OnFormClosing`).
+
+   **`SkylineWindow` - #4697's fourth site - examined and clean.** Copilot did not flag it and it
+   needed checking anyway. Both of its cancel paths return **before** any teardown:
+   `CheckSaveDocument()` failing does `e.Cancel = true; return;`, and the
+   `Settings.Default.SaveException` path cancels and then throws. The teardown that follows
+   (`_closing = true`, the eight `ProgressUpdateEvent` unsubscribes, `DestroyAllChromatogramsGraph`,
+   `DestroyFilesTreeForm`) is only reached once no cancel is possible. `base.OnFormClosing(e)` does
+   raise the `FormClosing` event after that teardown, which WOULD strand it if a subscriber
+   cancelled - but a grep shows **nothing subscribes to `SkylineWindow.FormClosing`**; all eight
+   `FormClosing +=` sites in the tree are dialogs subscribing to their own. No change needed.
+
+   **The fix, and why two shapes rather than one.** The invariant is that teardown must not run on
+   a `FormClosing` that may still be cancelled, and there are two honest ways to honour it:
+   - `ViewLibraryDlg`: move the teardown to `OnFormClosed`, which runs only on a close that
+     actually happened. It also covers a direct close cancelled by a `FormClosing` subscriber,
+     which the `CloseReason` shape below does not.
+   - `UndoRedoButtons`: skip on `CloseReason.FormOwnerClosing`. The whole purpose of the handler is
+     to veto closes, so it cannot move.
+   - `AlignmentForm`: **both** - skip the early cancel on `FormOwnerClosing`, and cancel in
+     `OnFormClosed` for the case that skips.
+
+   **Two drafts were written and backed out, and both mistakes are worth keeping:**
+   - *Moving `AlignmentForm`'s cancel wholesale out of `OnFormClosing`* would have changed the
+     NORMAL close path too, letting in-flight alignment call `Invoke` and touch the grid mid-close
+     where the early cancel used to stop it. Same hazard class as the `base.OnFormClosed` omission
+     under "Hazards" below. The normal path is now left byte-for-byte as it was; only the cascade
+     path changes.
+   - *`OnHandleDestroyed` as the replacement hook* - which is what both #4697's note and Copilot
+     suggested, on the strength of `ViewLibraryDlg` already unsubscribing
+     `SpectralLibraryList.ListChanged` there. It is the wrong hook for this: **`OnHandleDestroyed`
+     also fires when WinForms recreates a handle** (`RightToLeft`, `FormBorderStyle`,
+     `ShowInTaskbar` and friends), which would have torn down a form that is staying open - the
+     very bug being fixed, arrived at from the other direction. `OnFormClosed` fires only on a real
+     close and never on handle recreation. The existing `SpectralLibraryList` unsubscribe is left
+     where it is: that one points from a GLOBAL object at the dialog, so it must run on a hook that
+     always runs or the dialog leaks. The ion/loss handlers point from the dialog's own hosted panel
+     at the dialog, so they leak nothing and can use the stricter hook.
+
+   **Test**: `RetentionTimeAlignmentTest` gained
+   `VerifyCancelledShutdownLeavesOwnedFormsWorking`, reusing that test's existing fixture (results
+   + a .blib + a populated `AlignmentForm`) instead of standing up a second one. It opens the
+   library explorer, builds the ion type menu, asserts the document is dirty (without unsaved
+   changes the close would not stop to ask and would SUCCEED, which would wreck the test), drives
+   `SkylineWindow.Close` into the save prompt and clicks Cancel, then asserts both forms are still
+   alive and still functional. Both assertions are deterministic:
+   - `AlignmentForm.IsAlignmentActive`, a new `internal` property (`InternalsVisibleTo("TestFunctional")`
+     already exists, so no reflection) reporting `!IsCancellationRequested && Exception == null`.
+     A behavioural assertion could not work here: the token is refreshed on every `UpdateRows`, so
+     with no work in flight there is nothing observable to catch.
+   - For `ViewLibraryDlg`, toggling the `a`-ion checkbox in the hosted `IonTypeSelectionPanel` and
+     checking `GraphSettings.ShowAIons` followed it - a real end-to-end check of the subscription.
+     It toggles relative to the checkbox's own state so it does not depend on the panel starting in
+     sync, and restores `Settings.Default.ShowAIons` afterwards since that setting is global.
+     **First attempt failed, and the reason is the point of the whole item**: `UpdateIonTypeMenu()`
+     alone leaves `GetHostedControl<IonTypeSelectionPanel>()` returning null, because the selector
+     hangs off `ionTypesContextMenuItem`, which only enters `GraphControl.ContextMenuStrip` when
+     `BuildSpectrumMenu` runs from ZedGraph's `ContextMenuBuilder` event - i.e. on a right-click.
+     The test now calls `BuildSpectrumMenu` then `UpdateIonTypeMenu`, the two public methods that
+     right-click-then-hover drives, reaching the private `graphControl` the way
+     `LibraryExplorerTest` already does (`Controls.Find(@"graphControl", true)`). **This also bounds
+     the real-world defect**: the ion/loss handlers do not exist until the user has opened that
+     context menu, so the `ViewLibraryDlg` half only bites someone who did.
+
+   **Both assertions were verified to have teeth, by negative control.** A test that passes before
+   and after the fix is worthless, so each fix was reverted in turn (keeping the `IsAlignmentActive`
+   property so the test still compiled) and the test re-run. Two runs were needed, because the
+   first failure short-circuits the second assertion:
+
+   | Product state | `TestRetentionTimeAlignment` | Failing line |
+   |---|---|---|
+   | both fixes reverted | **FAILED** | 180, `AssertEx.IsTrue(alignmentForm.IsAlignmentActive)` |
+   | `AlignmentForm` fixed, `ViewLibraryDlg` reverted | **FAILED** | 184, `AssertEx.AreEqual(..., GraphSettings.ShowAIons)` |
+   | both fixed | **PASSED** | - |
+
+   The three `IsDisposed` assertions just above passed in both failing runs, which is itself the
+   proof of the scenario: the cancelled close left both forms **open**, with teardown applied.
+
+   **Why no existing test caught any of this**, which is the part worth remembering: a grep for
+   `SkylineWindow.Close` across `TestFunctional`, `TestTutorial` and `TestUtil` finds exactly one
+   caller - the framework's own teardown in `TestFunctional.cs` - and it calls
+   `CloseOpenForms(typeof(SkylineWindow))` FIRST, so by the time it closes the main window there are
+   no owned forms left and the cascade never runs. Nothing in the suite had ever closed
+   `SkylineWindow` mid-test, let alone cancelled it with owned forms open, so this was not a gap in
+   assertions - the code path had zero coverage. The new helper is the first test to enter it.
 4. **`ServicePointManager` is NOT inert on net10 for the legacy stack** - was #4697's other open
    question. Now moot for the nightly projects: wave 3 moved them to `HttpClient`, so the pinning
    in `TeamCityNightlyAuth` was dead and is deleted (`c01385e72a`).
@@ -423,6 +602,36 @@ Detail for each step is in its own section below; this is the sequence.
   finding, and half of it turned out not to be a defect (pwiz-sharp has `root = true`).
 - **09-30** Copilot review of #4685, 13 comments: **2 fixed, 8 refuted, 3 confirmed-deferred**
   (`f54676b6b6`). Inspection still `success` afterwards.
+
+### 2026-09-30, later session: the owned-form close cascade
+
+Picked up the largest remaining item (item 3 under "Open items") on its own branch,
+`Skyline/work/20260930_owned_form_close_cascade`, stacked on #4685.
+
+- **Measured the WinForms semantics instead of reasoning about them.** A 5-case net10 WinForms
+  repro settled the ordering, the legacy-`OnClosing` question, the `Show(childControl)` owner
+  resolution and the owner-clears-cancel case in one run. The legacy-`OnClosing` result is what
+  pinned the defect to the net10 line rather than master, and the owner-clears-cancel result is
+  what refuted one of the three Copilot findings.
+- **2 of 4 sites real, not 3.** `AlignmentForm` and `ViewLibraryDlg` are genuine and permanent.
+  `UndoRedoButtons` is not a defect (`SkylineWindow.OnFormClosing` clears `e.Cancel` on its first
+  line, and that line predates #4697); hardened anyway. `SkylineWindow` examined for the first time
+  and clean.
+- **Enumerated all of `SkylineWindow`'s owned forms rather than working from the review's list**,
+  since the cascade reaches every one. That added `AllChromatogramsGraph`, `DocumentationViewer`
+  and the DigitalRune floating-window path to the checked set - all three safe, the last because
+  the docking library never references `FormClosing` at all.
+- **The recorded `AlignmentForm` mechanism was wrong** and would have produced a fix that changed
+  nothing. Corrected in item 3: the token is refreshed on every `UpdateRows`; what actually dies
+  is `_rowUpdateQueue`, permanently, via `ProducerConsumerWorker.SetException` -> `Abort()`.
+- **Backed out the first version of the `AlignmentForm` fix.** Moving the cancel wholesale to
+  `OnHandleDestroyed` would also have changed the normal close path, letting in-flight alignment
+  reach the grid mid-close. Now it skips only `FormOwnerClosing` and cancels in
+  `OnHandleDestroyed` for that case, leaving the normal path unchanged.
+- `build.bat` run through `cmd /c` from the Bash tool **silently did not run**: it landed in an
+  interactive clink shell, logged a banner and a prompt, and **exited 0**. Ran it through the
+  PowerShell tool instead. This is the same shape as the LF-`.bat` label-skip note in MEMORY -
+  a 0 exit from a build wrapper proves nothing on its own, so check the log for the compile lines.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
