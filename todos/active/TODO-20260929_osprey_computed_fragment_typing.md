@@ -323,7 +323,61 @@ an output whose validity key no longer matches, so any future key term is silent
 - regression-parallel All on the strict loader: 70 PASS / 0 FAIL. PR #4746 opened; TeamCity
   Perf/Regression 4194189 triggered (Brendan approved).
 
-### 2026-09-29 - PR 2 typing rework (a728f1a652) - CURRENT STATE / RESUME HERE
+### 2026-09-30 night session - PRs opened and stacked - CURRENT STATE / RESUME HERE
+Stack (bottom to top), each branch containing the head below it (merges only, no force-push):
+- **#4746** stacked-mod decoys, head b2ffe1196a (Brendan's 23:58 port-branch merge). TeamCity
+  Windows 4194665 + Linux 4194666 SUCCESS; Perf 4194189 SUCCESS at d5fe68fd; local
+  regression-parallel All 48/0 at b2ffe1196a; cross-impl vs maccoss/osprey#71 (867029e281) on
+  the stacked-mod Stellar variant PASS 1e-9, 30,296 both (logs D:/test/osprey-runs/crossimpl-4746-logs).
+- **#4749** PR 2 (this TODO), head ce565c1c22 (6b909a6bcc review fixes + merge of #4746 head).
+  628/628; regression 70/0 at 6b909a6bcc and 48/0 at ce565c1c22; Windows 4194844 + Linux 4194826
+  SUCCESS.
+- **#4708** (Mike) re-based onto #4749 by merge 874536be8e, then 9aa7429305 (merge of #4749).
+  Linux failed deterministically at 9aa7429305: TestSubsetTrainingExportSingleRun. Root cause
+  (sub-agent, WSL repro): whole-second mtime race. PerFileRescoring declines its resume on every
+  invocation of a one-run analysis (#4729), clears the reconciled stamp and rewrites an identical
+  parquet; the export's recon= identity holds its mtime. Pre-existing, not Linux-specific.
+  Fixed in PerFileRescoreTask (338c593d58). Mike pushed c0c7428206 (LIBRARY_MZ_MATCHED for
+  Osprey-typed blib fragments) at 01:29; merged -> cce115ab01. 638/638, regression 48/0,
+  Windows 4194841/4194846 + Linux 4194842 SUCCESS.
+- **#4730** commented recommending close (annotations table never meant for proteomics; doubled
+  blib size 27.4 -> 59.9 MB).
+- Perf/Regression queued: 4194805 (#4746), 4194827 (#4749), 4194843 (#4708). The only compatible
+  agent (MacCoss TeamCity Agent 1) had 7 auto-triggered Skyline Perf/Tutorial builds ahead
+  (pwiz-commit, 00:10). Not reordered or cancelled.
+- Worktrees: C:/proj/pwiz-4708 (branch of #4708), C:/proj/pwiz-4746 (detached b2ffe1196a) -
+  remove when done.
+- Still open for Brendan: StripFlankingChars bracket bug (#4746 or separate; left untouched so
+  #4746's gates stay valid). After merges: resume fixes #2/#3.
+
+### 2026-09-30 - PR 2 code-review fixes
+`/code-review max` returned 15 findings; Brendan triaged:
+- **Blib annotation rows are NOT READ at all** (Skyline designed the table for small molecules; no
+  proteomics software writes it). Deleted `BlibPeakAnnotations.cs`, the stated-ion pass in
+  `FragmentTyping`, blib `TypeCheck`. DIA-NN TSV columns stay the typing, still compared
+  (`FragmentTypeCheck`, now single stated ion per peak). Findings #8/#10/#11 moot. Future
+  .sptxt/.msp/Spectronaut inputs should NOT ignore stated ions - only when a user asks.
+- #3/#4 blib mods matched like Skyline `MassModification.Matches` (round at printed precision,
+  cap 4 decimals, or within 1e-4), residue/terminus-specific, table order = preference; unmatched
+  with <4 decimals, unknown UniMod id, other text -> library refused listing each mod once.
+  `(UniMod:N)` read. New `Osprey.Core/UniMod.cs` (masses from Skyline UniModData.cs).
+- #5 one UniMod table shared by DiannTsvLoader/BlibWriter/BlibLoader; corrected ids 28, 122, 214,
+  312, 385, 747. Rust `unimod_id_to_mass` still wrong - noted in docs/DIVERGENCES.md (parity
+  datasets use only UniMod:4). Named mods (Oxidation...) left at Rust's 4-decimal masses.
+- #1 `-o` == `--library` refused (ValidateArgs, all tasks); #12 blank `--export-library` refused.
+- #2 (a): unflagged precursors with decoy-prefix accessions refused unless --decoys-in-library.
+- #9 blib CheckDecoysUsable message points at --fragment-tolerance/--resolution.
+- #14 TIE_TOLERANCE 1e-3 -> 1e-5 Th; #15 FormatMassDelta zero section. Dropped: #6, #7 (Skyline
+  quirk, composite mods), #13.
+- Build 624/624 + inspection 0 (before ProgramTests.TestValidateRejectsOutputOverLibrary and the
+  Deamidated R entry were added). regression-parallel All running (regr3.log).
+- NEXT: finish regression, rebuild+tests, commit (msg `ai/.tmp/sessions/20260929-8a15/pr2-commit3.txt`),
+  push, open PR 2 with `pr2-body.md` (base = Skyline/work/20260929_osprey_stacked_mod_decoys,
+  label osprey). Ask before TeamCity. Still pending from Brendan: StripFlankingChars bracket bug
+  (fix in #4746 or separate?), cross-impl re-run for #4746 (asked, no answer). Then #4730 close
+  review, Mike note, resume fixes #2/#3 after merge.
+
+### 2026-09-29 - PR 2 typing rework (a728f1a652)
 Brendan's rules after reviewing the 6 subset "isobar" peaks (b2 = b4^2 of IQQLTEEIGR etc.):
 1. A library-stated primary b/y ion within the search tolerance is ACCEPTED, even over Osprey's
    choice (isotope labels can resolve isobars Osprey cannot). Loss / a,c,x,z / z>2 / out of
