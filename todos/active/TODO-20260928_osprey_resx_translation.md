@@ -307,3 +307,14 @@ The work is only half the deliverable; the other half is evidence for or against
 - Left for their owners (pwiz-ai, not this branch): `ai/scripts/Invoke-DailyReport.ps1`,
   `Invoke-PRReport.ps1`, and the two `TODO-20260924_osprey_log_readability-*.csv` still carry BOMs
   (a BOM on a CSV may be deliberate - Excel needs it to show CJK).
+- Do Osprey output files carry a BOM? No. All 124 files of the last Stellar regression run (every
+  intermediate file, JSON, `.osprey.task` stamp, TSV report, log, parquet, blib) start without one; and
+  every text writer in product code (49: StreamWriter / File.WriteAllText, incl. FDRBench, PIN,
+  model-diagnostics HTML/JSON and the `-d` dumps) uses the .NET default, UTF-8 without BOM. The 7
+  `Encoding.UTF8` uses are GetBytes/GetString (hashes, library-cache strings) and one StreamReader - no
+  preamble.
+- `b4e0de0b01`: `CodeInspectionTest.TestNoBomWritingEncoding` - Skyline's Encoding.UTF8 writer rule plus
+  File.Append*, `XmlWriterSettings { Encoding = Encoding.UTF8 }`, `new UTF8Encoding(true)`,
+  `Encoding.GetEncoding("utf-8")`; all .cs incl. tests, comments ignored, exemption `// UTF8 BOM OK:`.
+  Mutation-tested (a File.WriteAllText with Encoding.UTF8 is reported with file:line; nothing else
+  matches). Gates 612/612 en-US (inspection 0), ja-JP, zh-CN, fr-FR.
