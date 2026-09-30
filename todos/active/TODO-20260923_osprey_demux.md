@@ -325,6 +325,47 @@ Not yet tried, most promising first:
   - Untested: a narrower layout (`centered:5` / `centered:3`) with the joint solve. DIA-NN picks candidates
     at 1.18 Th but each spectrum carries 8.3 Th of positions, so fragments interfere up to 3 bins away.
 
+**Night of 2026-09-29/30: CPU speed of the joint solve, unchanged output**
+- **1.36x on 12 sweeps** (A1 dump sweeps 57-68, precursors 560-600, measured shape, one thread on a cleared
+  P-core): b6bae12c32 114-120 s, 6ae9643df7 82.5-87 s, both 0.0101 from the converged solve (`bench\ref12_ref`).
+  - fb80b10ca2 block Hessian from each column pair's shared rows (a block's positions span about 25, so many
+    pairs share none) and the first weights spread from samples with data: byte-identical, 12%.
+  - c54a6be7a4 gradient check four grid points per vector (it made 83M peak-gradient calls a sweep against
+    the block solves' 59M): 13%, output unchanged on the benchmark.
+  - 77c84dd54e prune only the points a pass solved, active counts per point: byte-identical, 2.5%.
+  - 6ae9643df7 v and curvature four points per vector, one residual update per row: 5%.
+- **Measuring on SCARFELL:** timings while arms run are only usable with the arms and DIA-NN kept off the
+  benchmark's P-cores (affinity 0xFF003) and A/B pairs swapped between cores; identical runs still differ by
+  about 4-8%, so a part under about 10% cannot be ranked. Ablation (`OSPREY_JOINT_ABLATE`, a part run twice,
+  `sessions/.../Bench-Ablate.ps1`) ranked the Hessian first; the profile's own sub-timers understate it.
+- Tried and dropped: inlined, bounds-check-free peak loops (byte-identical, about 3%, within noise; not worth
+  unchecked writes); alternating pass directions (46 passes against 28, 39.7M block solves against 24.1M);
+  96-bin units (`--group-bins 96`: 36% fewer block solves but blocks of 5.3 positions against 4.0, about 3%,
+  output 0.043 away); `PeakHalfWidth=4`; skipping rows with no data near a point (13% of terms).
+- **0025884217 over-relaxation 1.7 -> 1.5**, against 12 sweeps solved to convergence (`bench\gref12_base`
+  Gaussian, 637 passes; `bench\ref12_ref` measured), block solves and |log2|: Gaussian 1.0 19.7M 0.033, 1.2
+  18.8M 0.028, 1.4 18.7M 0.024, **1.5 19.1M 0.022**, 1.6 19.9M 0.022, 1.7 21.2M 0.023, 1.8 23.7M 0.026, 1.9
+  29.1M 0.032; measured **1.5 19.5M 0.0056**, 1.6 21.3M 0.0073, 1.7 24.1M 0.0101. The Gaussian default is
+  twice as far from converged as the measured shape, and convergence moves the CV (looser rules cost
+  +0.013-0.017).
+- **43b3088e67 `BlockPoints` (option, default 1):** each block step solves the active positions of up to 5
+  neighbouring grid points together (cross terms from v shifted by their distance, boundaries moving each
+  pass). 12 Gaussian sweeps, block solves / positions per block / |log2| from converged: 1 19.1M / 3.9 /
+  0.022; 2 11.5M / 6.3 / 0.019; 3 8.1M / 8.5 / 0.010; 4 6.1M / 10.8 / 0.008; 5 4.9M / 13.1 / 0.007. It buys
+  accuracy, not speed: timed back to back on the same cores (6 sweeps, 6 runs each) 1 point 33.5 s, 3 points
+  with `RelativeTolerance=1e-3` 38.8 s (0.019), 4 points with it 43.9 s (0.014). Worth a slice arm if tighter
+  convergence improves the CV.
+- Where the current build's time goes (12 Gaussian sweeps): passes 66%, gradient check 23%, weights 8%; each
+  grid point in reach is solved about 12 times per sweep.
+- **Slice, 2-sigma merge + joint MS1 (`c7_joint_m2_ms1`, `--window 6`):** 3,447 / 3,788 / 3,532 precursors,
+  2,651 peptides in all runs and 4,640 in any (the most of any arm; channel 2,197 / 3,743, Gaussian 2-sigma
+  2,610 / 4,508), CV 0.095 against 0.092 for the 2-sigma merge alone. Pinned (14 / 17 ppm): 3,586 / 3,775 /
+  3,589, 2,698 peptides in all runs and 4,698 in any (channel 2,281 / 3,851), CV 0.0905 against the channel's
+  0.0964 on the precursors both quantify (0.094 against 0.092 for the 2-sigma merge alone). **Recommended
+  defaults: `--merge-sigmas 2 --ms1 joint`.** Whole runs with them: `full\joint_m2_ms1`
+  (`sessions/.../Run-WholeJoint.ps1`: A1 alone at 16 threads for the timing, then D1 and G1, then DIA-NN as
+  `full_c7pz_scarfell`, arm `slices\diann\full_joint_m2_ms1`).
+
 I/O around the solve (separate from it): the writer re-centroided every spectrum to get its header (fixed,
 ff7e429fb4); the vendor reads were serial (4 threads, aac2026874: 3.95x, identical peaks). Opening a run takes
 ~80 s. Still open: mzMLb or an in-memory hand-off to Osprey instead of a 17-19 GB mzML per run.
