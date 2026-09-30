@@ -294,6 +294,18 @@ Stacked on PR 1 (it uses `PeptideFragmentMass`), or cut after PR 1 merges.
 - regression-parallel All on the strict loader: 70 PASS / 0 FAIL. PR #4746 opened; TeamCity
   Perf/Regression 4194189 triggered (Brendan approved).
 
+### 2026-09-29 - Brendan's answers
+- `;decoymods=2`: DROP - removed (919f6ff6ea); docs/01 says a directory resumed across the fix
+  keeps its old decoys. TeamCity 4194189 (on d5fe68fd07) still covers the outputs; not re-run.
+- Rust `diann.rs` strict validation: NO - Rust only has to pass cross-impl, which valid libraries do.
+- Skyline header line-number bug: FILED [#4747](https://github.com/ProteoWizard/pwiz/issues/4747).
+- Resume gaps #1-#3: Brendan asked for clarification.
+- Tolerance (decision 5): Brendan asked for precedent. Skyline: one "Ion match tolerance" setting,
+  default 0.5 m/z (Properties/Settings.cs:3521), m/z or ppm. Osprey already matches peaks with
+  `FragmentToleranceConfig`: 0.5 Th for `--resolution unit`, ppm (default 10) for hram, then
+  MS2 calibration narrows it to |mean|+3SD. The 1-decimal heuristic has no precedent (mine);
+  0.02 Th/20 ppm came from #4730. Proposal now: type with the search's fragment tolerance.
+
 ### 2026-09-29 - NIST measurement for decision 5 (PR 2 tolerance)
 Harness `ai/.tmp/sessions/20260929-8a15/measure_nist_typing.py` (results `nist_msp_typing.txt`,
 `nist_sptxt_typing.txt` beside it): primary b/y at z <= min(prec, 2), nearest match, a tie
