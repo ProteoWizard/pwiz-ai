@@ -364,3 +364,22 @@ The work is only half the deliverable; the other half is evidence for or against
   unrelated) - TeamCity covers the Skyline side of the `ConsoleTable` / `ParaUsageBlock` changes.
 - Next: merge the port branch when #4708 lands, rerun the 4-culture gate, report new/removed/orphaned
   strings; then ask before re-triggering Perf/Regression.
+
+**2026-10-01** - Skyline help failure + #4708 merge
+- TeamCity Skyline Windows .NET failed `TestCommandLineHelpDocumentation-en` on `ea377bab71`: the review fix made
+  `ParaUsageBlock.ToHtmlString` use `ArgUsage.HtmlEncode`, which also writes `'` as `&#39;`, changing Skyline's
+  committed help (`'--in'`). Now encodes only `& < >` - Skyline's para texts (en/ja/zh-Hans) contain none of
+  those, so its output is unchanged; Osprey's `<file1.mzML>` USAGE fix stays.
+- `5a62f2df20` merged the port branch (#4708). 8 conflicts: upstream moved `LoadSpectraForRescore` /
+  `LoadMassCalibrations` to `ScoringTaskShared` with new keys whose English re-typed `--task`, `--cache-dir`,
+  `PerFileScoring`, `.spectra.bin`; renamed the reconciled-input key to take the consumer as `{2}`. Kept the
+  upstream moves and key names, re-tokenized. Guards fired as designed: `TestArgumentTextComesFromArguments`
+  (3 `--training-export` / `--task` literals -> `OspreyArgNames.TRAINING_EXPORT`), and
+  `OspreyLocalizedResourcesTest` caught the first changed-English case: `--task` help gained `{4}`/`{5}` for
+  the TrainingExport task under an already-translated key (format-item mismatch). Carried drafts to 9 moved or
+  renamed keys and updated `_task`, through the pipeline import (`carry_4708.py`); orphans dropped.
+- Counts: 885 English, 826 ja / zh-Hans; 59 untranslated (22 earlier + #4708's training export). 642/642 in
+  en-US (inspection 0), ja-JP, zh-CN, fr-FR; Stellar regression PASSED.
+- Upstream (not this branch): `OspreyDiagnostics.cs:107` ProcessExit handler reads static `s_sink`, which can be
+  null at exit -> "Unhandled exception. NullReferenceException" printed during the test run (tests pass).
+- Next: TeamCity PR builds on `5a62f2df20`; ask before re-triggering Perf/Regression.
