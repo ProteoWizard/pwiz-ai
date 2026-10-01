@@ -212,3 +212,55 @@ the branch carries no binary change". True at the time and no longer relevant: #
 `ParquetNet.dll` and its companion DLLs, adds `Parquet.dll` (743936), renames the XML docs, and
 moves consumers onto a `ReferenceParquetNet=true` targets mechanism. There is no longer a
 vendored `ParquetNet.dll` for this branch to have an opinion about.
+
+### 2026-10-01: that measurement is DONE. The premise survives Parquet 6.
+
+Built `df01fa50e3` (#4751 head) with the three FirstPassFDR commits cherry-picked on top
+(`65283f6dc1` / `154219f399` / `b8524ef1dc`), so **both sides of the comparison carry the same
+code and the only variable is the Parquet library**. Saved as branch
+`nightlywork/4751-parquet6-instr` @ `6c8ba03c04` in `pwiz-parqread`; that worktree has been
+restored to its own branch and `backup/pre-rebase-20260930` is intact.
+
+Two useful by-products before the number:
+
+* **#4751 builds here** - `Build succeeded in 77.3s`. Nick's private `skylinedev/Parquet.Net6`
+  fork restores without any feed trouble on this machine, and the shipped assembly is
+  `Parquet.dll`, 743936 bytes, **FileVersion 6.1.0.0**.
+* **The two lines of work compose.** The three FirstPassFDR commits cherry-picked onto #4751
+  with no conflict at all - they touch `PercolatorScorer.cs` / `PercolatorEngine.cs` /
+  `FdrProjectionOutput.cs` / `FirstPassFdrTask.cs` / `FdrTest.cs`, and #4751 touches
+  `ParquetScoreCache.cs` / `IOTest.cs` / the csproj+targets. The collision is specific to the
+  READ-pipeline branch, not to the FirstPassFDR work.
+
+#### The decode cost, 8 files / 33,459,602 rows, quiet box
+
+| bucket | Parquet 4.25 (`ed25627d81`) | Parquet 6.1 (#4751) | |
+|---|---|---|---|
+| pass 1 `parquet walk` | 6.7 s | **8.4 s** | +25% |
+| pass 2 `parquet walk` | 7.4 s | **8.2 s** | +11% |
+
+**Parquet 6 decode is slightly SLOWER, not faster.** So the upgrade does not dissolve the
+problem this branch solves - serial row-group decode is still worth parallelising, and the
+port remains justified in principle.
+
+#### Do not read the other buckets as a comparison
+
+`q-assign` reads 62.4 s here against 79.2 s on 4.25, but that is **not** controlled: the 79.2 s
+run carried the per-row sink and peptide timers that `b8524ef1dc` removes and which are absent
+here, and the mdiag state and run-to-run variance differ. Only the walk was set up as a
+like-for-like. For the record, the rest came in at run-q sort 36.1 s (against 37.3), 
+score+competition 18.2 (18.9), clamp floors 7.9 (9.8), sidecar write 5.3 (5.4), sidecar load
+2.8 (2.8) - all within noise of the 4.25 figures, which is the expected result for a change
+that touches only the parquet layer.
+
+#### Still size it at the real file count before porting
+
+The walk is the **one superlinear bucket** - 3.27x for 2.04x rows on 4.25 (6.7 s at 8 files,
+21.9 s at 16). So 8.4 s at 8 files does not scale to 82 by multiplication, and the prize could
+be a lot bigger than a naive x10.55 suggests, or differently shaped. Measure the walk on #4751
+at the file count that matters before committing to re-porting ~800 lines of N-reader
+concurrency onto a reader surface that is now async-first and wrapped.
+
+(The run's version stamp reads `26.1.1.268` because `-LinkFrom` pins
+`OSPREY_VERSION_OVERRIDE` from the source run. That is expected and not a wrong build; the
+`Parquet.dll` 6.1.0.0 check above is what confirms which library ran.)
