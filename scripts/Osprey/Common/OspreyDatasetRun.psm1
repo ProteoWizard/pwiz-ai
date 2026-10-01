@@ -529,20 +529,15 @@ function Invoke-OspreyDatasetRun {
     }
     if ($Task) { $cliArgs += @('--task', $Task) }
     if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
-    # A post-scoring --task leg used to read .scores.parquet out of $OutDir with no raw input
-    # path at all, so it could not resolve the .spectra.bin cache - and Stage 6 rescore
-    # REQUIRES that cache. Since --input-scores retired the leg names its runs by their data
-    # files and resolves the cache beside them on its own, so this is now an explicit
-    # restatement of the default rather than the only way to get it. Kept because it is
-    # exactly what -CacheDir means for these legs, and losing it costs a 13-minute hydrate
-    # that fails on the first file.
-    # The cache sits beside its source in the data directory (ai/docs/osprey-run-layout.md:
-    # "it is not a separate tree"), so point the leg at it rather than hard-linking GB of
-    # cache into every worker directory. Without this a PerFileRescoring leg runs the whole
-    # hydrate and compaction and only then fails on the first file's missing cache - 13
-    # minutes at plate scale, and it would be hours at 446.
-    $effectiveCacheDir = if ($CacheDir) { $CacheDir } elseif ($useScores) { $dataDir } else { $null }
-    if ($effectiveCacheDir) { $cliArgs += @('--cache-dir', $effectiveCacheDir) }
+    # --cache-dir only when -CacheDir is given. A post-scoring --task leg names its runs by
+    # their data files (the -i paths in the data directory), and Osprey resolves each
+    # .spectra.bin beside its source on its own (ai/docs/osprey-run-layout.md: the cache "is
+    # not a separate tree"), so the runner used to pass --cache-dir <data dir> only as a
+    # restatement of that default. It was not harmless: --cache-dir also moves the library's
+    # .libcache lookup, so a post-scoring leg missed the .libcache the straight run wrote
+    # beside the library and re-parsed the 13 GB SEA-AD TSV - without the retained-fragment
+    # skip - writing a second 2.2 GB .libcache into the data directory.
+    if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
