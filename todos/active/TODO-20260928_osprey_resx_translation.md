@@ -344,3 +344,23 @@ The work is only half the deliverable; the other half is evidence for or against
   translation was made from (e.g. in the resx comment) and have the test compare.
 - Next translation pass: the 22 new strings, through the same drafting + validation + import flow.
 - 2026-09-30 evening: opened [#4752](https://github.com/ProteoWizard/pwiz/pull/4752) at `a9ea0e1086` (Brendan); triggered TeamCity Osprey Perf/Regression build 4196262 on `pull/4752`. `/code-review` not yet run (PR opened at Brendan's request after hours to use TeamCity time).
+- TeamCity Perf/Regression 4196262 on `a9ea0e1086`: SUCCESS.
+- `/code-review max` (Brendan): 15 findings. Fixed in `ea377bab71`: UTF-8 console output when the run may
+  write ja/zh text (Program.Main switches and restores the encoding); CJK help wrapping by display width
+  (`ConsoleTable.DisplayWidth`, ASCII output identical); help HTML now encodes prose and `ParaUsageBlock`
+  text; model-diagnostics report and its JSON intermediate file use a culture-invariant `ReportLabel`;
+  "all targets" calibration sentences split from the `{2:N0}` count form; charge-0 error names the row group
+  and the right remedy task for reconciled files; CwtCandidateLoader "(unreadable: ...)" moved to a resource;
+  `ImportLocalizationCsvFiles.bat` used `%ERRORLEVEL%` inside parenthesized blocks (failed import printed
+  SUCCESS) -> `|| goto error` + `exit /b 1`; README names `localization.zh-Hans.csv`; tests tightened
+  (format strings exercised, BOM regex covers Async writers/named args, per-file IO errors). Posted to #4737:
+  IncrementalUpdate/FinalizeResxFiles would discard the Osprey drafts (no Osprey rows in
+  `LastReleaseResources.db`), and the zh-CHS tools (MPPExport, SProCoP, Turnover) misrouted by the zh-Hans
+  bat switch. Dropped the rest. Gates 632/632 en-US (inspection 0), ja-JP, zh-CN, fr-FR; Stellar
+  regression PASSED. PR description updated with real counts (826 of 848; the 22 new strings stay English).
+- Environment notes: `Build-Osprey.ps1 -RunInspection` resolves CommonUtil from
+  `Shared/CommonUtil/bin/x64/Debug/net10.0`, which goes stale when CommonUtil changes (copied the fresh
+  `bin/Debug` dll over it); a local Skyline build failed in BiblioSpec's CMake MascotShim step (environment,
+  unrelated) - TeamCity covers the Skyline side of the `ConsoleTable` / `ParaUsageBlock` changes.
+- Next: merge the port branch when #4708 lands, rerun the 4-culture gate, report new/removed/orphaned
+  strings; then ask before re-triggering Perf/Regression.
