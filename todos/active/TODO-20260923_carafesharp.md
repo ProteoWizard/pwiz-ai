@@ -499,10 +499,9 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
     - `TestCollisionEnergies`: the per-vendor rules.
   - Open: no Sciex, Bruker, Agilent or Waters data here to calibrate on for real. A run from the developer would show
     whether the calibrated NCE beats a fixed one on held-out metrics.
-- [ ] Goldens remade for the acquisition layer (2026-09-30; developer: "We would need to do it for the Astral
-  data too"). Open item: the developer uploads `D:\test\carafesharp-testdata-zips\carafesharp-export-astral-v1.zip`
-  (161,898,686 B, SHA-256 f718764460ac26c80799be02e8df23c11f41bbe9c929a238897d1c3446c51296) to Panorama perftests,
-  then set its URL in testdata.json (it is PLACEHOLDER) and confirm an anonymous download.
+- [x] Goldens remade for the acquisition layer (2026-09-30; developer: "We would need to do it for the Astral
+  data too"). The developer uploaded carafesharp-export-astral-v1.zip on 2026-10-01; an anonymous download matches
+  its SHA-256, and its URL is in testdata.json (6d613f6f6a).
   - Stellar: c7147d8414. Fine-tuned MS2 within 3.5e-4, peaks +0.33%; two runs of 8dfe512b59 byte-identical.
   - Astral: a new dataset (249d01cc82); golden a9a430044d. CPU, 35 min: 123,399 precursors, MS2 COS
     0.9771 -> 0.9868, RT R2 0.8595 -> 0.9972. Its own run compares SAME everywhere.
@@ -517,6 +516,10 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
         target). The planner pairs that one precursor once, so the check counts them apart.
       - 4e68f62ac8: the sample modulus scales with the library (Astral 70), under the 2 MB cap.
     - Carafe's digest repeats 39 sequences across records (111,322 records, 111,277 distinct in the subset).
+- [x] Merged the PR base `Skyline/work/20260612_net8_port` after #4708's squash merge and #4725 (514cd3f189,
+  2026-10-01). The add/add conflicts in 6 of #4708's files were three-way merges on #4708's head 23389009a0: this
+  branch's analyzers footer plus the base's training-export progress reporting. Osprey 638/638, CarafeSharp 80/80,
+  and the chained leg passed after it. #4717 is MERGEABLE/CLEAN.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
