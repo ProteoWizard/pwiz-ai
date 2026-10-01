@@ -471,6 +471,82 @@ or round-tripping breaks for any name containing a reserved character.
 4. **`ServicePointManager` is NOT inert on net10 for the legacy stack** - was #4697's other open
    question. Now moot for the nightly projects: wave 3 moved them to `HttpClient`, so the pinning
    in `TeamCityNightlyAuth` was dead and is deleted (`c01385e72a`).
+5. **CI cleaning, the test-project set and the x64 build - pushed to #4685 (2026-10-01) as
+   `51573fe525` (clean slate, CleanSkyline sweep, every test project built, tutorial skip, dead
+   dotnet steps removed) and `d4643f36c5` (x64 `build.bat` reusing the inspection's build).**
+   Next: watch the first CI build of `d4643f36c5` - it is the first real run of the new Clean step,
+   the patch with four steps removed, and the x64 build. If `TestLibraryBuild` leaves a `.ses`
+   temp file there, see the x64 notes below (1 failure in 6 local runs, 0 on AnyCPU CI).
+   The fix for the bad-agent inspection failure, as directed by the developer:
+   - `.kts`: new `Skyline_Clean` step running root `clean.bat`, ordered BEFORE the inspection, so
+     the inspection starts from a clean slate. It is the build's only clean.
+   - `tcbuild.bat`: no longer cleans. It used to call `CleanSkyline.bat` directly, which bypassed
+     `clean-apps.bat`'s `for /d /r` bin/obj sweep - **that bypass is why `SkylineTester\obj` was
+     never cleaned**. The sweep lived in `clean-apps.bat` all along; `CleanSkyline.bat` was never an
+     enumeration, even in its 2009 first version. The chain the old build used is
+     `clean.bat` -> `clean-apps.bat` (sweep) -> `CleanSkyline.bat` (generated-file extras).
+   - `CleanSkyline.bat`: its 24 hand-listed bin/obj lines replaced by a copy of `clean-apps.bat`'s
+     `:CleanBinaries` sweep over its own tree, so running it alone cleans Skyline completely;
+     `clean-apps.bat` sweeps every app except Skyline and still calls it. It ends `exit /b 0`
+     because the sweep leaves errorlevel 1 behind (`git ls-files --error-unmatch`) and the TC Clean
+     step fails on a nonzero `clean.bat` exit. Verified: alone it took Skyline from 37 bin/obj dirs
+     to 1 and left `Shared` alone; via `clean.bat`, `Shared` 22 -> 0; both exit 0; nothing tracked
+     deleted. The one survivor is `Executables\DevTools\DocumentConverter\bin`, **a git submodule
+     with a tracked `bin\mammoth`** - the sweep's tracked-file guard keeping it is correct, and a
+     blind `rmdir` (or a parent-repo `git ls-files` check) would have deleted it.
+   - `build.bat`: always builds and stages every test project (TestTutorial and TestPerf included),
+     so `SkylineTester.zip` carries every test DLL. New `--skip-tutorial-tests`
+     (`skip=TestTutorial.dll`, applied in `:run_tests` so every pass honours it);
+     `--with-tutorial-perf` now means "include tutorial and perf tests in the run" and adds
+     `perftests=on` to the full-suite pass only (the ja/zh pass selects by regex and would pick up
+     `TestImportHundredsOfReplicates`/`TestImportMassOnlyMolecules` in two more languages).
+   - `tcbuild.bat`: passes `--skip-tutorial-tests` unless given `--with-tutorial-perf`.
+   - Found on the way: **CI was already staging - and zipping - the inspection's x64 `TestPerf`**
+     (#374: `Staging TestPerf (...\bin\x64\...)`), because `CleanSkyline.bat` listed `TestTutorial\bin`
+     but not `TestPerf\bin`. Its tests did not run only because perf tests are gated on
+     `perftests=on`.
+   - Verified end to end in the new CI order (`clean.bat` -> `tcinspect.ps1` -> `tcbuild.bat`):
+     clean exits 0 (no errorlevel leak from `git ls-files --error-unmatch`) and deletes nothing
+     tracked; inspection `success`, 0 issues, from the clean slate; staging took `build.bat`'s
+     AnyCPU output for every project even with the inspection's x64 trees present (the stager takes
+     the newer directory); default run appended `skip=TestTutorial.dll` and ran only the ordinary
+     test; `--with-tutorial-perf` run appended `perftests=on`, no skip, and ran
+     `TestAuditLogTutorial` (pass); `SkylineTester.zip` contains all seven test DLLs; the hygiene
+     check listed only the uncommitted edits.
+   - **Then made `build.bat` x64 so the inspection's build IS the build (developer's design: the
+     inspection still runs first and builds; `build.bat` picks up after it).** Measured with
+     alternating solution / `build.bat --build-only` builds: **0 recompiles in either direction**,
+     `build.bat` on top of an inspected tree ~2 min instead of a full build. Five things had to
+     change, and three of them would have failed SILENTLY:
+     - `build.bat`: `-p:Platform=x64` in `MSBUILD_PROPS`.
+     - `Directory.Build.targets`: the out-of-solution pin passes the solution's own `$(Platform)`
+       (was a fixed AnyCPU, chosen only to match the old `build.bat`).
+     - **`Skyline.csproj` bundles BlibBuild/BlibFilter/msconvert/Bullseye/SkylineProcessRunner/
+       SkylineCmd output from hard-coded `bin\$(Configuration)` paths, every one behind
+       `Exists()`** - under x64 they would simply have vanished from Skyline with no error. New
+       `BundledProjectPlatformDir` (beside the pin) used in all 17 places, plus `Test.csproj` and
+       SkylineTester's `_PrereqOut`. **`_PrereqOut` was also quietly zipping STALE AnyCPU
+       `BlibToMs2` binaries** (pwiz-sharp is never swept). Staged file list verified identical to
+       the AnyCPU baseline: 1,386 files, all 34 bundled-tool files.
+     - **`SkylineTool` is deliberately AnyCPU** (external tools link it and may be 32-bit; master's
+       sln maps it the same) - so `BuildSkylineToolAsAnyCPU` pins it centrally. It has to be a
+       target, not reference metadata: test projects reach it TRANSITIVELY, the SDK adds those
+       references without metadata, and every reference PATH is hashed into
+       `CoreCompileInputs.cache`. First version broke `Hardklor.vcxproj` (native, imports the same
+       file, no `ResolvePackageDependenciesForBuild`) - fixed with a `UsingMicrosoftNETSdk` condition.
+     - **Pre-existing, independent of all this: `Net8Version.g.cs` made Skyline and every dependent
+       recompile on EVERY build** (`WriteCodeFragment` writes unconditionally). Now gated on an
+       inputs cache written `WriteOnlyWhenDifferent`, like the SDK's own `GenerateAssemblyInfo`.
+       Diagnosed with `-v:d`: CoreCompile prints which input is newer than which output.
+     - `tcinspect.ps1 -AutomatedBuild` (passed by the `.kts`): `AutomatedBuild` changes every
+       assembly's version stamp, so any property mismatch with `build.bat` means a full rebuild.
+   - **Superseded design question: the inspection should reuse `build.bat`'s artifacts and does not.**
+     `Skyline.sln` has only x64/x86 platforms, so solution-based tools build `bin\x64`; `build.bat`
+     builds per-csproj AnyCPU into `bin\<Config>` (since `90db5edf4e`, no recorded reason); and
+     ReSharper resolves out-of-solution `pwiz-sharp` references with `Platform=x64`, ignoring the
+     `Directory.Build.targets` AnyCPU pin, which is the sole reason for `tcinspect.ps1`'s x64
+     pre-build. Cost on #374 (warm): ~3 min of the 11.5-min step is building; more cold. Proposed:
+     build x64 in `build.bat`, run the inspection with `--no-build` after it. Not started.
 
 ## Hazards found the hard way
 
@@ -628,9 +704,10 @@ Picked up the largest remaining item (item 3 under "Open items") on its own bran
   `OnHandleDestroyed` would also have changed the normal close path, letting in-flight alignment
   reach the grid mid-close. Now it skips only `FormOwnerClosing` and cancels in
   `OnHandleDestroyed` for that case, leaving the normal path unchanged.
-- `build.bat` run through `cmd /c` from the Bash tool **silently did not run**: it landed in an
-  interactive clink shell, logged a banner and a prompt, and **exited 0**. Ran it through the
-  PowerShell tool instead. This is the same shape as the LF-`.bat` label-skip note in MEMORY -
+- `build.bat` run through `cmd /c` from the Bash tool **silently did not run** and **exited 0**:
+  Git Bash's MSYS path conversion rewrites `/c` to `C:/`, so `cmd` never saw the switch and
+  started an interactive shell (banner plus a clink prompt, then EOF). First blamed on clink;
+  `cmd /c echo X` vs `cmd //c echo X` settled it. Ran it through the PowerShell tool instead. This is the same shape as the LF-`.bat` label-skip note in MEMORY -
   a 0 exit from a build wrapper proves nothing on its own, so check the log for the compile lines.
 
 **Next session handoff**: For detailed startup protocol, read
