@@ -478,6 +478,18 @@ batch before waiting (e2a9a7199c) plus preallocation 1,058 s at 512. 20 threads:
   the chunk size (+3% on the slice at an unchanged CV); a whole-run x1.0 control at 512 would separate it.
   Demux 91 min for A1 alone at 16 threads; D1 and G1 together 161 min, shared with a CarafeSharp run.
 
+**Which library the ZT Scan DIA-NN arms used (checked 2026-10-01).** Every DIA-NN ZT Scan arm to date - the
+slices, the whole runs and the `.wiff` baseline - loaded `ztscan_carafe_lib.parquet`: predicted on 2026-09-25 by
+CarafeSharp with the AlphaPeptDeep starting weights (no fine-tuning; SciexTOF, NCE 27;
+`Z:\test\osprey-runs\ztscan\library\carafe-libgen.log`) and only converted to DIA-NN's format by DIA-NN
+(`diann-libconvert.log`). DIA-NN's own predictor was started the same day and never finished (`diann-libgen.log`
+stops at "Predicting spectra"). So the demux comparisons are like for like, but no arm has had DIA-NN's own
+library. **The comparison that counts (Mike): DIA-NN given the `.wiff` and the FASTA, predicting its own
+library**, against Osprey with our joint demux and the fine-tuned CarafeSharp library. Queued 2026-10-01:
+`W_wiff_diann_library` (`Run-DiannWiffOwnLibrary.ps1`: DIA-NN's predictor on the target + entrapment peptides,
+auto mass accuracy, `--scanning-swath`), then `full_joint_diannlib` (our demux files with that library, pinned),
+after `full_joint_finetuned` (DIA-NN on our demux files with the fine-tuned Carafe library).
+
 **CarafeSharp + Osprey on ZT Scan (Mike, 2026-09-30: train on the middle run, fine-tune, search all three,
 keep the fine-tuned library for later tests).** Built from #4717's head 27a0ba6595 in the worktree
 `C:\Dev\pwiz-carafesharp` (CPU libtorch; SCARFELL has no NVIDIA GPU), snapshots
