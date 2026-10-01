@@ -499,6 +499,19 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
     - `TestCollisionEnergies`: the per-vendor rules.
   - Open: no Sciex, Bruker, Agilent or Waters data here to calibrate on for real. A run from the developer would show
     whether the calibrated NCE beats a fixed one on held-out metrics.
+- [ ] Goldens remade for the acquisition layer (2026-09-30; developer: "We would need to do it for the Astral
+  data too").
+  - Stellar: c7147d8414 (pushed). Fine-tuned MS2 within 3.5e-4, peaks +0.33%, and two runs byte-identical.
+  - Astral: a new dataset (249d01cc82); its golden is being made on the CPU.
+    - Package `carafesharp-export-astral-v1.zip` (161,898,686 B, SHA-256 f718764460ac...) is in
+      `D:\test\carafesharp-testdata-zips`. The developer uploads it to Panorama perftests; then set its URL in
+      testdata.json.
+    - It is the Stellar recipe: Osprey #4708 a5d15e6a4f from the _55 .raw, Carafe's initial library and train
+      pairing, `--training-export-xics`, 86,886 precursors.
+    - Carafe's June Astral library merges a decoy with an identical target in 7 precursors (71 rows), which
+      this Osprey refuses against the manifest. They were removed from a copy; the README records them.
+    - The library subset (every 50th pair group) is 27,820 groups. Carafe's digest repeats 39 sequences
+      across records, so the FASTA has 45 more records than distinct sequences.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
