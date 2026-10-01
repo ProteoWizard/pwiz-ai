@@ -8,9 +8,12 @@
 - **GitHub Issue**: [#4707](https://github.com/ProteoWizard/pwiz/issues/4707)
 - **Module**: `osprey`
 - **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch). Since 2026-09-30 it
-  also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR,
-  and Osprey's training export, formerly #4708 (closed; merged in by d3b12cd989), so Brendan can test the whole workflow in one PR.
-- **Companion**: `ai/todos/active/TODO-20260923_osprey_carafe_export.md` (the Osprey side, now in this PR)
+  also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR.
+  Osprey's training export, folded in for a while, landed on its own as #4708 (squash-merged into the base, 2026-10-01).
+  Since 2026-10-01 the diff is CarafeSharp and the trigger configs only (Brendan's request).
+- **Osprey PR**: [#4757](https://github.com/ProteoWizard/pwiz/pull/4757), the `osprey.ms2_mass_analyzers` footer,
+  split out of #4717 (branch `Skyline/work/20261001_osprey_ms2_analyzers`, worktree `D:\Dev\pwiz-osprey-analyzers`).
+- **Companion**: `ai/todos/completed/TODO-20260923_osprey_carafe_export.md` (the Osprey side, #4708, completed); #4757 is tracked here
 
 ## Objective
 
@@ -529,6 +532,20 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
     decided when all of them are offered. Ambiguous sequences (I/L twins, shared partners) pass ungated.
   - Astral: 10 left out on the CPU (6 targets, 4 decoys) and 14 on the GPU. Stellar: none.
   - The regression now fails on any unpaired target; parity subtracts the gate's drops.
+- [x] Split #4717 at Brendan's request (2026-10-01). He asked that the diff show only CarafeSharp and the trigger
+  configs, and that the description's #4708 sections go back to #4708.
+  - The Osprey footer change (170497a150) moved to #4757 (aea0df65af, base the port branch, label osprey). Osprey
+    638/638 and inspection 0 there. `/code-review high` found 7 doc and test issues, all fixed. The main one: pwiz
+    joins a configuration's analyzers with "/", so the keys are a Stellar's `radial ejection linear ion trap` and an
+    Astral's MS2 `quadrupole/asymmetric track lossless time-of-flight analyzer`. CarafeSharp's substring match
+    already handles that.
+  - #4717 a7bf9f70be restores the four Osprey files to the base and points docs 01 and 06 at #4757. CarafeSharp
+    81/81, inspection 0, and the chained Stellar leg PASSED, with the analyzer taken from the model (LIT).
+  - #4717's description lost its #4708 sections (#4708 already holds them, including R8 coverage). #4708 was not
+    edited.
+  - Inspection on a fresh worktree needs CommonUtil and `Shared/ProteowizardWrapper` built with
+    `-p:Platform=x64` first (the #4725 out-of-solution reference gap; worked around locally, nothing changed there).
+  - Brendan's CHANGES_REQUESTED review on #4717 stands until he re-reviews.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
