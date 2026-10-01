@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: Item 1 IMPLEMENTED and committed (`65283f6dc1`), unit-green (628/628), awaiting
-  the Stellar regression gate and a before/after stage measurement. **Item 1's size was
-  mis-stated in the original analysis - see the 2026-09-30 section at the END.**
+- **Status**: Item 1 IMPLEMENTED, committed (`65283f6dc1` + `154219f399`) and MEASURED at
+  ~404 s off an 82-file FirstPassFDR. **Item 1 was mis-sized in the original analysis -
+  see the 2026-10-01 section at the END for the measured numbers.**
 - **Module**: `osprey`
 - **PR**: none
 
@@ -219,3 +219,94 @@ Incidental: the unit-test run ends with an unhandled `NullReferenceException` in
 `OspreyDiagnostics.<Initialize>b__2_0` (`OspreyDiagnostics.cs:107`), an exit-time event
 handler. The run still reports success. Pre-existing and unrelated to this change, but it is
 noise in every test run.
+
+## 2026-10-01 night session: item 1 MEASURED. The sort costs 38.3 s / 33.5M rows.
+
+This supersedes the "Still outstanding" line in the 2026-09-30 section above.
+
+### Commits (branch `Skyline/work/20260930_osprey_pass2_runq_reuse`, worktree `pwiz-net10b`)
+
+* `65283f6dc1` - pass 2 reads the run q-values off the sidecar instead of re-sorting.
+* `154219f399` - `[PATH]` cost attribution for BOTH streaming passes. Log-only.
+
+### How to measure this stage - do NOT use log-heading deltas
+
+The first attempt measured "pass 2" as `t("Assigning q-values")` to
+`[TASK] FirstPassFDR:done` and got a misleading answer. **That window is about 3x pass 2**:
+it also contains `sink.Finish`, mdiag peak co-assignment, first-pass protein FDR,
+resolve-protein-q + persist stratum, the FDRBench pass-1 write and the compaction - the
+159 + 100 + 182 + 889 s items this TODO already lists separately. A 38 s effect inside a
+370 s window whose run-to-run noise is +-4% (+-15 s) is not resolvable; the A/B showed 14 s
+and read as "no win", which was wrong.
+
+**Use the `[PATH]` lines from `154219f399`.** They bucket each pass directly and are
+log-only, so they cost nothing and perturb nothing (the stopwatches run once per FILE, except
+one per-row timer around `sink.Accept` worth ~1.5 s over 33M rows).
+
+### Measured, 8 files / 33,459,602 rows, isolated `-Task FirstPassFDR`
+
+```
+pass 1: walk 7.5s | sidecar 0.1s | score+competition 20.0s | RUN-Q SORT 38.3s |
+        clamp floors 9.2s | sidecar write 5.9s                        total 81.0s
+pass 2: walk 7.2s | sidecar 3.1s | fill 0.5s | run-q recompute 0.0s |
+        q-assign 76.6s (sink 40.0s, lookups ~36.6s)                   total 87.4s
+```
+
+`run-q recompute 0.0s` in pass 2 is the proof the read-back fires - zero sorts - which the
+wall-clock A/B could not establish. Pass 1 still pays its own 38.3 s sort, correctly: it is
+the writer and the sort is what produces what it writes.
+
+**The sort is 38.3 s**, measured in pass 1 on the same call and the same data pass 2 no
+longer sorts.
+
+| | pass 2 |
+|---|---|
+| before | 87.4 + 38.3 = 125.7 s |
+| after | 87.4 s |
+| saving | **38.3 s, -30.5% of pass 2** |
+
+Scaling by rows (353,085,961 / 33,459,602 = 10.55x; per-file row counts are equal, so the
+per-file sort scales linearly in files): **~404 s off an 82-file FirstPassFDR**, roughly
+7-10% of the stage against the 4,015.7 s par3 reference.
+
+So item 1 is worth **~400 s, not the ~1,163 s** this TODO originally claimed - the 1,163 s
+was pass 2's whole cost, and the sort is under a third of it. It is still a real win and the
+change is byte-identical.
+
+### Where the rest of pass 2 goes - the next target, now quantified
+
+`q-assign` is **76.6 s of pass 2's 87.4 s (88%)**, and it splits:
+
+| | 8 files | ~82 files |
+|---|---|---|
+| `sink.Accept` (the record write) | 40.0 s | ~422 s |
+| the five q-value lookups | ~36.6 s | ~386 s |
+
+That is **~800 s at 82 files inside pass 2 alone**, and it is a much better founded target
+than the original item 1. Two of the four per-row dictionary lookups are keyed on the peptide
+STRING and on a `(string, bool)` tuple, so every row pays string hashing; `expPrecByWinnerId`
+and `expAggByEntryId` are `uint`-keyed and cheap by comparison. Ruled out already:
+`ProgressReporter.Report` is an uncontended lock plus a `Stopwatch.Elapsed` read, ~1.5 s over
+the pass, so the per-row progress call is not the cost.
+
+### Verification state
+
+* 628/628 unit tests pass, on both commits, including every `SubsetPipelineTest` leg
+  (resume, HPC task chain, sidecar contracts, rescore resume).
+* `TestStreamingFirstPassMatchesProjection` gained a third arm holding the sidecar read-back
+  to the resident projection oracle at 0.0 delta, with a guard that pass 1 actually flushed
+  every file so it cannot pass vacuously. Negative control: perturbing the served
+  `RunPrecQ` by `1e-12` makes it FAIL.
+* `regression.ps1 -Dataset Stellar` PASSED (5 legs; mode 1 is the 1e-9 golden byte gate).
+* `regression-parallel.ps1 -Dataset All` launched 00:36 - this is the one that matters here,
+  because Stellar sets `SkipModes = @(2, 3)` and **mode 3, the cross-PROCESS `--task`
+  rehydrate chain, runs on Astral only**. A change to how pass-1 sidecars are read back is
+  exactly what that leg exercises. Result not in at the time of writing - CHECK IT.
+
+### Caveats on tonight's numbers
+
+MACS2 was shared all night: a foreign `diann.exe` ran at up to ~24 cores and was still
+resident at 00:30, and the 82-file par4 run held the box until 00:17:42. Every absolute
+wall-clock number from tonight is contended and must not be compared with 2026-09-26.
+The `[PATH]` buckets above are internally consistent within one run, which is why they are
+the numbers quoted rather than any stage total. A quiet-box re-run would tighten them.
