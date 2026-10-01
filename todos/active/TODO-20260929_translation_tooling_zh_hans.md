@@ -15,7 +15,7 @@ Fix the parts of the translation tooling that had not caught up with the port br
 `zh-CHS` -> `zh-Hans` rename and the net10 retarget, as reported by Brendan in #4737 (found while
 taking Osprey's first translation through ResourcesOrganizer on the Osprey branch, PR #4752).
 
-## Done (commit `efab95f53a`, not pushed)
+## Done (commits `efab95f53a`, `dafda3aef4`; not pushed)
 - [x] `LastReleaseResources.db`: one-time SQL `UPDATE LocalizedResource SET Language='zh-Hans'
       WHERE Language='zh-CHS'` + `VACUUM` (36,892 rows each for ja / zh-Hans). Other `zh-CHS`
       strings in the db (designer `$this.Language` metadata in ChooseViewsControl.resx and
@@ -44,7 +44,12 @@ taking Osprey's first translation through ResourcesOrganizer on the Osprey branc
       sweep Osprey. Verified: 349 resx files / 0 Osprey with the variable set, 357 / 8 without.
 
 ## Remaining
-- [ ] `/code-review`, push, open PR against `Skyline/work/20260612_net8_port`.
+- [x] `/code-review max` (2026-10-01): 15 findings. Fixed in `dafda3aef4`: importLastVersion now
+      fails when the old db lacks a requested language (guards against a master merge bringing
+      back the zh-CHS db), README names `localization.zh-Hans.csv`, SortRESX exclude path fixed
+      (moved to DevTools in #4125). Nick dropped the rest: pre-existing batch error handling,
+      cosmetic/unbuilt-tool items, and the rewrite-unchanged-files churn.
+- [ ] Push, open PR against `Skyline/work/20260612_net8_port`.
 - [ ] Left to the Osprey branch (#4752), not duplicated here to avoid conflicts:
       `ImportLocalizationCsvFiles.bat` `%ERRORLEVEL%` inside `if exist (...)` (now `|| goto error`)
       and the README naming `localization.zh-Hans.csv`.
