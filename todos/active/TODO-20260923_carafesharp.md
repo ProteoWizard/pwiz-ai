@@ -500,18 +500,23 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   - Open: no Sciex, Bruker, Agilent or Waters data here to calibrate on for real. A run from the developer would show
     whether the calibrated NCE beats a fixed one on held-out metrics.
 - [ ] Goldens remade for the acquisition layer (2026-09-30; developer: "We would need to do it for the Astral
-  data too").
-  - Stellar: c7147d8414 (pushed). Fine-tuned MS2 within 3.5e-4, peaks +0.33%, and two runs byte-identical.
-  - Astral: a new dataset (249d01cc82); its golden is being made on the CPU.
-    - Package `carafesharp-export-astral-v1.zip` (161,898,686 B, SHA-256 f718764460ac...) is in
-      `D:\test\carafesharp-testdata-zips`. The developer uploads it to Panorama perftests; then set its URL in
-      testdata.json.
-    - It is the Stellar recipe: Osprey #4708 a5d15e6a4f from the _55 .raw, Carafe's initial library and train
-      pairing, `--training-export-xics`, 86,886 precursors.
-    - Carafe's June Astral library merges a decoy with an identical target in 7 precursors (71 rows), which
-      this Osprey refuses against the manifest. They were removed from a copy; the README records them.
-    - The library subset (every 50th pair group) is 27,820 groups. Carafe's digest repeats 39 sequences
-      across records, so the FASTA has 45 more records than distinct sequences.
+  data too"). Open item: the developer uploads `D:\test\carafesharp-testdata-zips\carafesharp-export-astral-v1.zip`
+  (161,898,686 B, SHA-256 f718764460ac26c80799be02e8df23c11f41bbe9c929a238897d1c3446c51296) to Panorama perftests,
+  then set its URL in testdata.json (it is PLACEHOLDER) and confirm an anonymous download.
+  - Stellar: c7147d8414. Fine-tuned MS2 within 3.5e-4, peaks +0.33%; two runs of 8dfe512b59 byte-identical.
+  - Astral: a new dataset (249d01cc82); golden a9a430044d. CPU, 35 min: 123,399 precursors, MS2 COS
+    0.9771 -> 0.9868, RT R2 0.8595 -> 0.9972. Its own run compares SAME everywhere.
+    - The export is the Stellar recipe: Osprey #4708 a5d15e6a4f from the _55 .raw, Carafe's initial library and
+      train pairing, `--training-export-xics`, 86,886 precursors. It is in `D:\test\osprey-runs\carafe-export-astral-raw`.
+    - Carafe's June Astral library merges a decoy with an identical target in 7 precursors (71 rows). This Osprey
+      refuses those against the manifest (a row with any decoy accession is a decoy), so they are removed from
+      a copy. The other 17 mixed-accession precursors the manifest calls decoys, and they are kept. The README
+      lists the 7.
+    - Two comparator fixes were needed, and Stellar's comparison is unchanged by either:
+      - 214c60d242: 4 entrapment targets have an entrapment decoy whose sequence is also the group's decoy (or
+        target). The planner pairs that one precursor once, so the check counts them apart.
+      - 4e68f62ac8: the sample modulus scales with the library (Astral 70), under the 2 MB cap.
+    - Carafe's digest repeats 39 sequences across records (111,322 records, 111,277 distinct in the subset).
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
