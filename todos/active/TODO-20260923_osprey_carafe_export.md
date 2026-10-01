@@ -484,3 +484,37 @@ fixes), local until pushed.
   gives CarafeSharp's masking parity 85.0%, and CarafeSharp's 68 tests pass on it (#4717 reads format 2).
 - Remaining: TeamCity Perf/Regression (ask first); #4729 (Brendan's) still blocks the single-run leg's
   SecondPassFDR.
+
+### 2026-09-30 (Brendan session) - #4708 reopened, finished for merge, SEA-AD validation
+
+- #4708 had been folded into #4717 by misunderstanding; reopened (head 23389009a0, base = port branch) and
+  #4717 re-based onto this branch (no reverts, no force-push). Comments on both PRs.
+- Review against R1-R10 (sub-agent, verified): re-architecture done as specified; R1/R7/R10 superseded by
+  #4746/#4749 (merged). D1 (RunQPath trusts a pass-2 stamp by presence; driver re-stamps stale files) moved to
+  `todos/backlog/TODO-osprey_resume_validity_gates.md` with resume gap #2. Test plan refreshed in the PR body.
+- Coverage (Build-Osprey -Coverage): port branch ea1d1dc2df 84.1% (628 tests) -> 23389009a0 84.7% (638); new
+  types TrainingEvidence 98%, TrainingExportParquet 99%, TrainingExportWriter 87%, TrainingEvidenceWindow /
+  TrainingEvidenceSettings / TrainingExportConfig / TrainingRecord 100%, SourceRunMetadata 93%,
+  ParquetBlobCodec 91%, TrainingExportTask 56% (selector; Run/Rehydrate throw by design).
+- d5f769882a (pushed): `Osprey-workflow.html` opt lines - model-diagnostics json+html on both FDR banners,
+  training parquet on PerFileRescoring, selectors are not HPC nodes, .blib peaks typed from m/z in Stage 1.
+- Runner (pwiz-ai 2d8896fe): `-TrainingExport` and `-Task TrainingExport` in Run-SeaAd/Run-Tdp43/Run-Chs and
+  `Common/OspreyDatasetRun.psm1`.
+- **SEA-AD 82 files, straight through** (`D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-
+  protein-compact-trainexport-20260930_122429`, exe snapshot `D:\test\osprey-runs\_bin\4708-d5f769882a`,
+  library target+decoy+entrapment-20260817): 7 h 45 m, exit 0; 82/82 exports, 2,741,616 rows, 3.73 GB; every
+  file: rows == footer, run q <= 0.01, no decoys, run_q_pass 2, mp parity fitted N/N, source metadata present.
+  Export cost 426 s total (max 7.5 s/run). perfviz: peak 27.9 GB private, 0 gaps >= 30 s, floor falling.
+  Logs/hashes: `ai/.tmp/sessions/20260929-8a15/seaad-straight-run.log`, `seaad-export-hashes.json`.
+- **Phase 2** (parquets deleted, `Run-SeaAd.ps1 -Task TrainingExport -Resume -OutDir <same>`): 1 h 27 m;
+  PerFileScoring / FirstPassFDR / SecondPassFDR skipped, 0 score/rescore route lines, 82/82 parquets
+  BYTE-IDENTICAL. Two defects found:
+  1. **51+ reporting gaps of 56-89 s**, one per run: the export-only arm streams each run's ~4 GB
+     .spectra.bin windows cold with no progress. Fixed in 61462edf2c (LOCAL, not pushed): ProgressReporter
+     over the export's window loop ("Exporting isolation windows", like the rescore's). 638/638, inspection 0.
+  2. **Library cache missed**: the runner passes `--cache-dir <mzml dir>` for post-scoring tasks, which also
+     moves the .libcache lookup, so phase 2 re-parsed the 13 GB TSV (20:12-20:16, ~15 GB peak) without the
+     retained-fragment skip and wrote a 2nd libcache in mzml\ (delete it). Runner fix pending: pass
+     --cache-dir only when -CacheDir is given (Osprey finds .spectra.bin beside the data by default).
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20260923_osprey_carafe_export.md` before starting work.
