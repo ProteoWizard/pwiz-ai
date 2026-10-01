@@ -497,8 +497,9 @@ joint solve's whole-run mzMLs (`full\joint_m2_ms1`); training run D1.
   Osprey's q is conservative here: q 0.02 gives 37,256 at 0.48% FDP, q 0.03 39,226 at 0.52%. D1 went from
   20,426 (pretrained, one-run search) to 28,534; the SVM C choices are ordinary in both (folds 0.1 / 1 / 1
   and 10 / 0.1 / 1), so not the C-selection bimodality. Still ~22% under DIA-NN per run (36-37k at ~0.8%
-  FDP). A clean pretrained control needs the entrapment library predicted with the pretrained model
-  (~4 h on this CPU) and the same three-run search.
+  FDP). Mike (2026-10-01): fine as a first pass, and the initial library stays target+decoy without
+  entrapment (entrapment would double its prediction and search time and cost sensitivity), so no
+  pretrained entrapment baseline. The fine-tuned library is the one to use for later ZT Scan tests.
 - **Mass accuracy is not the matching problem, precision is.** Accuracy (offset from library m/z) is +4.4 ppm
   in every arm, the instrument's calibration. Precision (sweep-to-sweep spread of a fragment's m/z): joint
   5.66 ppm, centroid solve 5.59, acquired 6.03. The joint solve's centroids snap to the TOF grid: 36.1% lie
