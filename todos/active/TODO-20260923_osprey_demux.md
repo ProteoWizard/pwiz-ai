@@ -430,6 +430,11 @@ ff7e429fb4); the vendor reads were serial (4 threads, aac2026874: 3.95x, identic
 
 ## Day of 2026-09-30 on SCARFELL: speed, precision, and one pipeline
 
+**Moved to the NAS (2026-10-01, `Move-ToNas.ps1` in the session folder):** finished work under
+`C:\temp\osprey-runs` is now at the same path under `Z:\test\osprey-runs` (Z: = `\\maccoss-nas\home`):
+every `ztscan\slices\<arm>` except `diann` and the 8 arms `mass_accuracy.py` reads, `ztscan\full\c7pz_scarfell`,
+`ztscan\bench`, and `eclipse-staggered\search-osprey-weighted` and `tool-cache`. 252 GB; C: now 348 GB free.
+
 **Speed** (A1 sweeps 324-431, 16 threads, joint solve): the solve is memory-bandwidth bound, so the chunk
 size is what moves it. 2048-point chunks 1,263 s, 1024 1,189 s, 512 1,159 s, 256 1,153 s; queuing the next
 batch before waiting (e2a9a7199c) plus preallocation 1,058 s at 512. 20 threads: 1,150 s, no gain.
