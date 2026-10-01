@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: Item 1 IMPLEMENTED, committed (`65283f6dc1` + `154219f399`) and MEASURED at
-  ~404 s off an 82-file FirstPassFDR. **Item 1 was mis-sized in the original analysis -
-  see the 2026-10-01 section at the END for the measured numbers.**
+- **Status**: Item 1 DONE: 3 commits (`65283f6dc1`, `154219f399`, `b8524ef1dc`), gated at
+  48 PASS / 0 FAIL (-Dataset All), measured two ways at **~370-394 s off an 82-file
+  FirstPassFDR**. Not pushed, no PR. **Mis-sized originally - read the 2026-10-01 sections at the END.**
 - **Module**: `osprey`
 - **PR**: none
 
@@ -299,9 +299,9 @@ the pass, so the per-row progress call is not the cost.
   `RunPrecQ` by `1e-12` makes it FAIL.
 * `regression.ps1 -Dataset Stellar` PASSED (5 legs; mode 1 is the 1e-9 golden byte gate).
 * `regression-parallel.ps1 -Dataset All` launched 00:36 - this is the one that matters here,
-  because Stellar sets `SkipModes = @(2, 3)` and **mode 3, the cross-PROCESS `--task`
-  rehydrate chain, runs on Astral only**. A change to how pass-1 sidecars are read back is
-  exactly what that leg exercises. Result not in at the time of writing - CHECK IT.
+  because Stellar sets `SkipModes = @(2, 3)`. (Mode 3, the cross-PROCESS `--task`
+  rehydrate chain, turned out to run on StellarLibDecoy, NOT Astral - see the final section
+  at the end of this file for the result: 48 PASS / 0 FAIL.)
 
 ### Caveats on tonight's numbers
 
@@ -310,3 +310,109 @@ resident at 00:30, and the 82-file par4 run held the box until 00:17:42. Every a
 wall-clock number from tonight is contended and must not be compared with 2026-09-26.
 The `[PATH]` buckets above are internally consistent within one run, which is why they are
 the numbers quoted rather than any stage total. A quiet-box re-run would tighten them.
+
+## 2026-10-01 final results (same night session). Supersedes the "not in at the time of writing" notes above.
+
+### Branch is three commits, all gated
+
+```
+b8524ef1dc  osprey: Removed the per-row sink timer from the pass-2 cost attribution
+154219f399  osprey: Added pass-1 and pass-2 cost attribution to the streaming first pass
+65283f6dc1  osprey: Changed pass 2 to read the run q-values pass 1 already stored
+```
+
+`b8524ef1dc` exists because `154219f399` shipped a **per-row** `Stopwatch` around `sink.Accept`
+- about 2% of pass 2, permanently, to watch a split that is now written down here. The per-FILE
+buckets are free at any cohort size and are kept. To get the finer split again, build a
+throwaway with per-row timers; the snapshot `_bin\26.1.1.273-instr-lookups` already has them.
+
+### `regression-parallel.ps1 -Dataset All`: **48 PASS / 0 FAIL / 0 SKIP in 00:56:36**
+
+**Correction to the note above: mode 3 runs on StellarLibDecoy, NOT on Astral.** Astral ran
+only mode4, mode1 (streamed join) and mode6. The coverage is better than feared, and it
+includes the leg that matters most for this change:
+
+```
+StellarLibDecoy mode3 (per-file FDR sidecars==straight): PASS (5,094,029 records)
+StellarLibDecoy mode3 (HPC chain==straight): PASS
+StellarLibDecoy mode3 (per-run hydrate): PASS (3 worker(s))
+StellarLibDecoy mode2 (resume cache hits): PASS;  mode2 (resume==straight): PASS
+StellarGenDecoyEntrap mode2 / mode12 (resume fdrbench==straight): PASS
+```
+
+"per-file FDR sidecars == straight" over 5,094,029 records is precisely the assertion a
+sidecar read-back change needs.
+
+### The win, measured two independent ways on a QUIET box
+
+The machine went genuinely quiet at 01:36 (`diann.exe` gone, total CPU 1-2%).
+
+| measurement | result |
+|---|---|
+| direct bucket: pass 1 `run-q sort` | **37.3 s** / 33.46M rows |
+| clean stage A/B, `-Task FirstPassFDR`, 8 files | **485.2 s -> 450.1 s = -35.1 s (-7.2%)** |
+| the A/B's control (pass 1) | **102 s in BOTH arms - exactly flat** |
+
+The two agree within 6%. **At 82 files: ~370-394 s off FirstPassFDR.**
+
+Quote the **bucket as primary** in the PR. Stage-level run-to-run noise on a quiet box is
+~6.7% (two instrumented runs that both contained the change came in at 474.6 s and 506.3 s),
+the same order as the effect; the bucket does not depend on that noise.
+
+### Quiet-box attribution of the whole stage (8 files / 33,459,602 rows)
+
+```
+pass 1: walk 6.7 | sidecar 0.0 | score+competition 18.9 | run-q SORT 37.3 | clamp 9.8 | write 5.4  = 78.1 s
+pass 2: walk 7.4 | sidecar 2.8 | fill 0.9 | run-q 0.0 | q-assign 79.2 (sink 35.7, peptide lookups 20.5) = 90.3 s
+```
+
+Pass 2 at 82 files is therefore ~953 s, and ~1,347 s before this change - which **reconciles
+with the 1,163 s this TODO originally quoted for pass 2.** That figure was a fair number for
+pass 2 as a whole; the error was attributing it to re-decoding parquet rather than to the sort
+plus the emit loop.
+
+### A one-row memo for the peptide lookups is REFUTED - do not build it
+
+Measured adjacency over 33,459,602 rows:
+
+```
+same entry_id as previous row:        0        (ZERO)
+same peptide by reference:      224,578        (0.67%)
+same peptide by value only:   5,679,528        (17.0%)
+```
+
+Adjacent rows **never** share an entry_id, so the assumption that a precursor's rows sit
+together (parquet written `(entry_id, charge, scan)`-sorted) does not hold on this path. A
+one-row memo would hit 17.7% at best and 96% of those hits would still pay a full string
+compare. **Side finding:** 224,578 reference matches against 5.68M value matches means the
+parquet reader allocates a **fresh peptide string per row** - ~33.5M allocations per pass, no
+interning. That is GC pressure and a candidate in its own right.
+
+### What to do next, with sizes (82 files, scaled x10.55 from the quiet-box buckets)
+
+1. `sink.Accept`, the pass-2 record write - **~376 s**. Largest single item in pass 2.
+2. The two peptide-keyed lookups - **~216 s**. The memo is out; the option left is making the
+   maps ID-keyed, i.e. assign a peptide ordinal once in
+   `StreamingFdr.BuildExperimentPeptideQMap` and key on that instead of the string. The four
+   `uint`-keyed lookups plus the arithmetic are ~243 s and already cheap per probe.
+3. Interning the peptide column at decode, which would cut both the allocations and the
+   hashing. Ruled out as the cost already: `ProgressReporter.Report` is an uncontended lock
+   plus a `Stopwatch.Elapsed` read, ~1.5 s over the pass.
+
+### Separately settled: there is NO PerFileScoring regression on the tip
+
+Handoff item 6, taken in the quiet window with the sanctioned runner (not the `ai/.tmp`
+bisect script), 4 files, `-Task PerFileScoring`, identical config, back-to-back:
+
+| | PerFileScoring |
+|---|---|
+| old pin `5bd83dae8b` (v26.1.1.268) | 750.7 s |
+| tip `ed25627d81` (v26.1.1.273) | **738.1 s** |
+
+**The tip is 1.7% faster.** So the 2026-09-30 PerFileScoring 2.16x and FirstPassFDR 1.55x gaps
+against 2026-09-26 were contention plus config differences, not a code regression - the
+previous handoff was right to withdraw that finding, and the "maybe a real regression hides
+alongside it" worry is now closed. Both SHAs also scored **16,656,225** peaks on the same 4
+files, identical across the eleven commits. Caveat: threads 30 sequential here against
+threads 72 `--parallel-files 4` in the 82-file runs, so these absolutes are comparable only to
+each other.
