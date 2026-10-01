@@ -547,3 +547,38 @@ which makes it a markedly safer place to optimize than the q-value math.
   headline ~400 s stands.
 * Do not read the two pass-1 columns as a controlled pair: `score+competition` also moved
   (18.9 s -> 15.4 s) because the accumulator feeds from pass 1 as well.
+
+## 2026-10-01: mdiag is purely additive, and why the obvious peptide-lookup fix does not work
+
+### `--model-diagnostics` does not affect the FDR output
+
+```
+*.1st-pass.fdr_scores.bin : 8 bins per arm, SHA256 mismatches = 0
+                            BYTE-IDENTICAL with and without --model-diagnostics
+```
+
+It computes a report and nothing else. So the **~690 s at 82 files is available with no code
+change and no output change** - just omit the flag when the report is not wanted. That is a
+question for Brendan ("do the production 82-file runs need the diagnostics report?"), not an
+experiment.
+
+### The obvious fix for the peptide lookups does NOT work - written down so nobody re-derives it
+
+The tempting fix is "make the two peptide maps ID-keyed". **It does not help as stated.** Pass
+2 receives a peptide **string** per row from parquet, so to use an id-keyed map it must first
+map string -> id, which is the same string hash it was trying to avoid. Interning the column
+does not fix it either; interning removes the per-row *allocation* (~33.5M of them, see the
+adjacency section) but not the hash.
+
+**The shape that does work** is to key the experiment peptide-q map on **`entry_id`** instead
+of on the peptide. Every `entry_id` maps to exactly one peptide, so a `uint`-keyed map returns
+the same value with a cheap `uint` hash - the same trick that already makes
+`expPrecByWinnerId`, `pepByEntryId` and `expAggByEntryId` cheap. The same applies to the
+`(peptide, isDecoy)` clamp-floor map.
+
+**The tradeoff, which is why this needs a decision rather than a refactor.** The map becomes
+O(entry_ids) instead of O(peptides) - about 5.3M distinct entry_ids at 8 files, more at 82 -
+inside a stage with a documented memory budget (FirstPassFDR private peak 25.2 GB against the
+run's 46.8 GB). It buys ~196 s at 82 files for a larger resident map. That is a speed-for-
+memory trade in the one stage whose whole design history is about staying flat in file count,
+so it should be Brendan's call, not an assumption.
