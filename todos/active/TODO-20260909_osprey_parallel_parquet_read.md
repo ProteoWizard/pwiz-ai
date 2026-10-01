@@ -264,3 +264,27 @@ concurrency onto a reader surface that is now async-first and wrapped.
 (The run's version stamp reads `26.1.1.268` because `-LinkFrom` pins
 `OSPREY_VERSION_OVERRIDE` from the source run. That is expected and not a wrong build; the
 `Parquet.dll` 6.1.0.0 check above is what confirms which library ran.)
+
+#### Bonus, and worth passing to Nick: Parquet 6 reads the existing parquet bit-identically
+
+Same experiment, extra check. The two runs differ ONLY in the Parquet library (identical Osprey
+code: `65283f6dc1` + `154219f399` + `b8524ef1dc` on both sides), same 8 input
+`.scores.parquet`, same `-LinkFrom` source:
+
+```
+1st-pass FDR sidecars: 8 bins per side, SHA256 mismatches = 0
+  -> BYTE-IDENTICAL between Parquet.Net 4.25.0 and 6.1.0
+```
+
+Row counts agree exactly too - `33,459,602 peaks (16,807,902 targets, 16,651,700 decoys,
+21 features)` on both.
+
+So on the Osprey READ path the 6.1.0 fork decodes the existing files to the same values, and
+everything downstream of it in FirstPassFDR lands on the same bytes. That is independent
+corroboration for **#4751** at 33M-row scale on real SEA-AD data, which is broader than its own
+test plan (regression subsets, `TestParquetRoundTripScalarStress`, the BiblioSpec DIA-NN tests)
+- worth handing to Nick as supporting evidence.
+
+`FirstPassFDR:done (672.7s)` on Parquet 6. **Do not compare that against the 450-485 s figures
+from 4.25**: it ran 07:57-08:08, by which time other users were active again, and only the
+`[PATH]` walk buckets were set up as a controlled comparison.
