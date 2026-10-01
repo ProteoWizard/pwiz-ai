@@ -446,9 +446,24 @@ batch before waiting (e2a9a7199c) plus preallocation 1,058 s at 512. 20 threads:
 | Gaussian sigma x 0.67 (`sig067`) | - | 2,533 | 0.097 |
 | centered:5 (`c5_joint_c512_pinned`) | 3,443 / 3,612 / 3,716 | 2,680 / 4,597 | 0.0917 vs 0.0932 (2,479 shared) |
 
-- A narrower peak model is worse, and centered:5 loses 3.8% of the peptides at an unchanged CV: the default
-  sigma table and centered:7 stay. D1's FDP was 1.15% in the 512 arm; watch it. The sigma x 1.2 arm
-  (`c7_joint_sig120_c512_pinned`) is running.
+- A narrower peak model is worse, and centered:5 loses 3.8% of the peptides at an unchanged CV: centered:7
+  stays. D1's FDP was 1.15% in the 512 arm; watch it.
+- **Wider peak models** (each with its own 2,396-2,539 shared precursors; DIA-NN's settings alone move the
+  paired CV by 0.0015 with 46.5% improved):
+
+  | Sigma | Peptides, all runs / any | Median CV vs x1.0 | Paired dCV, improved | Precision | Within 10 ppm | On grid |
+  |---|---|---|---|---|---|---|
+  | x0.67 | 2,533 | 0.097 | - | 5.97 ppm | 65.0% | 28.4% |
+  | x0.8 | 2,578 / 4,496 | 0.094 | - | 5.86 | 65.7% | 31.2% |
+  | x1.0 | 2,785 / 4,821 | 0.0935 | - | 5.71 | 66.6% | 34.2% |
+  | x1.2 | 2,758 / 4,687 | 0.0869 | -0.0042, 57.3% | 5.50 | 67.4% | 36.0% |
+  | x1.4 | 2,755 / 4,765 | 0.0979 | +0.0038, 45.7% | 5.30 | 68.0% | 36.6% |
+
+  Identifications peak at x1.0-1.2; the CV is best at x1.2 and worse again at x1.4; mass precision improves
+  all the way (partly selection: the wider arms match 99.7-101.3k observations against 102.7k). The
+  default stays at x1.0 for identifications; x1.2 is the candidate for quantitation, to confirm on whole
+  runs before changing anything (`Run-SliceArms.ps1` arms `sig120`, `sig140`; precision from
+  `mass_accuracy.py --arms`).
 - **Mass accuracy is not the matching problem, precision is.** Accuracy (offset from library m/z) is +4.4 ppm
   in every arm, the instrument's calibration. Precision (sweep-to-sweep spread of a fragment's m/z): joint
   5.66 ppm, centroid solve 5.59, acquired 6.03. The joint solve's centroids snap to the TOF grid: 36.1% lie
