@@ -8,7 +8,7 @@
 - **Created**: 2026-09-29
 - **Status**: In Progress
 - **GitHub Issue**: #4737
-- **PR**: (pending)
+- **PR**: #4758
 
 ## Objective
 Fix the parts of the translation tooling that had not caught up with the port branch's
@@ -49,7 +49,7 @@ taking Osprey's first translation through ResourcesOrganizer on the Osprey branc
       back the zh-CHS db), README names `localization.zh-Hans.csv`, SortRESX exclude path fixed
       (moved to DevTools in #4125). Nick dropped the rest: pre-existing batch error handling,
       cosmetic/unbuilt-tool items, and the rewrite-unchanged-files churn.
-- [ ] Push, open PR against `Skyline/work/20260612_net8_port`.
+- [x] Pushed and opened PR #4758 (2026-10-01) against `Skyline/work/20260612_net8_port`.
 - [ ] Left to the Osprey branch (#4752), not duplicated here to avoid conflicts:
       `ImportLocalizationCsvFiles.bat` `%ERRORLEVEL%` inside `if exist (...)` (now `|| goto error`)
       and the README naming `localization.zh-Hans.csv`.
