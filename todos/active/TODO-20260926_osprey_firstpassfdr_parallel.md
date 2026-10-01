@@ -493,3 +493,57 @@ FirstPassFDR came in at **442.2 s in a FULL run** against **450.1 s in the isola
 full-run number. On this stage tonight the bias was far smaller than that, so the 10.1% figure
 may be stage-specific or stale. The rule (do not mix the two) is still the safe default, but
 the number behind it deserves a re-measure.
+
+## 2026-10-01: most of `sink.Accept` is the --model-diagnostics accumulator, not the write
+
+**This corrects the attribution in the section above.** That section calls `sink.Accept`
+"the record write" and sizes it at ~376 s at 82 files, "the largest single item in pass 2".
+The size is right; the interpretation is not.
+
+The lead is in `FdrProjectionSinks.cs`, in the base `Accept`:
+
+```csharp
+if (_mdiagAccumulator != null)
+    _mdiagAccumulator.Add(fileIdx, peptide, charge, entryId, isDecoy, score, in q);
+```
+
+That runs for **every** row - the comment says so explicitly, "every row - targets, decoys,
+entrapment, failing - not just the passing set" - and `Run-SeaAd.ps1` turns
+`--model-diagnostics` **on by default**.
+
+Measured with `-NoModelDiagnostics`, same exe, same 8 files, quiet box:
+
+| bucket | mdiag ON | mdiag OFF | delta |
+|---|---|---|---|
+| pass 2 q-assign | 79.2 s | **45.9 s** | -33.3 s (-42%) |
+| - of which `sink.Accept` | 35.7 s | **6.2 s** | **-29.5 s (-83%)** |
+| - peptide-keyed lookups | 20.5 s | 18.6 s | -1.9 s |
+| pass 1 run-q sort | 37.3 s | 38.1 s | +0.8 s (noise) |
+| **FirstPassFDR total** | 474.6 s | **409.2 s** | **-65.4 s** |
+
+So the real record write is **6.2 s (~65 s at 82 files)**, and the accumulator is
+**~311 s at 82 files in pass 2 alone**. Turning mdiag off takes **~690 s** off the whole stage,
+because the accumulator feeds from pass 1 too.
+
+### Revised next-target list for pass 2 at 82 files
+
+| item | 8 files | ~82 files | notes |
+|---|---|---|---|
+| `--model-diagnostics` accumulator | 29.5 s | **~311 s** | diagnostic, on by default |
+| the two peptide-keyed lookups | 18.6 s | ~196 s | ID-keyed maps; memo refuted |
+| the four `uint` lookups + arithmetic | ~23 s | ~243 s | already cheap per probe |
+| `sink.Accept`, the actual record write | 6.2 s | ~65 s | NOT the prize after all |
+
+**Two ways to take the biggest item.** If production 82-file runs do not need
+`--model-diagnostics`, that is ~690 s of FirstPassFDR for free with no code change at all -
+worth asking before writing anything. If they do need it, the accumulator itself is the target,
+and because it is a diagnostics path the byte-identity of the FDR output is not at risk there,
+which makes it a markedly safer place to optimize than the q-value math.
+
+### Caveats
+
+* Every other measurement in this TODO was taken with mdiag **ON** (the runner default). The
+  **sort is unaffected** (38.1 s against 37.3 s, inside noise), so the committed change's
+  headline ~400 s stands.
+* Do not read the two pass-1 columns as a controlled pair: `score+competition` also moved
+  (18.9 s -> 15.4 s) because the accumulator feeds from pass 1 as well.
