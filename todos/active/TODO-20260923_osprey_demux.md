@@ -464,6 +464,41 @@ batch before waiting (e2a9a7199c) plus preallocation 1,058 s at 512. 20 threads:
   default stays at x1.0 for identifications; x1.2 is the candidate for quantitation, to confirm on whole
   runs before changing anything (`Run-SliceArms.ps1` arms `sig120`, `sig140`; precision from
   `mass_accuracy.py --arms`).
+- **Whole runs at sigma x1.2** (`full\joint_sig120`, 512-point chunks; DIA-NN 17 / 19 ppm, arm
+  `slices\diann\full_joint_sig120`): 37,317 / 36,645 / 37,503 precursors (FDP 0.80-0.85%) against the joint
+  default's 36,314 / 36,169 / 36,627; peptides 26,086 in all runs / 40,920 in any against 25,622 / 39,984
+  (+20.8% over DIA-NN on the `.wiff`); CV 0.1068 against 0.1119 on 26,828 shared (paired -0.0042, 55.9%
+  improved), and against the `.wiff`'s 0.0918 the gap goes from +0.0141 to +0.0099. Better on every
+  measure: **make x1.2 the default.** The reference used 2048-point chunks, so part of the ID gain may be
+  the chunk size (+3% on the slice at an unchanged CV); a whole-run x1.0 control at 512 would separate it.
+  Demux 91 min for A1 alone at 16 threads; D1 and G1 together 161 min, shared with a CarafeSharp run.
+
+**CarafeSharp + Osprey on ZT Scan (Mike, 2026-09-30: train on the middle run, fine-tune, search all three,
+keep the fine-tuned library for later tests).** Built from #4717's head 27a0ba6595 in the worktree
+`C:\Dev\pwiz-carafesharp` (CPU libtorch; SCARFELL has no NVIDIA GPU), snapshots
+`C:\temp\osprey-runs\_bin\carafesharp-27a0ba6-cpu` and `osprey-27a0ba6-vendor`; `Run-CarafeSharpWorkflow.ps1
+-Dataset ZTScan -InputFormat mzML -Device cpu`, work dir `C:\temp\osprey-runs\ztscan\carafesharp`. Input: the
+joint solve's whole-run mzMLs (`full\joint_m2_ms1`); training run D1.
+- Pretrained library (SciexTOF, NCE 27, charge 2-4, 392-900 m/z): 4 h 16 min on the CPU, shared with the
+  sigma x1.2 demux. Osprey on D1 with it: **20,426 precursors, 17,989 peptides** - against DIA-NN's 36,169
+  precursors on the same file with a pretrained Carafe library. Not yet understood: the C-selection
+  bimodality reported for Osprey (~21k or 28-30k), the 1.18 Th windows each carrying 8.3 Th of positions,
+  or something else. To look into after the fine-tuned search.
+- Training export: ZenoTOF 8600, HCD, Q-TOF, collision energy 18; MS2 calibration +4.38 ppm, SD 5.68 ppm (the
+  slice's accuracy and precision). SCIEX activation would train CarafeSharp's resonance-CID slot, hence
+  `-ms_instrument SciexTOF`, which training and prediction both keep.
+- Fine-tune (94 min): MS2 cosine 0.878 -> 0.984, PCC 0.868 -> 0.983, spectral angle 0.682 -> 0.887 (n=831,
+  held out of D1); RT R2 0.922 -> 0.997, median error 0.034 -> 0.006. 13,623 of 20,426 spectra kept. Library:
+  8,936,669 precursors (4.47M target/decoy pairs, shuffled entrapment), `osprey_new_library\`; model
+  `carafe_fine_tuned_model.carafemodel` (re-predict with `-model`).
+- **Three-run search with it (45 min, `osprey_project\`):** per run 27,901 / 28,534 / 27,696 precursors
+  (24,425 / 24,880 / 24,338 peptides); experiment 33,951 precursors at q <= 0.01 with 0.26% entrapment FDP
+  (44 hits), 29,409 peptides at 0.30% (`Compare-DemuxSearches.py --search finetuned=osprey_project`).
+  Osprey's q is conservative here: q 0.02 gives 37,256 at 0.48% FDP, q 0.03 39,226 at 0.52%. D1 went from
+  20,426 (pretrained, one-run search) to 28,534; the SVM C choices are ordinary in both (folds 0.1 / 1 / 1
+  and 10 / 0.1 / 1), so not the C-selection bimodality. Still ~22% under DIA-NN per run (36-37k at ~0.8%
+  FDP). A clean pretrained control needs the entrapment library predicted with the pretrained model
+  (~4 h on this CPU) and the same three-run search.
 - **Mass accuracy is not the matching problem, precision is.** Accuracy (offset from library m/z) is +4.4 ppm
   in every arm, the instrument's calibration. Precision (sweep-to-sweep spread of a fragment's m/z): joint
   5.66 ppm, centroid solve 5.59, acquired 6.03. The joint solve's centroids snap to the TOF grid: 36.1% lie

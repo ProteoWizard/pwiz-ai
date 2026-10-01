@@ -79,9 +79,17 @@ def read_stats(directory):
     return rows
 
 
+def fdrbench_path(directory):
+    # <dir>/fdrbench.tsv, or <dir>/FDRBench/FDRBench-Input.tsv as Run-CarafeSharpWorkflow.ps1 writes it.
+    for path in (os.path.join(directory, "fdrbench.tsv"), os.path.join(directory, "FDRBench", "FDRBench-Input.tsv")):
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError(f"no fdrbench.tsv or FDRBench/FDRBench-Input.tsv in {directory}")
+
+
 def entrapment_ratio(directory):
     counts = {"target": 0, "p_target": 0}
-    path = os.path.join(directory, "fdrbench.tsv.pairing.tsv")
+    path = fdrbench_path(directory) + ".pairing.tsv"
     with open(path, newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
             kind = row["peptide_type"]
@@ -93,7 +101,7 @@ def entrapment_ratio(directory):
 def read_fdrbench(directory, mz_range):
     """(precursor key -> (q, is_entrapment)), (peptide -> (best q, is_entrapment)), within mz_range."""
     precursors, peptides = {}, {}
-    with open(os.path.join(directory, "fdrbench.tsv"), newline="") as f:
+    with open(fdrbench_path(directory), newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
             if mz_range is not None:
                 mz = precursor_mz(row["mod_peptide"], row["charge"])
