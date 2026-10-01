@@ -8,7 +8,7 @@
 - **Created**: 2026-09-26 (Brendan's request at the end of the RESX session); started 2026-09-28
 - **Status**: In Progress
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4752](https://github.com/ProteoWizard/pwiz/pull/4752) (base `Skyline/work/20260612_net8_port`)
 
 ## The question this answers
 Skyline's translations came out of a rigorous process: glossary generated from source material,
@@ -343,3 +343,4 @@ The work is only half the deliverable; the other half is evidence for or against
   them. Options: include Osprey in that baseline (Nick, #4737 context), or record the English each
   translation was made from (e.g. in the resx comment) and have the test compare.
 - Next translation pass: the 22 new strings, through the same drafting + validation + import flow.
+- 2026-09-30 evening: opened [#4752](https://github.com/ProteoWizard/pwiz/pull/4752) at `a9ea0e1086` (Brendan); triggered TeamCity Osprey Perf/Regression build 4196262 on `pull/4752`. `/code-review` not yet run (PR opened at Brendan's request after hours to use TeamCity time).
