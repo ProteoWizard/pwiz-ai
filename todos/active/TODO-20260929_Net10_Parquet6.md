@@ -110,6 +110,21 @@ osprey and pwiz (BiblioSpec) code.
 - [x] Release Skyline builds, and its reference cache resolves `Parquet` to `ParquetNet.dll`
 - [x] Committed and pushed `5ba451a946`; opened [#4751](https://github.com/ProteoWizard/pwiz/pull/4751)
   against `Skyline/work/20260612_net8_port`
+- [x] Ported `54af0de323` (Skyline/work/20260930_parquet_timestamps) to 6.x: DateTime report columns
+  use TIMESTAMP(MILLIS). Millis because 6.x converts a local DateTime to UTC for Micros and Nanos,
+  which would shift a wall-clock time. TestParquetTimestamps passes.
+- [x] Copilot: the exporter's pre-check before `DoneAdding` still raced the consumer's failure.
+  Fixed in `ProducerConsumerWorker`: a consumer failure clears the queue and calls `CompleteAdding`,
+  and `Add`/`DoneAdding`/`Take` return instead of blocking on a completed queue. Reverted the
+  exporter pre-check.
+- [x] Skyline deploys BlibBuild, BlibFilter, msconvert and bullseye-sharp through
+  `_DeployBundledToolOutputs`, which asks each `DeployOutput="true"` reference for `GetTargetPath`.
+  A VS build of Skyline.sln gives these out-of-solution references Platform=AnyCPU and
+  Build-Skyline.ps1 gives them x64, so no fixed path is right for both. Debug and Release bins
+  match the x64 build outputs byte for byte.
+- [x] Applied the `_DeploySkylineCmd` hunks of `15dc5be3b7` (not its server GC hunk), which made
+  TestCmdLineAssociateProteins pass. It was the only Test.dll failure (420 of 421 passed).
+- [x] Committed and pushed `9abe7ccc3e`; replied to and resolved the Copilot thread
 
 ## Notes
 
