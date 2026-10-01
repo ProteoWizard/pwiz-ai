@@ -5,7 +5,7 @@
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
 - **Status**: Item 1 DONE: 3 commits (`65283f6dc1`, `154219f399`, `b8524ef1dc`), gated at
-  48 PASS / 0 FAIL (-Dataset All), measured two ways at **~370-394 s off an 82-file
+  48 PASS / 0 FAIL (-Dataset All), measured two ways, scaling validated, at **~400 s off an 82-file
   FirstPassFDR**. Not pushed, no PR. **Mis-sized originally - read the 2026-10-01 sections at the END.**
 - **Module**: `osprey`
 - **PR**: none
@@ -416,3 +416,38 @@ alongside it" worry is now closed. Both SHAs also scored **16,656,225** peaks on
 files, identical across the eleven commits. Caveat: threads 30 sequential here against
 threads 72 `--parallel-files 4` in the 82-file runs, so these absolutes are comparable only to
 each other.
+
+## 2026-10-01: the linear extrapolation is VALIDATED at a second file count
+
+The 82-file figure above extrapolates from 8 files, which assumes the per-file sort cost scales
+linearly in rows. Tested directly at 16 files (68,348,863 rows, 2.043x the 8-file 33,459,602),
+quiet box, same instrumented exe:
+
+| bucket | 8 files | 16 files | ratio |
+|---|---|---|---|
+| pass 1 **run-q SORT** | 37.3 s | **77.7 s** | **2.083** |
+| pass 1 score+competition | 18.9 s | 38.1 s | 2.016 |
+| pass 1 clamp floors | 9.8 s | 19.1 s | 1.949 |
+| pass 1 sidecar write | 5.4 s | 11.1 s | 2.056 |
+| pass 1 parquet walk | 6.7 s | 21.9 s | **3.27** |
+| pass 2 q-assign | 79.2 s | 154.3 s | 1.948 |
+| pass 2 - of which sink | 35.7 s | 68.1 s | 1.908 |
+| pass 2 - peptide lookups | 20.5 s | 41.4 s | 2.020 |
+
+The sort tracks rows to within 2%. Two independent base points now agree on the 82-file figure:
+
+```
+from 16 files: 77.7 s x (353,085,961 / 68,348,863 = 5.166) = 401 s
+from  8 files: 37.3 s x 10.55                              = 394 s
+```
+
+**So ~400 s off an 82-file FirstPassFDR.** Pass 2's q-assign likewise projects to 797 s
+(sink 352 s, peptide lookups 214 s), matching the ~800 s estimated from the 8-file run.
+
+**The parquet walk is the one SUPERLINEAR bucket (3.27x).** Do not extrapolate walk costs
+linearly - it is I/O and page-cache bound, which is also why it swung 12.5x between a loaded
+and an idle machine earlier in the night.
+
+The memo refutation also reproduces at 16 files: `same entry_id as previous row = 0` again,
+over 68.3M rows this time; same peptide by reference 1,273,297 (1.9%), by value only
+11,057,930 (16.2%).
