@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: In review - #4708 reopened 2026-09-30 (folding it into #4717 was a misunderstanding;
-  Brendan asked only for #4717 + #4719 to combine). Base = the port branch, head 23389009a0; #4717 is
-  stacked on this branch. Brendan is finishing it (workflow page, test plan refresh) for /pw-complete.
+- **Status**: Ready for /pw-complete - head f441fd9e6c, TeamCity Windows .NET, Linux .NET and
+  Perf/Regression green on it, SEA-AD validated, PR body final, not a draft. #4717 is stacked on this
+  branch: retarget it to the port branch BEFORE deleting this branch.
 - **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
 - **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (reopened); [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) stacked on it
@@ -516,5 +516,20 @@ fixes), local until pushed.
      moves the .libcache lookup, so phase 2 re-parsed the 13 GB TSV (20:12-20:16, ~15 GB peak) without the
      retained-fragment skip and wrote a 2nd libcache in mzml\ (delete it). Runner fix pending: pass
      --cache-dir only when -CacheDir is given (Osprey finds .spectra.bin beside the data by default).
+
+### 2026-09-30 (night session) - #4708 finished for merge
+
+- Runner fix (pwiz-ai 56b03a0f): `OspreyDatasetRun.psm1` passes `--cache-dir` only when `-CacheDir` is
+  given; it used to pass the data dir for post-scoring legs, which also moved the `.libcache` lookup.
+- Merged the port branch (#4725, build files only) -> f441fd9e6c; 638/638, inspection 0. Pushed.
+- SEA-AD re-validation with exe 61462edf2c (`D:\test\osprey-runs\_bin\4708-61462edf2c`): 5 parquets deleted,
+  `-Task TrainingExport -Resume`: 4 m 15 s, only those 5 exported, 82/82 byte-identical to
+  `seaad-export-hashes.json`, 0 gaps >= 30 s, library loaded from the `.libcache` beside the library in 12 s
+  (`library-fragments-skipped-at-load ... retained=727101`), no libcache written to mzml\. Log: run.log in
+  the run dir (phase 2's saved as run.phase2.log).
+- TeamCity on f441fd9e6c: Windows .NET 4196437, Linux .NET 4196438, Perf/Regression 4196439 (48 PASS / 0 FAIL).
+  The push also auto-triggered builds (handoff said it would not): Windows 4196440 passed; Linux 4196441-44
+  were canceled by an agent-connect timeout and left a red status, so Linux was re-run (4196445, 638 passed); all 5 PR checks green.
+- PR body updated (progress fix, SEA-AD results, new build ids).
 
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20260923_osprey_carafe_export.md` before starting work.
