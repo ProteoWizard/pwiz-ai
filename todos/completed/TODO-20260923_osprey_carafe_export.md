@@ -4,12 +4,10 @@
 - **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: Ready for /pw-complete - head f441fd9e6c, TeamCity Windows .NET, Linux .NET and
-  Perf/Regression green on it, SEA-AD validated, PR body final, not a draft. #4717 is stacked on this
-  branch: retarget it to the port branch BEFORE deleting this branch.
+- **Status**: Completed
 - **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
-- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (reopened); [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) stacked on it
+- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (merged 2026-10-01); [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) retargeted to the port branch
 - **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`
 
 ## Objective
@@ -531,5 +529,15 @@ fixes), local until pushed.
   The push also auto-triggered builds (handoff said it would not): Windows 4196440 passed; Linux 4196441-44
   were canceled by an agent-connect timeout and left a red status, so Linux was re-run (4196445, 638 passed); all 5 PR checks green.
 - PR body updated (progress fix, SEA-AD results, new build ids).
+
+### 2026-10-01 - Merged
+
+PR #4708 merged into `Skyline/work/20260612_net8_port` as commit 6971b72376. Shipped: `--training-export`
+as a PerFileRescoring output (`<stem>.training.parquet`, format 2), the pay-later export-only arm that
+re-scores nothing, `--task TrainingExport` as a selector, principle P17 and doc 22, and progress reporting
+over the export's isolation windows. Deferred: D1 (stale pass-2 sidecar on a reused work directory) in
+`todos/backlog/TODO-osprey_resume_validity_gates.md`; the single-run SecondPassFDR error is #4729. #4717
+was retargeted to the port branch before this branch was deleted; it will likely need a no-op `-s ours`
+merge of the port branch.
 
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20260923_osprey_carafe_export.md` before starting work.
