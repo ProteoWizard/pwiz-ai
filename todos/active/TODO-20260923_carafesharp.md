@@ -452,16 +452,46 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
     compares m/z, RT and fragments exactly and intensities within 1e-5.
   - Skyline (Nick): reads `manifest.json` from the zip to list models (Skyline is .NET Framework, so it cannot
     reference the net10 CarafeSharp assemblies), and runs `CarafeSharp -model` to predict.
-- [x] Instrument classes LIT and CID (#4717 170497a150 Osprey, 27a0ba6595 CarafeSharp, 2026-09-30; developer's
-  request: Stellar and Tribrid LIT as an instrument, and resonance CID (Thermo's CID) distinguished from HCD after
-  fine-tuning). Developer's decisions: LIT and CID each get a slot (5, 6); a run mixing classes is refused
-  (`-ms_instrument` overrides). The MS2 one-hot has 8 slots fixed by the pretrained weights: 5 trained by peptdeep,
-  7 = unknown, so these were the last two free slots. Pretrained slots 5-7 were never trained (init scale, cosine
-  -0.14 with Lumos; measured with Carafe's `~/.carafe/.venv` torch), so a model without CarafeSharp's
-  `carafesharp.instrument_slots` safetensors record starts LIT and CID as a copy of Lumos. Osprey's footer gained
-  `osprey.ms2_mass_analyzers` (pwiz's per-scan configuration analyzer). Stellar golden: metrics, tables and library
-  SAME; only the MS2 model hash moved. Open: no CID or Tribrid LIT data here to fine-tune a CID/LIT model on beyond
-  the Stellar HCD subset.
+- [x] Activation and analyzer lists (#4717 170497a150 Osprey, 332f2911ac CarafeSharp, 2026-09-30; developer's request:
+  Stellar and Tribrid LIT trained apart from Orbitrap, and resonance CID apart from HCD after fine-tuning). It replaced
+  27a0ba6595's LIT and CID instrument slots. The developer's point was that the 8 one-hot slots limit only the
+  pretrained model: a fine-tuned model can carry any number of values, as its metadata. Developer's decisions:
+  - separate lists for activation (`beam-CID`, `reCID`; not "CID", which is resonance CID to Thermo and beam-type to
+    Sciex and Bruker) and analyzer (`Orbitrap`, `LIT`, `ToF`; the Astral's MS2 is ToF);
+  - a run mixing either is refused (`-activation`, `-analyzer` override).
+  Design (01-model-spec.md):
+  - `meta_nn.acquisition_nn`, Linear(activations + analyzers -> 7, no bias), added to peptdeep's instrument/NCE
+    layer.
+  - Zero in any model that never trained it, so pretrained predictions are bit-identical.
+  - Columns are named in the safetensors metadata (`carafesharp.activations`, `carafesharp.analyzers`) and placed by
+    name on load.
+  - Stellar and TribridOT remain peptdeep's Lumos family.
+  Osprey's footer gained `osprey.ms2_mass_analyzers` (pwiz's per-scan configuration analyzer). The pretrained slots
+  5-7 were never trained (cosine -0.14 with Lumos, measured with Carafe's `~/.carafe/.venv` torch), which is why
+  the slot design copied Lumos.
+  - Found by `TestAcquisitionColumns`: `NormalizeToApex` had dropped the example's activation and analyzer, so the
+    layer never trained.
+  - Runs of one activation and one analyzer train both columns alike (the same updates), so a Stellar-only model
+    cannot tell beam-CID from LIT.
+  - Stellar golden: isolated leg PASSED; pretrained metrics identical, fine-tuned MS2 within 3.5e-4, library peaks +0.33%. The beam-CID and LIT columns came out equal and the other three zero. The golden is not recreated yet, so its exact comparisons report the MS2 model and library hashes as DIFFERS (information only).
+  - Open: no reCID, Tribrid LIT or ToF data here to fine-tune on beyond the Stellar HCD subset.
+- [x] `-model` as a training start (#4717 2f01e28fc1, 2026-09-30). The developer asked whether a fine-tuned model
+  can start another fine-tune: yes, since it differs from the pretrained one only in its weights.
+  - Both models start from the saved model's, and its MS2 model is the baseline the new one must beat.
+  - A new MS2 model that loses leaves the saved one in the new file (`ms2_base.safetensors`, which
+    `CarafeModelDirectory.GetMs2ModelPath` falls back on), not the pretrained one. Carafe's `-ms2_model` is unchanged.
+  - `base_models` in the manifest names the lineage, newest first, by file and SHA-256.
+  - `-tf all` only; refused with `-ms2_model`.
+  - Tests: `TestModelTrainerFromSavedModel` (learning rate 0 forces the loss; two mutation checks fail it).
+  - Chained leg: the further fine-tune's start RT model scores exactly as the first run's fine-tuned RT model did
+    (R2 0.9475898538461316).
+- [ ] Collision energy in eV (developer's request, 2026-09-30: read it from the files, not `-nce`). pwiz reports every
+  vendor's energy as MS:1000045 in eV, but Thermo's value is the filter's NCE (pwiz's TODO in
+  SpectrumList_Thermo.cpp), so Osprey's `osprey.collision_energies` holds NCE for Thermo and eV for Sciex, Bruker,
+  Agilent and Waters, unmarked. CarafeSharp (and Carafe) feed the dominant value into the NCE input either way.
+  Developer's decision: calibrate the NCE for eV runs. Score the start model on the run's training spectra at NCE
+  20-40 and take the best median, as AlphaPeptDeep did for its Sciex TripleTOF fine-tune. Thermo keeps its NCE, and
+  `-nce` overrides. Record the measured eV beside the NCE in meta.json and the saved model.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
