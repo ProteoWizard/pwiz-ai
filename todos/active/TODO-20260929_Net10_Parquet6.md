@@ -2,12 +2,12 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260929_Net10_Parquet6`
-- **Base**: `master`
+- **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-29
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4751](https://github.com/ProteoWizard/pwiz/pull/4751)
 
 ## Objective
 
@@ -41,17 +41,20 @@ osprey and pwiz (BiblioSpec) code.
 
 ## Decisions
 
-- **DLL**: `ParquetNet.dll` and `ParquetNet.xml` are copied from
-  `Parquet.Net6/BinariesForProteoWizard` as they are now (fork commit `5fff229`). That is newer than
-  the DLL in `d16b59f16f`. It is the same build `801d4a59bd` on the perf branch switched to, and it
-  adds an API that splits writing a column into preparing it and appending it. Nothing on this
-  branch calls that API.
+- **DLL**: `ParquetNet.dll` and `ParquetNet.xml` come from `Parquet.Net6/BinariesForProteoWizard`
+  at 6.1.0-osprey3 (maccoss-developers commit `76f5f6b`, branch `20260923ParquetNet6`). osprey2
+  (`5fff229`) added `PrepareColumnAsync`/`WritePreparedColumnAsync`, which Osprey now uses. osprey3
+  fixed the `byte`/`sbyte`/`short`/`ushort` plain encoders, which returned their pooled `int[]`
+  before encoding from it. That is the same bug the 4.25.0 fork fixed, and it only matters when
+  columns are prepared concurrently.
 - **Report exporter**: master's exporter was ported directly rather than taking the perf branch's
   version, which depends on its ColumnBuffer and threading rewrite. The changes:
   - `ParquetOptions` with Zstd and `CompressionLevel.Optimal`. The 6.x default, SmallestSize, is
     Zstd level 19 and much slower.
-  - Every non-list column is created with `isNullable: true`. Parquet.Net 6 makes only a
-    `Nullable<T>` column nullable by itself, not a string column.
+  - Columns keep master's `new DataField(Name, StorageType)`. Parquet.Net 6 already treats a string
+    field as nullable, because its `IsNullable` is true for any class.
+  - Non-list string columns get `EncodingHint.Dictionary`, with `DictionaryEncodingSampleSize`
+    10,000. Parquet.Net 4 dictionary-encoded them by default; 6 only does it when asked.
   - The chunk's typed arrays are written with `WriteAsync<T>` (the string overload for strings),
     in place of `DataColumn`.
   - List columns go through `WriteAllPartsAsync<T>` with explicit definition levels, so a null
@@ -61,6 +64,25 @@ osprey and pwiz (BiblioSpec) code.
   - `ParquetWriter` is only `IAsyncDisposable` in 6.x. It is disposed with `DisposeAsync` on
     success and on cancel, and not disposed after a failure, because writing the footer would
     throw again and hide the original exception.
+  - `CreateAsync` and `DisposeAsync` run under `ActionUtil.CallWithoutSynchronizationContext`
+    (which gained an `Action` overload). 6.x awaits the footer write and flush without
+    `ConfigureAwait(false)`, so blocking on them from a WinForms thread, such as the Immediate
+    Window, can deadlock.
+  - The column-write dispatch passes `BindingFlags.DoNotWrapExceptions`, so a failure is reported
+    as itself rather than as `TargetInvocationException`.
+  - The exporter skips `DoneAdding(wait: true)` once the writer thread has failed. In
+    `ProducerConsumerWorker` the failing consumer has already filled the one-slot queue with its
+    stop null, so another `Add` would block forever. This is a master bug, made easier to hit
+    because more work now runs on the writer thread.
+- **ParquetNet.targets**: the `Reference` uses the DLL's full path. With the simple name
+  `Parquet` plus a HintPath, ResolveAssemblyReference found `Parquet.dll` among Skyline's Content
+  items first, and Release Skyline compiled against
+  `pwiz-sharp/Tools/BiblioSpec/src/BlibBuild/bin/Release/net10.0/Parquet.dll`.
+- **Osprey writes**: a row group's columns are prepared concurrently with `PrepareColumnAsync` on
+  `ParallelEx` threads and appended in schema order, as master did with the 4.x fork's
+  `WriteColumnsAsync`. `OSPREY_PARQUET_WRITE_THREADS` sets the thread count and defaults to the
+  core count. String and blob columns are packed with their own definition levels. String columns
+  are dictionary-encoded.
 - **Osprey merge**: master had moved the score cache's error text into RESX (#4721), so the
   merged code keeps that resource string and gets the type name from `cwtField.ClrType`.
 
@@ -75,10 +97,19 @@ osprey and pwiz (BiblioSpec) code.
   TestTextReportInvariant, TestExportHugeParquetReport
 - [x] Osprey tests pass: all 615
 - [x] BiblioSpec DIA-NN tests pass: all 8, including Diann2_Parquet
-- [x] Committed locally (not pushed)
-- [ ] Release build of Skyline
-- [ ] `/code-review max`
-- [ ] Push and open the PR
+- [x] Committed and pushed `ff622113da`
+- [x] `/code-review max`: 15 findings. Fixed the WinForms deadlock, the missing dictionary
+  encoding, the hang after a writer-thread failure, the Content-item reference, the wrapped
+  exceptions, the wrong nullability comment, and Osprey's lost concurrent writes. Left out of
+  this PR: how the fork DLL is delivered (see Notes), Osprey's double copy of blob columns on
+  read, DIA-NN's boxed reads, a float16 sibling parquet aborting BlibBuild, and test gaps.
+- [x] Rebuilt the fork as 6.1.0-osprey3 and copied it in
+- [x] Skyline Parquet tests, all 615 Osprey tests, and the 8 BiblioSpec DIA-NN tests pass on
+  osprey3
+- [x] `TestParquetRoundTripScalarStress` passes 5,000 iterations
+- [x] Release Skyline builds, and its reference cache resolves `Parquet` to `ParquetNet.dll`
+- [x] Committed and pushed `5ba451a946`; opened [#4751](https://github.com/ProteoWizard/pwiz/pull/4751)
+  against `Skyline/work/20260612_net8_port`
 
 ## Notes
 
@@ -86,5 +117,17 @@ osprey and pwiz (BiblioSpec) code.
   `OspreyDiagnostics.cs:107` after every test had passed. It comes from master (#4694), not this
   branch: the `ProcessExit` handler reads the static `s_sink`, which a later `Initialize` can set
   back to null.
-- The fork's `PATCH-NOTES.md` still says it differs from upstream only by the Thrift struct-skip
-  fix. It does not mention the column-write split in `5fff229`.
+- `TestParquetRoundTripScalarStress` did not catch the unfixed encoders either: osprey2 also passed
+  5,000 iterations with concurrent prepare on. So the osprey3 fix rests on reading the code, not on
+  a reproduction. .NET 10's shared `ArrayPool` usually hands a returned array back to the thread
+  that returned it, which keeps the race rare.
+- ExportHugeParquetReportTest's 50,000-row `prism.parquet` is 22,363 bytes with the dictionary
+  hint. Protein, Peptide, Fragment_Ion, Replicate_Name and File_Name are dictionary-encoded. The
+  review reported 18,388 bytes for 4.x and 33,634 without the hint; those numbers were not
+  re-measured.
+- Fork DLL delivery is still a copy after Build. A project whose bin `Parquet.dll` is loaded by a
+  running process fails a no-op build, because the stock package DLL is copied in before the fork
+  is copied back. `dotnet publish` (Osprey's `package.ps1`) ships the stock NuGet DLL, which lacks
+  the Thrift read fix. Osprey had this on master already. A repo-local package feed would fix both.
+- Files written by the fork record `created_by` as `Parquet.Net version ${VERSION} (build
+  ${GITHUB_SHA})`, because the fork build does not substitute `Globals.cs`.
