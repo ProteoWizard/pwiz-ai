@@ -490,6 +490,17 @@ library**, against Osprey with our joint demux and the fine-tuned CarafeSharp li
 auto mass accuracy, `--scanning-swath`), then `full_joint_diannlib` (our demux files with that library, pinned),
 after `full_joint_finetuned` (DIA-NN on our demux files with the fine-tuned Carafe library).
 
+**DIA-NN on our demux with the fine-tuned Carafe library (`full_joint_finetuned`, 2026-10-01;
+`Run-DiannFineTuned.ps1`: the saved model re-predicted as a DIA-NN TSV from the same target + entrapment
+peptides, converted, searched pinned):** 48,669 / 49,127 / 50,023 precursors per run (FDP 0.84-0.91%) against
+36,314 / 36,169 / 36,627 with the starting-model library; peptides 33,788 in all runs / 51,041 in any against
+25,622 / 39,984 (+32%); CV unchanged (0.1143 against 0.1132 on 27,090 shared, paired +0.0020, 46.7% improved).
+A1 and G1 gain as much as D1, the training run. Experiment level: 53,351 precursors at 0.48% FDP, 56,165 at
+0.89%. **At matched FDP, with the same library and the same demux files, Osprey trails DIA-NN by 33% at 0.3%
+FDP to 16% at 0.8%** (Osprey 38,241 against ~53,540 at 0.5%). Osprey's lead over DIA-NN on the `.wiff`
+(+15-37%) was the fine-tuned library, not Osprey's scoring: the Osprey search on ZT Scan demux data is the
+gap to work on.
+
 **CarafeSharp + Osprey on ZT Scan (Mike, 2026-09-30: train on the middle run, fine-tune, search all three,
 keep the fine-tuned library for later tests).** Built from #4717's head 27a0ba6595 in the worktree
 `C:\Dev\pwiz-carafesharp` (CPU libtorch; SCARFELL has no NVIDIA GPU), snapshots
