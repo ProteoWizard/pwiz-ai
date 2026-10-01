@@ -486,8 +486,10 @@ CarafeSharp with the AlphaPeptDeep starting weights (no fine-tuning; SciexTOF, N
 stops at "Predicting spectra"). So the demux comparisons are like for like, but no arm has had DIA-NN's own
 library. **The comparison that counts (Mike): DIA-NN given the `.wiff` and the FASTA, predicting its own
 library**, against Osprey with our joint demux and the fine-tuned CarafeSharp library. Queued 2026-10-01:
-`W_wiff_diann_library` (`Run-DiannWiffOwnLibrary.ps1`: DIA-NN's predictor on the target + entrapment peptides,
-auto mass accuracy, `--scanning-swath`), then `full_joint_diannlib` (our demux files with that library, pinned),
+`W_wiff_diann_library` (`Run-DiannWiffOwnLibrary.ps1`: DIA-NN's predictor on the target + entrapment peptides
+with `--cut ""` - no digest, 4,472,486 precursors as the Carafe libraries; letting DIA-NN digest the peptide
+FASTA split shuffled entrapment peptides at internal K/R, 5.89M precursors at 1.63 entrapment per target, so
+that first library was set aside in `digested\` - auto mass accuracy, `--scanning-swath`), then `full_joint_diannlib` (our demux files with that library, pinned),
 after `full_joint_finetuned` (DIA-NN on our demux files with the fine-tuned Carafe library).
 
 **DIA-NN on our demux with the fine-tuned Carafe library (`full_joint_finetuned`, 2026-10-01;
