@@ -477,6 +477,18 @@ or round-tripping breaks for any name containing a reserved character.
    Next: watch the first CI build of `d4643f36c5` - it is the first real run of the new Clean step,
    the patch with four steps removed, and the x64 build. If `TestLibraryBuild` leaves a `.ses`
    temp file there, see the x64 notes below (1 failure in 6 local runs, 0 on AnyCPU CI).
+   **Follow-up (2026-10-01, `732ae80769`): `pwiz-sharp` added to the clean.** Perf/Tutorial build
+   4196611 (#4750) failed with `MSB3030` copying `CommunityToolkit.HighPerformance.dll` and
+   `K4os.Compression.LZ4.dll` from BlibBuild/BlibFilter output. `Skyline.csproj`'s wildcard over
+   BlibBuild's `bin` is expanded at project LOAD; it listed DLLs a pre-`ff622113da` build left on
+   the agent (that commit moved Parquet.Net to the 6.1.0 fork and dropped both packages), and
+   BlibBuild's own `IncrementalClean` deleted them before Skyline copied. Root `clean.bat` now
+   calls `pwiz-sharp\clean.bat` (proven by pwiz-sharp's own CI; also clears the native CMake trees
+   and generated vendor pins; keeps its caches), and the Perf/Tutorial `.kts` gets the same Clean
+   step - it never cleaned, which is why it was exposed. Verified cold: clean exits 0, pwiz-sharp
+   52 bin/obj -> 0, tracked `vendor-archives/` and `build/` untouched; main config inspection
+   `success` 0 issues in 579s (~100s more than with pwiz-sharp warm), `tcbuild.bat` unchanged at
+   296s, `TestLibraryBuild` passed; Perf/Tutorial clean 10s + build/test 136s, tutorial test passed.
    The fix for the bad-agent inspection failure, as directed by the developer:
    - `.kts`: new `Skyline_Clean` step running root `clean.bat`, ordered BEFORE the inspection, so
      the inspection starts from a clean slate. It is the build's only clean.
