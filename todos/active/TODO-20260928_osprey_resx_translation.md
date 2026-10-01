@@ -335,7 +335,9 @@ The work is only half the deliverable; the other half is evidence for or against
   removes or renames a key deletes its translations in the same change). Existing tools only drop orphans
   when someone runs an import. Its first run listed exactly the 4 (2 keys x 2 languages); removed via
   the pipeline import. 632/632 in 4 cultures.
-- Gap to remember (not addressed): if a future merge CHANGES the English of a translated key, the old
+- Deferred by decision (Brendan, 2026-09-30): no Osprey translation is final - all are drafts marked
+  Needs Review, so changed-English tracking only matters once a release finalizes text and Osprey enters
+  `LastReleaseResources.db`. Background: if a future merge CHANGES the English of a translated key, the old
   translation stays attached and nothing flags it - ResourcesOrganizer's "English text changed" compares
   against `LastReleaseResources.db`, which has no Osprey rows until the next release baseline includes
   them. Options: include Osprey in that baseline (Nick, #4737 context), or record the English each
