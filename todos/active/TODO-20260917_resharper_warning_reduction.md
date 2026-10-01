@@ -474,6 +474,22 @@ or round-tripping breaks for any name containing a reserved character.
 5. **CI cleaning, the test-project set and the x64 build - pushed to #4685 (2026-10-01) as
    `51573fe525` (clean slate, CleanSkyline sweep, every test project built, tutorial skip, dead
    dotnet steps removed) and `d4643f36c5` (x64 `build.bat` reusing the inspection's build).**
+   **CI confirmed green**: build #414 (`732ae80769`) - 1802 tests, `Skyline code inspection`
+   PASS (first green inspection check since the bad-agent failures), Core Windows .NET 650 tests.
+   **Then `f994f9b8a0`: removed package references the framework provides, and stopped
+   suppressing `NU1510`.** The warning only showed for `Common.csproj` on the command line because
+   `Shared/Common` has its own `Directory.Build.props`, which stops MSBuild walking up to the global
+   `NoWarn`. Removed `System.Resources.Extensions` from the 27 WinForms projects (Windows Desktop
+   ships it; kept in plain-`net10.0` `CommonUtil`, `ProteowizardWrapper`, `SkylineRunner`), then the
+   14 more references that unsuppressing exposed. **Two were security pins**
+   (`System.Security.Cryptography.Xml 8.0.4` in `SkylineNightly`/`TestData`, against GHSA advisories
+   via `System.ServiceModel`): NuGet audit could not prove them safe to drop (`NuGetAuditMode=direct`,
+   and `TestData` suppresses `NU1903`), so the restore graph was checked instead - after removal,
+   `Cryptography.Xml` and `Pkcs` are absent entirely; pruning removed the vulnerable transitive copy
+   too. Verified: zero `NU1510` and no `MSB3822/3823` across the inspection, `tcbuild.bat` and all 15
+   `Executables` builds; UI tests with embedded bitmaps pass in en and ja. Gotchas found: building
+   `SkylineAiConnector` needs `SkylineMcpServer` restored first (pre-existing), and rewrites the
+   TRACKED `SkylineAiConnector.zip` - restore it before committing.
    Next: watch the first CI build of `d4643f36c5` - it is the first real run of the new Clean step,
    the patch with four steps removed, and the x64 build. If `TestLibraryBuild` leaves a `.ses`
    temp file there, see the x64 notes below (1 failure in 6 local runs, 0 on AnyCPU CI).
