@@ -336,6 +336,51 @@ including `saved-all-labeled` refusing to scale across a 3x area increase.
 CSVs: `label-layout-sweep.csv` (Release onscreen), `-debug.csv`, `-offscreen.csv` in
 `ai/.tmp/sessions/20260929-labelsweep/`.
 
+## 2026-10-01 - Ready to merge, waiting on master
+
+The PR is down to just the fix and is otherwise merge-ready:
+
+* Sweep tool reverted off this branch (`9d2b659573`) - the net diff is four files: `LabelLayout.cs`,
+  `LabelLayoutRunner.cs`, `GraphObjList.cs`, `LabelLayoutTest.cs`. The tool is parked on
+  `Skyline/work/20260929_labelLayoutSweep`, which is based on this branch and will need
+  `git merge origin/master` after the squash-merge before its own PR shows a sensible diff.
+* Three code inspection warnings the tool introduced are fixed (`a254c29857`); QuickInspection locally
+  reports 0 errors, 0 warnings.
+* PR title now carries the module prefix - `skyline: Fixed sparse and marker-overlapping labels on the
+  dot plots` - and the `skyline` label was added. The PR had **no labels at all** before.
+* Merged master twice to clear BEHIND, most recently `d6f5df17` (#4748). Build clean and the four plot
+  tests pass locally after each merge.
+
+**Blocked on two things, neither ours:**
+
+1. **Master is red.** `TestNativeMessageBox` fails on `d6f5df17` (bt209 build #22078) with
+   `System.ArgumentException: Setting values is not supported for native dialog Dialog:Save As` at
+   `NativeDialog.SetValueCore`, `NativeDialog.cs:320`. That is #4748's own area (off-screen rendering for
+   form images and error-report screenshots), unrelated to label layout. Because master was merged into
+   this branch, the PR inherits the failure. Developer's call: wait for the fix rather than overlap it,
+   and merge when master is clear.
+2. **No approving review.** All four reviews on the PR are `COMMENTED`, including Nick's two rounds, so
+   `reviewDecision` is empty and `mergeStateStatus` is `BLOCKED`. An author cannot approve their own PR;
+   it needs Brendan or Nick to pick **Approve** in Files changed -> Review changes, or
+   `gh pr review 4495 --approve`.
+
+Squash-merge message agreed:
+
+```
+skyline: Fixed sparse and marker-overlapping labels on the dot plots (#4495)
+
+* Capped the label sampler on the min of its two rates, not their product
+* Counted label candidates per density cell rather than data point markers
+* Added a post-annealer prune for overlapping and marker-covering labels
+* Made GraphObjList.FindPoint respect IsVisible for hidden labels
+
+See TODO-20260521_labelSamplingFix.md in pwiz-ai/todos
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+`Fixes #4330` is already in the PR description, so the squash message does not repeat it.
+
 ## Notes
 
 - The annealer already soft-avoids markers via the density grid
