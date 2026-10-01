@@ -488,8 +488,10 @@ gated byte-identically on the tool's reference outputs (`Capture-DemuxGoldens.ps
   hits** (below 1000.70 m/z; `Compare-DemuxSearches.py`), against 40,009 / 34,501 / 52 for Osprey searching
   the tool's mzML: the same result within run noise, +4.0% over msconvert. 44 min for both files
   (`C:\temp\osprey-runs\eclipse-staggered\search-osprey-weighted`).
-- Next: ZT Scan through Osprey needs the profile (the joint solve reads it; `.spectra.bin` holds centroids),
-  the kernel, and the .wiff2 reader for Osprey.exe; then the Stellar staggered profile (needs data), then
+- Next: ZT Scan through Osprey. Per Mike, the cache never holds the profile: the joint solve runs as the
+  run is read (`.wiff2`, `.wiff`, mzML) and only its demultiplexed, centroided spectra go to the spectra
+  cache. Also the kernel measured per file in C# and the .wiff2 reader for Osprey.exe. **TODO: a
+  joint-solved file Skyline can read.** Then the Stellar staggered profile (needs data), then
   the rest of the spec. Step 3 changes `DemuxCacheBuilder`, which #4710 adds: agree the order with Brendan
   before pushing.
 

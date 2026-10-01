@@ -75,12 +75,16 @@ test suite, inspection, and for steps touching Osprey's `--demux`, `regression.p
    Osprey source and a cache sink; the new staggered demux is the default, `OverlapDemultiplexer` behind
    an option (for example `--demux-engine msconvert`). Check Eclipse IDs and FDP through Osprey itself
    against the tool's 40,009, and ZT Scan through Osprey against the tool's whole-run results.
-   **In progress:** `WeightedDemultiplexer` (Osprey's MS2 list as an `IDemuxSource` on
+   **Staggered done:** eb9e893553. `WeightedDemultiplexer` (Osprey's MS2 list as an `IDemuxSource` on
    `StaggeredDemuxPipeline`), `DemuxParams.Engine` weighted | msconvert in the descriptor (version 4),
    `OSPREY_DEMUX_ENGINE=msconvert` for the old engine, an env override rather than a flag because it is
-   to be removed. Tests pass; the Eclipse search through Osprey is running
-   (`C:	emp\osprey-runs\eclipse-staggered\search-osprey-weighted`). ZT Scan through Osprey still needs
-   the profile (the joint solve reads it; the `.spectra.bin` holds centroids) and the kernel.
+   to be removed. Eclipse through Osprey: 39,956 precursors at 0.26% FDP, every peak identical to the
+   tool's (`C:\temp\osprey-runs\eclipse-staggered\search-osprey-weighted`).
+   **ZT Scan, to do (Mike, 2026-09-30):** the cache never holds the profile. The joint solve runs as the
+   run is read (`.wiff2`, `.wiff` or mzML) and only its demultiplexed, centroided spectra are written to
+   the spectra cache; the joint solve's settings and the kernel go in its descriptor. Also needs the
+   kernel measured per file in C# and the .wiff2 reader staged for Osprey.exe. Later: a joint-solved
+   file Skyline can read.
 4. **Staggered profile (decision 4).** The profile solver takes gathered events: each window's profile
    interpolated to the target's time on the exact grid, then the joint solve as for a sweep. Needs a
    Stellar staggered profile acquisition (window width, overlap, scan rate) and a Stellar grid check
