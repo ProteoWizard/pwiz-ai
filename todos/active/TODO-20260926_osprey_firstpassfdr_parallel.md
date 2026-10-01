@@ -1,10 +1,12 @@
 # TODO: Parallelize FirstPassFDR - 86% of the stage is serial per-file work
 
 ## Branch Information
-- **Branch**: not started
-- **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
+- **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
+- **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: Analysis complete, no code written
+- **Status**: Item 1 IMPLEMENTED and committed (`65283f6dc1`), unit-green (628/628), awaiting
+  the Stellar regression gate and a before/after stage measurement. **Item 1's size was
+  mis-stated in the original analysis - see the 2026-09-30 section at the END.**
 - **Module**: `osprey`
 - **PR**: none
 
@@ -117,3 +119,103 @@ The FDRBench pass-1 write (182 s) is **new since the 2026-09-10 reference** - #4
 (09-13) made `--fdrbench-pass both` actually emit pass 1. So today's FirstPassFDR does
 182 s of work the reference never did and still came in faster (4,015.7 s vs 4,173.7 s).
 Net of that the stage is ~8% quicker than the reference, not ~4%.
+
+## 2026-09-30 night session: item 1 implemented, and its size CORRECTED
+
+### Item 1 as originally written conflated two different costs
+
+The work-item list above says:
+
+> 1. **Pass 2: read the v7 sidecar instead of re-decoding parquet a THIRD time** (1,163 s).
+
+That attributes the whole 1,163 s of pass 2 to the re-decode. It is not the re-decode, and
+the re-decode is not 1,163 s. Three pieces of evidence, all from the code and the logs
+rather than from a new experiment:
+
+* **Pass 2 already reads the sidecar.** `TryLoadCompletedScores` was already being called
+  at BOTH score-pass call sites (`PercolatorScorer.cs`, pass 1 and pass 2). On a cold run
+  pass 1 writes each file's sidecar through `flushFileRunScope`, so by the time pass 2
+  reaches that file the shortcut already fires: pass 2 was NOT reloading features or
+  re-running the dot product.
+* **A full decode walk of all 82 files is 43-92 s, not 1,163 s.** Pass 0 is a complete
+  decode walk and the in-code comment at the pass-0 loop states "43s at 82 files"; the
+  analysis above quotes 92 s for the same step. Either way it is a few percent of pass 2.
+  The pass-2 comment in the source makes the same estimate in its own words - it calls the
+  remaining walk "the ~7% ... price of not relying on a distant invariant".
+* **Pass 2 is SLOWER than pass 1 while doing strictly less scoring work.** From
+  `seaad-82files-libdecoy-r1.0-protein-compactnet10tip-par4/run.log`:
+  pass 1 ("Scoring 353,085,961 precursor candidate peaks") 20:41:45 -> 21:05:55 = **1,450 s**;
+  pass 2 ("Assigning q-values to 353,085,961 precursor candidate peaks") 21:05:55 -> ~21:36
+  = **~1,830 s**. Pass 1 pays the feature load AND the SVM dot product; pass 2 pays neither.
+  So pass 2's cost is overwhelmingly in work that is NOT decoding and NOT scoring.
+
+### What the real redundancy is
+
+Pass 2 recomputed `PercolatorQValues.ComputePerFileRunQvalues` - **a sort per file, 353M
+rows across the cohort** - to re-derive the two run q-values that **pass 1 had already
+computed and written into the v7 sidecar**. The sidecar record carries them
+(`FdrScoreRecord.RunPrecursorQvalue` / `.RunPeptideQvalue`) and the reader materialized
+them and then threw them away: `rec => onScore(rec.EntryId, rec.Score)`.
+
+Why it looked free, which is the part worth keeping: the doc comment on
+`TryLoadCompletedScores` justified recomputing as "a sort and costs nothing next to loading
+a file's feature vectors and re-running the dot product". That comparison is sound on the
+RESUME path it was written for. It silently carries over to fresh-run pass 2, where there
+is no feature load and no dot product to weigh it against - so the sort is measured against
+nothing and becomes the pass's dominant remaining cost. **A cost justification that names
+what it is cheaper THAN stops being true when the thing it was cheaper than is removed.**
+
+The determinism objection in that same comment ("rather than by trusting two writers to
+agree") does not apply either: there is one writer. `FirstPassFdrTask.cs` states it
+directly - "the score and both run q-values are final the moment that file's rows have been
+walked, and no later phase revises them". Pass 2 is a reader, not a second writer.
+
+### What was implemented (commit `65283f6dc1`)
+
+* Added `CompletedScoreStreamer` (`Osprey.FDR/FdrProjectionOutput.cs`), replacing the
+  `Func<string, Action<uint, double>, bool>` so a file's stored score arrives with BOTH run
+  q-values instead of alone.
+* `TryLoadCompletedScores` returns the two q-value arrays through `out` parameters, published
+  only after the existing count check AND row-identity check both pass, so a rejected
+  sidecar yields three nulls together.
+* **Pass 2** uses them and sorts only a file that had no sidecar. **Pass 1 deliberately
+  discards them** (`out _, out _`): it is the writer, the sort is what produces what it
+  writes, and on a resumed file those values feed the global clamp-floor reduction, so the
+  saving there would be confined to a resume while the blast radius would be global state.
+  Pass 1's resume path is a possible follow-up, not part of this change.
+
+### Verification
+
+* **628/628 Osprey unit tests pass**, including every `SubsetPipelineTest` leg (resume, HPC
+  task chain, sidecar contracts, rescore resume) - the suite that exercises the sidecar
+  paths this change touches.
+* `TestStreamingFirstPassMatchesProjection` gained a **third arm**: it captures pass 1's
+  run-scope output and serves it back to pass 2, then compares against the SAME resident
+  projection oracle the other two arms use, exact (0.0 delta). It asserts pass 1 actually
+  flushed every file first, so it cannot pass vacuously by falling back to the recompute.
+* **Negative control run deliberately**: perturbing the served `RunPrecQ` by `1e-12` makes
+  that arm FAIL. The arm genuinely exercises the read-back and the comparison is exact.
+* Still outstanding: `regression.ps1 -Dataset Stellar` (modes 1-3) and a before/after stage
+  measurement. The expected win is the per-file sort across 353M rows, NOT the ~7% walk.
+
+### Separate finding: the Osprey pre-commit INSPECTION gate is broken in these worktrees
+
+`Build-Osprey.ps1 -RunInspection` reports **427 errors + 20 warnings** and so always fails.
+It is not caused by any change: the **clean tip `ed25627d81`, detached, with the script
+printing "No modified/added files found", produces the IDENTICAL 427/20 and the same
+per-file counts**. All 427 are `CSharpErrors` of the form "Cannot resolve symbol 'X'" for
+types living in the pwiz-sharp / CommonUtil projects, and `jb inspectcode` prints
+"Referenced project 'X' not found in the solution, it's output assembly wasn't found either"
+for every one of them. So `Osprey.sln` does not carry those project references in a form the
+inspector can resolve, and the "errors" are resolution failures, not code defects - the
+compiler builds the same tree clean.
+
+Consequence: the documented gate `Build-Osprey.ps1 -Configuration Debug -RunTests
+-RunInspection` cannot go green here, and a session that treats its red as a real signal
+will chase 427 phantoms. Worth its own TODO and a fix to the inspection invocation (or to
+`Osprey.sln`'s reference set).
+
+Incidental: the unit-test run ends with an unhandled `NullReferenceException` in
+`OspreyDiagnostics.<Initialize>b__2_0` (`OspreyDiagnostics.cs:107`), an exit-time event
+handler. The run still reports success. Pre-existing and unrelated to this change, but it is
+noise in every test run.
