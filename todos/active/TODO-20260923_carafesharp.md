@@ -485,13 +485,20 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   - Tests: `TestModelTrainerFromSavedModel` (learning rate 0 forces the loss; two mutation checks fail it).
   - Chained leg: the further fine-tune's start RT model scores exactly as the first run's fine-tuned RT model did
     (R2 0.9475898538461316).
-- [ ] Collision energy in eV (developer's request, 2026-09-30: read it from the files, not `-nce`). pwiz reports every
-  vendor's energy as MS:1000045 in eV, but Thermo's value is the filter's NCE (pwiz's TODO in
-  SpectrumList_Thermo.cpp), so Osprey's `osprey.collision_energies` holds NCE for Thermo and eV for Sciex, Bruker,
-  Agilent and Waters, unmarked. CarafeSharp (and Carafe) feed the dominant value into the NCE input either way.
-  Developer's decision: calibrate the NCE for eV runs. Score the start model on the run's training spectra at NCE
-  20-40 and take the best median, as AlphaPeptDeep did for its Sciex TripleTOF fine-tune. Thermo keeps its NCE, and
-  `-nce` overrides. Record the measured eV beside the NCE in meta.json and the saved model.
+- [x] Collision energy in eV (#4717 8dfe512b59, 2026-09-30; developer's request: read it from the files, not `-nce`).
+  pwiz reports every vendor's energy as MS:1000045 in eV, but Thermo's value is the filter's NCE (pwiz's TODO in
+  SpectrumList_Thermo.cpp). So Osprey's `osprey.collision_energies` holds NCE for Thermo and eV for Sciex, Bruker,
+  Agilent and Waters, unmarked, and Carafe trains at that number either way.
+  - Developer's decision: calibrate the NCE for eV runs, as AlphaPeptDeep did for its SCIEX TripleTOF fine-tune.
+    The start MS2 model scores the run's training spectra at NCE 20-40; the highest median PCC wins (`NceCalibration`).
+  - Thermo keeps its NCE (Carafe's precedence); `-nce` overrides for eV runs.
+  - `RunCollisionEnergy` records the source and unit, and saved models carry `nce_source` and `collision_energy_unit`.
+  - Tests:
+    - `TestNceCalibration`: spectra the start model predicts at NCE 33 calibrate to 33. A SCIEX run trains and
+      predicts at its calibrated NCE, and `-nce` names it instead.
+    - `TestCollisionEnergies`: the per-vendor rules.
+  - Open: no Sciex, Bruker, Agilent or Waters data here to calibrate on for real. A run from the developer would show
+    whether the calibrated NCE beats a fixed one on held-out metrics.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
