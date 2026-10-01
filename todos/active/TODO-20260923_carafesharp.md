@@ -520,6 +520,15 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   2026-10-01). The add/add conflicts in 6 of #4708's files were three-way merges on #4708's head 23389009a0: this
   branch's analyzers footer plus the base's training-export progress reporting. Osprey 638/638, CarafeSharp 80/80,
   and the chained leg passed after it. #4717 is MERGEABLE/CLEAN.
+- [x] Whole target/decoy pairs (#4717 8362e74827, golden adac75f657, 2026-10-01). The developer asked how to fix the
+  one extra unpaired Astral GPU target, and chose to drop both members.
+  - Cause: the library drops a precursor below `-lf_min_n_frag` independently for target and decoy (Carafe's
+    rule); the GPU only moved one decoy across it. Osprey's `TargetDecoyCompetition` counts a target with no
+    decoy as a winner.
+  - `DecoyPairGate` (Proteome) writes a pair only whole. Expected members are counted up front; a pair is
+    decided when all of them are offered. Ambiguous sequences (I/L twins, shared partners) pass ungated.
+  - Astral: 10 left out on the CPU (6 targets, 4 decoys) and 14 on the GPU. Stellar: none.
+  - The regression now fails on any unpaired target; parity subtracts the gate's drops.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
