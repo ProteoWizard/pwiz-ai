@@ -20,8 +20,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--rt', type=float, nargs=2, default=[0, 1e9])
     ap.add_argument('--r', type=float, default=R,
-                    help='entrapment to target ratio of the searched library (1.6345 for DIA-NN predicting its own '
-                         'library from the ZT Scan target + entrapment peptides, which it re-digests)')
+                    help='entrapment to target ratio of the searched library, when not the Carafe ZT Scan one (a '
+                         'library DIA-NN predicts from the peptide FASTA keeps 1:1 only with --cut "", no digest)')
     ap.add_argument('arms', nargs='+')
     args = ap.parse_args()
     R = args.r
