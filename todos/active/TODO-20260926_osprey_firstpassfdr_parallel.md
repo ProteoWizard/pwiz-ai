@@ -451,3 +451,45 @@ and an idle machine earlier in the night.
 The memo refutation also reproduces at 16 files: `same entry_id as previous row = 0` again,
 over 68.3M rows this time; same peptide by reference 1,273,297 (1.9%), by value only
 11,057,930 (16.2%).
+
+## 2026-10-01: cross-arm determinism check PASSES (and it covers this change)
+
+Run with **this branch's exe** (`_bin\26.1.1.273-net10tip-65283f6dc1-runqreuse`), so it
+validates two things at once: that the #4706 `FrozenModelScorer` `_scratch` fix holds, and that
+reading the run q-values off the sidecar preserves determinism across `--parallel-files`
+settings. Full runs (all four stages), 8 files, threads 30, no `-Task`, no `-LinkFrom`, quiet
+box, back-to-back.
+
+```
+out.stats.tsv                 : IDENTICAL (diff empty) between --parallel-files 3 and 4
+*.2nd-pass.fdr_*.bin          : 17 files per arm, SHA256 mismatches = 0
+                                ALL second-pass FDR bins BYTE-IDENTICAL
+zero-precursor rows           : none, in either arm (8 of 8 rows populated)
+```
+
+Before the #4706 fix, 4 of 83 rows differed. Now every row matches and every binary hashes
+equal.
+
+### Stage times, as a by-product
+
+| stage | `--parallel-files 3` | `--parallel-files 4` |
+|---|---|---|
+| PerFileScoring | 1062.2 s | 810.8 s |
+| **FirstPassFDR** | **442.2 s** | **441.6 s** |
+| PerFileRescoring | 302.3 s | 161.0 s |
+| SecondPassFDR | 148.9 s | 148.6 s |
+| total | 32 m 35 s | 26 m 02 s |
+
+**FirstPassFDR differs by 0.14%** - an independent, from-scratch confirmation of this TODO's
+central premise that the stage is completely flat in `--parallel-files` (1.02x on the
+2026-09-10 sweep, -1.1% on 2026-09-26). SecondPassFDR is flat too. PerFileScoring and
+PerFileRescoring both scale.
+
+### One figure to re-check before relying on it
+
+FirstPassFDR came in at **442.2 s in a FULL run** against **450.1 s in the isolated
+`-LinkFrom` measurement** with the same exe - **+1.8%**. The carried-over note says a
+`-LinkFrom` isolated stage has a systematic **+10.1%** bias and must never be compared to a
+full-run number. On this stage tonight the bias was far smaller than that, so the 10.1% figure
+may be stage-specific or stale. The rule (do not mix the two) is still the safe default, but
+the number behind it deserves a re-measure.
