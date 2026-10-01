@@ -106,3 +106,22 @@ session folder `ai/.tmp/sessions/20260927-054c052f`):**
 
 So ZT Scan's late loss is mainly the Carafe libraries' compressed late RTs plus a global window that cannot absorb
 it. On Astral the ~25% gap to DIA-NN is spread evenly along the gradient: not RT calibration.
+
+**Stellar, same library (`C:\temp\osprey-runs\rtcal\stellar\`):**
+- DIA-NN with `--mass-acc-cal 900 --no-ms1`, no MBR: 12 min; 35,219 / 34,212 / 34,428 precursors per run.
+  - With its own library and MBR in July it found 23.5k; with the SkylineAI library it is ahead of Osprey.
+- Osprey: 4 min; 27,957 / 28,519 / 28,730 per run, 31,720 experiment.
+- Osprey recovers 68.2% of DIA-NN's 40,358, flat at 65-71% along the gradient. The last bin, 22.0-23.8 min, is 57%
+  (2.6% of misses).
+- There the calibration (5,579 points) ends at observed 23.35 while the run reaches 23.78: Osprey predicts 0.35 min
+  early, and apex agreement is 64% against about 86% mid-run (87% at best: unit resolution).
+- DIA-NN writes `<library>.skyline.speclib` beside its library. The two it wrote into the regression data folder
+  were moved to the `rtcal\<dataset>\diann` folders, and the driver now gives DIA-NN a copy of the library.
+
+**Summary across the three sets:**
+- **The RT edge costs 2-3% of the misses on the regression sets** (in their last 1.5-2 min) and 21.5% on ZT Scan
+  with the Carafe library.
+- The bulk of the same-library gap to DIA-NN (25% Astral, 32% Stellar, 31% ZT Scan before 10 min) is uniform in RT:
+  a separate, sensitivity question.
+- The RT fix should recover ZT Scan's late region and the last bins of Astral and Stellar without changing the
+  middle of a run.
