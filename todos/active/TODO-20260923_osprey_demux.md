@@ -503,6 +503,33 @@ FDP to 16% at 0.8%** (Osprey 38,241 against ~53,540 at 0.5%). Osprey's lead over
 (+15-37%) was the fine-tuned library, not Osprey's scoring: the Osprey search on ZT Scan demux data is the
 gap to work on.
 
+**The comparison that counts (2026-10-01): DIA-NN out of the box.** `W_wiff_diann_library`: the three `.wiff` +
+the target + entrapment peptides, DIA-NN predicting its own library (`--cut ""`, 4,472,486 precursors, r =
+0.99987), auto mass accuracy, `--scanning-swath`; 40,108 / 40,206 / 40,507 precursors per run (0.83-0.92%),
+27,625 peptides in all runs. Then `full_joint_diannlib`: our demux files with that library, pinned: 46,282 /
+46,060 / 46,535 (0.80-0.98%), 31,704 peptides in all runs (+14.8%). Experiment level, interpolated at matched
+entrapment FDP (`diann_experiment_level.py`, `Compare-DemuxSearches.py`):
+
+| Arm | 0.3% | 0.5% | 0.7% | vs out of the box |
+|---|---|---|---|---|
+| A DIA-NN out of the box (`.wiff`, DIA-NN library) | 40,833 | 43,300 | 44,980 | - |
+| B DIA-NN, our demux, DIA-NN library | 48,897 | 51,078 | 52,380 | +17 to +20% |
+| C DIA-NN, our demux, fine-tuned Carafe | 51,561 | 53,545 | 55,244 | +23 to +26% |
+| D DIA-NN, our demux, Carafe starting model | 36,959 | 39,359 | 40,942 | -9% |
+| E DIA-NN, `.wiff`, Carafe starting model | 30,073 | 32,450 | 33,658 | -25% |
+| F Osprey, our demux, fine-tuned Carafe | 34,552 | 38,241 | 44,544 | -15 to -1% |
+
+- The Carafe starting-model library was ~25% worse than DIA-NN's predictor on ZT Scan (E vs A, D vs B), so every
+  earlier "vs DIA-NN on the `.wiff`" number (including #4710's "+19%") was against a handicapped DIA-NN; those
+  comparisons were like for like, not out of the box.
+- The demux's own gain holds with DIA-NN's library: +17-20% at matched FDP. The fine-tuned library adds ~5%
+  over DIA-NN's own (C vs B).
+- **Osprey is the gap: 16-33% under DIA-NN with the same data and library (C vs F), and 1-15% under DIA-NN
+  out of the box.** Mike's criterion (IDs >= DIA-NN on the `.wiff`) is met by the demux searched with DIA-NN,
+  not yet by Osprey.
+- CV still favors the `.wiff`: 0.092 against 0.113 (DIA-NN library) and 0.115 (fine-tuned) on 28,142 shared.
+- Arm A used DIA-NN's own tuning, as a user would; the demux arms the settings pinned throughout this work.
+
 **CarafeSharp + Osprey on ZT Scan (Mike, 2026-09-30: train on the middle run, fine-tune, search all three,
 keep the fine-tuned library for later tests).** Built from #4717's head 27a0ba6595 in the worktree
 `C:\Dev\pwiz-carafesharp` (CPU libtorch; SCARFELL has no NVIDIA GPU), snapshots
