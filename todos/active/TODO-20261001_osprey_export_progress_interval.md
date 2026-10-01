@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261001_osprey_export_progress_interval` (worktree `C:\proj\pwiz-4708`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-10-01
-- **Status**: In progress
+- **Status**: In review - #4756 green, awaiting Brendan
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4756](https://github.com/ProteoWizard/pwiz/pull/4756)
 - **Follows**: `ai/todos/completed/TODO-20260923_osprey_carafe_export.md` (#4708)
 
 ## Objective
@@ -34,7 +34,7 @@ Follow-ups to the #4708 training export, found validating it on SEA-AD (82 Astra
   out-of-center-order IOTest case (red under a center-order BlockEnd), stale comments (061b2c9057).
   Dropped: per-thread buffers (~1 GB at 30 threads for ~0.4 s warm), warm pay-later cost, double-held
   block, extra decode copy, other loops' progress cadence. Calibration/Stage 6 cold reads raised with Brendan.
-- [ ] PR, TeamCity Windows + Linux .NET
+- [x] PR #4756; TeamCity at 061b2c9057: Windows .NET 4197553, Linux .NET 4197571 (638 each)
 
 ## Progress Log
 
