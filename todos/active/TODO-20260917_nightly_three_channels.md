@@ -358,3 +358,14 @@ leak run logs the sweep marker; quick inspection clean.
 - `TODO-20260913_net8_nightly_reporting.md` - Integration nightly reporting
 - PR #4677 (`GCCollectionMode.Aggressive` before each sample), which is what makes the
   private-bytes axis worth a dedicated leak machine
+
+### 2026-10-02 - Standard and Leak Checking clean; Perf close
+
+Brendan: Integration Standard and Leak Checking runs on many machines now pass fully, with no
+failures and no leaks. Perf is not clean yet: last night's BRENDANX-UW7 Integration with Perf
+Tests run (720 min) failed only TestDiaTtofDiaUmpireTutorial. Ignore SKYLINE-DEV6 when judging
+these runs. Same day: added `Integration Leak Detection` (720 min) to `get_daily_test_summary`
+and the failures-by-date query in `nightly.py`, and to `scan_testrunner_crashes.py`. That script
+also had the Perf folder misspelled as "Integration With Perf Tests", which returns no rows, so it
+was fixed too. Checked against the LabKey email for 2026-10-02: 7 folders, 117,583 tests,
+BRENDANX-DT1 clean.

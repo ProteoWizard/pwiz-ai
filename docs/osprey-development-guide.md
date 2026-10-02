@@ -1702,7 +1702,9 @@ Differences from Skyline WORKFLOW.md:
   and `git show` applies the checkout smudge, so neither is a raw-bytes view.
   Use `git cat-file blob <sha>:<path> | tr -cd '\r' | wc -c` (or `| od -c |
   head`, `| file -`).
-- **No `Co-Authored-By: Claude` trailer** unless Mike opts in.
+- **`Co-Authored-By: Claude <noreply@anthropic.com>` trailer**, the same line as pwiz (Mike's
+  and Brendan's merged Rust commits carry it since #68, and `Deny-HarnessAttribution.ps1`
+  requires it). Still no `Claude-Session:` line, model name or emoji.
 - **Reasonable prose is fine.** The Skyline 10-line cap is a
   Skyline-team convention.
 - **Cross-references** to related PRs are welcome
@@ -2000,8 +2002,8 @@ it. When a PR is otherwise ready (review findings settled, the
 `Osprey Windows .NET` unit build green), it must run before human review / merge.
 
 **Every dataset, and on each one the modes its SkipModes leaves.** No `-Skip*`
-switch is passed (`-SkipResume`, `-SkipWarmRerun`, `-SkipRehydrate`,
-`-SkipHpcChain` all default false), so the config runs whatever `regression.ps1`
+switch is passed (`-SkipResume`, `-SkipWarmRerun`, `-SkipHpcChain` all default
+false), so the config runs whatever `regression.ps1`
 currently defines per dataset - which since 2026-09-12 is deliberately NOT every
 mode everywhere. Do not maintain a mode list here: this sentence read "mode1/2/3"
 for months after modes 4-6 were added, and was quoted back as fact.
@@ -2035,21 +2037,31 @@ dataset's `SkipModes` now carries that decision for every mode, not just mode 2,
 mode emits NO summary line - a designed omission is not a SKIP. **SKIP now means a `-Skip*`
 switch was passed**, i.e. the run was not a full one.
 
+**And since 2026-09-29 (#4728): pipeline behavior is not a leg here at all.** Resume,
+rehydrate, rescore-resume, the alternate pass-2 arm, diagnostics regeneration and pay-later
+(modes 5 and 7-11) moved to `Osprey.Test\SubsetPipelineTest.cs`, which runs them on subset
+data on every commit, each red-checked against the defect its leg was written for. What
+stays is results at real-data scale: goldens, FDR bounds, and mode 3's chain against
+straight-through at full size. A new check of pipeline behavior goes in the subset tests;
+the rule is at the top of `regression.ps1`.
+
 | dataset | what it is FOR | runs | cut |
 |---|---|---|---|
-| `StellarLibDecoy` | the recommended product path, and the cheapest full-coverage config | everything | - |
-| `Stellar` | the default product path (generated decoys, unit, no diagnostics) | 1, 1c, 2, 3, 4, 5, 6 | 8, 9 |
-| `StellarGenDecoyEntrap` | the decoy-construction oracle | 1, 1b, 1c, 2, 4, 6, 12 | 3, 5, 7, 8, 9, 11 |
-| `Astral` | hram scoring and the gap-fill rows only hram produces | 1, 1b, 1c, 3, 4, 6 | 2, 5, 7, 8, 9, 11 |
+| `StellarLibDecoy` | the recommended product path, and the cheapest full-coverage config | 1, 1b, 1c, 2, 3, 4, 6 | - |
+| `Stellar` | the default product path (generated decoys, unit, no diagnostics) | 1, 1c, 4, 6 | 2, 3 |
+| `StellarGenDecoyEntrap` | the decoy-construction oracle | 1, 1b, 1c, 2, 4, 6, 12 | 3 |
+| `Astral` | hram scoring and the gap-fill rows only hram produces | 1, 1b, 1c, 3, 4, 6 | 2 |
 
-Summary-line counts on a green `-Dataset All`: **Stellar 17, StellarLibDecoy 27,
-StellarGenDecoyEntrap 12, Astral 14.** A short count is what distinguishes an aborted run.
-Mode 2 stays on `StellarGenDecoyEntrap` because it carries the second half of mode 12 (the
-FDRBench resume identity); mode 3 stays on Astral because it is the only leg that ships hram's
-gap-fill rows across a process boundary. Wall time went from 65 min to ~44 min on the dev box,
-with the lanes rebalanced to Astral+StellarGenDecoyEntrap | Stellar+StellarLibDecoy.
+Summary-line counts on a green `-Dataset All`: **Stellar 5, StellarLibDecoy 17,
+StellarGenDecoyEntrap 12, Astral 14** (48 total). A short count is what distinguishes an
+aborted run. Mode 2 stays on `StellarGenDecoyEntrap` because it carries the second half of
+mode 12 (the FDRBench resume identity); mode 3 stays on Astral because it is the only leg
+that ships hram's gap-fill rows across a process boundary, at a scale no subset reproduces.
+Measured 2026-09-29 on the dev box: 33:41 wall, lanes 1,288 s (Stellar+StellarLibDecoy) and
+2,020 s (Astral+StellarGenDecoyEntrap). The Astral lane is the wall; the Stellar-only smoke
+test went from 839 s of legs to ~260 s.
 
-The accounting below predates the cut and is kept for the asymmetries that are about the
+The accounting below predates both cuts and is kept for the asymmetries that are about the
 DATASETS rather than the mode list - which library each is searched against, which tier-2
 bound applies, and what reads a leg's log.
 
@@ -2094,11 +2106,12 @@ release fired on every leg that HOLDS the library, and it inspects **eight** leg
 four KINDS its header lists - the `--task PerFileRescoring` kind expands to one check per
 file stem (three of them), and `resume.log` (mode 2) and `rehydrate.log` (mode 5) are
 among the rest. Its check list is gated on `SkipModes` for exactly this reason, and it
-reports its leg count on PASS so a shrinking set is visible. Under the sparse matrix a green
-`-Dataset All` shows `PASS (8 leg(s))` on Stellar and StellarLibDecoy, `PASS (6 leg(s))` on
-Astral (no resume, no rehydrate) and `PASS (2 leg(s))` on StellarGenDecoyEntrap (straight and
-resume only - it runs no HPC chain and no rehydrate). Cutting a mode therefore silently
-shrinks mode 6's evidence too; that count is how you see it.
+reports its leg count on PASS so a shrinking set is visible. Since #4728 a green
+`-Dataset All` shows `PASS (7 leg(s))` on StellarLibDecoy, `PASS (6 leg(s))` on Astral,
+`PASS (2 leg(s))` on StellarGenDecoyEntrap and `PASS (1 leg(s))` on Stellar (straight only).
+The own-sidecar rehydrate's release moved with mode 5: `SubsetPipelineTest` asserts it,
+#4650 count oracle included. Cutting a mode therefore silently shrinks mode 6's evidence
+too; that count is how you see it, and the cut's subset twin must pick up what it read.
 
 `StellarGenDecoyEntrap` is the only leg that can catch a decoy-construction
 regression: it is the sole configuration where `DecoyGenerator` runs AND an

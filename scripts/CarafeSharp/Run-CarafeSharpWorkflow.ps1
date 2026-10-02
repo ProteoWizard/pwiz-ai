@@ -47,6 +47,11 @@
 .PARAMETER Device
     gpu (default; a CPU-only CarafeSharp build falls back to the CPU) or cpu.
 
+.PARAMETER RtModel
+    chronologer (default, as CarafeSharp's) or alphapeptdeep (Carafe's): CarafeSharp's -rt_model for the
+    initial library (stage 2) and the fine-tuning and final library (stage 4/5). Always passed, so a run
+    names its RT model whatever the build's default; it needs a CarafeSharp with -rt_model.
+
 .EXAMPLE
     pwsh -File ./ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1 -Preflight `
         -MzmlSourceDir D:\GitHub-Repo\maccoss\osprey\example_test_data\stellar -OspreyExe <exe>
@@ -62,7 +67,7 @@
 #requires -Version 7
 [CmdletBinding()]
 param(
-    [ValidateSet('Stellar', 'Astral')] [string]$Dataset = 'Stellar',
+    [ValidateSet('Stellar', 'Astral', 'ZTScan')] [string]$Dataset = 'Stellar',
     [string]$Stages = '1a,1b,2,3,4-5,6',
     [string]$WorkDir,
 
@@ -84,6 +89,10 @@ param(
     [int]$Threads = 16,
     [string]$ProteinFdr = '0.01',
     [switch]$ModelDiagnostics,
+    # Osprey's spectra cache, default <WorkDir>\spectra-cache. A .spectra.bin depends only on its input
+    # file, so a second round of the loop over the same runs can share the first round's.
+    [string]$CacheDir,
+    [ValidateSet('alphapeptdeep', 'chronologer')] [string]$RtModel = 'chronologer',
     [switch]$Preflight
 )
 
@@ -101,7 +110,7 @@ $testFilesRoot = if ($env:OSPREY_TESTFILES_DIR) { $env:OSPREY_TESTFILES_DIR }
 
 $presets = @{
     Stellar = @{
-        SourceDir   = Join-Path $testFilesRoot 'stellar'
+        SourceDir   = [IO.Path]::Combine($testFilesRoot, 'stellar')
         Fasta       = 'hela-filtered.fasta'
         Files       = @(
             'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20',
@@ -117,7 +126,7 @@ $presets = @{
         MaxPepMz    = '900'
     }
     Astral = @{
-        SourceDir   = Join-Path $testFilesRoot 'astral'
+        SourceDir   = [IO.Path]::Combine($testFilesRoot, 'astral')
         Fasta       = 'uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta'
         Files       = @(
             'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49',
@@ -135,11 +144,36 @@ $presets = @{
         MinPepMz    = '400'
         MaxPepMz    = '900'
     }
+    # SCIEX ZenoTOF 8600 ZT Scan DIA, as Osprey.DemuxTool's joint solve writes it (the scanning
+    # quadrupole demultiplexed; each spectrum a 1.18 Th bin): the vendor files cannot be searched
+    # until --demux reads ZT Scan, so the data is the tool's mzML (-InputFormat mzML). Charge 2-4 and
+    # the sweep's 392-900 m/z, as the DIA-NN ZT Scan library. SCIEX's beam-type CID reads as CID, which
+    # CarafeSharp would train in its resonance CID slot, so the instrument is given; the NCE is the
+    # pretrained library's (training takes the run's own collision energy).
+    ZTScan = @{
+        SourceDir   = 'C:\temp\osprey-runs\ztscan\full\joint_m2_ms1'
+        Fasta       = 'Z:\demux-test-data\ZenoTOF8600-ZTScan\uniprot_human_march2026_yeastENO1_contam_ADpeps.fasta'
+        Files       = @(
+            '250814_ZTScan_100spd_A_1_A1',
+            '250814_ZTScan_100spd_A_2_D1',
+            '250814_ZTScan_100spd_A_3_G1')
+        TrainIndex  = 1
+        Resolution  = 'hram'
+        FragTol     = '20'
+        FragUnit    = 'ppm'
+        CarafeItol  = '20'
+        CarafeItolU = 'ppm'
+        MinPepMz    = '392'
+        MaxPepMz    = '900'
+        MaxCharge   = '4'
+        CarafeExtra = @('-ms_instrument', 'SciexTOF', '-nce', '27')
+    }
 }
 $preset = $presets[$Dataset]
+$maxCharge = if ($preset.MaxCharge) { $preset.MaxCharge } else { '3' }
 
 if (-not $MzmlSourceDir) { $MzmlSourceDir = $preset.SourceDir }
-if (-not $InputFasta)    { $InputFasta = Join-Path $MzmlSourceDir $preset.Fasta }
+if (-not $InputFasta)    { $InputFasta = if ([IO.Path]::IsPathRooted($preset.Fasta)) { $preset.Fasta } else { Join-Path $MzmlSourceDir $preset.Fasta } }
 if (-not $MzmlNames)     { $MzmlNames = $preset.Files | ForEach-Object { "$_.$InputFormat" } }
 if ($TrainFileIndex -lt 0) { $TrainFileIndex = $preset.TrainIndex }
 if (-not $WorkDir) {
@@ -254,13 +288,14 @@ $libGen = @(
     '-enzyme', 'NoCut', '-miss_c', '1', '-fixMod', '1', '-varMod', '0', '-maxVar', '1', '-clip_n_m',
     '-minLength', '7', '-maxLength', '35',
     '-min_pep_mz', $preset.MinPepMz, '-max_pep_mz', $preset.MaxPepMz,
-    '-min_pep_charge', '2', '-max_pep_charge', '3',
+    '-min_pep_charge', '2', '-max_pep_charge', $maxCharge,
     '-lf_frag_mz_min', '200', '-lf_frag_mz_max', '1960', '-lf_top_n_frag', '20',
     '-lf_min_n_frag', '2', '-lf_frag_n_min', '2', '-lf_type', 'blib',
     '-se', 'Osprey', '-decoy_prefix', 'decoy_', '-nm', '-nf', '4', '-min_n', '4',
     '-valid', '-na', '0', '-fast')
+if ($preset.CarafeExtra) { $libGen += $preset.CarafeExtra }
 
-$cacheDir = Join-Path $WorkDir 'spectra-cache'
+$cacheDir = if ($CacheDir) { $CacheDir } else { Join-Path $WorkDir 'spectra-cache' }
 $ospreyCommon = @(
     '--decoys-in-library',
     '--resolution', $preset.Resolution,
@@ -282,9 +317,12 @@ $newLib       = Join-Path $WorkDir 'osprey_new_library'
 $projectDir   = Join-Path $WorkDir 'osprey_project'
 $libraryBlib  = 'carafe_spectral_library.blib'
 
+# Always passed: the RT model is the run's choice, not whatever the CarafeSharp build defaults to.
+$rtModelArgs = @('-rt_model', $RtModel)
+
 $digestCommon = @(
     '-enzyme', '2', '-miss_c', '1', '-minLength', '7', '-maxLength', '35',
-    '-min_pep_charge', '2', '-max_pep_charge', '3')
+    '-min_pep_charge', '2', '-max_pep_charge', $maxCharge)
 
 if ($StageList -contains '1a') {
     Invoke-Step 'Stage 1a: train FASTA (target+decoy)' $CarafeSharpExe (@(
@@ -302,7 +340,7 @@ if ($StageList -contains '1b') {
 
 if ($StageList -contains '2') {
     Invoke-Step 'Stage 2: initial library' $CarafeSharpExe (@(
-        '-db', $trainFasta, '-o', $initialLib, '-pairing_manifest', $trainPairing) + $libGen)
+        '-db', $trainFasta, '-o', $initialLib, '-pairing_manifest', $trainPairing) + $libGen + $rtModelArgs)
 }
 
 if ($StageList -contains '3') {
@@ -316,7 +354,7 @@ if ($StageList -contains '3') {
 if ($StageList -contains '4-5') {
     Invoke-Step 'Stage 4/5: fine-tune + final library' $CarafeSharpExe (@(
         '-db', $libFasta, '-i', $trainBlib, '-ms', $trainMzml, '-o', $newLib,
-        '-pairing_manifest', $libPairing) + $libGen + @('-tf', 'all'))
+        '-pairing_manifest', $libPairing) + $libGen + @('-tf', 'all') + $rtModelArgs)
 }
 
 if ($StageList -contains '6') {

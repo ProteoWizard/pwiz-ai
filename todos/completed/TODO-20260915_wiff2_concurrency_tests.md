@@ -6,7 +6,7 @@
 - **Checkout**: `C:\proj\pwiz-work1` (now on the branch above)
 - **Module**: `pwiz` (pwiz-sharp vendor reader tests; nothing under `pwiz_tools/Skyline`)
 - **Created**: 2026-09-15
-- **Status**: PR open, awaiting CI and review
+- **Status**: Completed - PR #4670 merged 2026-09-18 into the port branch
 - **GitHub Issue**: [#4674](https://github.com/ProteoWizard/pwiz/issues/4674) - the leak fix itself, filed
   2026-09-15 and assigned to Matt (the wiff2 reader is his). Related filed issues: #4638 (retry latch blames AddFramingZeros for
   any SDK failure), #4639 (profile data stamped MS_centroid_spectrum after the centroid latch
@@ -118,7 +118,7 @@ Windows check the fixture IS found so the tests actually execute somewhere.
       6/6 red, reworked test 8/8 red. Refcounted: 8/8 green. See the 2026-09-15 entry
 - [x] `/code-review max`: 15 findings, the real ones folded into `b5e25403b8`
 - [x] PR #4670 opened
-- [ ] Watch the Linux and Windows .NET checks (the no-vendor build passes locally; TeamCity
+- [x] Watch the Linux and Windows .NET checks (the no-vendor build passes locally; TeamCity
       confirms the fixture is found on the Windows agent so the tests execute, not Inconclusive)
 - [x] Leave the leak itself alone here: handed to Matt as #4674 with the refcounted fix, the
       measurements, and the multi-sample gap; #4670's churn test is its acceptance test
@@ -206,3 +206,20 @@ Measured before filing, all on the stash's refcounted shared api vs current code
 
 Also checked: Matt's #4640 is the `.wiff` (Clearcore2) side and does not touch `Wiff2File.cs`;
 #4670 merged onto it locally is 10/10. Replied to his comment on #4670 accordingly.
+
+### 2026-09-18 - Merged
+
+PR #4670 merged into `Skyline/work/20260612_net8_port` as `94fc7222a4`. CI passed before the merge,
+which closes the remaining CI task.
+
+## Resolution
+
+**Status**: Completed - merged into the port branch (reaches master with #4619)
+
+The two `.wiff2` concurrency regression tests
+(`Reader_Sciex_wiff2_SecondReaderSurvivesFirstReaderDispose`,
+`Reader_Sciex_wiff2_ConcurrentReadersSurviveChurnOnSamePath`) are now in
+`pwiz-sharp/pwiz/test/Sciex.Tests/ReaderSciexTests.cs`. They fail against the bare shared-api leak
+fix and pass against the refcounted one. That makes them the acceptance test for the wiff2 SDK
+leak fix, which stays open as #4674 (assigned to Matt). #4638 and #4639 remain open as separate
+wiff2 defects. Also added: `ai/scripts/PwizSharp/Build-PwizSharp.ps1`.

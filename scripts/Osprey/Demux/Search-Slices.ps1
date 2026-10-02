@@ -5,12 +5,13 @@ param(
     [Parameter(Mandatory)] [string]$Mzml,  # comma-separated: pwsh -File cannot pass an array
     [switch]$ScanningSwath,
     [string]$Extra = '',  # extra DIA-NN flags, space-separated
-    [int]$Threads = 4
+    [int]$Threads = 4,
+    [string]$Library = ''  # default: the pretrained Carafe library, <run root>\ztscan\library\ztscan_carafe_lib.parquet
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Demux-Roots.ps1')
 $diann = 'C:\DIA-NN\2.3.2\diann.exe'
-$lib = Join-Path $runRoot 'ztscan\library\ztscan_carafe_lib.parquet'
+$lib = if ($Library) { $Library } else { Join-Path $runRoot 'ztscan\library\ztscan_carafe_lib.parquet' }
 $outDir = Join-Path $runRoot "ztscan\slices\diann\$Arm"
 New-Item -ItemType Directory -Force (Join-Path $outDir 'tmp') | Out-Null
 $argv = @()

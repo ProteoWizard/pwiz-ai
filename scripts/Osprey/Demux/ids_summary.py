@@ -8,7 +8,7 @@ import argparse
 
 import pandas as pd
 
-R = 0.99986
+R = 0.99986  # the Carafe ZT Scan library's entrapment ratio; --r for another library
 
 
 def fdp(n_target, n_entrap):
@@ -16,10 +16,15 @@ def fdp(n_target, n_entrap):
 
 
 def main():
+    global R
     ap = argparse.ArgumentParser()
     ap.add_argument('--rt', type=float, nargs=2, default=[0, 1e9])
+    ap.add_argument('--r', type=float, default=R,
+                    help='entrapment to target ratio of the searched library, when not the Carafe ZT Scan one (a '
+                         'library DIA-NN predicts from the peptide FASTA keeps 1:1 only with --cut "", no digest)')
     ap.add_argument('arms', nargs='+')
     args = ap.parse_args()
+    R = args.r
     print('%-12s %-30s %9s %7s %9s %7s' % ('arm', 'run', 'prec', 'FDP', 'peptides', 'FDP'))
     summary = []
     for arm in args.arms:

@@ -35,7 +35,8 @@ SERVER = "skyline.ms"
 # folder -> scheduled duration (minutes); runs shorter than duration-10 are candidates
 FOLDERS = {
     "Nightly x64": 540, "Release Branch": 540, "Integration": 540,
-    "Performance Tests": 720, "Release Branch Performance Tests": 720, "Integration With Perf Tests": 720,
+    "Integration Leak Detection": 720,
+    "Performance Tests": 720, "Release Branch Performance Tests": 720, "Integration with Perf Tests": 720,
 }
 HARDWARE_CODES = {
     "-1073741819": "ACCESS_VIOLATION",       # 0xC0000005

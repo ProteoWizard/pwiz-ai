@@ -1073,3 +1073,23 @@ when pass 2 opens the first real `.wiff2`. Static floor, same SDK; noted on #467
   minutes later: a false rising signal manufactured entirely by the other run, on the very axis this
   branch exists to make trustworthy. The build guard had looked at the checkout, found it idle, and
   its silence was read as "the machine is idle".
+
+### 2026-10-02 - Clean leak-checking nightlies; TODO completed
+
+Brendan: Integration Standard and Leak Checking runs on many machines now pass fully, with no
+failures and no leaks. The 2026-10-02 report shows all four Integration runs at 0 fail and 0 leak.
+That was the goal of this TODO: leak reporting on the .NET 10 port branch that can be trusted.
+
+## Resolution
+
+**Status**: Completed - fixes merged into the port branch (#4659 `6ef677076e`, #4667, #4677), reach master with #4619
+
+* #4659 fixed two .NET 10 leaks and excluded the wiff2 SDK leak from leak checking. The wiff2
+  leak fix itself is #4674 (Matt); its acceptance tests landed in #4670.
+* #4667 fixed ThermoCancelImportTest in the Integration nightly.
+* #4677 fixed the Private Bytes axis by running `GCCollectionMode.Aggressive` before each sample.
+  Together with the quiet sample point, this made the Total axis usable.
+* The test-run wrapper now refuses to start memory-measuring runs while another test process
+  is running anywhere on the machine.
+* Still parked, not merged: `Skyline/work/20260911_leak_estimator` (estimator and diagnostics
+  tooling). Pick it up from this TODO if the leak axes start reporting noise again.

@@ -28,6 +28,14 @@
     Run only this test category (e.g. Astral, Cuda); needs build.ps1 in the checkout.
 .PARAMETER RequireData
     Fail when a test did not run (no test data); needs build.ps1 in the checkout.
+.PARAMETER TestData
+    Fetch or Verify the test data packages before building (build.ps1 -TestData): Fetch downloads
+    and extracts the packages the run reads that are missing, each zip checked against
+    testdata.json; Verify checks every file against its package's MANIFEST.sha256 and the committed
+    pretrained_models.zip against its pin. Needs build.ps1 in the checkout.
+.PARAMETER TestDataPackage
+    With -TestData, the package ids (testfiles, export, astral, astral-export) or all. By default
+    the default test pass's packages, plus -TestCategory's.
 .PARAMETER Summary
     Suppress detailed build output.
 .PARAMETER SourceRoot
@@ -37,6 +45,8 @@
     pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -Configuration Debug -RunTests
 .EXAMPLE
     pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests -TestName ModelParity
+.EXAMPLE
+    pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -TestData Fetch -RunTests -RunInspection -RequireData
 #>
 param(
     [ValidateSet("Debug", "Release")]
@@ -48,6 +58,9 @@ param(
     [string]$Torch = "cpu",
     [string]$TestCategory = $null,
     [switch]$RequireData = $false,
+    [ValidateSet("Fetch", "Verify")]
+    [string]$TestData = $null,
+    [string[]]$TestDataPackage = $null,
     [switch]$Summary = $false,
     [string]$SourceRoot = $null
 )
@@ -102,11 +115,26 @@ $verbosity = if ($Summary) { "quiet" } else { "minimal" }
 # checkouts (before build.ps1) build here, as they always did.
 $inRepoBuild = Join-Path $carafeRoot 'build.ps1'
 if (Test-Path -LiteralPath $inRepoBuild) {
-    pwsh -NoProfile -File $inRepoBuild -Configuration $Configuration -Torch $Torch -Verbosity $verbosity -NoTests
+    $buildArgs = @('-Configuration', $Configuration, '-Torch', $Torch, '-Verbosity', $verbosity, '-NoTests')
+    if ($TestData) {
+        $buildArgs += @('-TestData', $TestData)
+        if ($TestCategory) {
+            $buildArgs += @('-TestCategory', $TestCategory)
+        }
+        if ($TestDataPackage) {
+            # One comma-separated argument: pwsh -File passes each token as a separate value.
+            $buildArgs += @('-TestDataPackage', ($TestDataPackage -join ','))
+        }
+    }
+    pwsh -NoProfile -File $inRepoBuild @buildArgs
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
 } else {
+    if ($TestData) {
+        Write-Error "-TestData needs pwiz_tools/CarafeSharp/build.ps1, which this checkout does not have."
+        exit 1
+    }
     # A backend switch leaves the other backend's native files in bin/, where they would be
     # loaded instead of the ones this build restored. Record the backend and clean on change.
     $backendStamp = Join-Path $carafeRoot "CarafeSharp/obj/torch-backend-$Configuration.txt"

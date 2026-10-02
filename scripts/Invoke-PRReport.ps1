@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Runs Claude Code PR-activity report and emails results.
 

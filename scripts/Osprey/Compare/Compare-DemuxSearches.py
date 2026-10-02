@@ -25,6 +25,7 @@ Example:
 
 import argparse
 import csv
+import glob
 import os
 import re
 import sys
@@ -64,16 +65,31 @@ def named(value):
 
 
 def read_stats(directory):
+    # Named after the search's -o: output.stats.tsv for -o output.blib, results.stats.tsv for results.blib.
+    path = os.path.join(directory, "output.stats.tsv")
+    if not os.path.exists(path):
+        found = sorted(glob.glob(os.path.join(directory, "*.stats.tsv")))
+        if len(found) != 1:
+            raise FileNotFoundError(f"expected one *.stats.tsv in {directory}, found {len(found)}")
+        path = found[0]
     rows = {}
-    with open(os.path.join(directory, "output.stats.tsv"), newline="") as f:
+    with open(path, newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
             rows[row["Run"]] = (int(row["Precursors"]), int(row["Peptides"]), int(row["Proteins"]))
     return rows
 
 
+def fdrbench_path(directory):
+    # <dir>/fdrbench.tsv, or <dir>/FDRBench/FDRBench-Input.tsv as Run-CarafeSharpWorkflow.ps1 writes it.
+    for path in (os.path.join(directory, "fdrbench.tsv"), os.path.join(directory, "FDRBench", "FDRBench-Input.tsv")):
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError(f"no fdrbench.tsv or FDRBench/FDRBench-Input.tsv in {directory}")
+
+
 def entrapment_ratio(directory):
     counts = {"target": 0, "p_target": 0}
-    path = os.path.join(directory, "fdrbench.tsv.pairing.tsv")
+    path = fdrbench_path(directory) + ".pairing.tsv"
     with open(path, newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
             kind = row["peptide_type"]
@@ -85,7 +101,7 @@ def entrapment_ratio(directory):
 def read_fdrbench(directory, mz_range):
     """(precursor key -> (q, is_entrapment)), (peptide -> (best q, is_entrapment)), within mz_range."""
     precursors, peptides = {}, {}
-    with open(os.path.join(directory, "fdrbench.tsv"), newline="") as f:
+    with open(fdrbench_path(directory), newline="") as f:
         for row in csv.DictReader(f, delimiter="\t"):
             if mz_range is not None:
                 mz = precursor_mz(row["mod_peptide"], row["charge"])

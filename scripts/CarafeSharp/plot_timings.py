@@ -26,6 +26,7 @@ COLORS = {
     'setup': '#9aa3b0',
     'ms2': '#3a4787',
     'rt': '#4f86b6',
+    'ccs': '#8fb9d9',
     'assembly': '#c6b27a',
     'writing': '#2b8a6c',
     'convert': '#9aa3b0',
@@ -61,25 +62,26 @@ def segment_labels(ax, y, height, x0, width, value, color):
 
 # ---- library step -------------------------------------------------------------------------------
 
-PHASES = re.compile(r'MS2 ([\d.]+) s, RT ([\d.]+) s, assembly ([\d.]+) s, writing ([\d.]+) s')
+# A -ccs library also reports its CCS (ion mobility) prediction time, between RT and assembly.
+PHASES = re.compile(r'MS2 ([\d.]+) s, RT ([\d.]+) s(?:, CCS ([\d.]+) s)?, assembly ([\d.]+) s, writing ([\d.]+) s')
 
 
 def read_library_run(folder):
     text = open(os.path.join(folder, 'run.log'), encoding='utf-8', errors='replace').read()
     wall = float(re.findall(r'exit=0 wall=(\d+)s', text)[-1])
     batch = [line for line in text.splitlines() if line.startswith('Batch ')][-1]
-    ms2, rt, assembly, writing = (float(v) for v in PHASES.search(batch).groups())
+    ms2, rt, ccs, assembly, writing = (float(v) if v is not None else 0.0 for v in PHASES.search(batch).groups())
     finished = re.search(r'Writing finished [\d.]+ s after prediction: \d+ precursors, writing ([\d.]+) s', text)
     overlapped = finished is not None
     if overlapped:
         writing = float(finished.group(1))
-    serial = ms2 + rt + assembly + (0 if overlapped else writing)
-    return {'wall': wall, 'ms2': ms2, 'rt': rt, 'assembly': assembly, 'writing': writing,
+    serial = ms2 + rt + ccs + assembly + (0 if overlapped else writing)
+    return {'wall': wall, 'ms2': ms2, 'rt': rt, 'ccs': ccs, 'assembly': assembly, 'writing': writing,
             'setup': wall - serial, 'overlapped': overlapped}
 
 
 def median_run(runs):
-    keys = ('wall', 'ms2', 'rt', 'assembly', 'writing', 'setup')
+    keys = ('wall', 'ms2', 'rt', 'ccs', 'assembly', 'writing', 'setup')
     merged = {k: statistics.median(r[k] for r in runs) for k in keys}
     merged['overlapped'] = runs[0]['overlapped']
     merged['n'] = len(runs)
@@ -102,7 +104,7 @@ def plot_library(runs_dir, out):
         rows = [('Before', base, 2.2), ('After', new, 1.0)]
         for label, run, y in rows:
             x = 0.0
-            for key in ('setup', 'ms2', 'rt', 'assembly') + (() if run['overlapped'] else ('writing',)):
+            for key in ('setup', 'ms2', 'rt', 'ccs', 'assembly') + (() if run['overlapped'] else ('writing',)):
                 width = run[key] / 60
                 ax.barh(y, width, left=x, height=0.62, color=COLORS[key], edgecolor='white', linewidth=0.6)
                 segment_labels(ax, y, 0.62, x, width, width, COLORS[key])
@@ -112,7 +114,7 @@ def plot_library(runs_dir, out):
             if run['overlapped']:
                 # The writer works in bursts across the whole prediction, one chunk behind it.
                 start = run['setup'] / 60
-                span = (run['ms2'] + run['rt'] + run['assembly']) / 60
+                span = (run['ms2'] + run['rt'] + run['ccs'] + run['assembly']) / 60
                 ax.barh(y - 0.52, span, left=start, height=0.22, color=COLORS['writing'], alpha=0.45,
                         edgecolor=COLORS['writing'], hatch='////', linewidth=0.6)
                 ax.text(start + span + ax.get_xlim()[1] * 0.012, y - 0.52,
@@ -125,9 +127,12 @@ def plot_library(runs_dir, out):
         ax.set_title(f"{ds}: {base['wall']:.0f} s to {new['wall']:.0f} s, {speedup:.2f}x faster",
                      loc='left', fontsize=11.5, fontweight='bold', color=INK)
         ax.set_xlabel('minutes (median of runs)', fontsize=9, color=MUTED)
-    handles = [plt.Rectangle((0, 0), 1, 1, color=COLORS[k]) for k in ('setup', 'ms2', 'rt', 'assembly', 'writing')]
-    fig.legend(handles, ['Other (FASTA, peptide forms, models, finishing)', 'MS2 prediction', 'RT prediction', 'Spectrum assembly',
-                         'Library writing'], loc='lower center', ncol=5, frameon=False, fontsize=8.5,
+    legend = [('setup', 'Other (FASTA, peptide forms, models, finishing)'), ('ms2', 'MS2 prediction'), ('rt', 'RT prediction')]
+    if any(run['ccs'] > 0 for arm in arms.values() for run in arm):
+        legend.append(('ccs', 'CCS prediction'))
+    legend += [('assembly', 'Spectrum assembly'), ('writing', 'Library writing')]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=COLORS[k]) for k, _ in legend]
+    fig.legend(handles, [label for _, label in legend], loc='lower center', ncol=len(legend), frameon=False, fontsize=8.5,
                bbox_to_anchor=(0.5, 0.0))
     fig.tight_layout(rect=(0, 0.06, 1, 1))
     fig.savefig(out, dpi=160, facecolor='white')

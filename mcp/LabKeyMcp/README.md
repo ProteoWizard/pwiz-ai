@@ -94,14 +94,14 @@ query_table(
 
 | Tool | Description |
 |------|-------------|
-| `get_daily_test_summary(report_date)` | Query all 6 folders, save report to ai/.tmp/ |
+| `get_daily_test_summary(report_date)` | Query all 7 folders, save report to ai/.tmp/ |
 | `save_test_failure_history(test_name, start_date, container_path)` | Collect stack traces, detect patterns |
 | `query_test_runs(days, max_rows)` | Query recent test runs with pass/fail/leak counts |
 | `get_run_failures(run_id)` | Get failed tests and stack traces for a run |
 | `get_run_leaks(run_id)` | Get memory and handle leaks for a run |
 | `save_run_log(run_id, part)` | Save test log section (full/git/build/testrunner/failures) |
 
-The `get_daily_test_summary(report_date)` tool is the primary entry point for daily test review. It queries all 6 test folders, saves a full markdown report to `ai/.tmp/nightly-report-YYYYMMDD.md`, and returns a brief summary with action items.
+The `get_daily_test_summary(report_date)` tool is the primary entry point for daily test review. It queries all 7 test folders, saves a full markdown report to `ai/.tmp/nightly-report-YYYYMMDD.md`, and returns a brief summary with action items.
 
 For **historical analysis** (How long has this been failing? When did it last pass?), use `query_table` with `testruns_detail` and a date range:
 ```
@@ -187,6 +187,7 @@ a session pointed at `http://localhost:8080` can still reach
 | Release Branch | `/home/development/Release Branch` |
 | Release Branch Performance Tests | `/home/development/Release Branch Performance Tests` |
 | Integration | `/home/development/Integration` |
+| Integration Leak Detection | `/home/development/Integration Leak Detection` |
 | Integration with Perf Tests | `/home/development/Integration with Perf Tests` |
 
 ## Discovery Workflow

@@ -112,6 +112,11 @@
     # Re-measure Stage 7 alone against a completed run (~25 min, not 8.5 h).
     .\Run-SeaAd.ps1 -Task SecondPassFDR -LinkFrom D:\test\...\<completed run> -Fresh
 
+.PARAMETER TrainingExport
+    Add --training-export: PerFileRescoring writes each run's <stem>.training.parquet. To
+    regenerate the exports of a finished run without re-analysis, give -Task TrainingExport
+    -Resume on that run's directory instead.
+
 .PARAMETER NoModelDiagnostics
     Turn OFF the --model-diagnostics HTML report, which is on by default here. Leave it on
     unless you have a reason: it is the only place pass-1 entrapment FDP is reported today.
@@ -153,7 +158,7 @@ param(
     [int]$Threads = 30,
     [int]$ParallelFiles = 0,
     [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring',
-                 'CompactPerFileRescoring','SecondPassFDR')]
+                 'CompactPerFileRescoring','SecondPassFDR','TrainingExport')]
     [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
@@ -173,6 +178,7 @@ param(
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,
+    [switch]$TrainingExport,
     [switch]$NoPerfStats,
     [switch]$WhatIf
 )

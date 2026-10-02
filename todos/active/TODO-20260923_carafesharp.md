@@ -7,8 +7,13 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4707](https://github.com/ProteoWizard/pwiz/issues/4707)
 - **Module**: `osprey`
-- **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch)
-- **Companion**: `ai/todos/active/TODO-20260923_osprey_carafe_export.md` (the Osprey-side PR this depends on)
+- **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch). Since 2026-09-30 it
+  also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR.
+  Osprey's training export, folded in for a while, landed on its own as #4708 (squash-merged into the base, 2026-10-01).
+  Since 2026-10-01 the diff is CarafeSharp and the trigger configs only (Brendan's request).
+- **Osprey PR**: [#4757](https://github.com/ProteoWizard/pwiz/pull/4757), the `osprey.ms2_mass_analyzers` footer,
+  split out of #4717 (branch `Skyline/work/20261001_osprey_ms2_analyzers`, worktree `D:\Dev\pwiz-osprey-analyzers`).
+- **Companion**: `ai/todos/completed/TODO-20260923_osprey_carafe_export.md` (the Osprey side, #4708, completed); #4757 is tracked here
 
 ## Objective
 
@@ -25,6 +30,100 @@ shared-fragment evidence; every library is .blib; results should come out close 
 
 Approved plan: `C:\Users\maccoss\.claude\plans\i-would-like-to-starry-gizmo.md` (machine-local);
 the durable parts are below and in `pwiz_tools/CarafeSharp/docs/`.
+
+## How to build and test (current as of 2026-09-30; #4717 carries the port, the writer and Osprey's export)
+
+The user-facing version is `pwiz_tools/CarafeSharp/docs/04-testing.md` and #4717's "How to build and test"
+section. This one adds what is specific to this machine and to the review.
+
+**Pre-commit gates** (run both on #4717; `D:\Dev\pwiz` is its checkout, the scripts' default `-SourceRoot`):
+```
+$env:CARAFESHARP_TESTDATA = 'D:\test\carafesharp export check'
+pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests -RunInspection -RequireData   # 73/73, inspection 0
+pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection       # 638/638, inspection 0
+```
+- `Build-CarafeSharp.ps1` wraps the in-repo `pwiz_tools/CarafeSharp/build.ps1` (`build.sh` on Linux, `build.bat`),
+  adding the CRLF fix and the ReSharper inspection. Options: `-Torch cuda`, `-TestCategory Astral|Cuda`,
+  `-TestName`, `-RequireData` (needed: `dotnet test` counts Inconclusive as a pass), `-Coverage`.
+- Without `CARAFESHARP_TESTDATA` the parity tests look in `C:\Users\maccoss\Downloads\Perftests`, which does
+  NOT hold the packages on this machine, so 8 tests do not run and `-RequireData` fails.
+- Astral: `build.ps1 -TestCategory Astral -RequireData` (4 tests, about 12 min) needs the Astral package:
+  point `CARAFESHARP_TESTDATA` at `D:\test\carafesharp-testdata-pkg`.
+
+**Test data** (Panorama, anyone can download):
+<https://panoramaweb.org/_webdav/MacCoss/software/%40files/perftests/>; URLs, sizes and SHA-256 in
+`pwiz_tools/CarafeSharp/testdata.json`.
+- `carafesharp-testfiles-v1.zip` 1.5 GB (5.6 GB extracted), `carafesharp-testfiles-astral-v1.zip` 4.8 GB
+  (22 GB), `carafesharp-export-v1.zip` 67 MB (Osprey's format 2 export of Stellar `_21`, from the .raw).
+- Extracted here: `D:\test\carafesharp export check` (testfiles + export, from the published zips, path with
+  spaces: the gate's root), `D:\test\carafesharp-testdata-pkg` (all three), `D:\test\carafesharp-testdata-dev`.
+- Built by `ai/scripts/CarafeSharp/New-CarafeSharpTestData.ps1` from `D:\test\carafesharp-testdata-staging`.
+  Never republish under the same name (extraction never overwrites): a change gets a new version and a new
+  `testdata.json` entry. The upload is the developer's: the auto-mode classifier blocks Claude's upload.
+
+**Golden regression** (category `Regression`, not in the default pass): `pwsh -File
+pwiz_tools/CarafeSharp/regression.ps1` (12 min on this i9 CPU), `-Torch cuda`, `-Export <parquet>` (another
+export; its hash is INFO), `-CompareRun <folder>`, `-CreateGolden` (clean tree; `-Force` to replace). Golden:
+`regression.data/stellar` (format 3: training-table hashes ignore line endings). Runs land in
+`TestResults/regression`. `-Leg Chained` (a943ca409b): builds Osprey, searches its committed Stellar subset
+with `--training-export`, trains CarafeSharp on the exports, and checks each tool's part with no golden; no test
+data, about 2 min. 2026-09-30: exports of 118/159/159 precursors, second-pass run q, 107 MS2 spectra and 179 RT
+forms trained, a 358-precursor library; identical on a rerun; one export removed fails it.
+
+**CUDA** here: GTX 1650 (Turing, compute 7.5), driver 591.86. `-Torch cuda` builds into `bin-cuda` and the
+CUDA pass sets `CARAFESHARP_REQUIRE_CUDA=1`. GPU fine-tuning is not bit-reproducible; the CPU one is.
+
+**Linux (WSL2 Ubuntu 22.04):**
+- `~/carafesharp-wsl`: blobless partial clone of `file:///mnt/d/Dev/pwiz`, sparse (CarafeSharp,
+  `Shared/Lib/Parquet`, `pwiz-sharp/scripts`); fetch the branch into it before a Linux run.
+- `~/osprey-wsl`: sparse worktree for Osprey (Osprey, Shared, pwiz-sharp, `libraries/7zz`,
+  `pwiz/data/common/*.obo`, the `pwiz_aux` vendor archives and UIMF); `git -c submodule.recurse=false`.
+- A non-login shell needs `export PATH=$HOME/.dotnet/tools:$PATH DOTNET_ROOT=/usr/lib/dotnet` for pwsh.
+- Point `SKYLINE_DOWNLOAD_PATH` at the Windows Downloads so nothing downloads twice. Read SQLite results
+  from a copy on `D:` (over `\wsl.localhost` they report "database is locked").
+
+**Osprey side** (the training export): `--training-export` writes `<stem>.training.parquet` per run
+(contract: `pwiz_tools/Osprey/docs/22-training-export.md`). For `.raw` input build Osprey with the vendor
+readers: `Build-Osprey.ps1 -VendorReader` (in-repo: `build.ps1 -IAgreeToVendorLicenses`), and snapshot the
+exe to `D:\test\osprey-runs\_bin\<tag>` before a long run. Osprey's own gates are in
+`TODO-20260923_osprey_carafe_export.md` ("Gates"). End to end: `ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1`
+(`.raw` by default, `-InputFormat mzML`).
+
+**CI:** no TeamCity config builds CarafeSharp. `scripts/misc/vcs_trigger_and_paths_config.py` and
+`nightly_trigger_and_paths_config.py` route `pwiz_tools/CarafeSharp/.*` to no build (Matt's request), so
+the CarafeSharp gate above is the only one; the Osprey PR configs (Windows and Linux .NET) cover the Osprey
+files. The Osprey Perf/Regression run is manual: Brendan triggers it. We have no TeamCity access (its guest
+REST API shows build status, read only); an agent-connection cancel retries by itself, so check before pushing.
+
+**Coverage:** `build.ps1 -Coverage` (dotCover 2023.3.3 from `.config/dotnet-tools.json`, Windows only);
+the `.dcvr` and a JSON report go to `TestResults`. On #4717's d3b12cd989 with the data (73 tests, 2026-09-30):
+CarafeSharp 95.4%, Core 94.2%, IO 98.8%, Models 97.5%, Proteome 98.3%, Training 99.6% of statements (5,421 of
+5,532). The regression runs as a subprocess, so it is not in these numbers. Every uncovered statement with its
+source line: `ai/.tmp/sessions/20260927-osprey-export/coverage-uncovered-lines.txt`, from
+`dotCover report /ReportType=DetailedXML` (in Git Bash set `MSYS_NO_PATHCONV=1`, or `/Source=` becomes a path)
+and `coverage_lines.py` beside it.
+
+**Test gaps (2026-09-30), for Brendan's coverage review.** Items 1-6, the behavior among the 111 uncovered
+statements, are covered by #4717's 4a0de4e019 (`TestModelTrainerPredictsLibrary`, and additions to
+`TestModelDirectory`, `TestModifiedPeptideNotation`, `TestLibraryWriterThread`): training into a library
+from this run's model (fails with `PreferSafetensors` reverted), the training run's instrument,
+`use_finetuned_for_prediction` as Python's `bool()`, phospho notation (checked against Carafe's `AIGear.java`),
+the trainer's warnings, and a second `Dispose`. After them: 74/74, and 94.2-99.6% per assembly with and without
+the data (CarafeSharp 98.3%, Proteome 99.0% with it); `docs/04-testing.md` has both columns (fd4185456f).
+Left uncovered on purpose: argument checks, `ToString`, the CUDA path, and a defensive rethrow in
+`LibraryChunkWriter.Add` that one thread cannot reach.
+
+The golden regression passed on the merged head d3b12cd989, every exact comparison SAME; the Osprey golden
+passed on TeamCity (Perf/Regression, 77da8e6465, Osprey files identical to #4717's).
+
+Beyond statement coverage:
+- [x] **The chained leg** is `regression.ps1 -Leg Chained` (a943ca409b), on Osprey's committed Stellar subset.
+  The full chain on a real run (digest and initial library too) is left for later: it needs the Osprey
+  test files and hours on the CPU.
+- **No CI runs CarafeSharp** (no TeamCity config; the triggers route it to nothing). Needs a config from the
+  TeamCity owners (Brendan, Matt).
+- **Model-folder writes are not atomic** (review follow-up): a rerun into an existing `-o` can mix two runs'
+  models. A fix and its test.
 
 ## Decisions
 
@@ -250,7 +349,7 @@ CUDA test pass can run there too.
 
 **Plan** (the reference data goes where the Osprey regression data lives):
 
-- [ ] Share the reference data. Per the section below, plus what it does not list:
+- [x] Share the reference data (2026-09-28/30: the four packages below). Per the section below, plus what it does not list:
   - `example_test_data\stellar\carafe-osprey-entrapment\` (`CARAFESHARP_CARAFE_REFERENCE`,
     `CARAFESHARP_CARAFE_FINETUNED`, `CARAFESHARP_STAGE1_REFERENCE`)
   - `example_test_data\stellar\carafe-osprey\`
@@ -259,13 +358,18 @@ CUDA test pass can run there too.
   - `example_test_data\astral\` Carafe outputs, for the end-to-end workflow
   - The Stellar `_21` training export (`CARAFESHARP_OSPREY_TRAINING_EXPORT`) and the mzML can be
     regenerated from the Osprey regression data.
-- [ ] Package it as a Perftests zip next to `osprey-testfiles-mzML-v2` on the Panorama
-      `perftests` folder (e.g. `carafesharp-testfiles.zip`), unpacking to `<Downloads>\Perftests\`.
-- [ ] Default the parity tests to that folder when the `CARAFESHARP_*` variables are unset, as
+- [x] Package it as a Perftests zip next to `osprey-testfiles-mzML-v2` on the Panorama
+      `perftests` folder (e.g. `carafesharp-testfiles.zip`), unpacking to `<Downloads>\Perftests\`:
+      `carafesharp-testfiles-v1`, `carafesharp-testfiles-astral-v1`, `carafesharp-export-v1`,
+      `carafesharp-export-astral-v1` (`testdata.json`).
+- [x] Default the parity tests to that folder when the `CARAFESHARP_*` variables are unset, as
       `regression.ps1` finds its data; keep the variables as overrides. With the data present,
       "every test runs" becomes the normal state, not an opt-in.
-- [ ] `Build-CarafeSharp.ps1`: a switch to fetch or verify the test data and the pinned
-      `pretrained_models.zip`, and a CUDA test pass.
+- [x] `Build-CarafeSharp.ps1`: a switch to fetch or verify the test data and the pinned
+      `pretrained_models.zip`, and a CUDA test pass. CUDA: `-Torch cuda` (2026-09-29). The models are
+      committed. Fetch/verify (2026-10-01): `build.ps1 -TestData Fetch|Verify` (and the wrapper's),
+      `scripts/TestData.ps1`; fetched into an empty folder from Panorama, the testfiles package's 286
+      files match its manifest; negative checks (changed file, no manifest, truncated zip, unknown id).
 - [ ] Later, not blocking merge: a TeamCity config that builds CarafeSharp and runs the tier-1
       tests; point the `vcs_trigger_and_paths_config.py` entry at it.
 
@@ -289,10 +393,175 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
 
   Both were extracted with Expand-ZipNoOverwrite into a path with spaces on C:, with 0 checksum
   mismatches; the CPU suite ran 68/68 from there and Astral 4/4. The default <Downloads>/Perftests root works.
-- [ ] export-v1: regenerate from .raw with the landed #4708 Osprey (a dry-run zip from the June mzML export
-  is in carafesharp-testdata-zips-dryrun, NOT for publishing). Then upload all three with approval and fill
-  testdata.json's url/sha256/size.
-- [ ] Golden regression.ps1 (section 5), WSL2 verification (section 7), final Carafe comparison (section 8).
+- [x] export-v1 regenerated (2026-09-28 night): the #4708 Osprey a5d15e6a4f (vendor reader, snapshot
+  `D:\test\osprey-runs\_bin\prB-a5d15e6a4f-vendor`) searched the Stellar `_21` .raw with the June settings
+  (`D:\test\osprey-runs\carafe-export-v2-raw`, 9 min): 22,761 rows, format 2, second-pass run q.
+  CarafeSharp reads formats 1 and 2 (6b9288f6fa). Masking parity 85.0%, 12,378 kept by both (June 85.0% / 12,404).
+  Zip `D:\test\carafesharp-testdata-zips\carafesharp-export-v1.zip`, 67,127,081 B, SHA-256
+  1e2071d453c6fe963b93ea70ea803c06d138f0452358ccb8baeb5f0714d76fb2; 68/68 with -RequireData from the extracted
+  zip (path with spaces); a missing MANIFEST fails. #4719 70/70 after merging.
+- [x] carafesharp-export-v1.zip uploaded by the developer (2026-09-29); an anonymous download matches
+  (67,127,081 B, 1e2071d4...). testdata.json filled (#4717 d8c39922f3). The regression branch merged into #4717
+  (f2eb050dee; 69/69 with -RequireData, the golden check run PASSED) and #4717 into #4719 (d1d9745b40; 71/71, and
+  #4719's own regression run is SAME on every exact comparison). Brendan told on #4717 (comment 5893153501).
+- [x] PTM follow-ups (2026-09-28 night): Carafe CANNOT predict id 28 (Gln->pyro-Glu of Q) or 27: it names them
+  `Gln->pyro-Glu@Q` / `Glu->pyro-Glu@E`, alphabase has only the `^Any N-term` forms, so peptdeep raises
+  KeyError (verified with the installed 2.2.0). CarafeSharp's refusal is parity. A recipe to support both
+  correctly anyway is in `ai/.tmp/agent-carafe-mod28-status.md` (name, site-0 blib position, notations, tests).
+  Phospho: trains in general mode like Carafe's general mode (TestPhosphoTrainingRows, 2ebf6288f2); Carafe's
+  `-mode phosphorylation` (phos models, H3PO4 neutral-loss channels, site-probability filter) is not ported;
+  two of its parts need Osprey evidence it does not export (neutral-loss ions, localization scores).
+- [x] Final Carafe comparison (section 8, 2026-09-29 night): both arms re-run on Stellar and Astral with the #4708
+  Osprey (`D:\test\carafesharp-runs\e2e-final`); `docs/05-carafe-comparison.md` rewritten (#4717 837dfd057e),
+  published for Brendan at https://claude.ai/artifact/DNXEQD1iq4Xp4a8bKwuLUT. Stellar 3-run search: 31,158 / 28,422 /
+  4,285 at 0.62% combined FDP.
+- [x] Golden regression (section 5), from `nightlywork/carafesharp-regression`, now merged into #4717: Stellar golden recreated from export-v1 (724e449d25, CPU 12 min; a second Windows run is all
+  SAME); `-Export` (04be4e098f); training-table hashes ignore line endings (f81d9a0d67, 370b8e509d); docs 84504b04ca.
+- [x] Linux from .raw (section 7): Osprey #4708 built in WSL2 (`~/osprey-wsl`, sparse: Osprey, Shared, pwiz-sharp,
+  libraries/7zz, pwiz/data/common/*.obo, pwiz_aux vendor archives + UIMF) read the `_21` .raw in 332 s: the same
+  22,761 precursors; `score` and 4 polish statistics differ in the last digit. CarafeSharp's regression on Linux passed
+  on that export and on the packaged one; both runs' training tables match the Windows golden's in content, and their
+  models are byte-identical to each other.
+- [x] Linux CUDA leg (2026-09-29, developer approved the download): WSL2 GTX 1650, `build.sh -Torch cuda` Cuda test
+  passed; `regression.ps1 -Torch cuda` passed against the CPU golden (sampled cosine median 0.99981, 3.6 min).
+- [x] pyro-Glu (ids 27, 28) supported (#4717 d98fc9a9bf): alphabase `^Any_N-term` names, .blib on residue 1, TSV
+  refused, training mapper maps it; m/z exact vs Carafe, predictions within 2e-5 of Carafe's Python given the names.
+  #4719 4af488ad12, 73/73.
+- [x] Masking question (developer, 2026-09-29): across 403,267 ions both tools matched, Carafe's correlation and
+  corr_polish mostly agree (1+ medians 0.894 / 0.873; 2+ 0.399 / 0.361). The illustrated extremes were chosen as the
+  worst disagreements. AVFDETYPDPVR: two components; Carafe's refined window covered only the rising edge and its best
+  ion (b10++) belongs to the second one. Zeros in Osprey's XICs raise corr_polish failures (1+ 11.9% -> 27.6%, 2+
+  42.3% -> 56.5% from no zeros to 2+ zeros). Holes: 1+ Osprey 31.5% / Carafe 28.7%; 2+ 54.6% / 34.1%. Carafe's are
+  not a better measurement: it centers each XIC on the library spectrum's peak m/z, not the theoretical one, so its
+  window follows whatever peak is there (holes grow 29.8% -> 42.2% with the offset).
+  - RESOLVED, not a CarafeSharp defect (developer, 2026-09-29): a null test on 800 Stellar 2+ precursors (a null
+    m/z a few Th away, clear of the ladder) finds 2+ fragments barely above null: a peak at the apex 56.4% vs 60.1%,
+    well-correlated 9.0% vs 6.7%. 1+ fragments stand clear: 92.9% vs 67.4%, 50.6% vs 8.0%. So 2+ matches of 2+
+    precursors on the Stellar are mostly interference; Carafe's extra weak 2+ library fragments are learned from it.
+    Recorded in 05-carafe-comparison.md (#4717 f6441873c7) and both artifacts.
+  - Masking artifact has a "Carafe masks more" group: AYVSTLMGVPGR, DDSFFGETSHNYHK (Carafe's refined windows wider,
+    16 vs 6 and 14 vs 7 scans), VFQVEYAMK (b3+ XIC centered 0.34 Th off, missing the real peak).
+  Scripts: `ai/.tmp/sessions/20260927-osprey-export/maskviz/` (`corr_global.py`, `corr_audit.py`, `holes_global.py`,
+  `null_ions.py`).
+- [x] Nightly trigger (Matt's #4717 comment, 2026-09-30): `pwiz_tools/CarafeSharp/.*` no-op added to
+  `scripts/misc/nightly_trigger_and_paths_config.py` too (6ced1ad1fd), so a CarafeSharp PR no longer queues the
+  nightly Skyline perf suite.
+- [x] Saved fine-tuned models (#4717 704b3e2159, 2026-09-30; for Nick's model selection in Skyline, and the
+  command line). Developer's decisions: extension `.carafemodel`; every training run writes
+  `carafe_fine_tuned_model.carafemodel` into `-o`; with `-model` the command line's m/z window and fragment range
+  apply, and NCE, instrument and rt_max come from the training run unless given (rt_max because the fine-tuned RT
+  model predicts on the training gradient). `-model_info <file>` prints the training description. The manifest
+  records each run's instrument, fragmentation and collision-energy histograms, NCE, RT range, isolation and MS2
+  windows, fragment tolerance, precursors by charge, Osprey version and hashes; the training data's size, charges,
+  peptide lengths and modifications; settings; held-out metrics. Format and usage: `docs/06-saved-models.md`
+  (written for CarafeSharp, its GUI and Skyline). Classes: `CarafeModelFile`, `CarafeModelTraining` (Proteome).
+  - Over the training library's window the saved model reproduces it byte for byte (358/358); over a wider window
+    intensities differ by <= 8.6e-7 (float32 rounding with a batch's other peptides), so the chained leg's check
+    compares m/z, RT and fragments exactly and intensities within 1e-5.
+  - Skyline (Nick): reads `manifest.json` from the zip to list models (Skyline is .NET Framework, so it cannot
+    reference the net10 CarafeSharp assemblies), and runs `CarafeSharp -model` to predict.
+- [x] Activation and analyzer lists (#4717 170497a150 Osprey, 332f2911ac CarafeSharp, 2026-09-30; developer's request:
+  Stellar and Tribrid LIT trained apart from Orbitrap, and resonance CID apart from HCD after fine-tuning). It replaced
+  27a0ba6595's LIT and CID instrument slots. The developer's point was that the 8 one-hot slots limit only the
+  pretrained model: a fine-tuned model can carry any number of values, as its metadata. Developer's decisions:
+  - separate lists for activation (`beam-CID`, `reCID`; not "CID", which is resonance CID to Thermo and beam-type to
+    Sciex and Bruker) and analyzer (`Orbitrap`, `LIT`, `ToF`; the Astral's MS2 is ToF);
+  - a run mixing either is refused (`-activation`, `-analyzer` override).
+  Design (01-model-spec.md):
+  - `meta_nn.acquisition_nn`, Linear(activations + analyzers -> 7, no bias), added to peptdeep's instrument/NCE
+    layer.
+  - Zero in any model that never trained it, so pretrained predictions are bit-identical.
+  - Columns are named in the safetensors metadata (`carafesharp.activations`, `carafesharp.analyzers`) and placed by
+    name on load.
+  - Stellar and TribridOT remain peptdeep's Lumos family.
+  Osprey's footer gained `osprey.ms2_mass_analyzers` (pwiz's per-scan configuration analyzer). The pretrained slots
+  5-7 were never trained (cosine -0.14 with Lumos, measured with Carafe's `~/.carafe/.venv` torch), which is why
+  the slot design copied Lumos.
+  - Found by `TestAcquisitionColumns`: `NormalizeToApex` had dropped the example's activation and analyzer, so the
+    layer never trained.
+  - Runs of one activation and one analyzer train both columns alike (the same updates), so a Stellar-only model
+    cannot tell beam-CID from LIT.
+  - Stellar golden: isolated leg PASSED; pretrained metrics identical, fine-tuned MS2 within 3.5e-4, library peaks +0.33%. The beam-CID and LIT columns came out equal and the other three zero. The golden is not recreated yet, so its exact comparisons report the MS2 model and library hashes as DIFFERS (information only).
+  - Open: no reCID, Tribrid LIT or ToF data here to fine-tune on beyond the Stellar HCD subset.
+- [x] `-model` as a training start (#4717 2f01e28fc1, 2026-09-30). The developer asked whether a fine-tuned model
+  can start another fine-tune: yes, since it differs from the pretrained one only in its weights.
+  - Both models start from the saved model's, and its MS2 model is the baseline the new one must beat.
+  - A new MS2 model that loses leaves the saved one in the new file (`ms2_base.safetensors`, which
+    `CarafeModelDirectory.GetMs2ModelPath` falls back on), not the pretrained one. Carafe's `-ms2_model` is unchanged.
+  - `base_models` in the manifest names the lineage, newest first, by file and SHA-256.
+  - `-tf all` only; refused with `-ms2_model`.
+  - Tests: `TestModelTrainerFromSavedModel` (learning rate 0 forces the loss; two mutation checks fail it).
+  - Chained leg: the further fine-tune's start RT model scores exactly as the first run's fine-tuned RT model did
+    (R2 0.9475898538461316).
+- [x] Collision energy in eV (#4717 8dfe512b59, 2026-09-30; developer's request: read it from the files, not `-nce`).
+  pwiz reports every vendor's energy as MS:1000045 in eV, but Thermo's value is the filter's NCE (pwiz's TODO in
+  SpectrumList_Thermo.cpp). So Osprey's `osprey.collision_energies` holds NCE for Thermo and eV for Sciex, Bruker,
+  Agilent and Waters, unmarked, and Carafe trains at that number either way.
+  - Developer's decision: calibrate the NCE for eV runs, as AlphaPeptDeep did for its SCIEX TripleTOF fine-tune.
+    The start MS2 model scores the run's training spectra at NCE 20-40; the highest median PCC wins (`NceCalibration`).
+  - Thermo keeps its NCE (Carafe's precedence); `-nce` overrides for eV runs.
+  - `RunCollisionEnergy` records the source and unit, and saved models carry `nce_source` and `collision_energy_unit`.
+  - Tests:
+    - `TestNceCalibration`: spectra the start model predicts at NCE 33 calibrate to 33. A SCIEX run trains and
+      predicts at its calibrated NCE, and `-nce` names it instead.
+    - `TestCollisionEnergies`: the per-vendor rules.
+  - Open: no Sciex, Bruker, Agilent or Waters data here to calibrate on for real. A run from the developer would show
+    whether the calibrated NCE beats a fixed one on held-out metrics.
+- [x] Goldens remade for the acquisition layer (2026-09-30; developer: "We would need to do it for the Astral
+  data too"). The developer uploaded carafesharp-export-astral-v1.zip on 2026-10-01; an anonymous download matches
+  its SHA-256, and its URL is in testdata.json (6d613f6f6a).
+  - Stellar: c7147d8414. Fine-tuned MS2 within 3.5e-4, peaks +0.33%; two runs of 8dfe512b59 byte-identical.
+  - Astral: a new dataset (249d01cc82); golden a9a430044d. CPU, 35 min: 123,399 precursors, MS2 COS
+    0.9771 -> 0.9868, RT R2 0.8595 -> 0.9972. Its own run compares SAME everywhere.
+    - The export is the Stellar recipe: Osprey #4708 a5d15e6a4f from the _55 .raw, Carafe's initial library and
+      train pairing, `--training-export-xics`, 86,886 precursors. It is in `D:\test\osprey-runs\carafe-export-astral-raw`.
+    - Carafe's June Astral library merges a decoy with an identical target in 7 precursors (71 rows). This Osprey
+      refuses those against the manifest (a row with any decoy accession is a decoy), so they are removed from
+      a copy. The other 17 mixed-accession precursors the manifest calls decoys, and they are kept. The README
+      lists the 7.
+    - Two comparator fixes were needed, and Stellar's comparison is unchanged by either:
+      - 214c60d242: 4 entrapment targets have an entrapment decoy whose sequence is also the group's decoy (or
+        target). The planner pairs that one precursor once, so the check counts them apart.
+      - 4e68f62ac8: the sample modulus scales with the library (Astral 70), under the 2 MB cap.
+    - Carafe's digest repeats 39 sequences across records (111,322 records, 111,277 distinct in the subset).
+- [x] Merged the PR base `Skyline/work/20260612_net8_port` after #4708's squash merge and #4725 (514cd3f189,
+  2026-10-01). The add/add conflicts in 6 of #4708's files were three-way merges on #4708's head 23389009a0: this
+  branch's analyzers footer plus the base's training-export progress reporting. Osprey 638/638, CarafeSharp 80/80,
+  and the chained leg passed after it. #4717 is MERGEABLE/CLEAN.
+- [x] Whole target/decoy pairs (#4717 8362e74827, golden adac75f657, 2026-10-01). The developer asked how to fix the
+  one extra unpaired Astral GPU target, and chose to drop both members.
+  - Cause: the library drops a precursor below `-lf_min_n_frag` independently for target and decoy (Carafe's
+    rule); the GPU only moved one decoy across it. Osprey's `TargetDecoyCompetition` counts a target with no
+    decoy as a winner.
+  - `DecoyPairGate` (Proteome) writes a pair only whole. Expected members are counted up front; a pair is
+    decided when all of them are offered. Ambiguous sequences (I/L twins, shared partners) pass ungated.
+  - Astral: 10 left out on the CPU (6 targets, 4 decoys) and 14 on the GPU. Stellar: none.
+  - The regression now fails on any unpaired target; parity subtracts the gate's drops.
+- [x] Split #4717 at Brendan's request (2026-10-01). He asked that the diff show only CarafeSharp and the trigger
+  configs, and that the description's #4708 sections go back to #4708.
+  - The Osprey footer change (170497a150) moved to #4757 (aea0df65af, base the port branch, label osprey). Osprey
+    638/638 and inspection 0 there. `/code-review high` found 7 doc and test issues, all fixed. The main one: pwiz
+    joins a configuration's analyzers with "/", so the keys are a Stellar's `radial ejection linear ion trap` and an
+    Astral's MS2 `quadrupole/asymmetric track lossless time-of-flight analyzer`. CarafeSharp's substring match
+    already handles that.
+  - #4717 a7bf9f70be restores the four Osprey files to the base and points docs 01 and 06 at #4757. CarafeSharp
+    81/81, inspection 0, and the chained Stellar leg PASSED, with the analyzer taken from the model (LIT).
+  - #4717's description lost its #4708 sections (#4708 already holds them, including R8 coverage). #4708 was not
+    edited.
+  - Inspection on a fresh worktree needs CommonUtil and `Shared/ProteowizardWrapper` built with
+    `-p:Platform=x64` first (the #4725 out-of-solution reference gap; worked around locally, nothing changed there).
+  - Brendan's CHANGES_REQUESTED review on #4717 stands until he re-reviews.
+- [x] Ion mobility for timsTOF (`-ccs`, 2026-10-01/02, developer's request): merged into #4717 (016105f3ba).
+  Details, the parity against Carafe's Python and jar, and the unchanged-without-`-ccs` workflow A/B are in
+  `ai/todos/active/TODO-20261001_carafesharp_tims_im.md`.
+- [x] Brendan's review item 3, test data fetch/verify (7cd987b21f): `build.ps1 -TestData Fetch|Verify`. #4717's two
+  answered Copilot threads resolved (2026-10-01). Brendan not yet told that his items and the split are done.
+- [x] Copilot review of #4717 (2026-10-02, after the CCS merge): a saved model's entry names were not checked, so
+  `-model` could write outside its temporary folder; fixed in d1b7738ce1 (`CarafeModelFile.Open` refuses a name that is
+  not a plain file name). The entrapment FASTA commit-order comment answered as by design. Both threads resolved.
+- [x] #4717 carries both features (developer, 2026-10-02): the Chronologer RT model commits (d79aae9e3c..0f10709372,
+  pushed from another session) merged with the fix in 8d8fcfb128; 89/89 with the test data, inspection 0; the PR
+  description has a Chronologer section.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
@@ -423,17 +692,10 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
         with Osprey 0a0b744 the project search picked C = 0.1, 1, 1 and gave 20,263 precursors (the known C coin
         flip); Stage 6 rerun with a vendor-enabled #4703 build (`csel-f9aa0dd-vendor`) gave 31,246 / 28,390 / 4,302
         at 0.61% combined FDP, matching the mzML runs (31,460 / 28,637 / 4,338 and 31,104 / 28,240 / 4,326).
-      - **When #4717 squash-merges:** #4719 is stacked on its branch, so restack it or its diff will show #4717
-        again. `<old base>` is the #4717 commit #4719 is built on (`b70b34d0ab` unless #4717 is merged in later):
-        ```
-        git fetch origin
-        git rebase --onto origin/Skyline/work/20260612_net8_port <old base> Skyline/work/20260925_carafesharp_write_speed
-        git push --force-with-lease origin Skyline/work/20260925_carafesharp_write_speed
-        gh pr edit 4719 --repo ProteoWizard/pwiz --base Skyline/work/20260612_net8_port
-        ```
-        GitHub retargets the base by itself if #4717's branch is deleted, but the rebase is still needed. Then
-        repoint the two plot links in the PR body (`raw/<sha>/pwiz_tools/CarafeSharp/docs/performance/...png`) at
-        the rebased head: the old SHAs are no longer on the branch after the force push.
+      - **Folded into #4717 (2026-09-30), Brendan's request.** #4719 contained all of #4717, so #4717's branch was
+        fast-forwarded to #4719's head (`271e08e052`); #4717's body took #4719's summary, results and test plan,
+        and GitHub marked #4719 merged into it. No restack is needed any more. The worktree `D:\Dev\pwiz-carafesharp-train` and the
+        `Skyline/work/20260925_carafesharp_write_speed` branch are left for cleanup.
       - Follow-up for Osprey: reading the 8 GB Astral `.raw` took 899 s of per-file scoring vs 541 s from mzML.
 
    **The speedups:** two library-writing changes in one commit set, both with byte-identical output.

@@ -5,10 +5,10 @@
 - **Base**: `Skyline/work/20260612_net8_port` (PR goes `--base` the port branch; update via `git merge origin/Skyline/work/20260612_net8_port`)
 - **Checkout**: `C:\proj\pwiz-work1` (all Build-*/Run-* calls need `-SourceRoot C:/proj/pwiz-work1`)
 - **Created**: 2026-09-27
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4360](https://github.com/ProteoWizard/pwiz/issues/4360)
 - **Module**: `osprey`
-- **PR**: [#4727](https://github.com/ProteoWizard/pwiz/pull/4727)
+- **PR**: [#4727](https://github.com/ProteoWizard/pwiz/pull/4727) (merged 2026-09-28)
 
 ## Objective
 
@@ -26,13 +26,13 @@ skips downstream stages and reduces coverage.
 
 ## Tasks
 
-- [ ] msconvert a narrow slice of one Stellar file (2-3 min RT window and/or a few isolation windows)
-- [ ] Subset the `.tsv` library to peptides eluting in that window (+ enough for decoys/FDR)
-- [ ] Binary-search the size down until Percolator still yields a non-empty, structurally valid `output.blib` (the floor)
-- [ ] Commit the subset(s) (target a few MB); add an `OspreySharp.Test` integration test asserting a non-empty, well-formed blib (RefSpectra/RetentionTimes present, sane counts)
-- [ ] Wire into the per-commit `-RunTests` suite; confirm runtime stays seconds
-- [ ] Repeat with an Astral-style HRAM subset + 2-3 files (`HramStrategy`, `Ms1ScoringByproduct`, MS1/isotope, multi-file reconciliation)
-- [ ] Measure delivered coverage vs the full run
+- [x] msconvert a narrow slice of one Stellar file (2-3 min RT window and/or a few isolation windows)
+- [x] Subset the `.tsv` library to peptides eluting in that window (+ enough for decoys/FDR)
+- [x] Binary-search the size down until Percolator still yields a non-empty, structurally valid `output.blib` (the floor)
+- [x] Commit the subset(s) (target a few MB); add an `OspreySharp.Test` integration test asserting a non-empty, well-formed blib (RefSpectra/RetentionTimes present, sane counts)
+- [x] Wire into the per-commit `-RunTests` suite; confirm runtime stays seconds
+- [x] Repeat with an Astral-style HRAM subset + 2-3 files (`HramStrategy`, `Ms1ScoringByproduct`, MS1/isotope, multi-file reconciliation)
+- [x] Measure delivered coverage vs the full run
 
 ## Not Covered (stays with overnight regression)
 
@@ -41,11 +41,11 @@ consensus, gap-fill), and scientific validity.
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
+- **Test name**: `SubsetPipelineTest` (7 methods) and `FdrTest.TestFrozenModelScorerIsThreadSafe`
 - **Test project**: OspreySharp.Test
 - **Fails on master**: n/a - this issue adds new coverage rather than fixing a defect;
   the test itself is the deliverable
-- **Passes on fix**: (pending)
+- **Passes on fix**: yes - 615 tests on Windows and Linux CI (#4727); `TestFrozenModelScorerIsThreadSafe` fails in round 0 on the pre-fix `FrozenModelScorer` (#4706)
 
 ## Progress Log
 
@@ -120,3 +120,16 @@ the ported code.
   (full Stellar 0/242,814, Astral 1/1,565,450). Fixed test isolation (OSPREY_DUMP_* restore after
   --diagnostics, explicit --parallel-files 1 baseline, MeanBestN set directly, per-dataset recovery floor,
   top-6 m/z cache cleared per command line). Regression follow-up: issue #4728.
+
+### 2026-09-28 - Merged
+
+PR #4727 merged into `Skyline/work/20260612_net8_port` as commit fcd59201a3. Shipped the committed
+StellarSubset.zip (4.1 MB) and AstralSubset.zip (4.9 MB), `SubsetPipelineTest` running the pipeline
+in-process on every commit (regression modes 1-5, HPC chain, libdecoy/entrapment, diagnostics, FDRBench,
+HRAM, `--parallel-files`, unusable decoys, option variants; ~25 s on Linux CI), CI coverage 83.5%
+(from 59.1%). Fixed the `--parallel-files` FrozenModelScorer race (#4706) and added the generated-decoy
+check (warn on any unusable decoy, refuse above 1%). Perf/Regression (TeamCity 4191901) green.
+Deferred to follow-up issues: #4729 (SecondPassFDR no-rescore failure and stale per-run 2nd-pass files;
+the attempted fix was withdrawn after code review) and #4728 (cut regression.ps1 mechanics legs now
+covered here). The peak-sharpness finding stays on local branch `nightlywork/reconciled-peak-sharpness`
+(worktree C:\proj\pwiz-sharpfix) pending a design decision; see ai/.tmp/handoff-20260928.md.

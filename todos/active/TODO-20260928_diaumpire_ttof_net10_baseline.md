@@ -1,13 +1,29 @@
 # TODO-20260928_diaumpire_ttof_net10_baseline.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260928_bruker_empty_combined_mobility` (off the .NET 10 port branch
-  `Skyline/work/20260612_net8_port`, PR #4619). Local only on NICKSH's `I:\git_i\sky_net10tests`,
-  not pushed. Holds one commit, `f32382a14e`, the Bruker reader fix below.
-- **Module**: `skyline` (the expected-values change); the Bruker commit is `pwiz`
+- **Branch**: `Skyline/work/20260928_diaumpire_ttof_net10_baseline` (off the .NET 10 port branch
+  `Skyline/work/20260612_net8_port`, PR #4619, after #4735 merged into it)
+- **Module**: `skyline`
 - **Created**: 2026-09-28
-- **Status**: Blocked on a machine-dependent result; needs investigation on another computer
-- **PR**: (none)
+- **Status**: PR open; waiting for Nick to confirm the new values on other machines (NICKSH)
+- **PR**: #4740 closed 2026-09-29 in favor of chambm's #4738 (same TestDiaTtofDiaUmpireTutorial.json
+  byte-for-byte, plus the FullFileset re-record and CleanUpPersistentDir in a `finally`)
+
+## Progress (2026-09-29, MACS2)
+
+- The Bruker fix went in separately as #4735, squash-merged into `20260612_net8_port` (`553a145871`).
+- MACS2 (2x Xeon Gold 6354, AVX-512) ran `TestDiaTtofDiaUmpireTutorial` in record mode on a fresh
+  download of DIA-TTOF data and got the NIGHTLY values exactly: IrtIntercept -66.861, the same 8
+  coefficients, FinalTargetCounts 213/283/1697. So three machines agree and NICKSH is the outlier.
+- Leading theory for NICKSH: the stale 8/23 `collinsb_I180316_001_SW-A-diaumpire.mz5` in its
+  persistent dir. Outside record mode the test keeps the first `*-diaumpire.*` file and reuses it,
+  so NICKSH searched old pseudo-spectra for SW-A. Not yet confirmed.
+- Committed MACS2's recorded JSON as `05a25461eb` (coefficients and MassErrorStats only).
+  `TestDiaTtofDiaUmpireTutorialFullFileset.json` (NoNightlyTesting) was not re-recorded.
+- MACS2's kept intermediate files: `E:\Users\nicksh\SkylineDownloadPath2\Tutorials\DIA-TTOF\DIA-TTOF\DIA\`
+- Remaining: normal-mode verification run on MACS2; Nick reruns on NICKSH after deleting
+  `*-diaumpire*`, `comet.*`, `make-pin.pin`, `percolator.*` from `D:\Downloads\Tutorials\DIA-TTOF\DIA`;
+  then the hygiene items in step 4 below.
 
 ## The failure
 

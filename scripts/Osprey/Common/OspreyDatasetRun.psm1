@@ -203,7 +203,7 @@ function Invoke-OspreyDatasetRun {
         # -LinkFrom this makes a single-phase re-measurement cost only that phase - e.g. Stage 5
         # at 163 files is ~75 min instead of the 18 h a full run takes.
         [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                     'SecondPassFDR', 'ModelDiagnostics')]
+                     'SecondPassFDR', 'ModelDiagnostics', 'TrainingExport')]
         [string]$Task,
         # Link the stages up to AND INCLUDING -Task, instead of strictly before it.
         #
@@ -229,7 +229,7 @@ function Invoke-OspreyDatasetRun {
         # line but the inputs. That is the shape the 446-run 91.1 GB Stage-7 measurement was
         # taken on (issue #4486), so it is the shape its re-measurement has to use.
         [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                     'SecondPassFDR', 'ModelDiagnostics')]
+                     'SecondPassFDR', 'ModelDiagnostics', 'TrainingExport')]
         [string]$LinkUpTo,
         [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
         # First-pass EXPERIMENT-score aggregation: '' (the max default) or 'mean-best-<N>'.
@@ -278,6 +278,10 @@ function Invoke-OspreyDatasetRun {
         [switch]$Fresh,
         [switch]$Resume,
         [switch]$NoModelDiagnostics,
+        # --training-export: PerFileRescoring writes each run's <stem>.training.parquet (the
+        # per-run training data CarafeSharp fine-tunes on). Off by default. To regenerate the
+        # exports of a finished run without re-analysis, use -Task TrainingExport -Resume.
+        [switch]$TrainingExport,
         [switch]$NoPerfStats,
         [switch]$WhatIf
     )
@@ -503,7 +507,7 @@ function Invoke-OspreyDatasetRun {
     # same thing: these runs, artifacts over there. Osprey accepts an input that is absent
     # when its scores parquet is on disk, which is the state a staged phase directory is in.
     $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR',
-                            'ModelDiagnostics')
+                            'ModelDiagnostics', 'TrainingExport')
     $useScores = $Task -and ($POST_SCORING_TASKS -contains $Task)
     if ($useScores -and -not $LinkFrom -and -not $Resume) {
         throw ("-Task $Task consumes per-file artifacts, not raw input. Pass -LinkFrom <a completed " +
@@ -525,23 +529,19 @@ function Invoke-OspreyDatasetRun {
     }
     if ($Task) { $cliArgs += @('--task', $Task) }
     if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
-    # A post-scoring --task leg used to read .scores.parquet out of $OutDir with no raw input
-    # path at all, so it could not resolve the .spectra.bin cache - and Stage 6 rescore
-    # REQUIRES that cache. Since --input-scores retired the leg names its runs by their data
-    # files and resolves the cache beside them on its own, so this is now an explicit
-    # restatement of the default rather than the only way to get it. Kept because it is
-    # exactly what -CacheDir means for these legs, and losing it costs a 13-minute hydrate
-    # that fails on the first file.
-    # The cache sits beside its source in the data directory (ai/docs/osprey-run-layout.md:
-    # "it is not a separate tree"), so point the leg at it rather than hard-linking GB of
-    # cache into every worker directory. Without this a PerFileRescoring leg runs the whole
-    # hydrate and compaction and only then fails on the first file's missing cache - 13
-    # minutes at plate scale, and it would be hours at 446.
-    $effectiveCacheDir = if ($CacheDir) { $CacheDir } elseif ($useScores) { $dataDir } else { $null }
-    if ($effectiveCacheDir) { $cliArgs += @('--cache-dir', $effectiveCacheDir) }
+    # --cache-dir only when -CacheDir is given. A post-scoring --task leg names its runs by
+    # their data files (the -i paths in the data directory), and Osprey resolves each
+    # .spectra.bin beside its source on its own (ai/docs/osprey-run-layout.md: the cache "is
+    # not a separate tree"), so the runner used to pass --cache-dir <data dir> only as a
+    # restatement of that default. It was not harmless: --cache-dir also moves the library's
+    # .libcache lookup, so a post-scoring leg missed the .libcache the straight run wrote
+    # beside the library and re-parsed the 13 GB SEA-AD TSV - without the retained-fragment
+    # skip - writing a second 2.2 GB .libcache into the data directory.
+    if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
+    if ($TrainingExport) { $cliArgs += '--training-export' }
     # The [PATH] / [COUNT] / [STAGE-WALL] lines are the only route and count evidence a run
     # leaves (the READMEs' route checks, Get-MemoryReport.ps1, Measure-CoAssignmentScaling.py
     # read them), and they print only under --perf-stats. -NoPerfStats is for a run whose
@@ -603,8 +603,9 @@ function Invoke-OspreyDatasetRun {
                 $(if ($ParallelFiles -gt 1) {
                     " -> ~$([int]($Threads / $ParallelFiles)) per file (--threads is DIVIDED across them)" }
                   else { '' }))
-    Write-Host ("  pass 2   : {0}   fdrbench pass {1}   model-diagnostics {2}" -f
-                $Pass2Mode, $FdrBenchPass, $(if ($mdiag) { 'on' } else { 'OFF' }))
+    Write-Host ("  pass 2   : {0}   fdrbench pass {1}   model-diagnostics {2}   training-export {3}" -f
+                $Pass2Mode, $FdrBenchPass, $(if ($mdiag) { 'on' } else { 'OFF' }),
+                $(if ($TrainingExport -or $Task -eq 'TrainingExport') { 'on' } else { 'off' }))
     # Nothing Osprey logs records the pick model, so this banner line and the run.log START
     # line are the only provenance a finished run carries.
     Write-Host ("  peak pick: {0}" -f $(if ($PickProduct) {
@@ -975,7 +976,7 @@ function Invoke-OspreyDatasetRun {
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' files=$($inputs.Count) threads=$Threads " +
-     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag perfstats=$(-not $NoPerfStats) " +
+     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag trainexport=$([bool]$TrainingExport) perfstats=$(-not $NoPerfStats) " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log

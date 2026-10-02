@@ -5,10 +5,10 @@
 - **Checkout**: `I:\git_i\sky_typinginsequencetree`
 - **Base**: `master`
 - **Created**: 2026-09-21
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4671](https://github.com/ProteoWizard/pwiz/issues/4671) (item 2 only)
 - **Module**: `skyline`
-- **PR**: [#4726](https://github.com/ProteoWizard/pwiz/pull/4726) (draft)
+- **PR**: [#4726](https://github.com/ProteoWizard/pwiz/pull/4726) (merged 2026-10-01)
 
 ## Objective
 
@@ -43,16 +43,16 @@ Fix the tree, so the connector needs no typing verb of its own:
 ## Tasks
 
 - [x] Tree fix, key strokes while editing, completion list element, descriptions
-- [ ] Settle the API shape with Nick (build only until then; no commits, no tests)
+- [x] Settle the API shape with Nick (build only until then; no commits, no tests)
 - [x] Readiness: decided 2026-09-24 - the caller polls `get_open_forms` for the pop-up; `send_text` does not
       wait for it (see Progress Log).
-- [ ] No functional test, at Nick's direction: the test is driving the MethodEdit tutorial through the MCP
+- [x] No functional test, at Nick's direction: the test is driving the MethodEdit tutorial through the MCP
       against a build of this branch (s-16/s-17: select the blank node, `send_text` "ybl087", pop-up
       listed, choose `YBL087C`; then the peptide `IQGPNYVPGK`).
 - [x] `rename_node` removed (2026-09-24, Nick): it set a name without the pop-up a user sees
 - [x] `MethodEditTutorialTest` scaffolding removed (file restored to master's)
-- [ ] Re-record nothing expected (no new menu item, CLI arg or report column)
-- [ ] `/code-review max`, then PR with `Fixes` left off (the issue has six other items)
+- [x] Re-record nothing expected (no new menu item, CLI arg or report column)
+- [x] `/code-review max`, then PR with `Fixes` left off (the issue has six other items)
 
 ## Progress Log
 
@@ -222,3 +222,17 @@ Release build of Skyline and of the MCP server both clean. Uncommitted.
   get_controls still lists the controls inside. Verified live on Unique Peptides: listed as `SplitContainer`,
   330 -> 58 read back, 5000 refused ("between 25 and 224"), then 719x292. Captures of it came back all cyan:
   the relaunched Skyline was refused the foreground. s-15 not re-captured yet. Build only, not committed.
+
+### 2026-10-01 - Merged
+
+PR #4726 merged as commit 7e585a64a7 (squash, admin override: one commit behind master, #4754, whose
+new invisible-character CodeInspection rules were checked against the PR's 22 changed .cs files - none hit).
+Shipped: Targets tree typing and completion pop-up choice, keyboard-faithful `send_key_stroke`,
+`resize_window`, `show_tooltip`, `click_cell_image`, splitters and list values as controls, graph verbs and
+`HasGraph` on dialogs with one graph, `set_selection` errors for any missing element, the #4748 capture fix
+for 1-4 px foreign windows (ReSharper helper windows), Skyline fixes found on the way, and English tutorial
+corrections. The MethodEdit and MethodRefine walkthroughs were re-run after the master merge and refreshed in
+nickshulman/pr-assets. Copilot's four review comments were addressed (the `MessageNotNeeded` one refuted with
+the WinForms IL). Deferred: the FASTA paste "Unexpected document change during operation" race with the
+background proteome loader (a `GetDocumentChangeLock` fix was tried and backed out, to be done separately);
+regenerated tutorial content listed under "Not addressed" in the PR; #4671's other items (the issue stays open).

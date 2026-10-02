@@ -1,4 +1,4 @@
-﻿Term in log,Default-tier sites,What it means inside Osprey,Proposed replacement,Brendan decision so far,Notes
+Term in log,Default-tier sites,What it means inside Osprey,Proposed replacement,Brendan decision so far,Notes
 sidecar,53,"Any derived file written beside an input or the output (.calibration.json, .1st-pass.fdr_scores.bin, .reconciliation.json, .2nd-pass.fdr_scores.bin, .osprey.task).","name the file, or 'saved results beside the input'",intermediate file / intermediate results file / intermediate analysis file ('intermediate' is the key word), 
 entry / entries,61,One library precursor (target or decoy) scored in one run; a dev shorthand for a library row (from 'no O(files x entries)').,precursor candidates (targets + decoys),agreed: dev term, 
 numbers without thousands separators,0,"Only 3 of 582 call sites format counts with N0; counts of 5+ digits are common (1448698 entries, 2110341 observations).",use {0:N0} for every count,adopt a thousands separator everywhere,"global rule, not a per-line fix"

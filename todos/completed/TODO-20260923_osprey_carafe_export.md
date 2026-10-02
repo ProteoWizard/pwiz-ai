@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260923_osprey_carafe_export` (worktree `D:\Dev\pwiz-osprey-export`, upstream unset)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-09-23
-- **Status**: Changes required - see "Review 2026-09-28": split the PR and re-architect part B as a PerFileRescoring product (no fifth stage)
+- **Status**: Completed
 - **GitHub Issue**: [#4705](https://github.com/ProteoWizard/pwiz/issues/4705)
 - **Module**: `osprey`
-- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (base `Skyline/work/20260612_net8_port`)
+- **PR**: [#4708](https://github.com/ProteoWizard/pwiz/pull/4708) (merged 2026-10-01); [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) retargeted to the port branch
 - **Consumer**: `ai/todos/active/TODO-20260923_carafesharp.md`
 
 ## Objective
@@ -155,6 +155,24 @@ one manual Stellar run. Neither PR is ready without the tests below.
   their targets; `BlibWriter` should write `RefSpectraPeakAnnotations` (follow-up). The #4360
   branch turns the resulting `LinearDiscriminant` crash into a plain error.
 - `docs/01-decoy-generation.md:191` still places `CalculateFragmentMz` in `DecoyGenerator`.
+
+### R10. BLIB writing belongs in PR A (#4730) - decided 2026-09-28 (Brendan)
+Brendan is taking #4730 to merge. Instead of a test-only helper that builds an annotated blib
+(the first R6 leg did exactly that, in `SubsetPipelineTest.WriteSubsetLibraryBlib`), #4730 gets
+the production utilities, and the tests use them:
+1. **Osprey writes fully annotated output blibs.** `BlibWriter` writes one
+   `RefSpectraPeakAnnotations` row per peak whose ion type is known, in the grammar
+   `BlibPeakAnnotations` reads (`y5`, `b3-H2O`, charge column, `mzTheoretical`), plus proteins.
+   An Osprey output blib then searches as a library with real decoys (today it is refused by the
+   #4727 decoy check, every decoy copying its target).
+2. **Any loaded library can be persisted as a fully compatible BLIB** (targets, fragments with
+   annotations, proteins, library RT, modifications in blib mass form): a library-to-blib utility,
+   exposed as a command-line option, readable by Skyline and re-importable by Osprey.
+3. **Tests use the utilities**: TSV -> BLIB -> search equals the TSV search (tight tolerance);
+   Osprey's own output blib searches back; the refusal leg keeps an unannotated blib.
+Future, NOT in #4730: a shared BLIB writer/reader in `pwiz_tools/Shared/BiblioSpec` used by Skyline
+and Osprey, and BLIB replacing `.libcache` as the library cache (Nick's Skyline BLIB-reader work
+made a private cache unnecessary there; measure load time vs `.libcache` on full Astral first).
 
 ### R8. Code coverage must show the new code is exercised
 Run `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` and
@@ -346,9 +364,180 @@ meet R6 even when the percentage is high.
 - NCE semantics differ by vendor (Thermo NCE, Sciex eV, stepped HCD) - export the histogram.
 
 ## Gates
-- `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
+Since 2026-09-30 this work is on #4717 (`D:\Dev\pwiz`, the scripts' default `-SourceRoot`), so run these
+there, with the CarafeSharp gate; the full build and test process, test data and WSL setup are in
+`TODO-20260923_carafesharp.md`, "How to build and test".
+- `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` (638/638 on #4717's d3b12cd989)
 - `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`, then `-Dataset All` (options off, 1e-9)
 - `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar`
 - `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -Coverage` + `Summarize-Coverage.ps1`, numbers in the PR test plan (R8)
 - `SubsetPipelineTest` legs for the export (R6) pass, and each fix's test fails without its fix
 - TeamCity Perf/Regression only on the finished PR candidate, and only after asking. Review requested from Brendan (2026-09-25); he triggers the TeamCity Osprey Perf/Regression run - the developer (Mike) has no trigger access, so do not ask him to.
+
+### 2026-09-28 (Brendan session) - #4730 taken to merge
+
+Mike split part A out as #4730 (R1, R7 done, own `/code-review max`, CI green). Brendan decided to
+finish #4730 here and leave #4708 (part B, R2-R6) to Mike. In `C:\proj\pwiz-work1`, branch
+`Skyline/work/20260928_osprey_blib_annotations` (NOT pushed, 3 commits ahead of origin):
+merged the port branch (brings #4727: `SubsetPipelineTest`, `InProcessOsprey`, subset zips) with no
+conflicts, and added `TestSubsetAnnotatedBlibLibrary` (d06c03edc2): an annotated blib of the
+subset library gives first-pass counts identical to the TSV (128/154/143) and passes; the
+unannotated version is refused. Full gate on the merged state: 620 tests, inspection clean.
+Found (pre-existing, not yet filed): a library with no protein information cannot finish
+second-pass FDR (no protein has 2 detections -> empty stratum -> "Second-pass FDR cannot run");
+the test blib now carries proteins via `BlibWriter.AddProteinMapping`. Next: R10.
+
+### 2026-09-28 (Mike session) - #4708 reworked as a PerFileRescoring product (R2-R5, R9)
+
+In `D:\Dev\pwiz-osprey-export`, branch `Skyline/work/20260923_osprey_carafe_export` (stacked on
+the pushed #4730 head f7f28dd1a9; NOT yet merged with Brendan's unpushed #4730 work). Commits
+b76267f9f9 (R2-R4), 9a59d07c3f (R5 docs, key fix, tests), f636fb2b6f (`/code-review max`
+fixes), local until pushed.
+- R2: the export is a declared output of PerFileRescoring, written in flight after the per-run
+  second pass or by an export-only arm (`OnlyTrainingExportsOutstanding`); `--task
+  TrainingExport` is a selector; the pipeline is four stages again.
+- R3: no run-info.json; per-window scan range from the spectra (`ObservedMzRange`); instrument
+  and activation footer keys from the data file when present (first 200 MS2 spectra).
+- R4: format v2 without experiment q/PEP; run q from the worker's pass-2 sidecar (its stamp AND
+  its decoys file - the driver stamps every existing declared output, so the stamp alone can be
+  a SecondPassFDR file), else pass 1 with `run_q_pass=1` and a warning; transfer refused.
+- R5: P17 in docs/00; fifth-stage text removed from docs 14/15/20/22, help, ModelDiagnosticsTask;
+  doc 13's leftover copy of part A's sections removed.
+- R9: fitted parity count; failure policy (others still export, task fails before the blib, a
+  re-run retries only the failed exports - measured); OOM propagates, defects keep their stack.
+- Verified: 617/617 + zero inspection; Stellar 3-run exports byte-identical flag-up-front vs
+  pay-later (pay-later 15 s, three upstream tasks skipped, nothing re-scored); blib tables equal
+  with and without the flag (only `LibInfo` differs); single-run analysis selects on pass 2 and is
+  stable over three invocations; failure injection + retry byte-identical.
+- `/code-review max`: 15 findings, all fixed. Pre-existing issues it found are drafted, NOT filed,
+  in `ai/.tmp/sessions/20260927-osprey-export/issue-drafts.md` (driver stamps outputs a task did not
+  write; a no-work run keeps PerFileRescoring never current; stamp bytes grow as runs squared;
+  pwiz-sharp VendorPinsGenerator CS2012 build race).
+- Still open for #4708: R6 pipeline legs (after Brendan's #4730 push brings #4727's
+  `SubsetPipelineTest`; then merge #4730 into this branch), R8 coverage (dotCover blocked on this
+  machine), perf gate on a quiet machine, TeamCity (ask Brendan).
+
+### 2026-09-28 (Mike session, later) - #4708 R6 and R8 done, merged with #4730
+
+- Merged the port branch (#4727) and then Brendan's pushed #4730 (d2aa967af6, R10) into #4708;
+  one conflict (Program.ValidateArgs: `--export-library` check kept first, then the export check).
+  Pushed a5d15e6a4f; GitHub reports it mergeable. #4708 stays a draft.
+- R6: `Osprey.Test/SubsetPipelineTest.TrainingExport.cs` (SubsetPipelineTest made partial): Stellar
+  up front / pay-later / repeat / `--task TrainingExport` / second pass outstanding / failure and
+  retry; Astral HRAM; a `--task PerFileRescoring` node; library decoys + entrapment; the one-run
+  no-rescore case (pass 1 + warning, stable; accepts #4729's SecondPassFDR error until it is fixed).
+- R8 (needs VS 2026; `pwiz_tools/Osprey/build.ps1 -Coverage`, dotCover 2023.3.3): overall 83.3% on
+  #4730 + #4727 vs 84.0% with #4708; `TrainingExportWriter` 87.3%, `TrainingEvidence` 98.3%,
+  PerFileRescoring export methods 97-100%. Numbers are in the #4708 test plan.
+- Gate on the merged head: 631/631, zero inspection warnings. Filed #4731-#4734 (issue drafts).
+- Still open: perf gate on a quiet machine; TeamCity (ask Brendan).
+
+### 2026-09-28 (Brendan session, evening + night) - R10 done, #4730 merge candidate
+- **R10**, pushed as d2aa967af6 (Mike merged it into #4708) and 2e88e21746 (review fixes, NOT yet in
+  #4708 - merging it will conflict in `Program.ValidateArgs` again, where the export check moved to
+  the top of the method):
+  - `Osprey.IO/BlibSpectrum.FromLibraryEntry` is the one LibraryEntry-to-blib-rows composition
+    (Brendan: no second copy), used by the search output (`BlibOutputWriter.PrepareSpectra`, in
+    parallel), `--export-library` (`LibraryBlibWriter`, parallel blocks of 10,000) and the old
+    convenience overload; `BlibWriter.AddSpectrum(BlibSpectrum, ...)` writes it.
+  - Peaks sorted by m/z (Brendan: better for Skyline; Skyline `ReadPeaks` keeps stored order).
+    Modseq from `Modifications`, masses as `+0.0###` (keeps printed precision: `K[+114.0]` stays,
+    Skyline matches at the printed precision); an entry whose text has more mod tokens than parsed
+    mods keeps its own text (no two precursors share a key). One `RefSpectraPeakAnnotations` row per
+    b/y peak whose recomputed m/z matches (ordinal < length; custom losses printed with >= 4
+    decimals); `mzObserved` = peak m/z exactly (Skyline asserts 1e-7).
+  - `;blibout=2` (`BlibSpectrum.FORMAT_VERSION`) in the SecondPassFDR key, unconditional.
+  - Export: one RetentionTimes row per spectrum (rt, NULL start/end); column-only decoys get the
+    first decoy prefix on their accessions; progress; locked output -> `BlibOutputException`;
+    validated and dispatched before input checks; refuses `--export-library` == `--library`.
+  - Fixed the output blib keeping `[UniMod:N]` text for ids outside the writer's table (Skyline's
+    `MassModification.Parse` accepts only numbers).
+- Goldens: only `tables/PeakDigest.tsv` recaptured (every spectrum re-sorted); `blib_summary.tsv`
+  recapture was last-digit sum-order noise, restored.
+- Rust parity PR maccoss/osprey#72 (`fix/sort-blib-peaks`, stable m/z sort in `add_spectrum`):
+  Stellar `Compare-EndToEnd-Crossimpl -Files All` OVERALL PASS, 0/31,720 peak blobs divergent.
+  Running Rust needs `C:\vcpkg\installed\x64-windows\bin` on PATH (0xC0000135 otherwise).
+- Second `/code-review max`: 15 findings, 10 fixed; dropped as pre-existing/out of scope: wrong
+  masses for UniMod 28/122/214/312/385/747 in `DiannTsvLoader.UnimodIdToMass` (and Rust);
+  HPC join adopts worker parquets by footer only (under version override); one-decimal unknown blib
+  mods not refined from the Modifications table; the reader-version probe gating design; export
+  journal mode. NEEDS BRENDAN: BiblioSpec `BlibMaker::transferPeakAnnotations`
+  (BlibMaker.cpp:1025-1039) formats text columns unquoted, so BlibBuild cannot merge ANY annotated
+  blib (CarafeSharp's too, now Osprey's) - fix is `sqlite3_snprintf` + `%Q`; needs a BiblioSpec
+  build, separate pwiz PR.
+- Gates (final): 621/621 en/ja-JP/fr-FR, inspection clean; coverage 83.4% (BlibSpectrum 99%,
+  LibraryBlibWriter 98.1%, BlibPeakAnnotations 100%, FragmentLadder 100%, BlibWriter 90.8%,
+  Program 88.1%, BlibOutputWriter 87.2%, BlibLoader 81.2%). regression-parallel All and TeamCity
+  Perf/Regression (build 4192947): see the night-session report.
+
+**PR B (#4708), 2026-09-28 night session:**
+- Perf gate PASSED: `Test-PerfGate.ps1 -Dataset Stellar`, a5d15e6a4f against #4730's head d2aa967af6 (a new
+  baseline worktree `D:/Dev/pwiz-perfbase-4730`; the shared pwiz-perfbase was left alone). Median total wall
+  5:02 vs 5:00, +0.2% (per repeat +0.2 / +2.8 / -1.6), no stage flagged. Verdict:
+  `ai/.tmp/perf-gate/20260929-060001Z/verdict.md`.
+- Merged #4730's 2e88e21746 (ae0b22806d): conflicts in `Program.ValidateArgs` (kept #4730's `--export-library`
+  check at the top, then `TrainingExportError`) and `OspreyResources.resx` (both sides' strings). 631/631,
+  inspection clean, pushed. PR body updated (perf + consumer check).
+- Consumer check: the Stellar `_21` export this build wrote from the .raw (22,761 rows, second-pass run q)
+  gives CarafeSharp's masking parity 85.0%, and CarafeSharp's 68 tests pass on it (#4717 reads format 2).
+- Remaining: TeamCity Perf/Regression (ask first); #4729 (Brendan's) still blocks the single-run leg's
+  SecondPassFDR.
+
+### 2026-09-30 (Brendan session) - #4708 reopened, finished for merge, SEA-AD validation
+
+- #4708 had been folded into #4717 by misunderstanding; reopened (head 23389009a0, base = port branch) and
+  #4717 re-based onto this branch (no reverts, no force-push). Comments on both PRs.
+- Review against R1-R10 (sub-agent, verified): re-architecture done as specified; R1/R7/R10 superseded by
+  #4746/#4749 (merged). D1 (RunQPath trusts a pass-2 stamp by presence; driver re-stamps stale files) moved to
+  `todos/backlog/TODO-osprey_resume_validity_gates.md` with resume gap #2. Test plan refreshed in the PR body.
+- Coverage (Build-Osprey -Coverage): port branch ea1d1dc2df 84.1% (628 tests) -> 23389009a0 84.7% (638); new
+  types TrainingEvidence 98%, TrainingExportParquet 99%, TrainingExportWriter 87%, TrainingEvidenceWindow /
+  TrainingEvidenceSettings / TrainingExportConfig / TrainingRecord 100%, SourceRunMetadata 93%,
+  ParquetBlobCodec 91%, TrainingExportTask 56% (selector; Run/Rehydrate throw by design).
+- d5f769882a (pushed): `Osprey-workflow.html` opt lines - model-diagnostics json+html on both FDR banners,
+  training parquet on PerFileRescoring, selectors are not HPC nodes, .blib peaks typed from m/z in Stage 1.
+- Runner (pwiz-ai 2d8896fe): `-TrainingExport` and `-Task TrainingExport` in Run-SeaAd/Run-Tdp43/Run-Chs and
+  `Common/OspreyDatasetRun.psm1`.
+- **SEA-AD 82 files, straight through** (`D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-
+  protein-compact-trainexport-20260930_122429`, exe snapshot `D:\test\osprey-runs\_bin\4708-d5f769882a`,
+  library target+decoy+entrapment-20260817): 7 h 45 m, exit 0; 82/82 exports, 2,741,616 rows, 3.73 GB; every
+  file: rows == footer, run q <= 0.01, no decoys, run_q_pass 2, mp parity fitted N/N, source metadata present.
+  Export cost 426 s total (max 7.5 s/run). perfviz: peak 27.9 GB private, 0 gaps >= 30 s, floor falling.
+  Logs/hashes: `ai/.tmp/sessions/20260929-8a15/seaad-straight-run.log`, `seaad-export-hashes.json`.
+- **Phase 2** (parquets deleted, `Run-SeaAd.ps1 -Task TrainingExport -Resume -OutDir <same>`): 1 h 27 m;
+  PerFileScoring / FirstPassFDR / SecondPassFDR skipped, 0 score/rescore route lines, 82/82 parquets
+  BYTE-IDENTICAL. Two defects found:
+  1. **51+ reporting gaps of 56-89 s**, one per run: the export-only arm streams each run's ~4 GB
+     .spectra.bin windows cold with no progress. Fixed in 61462edf2c (LOCAL, not pushed): ProgressReporter
+     over the export's window loop ("Exporting isolation windows", like the rescore's). 638/638, inspection 0.
+  2. **Library cache missed**: the runner passes `--cache-dir <mzml dir>` for post-scoring tasks, which also
+     moves the .libcache lookup, so phase 2 re-parsed the 13 GB TSV (20:12-20:16, ~15 GB peak) without the
+     retained-fragment skip and wrote a 2nd libcache in mzml\ (delete it). Runner fix pending: pass
+     --cache-dir only when -CacheDir is given (Osprey finds .spectra.bin beside the data by default).
+
+### 2026-09-30 (night session) - #4708 finished for merge
+
+- Runner fix (pwiz-ai 56b03a0f): `OspreyDatasetRun.psm1` passes `--cache-dir` only when `-CacheDir` is
+  given; it used to pass the data dir for post-scoring legs, which also moved the `.libcache` lookup.
+- Merged the port branch (#4725, build files only) -> f441fd9e6c; 638/638, inspection 0. Pushed.
+- SEA-AD re-validation with exe 61462edf2c (`D:\test\osprey-runs\_bin\4708-61462edf2c`): 5 parquets deleted,
+  `-Task TrainingExport -Resume`: 4 m 15 s, only those 5 exported, 82/82 byte-identical to
+  `seaad-export-hashes.json`, 0 gaps >= 30 s, library loaded from the `.libcache` beside the library in 12 s
+  (`library-fragments-skipped-at-load ... retained=727101`), no libcache written to mzml\. Log: run.log in
+  the run dir (phase 2's saved as run.phase2.log).
+- TeamCity on f441fd9e6c: Windows .NET 4196437, Linux .NET 4196438, Perf/Regression 4196439 (48 PASS / 0 FAIL).
+  The push also auto-triggered builds (handoff said it would not): Windows 4196440 passed; Linux 4196441-44
+  were canceled by an agent-connect timeout and left a red status, so Linux was re-run (4196445, 638 passed); all 5 PR checks green.
+- PR body updated (progress fix, SEA-AD results, new build ids).
+
+### 2026-10-01 - Merged
+
+PR #4708 merged into `Skyline/work/20260612_net8_port` as commit 6971b72376. Shipped: `--training-export`
+as a PerFileRescoring output (`<stem>.training.parquet`, format 2), the pay-later export-only arm that
+re-scores nothing, `--task TrainingExport` as a selector, principle P17 and doc 22, and progress reporting
+over the export's isolation windows. Deferred: D1 (stale pass-2 sidecar on a reused work directory) in
+`todos/backlog/TODO-osprey_resume_validity_gates.md`; the single-run SecondPassFDR error is #4729. #4717
+was retargeted to the port branch before this branch was deleted; it will likely need a no-op `-s ours`
+merge of the port branch.
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20260923_osprey_carafe_export.md` before starting work.

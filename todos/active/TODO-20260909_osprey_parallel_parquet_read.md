@@ -2,9 +2,9 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260909_osprey_parallel_parquet_read`
-- **Base**: `a9ee510ada` (the parallel-WRITE branch, pre-merge) - **needs `git merge origin/master`** before anything else; master has since taken #4652 and #4680, both of which touch `ParquetScoreCache.cs` and the bundled `ParquetNet.dll`
+- **Base**: **must be stacked on PR #4751** (`Skyline/work/20260929_Net10_Parquet6`, Parquet.Net 6.1.0) - see the 2026-10-01 section at the END. The 2026-09-30 rebase onto `ed25627d81` (`b9c380515e`) is superseded.
 - **Created**: 2026-09-10 (night session), TODO written 2026-09-17
-- **Status**: Implemented, gate green at the time, benchmarked, NOT merged from master, NOT reviewed, no PR
+- **Status**: Rebased to `b9c380515e` and gate-green on `ed25627d81` (2026-09-30), but that base is SUPERSEDED - needs re-porting onto #4751, and its benchmark needs re-establishing on Parquet.Net 6 first. No PR. Do not push.
 - **Module**: `osprey`
 - **PR**: none
 - **Worktree**: `D:\Users\brendanx\proj\pwiz-parqread` (pushed to origin 2026-09-17; the worktree is disposable once merged)
@@ -105,3 +105,186 @@ schema-wide). The parent session independently traced the helper's slot protocol
 deadlock-freedom, signal accounting and teardown and found no defect. Full
 narrative was in `ai/.tmp/sessions/20260909-night/job3-parallel-parquet-read.md`
 (gitignored; may be gone).
+
+## 2026-10-01: this branch must be STACKED ON PR #4751 (Parquet.Net 6). Do not PR it onto the tip.
+
+Brendan, 2026-10-01: the read work has to sit on top of **PR #4751**, where Nick upgrades to
+current Parquet.Net for the .NET 10 port. We were only on the old version because 4.25.0 was
+the most recent release we believed we could use with .NET 4.7.2 - that constraint is gone with
+the port, so the pin goes away.
+
+**This supersedes the 2026-09-30 rebase onto `ed25627d81`.** That rebase
+(`b9c380515e`, backup ref `backup/pre-rebase-20260930`) is still useful as a record of which
+upstream *behaviour* changes the read code has to honour - `RequireCharge` (#4680), the 6-arg
+`ReadFdrStubScalars` + mandatory `StubColumns`, `TryReadEntryIdsAndApexRts` deleted for
+`ReadApexRtsByParquetIndex`, `StreamReconciledScoresParquet` gaining `taskName`, the RESX
+strings - but the mechanical rebase will have to be redone on #4751.
+
+### PR #4751 (`Skyline/work/20260929_Net10_Parquet6`, nickshulman, OPEN)
+
+Base is the port branch. Head `df01fa50e3`, 4 commits off merge base `553a145871`, and
+**5 commits behind `ed25627d81`**. `ed25627d81` is NOT an ancestor of it.
+
+What it changes in this area (merge base -> head, so this is #4751's own work):
+
+```
+pwiz_tools/Osprey/Osprey.IO/ParquetScoreCache.cs      | 433 +++-
+pwiz_tools/Osprey/Directory.Build.targets             |  58 +-
+pwiz_tools/Osprey/Osprey.IO/Osprey.IO.csproj          |  14 +-
+pwiz_tools/Osprey/Osprey.Test/Osprey.Test.csproj      |  18 +-
+pwiz_tools/Osprey/Osprey.Test/IOTest.cs               |  22 +-
+ParquetNet.dll (751104) DELETED; Parquet.dll (743936) ADDED
+IronCompress / Snappier / ZstdSharp / System.Text.Json / nironcompress / ... DELETED
+ParquetNet.xml -> Parquet.xml;  new ParquetNet.targets (53 lines)
+```
+
+It does **not** touch `regression.ps1` or the `PeakDigest.tsv` goldens. (An earlier read of
+mine suggested it did; that was an artifact of diffing `ed25627d81..df01fa50e3` across a
+divergence instead of from the merge base. The goldens are safe.)
+
+### Why the collision is structural, not textual
+
+In Parquet.Net 6, **`ParquetReader` is only `IAsyncDisposable`**. #4751 therefore introduces
+
+```csharp
+private sealed class SyncParquetReader : IDisposable   // holds a ParquetReader
+    public int RowGroupCount => _reader.RowGroupCount;
+    public ParquetRowGroupReader OpenRowGroupReader(int index) => _reader.OpenRowGroupReader(index);
+private static SyncParquetReader OpenReader(Stream stream)
+    => new SyncParquetReader(RunSync(ParquetReader.CreateAsync(stream)));
+```
+
+and replaces every `using (var reader = RunSync(ParquetReader.CreateAsync(stream)))` site with
+it, re-typing `BuildFieldLookup` and `ReadFdrEntryGroup` to take `SyncParquetReader`.
+
+`RowGroupCount` and `OpenRowGroupReader` are **exactly** the two members this branch's design
+confines to `ReadRowGroupsPipelined` - that confinement is the branch's stated invariant and
+the thing `grep RowGroupCount` was used to verify. So the two changes meet in the same file, in
+the same methods, on the same two API members.
+
+Worse for the port than a type rename: this branch's degree-N path gives **each worker its own
+`FileStream` + `ParquetReader`**. On #4751 that becomes N `SyncParquetReader`s created AND
+disposed async-over-sync (`RunSync`) on `TaskCreationOptions.LongRunning` threads. #4751's own
+PR body records that Parquet.Net 6 "awaits the footer write without `ConfigureAwait(false)`"
+and deadlocked on a WinForms thread, and that the fork's `byte`/`sbyte`/`short`/`ushort`
+encoders "returned their pooled buffer before encoding from it and so were unsafe to run
+concurrently". Both are write-side, but they establish that this fork has had
+`ConfigureAwait` and concurrency-safety gaps - a read-side pipeline running N concurrent
+readers deserves the same scrutiny rather than an assumption.
+
+### RE-ESTABLISH THE BENCHMARK BEFORE RE-PORTING ~800 LINES
+
+The branch's premise is that serial row-group decode is the bottleneck, and it was
+**benchmarked on Parquet.Net 4.25.0 - a library that this PR replaces wholesale.** A major
+version can change decode throughput and internal parallelism. So the first step on top of
+#4751 is not the port, it is a measurement: with #4751 alone, is row-group decode still the
+bottleneck, and how much is there to win?
+
+If it is, port it. If Parquet 6 narrowed the gap, the ~800 lines and the N-reader concurrency
+risk may no longer pay for themselves - and that is a much better thing to learn from a
+one-hour measurement than from a completed port.
+
+A cheap way to take that measurement exists already: the night of 2026-09-30/10-01 added
+`[PATH]` per-file cost buckets to the FirstPassFDR passes (commits `154219f399` /
+`b8524ef1dc` on `Skyline/work/20260930_osprey_pass2_runq_reuse`), and the `parquet walk`
+bucket is the decode cost. On a quiet box it read 6.7-7.4 s per pass at 8 files, and it is the
+one bucket that scales SUPERlinearly in file count (3.27x for 2.04x rows), so measure it at
+the file count you care about.
+
+### Sequencing
+
+Both branches are unpushed and neither has a PR, so nothing is locked in yet.
+
+* **Preferred: let #4751 land first, then re-port onto the updated port branch.** It avoids the
+  stacked-PR trap the version-control guide documents: when the parent squash-merges, the
+  child's merge base falls back and both sides re-introduce the parent's whole content, so the
+  child conflicts with a master that moved by one commit.
+* If the read work must proceed before #4751 merges, develop it on a branch off
+  `df01fa50e3` and open the PR with `--base Skyline/work/20260929_Net10_Parquet6`, then
+  `git merge` the port branch once #4751 is in - **merge, never rebase**, once a PR exists.
+* Either way, the gates must be re-run on the new base. The Stellar regression that went green
+  on 2026-09-30 was green against `ed25627d81`'s build and goldens, not #4751's.
+
+### The DLL question is now moot
+
+The 2026-09-30 session concluded "keep the tip's `ParquetNet.dll` (751104, re-bumped by #4680);
+the branch carries no binary change". True at the time and no longer relevant: #4751 **deletes**
+`ParquetNet.dll` and its companion DLLs, adds `Parquet.dll` (743936), renames the XML docs, and
+moves consumers onto a `ReferenceParquetNet=true` targets mechanism. There is no longer a
+vendored `ParquetNet.dll` for this branch to have an opinion about.
+
+### 2026-10-01: that measurement is DONE. The premise survives Parquet 6.
+
+Built `df01fa50e3` (#4751 head) with the three FirstPassFDR commits cherry-picked on top
+(`65283f6dc1` / `154219f399` / `b8524ef1dc`), so **both sides of the comparison carry the same
+code and the only variable is the Parquet library**. Saved as branch
+`nightlywork/4751-parquet6-instr` @ `6c8ba03c04` in `pwiz-parqread`; that worktree has been
+restored to its own branch and `backup/pre-rebase-20260930` is intact.
+
+Two useful by-products before the number:
+
+* **#4751 builds here** - `Build succeeded in 77.3s`. Nick's private `skylinedev/Parquet.Net6`
+  fork restores without any feed trouble on this machine, and the shipped assembly is
+  `Parquet.dll`, 743936 bytes, **FileVersion 6.1.0.0**.
+* **The two lines of work compose.** The three FirstPassFDR commits cherry-picked onto #4751
+  with no conflict at all - they touch `PercolatorScorer.cs` / `PercolatorEngine.cs` /
+  `FdrProjectionOutput.cs` / `FirstPassFdrTask.cs` / `FdrTest.cs`, and #4751 touches
+  `ParquetScoreCache.cs` / `IOTest.cs` / the csproj+targets. The collision is specific to the
+  READ-pipeline branch, not to the FirstPassFDR work.
+
+#### The decode cost, 8 files / 33,459,602 rows, quiet box
+
+| bucket | Parquet 4.25 (`ed25627d81`) | Parquet 6.1 (#4751) | |
+|---|---|---|---|
+| pass 1 `parquet walk` | 6.7 s | **8.4 s** | +25% |
+| pass 2 `parquet walk` | 7.4 s | **8.2 s** | +11% |
+
+**Parquet 6 decode is slightly SLOWER, not faster.** So the upgrade does not dissolve the
+problem this branch solves - serial row-group decode is still worth parallelising, and the
+port remains justified in principle.
+
+#### Do not read the other buckets as a comparison
+
+`q-assign` reads 62.4 s here against 79.2 s on 4.25, but that is **not** controlled: the 79.2 s
+run carried the per-row sink and peptide timers that `b8524ef1dc` removes and which are absent
+here, and the mdiag state and run-to-run variance differ. Only the walk was set up as a
+like-for-like. For the record, the rest came in at run-q sort 36.1 s (against 37.3), 
+score+competition 18.2 (18.9), clamp floors 7.9 (9.8), sidecar write 5.3 (5.4), sidecar load
+2.8 (2.8) - all within noise of the 4.25 figures, which is the expected result for a change
+that touches only the parquet layer.
+
+#### Still size it at the real file count before porting
+
+The walk is the **one superlinear bucket** - 3.27x for 2.04x rows on 4.25 (6.7 s at 8 files,
+21.9 s at 16). So 8.4 s at 8 files does not scale to 82 by multiplication, and the prize could
+be a lot bigger than a naive x10.55 suggests, or differently shaped. Measure the walk on #4751
+at the file count that matters before committing to re-porting ~800 lines of N-reader
+concurrency onto a reader surface that is now async-first and wrapped.
+
+(The run's version stamp reads `26.1.1.268` because `-LinkFrom` pins
+`OSPREY_VERSION_OVERRIDE` from the source run. That is expected and not a wrong build; the
+`Parquet.dll` 6.1.0.0 check above is what confirms which library ran.)
+
+#### Bonus, and worth passing to Nick: Parquet 6 reads the existing parquet bit-identically
+
+Same experiment, extra check. The two runs differ ONLY in the Parquet library (identical Osprey
+code: `65283f6dc1` + `154219f399` + `b8524ef1dc` on both sides), same 8 input
+`.scores.parquet`, same `-LinkFrom` source:
+
+```
+1st-pass FDR sidecars: 8 bins per side, SHA256 mismatches = 0
+  -> BYTE-IDENTICAL between Parquet.Net 4.25.0 and 6.1.0
+```
+
+Row counts agree exactly too - `33,459,602 peaks (16,807,902 targets, 16,651,700 decoys,
+21 features)` on both.
+
+So on the Osprey READ path the 6.1.0 fork decodes the existing files to the same values, and
+everything downstream of it in FirstPassFDR lands on the same bytes. That is independent
+corroboration for **#4751** at 33M-row scale on real SEA-AD data, which is broader than its own
+test plan (regression subsets, `TestParquetRoundTripScalarStress`, the BiblioSpec DIA-NN tests)
+- worth handing to Nick as supporting evidence.
+
+`FirstPassFDR:done (672.7s)` on Parquet 6. **Do not compare that against the 450-485 s figures
+from 4.25**: it ran 07:57-08:08, by which time other users were active again, and only the
+`[PATH]` walk buckets were set up as a controlled comparison.

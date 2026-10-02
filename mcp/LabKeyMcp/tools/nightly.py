@@ -523,7 +523,7 @@ def register_tools(mcp):
         report_date: str,
         server: str = DEFAULT_SERVER,
     ) -> str:
-        """[P] Daily nightly test report. Queries all 6 folders. Saves to ai/.tmp/nightly-report-YYYYMMDD.md. → nightly-tests.md"""
+        """[P] Daily nightly test report. Queries all 7 folders. Saves to ai/.tmp/nightly-report-YYYYMMDD.md. → nightly-tests.md"""
         # Parse report_date as the END of the nightly window
         # Nightly "day" runs from 8:01 AM day before to 8:00 AM report_date
         end_dt = datetime.strptime(report_date, "%Y-%m-%d")
@@ -541,13 +541,14 @@ def register_tools(mcp):
         start_date = start_dt.strftime("%Y-%m-%d")
         end_date = end_dt.strftime("%Y-%m-%d")
 
-        # All 6 test folders with their expected durations
+        # All 7 test folders with their expected durations
         folders = [
             ("/home/development/Nightly x64", 540),
             ("/home/development/Release Branch", 540),
             ("/home/development/Performance Tests", 720),
             ("/home/development/Release Branch Performance Tests", 720),
             ("/home/development/Integration", 540),
+            ("/home/development/Integration Leak Detection", 720),
             ("/home/development/Integration with Perf Tests", 720),
         ]
 
@@ -1265,13 +1266,14 @@ def register_tools(mcp):
         window_start_str = window_start.strftime("%Y-%m-%d %H:%M:%S")
         window_end_str = window_end.strftime("%Y-%m-%d %H:%M:%S")
 
-        # All 6 test folders
+        # All 7 test folders
         folders = [
             "/home/development/Nightly x64",
             "/home/development/Release Branch",
             "/home/development/Performance Tests",
             "/home/development/Release Branch Performance Tests",
             "/home/development/Integration",
+            "/home/development/Integration Leak Detection",
             "/home/development/Integration with Perf Tests",
         ]
 

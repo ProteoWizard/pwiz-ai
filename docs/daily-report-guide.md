@@ -57,7 +57,7 @@ For example, if research ran at 8:05 AM and the user reviews findings at 2:00 PM
 ## Overview
 
 The daily report consolidates three data sources:
-1. **Nightly test results** - All 6 test folders (Nightly x64, Release Branch, etc.)
+1. **Nightly test results** - All 7 test folders (Nightly x64, Release Branch, etc.)
 2. **User-submitted exceptions** - Crash reports from skyline.ms
 3. **Support board activity** - Unanswered threads needing attention
 

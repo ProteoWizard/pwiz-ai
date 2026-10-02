@@ -83,7 +83,7 @@ param(
     [int]$Threads = 30,
     [int]$ParallelFiles = 0,
     [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring',
-                 'CompactPerFileRescoring','SecondPassFDR')]
+                 'CompactPerFileRescoring','SecondPassFDR','TrainingExport')]
     [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
@@ -100,6 +100,7 @@ param(
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,
+    [switch]$TrainingExport,
     [switch]$NoPerfStats,
     [switch]$WhatIf
 )

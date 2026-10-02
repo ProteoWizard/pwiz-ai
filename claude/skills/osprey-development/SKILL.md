@@ -233,12 +233,19 @@ and `README.md` are the authoritative gate references.
   motion, output-locked by the golden. Characterization unit tests on
   parity-locked extracts stay low-ROI because the golden already pins
   those values.
-  - **Correctness** (output unchanged): the self-contained straight-through
-    regression vs a committed C# golden + a resume leg, both at 1e-9 (no Rust
-    checkout):
+  - **Correctness** (output unchanged): the unit tests (above - `SubsetPipelineTest`
+    runs the whole pipeline in-process on subset data: resume, rehydrate, HPC chain,
+    sidecars, diagnostics, in seconds) plus the self-contained straight-through
+    regression vs a committed C# golden at 1e-9 (no Rust checkout):
     `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`
     (`-Dataset All` before a behavior/perf-sensitive merge). Also the overnight
     TeamCity gate.
+  - **Adding coverage for pipeline behavior** (caching, resume, task boundaries,
+    sidecar contracts, route markers, which files a run writes)? It goes in
+    `Osprey.Test\SubsetPipelineTest.cs`, NOT a new `regression.ps1` leg or Stellar
+    variant. `regression.ps1` is for results at real-data scale: goldens, FDR bounds,
+    and scale-fidelity comparisons (the HPC chain vs straight-through). #4728 moved
+    the mechanics legs out; see the rule at the top of `regression.ps1`.
     - **For `-Dataset All`, use `regression-parallel.ps1`, not `regression.ps1`.**
       Same coverage - every dataset, every mode - in two concurrent lanes, because
       Astral alone is 51.8% of the serial wall and almost exactly equals the other
@@ -276,10 +283,10 @@ merge.
 **It runs ALL FOUR datasets with no `-Skip*` switch**, so whatever `regression.ps1`
 gains, this config runs - but NOT every mode on every dataset: each dataset's
 `SkipModes` entry in the regression.ps1 dataset table cuts legs (e.g. mode 3 is not
-run on StellarGenDecoyEntrap, mode 2 not on Astral, modes 7-11 run only on
-StellarLibDecoy). Read the mode list from that table and `tctest.bat`, not from
-here; this paragraph has been stale twice. #4728 plans moving the pipeline-mechanics
-legs to `SubsetPipelineTest`.
+run on StellarGenDecoyEntrap, mode 2 not on Astral). Read the mode list from that
+table, `tctest.bat` and `regression.html`, not from here; this paragraph has been
+stale three times. The pipeline-mechanics legs (modes 5 and 7-11) moved to
+`SubsetPipelineTest` in #4728.
 
 "Four datasets" is **two acquisitions searched four ways**, not four acquisitions:
 `stellar` (3 mzML, unit) and `astral` (3 mzML, hram), 6 distinct files total. The

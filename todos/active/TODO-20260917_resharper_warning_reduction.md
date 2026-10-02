@@ -11,6 +11,10 @@ the way it already runs on net472.
     severity/sweep/clipboard work below.
   - `Skyline/work/20260922_form_close_obsolete_apis` - [#4697](https://github.com/ProteoWizard/pwiz/pull/4697),
     **stacked on #4685**. Obsolete Form close methods, ServicePointManager, Assembly.CodeBase.
+  - `Skyline/work/20260930_owned_form_close_cascade` - [#4750](https://github.com/ProteoWizard/pwiz/pull/4750),
+    **stacked on #4685** (`d5bed42226`). The owned-form close cascade (item 3 below). Stacked
+    because the defect exists ONLY on #4685: it arrived with #4697's `OnClosing` ->
+    `OnFormClosing` rename and has not reached the base.
   - `Skyline/work/20260925_dda_search_fixes` - [#4712](https://github.com/ProteoWizard/pwiz/pull/4712),
     **also stacked on #4685** (two of its commits edit lines #4685 introduced). The three product
     and test defects the `NotAccessedField.Local` findings exposed, combined from the three
@@ -20,7 +24,7 @@ the way it already runs on net472.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
 - **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **72 warnings, 0 errors** on #4685 as of 2026-09-28. Wave 3 moved to
+  **0 warnings, 0 errors** on #4685 as of 2026-09-29 - the goal is met. Wave 3 moved to
   `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
@@ -66,25 +70,86 @@ the team `Skyline.sln.DotSettings` profile.
 | #4685 after the unread fields and singletons (`79b26ba191`) | 0 | 105 |
 | #4685 after the CA1416 annotation (`8f1527a771`) | 0 | 101 |
 | #4685 after merging the base forward (`ba5bb9e763`, 17 commits) | 0 | 90 |
-| #4685 today, after the first annotation-family pass (`37e39d0700`) | 0 | **72** |
+| #4685 after the first annotation-family pass (`37e39d0700`) | 0 | 72 |
+| #4685 after the rest of the annotation family (`159a0bd27b`) | 0 | 53 (projected) |
+| #4685 after **#4697 merged in** (`17fa34a5da`) - CI-measured | 0 | 20 |
+| #4685 after the orphaned usings and wave 4 (`96a874fa0f`) | 0 | 5 |
+| #4685 today, after the dead TLS pinning and the Ardia pragma (`c01385e72a`) | 0 | **0** |
 | Projected with #4697 (wave 1) merged | 0 | ~154 |
 | Projected with wave 4, and wave 3 arriving through the base | 0 | ~139 |
 
-### The 72, in full (measured 2026-09-28 on #4685 at `37e39d0700`)
+### The red `Skyline code inspection` check on #4685 is ONE BAD AGENT, not a regression and not a flake (2026-09-30)
 
-Every category, nothing collapsed. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1` and
-group the report by `TypeId`.
+`gh pr checks 4685` shows `Skyline code inspection  fail - inspectcode exited with code 4` at
+`f54676b6b6`, which reads like the zero has been lost. It has not: **`inspectcode` never gets as far
+as analyzing.** Its own solution build fails, and `tcinspect.ps1` treats any non-zero `inspectcode`
+exit as `error` before it ever reads the report.
+
+**Called a flake at first, and that was wrong** - the developer re-ran it and it failed again.
+Re-running will keep failing, because the cause is persistent state on one build agent:
+
+| Build | Commit | Agent | Inspection |
+|---|---|---|---|
+| #389 (4195218) | `f54676b6b6` | **-0adf59cd4d8f84520** | **error, exit 4** |
+| #386 (4195026) | `f54676b6b6` | **-0adf59cd4d8f84520** | **error, exit 4** |
+| #374 (4193726) | `f4946afc18` | -09d014c1d20635833 | success, 0 inspections |
+| #372 (4193636) | `c01385e72a` | -081fe6d4d689fdb5f | success, 0 inspections |
+| #371 (4193605) | `96a874fa0f` | -09d014c1d20635833 | ran fine, reported 5 real warnings |
+| #366 (4193222) | `17fa34a5da` | -0e12417989960283e | success, 20 warnings |
+
+**2 of 2 failures on `pwiz-windows-i-0adf59cd4d8f84520`; 4 of 4 clean runs on three other agents.**
+The two failures have *different* proximate errors, which is the tell - it is not one stuck file but
+a dirty output tree:
+
+- #386: `MSB3021: Unable to copy file "...IoModuleGCMSRawDataRepository.dll" to
+  "bin\x64\Release\net10.0-windows\..." Access to the path ... is denied.`
+- #389: `CS0579: Duplicate 'System.Reflection.AssemblyCompanyAttribute' attribute` in
+  `SkylineTester\obj\x64\Release\net10.0-windows\SkylineTester.AssemblyInfo.cs` - the SDK's
+  generated `AssemblyInfo.cs` colliding with a stale one left in `obj`.
+
+Both are under `x64\Release\net10.0-windows`. **That is the part worth keeping**: those directories
+belong to projects the inspection's solution build is the ONLY thing that compiles - `SkylineTester`
+above all, which `build.bat` deliberately does not build (see the Copilot-round notes below). So
+nothing else on the agent ever cleans them, and once one goes stale it stays stale.
+
+The code is fine, on three independent measurements: #374 on another agent, a local `tcinspect.ps1`
+run over `f54676b6b6` **plus** the cascade fix (`success`, **0 `<Issue>` elements**), and #389's own
+test steps passing.
+
+**Two ways to fix it, developer's call:**
+1. Clean that agent - delete `pwiz_tools/Skyline/SkylineTester/{obj,bin}` in its `C:\pwiz` checkout,
+   or turn on "Clean all files before build" for the config once and let it run there.
+2. Make the check not care which agent it lands on - have `tcinspect.ps1` remove
+   `SkylineTester/obj` and `SkylineTester/bin/x64` before the solution build. Costs seconds and
+   removes a whole class of red checks that look exactly like losing the zero.
+
+### Nothing left (measured 2026-09-29 on #4685 at `c01385e72a`)
+
+`tcinspect.ps1` reports `Code inspection: success - No inspections at WARNING or above`, which is
+the FIRST time the script has taken its success path, so the GitHub check goes green rather than
+red. Regenerate with `pwiz_tools/Skyline/tcinspect.ps1`.
+
+The last 5 were both `CS0618`, and neither was a cleanup decision:
+
+| Site | Count | Resolution |
+|---|---|---|
+| `SkylineNightly/TeamCityNightlyAuth.cs:152,156` | 4 | **Deleted.** `ConfigureSecurityProtocol`'s only consumer was the `HttpClient` created three lines below its call, and `ServicePointManager` does not affect `HttpClient` - so wave 3's migration of these projects to `HttpClient` had already made the pinning inert. #4697's caveat ("NOT inert for the legacy stack, 7 files still on WebRequest/WebClient") no longer applied: a grep for `WebRequest`/`WebClient`/`ServicePointManager` across `SkylineNightly` and `SkylineNightlyShim` returns nothing outside the deleted method. It was also the last consumer of `using System.Net;` in that file - checked BEFORE editing this time, instead of discovering it on the re-inspect. #4697 had missed this fourth call site, in a different project from the three its body named |
+| `Shared/CommonMsData/RemoteApi/Ardia/ArdiaClient.cs:204` | 1 | **`#pragma warning disable SYSLIB0014`.** Stays on purpose, for the reason the file already documents at lines 188-190: `HttpClient` adds `charset=utf-8` to Content-Type and the delete API answers 400. The comment records what retiring it takes - an `HttpContent` with a `CharSet`-less `MediaTypeHeaderValue`, verified against the endpoint with `TestArdia*` credentials - against a component frozen pending Thermo funding |
+
+Both pragmas (these plus the two `SYSLIB0013` ones) clear the **build** warning as well as the
+inspection: `SYSLIB0013` and `SYSLIB0014` are now absent from the build log entirely.
 
 | Inspection | Count | What it is | Route to zero |
 |---|---|---|---|
-| `CSharpWarnings::CS0618` | 33 | Use of obsolete symbol | wave 1 here; wave 4 here. **Wave 3's share already arrived** through the base merge, taking this from 42 |
-| `ConditionIsAlwaysTrueOrFalse` | 16 | Expression is always true or false | per-site: dead guard, or a guard the annotations do not believe |
+| ~~`ConditionIsAlwaysTrueOrFalse`~~ | ~~32~~ 0 | Expression is always true or false | **done** - see below |
+| ~~`CSharpWarnings::CS0672`~~ | ~~20~~ 0 | Member overrides obsolete member | **done, #4697** (the `OnClosing`/`OnClosed` pairs) |
+| ~~`RedundantUsingDirective`~~ | ~~8~~ 0 | Using not required | **done** - regressed from 0 when #4697 orphaned them; see below |
 | ~~`LocalizableElement`~~ | ~~25~~ 0 | Element is localizable | **done, wave 5** - see below |
 | ~~`ConstantConditionalAccessQualifier`~~ | ~~23~~ 0 | `?.` qualifier known null or non-null | **done** - see below |
-| `CSharpWarnings::CS0672` | 20 | Member overrides obsolete member | wave 1 (the `OnClosing`/`OnClosed` pairs) |
+| ~~`CSharpWarnings::CS0618`~~ | ~~42~~ 0 | Use of obsolete symbol | **done** - waves 3 and 4, #4697, the dead TLS pinning, and one pragma |
 | ~~`ConstantNullCoalescingCondition`~~ | ~~13~~ 0 | `??` condition known null or non-null | **done** - see below |
 | ~~`InvalidXmlDocComment`~~ | ~~7~~ 0 | Invalid XML doc comment | **done** - see below |
-| `HeuristicUnreachableCode` | 3 | Heuristically unreachable code | pairs with the always-false conditions |
+| ~~`HeuristicUnreachableCode`~~ | ~~7~~ 0 | Heuristically unreachable code | **done** - always paired with the always-false conditions |
 | ~~`CheckNamespace`~~ | ~~6~~ 0 | Namespace does not match file location | **done, all 6 suppressed** - the rename it asks for would break every one; see below |
 | ~~`CA1416`~~ | ~~4~~ 0 | Platform compatibility | **done** - see below |
 | ~~`NotAccessedField.Local`~~ | ~~3~~ 0 | Private field never read | **done** - 2 deleted, 1 kept; see below |
@@ -95,11 +160,11 @@ group the report by `TypeId`.
 
 Two notes on getting this to zero rather than to "small":
 
-- **19 of the 72 are what is left of the annotation family** - `ConditionIsAlwaysTrueOrFalse`
-  (16) and `HeuristicUnreachableCode` (3); the other two members are now done. These flag our
+- **The annotation family is fully cleared.** All four members are at zero. These flagged our
   own defensive null checks as provably unnecessary, on the strength of .NET 10 annotations
-  net472 never had. Each one is either dead code to delete or a guard to keep with a
-  suppression; they cannot be swept. **The measured split from the 36 already worked is
+  net472 never had. Each one was either dead code to delete or a guard to keep with a
+  suppression; they could not be swept. **The measured split from the 36 worked in the first
+  pass is
   32 delete / 2 real bug / 2 keep**, so expect the bulk to be genuine and a real minority
   not to be.
 - The 1,833 warnings the `.editorconfig` severities removed are **demoted, not fixed**. If
@@ -226,17 +291,290 @@ or round-tripping breaks for any name containing a reserved character.
    plan are gone (both died with the pre-build fix), the severity tuning, sweep and waves 2
    and 5 are described, and the forbidden `Generated with [Claude Code]` line and session URL
    are removed. The missing `skyline` module label was added at the same time.
-2. **`.editorconfig` scope, raised by `/code-review max` and not yet addressed** - the blanket
-   `[*.cs]` at repo root reaches `pwiz_tools/Osprey`, `Bumbershoot`, `MSConvertGUI`, `SeeMS`
-   and `Skyline/Executables`, each of which keeps its own `.sln.DotSettings` that does not
-   suppress these inspections. `WFO1000 = none` also contradicts `pwiz-sharp/.editorconfig`'s
-   `= warning` with near-identical prose. Narrowing the scope to the Skyline tree is the
-   smaller claim and the easier review.
-3. **#4697 carries two documented open questions** (both in its PR body): the owned-forms
-   close cascade calls only `OnFormClosing`, never the legacy `OnClosing`, so four sites -
-   `ViewLibraryDlg`, `AlignmentForm`, `UndoRedoButtons`, `SkylineWindow` - may want an
-   `e.CloseReason` guard; and `ServicePointManager` is NOT inert on net10 for the legacy
-   stack, which wave 3 is what actually retires.
+2. ~~**`.editorconfig` scope**~~ **DONE 2026-09-29** (`f4946afc18`). The repo-root `[*.cs]` is now
+   `[pwiz_tools/{Skyline,Shared,SeeMS,MSConvertGUI}/**.cs]`.
+   - **`Shared` has to be in scope, and a `pwiz_tools/Skyline/.editorconfig` would NOT have
+     worked**: 11 of `Skyline.sln`'s 28 projects live in `pwiz_tools/Shared` (including the
+     vendored `zedgraph` the `WFO1000` note names), and EditorConfig matches on the file's path
+     on disk, not on which project compiles it. Scoping to the Skyline directory alone would
+     have reopened a large share of the 1,833 demotions. Nesting at `pwiz_tools/` instead would
+     have swept Osprey and Bumbershoot straight back in.
+   - `SeeMS` and `MSConvertGUI` are included on purpose - they are not in `Skyline.sln`, so they
+     do not affect this check, but they hit the same WinForms noise for the same reasons.
+   - Out of scope, deliberately: `pwiz_tools/Osprey` (252 `.cs`) and `pwiz_tools/Bumbershoot`
+     (234). Those are the ONLY C# trees the narrowing drops - every other `pwiz_tools`
+     subdirectory has no `.cs` at all.
+   - **The other half of the review finding was simply wrong, and it is worth knowing why.**
+     It claimed `WFO1000 = none` contradicted `pwiz-sharp/.editorconfig`'s `= warning`. It never
+     did: **`pwiz-sharp/.editorconfig` line 1 is `root = true`**, so EditorConfig stops walking
+     up there and the repo-root file has never reached anything under `pwiz-sharp`. The two
+     values govern disjoint trees. The near-identical prose is not duplication of a conflict -
+     pwiz-sharp has its OWN ported SeeMS and MsConvertGUI, so the same rule is documented once
+     per copy. pwiz-sharp's `= warning` is also load-bearing: WFO1000 ships at Error in the
+     .NET 9+ WinForms SDK, so without the demotion its WinForms builds would fail.
+   - Verified: `tcinspect` still `success - No inspections at WARNING or above`, so nothing
+     inside `Skyline.sln` reopened.
+3. **The owned-form close cascade - MEASURED, and 2 of the 4 sites are real. Fixed in
+   [#4750](https://github.com/ProteoWizard/pwiz/pull/4750) (2026-09-30).** #4697 raised this in its PR
+   body as an open question and Copilot's review of #4685 found three sites independently. Rather
+   than reason about WinForms semantics again, they were **measured** with a 5-case net10 WinForms
+   repro (`ai/.tmp/sessions/20260930-c6440483/cascade/`). What it establishes:
+   - An owned form's `OnFormClosing` fires with `reason=FormOwnerClosing` **BEFORE the owner's
+     own `OnFormClosing`**, so its teardown has already run when the owner cancels. The form is
+     left open (`IsDisposed=False`) with the teardown applied.
+   - **The legacy `OnClosing` override is NOT called by the cascade** - only `OnFormClosing` is.
+     So #4697's rename genuinely introduced this on the net10 line; it is **not** a master bug,
+     which is why the fix branch stacks on #4685 rather than going to master.
+   - `Show(someChildControl)` does resolve `Owner` to that control's top-level form, so
+     `UndoRedoList` really is in `SkylineWindow.OwnedForms`.
+   - An owned form that cancels propagates `e.Cancel = true` into the owner's `OnFormClosing`,
+     **and the owner can clear it** - after which the close proceeds normally.
+
+   The enumeration matters more than the three sites Copilot happened to find: the cascade reaches
+   EVERY owned form, so all of `SkylineWindow`'s modeless owned forms were checked.
+
+   | Owned form | Teardown reached by the cascade | Verdict |
+   |---|---|---|
+   | `AlignmentForm` (`SkylineGraphs.cs:2948`) | cancels `_cancellationTokenSource` | **REAL - worst** |
+   | `ViewLibraryDlg` (`Skyline.cs:1849`, `PeptideSettingsUI.cs:1304`) | unsubscribes the ion/loss handlers | **REAL** |
+   | `UndoRedoList` (via `Show(dropDownButton.Owner)`) | `DenyListClosing` cancels unconditionally | **NOT a defect** - see below |
+   | `AllChromatogramsGraph` (`Skyline.cs:4006`) | `OnFormClosed` only, which a cancelled close never raises | safe |
+   | `DocumentationViewer` (`Skyline.cs:2984`) | none | safe |
+   | DigitalRune `FloatingWindow` (floating dock panes) | the docking library never references `FormClosing` at all, and `FloatingWindow` does not forward it, so a floating `DockableFormEx` never sees the cascade | safe |
+   | `SkylineWindow` itself | it is the owner, not an owned form | safe - see below |
+
+   **`SkylineWindow` is not the only owner, so the other owners were checked too.** The cascade is
+   a general hazard, and `DockableFormEx.OnFormClosing` sets `_isClosingOrDisposing` (which
+   `SafeBeginInvoke` consults, so a stuck `true` silently stops background UI updates) - its
+   `if (!e.Cancel)` guard cannot see a cancel that happens after it. It turns out not to matter:
+   every form that owns another one here has **no cancel path at all**. `EditGroupComparisonDlg`
+   (owner of `foldChangeGrid`) and `FoldChangeForm` (owner of `foldChangeSettings`) have no
+   `OnFormClosing` and never set `e.Cancel`; `CreateMatchExpressionDlg` (owner of
+   `MatchExpressionListDlg`) has none either - its `_cancellationTokenSource.Cancel()` is in
+   `FilterRows`, not a close handler; `VolcanoPlotFormattingDlg` and `EditCustomThemeDlg` have
+   none. `VolcanoPlotPropertiesDlg` is the one form with a `FormClosing` handler that could have
+   cancelled, and it does not - it restores settings - and it owns nothing. So `DockableFormEx`
+   needs no change today, but the guard there is weaker than it looks and is worth remembering if
+   an owner ever gains a cancel.
+
+   **Correction 1: `AlignmentForm`'s mechanism was recorded wrongly here, and the wrong mechanism
+   leads to the wrong fix.** The note above said the token is left "permanently cancelled". It is
+   not: `UpdateRows` calls `Cancel()` and then **replaces** the token on every call where the row
+   set differs, and `AlignedRetentionTimes` participates in `DataRow.Equals`, so a completed
+   alignment guarantees the rows differ next time. Every `AlignDataRow` therefore gets a FRESH
+   token. The real mechanism is one level down: `AlignDataRowAsync` **rethrows**
+   `OperationCanceledException`, `ProducerConsumerWorker.Consume` catches it and calls
+   `SetException` -> `Abort()` -> `Clear()` + `DoneAdding()`, which pushes a `null` per consumer
+   thread and **ends every consumer thread permanently**. `_exception` is never cleared and only
+   the constructor calls `RunAsync`, so `_rowUpdateQueue` is dead for the life of the form: later
+   `Add()` calls enqueue work nothing will ever run, and the grid sits on "Waiting for retention
+   time alignment" forever. Anyone "fixing" this by recreating the token would have changed
+   nothing. The window is narrower than the old note implies (cancellation must catch alignment
+   in flight) but the damage is total and permanent.
+
+   **Correction 2: `UndoRedoButtons` is NOT a defect - Copilot's finding is refuted.** The claim
+   was that Skyline "refuses to close" while an undo/redo dropdown is open. It does not:
+   `SkylineWindow.OnFormClosing` **starts with `e.Cancel = false`** (`Skyline.cs:1145`), which
+   discards the owned form's cancel, and the repro's case F confirms the close then proceeds and
+   both forms dispose. That line is not new - it is on master at `Skyline.cs:1150`, so it predates
+   #4697 - and `UndoRedoButtons` is constructed in exactly one place (`Skyline.cs:148`), so
+   `SkylineWindow` is its only owner. Net behaviour versus master is identical, because on master
+   the legacy `Closing` event was never raised by the cascade at all. It was still **hardened**,
+   because the non-bug is accidental rather than designed: `DenyListClosing` now skips
+   `CloseReason.FormOwnerClosing`, so it no longer depends on `Skyline.cs:1145` staying there, and
+   no longer truncates the cascade (a cancel makes WinForms `break` out of the owned-forms loop,
+   silently skipping the remaining owned forms' `OnFormClosing`).
+
+   **`SkylineWindow` - #4697's fourth site - examined and clean.** Copilot did not flag it and it
+   needed checking anyway. Both of its cancel paths return **before** any teardown:
+   `CheckSaveDocument()` failing does `e.Cancel = true; return;`, and the
+   `Settings.Default.SaveException` path cancels and then throws. The teardown that follows
+   (`_closing = true`, the eight `ProgressUpdateEvent` unsubscribes, `DestroyAllChromatogramsGraph`,
+   `DestroyFilesTreeForm`) is only reached once no cancel is possible. `base.OnFormClosing(e)` does
+   raise the `FormClosing` event after that teardown, which WOULD strand it if a subscriber
+   cancelled - but a grep shows **nothing subscribes to `SkylineWindow.FormClosing`**; all eight
+   `FormClosing +=` sites in the tree are dialogs subscribing to their own. No change needed.
+
+   **The fix, and why two shapes rather than one.** The invariant is that teardown must not run on
+   a `FormClosing` that may still be cancelled, and there are two honest ways to honour it:
+   - `ViewLibraryDlg`: move the teardown to `OnFormClosed`, which runs only on a close that
+     actually happened. It also covers a direct close cancelled by a `FormClosing` subscriber,
+     which the `CloseReason` shape below does not.
+   - `UndoRedoButtons`: skip on `CloseReason.FormOwnerClosing`. The whole purpose of the handler is
+     to veto closes, so it cannot move.
+   - `AlignmentForm`: **both** - skip the early cancel on `FormOwnerClosing`, and cancel in
+     `OnFormClosed` for the case that skips.
+
+   **Two drafts were written and backed out, and both mistakes are worth keeping:**
+   - *Moving `AlignmentForm`'s cancel wholesale out of `OnFormClosing`* would have changed the
+     NORMAL close path too, letting in-flight alignment call `Invoke` and touch the grid mid-close
+     where the early cancel used to stop it. Same hazard class as the `base.OnFormClosed` omission
+     under "Hazards" below. The normal path is now left byte-for-byte as it was; only the cascade
+     path changes.
+   - *`OnHandleDestroyed` as the replacement hook* - which is what both #4697's note and Copilot
+     suggested, on the strength of `ViewLibraryDlg` already unsubscribing
+     `SpectralLibraryList.ListChanged` there. It is the wrong hook for this: **`OnHandleDestroyed`
+     also fires when WinForms recreates a handle** (`RightToLeft`, `FormBorderStyle`,
+     `ShowInTaskbar` and friends), which would have torn down a form that is staying open - the
+     very bug being fixed, arrived at from the other direction. `OnFormClosed` fires only on a real
+     close and never on handle recreation. The existing `SpectralLibraryList` unsubscribe is left
+     where it is: that one points from a GLOBAL object at the dialog, so it must run on a hook that
+     always runs or the dialog leaks. The ion/loss handlers point from the dialog's own hosted panel
+     at the dialog, so they leak nothing and can use the stricter hook.
+
+   **Test**: `RetentionTimeAlignmentTest` gained
+   `VerifyCancelledShutdownLeavesOwnedFormsWorking`, reusing that test's existing fixture (results
+   + a .blib + a populated `AlignmentForm`) instead of standing up a second one. It opens the
+   library explorer, builds the ion type menu, asserts the document is dirty (without unsaved
+   changes the close would not stop to ask and would SUCCEED, which would wreck the test), drives
+   `SkylineWindow.Close` into the save prompt and clicks Cancel, then asserts both forms are still
+   alive and still functional. Both assertions are deterministic:
+   - `AlignmentForm.IsAlignmentActive`, a new `internal` property (`InternalsVisibleTo("TestFunctional")`
+     already exists, so no reflection) reporting `!IsCancellationRequested && Exception == null`.
+     A behavioural assertion could not work here: the token is refreshed on every `UpdateRows`, so
+     with no work in flight there is nothing observable to catch.
+   - For `ViewLibraryDlg`, toggling the `a`-ion checkbox in the hosted `IonTypeSelectionPanel` and
+     checking `GraphSettings.ShowAIons` followed it - a real end-to-end check of the subscription.
+     It toggles relative to the checkbox's own state so it does not depend on the panel starting in
+     sync, and restores `Settings.Default.ShowAIons` afterwards since that setting is global.
+     **First attempt failed, and the reason is the point of the whole item**: `UpdateIonTypeMenu()`
+     alone leaves `GetHostedControl<IonTypeSelectionPanel>()` returning null, because the selector
+     hangs off `ionTypesContextMenuItem`, which only enters `GraphControl.ContextMenuStrip` when
+     `BuildSpectrumMenu` runs from ZedGraph's `ContextMenuBuilder` event - i.e. on a right-click.
+     The test now calls `BuildSpectrumMenu` then `UpdateIonTypeMenu`, the two public methods that
+     right-click-then-hover drives, reaching the private `graphControl` the way
+     `LibraryExplorerTest` already does (`Controls.Find(@"graphControl", true)`). **This also bounds
+     the real-world defect**: the ion/loss handlers do not exist until the user has opened that
+     context menu, so the `ViewLibraryDlg` half only bites someone who did.
+
+   **Both assertions were verified to have teeth, by negative control.** A test that passes before
+   and after the fix is worthless, so each fix was reverted in turn (keeping the `IsAlignmentActive`
+   property so the test still compiled) and the test re-run. Two runs were needed, because the
+   first failure short-circuits the second assertion:
+
+   | Product state | `TestRetentionTimeAlignment` | Failing line |
+   |---|---|---|
+   | both fixes reverted | **FAILED** | 180, `AssertEx.IsTrue(alignmentForm.IsAlignmentActive)` |
+   | `AlignmentForm` fixed, `ViewLibraryDlg` reverted | **FAILED** | 184, `AssertEx.AreEqual(..., GraphSettings.ShowAIons)` |
+   | both fixed | **PASSED** | - |
+
+   The three `IsDisposed` assertions just above passed in both failing runs, which is itself the
+   proof of the scenario: the cancelled close left both forms **open**, with teardown applied.
+
+   **Why no existing test caught any of this**, which is the part worth remembering: a grep for
+   `SkylineWindow.Close` across `TestFunctional`, `TestTutorial` and `TestUtil` finds exactly one
+   caller - the framework's own teardown in `TestFunctional.cs` - and it calls
+   `CloseOpenForms(typeof(SkylineWindow))` FIRST, so by the time it closes the main window there are
+   no owned forms left and the cascade never runs. Nothing in the suite had ever closed
+   `SkylineWindow` mid-test, let alone cancelled it with owned forms open, so this was not a gap in
+   assertions - the code path had zero coverage. The new helper is the first test to enter it.
+4. **`ServicePointManager` is NOT inert on net10 for the legacy stack** - was #4697's other open
+   question. Now moot for the nightly projects: wave 3 moved them to `HttpClient`, so the pinning
+   in `TeamCityNightlyAuth` was dead and is deleted (`c01385e72a`).
+5. **CI cleaning, the test-project set and the x64 build - pushed to #4685 (2026-10-01) as
+   `51573fe525` (clean slate, CleanSkyline sweep, every test project built, tutorial skip, dead
+   dotnet steps removed) and `d4643f36c5` (x64 `build.bat` reusing the inspection's build).**
+   **CI confirmed green**: build #414 (`732ae80769`) - 1802 tests, `Skyline code inspection`
+   PASS (first green inspection check since the bad-agent failures), Core Windows .NET 650 tests.
+   **Then `f994f9b8a0`: removed package references the framework provides, and stopped
+   suppressing `NU1510`.** The warning only showed for `Common.csproj` on the command line because
+   `Shared/Common` has its own `Directory.Build.props`, which stops MSBuild walking up to the global
+   `NoWarn`. Removed `System.Resources.Extensions` from the 27 WinForms projects (Windows Desktop
+   ships it; kept in plain-`net10.0` `CommonUtil`, `ProteowizardWrapper`, `SkylineRunner`), then the
+   14 more references that unsuppressing exposed. **Two were security pins**
+   (`System.Security.Cryptography.Xml 8.0.4` in `SkylineNightly`/`TestData`, against GHSA advisories
+   via `System.ServiceModel`): NuGet audit could not prove them safe to drop (`NuGetAuditMode=direct`,
+   and `TestData` suppresses `NU1903`), so the restore graph was checked instead - after removal,
+   `Cryptography.Xml` and `Pkcs` are absent entirely; pruning removed the vulnerable transitive copy
+   too. Verified: zero `NU1510` and no `MSB3822/3823` across the inspection, `tcbuild.bat` and all 15
+   `Executables` builds; UI tests with embedded bitmaps pass in en and ja. Gotchas found: building
+   `SkylineAiConnector` needs `SkylineMcpServer` restored first (pre-existing), and rewrites the
+   TRACKED `SkylineAiConnector.zip` - restore it before committing.
+   Next: watch the first CI build of `d4643f36c5` - it is the first real run of the new Clean step,
+   the patch with four steps removed, and the x64 build. If `TestLibraryBuild` leaves a `.ses`
+   temp file there, see the x64 notes below (1 failure in 6 local runs, 0 on AnyCPU CI).
+   **Follow-up (2026-10-01, `732ae80769`): `pwiz-sharp` added to the clean.** Perf/Tutorial build
+   4196611 (#4750) failed with `MSB3030` copying `CommunityToolkit.HighPerformance.dll` and
+   `K4os.Compression.LZ4.dll` from BlibBuild/BlibFilter output. `Skyline.csproj`'s wildcard over
+   BlibBuild's `bin` is expanded at project LOAD; it listed DLLs a pre-`ff622113da` build left on
+   the agent (that commit moved Parquet.Net to the 6.1.0 fork and dropped both packages), and
+   BlibBuild's own `IncrementalClean` deleted them before Skyline copied. Root `clean.bat` now
+   calls `pwiz-sharp\clean.bat` (proven by pwiz-sharp's own CI; also clears the native CMake trees
+   and generated vendor pins; keeps its caches), and the Perf/Tutorial `.kts` gets the same Clean
+   step - it never cleaned, which is why it was exposed. Verified cold: clean exits 0, pwiz-sharp
+   52 bin/obj -> 0, tracked `vendor-archives/` and `build/` untouched; main config inspection
+   `success` 0 issues in 579s (~100s more than with pwiz-sharp warm), `tcbuild.bat` unchanged at
+   296s, `TestLibraryBuild` passed; Perf/Tutorial clean 10s + build/test 136s, tutorial test passed.
+   The fix for the bad-agent inspection failure, as directed by the developer:
+   - `.kts`: new `Skyline_Clean` step running root `clean.bat`, ordered BEFORE the inspection, so
+     the inspection starts from a clean slate. It is the build's only clean.
+   - `tcbuild.bat`: no longer cleans. It used to call `CleanSkyline.bat` directly, which bypassed
+     `clean-apps.bat`'s `for /d /r` bin/obj sweep - **that bypass is why `SkylineTester\obj` was
+     never cleaned**. The sweep lived in `clean-apps.bat` all along; `CleanSkyline.bat` was never an
+     enumeration, even in its 2009 first version. The chain the old build used is
+     `clean.bat` -> `clean-apps.bat` (sweep) -> `CleanSkyline.bat` (generated-file extras).
+   - `CleanSkyline.bat`: its 24 hand-listed bin/obj lines replaced by a copy of `clean-apps.bat`'s
+     `:CleanBinaries` sweep over its own tree, so running it alone cleans Skyline completely;
+     `clean-apps.bat` sweeps every app except Skyline and still calls it. It ends `exit /b 0`
+     because the sweep leaves errorlevel 1 behind (`git ls-files --error-unmatch`) and the TC Clean
+     step fails on a nonzero `clean.bat` exit. Verified: alone it took Skyline from 37 bin/obj dirs
+     to 1 and left `Shared` alone; via `clean.bat`, `Shared` 22 -> 0; both exit 0; nothing tracked
+     deleted. The one survivor is `Executables\DevTools\DocumentConverter\bin`, **a git submodule
+     with a tracked `bin\mammoth`** - the sweep's tracked-file guard keeping it is correct, and a
+     blind `rmdir` (or a parent-repo `git ls-files` check) would have deleted it.
+   - `build.bat`: always builds and stages every test project (TestTutorial and TestPerf included),
+     so `SkylineTester.zip` carries every test DLL. New `--skip-tutorial-tests`
+     (`skip=TestTutorial.dll`, applied in `:run_tests` so every pass honours it);
+     `--with-tutorial-perf` now means "include tutorial and perf tests in the run" and adds
+     `perftests=on` to the full-suite pass only (the ja/zh pass selects by regex and would pick up
+     `TestImportHundredsOfReplicates`/`TestImportMassOnlyMolecules` in two more languages).
+   - `tcbuild.bat`: passes `--skip-tutorial-tests` unless given `--with-tutorial-perf`.
+   - Found on the way: **CI was already staging - and zipping - the inspection's x64 `TestPerf`**
+     (#374: `Staging TestPerf (...\bin\x64\...)`), because `CleanSkyline.bat` listed `TestTutorial\bin`
+     but not `TestPerf\bin`. Its tests did not run only because perf tests are gated on
+     `perftests=on`.
+   - Verified end to end in the new CI order (`clean.bat` -> `tcinspect.ps1` -> `tcbuild.bat`):
+     clean exits 0 (no errorlevel leak from `git ls-files --error-unmatch`) and deletes nothing
+     tracked; inspection `success`, 0 issues, from the clean slate; staging took `build.bat`'s
+     AnyCPU output for every project even with the inspection's x64 trees present (the stager takes
+     the newer directory); default run appended `skip=TestTutorial.dll` and ran only the ordinary
+     test; `--with-tutorial-perf` run appended `perftests=on`, no skip, and ran
+     `TestAuditLogTutorial` (pass); `SkylineTester.zip` contains all seven test DLLs; the hygiene
+     check listed only the uncommitted edits.
+   - **Then made `build.bat` x64 so the inspection's build IS the build (developer's design: the
+     inspection still runs first and builds; `build.bat` picks up after it).** Measured with
+     alternating solution / `build.bat --build-only` builds: **0 recompiles in either direction**,
+     `build.bat` on top of an inspected tree ~2 min instead of a full build. Five things had to
+     change, and three of them would have failed SILENTLY:
+     - `build.bat`: `-p:Platform=x64` in `MSBUILD_PROPS`.
+     - `Directory.Build.targets`: the out-of-solution pin passes the solution's own `$(Platform)`
+       (was a fixed AnyCPU, chosen only to match the old `build.bat`).
+     - **`Skyline.csproj` bundles BlibBuild/BlibFilter/msconvert/Bullseye/SkylineProcessRunner/
+       SkylineCmd output from hard-coded `bin\$(Configuration)` paths, every one behind
+       `Exists()`** - under x64 they would simply have vanished from Skyline with no error. New
+       `BundledProjectPlatformDir` (beside the pin) used in all 17 places, plus `Test.csproj` and
+       SkylineTester's `_PrereqOut`. **`_PrereqOut` was also quietly zipping STALE AnyCPU
+       `BlibToMs2` binaries** (pwiz-sharp is never swept). Staged file list verified identical to
+       the AnyCPU baseline: 1,386 files, all 34 bundled-tool files.
+     - **`SkylineTool` is deliberately AnyCPU** (external tools link it and may be 32-bit; master's
+       sln maps it the same) - so `BuildSkylineToolAsAnyCPU` pins it centrally. It has to be a
+       target, not reference metadata: test projects reach it TRANSITIVELY, the SDK adds those
+       references without metadata, and every reference PATH is hashed into
+       `CoreCompileInputs.cache`. First version broke `Hardklor.vcxproj` (native, imports the same
+       file, no `ResolvePackageDependenciesForBuild`) - fixed with a `UsingMicrosoftNETSdk` condition.
+     - **Pre-existing, independent of all this: `Net8Version.g.cs` made Skyline and every dependent
+       recompile on EVERY build** (`WriteCodeFragment` writes unconditionally). Now gated on an
+       inputs cache written `WriteOnlyWhenDifferent`, like the SDK's own `GenerateAssemblyInfo`.
+       Diagnosed with `-v:d`: CoreCompile prints which input is newer than which output.
+     - `tcinspect.ps1 -AutomatedBuild` (passed by the `.kts`): `AutomatedBuild` changes every
+       assembly's version stamp, so any property mismatch with `build.bat` means a full rebuild.
+   - **Superseded design question: the inspection should reuse `build.bat`'s artifacts and does not.**
+     `Skyline.sln` has only x64/x86 platforms, so solution-based tools build `bin\x64`; `build.bat`
+     builds per-csproj AnyCPU into `bin\<Config>` (since `90db5edf4e`, no recorded reason); and
+     ReSharper resolves out-of-solution `pwiz-sharp` references with `Platform=x64`, ignoring the
+     `Directory.Build.targets` AnyCPU pin, which is the sole reason for `tcinspect.ps1`'s x64
+     pre-build. Cost on #374 (warm): ~3 min of the 11.5-min step is building; more cold. Proposed:
+     build x64 in `build.bat`, run the inspection with `--no-build` after it. Not started.
 
 ## Hazards found the hard way
 
@@ -347,6 +685,61 @@ real disagreement. Whoever moves that branch forward should also decide which br
 **Still open on #4697's description**: it says it is "Stacked on
 `Skyline/work/20260917_resharper_inspection_noise` ... which is the base of this PR". That
 branch no longer exists and its base is now `Skyline/work/20260918_inspection_in_build`.
+(Moot since #4697 merged into #4685 as `17fa34a5da`, but the body is still wrong if read.)
+
+### 2026-09-28 to 09-30: 101 -> 0, and the Copilot round
+
+Detail for each step is in its own section below; this is the sequence.
+
+- **09-28** Merged the base forward (`ba5bb9e763`, 17 commits): 101 -> 90 on the merge alone,
+  and it MOVED the composition - the 4 findings triaged as wave 3's vanished, and
+  `LocalizableElement` regressed 0 -> 2. Then the first annotation-family pass
+  (`37e39d0700`), 90 -> 72.
+- **09-28** Second annotation pass (`159a0bd27b`), the last 19 worked site by site: 16
+  deletions, 3 intent-preserving fixes. 72 -> 53 projected.
+- **09-29** #4697 merged into #4685 (`17fa34a5da`) while away, which is why the projection was
+  wrong: CI measured **20**, not 53. #4697 cleared all 20 `CS0672` but put 8
+  `RedundantUsingDirective` and 2 `??` BACK from zero.
+- **09-29** Those 10 plus wave 4 (`96a874fa0f`), 20 -> 5. Then the dead TLS pinning and the
+  Ardia pragma (`c01385e72a`): **5 -> 0.** `tcinspect` returns `success` for the first time.
+- **09-29** `.editorconfig` scope narrowed (`f4946afc18`) - the last open `/code-review max`
+  finding, and half of it turned out not to be a defect (pwiz-sharp has `root = true`).
+- **09-30** Copilot review of #4685, 13 comments: **2 fixed, 8 refuted, 3 confirmed-deferred**
+  (`f54676b6b6`). Inspection still `success` afterwards.
+
+### 2026-09-30, later session: the owned-form close cascade
+
+Picked up the largest remaining item (item 3 under "Open items") on its own branch,
+`Skyline/work/20260930_owned_form_close_cascade`, stacked on #4685.
+
+- **Measured the WinForms semantics instead of reasoning about them.** A 5-case net10 WinForms
+  repro settled the ordering, the legacy-`OnClosing` question, the `Show(childControl)` owner
+  resolution and the owner-clears-cancel case in one run. The legacy-`OnClosing` result is what
+  pinned the defect to the net10 line rather than master, and the owner-clears-cancel result is
+  what refuted one of the three Copilot findings.
+- **2 of 4 sites real, not 3.** `AlignmentForm` and `ViewLibraryDlg` are genuine and permanent.
+  `UndoRedoButtons` is not a defect (`SkylineWindow.OnFormClosing` clears `e.Cancel` on its first
+  line, and that line predates #4697); hardened anyway. `SkylineWindow` examined for the first time
+  and clean.
+- **Enumerated all of `SkylineWindow`'s owned forms rather than working from the review's list**,
+  since the cascade reaches every one. That added `AllChromatogramsGraph`, `DocumentationViewer`
+  and the DigitalRune floating-window path to the checked set - all three safe, the last because
+  the docking library never references `FormClosing` at all.
+- **The recorded `AlignmentForm` mechanism was wrong** and would have produced a fix that changed
+  nothing. Corrected in item 3: the token is refreshed on every `UpdateRows`; what actually dies
+  is `_rowUpdateQueue`, permanently, via `ProducerConsumerWorker.SetException` -> `Abort()`.
+- **Backed out the first version of the `AlignmentForm` fix.** Moving the cancel wholesale to
+  `OnHandleDestroyed` would also have changed the normal close path, letting in-flight alignment
+  reach the grid mid-close. Now it skips only `FormOwnerClosing` and cancels in
+  `OnHandleDestroyed` for that case, leaving the normal path unchanged.
+- `build.bat` run through `cmd /c` from the Bash tool **silently did not run** and **exited 0**:
+  Git Bash's MSYS path conversion rewrites `/c` to `C:/`, so `cmd` never saw the switch and
+  started an interactive shell (banner plus a clink prompt, then EOF). First blamed on clink;
+  `cmd /c echo X` vs `cmd //c echo X` settled it. Ran it through the PowerShell tool instead. This is the same shape as the LF-`.bat` label-skip note in MEMORY -
+  a 0 exit from a build wrapper proves nothing on its own, so check the log for the compile lines.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
 
 ### The `Redundant*` sweep: 178 -> 160, all 8 categories to zero
 
@@ -640,11 +1033,120 @@ Verified: `build.bat --no-tests` 0 errors; `tcinspect` **72/0**, `ConditionIsAlw
 `Test.dll` 421, `TestData.dll` 178, and `TestDocumentGridExport` + `TestClusteredHeatMap` +
 `TestCandidatePeaks` for the sort paths - all 0 failures.
 
-**The remaining 19 are the deliberate leftovers** - the D and F groups, which need reading
-site by site rather than a rule. Two to look at carefully, because both smell like the
-`CvParam` shape above: `BoundComboBoxColumn:119` (`null == DataPropertyName`, which returns
-`string.Empty`) and `PanoramaFilePicker:461` (`SubItems[1] != null`, where the indexer throws
-rather than returning null, so the real risk is the index).
+### Annotation family, second pass: 72 -> 53 (`159a0bd27b`, 2026-09-28)
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260918_inspection_in_build.md` before starting work.
+The last 19, worked site by site. **16 deletions, 3 intent-preserving fixes** - and the three
+are the same shape that has now appeared five times: a guard that can never fire, so a
+degenerate value flows on instead of being skipped.
+
+- `AuditLogEntry:361` - `loggedSkylineDocumentHash != null`, where the value comes from
+  `ReadElementString`, which returns `""` for an empty element. An empty `<document_hash/>` set
+  `DocumentHash` from `Convert.FromBase64String("")` and fed it to `VerifyHashValues()`. **The
+  same file already used the right idiom 30 lines earlier** (`!string.IsNullOrEmpty`).
+- `PanoramaFilePicker:461` - `SubItems[1] != null` **throws** when there is no second subitem,
+  i.e. in exactly the case it meant to skip; the body does not even read it. -> `Count > 1`.
+- `BoundComboBoxColumn:119` - `null == DataPropertyName`, which returns `string.Empty`, so an
+  unbound column was not caught. -> `string.IsNullOrEmpty`.
+
+Two gates the developer set were worth setting. `DataSourceUtil.IsDataSource(string)` does NOT
+tolerate null (`new FileInfo(path)` throws), so the two `entry != null` deletions were safe only
+because the CALLER (`Directory.EnumerateFileSystemEntries`) never yields null - a caller
+guarantee, not a callee one. And `BoundDataGridView` re-indexed `Columns[e.ColumnIndex]` on the
+next line, so deleting its dead guard alone would have orphaned `column` and traded one warning
+for another.
+
+### Wave 4 was never a uniform swap, which is why it stalled (`96a874fa0f`, 2026-09-29)
+
+The five `EscapeUriString` sites split two ways and the right answer is OPPOSITE for each half.
+
+**The two `NormalizationMethod` sites -> `EscapeDataString`.** The blocker ("is the encoding
+persisted in .sky?") is answered by the round-trip, not by inspecting documents: write is
+`surrogate_` + escape(name) + `?label=` + escape(label); read is `Split('?', 2)` ->
+**`Uri.UnescapeDataString`** -> `HttpUtility.ParseQueryString`. **The read side has ALWAYS used
+`UnescapeDataString`**, which decodes `%XX` whichever escaper wrote it, so old documents (fewer
+escapes, nothing to decode) and new ones both parse - and an older Skyline reads a new document
+too, since its read side is the same. Loading always re-derives `Name` through the constructor,
+so `Equals` (which compares `Name`) never straddles encodings. It also **fixes a latent bug**:
+that name is built like a query string, and `EscapeUriString` leaves `?` and `=` unescaped, so a
+surrogate name containing either broke the delimiters `ParseRatioToSurrogate` splits on.
+
+**`SkylineFiles:4175` and `PanoramaPublishUtil:377` must NOT be swapped.** Both escape a WHOLE
+URI or path: `folderPath` is `panoramaSavedUri.AbsolutePath`, so `EscapeDataString` would encode
+its `/` and the `Contains` match could never succeed; the other escapes a full absolute URI,
+where encoding `://` would fail the `IsWellFormedUriString(..., Absolute)` check on the next
+line. Swapping either is a silent functional break that compiles and passes inspection. Both now
+carry `#pragma warning disable SYSLIB0013` with the reason; retiring them properly means
+composing the `Uri` from parts, which needs real Panorama testing.
+
+### The `RedundantUsingDirective` regression, and what it says
+
+#4697 took the count down but put 8 findings BACK in a category the mechanical sweep had
+cleared, plus 2 in another. All ten are second-order effects of its three migrations:
+5 `System.ComponentModel` (the `CancelEventArgs` -> `FormClosingEventArgs` change), 2
+`System.Net` (the `ServicePointManager` removal), and 2 dead `nightlyDirectory ?? throw` guards
+(`Assembly.CodeBase`, nullable, -> `AppContext.BaseDirectory`, never null). **A merge can
+reopen a category you closed; re-measure the whole list, never just your targets.**
+
+Verified: `build.bat --no-tests` 0 errors and **no SYSLIB0013 anywhere in the build log** (the
+pragmas clean the build warning too, not just the inspection); `tcinspect` **5/0**; `Test.dll`
+421, `TestData.dll` 178, `TestSurrogateStandards` + `TestUpdateGlobalStandard` (the direct
+`RatioToSurrogate` coverage) - all 0 failures.
+
+## Done: 2,412 findings and 403 errors, down to ZERO of each
+
+The goal in the title is met on #4685. `tcinspect` returns `success`, so the check is green.
+
+**What the count never showed, and is the real return on this work**: the annotation family and
+the dead-guard hunt turned up **six genuine defects**, every one of which had been invisible
+because the guard or fallback that hid it could never execute:
+
+1. `EditPeakScoringModelDlg` - the wrong-sign coefficient tooltip **never appeared**, because
+   `ToolTipText` reads back as empty rather than null, so `??` kept the empty string.
+2. `HangDetection` - the `<no text>` placeholder never appeared in a hang report, same cause.
+3. `MsDataFileImpl` scan windows - a missing CV param recorded a scan window of **(0, 0)**
+   instead of being skipped, because `CvParam` returns an empty `CVParam`, never null, and an
+   empty one converts to `0.0`.
+4. `AuditLogEntry` - an empty `<document_hash/>` set a hash of zero bytes and fed it to
+   `VerifyHashValues()`.
+5. `PanoramaFilePicker` - a `SubItems[1] != null` guard **threw** in exactly the case it was
+   written to skip.
+6. MS Amanda ignored the DDA search page's max-variable-mods entirely (PR #4712).
+
+Plus two test defects: the DiaUmpire vendor test could not pass twice (its cleanup glob missed
+`-diaumpire_pin.tsv`), and `DiaUmpireTutorialTest` carried a dead field that LOOKED like a
+seventh defect and was not - see the correction above, which is the more useful lesson.
+
+**Nothing is open on #4685 any more.** The `.editorconfig` scope question - the last outstanding
+`/code-review max` finding - is closed (item 2 under "Open items"), and half of it turned out not
+to be a defect at all. The branch is ready for a human review request.
+
+### Copilot review of #4685, 2026-09-30 (`f54676b6b6`)
+
+13 inline comments: **2 fixed, 8 refuted, 3 confirmed-and-deferred** (item 3 under "Open items").
+
+**8 of the 13 rested on one false premise** - seven "this cast removal prevents compilation" and
+one "this test fails even for a correct layout". All were evaluated as if `IntPtr` were not
+`nint`, i.e. .NET Framework semantics. On this target (`LangVersion latest`, single
+`net10.0-windows`) the C# 11 numeric-`IntPtr` feature makes `int` -> `IntPtr` implicit. Refuted
+with evidence, not argument: the branch builds with 0 errors, CI build 4193222 ran the full suite
+green (1802 tests), and `TestChromPeakOffsets` - the exact test named - passes with 0 failures.
+**This is the same mistake made earlier in this work and corrected by checking `LangVersion`;**
+8 of the 8 trace to the mechanical sweep commit `d99bae0e24`, only `User32:420` to the later pass.
+
+**Nearly mis-refuted one of them.** The `StructSizeTest` claim was first checked against
+`TestCurrentStructSizes`, but line 45 is inside `TestChromPeakOffsets` - a different
+`[TestMethod]`. Both pass, but only the second is evidence. Check WHICH test covers the flagged
+line before citing a green run.
+
+**`build.bat` did not compile either file this round** - `SkylineNightlyShim` and `SkylineTester`
+are both outside its target set, so its 0-error result said nothing about the two fixes. A bare
+`dotnet build` of `SkylineTester` is no good either: it drags in `Skyline.csproj` and fails with
+~395 `MSB3030` copy errors for native/vendor artifacts only the staged build produces (0
+`error CS` among them). **The inspection's solution build is the gate for these projects** - it
+compiles both, and `tcinspect` stayed at `success` after the fixes.
+
+The two fixes: `Path.TrimEndingDirectorySeparator` for the drive-root path bug #4697 introduced
+(`C:\` -> the drive-relative `C:`), and the `GetFrames()` null check restored under a suppression
+for consistency with the ClrMD guards in `HangDetection`/`GcRootReporter` - a fair catch on my own
+inconsistency, since I had argued elsewhere that a framework annotation is not our guarantee and a
+diagnostic path deserves the guard.
