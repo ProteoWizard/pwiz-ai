@@ -179,8 +179,11 @@ them), the support-thread reply once a release carries the fix, and the .NET 10 
 - Master had a literal U+00AD in `ConsoleCultureArgumentTest` where the escape was intended: Claude's Edit/Write
   tools decode a typed backslash-u escape in their input into the character. Fixed on both branches by byte-level replacement.
 - Pre-existing: `Util/Adduct.cs:1206` had a U+00AD inside the adduct key "CH3CO2" (since #3201), so
-  `[M+CH3CO2]` without a declared charge parsed as charge 0. Fixed in #4754 (2026-10-01), with a red-then-green
-  case in AdductParserTest.
+  `[M+CH3CO2]` without a declared charge parsed as charge 0. Fixed in #4754, merged 2026-10-01 as `f1b74a7301`,
+  with a red-then-green case in AdductParserTest. #4754 also added CodeInspection rules forbidding format characters
+  (`[\p{Cf}\xAD]` - the .NET Framework regex engine classifies the soft hyphen as a dash, so `\p{Cf}` alone misses
+  it) and non-ASCII spaces and line breaks (`[\p{Zs}\p{Zl}\p{Zp}\x85-[ ]]`) in `*.cs`, fixed the one existing
+  violation (an ideographic space in `SrmDocument.FindNext`), and tested that every adduct ion charge key is ASCII.
 - #4743 merged to master as `05b8c93b3a`. #4742's first Skyline Windows .NET build failed `TestNativeMessageBox`
   ("Setting values is not supported for native dialog Dialog:Save As") on cloud agent
   `pwiz-windows-i-026de422cfdbcaf43`; unrelated to this change (#4735 passed on MacCoss TeamCity Agent 1).
