@@ -353,3 +353,27 @@ regression-library search, 149,643 precursors.
   Chronologer single 69.9% / 64.8%, 3-file 76.9% / 71.9%. Mid-run bins +3-4 points for Chronologer.
 - Library RT error on held-out run 49 in those bins: AlphaPeptDeep fine-tuned 0.42 / 0.99 min, Chronologer fine-tuned
   0.14 / 0.15 min; mid-run Chronologer 0.07-0.12 against 0.08-0.14.
+
+**SkylineAI regression libraries** (`osprey-testfiles-mzML-v2\{astral,stellar}\*SkylineAI_spectral_library.tsv`): Mike: a
+library fine-tuned with a new Carafe model, in which only the RT model changes; its FDR is not controlled as well, so its
+Osprey count (Astral 117,236 at 1%, port build) is not comparable with the matrix's entrapment-checked numbers. Library
+RT error on Astral run 49 (median |obs - isotonic|): no plateau (0.18 / 0.21 min in the last two bins, AlphaPeptDeep
+fine-tuned 0.42 / 0.99), mid-run 0.075-0.131; fine-tuned Chronologer is lower in every bin (0.074-0.115 mid, 0.136 /
+0.146 late), though run 49 may be in-sample for the SkylineAI fine-tune.
+
+**Osprey FDR, for the record (separate from #4759; not filed yet):**
+- q-values are conservative: entrapment FDP at q <= 0.01 is 0.41-0.56% on Stellar and Astral (matrix 3-file searches),
+  0.24-0.30% on ZT Scan. At q <= 0.015 Chronologer's FDP is still 0.64% (Astral) / 0.76% (Stellar) with 5% more
+  precursors (Astral 114,527 -> 120,577). A calibrated 1% would add roughly 5-10%.
+- `FDRBench-Input.tsv` is not a faithful sample past q ~0.015: the FDP flattens while targets keep growing, and at
+  q <= 1 it reads 1.5-5.4% for 150-620k targets on 1:1 entrapment libraries. It should carry every scored precursor.
+
+| arm (3-file) | q 0.005 | q 0.01 | q 0.015 | q 0.02 |
+|---|---|---|---|---|
+| Stellar AlphaPeptDeep | 28,940 (0.30%) | 31,110 (0.56%) | 32,739 (0.89%) | 33,840 (0.91%) |
+| Stellar Chronologer | 32,946 (0.30%) | 35,485 (0.52%) | 37,253 (0.76%) | 38,578 (0.78%) |
+| Astral AlphaPeptDeep | 95,084 (0.29%) | 103,269 (0.52%) | 108,445 (0.70%) | 112,168 (0.82%) |
+| Astral Chronologer | 104,810 (0.22%) | 114,527 (0.41%) | 120,577 (0.64%) | 124,811 (0.68%) |
+
+**Next (Mike, 2026-10-02): get the Chronologer work into the CarafeSharp PR (#4717).** If Chronologer becomes the
+default, CarafeSharp's regression goldens (Stellar, Astral) change.
