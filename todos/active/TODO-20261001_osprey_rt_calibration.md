@@ -283,3 +283,30 @@ A starting RT that tracks the end breaks the loop in one round without the windo
   Koina's Chronologer on 17,937 peptidoforms, max |difference| 7.6e-6 HI, Pearson 1.00000000.
 - Next: fine-tuning Chronologer (per-source normalization infrastructure, frozen BatchNorm, HI -> normalized-RT head),
   the RT model type in the saved model, then the default by measurement on G1.
+
+**Chronologer fine-tuning** (625d57d2ba, 0f10709372; local, not pushed):
+- `-rt_model chronologer` in training fine-tunes Chronologer: the least-squares line from its hydrophobic index to the
+  training peptides' normalized RT is folded into the output layer, then every weight trains with the RT L1 loss; the
+  BatchNorm running statistics stay frozen (`ModelChronologer.FreezeBatchNorm`, eval mode inside training).
+- Batches mix peptide lengths (0f10709372): Chronologer pads every peptide to 52 positions and its output layer weighs
+  each position, so single-length batches pulled it a different way per length.
+- Saved `rt.safetensors` carries `carafesharp.rt_model = chronologer`, `carafesharp.rt_scale = normalized_rt`;
+  library prediction uses a fine-tuned Chronologer whatever `-rt_model` says, with rt_max like AlphaPeptDeep.
+- Gate: 79 tests passed (8 Carafe parity tests inconclusive, no test data), inspection 0/0.
+- CLI smoke test on the Chronologer-start ZT Scan export (22,981 forms, held-out 1,000; `ztscan\chronologer-finetune-smoke\`):
+
+| RT model | R2 | median error (normalized) | final test L1 |
+|---|---|---|---|
+| Chronologer, linear calibration only | 0.9916 | 0.00849 | - |
+| Chronologer fine-tuned, single-length batches | 0.9981 | 0.00483 | 0.00916 |
+| Chronologer fine-tuned, mixed-length batches | 0.9982 | 0.00473 | 0.00628 |
+| AlphaPeptDeep fine-tuned, round 2 (AlphaPeptDeep-start export) | 0.9954 | 0.00593 | 0.01194 |
+
+  One-epoch test-loss spikes remain at the peak learning rate (1e-4); a lower rate for Chronologer is a tuning option.
+
+**Comparison matrix** (`Run-Matrix.ps1`, `C:\temp\osprey-runs\matrix\<dataset>-<rtmodel>`, progress `matrix\matrix.log`):
+Stellar, Astral, ZT Scan, each AlphaPeptDeep then Chronologer, the whole loop (FASTAs, starting library, single-file
+training search with the export, fine-tune + final library, 3-file search); CarafeSharp 0f10709, Osprey 492dc3d,
+window off. Compare per dataset: the single-file search with the starting model against the 3-file search with the
+fine-tuned models (per-run counts; matched entrapment FDP for the 3-file searches up to q ~0.02; recall of DIA-NN by
+RT), and AlphaPeptDeep against Chronologer, plus each library's RT error by RT bin on a held-out run.
