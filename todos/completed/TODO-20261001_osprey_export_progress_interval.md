@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261001_osprey_export_progress_interval` (worktree `C:\proj\pwiz-4708`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-10-01
-- **Status**: In review - #4756 green at 208e536d82 incl. Perf/Regression, awaiting Brendan
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#4756](https://github.com/ProteoWizard/pwiz/pull/4756)
+- **PR**: [#4756](https://github.com/ProteoWizard/pwiz/pull/4756) (merged 2026-10-02)
 - **Follows**: `ai/todos/completed/TODO-20260923_osprey_carafe_export.md` (#4708)
 
 ## Objective
@@ -66,3 +66,13 @@ Follow-ups to the #4708 training export, found validating it on SEA-AD (82 Astra
   (adjacent entries); #4752's TestArgumentTextComesFromArguments rejected the literal ".spectra.bin" in the new
   damaged-cache message, so it drops the remedy sentence like #4752's messages. 642/642, inspection 0.
   TeamCity: Perf/Regression 4198756 (48 PASS / 0 FAIL, 1:01:49), Windows .NET 4198775, Linux .NET 4198776.
+
+### 2026-10-02 - Merged
+
+PR #4756 merged into `Skyline/work/20260612_net8_port` as commit 5c6cb07140. Shipped: the pay-later training
+export reads each isolation window in one block, one read at a time per spectra cache
+(`SpectraWindowIndex.LoadWindowSerialRead`), cold SEA-AD ~52 -> ~29 s per run on a 7200 rpm HDD; the
+straight-through export keeps parallel `LoadWindow`; the export's progress reports at `IO_INTERVAL_SECONDS`.
+Not shipped: the next-run read-ahead (measured slower, reverted). Open question raised with Brendan, not
+started: calibration and the Stage 6 rescore read cold windows the same seek-heavy way (~59 and ~57 s/run
+cold vs ~16 and ~4.5 s warm on the 82-run straight-through log).
