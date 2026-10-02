@@ -426,3 +426,16 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
   defaults `-RtModel chronologer` and always passes it. Gate green (92 / 84 + 8 Inconclusive, inspection 0).
   Pending: regenerate the Stellar and Astral regression goldens (`regression.ps1 -CreateGolden -Force`, clean tree,
   CPU; needs `build.ps1 -TestData Fetch`, ~6.5 GB), then push the four commits to #4717.
+- Pushed to #4717 (Mike: yes to both): decaae533e (review fixes, finalizer races, provenance, merged with another
+  session's Copilot fix d1b7738ce1, `.carafemodel` entries must be plain names), then 7e03af27c1: the default flip
+  (6a1f1e41bc), goldens Stellar 3c3d40a502 / Astral 9f98c03903, docs/04 7e03af27c1. Test data fetched to
+  `C:\Users\macco\Downloads\Perftests` (all four packages).
+  - Goldens remade on this machine (i9-13900H, 14 threads; the old ones were the i9-9900K's). Against the AlphaPeptDeep
+    goldens only the RT metrics and library RT fail: Stellar pretrained RT R2 0.8707 -> 0.9933, fine-tuned 0.9976 ->
+    0.9980 (MAE 0.0050 -> 0.0037); Astral 0.8595 -> 0.9943, fine-tuned 0.9972 -> 0.9971 (MAE 0.0048 -> 0.0039).
+    Training tables identical; sampled spectral cosine median 0.99974 / 0.99982; machine: MS2 <= 3.3e-4, peaks
+    -0.18% / -0.11%, Astral 3 pairs fewer.
+  - With data: `build.ps1 -RequireData` 92 of 92 (the Carafe parity tests pass with `-rt_model alphapeptdeep`
+    pinned), `-TestCategory Astral -RequireData` 4 of 4.
+  - Logs: `ai/.tmp/sessions/20260927-054c052f/golden-{stellar,astral}.log`, `build-requiredata.log`,
+    `build-astral.log`.
