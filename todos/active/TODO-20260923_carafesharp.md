@@ -556,6 +556,12 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   `ai/todos/active/TODO-20261001_carafesharp_tims_im.md`.
 - [x] Brendan's review item 3, test data fetch/verify (7cd987b21f): `build.ps1 -TestData Fetch|Verify`. #4717's two
   answered Copilot threads resolved (2026-10-01). Brendan not yet told that his items and the split are done.
+- [x] Copilot review of #4717 (2026-10-02, after the CCS merge): a saved model's entry names were not checked, so
+  `-model` could write outside its temporary folder; fixed in d1b7738ce1 (`CarafeModelFile.Open` refuses a name that is
+  not a plain file name). The entrapment FASTA commit-order comment answered as by design. Both threads resolved.
+- [x] #4717 carries both features (developer, 2026-10-02): the Chronologer RT model commits (d79aae9e3c..0f10709372,
+  pushed from another session) merged with the fix in 8d8fcfb128; 89/89 with the test data, inspection 0; the PR
+  description has a Chronologer section.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).
