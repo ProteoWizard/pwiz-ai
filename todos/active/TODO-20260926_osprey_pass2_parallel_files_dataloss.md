@@ -6,11 +6,11 @@
   found by measurement, not introduced by a branch.
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
 - **Created**: 2026-09-26
-- **Status**: **ROOT CAUSE FOUND AND ALREADY FIXED UPSTREAM** - the `FrozenModelScorer`
+- **Status**: **ROOT CAUSE FIXED UPSTREAM AND NOW VERIFIED ON THE FIXED TIP** (2026-10-01: 82 files with zero empty rows, and par3 vs par4 byte-identical - see the section at the END). The `FrozenModelScorer`
   shared scratch buffer, fixed 2026-09-28 in `fcd59201a3` (#4727 / #4706), two days after
   the runs below. See the RESOLVED section at the end; read it before anything above it,
-  which is the investigation as it stood before the cause was known. Remaining action is
-  verification on the fixed tip, not a fix. The gate branch is recommended for DROPPING.
+  which is the investigation as it stood before the cause was known. No action remains except
+  the gate-branch disposal decision, which is Brendan's: dropping it is recommended.
 - **Module**: `osprey`
 - **Severity**: was **HIGH** (wrong results, silently, exit code 0) - now fixed upstream
 
@@ -303,3 +303,67 @@ asserts a diagnosis the code never checks and uses the banned word "sidecar"),
 against the experiment-level predicate rather than rebasing this one - upstream has since
 moved user-facing text to RESX (#4721) and replaced `Action<string> logInfo` with
 `IOspreyLog` / `LogTag.COUNT` (#4718), so the old shape does not apply anyway.
+
+## 2026-10-01: VERIFIED ON THE FIXED TIP. The one remaining action is done.
+
+The Status field said the root cause was found and fixed upstream (`fcd59201a3`, #4727 / #4706)
+and that "**remaining action is verification on the fixed tip, not a fix**". That verification
+ran on the night of 2026-09-30/10-01, two ways, and the fix holds.
+
+### 1. At 82-file scale - the symptom is absent
+
+The full par4 run on the fixed tip (`ed25627d81`, exe
+`_bin\26.1.1.273-net10tip-ed25627d81`) finished "Analysis complete in 7 hours 27 minutes" and
+harvested clean:
+
+```
+out.stats.tsv : 82 file rows, ZERO zero-precursor rows
+anchor        : 353,085,961 precursor candidate peaks across 82 files (unchanged)
+detected      : 54,285 of 545,091 scored target peptides at 1.0% experiment-level precursor FDR
+proteins      : 6,654 protein groups;  blib 343,265,280 bytes
+```
+
+A file contributing zero passing precursors was THE symptom of this defect - the 119x blib
+collapse and the 487-vs-50,051 peptide gap both reduce to it. Zero such rows at 82 files, on
+the fixed tip, at `--parallel-files 4` - the arm that was "much worse" - is the direct negative.
+
+### 2. Cross-arm determinism - byte-identical, which is the stronger test
+
+The check this defect most wanted, and which the sibling TODO
+`TODO-20260925_osprey_seaad_par3_net10port.md` also listed as never run. 8 files, full runs
+(all four stages), `--parallel-files` 3 against 4, quiet box, back to back:
+
+```
+out.stats.tsv         : IDENTICAL (diff empty)
+*.2nd-pass.fdr_*.bin  : 17 files per arm, SHA256 mismatches = 0 -> ALL BYTE-IDENTICAL
+zero-precursor rows   : none in either arm (8 of 8 populated)
+```
+
+**Before the fix, 4 of 83 rows differed.** Now every row matches and every second-pass binary
+hashes equal across the two arms. This is the property the defect violated - "Stage 6 output
+depends on `--parallel-files`" - tested directly on its own artifacts rather than through
+Stage 7, and it holds.
+
+It was run with the tip PLUS the pass-2 run-q-reuse branch
+(`Skyline/work/20260930_osprey_pass2_runq_reuse`), so it doubles as evidence that that change
+preserves cross-arm determinism.
+
+### What this does NOT re-validate
+
+The par3 / par4 measurements from 2026-09-26 remain **invalid for every pass-2 output**, exactly
+as the section above says - par3 was corrupted too. Nothing here rehabilitates them; the numbers
+above come from fresh runs on the fixed tip. The "still good for" list above is unchanged, with
+one addition from the new runs: **FirstPassFDR is flat in `--parallel-files` (442.2 s at par3
+against 441.6 s at par4, 0.14%)**, measured from scratch on the fixed tip.
+
+### The empty-run gate branch - decision still OPEN
+
+`Skyline/work/20260926_osprey_pass2_empty_run_gate` (`695ac9e779`, worktree
+`D:\Users\brendanx\proj\pwiz-gate`, never pushed) is **untouched**. The recommendation above -
+drop it - stands and is now better supported: the defect it detected is fixed and verified, so
+the gate has nothing left to catch, and `/code-review max` found it defective on its own terms.
+Deleting a branch is not something to do unasked, so it waits on Brendan. The worktree is clean
+and the branch ref is intact if it is wanted.
+
+**Status: verification COMPLETE.** The only thing left is the gate-branch disposal decision,
+which is a yes/no for Brendan, not work.

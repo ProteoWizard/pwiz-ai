@@ -5,7 +5,7 @@
 - **Pinned commit for this measurement**: `5bd83dae8b7b2347c8b9f60bac020c46199699b7` (2026-09-25, "pwiz: Reverted the Spectronaut parquet support pushed by mistake")
 - **Base**: `master` (branch was 1 commit behind master at pin time)
 - **Created**: 2026-09-25
-- **Status**: COMPLETE - ran 2026-09-25 21:58:04 -> 2026-09-26 02:57:27 PDT (4h59m23s); both correctness anchors exact
+- **Status**: COMPLETE - ran 2026-09-25 21:58:04 -> 2026-09-26 02:57:27 PDT (4h59m23s); both correctness anchors exact. The two questions the 2026-09-30 section reopened were CLOSED 2026-10-01 (no throughput regression; determinism check ran and passed) - see the section at the END.
 - **Module**: `osprey`
 - **PR**: none of our own; we are MEASURING #4619, not modifying it
 - **Worktree**: `D:\Users\brendanx\proj\pwiz-net10`, local branch `net10port-par3`, reset to the pinned SHA and clean
@@ -588,3 +588,75 @@ an idle box, and nothing in the run log records the difference.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260930_osprey_perf_night.md` before starting work. It leads with the
 shared-machine contention trap that invalidated tonight's timings.
+
+## 2026-10-01: both open questions CLOSED. This TODO is done.
+
+The "What is still open" section above listed exactly two items. The night session of
+2026-09-30/10-01 settled both, on a genuinely quiet box - the foreign `diann.exe` finished at
+~01:36 and total CPU fell to 1-2%, which is the window that section said to wait for.
+
+### 1. There is NO throughput regression on the tip
+
+Measured with the sanctioned runner (not the `ai/.tmp` bisect script), 4 files,
+`-Task PerFileScoring`, identical config, back to back, CACHE-ONLY from the existing
+`.spectra.bin`:
+
+| exe | PerFileScoring |
+|---|---|
+| old pin `5bd83dae8b` (v26.1.1.268) - this TODO's pinned commit | 750.7 s |
+| tip `ed25627d81` (v26.1.1.273) | **738.1 s** |
+
+**The tip is 1.7% FASTER.** So the 2026-09-30 PerFileScoring 2.16x and FirstPassFDR 1.55x gaps
+against 2026-09-26 were contention plus configuration differences, not a code regression. The
+withdrawn finding was right to be withdrawn, and the "maybe a real regression hides alongside
+the contention" worry is closed.
+
+Both exes also scored **16,656,225** peaks across the same 4 files - identical across the eleven
+commits between them. (The old exe logs it as "Coelution analysis complete. 16656225 total
+scored entries"; the tip logs "First-pass scoring complete: 16,656,225 precursor candidate
+peaks" - the #4718 rewording.)
+
+Caveat for anyone reusing these two numbers: threads 30 sequential here, against threads 72
+`--parallel-files 4` in the 82-file runs, so they are comparable only to each other. That is
+all the question needed.
+
+### 2. The cross-arm determinism check RAN, and passed
+
+8 files, full runs (all four stages), `--parallel-files` 3 against 4, quiet box, back to back,
+run with the tip plus the pass-2 run-q-reuse branch:
+
+```
+out.stats.tsv         : IDENTICAL (diff empty)
+*.2nd-pass.fdr_*.bin  : 17 files per arm, SHA256 mismatches = 0 -> ALL BYTE-IDENTICAL
+zero-precursor rows   : none in either arm (8 of 8 populated)
+```
+
+Before the #4706 `FrozenModelScorer` fix, 4 of 83 rows differed. This is the verification the
+sibling TODO `TODO-20260926_osprey_pass2_parallel_files_dataloss.md` also called for, and it
+closes the item in both.
+
+Stage times as a by-product (par3 -> par4): PerFileScoring 1062.2 -> 810.8 s,
+**FirstPassFDR 442.2 -> 441.6 s (0.14% - flat, as expected)**, PerFileRescoring 302.3 -> 161.0 s,
+SecondPassFDR 148.9 -> 148.6 s. Total 32m35s -> 26m02s.
+
+### Also settled, at 82-file scale
+
+The full par4 run on the tip finished "Analysis complete in 7 hours 27 minutes" and harvested
+clean: **82 file rows in `out.stats.tsv`, ZERO zero-precursor rows**, anchor unchanged at
+`353,085,961 precursor candidate peaks across 82 files`, 54,285 of 545,091 target peptides at
+1.0% experiment FDR, 6,654 protein groups. Every stage time in that run is contended and must
+not be compared with 2026-09-26.
+
+### The MANDATORY protocol above was followed, and earned its keep twice more
+
+* `diann.exe` **idles between phases**. At 23:47 no process was over 100% CPU and it looked
+  finished; it was still resident at 6.4 GB and had been at ~24 cores half an hour earlier.
+  Absence of CPU is not absence of the job - add that to the protocol's step 3.
+* Contention is **non-uniform across phases**, so no single normalisation factor rescues a
+  contended number: between two back-to-back arms the box went from 84-92% loaded to ~10-60%,
+  and the I/O-bound parquet walk got 12.5x faster while CPU-bound pass-1 scoring got only 1.64x.
+* The durable answer is to put a **control** in the measurement rather than to normalise.
+  `TODO-20260926_osprey_firstpassfdr_parallel.md` added `[PATH]` per-file cost buckets for this
+  reason; prefer those to wall-clock deltas on this machine.
+
+**Status: COMPLETE.** Nothing further is open here.
