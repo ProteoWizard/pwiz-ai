@@ -354,6 +354,31 @@ regression-library search, 149,643 precursors.
 - Library RT error on held-out run 49 in those bins: AlphaPeptDeep fine-tuned 0.42 / 0.99 min, Chronologer fine-tuned
   0.14 / 0.15 min; mid-run Chronologer 0.07-0.12 against 0.08-0.14.
 
+**Matrix, ZT Scan** (`matrix\ztscan-*`, `matrix\ztscan-report.txt`; about 3 h per arm; training run D1, held-out A1).
+DIA-NN reference: DIA-NN's own library on our demux files (`full_joint_diannlib`), 52,684 precursors, RT 1.5-11.2 min.
+
+| | AlphaPeptDeep | Chronologer |
+|---|---|---|
+| single-file search, starting library (D1) | 20,423 | 26,518 (+29.8%) |
+| 3-file search, fine-tuned, per run (A1 / D1 / G1) | 29,967 / 29,144 / 29,769 | 34,338 / 34,402 / 34,890 |
+| 3-file experiment precursors / peptides / proteins | 34,569 / 29,829 / 3,670 | 40,404 / 34,754 / 3,893 |
+| entrapment FDP at q <= 0.01 | 0.27% | 0.26% |
+| matched FDP 0.3% | 34,814 | 40,780 (+17.1%) |
+| matched FDP 0.5% | not reached by q 0.015 (0.37%) | not reached (0.42%) |
+| RT R2 / median, starting model (held-out split) | 0.9172 / 0.0353 | 0.9914 / 0.0080 |
+| RT R2 / median, fine-tuned (train rows) | 0.9967 / 0.0058 (17,074) | 0.9980 / 0.0049 (21,993) |
+
+- Recall of DIA-NN, last RT bin (10.0-11.2 min, 5,792 precursors): AlphaPeptDeep single 0.4%, 3-file 11.6%;
+  Chronologer single 52.9%, 3-file 67.5%. Every other bin +3-7 points (3-file 67-72% against 64-68%).
+- Library RT error on held-out A1, last two bins: AlphaPeptDeep fine-tuned 0.116 / 0.199 min, Chronologer fine-tuned
+  0.068 / 0.061; mid-run 0.033-0.056 against 0.038-0.061.
+- Against DIA-NN at matched 0.3% FDP (`TODO-20260923_osprey_demux.md` table): Chronologer's 40,780 equals DIA-NN out of
+  the box on the `.wiff` (40,833), where Osprey with the fine-tuned AlphaPeptDeep library was 15% under; it is still
+  17% under DIA-NN on the same demux files with its own library (48,897) and 21% under DIA-NN with the fine-tuned
+  Carafe library (51,561). The late-gradient loss of #4759 is gone; the remaining gap is Osprey's scoring.
+- matrix_report.py: matched FDP now stops at q 0.015 (the export's complete range) and says when a level is not reached,
+  instead of counting every target of the export (it had printed 234,254 / 431,076 at 0.5%).
+
 **SkylineAI regression libraries** (`osprey-testfiles-mzML-v2\{astral,stellar}\*SkylineAI_spectral_library.tsv`): Mike: a
 library fine-tuned with a new Carafe model, in which only the RT model changes; its FDR is not controlled as well, so its
 Osprey count (Astral 117,236 at 1%, port build) is not comparable with the matrix's entrapment-checked numbers. Library
@@ -377,3 +402,21 @@ fine-tuned 0.42 / 0.99), mid-run 0.075-0.131; fine-tuned Chronologer is lower in
 
 **Next (Mike, 2026-10-02): get the Chronologer work into the CarafeSharp PR (#4717).** If Chronologer becomes the
 default, CarafeSharp's regression goldens (Stellar, Astral) change.
+
+### 2026-10-02 - Code review, provenance, ZT Scan
+
+- Pushed 89c75b3808 to #4717 (Mike: push now, flip the default after ZT Scan). `/code-review max` on the Chronologer
+  diff: 15 findings, all fixed in 30701dad86 (local): saved models name their RT model (`carafemodel-2`; `-1` still
+  read); `-rt_model` optional (else `-model`'s, else AlphaPeptDeep), another kind starts from its pretrained model with
+  a warning; Chronologer clipped at 0, test-set fallback, encoded-row counts, summed same-site mods, version metadata;
+  files checked up front and by `-TestData Verify`; leak-safe loading; end-to-end tests; docs 01/04/06.
+- Mike: track model type and provenance through fine-tune chains. 4d102b2ecd (local): each manifest model has `model`,
+  `model_version` (AlphaPeptDeep v1, Chronologer 20220601193755) and `start` (pretrained / base / ms2_model), and each
+  `base_models` entry its own, so one file holds each model's lineage; `-model_info` prints it.
+- a9c0e2fac2 (local): a full-suite run failed in `PthReader` with libtorch `NYI` in `clone`: the strided view had no
+  reference once clone had its handle, so its finalizer could free it mid-copy. Fixed there and in `StateDict.Load`,
+  `SafetensorsFile.Write`, `Ms2Model.PlaceColumns`. Gate: 92 tests, 84 pass + 8 parity Inconclusive, three full passes;
+  inspection 0.
+- ZT Scan matrix (above) agrees with Stellar and Astral: Chronologer wins every count and every RT bin. Next: flip the
+  default to Chronologer (CLI, workflow script, parity tests pinned to AlphaPeptDeep, docs/05), regenerate the Stellar
+  and Astral goldens (needs the ~6.5 GB test data), push.
