@@ -228,3 +228,25 @@ within 0.1 min of DIA-NN's:
 - Last bin (past 10 min): Astral model 80.5% (D1) / 66.3% (A1); without its RT term 92.1% / 91.1%.
 - So the pick is not the problem except where the predicted RT is wrong; fixing the library fixes the pick. No ZT
   Scan-specific pick model needed on this evidence.
+
+**Which RT predictor tracks the end of the gradient?** (`koina_rt_test.py`; Koina KServe v2 as the maccoss/Carafe
+fork's `KoinaClient` sends it; DIA-NN's IDs as truth; "cal err" = median |observed - isotonic calibration|, what a
+search engine can recover from the predictor's order; outputs `rtcal\ztscan\koina_rt_test_D1*.txt`,
+`rtcal\stellar\koina_rt_test_20.txt`)
+
+| Predictor | ZT Scan D1 late Spearman | late / early cal err (min) | Stellar 20 late Spearman | late / early cal err |
+|---|---|---|---|---|
+| Chronologer_RT | 0.96 | 0.041 / 0.072 | 0.97 | 0.163 / 0.138 |
+| DIA-NN predictor | 0.95 | 0.049 / 0.097 | - | - |
+| Deeplc_hela_hf | 0.89 | 0.083 / 0.146 | 0.86 | 0.390 / 0.307 |
+| Prosit_2019_irt | 0.83 | 0.104 / 0.134 | 0.91 | 0.305 / 0.262 |
+| AlphaPeptDeep_rt_generic (= CarafeSharp start) | 0.69 | 0.205 / 0.160 | 0.59 | 0.681 / 0.225 |
+| CarafeSharp fine-tuned, round 1 (D1 in-sample) | 0.60 | 0.152 / 0.063 | - | - |
+
+- Koina's AlphaPeptDeep matches CarafeSharp's starting library exactly: the plateau is the generic model's.
+- Chronologer has no plateau on either gradient and is the best predictor everywhere; out of the box it is within
+  0.01 min of the in-sample fine-tuned model mid-run.
+
+**Chronologer arm** (`ztscan\carafesharp-chrono\`, `Run-CarafeChrono.ps1`): round one's starting library with every RT
+replaced by Chronologer_RT (`blib_set_koina_rt.py`, 2,636,987 peptidoforms), then stages 3, 4-5, 6 with the per-RT
+window OFF. Queued behind round 2.
