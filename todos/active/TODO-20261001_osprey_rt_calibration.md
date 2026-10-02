@@ -176,3 +176,45 @@ projects outside `Osprey.sln` (`CommonUtil`, `MsData`, `ProteowizardWrapper`, ..
 - Recall of DIA-NN 68.2% -> 70.1%. Last three bins (18.4-23.8 min) 67.0 / 66.5 / 57.0% -> 75.4 / 76.9 / 79.9%; mid-run
   bins +0.4-0.8 points.
 - Shared with DIA-NN +775, Osprey-only +227 (4,211 -> 4,438). No entrapment in this library; FDP check pending.
+
+**Astral A/B** (`rtcal\astral\osprey-base` vs `osprey-localwin`, DIA-NN Global.Q <= 0.01, 149,643 precursors):
+- Per run 108,438 / 106,743 / 106,215 -> 110,020 / 108,519 / 107,528 (+1.2-1.7%); experiment 117,236 -> 119,606 (+2.0%).
+- Recall of DIA-NN 74.6% -> 75.9%. Last three bins (18.2-23.6 min) 74.3 / 74.6 / 62.0% -> 79.4 / 81.6 / 71.6%; the
+  other bins +0.5-1.6 points.
+- Shared with DIA-NN +1,970, Osprey-only +400 (5,623 -> 6,023). No entrapment in this library.
+
+**Stellar entrapment A/B** (`rtcal\stellar-libdecoy\osprey-{base,localwin}`, the StellarLibDecoy regression library:
+Carafe, library decoys, `_p_target` entrapment 1:1; `entrap_ab.py`):
+- Experiment q <= 0.01: 30,963 -> 30,272 (-2.2%), entrapment FDP 0.55% -> 0.63%.
+- Matched FDP 0.3 / 0.5%: 28,641 -> 27,426, 30,474 -> 28,953 (-4 to -5%).
+- Every RT bin before 18 min loses 2-5% of its targets; the last bin gains 366 (FDP ~1.5% in both arms).
+
+**Why the window costs mid-run IDs.** The decoys' features before the end of the gradient are identical in both arms
+(`decoy_inflation.py`: the local window clamps to the global one there). Only late decoys change: they find peaks
+farther away (median |rt deviation| 0.24 -> 0.37 min on Stellar Carafe, 0.09 -> 0.18 on ZT Scan) with higher co-elution.
+The first-pass SVM is trained on all entries and re-weights: `sg_weighted_cosine` 1.573 -> 0.923 on Stellar Carafe;
+on ZT Scan `abs_mass_accuracy_deviation_mean` -0.551 -> -0.161 and `abs_rt_deviation` -0.385 -> -0.534. The regression
+libraries barely move (Stellar `sg_weighted_cosine` 1.491 -> 1.542), hence their clean gains.
+
+**Decision (Mike, 2026-10-01): drop the per-RT window.** dc30890311 stays local, not pushed.
+
+**Root cause of the late losses: Carafe library RTs saturate at the end of the gradient** (`library_rt_vs_observed.py`).
+- Stellar Carafe library: no target past 20.08 min (p99.9 19.61) on a gradient to 23.8. The 2,578 precursors DIA-NN
+  observes at 19.5-23.8 min (7.6% of its IDs) all have library RT 19.1-19.5. The SkylineAI regression library gives the
+  same peptides 20.4 and 22.1 min.
+- ZT Scan fine-tuned library: 9.70-9.86 for peptides observed at 10-11.4 min.
+- Within the plateau the library RT carries no order, so no calibration or window can recover it. Osprey's calibration
+  ends at the plateau (Stellar Carafe: observed 2.01-19.66 min; last bin predicted 2.66 min early, apex agreement with
+  DIA-NN 0.0%).
+- Not a hard cap in CarafeSharp: the RT decoder is linear (`ModelRtLstmCnn`), and RT is normalized by the run's last
+  MS2 RT + 0.1 (`OspreyTrainingSet.GetRtMax`). It is learned: round 1 trained on 17,989 peptide forms, 13 past 10 min.
+
+**Peak pick (Mike's question).** Mid-run the pick agrees with DIA-NN's apex 93-98% on ZT Scan, the same as Astral
+(93-96%), so it is not the mid-run limit. Late, it inherits the bad prediction: the Astral pick model's RT term has scale
+0.053, so a candidate 1-2 sigma off the predicted RT loses 3-6 rank units, more than perfect co-elution gives back.
+Candidate dump for A1/D1 in `rtcal\ztscan\pickdump\` (`OSPREY_PICK_DUMP_CANDIDATES`), analysis `pick_dump_analysis.py`.
+
+**Round 2 of the CarafeSharp loop** (`ztscan\carafesharp-r2\`, training search with the window on). RT training peptide
+forms by RT, round 1 -> round 2 (DIA-NN finds 1,314 / 2,632 / 187 at 10-10.5 / 10.5-11 / 11+):
+- < 9 min 16,143 -> 16,328; 9-9.5 1,102 -> 1,082; 9.5-10 731 -> 883; 10-10.5 12 -> 770; 10.5-11 1 -> 1,324; 11+ 0 -> 105.
+- 20,492 peptide forms (17,989). Fine-tune and the 3-run search to follow.
