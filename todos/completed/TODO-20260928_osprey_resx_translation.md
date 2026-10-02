@@ -6,9 +6,9 @@
 - **Base**: `Skyline/work/20260612_net8_port` (the RESX PR #4721 merged into it 2026-09-28)
 - **Module**: `osprey`
 - **Created**: 2026-09-26 (Brendan's request at the end of the RESX session); started 2026-09-28
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: [#4752](https://github.com/ProteoWizard/pwiz/pull/4752) (base `Skyline/work/20260612_net8_port`)
+- **PR**: [#4752](https://github.com/ProteoWizard/pwiz/pull/4752) (merged 2026-10-01 into `Skyline/work/20260612_net8_port`)
 
 ## The question this answers
 Skyline's translations came out of a rigorous process: glossary generated from source material,
@@ -383,3 +383,14 @@ The work is only half the deliverable; the other half is evidence for or against
 - Upstream (not this branch): `OspreyDiagnostics.cs:107` ProcessExit handler reads static `s_sink`, which can be
   null at exit -> "Unhandled exception. NullReferenceException" printed during the test run (tests pass).
 - Next: TeamCity PR builds on `5a62f2df20`; ask before re-triggering Perf/Regression.
+
+### 2026-10-01 - Merged
+
+PR #4752 merged as commit e51910615b into `Skyline/work/20260612_net8_port`, after a final merge of the port
+head (`ba6412a1a7`: TeamCity config + #4738, no Osprey impact, so no further Perf/Regression run - Brendan).
+Quick validation all green (Osprey Linux .NET needed two automatic restarts after its agent timed out, not
+a test failure). Shipped: ja / zh-Hans drafts of 826 Osprey strings marked Needs Review, the shared glossary
+and style guide, CLI tokens as {N} arguments, localized help pages, and the placeholder / orphan / BOM /
+argument-text guards. Deferred, as agreed: the 59 English strings added by port-branch merges since drafting
+(next drafting pass), sending the reviewer CSVs and blind grading sheets to the ja / zh reviewers, and Osprey
+in `LastReleaseResources.db` until a release finalizes text. Tooling follow-ups are on #4737 (Nick).
