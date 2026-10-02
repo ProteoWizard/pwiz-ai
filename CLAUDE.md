@@ -114,7 +114,7 @@ pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -Target TestConnected
 pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile
 
 # Run test with internet access
-pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile -Internet
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFileWeb -EnableInternet
 
 # Run test with visible UI
 pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomeUITest -ShowUI
