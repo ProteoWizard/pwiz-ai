@@ -316,3 +316,22 @@ library, equal to native; RT fine-tuned is AlphaPeptDeep): per run 32,203 / 32,5
 q <= 0.01 38,137 targets at entrapment FDP 0.30%; matched FDP 0.3% 38,182 (round 2 window off: 38,242; round 1:
 34,175); last RT bin 4,463 (round 2 4,381, round 1 865). Fine-tuned AlphaPeptDeep RT R2 0.9969, median 0.00581.
 One round from a Chronologer start equals two rounds from AlphaPeptDeep's.
+
+**Matrix, Stellar** (`matrix\stellar-{alphapeptdeep,chronologer}`, `matrix\stellar-report.txt`, `matrix_report.py`;
+about 33 min per arm). DIA-NN reference: the regression-library search, 40,358 precursors.
+
+| | AlphaPeptDeep | Chronologer |
+|---|---|---|
+| single-file search, starting library (run 21) | 22,842 | 27,510 (+20.4%) |
+| 3-file search, fine-tuned, per run | 27,435 / 27,850 / 27,963 | 31,141 / 31,667 / 31,708 |
+| 3-file experiment precursors / peptides / proteins | 31,197 / 28,426 / 4,201 | 35,578 / 32,318 / 4,515 |
+| entrapment FDP at q <= 0.01 | 0.56% | 0.52% |
+| matched FDP 0.3% / 0.5% | 28,946 / 30,514 | 32,528 / 35,250 |
+| RT R2 / median, starting model (held-out split) | 0.8747 / 0.0507 | 0.9976 / 0.0062 |
+| RT R2 / median, fine-tuned | 0.9974 / 0.0050 | 0.9989 / 0.0038 |
+
+- Recall of DIA-NN in the last two RT bins (18.4-21.1, 21.1-23.8 min): AlphaPeptDeep single 28.7% / 0.2%, 3-file
+  44.1% / 0.6%; Chronologer single 67.0% / 72.5%, 3-file 79.7% / 82.8%. Mid-run bins +1-3 points for Chronologer.
+- Library RT error on held-out run 20 (median |obs - isotonic|) in those bins: AlphaPeptDeep fine-tuned 0.40 / 0.83 min,
+  Chronologer fine-tuned 0.12 / 0.14 min; mid-run both 0.07-0.10.
+- One round cannot teach AlphaPeptDeep the end of a 24-min gradient: its training search finds 0.2% of the last bin.
