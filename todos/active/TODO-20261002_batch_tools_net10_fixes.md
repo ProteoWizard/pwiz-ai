@@ -9,7 +9,7 @@ never got a PR, onto the .NET 10 port branch.
 - **Checkout**: `C:\proj\review` (BRENDANX-UW6)
 - **Module**: `skyline`
 - **Created**: 2026-10-02
-- **Status**: In Progress - built and tested, commit `5cd3c43a1e` (local), /code-review max running
+- **Status**: In Progress - 2 commits (`5cd3c43a1e`, `4822e9fd60`), local; both batch-tool solutions inspection-clean and green; /code-review max running
 - **PR**: (pending)
 - **Salvaged from**: `completed/TODO-20260823_resharper_cleanup.md` (superseded by Matt's #4685,
   `TODO-20260917_resharper_warning_reduction.md`)
@@ -85,3 +85,35 @@ Built and tested on BRENDANX-UW6. Logs are in `ai/.tmp/sessions/20261002-batchfi
 * Quick inspection reported 46 issues, none in a changed file. All are unresolved-reference
   errors in `CommonUtil` (JetBrains annotations, Newtonsoft, ProtectedData), the artifact
   described in #4685.
+
+### 2026-10-02 - Batch-tool tests fixed for a Debug build; both solutions inspection-clean (`4822e9fd60`)
+
+Brendan asked whether the 11 SkylineBatch failures could be fixed so the suite passes on the
+Debug build. All 11 came from one cause, including the missing `emptyTemplate.sky`, which was
+a downstream effect.
+
+* `SkylineBatchTest.TestUtils.GetSkylineDir` only searched Release output folders (its doc
+  comment claimed Debug was searched too). The Debug build is at `bin\x64\Debug\net10.0-windows`
+  and `bin\staging\Debug`.
+* `AutoQCTest.TestUtils.GetSkylineBinDirectory` searched both and picked the newest, but still
+  listed the net472 `bin\x64\Release` and `bin\x64\Debug`. This checkout has a stale net472
+  `SkylineCmd.exe` there from 2026-08-17. It went unused only because the new build was newer.
+* Fixed by adding `ExtensionTestContext.GetSkylineBinDirectory()` in SharedBatchTest: the
+  newest SkylineCmd.exe across `bin\<Config>\net10.0-windows`, `bin\x64\<Config>\net10.0-windows`
+  and `bin\staging\<Config>` for Release and Debug, with no net472 paths. Both test projects now
+  call it. AutoQC still throws when nothing is found; SkylineBatch falls back to the Release path.
+* Result: **SkylineBatch 38/38** (was 27/38) and AutoQC 18/18, both on a Debug-only tree.
+
+Also cleared the last ReSharper warnings in both batch-tool solutions, so `-RunInspection` passes
+with zero warnings on both:
+
+* `ServicePointManager.SecurityProtocol` (SYSLIB0014) in AutoQC and SkylineBatch `Program.cs`:
+  removed, as #4697 did for Skyline and SkylineTester. On .NET it has no effect on HttpClient.
+* `ProgramLog.GetProgramLogFilePath`: dropped an always-true `repository != null`. AutoQC's own
+  copy of that method was never called, so it was deleted, along with the usings it alone needed.
+* `TestContext.TestDir` (obsolete) changed to `TestRunDirectory`, its documented replacement
+  (MSTest sets both to the same directory).
+* Redundant `(long?)` casts in `DownloadDlg` and `Server`; unused usings in `FilePathControl`
+  and `Server`.
+
+Logs: `ai/.tmp/sessions/20261002-batchfix/autoqc4.log`, `skylinebatch3.log`.
