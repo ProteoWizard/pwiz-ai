@@ -5,7 +5,7 @@
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Module**: `skyline`
 - **Created**: 2026-09-13
-- **Status**: In Progress
+- **Status**: Completed - Integration nightlies posting clean (2026-10-02)
 - **GitHub Issue**: (pending - not yet created)
 - **PR**: [#4666](https://github.com/ProteoWizard/pwiz/pull/4666) (merged 2026-09-13 as `ea391bde4e` into `Skyline/work/20260612_net8_port`, not `master`)
 
@@ -643,3 +643,22 @@ posted to skyline.ms, 540-minute duration, tutorial tests present in pass 0.
 | `pwiz_tools/Skyline/SkylineTester/TabBuild.cs` | 3 |
 | TestRunner stager (skip message / hard failure) | 3 |
 | TeamCity perf+tutorial configuration | 3 |
+
+### 2026-10-02 - Gate met: clean Integration nightlies
+
+The 2026-10-02 report shows all four Integration runs posted to skyline.ms at the full
+540-minute duration with 0 failures and 0 leaks: BRENDANX-UW6 (7,867 tests), BRENDANX-UW25,
+SKYLINE-DEV4 (`e51910615`) and BRENDANX-UW7 (`536a31115`). This meets the gate stated under
+Verification. Perf coverage is in progress under `TODO-20260917_nightly_three_channels.md`.
+Last night UW7's Integration with Perf Tests run (720 min) failed only
+TestDiaTtofDiaUmpireTutorial. SKYLINE-DEV6 results are ignored.
+
+## Resolution
+
+**Status**: Completed - merged into the port branch via #4666 (`ea391bde4e`), reaches master with #4619
+
+Fixed all three blockers: Integration runs post to skyline.ms again (none had posted since 2025-12-15),
+run for the full 540 minutes instead of dying around 5 hours, and include the tutorial tests.
+Confirmed by clean Integration nightlies on multiple machines (2026-10-02). Two items stay
+out of scope here: the stale `AssemblyInfo.cs` that breaks SkylineTester builds in pre-port
+checkouts (see "Incidental finding"), and Perf runs (tracked in the three-channels TODO).

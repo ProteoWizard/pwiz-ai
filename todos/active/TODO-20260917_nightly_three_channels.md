@@ -358,3 +358,11 @@ leak run logs the sweep marker; quick inspection clean.
 - `TODO-20260913_net8_nightly_reporting.md` - Integration nightly reporting
 - PR #4677 (`GCCollectionMode.Aggressive` before each sample), which is what makes the
   private-bytes axis worth a dedicated leak machine
+
+### 2026-10-02 - Standard and Leak Checking clean; Perf close
+
+Brendan: Integration Standard and Leak Checking runs on many machines now pass fully, with no
+failures and no leaks. Perf is not clean yet: last night's BRENDANX-UW7 Integration with Perf
+Tests run (720 min) failed only TestDiaTtofDiaUmpireTutorial. Ignore SKYLINE-DEV6 when judging
+these runs. Note: `get_daily_test_summary` still queries only the six original folders, without
+`Integration Leak Detection`, so the reporting task remains open.
