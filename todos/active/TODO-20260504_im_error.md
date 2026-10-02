@@ -4,11 +4,16 @@
 - **Branch**: `Skyline/work/20260504_im_error`
 - **Base**: `master`
 - **Created**: 2026-05-04
-- **Status**: Code complete; preparing PR (local prep + self-review before push)
+- **Module**: `skyline`
+- **Status**: PR open; all review threads resolved; awaiting TeamCity on the 2026-10-01 master
+  merge, then human re-review
 - **GitHub Issue**: [#4183](https://github.com/ProteoWizard/pwiz/issues/4183)
 - **Source Issue**: [skyline.ms #774](https://skyline.ms/home/issues/issues-details.view?issueId=774)
-- **PR**: [#4301](https://github.com/ProteoWizard/pwiz/pull/4301) (opened 2026-06-14, base master)
-- **HEAD**: `35447af24` (2nd master sync, 0 behind origin/master as of 2026-06-13). Commits
+- **PR**: [#4301](https://github.com/ProteoWizard/pwiz/pull/4301) (opened 2026-06-14, base master;
+  retitled `skyline: Added observed ion mobility and CCS to chromatogram extraction` + `skyline`
+  label 2026-10-01)
+- **HEAD (current)**: `03185408f4` (master merge 2026-10-01, on top of `7e3163eecb`)
+- **HEAD (historical, 2026-06-13)**: `35447af24` (2nd master sync, 0 behind origin/master as of 2026-06-13). Commits
   since 1st merge: `3754a390b` (apex-of-valid + scale source + decode guard), `07f4ea1ef`
   (Full Scan CCS-error target + golden refresh), `35447af24` (merge origin/master, 9 commits,
   no conflicts). Post-merge green: apex-of-valid + v19-compat unit tests, FullScanGraphTest,
@@ -354,15 +359,25 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
 - Column tooltips/help pages say observed IM is read at the peak apex.
 - Dropped (Brian agreed): in-window centroid bias (#7), rescore CCS loss, converter threading.
 
+## PR status review (2026-10-01)
+- Pulled the master merge `03185408f4` (#4748, #4743, #4669; no conflicts). Working tree clean.
+- Review threads: 0 unresolved. Nick's 2026-07-14 review addressed (reply posted 2026-08-11);
+  Copilot's 2026-09-25 pass on the `/code-review max` fixes answered the same evening.
+- No approving review yet. CI on the merge push: TeamCity bt209 build 4197793 and CodeQL
+  (csharp, c-cpp, java-kotlin) were still running when checked.
+- Added the missing `skyline:` title prefix and `skyline` label to the PR.
+
 ## Remaining before merge
-- [ ] (Optional) /pw-self-review on the final state; TeamCity green; human review
-- [ ] Produce Release/test build for the requesting user
-- [ ] Consider no-converter IM test data to red→green the scale-source fix directly
+- [x] Push branch; open PR #4301; Copilot rounds + `/pw-respond`; Nick's review addressed
+- [x] `/code-review max` on the branch (2026-09-24/25, fixes in `f1f68ea37c`, `7e3163eecb`)
+- [ ] TeamCity green on `03185408f4`
+- [ ] Request human re-review (Nick reviewed in July; code changed a lot since)
+- [ ] Re-capture tutorial s-19 (SmallMolLibraries; now shows the observed-IM/CCS tooltip) in
+      en/ja/zh-CHS and update its caption
+- [ ] Produce Release/test build for the requesting user (skyline.ms #774)
+- [ ] (Optional) No-converter IM test data to red→green the scale-source fix end to end
       (current functional data has a converter, so that fix is verified by code + the
       decode-guard unit test, not yet by an end-to-end no-converter import)
-- [ ] Push branch (fast-forward over stale remote)
-- [ ] Open PR (`Fixes #4183`) → Copilot review → `/pw-respond`
-- [ ] Produce Release/test build for the requesting user
 
 ## Decisions Log
 - **2026-05-04**: Algorithm = intensity-weighted COG of IM across the extraction band.
