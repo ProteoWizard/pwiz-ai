@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: Item 1 DONE: 3 commits (`65283f6dc1`, `154219f399`, `b8524ef1dc`), gated at
-  48 PASS / 0 FAIL (-Dataset All), measured two ways, scaling validated, at **~400 s off an 82-file
-  FirstPassFDR**. Not pushed, no PR. **Mis-sized originally - read the 2026-10-01 sections at the END.**
+- **Status**: Item 1 implemented and measured (~400 s at 82 files), 5 commits, all gates green -
+  but **NOT PR-ready**: /code-review max found real issues, incl. that the "one writer" safety
+  premise is FALSE. Read the 2026-10-01/02 review section at the END. Not pushed, no PR.
 - **Module**: `osprey`
 - **PR**: none
 
@@ -582,3 +582,98 @@ inside a stage with a documented memory budget (FirstPassFDR private peak 25.2 G
 run's 46.8 GB). It buys ~196 s at 82 files for a larger resident map. That is a speed-for-
 memory trade in the one stage whose whole design history is about staying flat in file count,
 so it should be Brendan's call, not an assumption.
+
+## 2026-10-01/02: `/code-review max` says NOT PR-ready. Triaged findings below.
+
+Branch is now **5 commits**:
+
+```
+5472611c53  Merge commit '536a31115e' into Skyline/work/20260930_osprey_pass2_runq_reuse
+f1fd603cd6  osprey: Sized the completed-score arrays exactly instead of growing lists
+b8524ef1dc  osprey: Removed the per-row sink timer from the pass-2 cost attribution
+154219f399  osprey: Added pass-1 and pass-2 cost attribution to the streaming first pass
+65283f6dc1  osprey: Changed pass 2 to read the run q-values pass 1 already stored
+```
+
+Merge from the port branch was clean (#4708 brought +6407 lines of training-export; no overlap
+with the five files here). **638/638 unit tests pass post-merge.** The PR was NOT opened.
+
+`/code-review max` returned 15 findings plus a cut list. Every one below was checked at source
+before being accepted or dropped - the review is capable of being confidently wrong, and one of
+its findings was (see "where the review overreached").
+
+### Real, and introduced by this change - fix before the PR
+
+| # | finding | status |
+|---|---|---|
+| 13 | **The "there is one writer" doc is FALSE**, and it is the premise the change rests on - stated in BOTH `FdrProjectionOutput.cs` and `TryLoadCompletedScores`. At least three writers of a `.1st-pass.fdr_scores.bin`: pass 1's `flushFileRunScope`, `FdrStoringSink.AcceptOutput` (its own comment: "the resident path still writes here"), and `FdrScoresSidecar.Write` at `FirstPassFdrTask.cs:2422` and `:3261` | CONFIRMED at source |
+| 14 | The positional entry_id guard pins entry_id **GROUPS, not rows**. `BASE_ID_MASK = 0x7FFFFFFF` only clears the decoy bit, so entry_id is a library precursor id, and first-pass is pre-compaction - 33,459,602 peaks over 5,308,766 precursors, ~6.3 rows each. `BuildMultiObservationEquivFixture` (`FdrTest.cs:1639`) builds exactly that shape. A permutation among rows sharing an entry_id passes at every `r`, and this change tripled what rides on the guard: score AND both q-values | CONFIRMED |
+| 1 | No validity-key term covers the newly authoritative q-values. The key adds only `";fdrsidecar=" + FormatVersion` (layout, still 7). Change a tie-break in `TargetDecoyCompetition`, the conservative +1 in `ComputeQvaluesCore`, or the best-per-peptide rule, then resume: adopted files emit the OLD algorithm's q and the rest the NEW one, in one experiment, with no log line distinguishing them. Before this change stale q was inert because pass 2 re-derived it | code matches the claim |
+| 5 | **The polish is a cold-path REGRESSION.** All four arrays are allocated before `tryStream`, and the production streamer refuses in O(1) (`FirstPassFdrTask.cs:3563`, `if (!scoresOnDisk.Contains(fileName)) return false;`). On a cold run every file in both passes allocates and zeroes 28 B/row for nothing - about +67 MB per file per pass against the base's two lists - in the one method (#4355 Stage B) whose purpose is a peak FLAT in file count. Fix: allocate lazily on the first record, and give pass 1 an overload that does not ask for the q-values | CONFIRMED |
+| 5b | The polish commit's comment describes a transition from ITS OWN pre-polish state ("the growable lists this used to build"), which will not exist after the squash. Relative to the base this change ADDS two arrays. Rewrite it to describe the state, not the diff | CONFIRMED |
+| 8, 11 | **Both new test arms can pass with the feature broken.** Arm 3 asserts `sidecar.Count`, which proves pass 1 FLUSHED, not that pass 2 READ; every rejection path falls back to the recompute, which matches the oracle. Arm 4 appends its extra record at the END, so an implementation that accepted the sidecar by truncating at `expectedCount` also passes. Neither observes the behaviour its comment claims to pin. (Both were confirmed non-vacuous by hand - 1e-12 perturbation, and removing the bound check - but nothing in the suite asserts it.) Fix: count streamer invocations that returned true and assert the pass-2 hit count | correct |
+| 11b | Arm 4 is coupled to arm 3: it keys into the dictionary arm 3 populated while building a separate fixture instance, so it depends on arm 3 running first and on the builder staying deterministic. And `records[records.Count - 1]` throws on a zero-row file, a shape pass 1 does flush | correct |
+| 6 | The cost breakdown misattributes the costs the commit is justified by. `loadFileFeatures` sits between `swSidecar.Stop` and `swFill.Start` in BOTH passes - in no timer - and `swFill` brackets the loop containing `ComputeStreamedScore`, so on a cold run pass 2 prints "array fill \<minutes\>s, run-q recompute 0.0s", inverting the attribution. The `~1.5 s over 33M rows` comment also cites a cohort-specific `n`; at 446 files `n` is ~1.34B rows | CONFIRMED |
+| 12 | `AssertSinkMatchesOracle` omits the experiment aggregate score, and `CapturingSink.ExperimentAggregateScoreAt` has zero call sites - a dead getter. On the resumed path the fallback `ea` is `fScores[r]`, which now comes off disk. One `Assert.AreEqual` inside the existing loop covers all arms | correct, cheap |
+| 15 | The recompute guard tests `runPrecFile == null` then dereferences `runPeptFile`, relying on an invariant held in another method. Inert today (both published together) but breaks on any future streamer that can supply one and not the other. Key off `doneScores2 == null`, or test both | correct, cheap |
+
+### The one fix worth designing around
+
+Finding 2 points at something better than three separate guards: **pass 1 already recomputes
+these q-values and currently discards the stored ones** (`out _, out _`). It holds both at once
+and compares neither. Comparing them is free - pass 1 sorts anyway - and one equality check
+there is a CONTINUOUS self-check that catches findings 1, 3 and 4 at runtime on every resumed
+file. Prefer that over bolting on separate validations.
+
+(Findings 3 and 4 are the same family: the adopted q-values are a function of `fLabels` and
+`fPeptides`, which pass 2 re-reads live from parquet and which nothing validates; and nothing
+screens the q VALUES, so a same-version sidecar with both columns at 0.0 makes pass 2 emit
+maximally-confident q for a whole file, which the compaction gate then admits at any threshold.)
+
+### Dropped, with reasons
+
+* **Finding 7** - resumed files skip `contribAcc.Add`, so a full resume publishes a
+  feature-contribution report built from zero rows and reports a DEGENERATE MODEL when the real
+  cause is that nothing was scored. **Pre-existing in the base**, not introduced here. Worth its
+  own issue; out of scope for this PR.
+* **Finding 9** - the production resume shape (pass 1 with `doneScores != null`, a non-null
+  `pretrainedModel`, `RunFirstPassStreaming` as the real entry point) is untested. Largely a
+  pre-existing coverage gap. Real, but scope creep here.
+* Cut-list items (callback cannot abort early; pass 2's five per-file arrays are a pure copy on
+  the sidecar path; `LogTag.PATH` vs `TIMING` so the perf tools cannot see the new lines;
+  `CompletedScoreStreamer` flattening the named `FdrScoreRecord` into four positional
+  same-typed values; three duplicated `streamFileRows` lambdas violating the >3-line DRY rule)
+  - all fair, none blocking. The `LogTag.TIMING` one is worth taking while in there, since
+  `regression.ps1` keys PATH by LogKey and these lines carry none.
+
+### Where the review overreached, and where I did
+
+* The review called the entry_id guard weak (finding 14) and **I first tried to dismiss it**
+  using the 2026-10-01 adjacency probe, which found 0 adjacent same-entry_id rows over 33.46M
+  and again over 68.3M. That was my error: the probe answers whether same-PEPTIDE rows are
+  ADJACENT, for a memo, not whether entry_ids are row-unique. They are not. Finding 14 stands.
+* Conversely the review is right that it refuted a whole class of concerns by building and
+  running: 0 warnings / 0 errors, and the FDR/sidecar/percolator tests pass. Format-string
+  arity, culture, definite assignment, float precision and older-sidecar adoption are all
+  checked and should not be re-spent.
+
+### A genuine benefit the review surfaced
+
+`CompactFromSidecars` and the FDRBench writer already read `rec.RunPeptideQvalue` off the
+sidecar, so emitting the stored values makes pass 2's output agree with compaction, where the
+recompute could in principle have diverged.
+
+### Standing: output is correct today
+
+None of the above is a wrong-output bug in the current tree. All gates are green and the output
+is byte-identical: 638/638 unit tests, 48 PASS / 0 FAIL on `-Dataset All` (including
+`StellarLibDecoy mode3 (per-file FDR sidecars==straight)` over 5,094,029 records), Stellar
+re-gated, and cross-arm determinism byte-identical at `--parallel-files` 3 against 4. The
+findings are robustness, documentation, two weak tests, and one cold-path memory regression.
+The measured win (~400 s at 82 files) is unaffected.
+
+Estimated work to PR-ready: **2-3 hours including a re-gate**, not the 45 minutes estimated
+before the review.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
