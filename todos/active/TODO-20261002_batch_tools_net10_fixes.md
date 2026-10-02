@@ -9,7 +9,7 @@ never got a PR, onto the .NET 10 port branch.
 - **Checkout**: `C:\proj\review` (BRENDANX-UW6)
 - **Module**: `skyline`
 - **Created**: 2026-10-02
-- **Status**: In Progress - 2 commits (`5cd3c43a1e`, `4822e9fd60`), local; both batch-tool solutions inspection-clean and green; /code-review max running
+- **Status**: In Progress - squashed to `94ad5f6fb8` (local, not pushed); review triaged; all green
 - **PR**: (pending)
 - **Salvaged from**: `completed/TODO-20260823_resharper_cleanup.md` (superseded by Matt's #4685,
   `TODO-20260917_resharper_warning_reduction.md`)
@@ -61,7 +61,7 @@ All net472 branches and two-target comments from the original commits were dropp
 - [x] Build AutoQC and SkylineBatch
 - [x] Run `TestHttpClientWithProgressIntegration` and `CodeInspection`
 - [x] Run the AutoQC and SkylineBatch suites
-- [ ] `/code-review max`, triage
+- [x] `/code-review max`, triage
 - [ ] Open the PR into `Skyline/work/20260612_net8_port`, label `skyline`
 
 ## Progress Log
@@ -117,3 +117,59 @@ with zero warnings on both:
   and `Server`.
 
 Logs: `ai/.tmp/sessions/20261002-batchfix/autoqc4.log`, `skylinebatch3.log`.
+
+### 2026-10-02 - /code-review max: 15 findings, triaged; squashed to `94ad5f6fb8`
+
+Reviewed commit `5cd3c43a1e` (the review started before `4822e9fd60`). Its 15 findings were
+checked and sorted into fix-now or drop.
+
+**Fixed:**
+* **#4 - The DNS fix was incomplete.** A name that exists but has no address record arrives as
+  `ConnectionError` with an inner `SocketException` of `NoData`. Confirmed on .NET 10.0.12:
+  `nonexistent.example.com`, which is `SimulateDnsFailure`'s own default host, does exactly
+  that. `IsDnsResolutionFailure` now also accepts an inner `HostNotFound`, `NoData`,
+  `NoRecovery` or `TryAgain`. `ConnectionRefused` stays a connection failure.
+  `SimulateDnsNoDataFailure` was added, and `TestHttpClientWithProgressIntegration` covers it for
+  both download and upload.
+* **#9** - `SimulateConnectionFailure` was a bare `HttpRequestException`, so the non-DNS path was
+  never tested with a realistic exception. It now uses the real refused shape (`ConnectionError`
+  + `ConnectionRefused`).
+* **#8** - `GetExpectedMessage` checked message text for status codes before checking the DNS
+  shape, so a host name containing "500" would have been mistaken for HTTP 500. It now checks
+  the exception shape first, using its own list of DNS shapes rather than calling the product's.
+  The hard-coded `:443` was dropped.
+* **#1 - LongWaitDlg hang, reproduced.** `LongWaitOperation` starts its work before `ShowDialog`
+  creates the window. A fast operation (for example an unresolvable FTP host failing in ~1.5 ms)
+  calls `Finish()` with no window handle, `Invoke` throws `InvalidOperationException`, and the
+  task swallows it. The completion callback never runs, the dialog never closes, and SkylineBatch's
+  Run buttons stay disabled. `Finish` now catches it, and the `Shown` handler closes the dialog
+  when the work already completed. New `LongWaitDlgTest.TestFinishBeforeDialogShown` fails in
+  12 ms against the old code (`skylinebatch-revertcheck.log`) and passes with the fix.
+* **#11, #14** - Inaccurate comments (the `IsDnsResolutionFailure` doc; the `HttpClientSingleton`
+  comment claiming .NET 4.7.2 limits and automatic DNS refresh).
+* **#12** - The commit message was 11 lines. The branch was squashed to one commit, never pushed.
+
+**Dropped:**
+* #2 (invalid naming-pattern regex in `DataServerForm`), #3 (`GetServerFromUi` swallowing
+  validation errors), #10 (`DialogResult` set off the UI thread): bugs already present in functions
+  this branch only edited mechanically (lambda wrapper removal). Not this branch's subject.
+* #7 - An unresolvable proxy is reported as a DNS failure of the target host. Low severity, and
+  it matches what .NET Framework did for https targets.
+* #13 - `FilePathControl` duplicates `UiFileUtil.OpenFile`. Calling `OpenFile` would silently
+  ignore the declared `ExistingOptional` option, which nothing passes today. That is a separate
+  decision.
+* #15 - `IsNetworkReallyAvailable` walks the adapters twice. A performance issue outside this
+  change.
+
+**Raised with Brendan (same simulator-versus-production pattern, outside the diff):**
+* #6 - Every real non-2xx response reaches users as raw "Response status code does not indicate
+  success: 404 (Not Found)". The friendly 404/401/403/500/429 messages only run for the
+  simulator's message-only exceptions.
+* #5 - The `ConnectionLost` classification keys on IOException HResults that .NET 10 never
+  produces. A real mid-download drop is rethrown raw, and WebEnabledFastaImporter's
+  batch-splitting branch can never fire.
+
+Final verification (all on `94ad5f6fb8`'s content): Skyline build;
+`TestHttpClientWithProgressIntegration`, `TestPanoramaDownloadFile`, `CodeInspection`,
+`TestRInstaller` pass; AutoQC 18/18 and SkylineBatch 39/39, both with `-RunInspection` at zero
+warnings. Logs: `build4.log`, `tests4.log`, `tests5.log`, `autoqc5.log`, `skylinebatch5.log`.
