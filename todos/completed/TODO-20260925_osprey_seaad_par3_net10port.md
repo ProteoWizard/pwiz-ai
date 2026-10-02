@@ -660,3 +660,20 @@ not be compared with 2026-09-26.
   reason; prefer those to wall-clock deltas on this machine.
 
 **Status: COMPLETE.** Nothing further is open here.
+
+## Resolution
+
+**Status**: Completed - measurement only; no PR of its own (it measured #4619)
+
+* The 82-file SEA-AD run of the .NET 10 port branch at `--parallel-files 3` (pinned `5bd83dae8b`)
+  finished in 4h59m23s on MACS2. Both correctness anchors matched exactly: 353,085,961 scored
+  entries, and a pass-1 FDP of q=0.0100 n=45,943.
+* The run's pass-2 outputs turned out to be wrong because of the `FrozenModelScorer` defect (see
+  `TODO-20260926_osprey_pass2_parallel_files_dataloss.md`). Its pass-1 numbers and anchors are
+  still valid; its pass-2 numbers are not.
+* No throughput regression on the tip: PerFileScoring took 750.7 s at the pin and 738.1 s at
+  `ed25627d81`, with identical config on a quiet machine. Both scored the same 16,656,225 peaks.
+* Determinism check on the fixed tip: par3 vs par4 output was byte-identical (all 17 second-pass
+  bins, plus `out.stats.tsv`). The full par4 run produced 82 of 82 file rows populated.
+* The measurement protocol gained one rule: diann idles between phases, so no CPU activity
+  does not mean the job has finished.

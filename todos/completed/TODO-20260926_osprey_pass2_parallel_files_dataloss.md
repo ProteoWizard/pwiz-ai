@@ -367,3 +367,23 @@ and the branch ref is intact if it is wanted.
 
 **Status: verification COMPLETE.** The only thing left is the gate-branch disposal decision,
 which is a yes/no for Brendan, not work.
+
+## Resolution
+
+**Status**: Completed - root cause fixed upstream in `fcd59201a3` (#4727 / #4706) and verified on the fixed tip
+
+* Defect: in pass 2, runs were silently dropped depending on `--parallel-files`. At par4 the blib
+  shrank 119x (50,051 peptides down to 487), with exit code 0 and no warning.
+* Root cause: a shared scratch buffer in `FrozenModelScorer`, which #4706 fixed on 2026-09-28,
+  two days after the runs that exposed it.
+* Verified 2026-10-01 on `ed25627d81`:
+  * The 82-file par4 run had zero zero-precursor rows, with the anchor unchanged at 353,085,961.
+    It found 54,285 peptides and 6,654 protein groups.
+  * An 8-file par3 vs par4 comparison was byte-identical (before the fix, 4 of 83 rows differed).
+* The 2026-09-26 par3 and par4 pass-2 measurements stay invalid. Only fresh runs on the fixed
+  tip count.
+* Gate branch `Skyline/work/20260926_osprey_pass2_empty_run_gate` (`695ac9e779`, never pushed,
+  worktree `D:\Users\brendanx\proj\pwiz-gate`): Brendan's decision is recorded in the handoff
+  file in `ai/.tmp` on the machine that holds that worktree. Act on it there. `/code-review max`
+  found the gate defective on its own terms. If a backstop is wanted later, build it fresh
+  against the experiment-level predicate.
