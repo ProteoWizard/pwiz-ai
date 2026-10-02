@@ -257,3 +257,29 @@ search engine can recover from the predictor's order; outputs `rtcal\ztscan\koin
 **Chronologer arm** (`ztscan\carafesharp-chrono\`, `Run-CarafeChrono.ps1`): round one's starting library with every RT
 replaced by Chronologer_RT (`blib_set_koina_rt.py`, 2,636,987 peptidoforms), then stages 3, 4-5, 6 with the per-RT
 window OFF. Queued behind round 2.
+
+**Round 2 library, window off** (`ztscan\carafesharp-r2\osprey_project_nowin\`, the production-relevant arm):
+- Per run 31,950 / 31,709 / 32,742 (round 1: 27,901 / 28,534 / 27,696); experiment 37,314 (33,995).
+- q <= 0.01: 37,269 targets, entrapment FDP 0.24% (round 1 33,951, 0.26%); matched FDP 0.3% 38,242 (34,175, +11.9%).
+- Last RT bin (9.9-11.2 min) 4,580 (round 1 1,075), the same as with the window: the library, not the window, does it.
+- Against DIA-NN out of the box (.wiff, its own library) at FDP 0.3%: -6.3% (round 1 -16.3%).
+- Caveat: Osprey's `FDRBench-Input.tsv` is not complete at loose q (at q <= 1 it holds 9,145 / 1,884 entrapment against
+  ~400k targets on a 1:1 library), so matched-FDP numbers mean something only up to q ~0.02 (FDP 0.3% here).
+  `entrap_ab.py` now cuts at the first crossing of the FDP level.
+
+**Chronologer start, window off: training set** (`ztscan\carafesharp-chrono\`): 22,981 RT training peptide forms;
+18,102 / 887 / 1,769 / 165 at < 9 / 10-10.5 / 10.5-11 / 11+ min (round 2 with the window: 16,328 / 770 / 1,324 / 105).
+A starting RT that tracks the end breaks the loop in one round without the window. Fine-tune and search running.
+
+**Chronologer in CarafeSharp** (`Skyline/work/20261001_osprey_missed_vs_diann`, local, not pushed):
+- d79aae9e3c: weights + encoding JSON committed (`models/chronologer-20220601193755`).
+- c3998d2127: TorchSharp port (`ModelChronologer`, `ChronologerEncoding`, `ChronologerFiles`, `ChronologerModel`;
+  iRT fit moved to `IrtKit`). Matches jchronologer's golden cases to 2e-5.
+- 492dc3dde5: `-rt_model alphapeptdeep|chronologer` for library prediction (`IRtPredictor`,
+  `ChronologerRtPredictor` with an AlphaPeptDeep fallback; library RT iRT; training only with `-tf ms2`).
+- Gate: build, 78 tests passed (8 Carafe parity tests inconclusive: `carafesharp-testfiles-v1.zip` not on SCARFELL),
+  inspection 0/0.
+- Bulk parity: 20,000-peptide subset of the ZT Scan training DB (`ztscan\chronologer-native-check\`): native against
+  Koina's Chronologer on 17,937 peptidoforms, max |difference| 7.6e-6 HI, Pearson 1.00000000.
+- Next: fine-tuning Chronologer (per-source normalization infrastructure, frozen BatchNorm, HI -> normalized-RT head),
+  the RT model type in the saved model, then the default by measurement on G1.
