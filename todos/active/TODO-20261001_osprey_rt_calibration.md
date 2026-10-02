@@ -125,3 +125,38 @@ it. On Astral the ~25% gap to DIA-NN is spread evenly along the gradient: not RT
   a separate, sensitivity question.
 - The RT fix should recover ZT Scan's late region and the last bins of Astral and Stellar without changing the
   middle of a run.
+
+### 2026-10-01 - Per-RT window (Mike: try it, keep it if it works)
+
+**Offline check first** (`simulate_local_window*.py`). From each run's `calibration.json` points and DIA-NN's IDs (library
+RT = iRT), what fraction of the latest 7% of DIA-NN's precursors would fall inside each window:
+
+| Window | Astral | Stellar | ZT Scan A1 / D1 / G1 | Mean width (min) |
+|---|---|---|---|---|
+| global (today) | 90-91% | 80-81% | 0.4 / 16 / 79% | 0.50-0.55 |
+| existing `LocalTolerance` (mean of 5, x3) | 96% | 92-93% | 10.5 / 98 / 97% | 0.53-0.60 |
+| median of nearest 5% (8-50) x 3 x 1.4826, clamped [global, 3.0] | 99.3-99.7% | 98.8-99.2% | 99.4 / 99.9 / 100% | 0.58-0.64 |
+
+A1 is sensitive to k (8: 30%, 12: 99%, 20: 0.4%): it has no calibration points past observed 9.88 min.
+
+**Implemented** as dc30890311 (local, not pushed):
+- `RTCalibration.LocalSearchWindowHalfWidth`: the median |residual| of the k points around each calibration point in
+  library-RT order (k = n/20 within 8-50), interpolated at the candidate's library RT; 3 x 1.4826 x that; clamped
+  [global, `MaxRtTolerance`].
+- `PeakDataExtractor` uses it, and scales the RT penalty sigma by the same ratio, only with `OSPREY_RT_LOCAL_WINDOW`
+  (off by default; not in any validity key, so A/B arms use separate output directories). Stage 6 boundary
+  overrides are unaffected.
+- `TestLocalSearchWindowHalfWidth`.
+- Gate: build, 639 tests, inspection 0/0.
+
+**Inspection in a fresh worktree (tooling gap).** `Build-Osprey.ps1 -RunInspection` resolves the 15 pwiz-sharp and Shared
+projects outside `Osprey.sln` (`CommonUtil`, `MsData`, `ProteowizardWrapper`, ...) through their
+`bin/x64/Debug/net10.0` outputs, which a fresh worktree's build never makes (it builds them platform-neutral, to
+`bin/Debug/net10.0`): 515 spurious "Cannot resolve symbol" errors.
+- Worked around by copying each `bin/Debug/net10.0` to `bin/x64/Debug/net10.0`, plus the demux worktree's built
+  ProteowizardWrapper (same source).
+- The script should do this itself.
+
+**A/B running** (`Run-LocalWindowAB.ps1`, `C:\temp\osprey-runs\rtcal\`):
+- ZT Scan off/on with this build;
+- Stellar and Astral on, against their `osprey-base`.
