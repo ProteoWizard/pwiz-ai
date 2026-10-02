@@ -675,9 +675,6 @@ The measured win (~400 s at 82 files) is unaffected.
 Estimated work to PR-ready: **2-3 hours including a re-gate**, not the 45 minutes estimated
 before the review.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
-
 ## INDEX: every FirstPassFDR performance opportunity found, with measured sizes
 
 One place to look when sizing the next change, so nothing has to be reconstructed from the
@@ -743,3 +740,10 @@ alone.
   uncontended lock plus a `Stopwatch.Elapsed` read, ~1.5 s over the pass.
 * **The parquet walk is the one SUPERLINEAR bucket** (3.27x for 2.04x rows). Never extrapolate
   walk costs linearly; everything else here tracks rows to within 2%.
+
+---
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work. The two sections
+that matter most here are "`/code-review max` says NOT PR-ready" (the fix set) and the INDEX
+above (what is left to win, with measured sizes).
