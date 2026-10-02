@@ -1,11 +1,14 @@
 # Carafe library RTs plateau at the end of the gradient, so Osprey loses late eluters
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261001_osprey_rt_calibration`
-- **Base**: `Skyline/work/20260612_net8_port` (5c90942d48)
-- **Worktree**: `C:\Dev\pwiz-osprey-rtcal` (SCARFELL)
+- **Branch**: `Skyline/work/20261001_osprey_missed_vs_diann` (local, not pushed)
+- **Base**: `Skyline/work/20260923_carafesharp` (#4717, a7bf9f70be). Focus: why Osprey misses peptides DIA-NN finds,
+  not the demux.
+- **Worktree**: `C:\Dev\pwiz-carafesharp` (SCARFELL)
+- **Superseded branch**: `Skyline/work/20261001_osprey_rt_calibration` (`C:\Dev\pwiz-osprey-rtcal`, from the port
+  branch 5c90942d48) holds only the dropped per-RT window, dc30890311, local
 - **Created**: 2026-10-01
-- **Status**: In Progress - reproducing on the Astral regression set against DIA-NN
+- **Status**: In Progress - Chronologer as CarafeSharp's starting RT predictor
 - **GitHub Issue**: [#4759](https://github.com/ProteoWizard/pwiz/issues/4759)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -26,15 +29,19 @@ Full evidence and data paths: the issue, and `TODO-20260923_osprey_demux.md` ("W
 
 ## Tasks
 
-- [ ] Astral regression set (`osprey-testfiles-mzML-v2\astral`, `SkylineAI_spectral_library.tsv`, 1,567,424
-      precursors, no decoys, no entrapment): DIA-NN 2.3.2 and Osprey (port-branch build) on the same library
-- [ ] Osprey recall of DIA-NN's precursors by RT; library RT against observed RT; Osprey's calibration coverage
-- [ ] Same on Stellar (DIA-NN needs `--mass-acc-cal 900 --no-ms1`; `stellar-libdecoy` has entrapment for FDP)
-- [ ] Decide the fix: calibration refit after the first pass from all passing IDs, and/or an RT-dependent window
-      (local residuals, local slope)
-- [ ] Regression test pinning the behavior
-- [ ] Re-measure on Astral, Stellar and ZT Scan; `regression.ps1 -Dataset All` (expected to move goldens if the
-      fix changes the search; rebless with the measured gain)
+- [x] Astral and Stellar regression sets against DIA-NN; Osprey recall by RT; library RT against observed RT
+- [x] Per-RT search window: tried and dropped (costs mid-run IDs through SVM re-weighting)
+- [x] Root cause: AlphaPeptDeep's generic RT model plateaus at the end of the gradient; fine-tuning on a first pass
+      that misses the late peptides keeps it
+- [x] Peak pick measured: fine mid-run; late it follows the bad prediction
+- [x] Chronologer weights and encoding committed (`models/chronologer-20220601193755`, d79aae9e3c)
+- [ ] Port Chronologer to TorchSharp in CarafeSharp; parity with jchronologer's golden vectors and the 2.64M cached
+      Koina predictions
+- [ ] Chronologer as the starting-library RT predictor (option), AlphaPeptDeep MS2 unchanged
+- [ ] Decide the final-library RT: fine-tuned AlphaPeptDeep on a good training set (round 2), Chronologer directly,
+      or Chronologer fine-tuned
+- [ ] Held-out RT error by RT bin in the CarafeSharp training report
+- [ ] Re-measure on ZT Scan, Stellar and Astral against DIA-NN
 
 ## How the RT calibration works today (code map, 2026-10-01)
 
