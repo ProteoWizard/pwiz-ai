@@ -1,4 +1,4 @@
-# Late-eluting peptides searched at the wrong RT where library RTs compress at the end of the gradient
+# Carafe library RTs plateau at the end of the gradient, so Osprey loses late eluters
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261001_osprey_rt_calibration`
