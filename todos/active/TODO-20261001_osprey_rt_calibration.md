@@ -420,3 +420,9 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
 - ZT Scan matrix (above) agrees with Stellar and Astral: Chronologer wins every count and every RT bin. Next: flip the
   default to Chronologer (CLI, workflow script, parity tests pinned to AlphaPeptDeep, docs/05), regenerate the Stellar
   and Astral goldens (needs the ~6.5 GB test data), push.
+- Default flipped, 0338c2a309 (local): `LibrarySettings.DEFAULT_RT_MODEL = chronologer` (else `-rt_model`, else the
+  model folder's or saved model's); `CarafeReferenceRun` pins `alphapeptdeep` for the Carafe parity tests; a
+  `carafemodel-1` file without an RT model stays AlphaPeptDeep; docs 01/05/06. `Run-CarafeSharpWorkflow.ps1`
+  defaults `-RtModel chronologer` and always passes it. Gate green (92 / 84 + 8 Inconclusive, inspection 0).
+  Pending: regenerate the Stellar and Astral regression goldens (`regression.ps1 -CreateGolden -Force`, clean tree,
+  CPU; needs `build.ps1 -TestData Fetch`, ~6.5 GB), then push the four commits to #4717.

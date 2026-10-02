@@ -48,8 +48,9 @@
     gpu (default; a CPU-only CarafeSharp build falls back to the CPU) or cpu.
 
 .PARAMETER RtModel
-    alphapeptdeep (default) or chronologer: CarafeSharp's -rt_model for the initial library (stage 2) and
-    the fine-tuning and final library (stage 4/5).
+    chronologer (default, as CarafeSharp's) or alphapeptdeep (Carafe's): CarafeSharp's -rt_model for the
+    initial library (stage 2) and the fine-tuning and final library (stage 4/5). Always passed, so a run
+    names its RT model whatever the build's default; it needs a CarafeSharp with -rt_model.
 
 .EXAMPLE
     pwsh -File ./ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1 -Preflight `
@@ -91,7 +92,7 @@ param(
     # Osprey's spectra cache, default <WorkDir>\spectra-cache. A .spectra.bin depends only on its input
     # file, so a second round of the loop over the same runs can share the first round's.
     [string]$CacheDir,
-    [ValidateSet('alphapeptdeep', 'chronologer')] [string]$RtModel = 'alphapeptdeep',
+    [ValidateSet('alphapeptdeep', 'chronologer')] [string]$RtModel = 'chronologer',
     [switch]$Preflight
 )
 
@@ -316,8 +317,8 @@ $newLib       = Join-Path $WorkDir 'osprey_new_library'
 $projectDir   = Join-Path $WorkDir 'osprey_project'
 $libraryBlib  = 'carafe_spectral_library.blib'
 
-# Only a non-default -rt_model is passed, so the script still drives CarafeSharp builds that predate it.
-$rtModelArgs = if ($RtModel -ne 'alphapeptdeep') { @('-rt_model', $RtModel) } else { @() }
+# Always passed: the RT model is the run's choice, not whatever the CarafeSharp build defaults to.
+$rtModelArgs = @('-rt_model', $RtModel)
 
 $digestCommon = @(
     '-enzyme', '2', '-miss_c', '1', '-minLength', '7', '-maxLength', '35',
