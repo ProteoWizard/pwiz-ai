@@ -79,8 +79,7 @@ Built and tested on BRENDANX-UW6. Logs are in `ai/.tmp/sessions/20261002-batchfi
 * AutoQC: 18/18 passed.
 * SkylineBatch: 27/38 passed. The same 11 tests fail on the unchanged base
   (`skylinebatch-base.log`), so the failures are environmental and not caused by this branch.
-  They look for SkylineCmd under `bin\Release
-et10.0-windows` (only Debug was built here) and
+  They look for SkylineCmd under `bin\Release\net10.0-windows` (only Debug was built here) and
   for a missing `Test\emptyTemplate.sky`. The run also writes `*_replaced.bcfg` files into
   `SkylineBatchTest/Test/BcfgTestFiles`, which had to be cleaned up afterwards.
 * Quick inspection reported 46 issues, none in a changed file. All are unresolved-reference
