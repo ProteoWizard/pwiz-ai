@@ -349,7 +349,7 @@ CUDA test pass can run there too.
 
 **Plan** (the reference data goes where the Osprey regression data lives):
 
-- [ ] Share the reference data. Per the section below, plus what it does not list:
+- [x] Share the reference data (2026-09-28/30: the four packages below). Per the section below, plus what it does not list:
   - `example_test_data\stellar\carafe-osprey-entrapment\` (`CARAFESHARP_CARAFE_REFERENCE`,
     `CARAFESHARP_CARAFE_FINETUNED`, `CARAFESHARP_STAGE1_REFERENCE`)
   - `example_test_data\stellar\carafe-osprey\`
@@ -358,13 +358,18 @@ CUDA test pass can run there too.
   - `example_test_data\astral\` Carafe outputs, for the end-to-end workflow
   - The Stellar `_21` training export (`CARAFESHARP_OSPREY_TRAINING_EXPORT`) and the mzML can be
     regenerated from the Osprey regression data.
-- [ ] Package it as a Perftests zip next to `osprey-testfiles-mzML-v2` on the Panorama
-      `perftests` folder (e.g. `carafesharp-testfiles.zip`), unpacking to `<Downloads>\Perftests\`.
-- [ ] Default the parity tests to that folder when the `CARAFESHARP_*` variables are unset, as
+- [x] Package it as a Perftests zip next to `osprey-testfiles-mzML-v2` on the Panorama
+      `perftests` folder (e.g. `carafesharp-testfiles.zip`), unpacking to `<Downloads>\Perftests\`:
+      `carafesharp-testfiles-v1`, `carafesharp-testfiles-astral-v1`, `carafesharp-export-v1`,
+      `carafesharp-export-astral-v1` (`testdata.json`).
+- [x] Default the parity tests to that folder when the `CARAFESHARP_*` variables are unset, as
       `regression.ps1` finds its data; keep the variables as overrides. With the data present,
       "every test runs" becomes the normal state, not an opt-in.
-- [ ] `Build-CarafeSharp.ps1`: a switch to fetch or verify the test data and the pinned
-      `pretrained_models.zip`, and a CUDA test pass.
+- [x] `Build-CarafeSharp.ps1`: a switch to fetch or verify the test data and the pinned
+      `pretrained_models.zip`, and a CUDA test pass. CUDA: `-Torch cuda` (2026-09-29). The models are
+      committed. Fetch/verify (2026-10-01): `build.ps1 -TestData Fetch|Verify` (and the wrapper's),
+      `scripts/TestData.ps1`; fetched into an empty folder from Panorama, the testfiles package's 286
+      files match its manifest; negative checks (changed file, no manifest, truncated zip, unknown id).
 - [ ] Later, not blocking merge: a TeamCity config that builds CarafeSharp and runs the tier-1
       tests; point the `vcs_trigger_and_paths_config.py` entry at it.
 
