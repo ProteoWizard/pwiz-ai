@@ -310,3 +310,9 @@ training search with the export, fine-tune + final library, 3-file search); Cara
 window off. Compare per dataset: the single-file search with the starting model against the 3-file search with the
 fine-tuned models (per-run counts; matched entrapment FDP for the 3-file searches up to q ~0.02; recall of DIA-NN by
 RT), and AlphaPeptDeep against Chronologer, plus each library's RT error by RT bin on a held-out run.
+
+**Chronologer start, one round, window off** (`ztscan\carafesharp-chrono\`, older build 27a0ba6; Koina-built starting
+library, equal to native; RT fine-tuned is AlphaPeptDeep): per run 32,203 / 32,587 / 33,084, experiment 38,194;
+q <= 0.01 38,137 targets at entrapment FDP 0.30%; matched FDP 0.3% 38,182 (round 2 window off: 38,242; round 1:
+34,175); last RT bin 4,463 (round 2 4,381, round 1 865). Fine-tuned AlphaPeptDeep RT R2 0.9969, median 0.00581.
+One round from a Chronologer start equals two rounds from AlphaPeptDeep's.
