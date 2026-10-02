@@ -155,8 +155,24 @@ projects outside `Osprey.sln` (`CommonUtil`, `MsData`, `ProteowizardWrapper`, ..
 `bin/Debug/net10.0`): 515 spurious "Cannot resolve symbol" errors.
 - Worked around by copying each `bin/Debug/net10.0` to `bin/x64/Debug/net10.0`, plus the demux worktree's built
   ProteowizardWrapper (same source).
-- The script should do this itself.
+- Fixed in the script (pwiz-ai 8dbfb082): `-RunInspection` now builds `Osprey.Test.csproj` as x64 first. Cold tree:
+  515 errors to 0. Root cause is #4725's AnyCPU pinning; noted on #4685.
 
 **A/B running** (`Run-LocalWindowAB.ps1`, `C:\temp\osprey-runs\rtcal\`):
 - ZT Scan off/on with this build;
 - Stellar and Astral on, against their `osprey-base`.
+
+**ZT Scan A/B** (same build, off/on; `C:\temp\osprey-runs\rtcal\ztscan\`):
+- Per run 27,901 / 28,534 / 27,696 -> 29,781 / 29,175 / 29,734.
+- Matched FDP 0.3 / 0.5 / 0.7%: 34,175 -> 34,964, 38,715 -> 41,170, 44,591 -> 46,025.
+- Recall of DIA-NN past 10 min: 10.2% -> 43.0%. Late apex agreement A1 0.7 -> 62.0%, D1 12.8 -> 78.0%, G1 68.9 -> 93.2%.
+- Remaining loss: the calibration curve is still 0.33-0.87 min early at the end, so the RT-deviation features penalize
+  the right peaks. The fine-tuned library itself compresses late RTs (round 1 trained on 12 / 1 / 0 peptides at
+  10.0-10.5 / 10.5-11.0 / 11+ min, against DIA-NN's 1,314 / 2,632 / 187), so round 2 of the CarafeSharp loop runs
+  with the window on (`ztscan\carafesharp-r2\`).
+
+**Stellar A/B** (`rtcal\stellar\osprey-base` vs `osprey-localwin`, DIA-NN Global.Q <= 0.01, 40,358 precursors):
+- Per run 27,957 / 28,519 / 28,730 -> 28,934 / 29,564 / 29,834 (+3.5-3.8%); experiment 31,720 -> 32,722 (+3.2%).
+- Recall of DIA-NN 68.2% -> 70.1%. Last three bins (18.4-23.8 min) 67.0 / 66.5 / 57.0% -> 75.4 / 76.9 / 79.9%; mid-run
+  bins +0.4-0.8 points.
+- Shared with DIA-NN +775, Osprey-only +227 (4,211 -> 4,438). No entrapment in this library; FDP check pending.
