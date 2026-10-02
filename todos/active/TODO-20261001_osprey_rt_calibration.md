@@ -218,3 +218,13 @@ Candidate dump for A1/D1 in `rtcal\ztscan\pickdump\` (`OSPREY_PICK_DUMP_CANDIDAT
 forms by RT, round 1 -> round 2 (DIA-NN finds 1,314 / 2,632 / 187 at 10-10.5 / 10.5-11 / 11+):
 - < 9 min 16,143 -> 16,328; 9-9.5 1,102 -> 1,082; 9.5-10 731 -> 883; 10-10.5 12 -> 770; 10.5-11 1 -> 1,324; 11+ 0 -> 105.
 - 20,492 peptide forms (17,989). Fine-tune and the 3-run search to follow.
+
+**Peak pick, measured** (`rtcal\ztscan\pickdump\analysis.txt`; first-pass candidate dump, window on, A1 and D1; the
+offline re-pick reproduces Osprey's pick for 100% of precursors). Share of DIA-NN's precursors whose chosen apex is
+within 0.1 min of DIA-NN's:
+- DIA-NN's peak is a candidate for 99.5-100% (every bin): the loss is in the choice, not detection.
+- Mid-run the Astral pick model is the best of those tried, 95-98% (no RT term 92-97%, co-elution only 87-93%, legacy
+  product 89-93%, Stellar model 90-95%).
+- Last bin (past 10 min): Astral model 80.5% (D1) / 66.3% (A1); without its RT term 92.1% / 91.1%.
+- So the pick is not the problem except where the predicted RT is wrong; fixing the library fixes the pick. No ZT
+  Scan-specific pick model needed on this evidence.
