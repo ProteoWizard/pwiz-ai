@@ -6,16 +6,16 @@
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Module**: `skyline`
 - **Created**: 2026-09-29
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: #4737
-- **PR**: #4758
+- **PR**: [#4758](https://github.com/ProteoWizard/pwiz/pull/4758) (merged 2026-10-02)
 
 ## Objective
 Fix the parts of the translation tooling that had not caught up with the port branch's
 `zh-CHS` -> `zh-Hans` rename and the net10 retarget, as reported by Brendan in #4737 (found while
 taking Osprey's first translation through ResourcesOrganizer on the Osprey branch, PR #4752).
 
-## Done (commits `efab95f53a`, `dafda3aef4`; not pushed)
+## Done
 - [x] `LastReleaseResources.db`: one-time SQL `UPDATE LocalizedResource SET Language='zh-Hans'
       WHERE Language='zh-CHS'` + `VACUUM` (36,892 rows each for ja / zh-Hans). Other `zh-CHS`
       strings in the db (designer `$this.Language` metadata in ChooseViewsControl.resx and
@@ -50,12 +50,12 @@ taking Osprey's first translation through ResourcesOrganizer on the Osprey branc
       (moved to DevTools in #4125). Nick dropped the rest: pre-existing batch error handling,
       cosmetic/unbuilt-tool items, and the rewrite-unchanged-files churn.
 - [x] Pushed and opened PR #4758 (2026-10-01) against `Skyline/work/20260612_net8_port`.
-- [ ] Left to the Osprey branch (#4752), not duplicated here to avoid conflicts:
+- [x] Left to the Osprey branch (#4752), which merged first with them:
       `ImportLocalizationCsvFiles.bat` `%ERRORLEVEL%` inside `if exist (...)` (now `|| goto error`)
       and the README naming `localization.zh-Hans.csv`.
-- [ ] Once Osprey is in `LastReleaseResources.db`, remove the `EXTRA_EXCLUDE` line from
+- [ ] Deferred: once Osprey is in `LastReleaseResources.db`, remove the `EXTRA_EXCLUDE` line from
       `UpdateResxFiles.bat`.
-- [ ] When the port branch merges to master, update `ai/docs/translation-guide.md` (still says
+- [ ] Deferred: when the port branch merges to master, update `ai/docs/translation-guide.md` (still says
       zh-CHS throughout, which is correct for master today).
 
 ## Notes
@@ -67,3 +67,17 @@ taking Osprey's first translation through ResourcesOrganizer on the Osprey branc
   not run; their test data uses `zh-CHS` as a self-contained language string and was left as is.
 - `TutorialLocalization/lib` still carries net472-era shims (Microsoft.Bcl.AsyncInterfaces,
   System.Numerics.Vectors, System.Threading.Tasks.Extensions) that nothing references any more.
+
+## Progress Log
+
+### 2026-10-02 - Merged
+
+PR #4758 merged into `Skyline/work/20260612_net8_port` as squash commit `ebde3bf6cd`, after
+two merges of the port branch: one bringing in #4752 (conflict in ImportLocalizationCsvFiles.bat
+resolved to #4752's version), and one bringing in the master merge #4744 (three normalized
+zh-Hans resx conflicted only on LF -> CRLF; kept our content in CRLF). After each merge a fresh
+exportResx reproduced all 641 localized resx byte-for-byte, Osprey included, and the baseline db
+stayed ja / zh-Hans. Copilot asked for a unit test of the language check; declined as a dev tool
+and the thread resolved. Deferred: removing the Osprey exclusion once Osprey is in the baseline,
+and updating ai/docs/translation-guide.md when the port branch reaches master. The squash
+message omitted the `See TODO` line.
