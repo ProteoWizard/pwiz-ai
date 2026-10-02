@@ -10,14 +10,11 @@ Get ReSharper green again for Skyline, SkylineBatch and AutoQC on the net8 line.
   `Skyline/work/20260612_net8_port` on 2026-08-31 (#4587)**, so this branch now needs
   rebasing/merging onto the port branch before a PR
 - **Created**: 2026-08-23
-- **Status**: In Progress - 12 commits on origin (build fixes, test fixes, ReSharper cleanup on
-  the net8 line, last 2026-08-24). The framework-neutral half shipped separately as
-  [#4648](https://github.com/ProteoWizard/pwiz/pull/4648) (WebClient migration + prohibition,
-  merged to master 2026-09-10). Next: move onto the port branch, re-run the inspection
-  baseline there, open a PR stacked on #4619. (Status corrected 2026-09-12; it had read
-  "Phase 0 not started" since the 24th.)
+- **Status**: Superseded - continued by Matt in `TODO-20260917_resharper_warning_reduction.md`
+  ([#4685](https://github.com/ProteoWizard/pwiz/pull/4685), merged into the port branch 2026-10-02).
+  8 commits for the projects outside `Skyline.sln` were never merged - see Resolution.
 - **Module**: `skyline`
-- **PR**: (pending, stacked on [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
+- **PR**: none (superseded by [#4685](https://github.com/ProteoWizard/pwiz/pull/4685))
 - **Related**: [#4587](https://github.com/ProteoWizard/pwiz/pull/4587) (CommonUtil WinForms split,
   the immediate base), `TODO-20260818_commonutil_winforms_split.md`,
   `TODO-20260612_net8_port.md`
@@ -1054,3 +1051,32 @@ Two observations that shape Phase 1:
 - Source files across `Skyline`, `SkylineBatch`, `AutoQC` per the Phase 1 baseline
 - Possibly `pwiz_tools/Skyline/Skyline.sln.DotSettings` plus
   `ai/scripts/Skyline/scripts/Sync-DotSettings.ps1` (severity retuning only)
+
+### 2026-10-02 - Superseded by Matt's TODO-20260917_resharper_warning_reduction (#4685)
+
+Matt took over the ReSharper work under `TODO-20260917_resharper_warning_reduction.md`. Its
+[#4685](https://github.com/ProteoWizard/pwiz/pull/4685) ("skyline: Added ReSharper inspection
+inside the Skyline Windows .NET build") merged into `Skyline/work/20260612_net8_port` on
+2026-10-02 as `bb4a910da2`. It took the net10 `Skyline.sln` inspection from 2,412 findings
+(403 errors) down to 178 warnings and 0 errors. The inspection now runs inside
+`ProteoWizard_SkylineWindowsNet`. This branch never had a PR.
+
+## Resolution
+
+**Status**: Superseded - continued by Matt in `TODO-20260917_resharper_warning_reduction.md` (#4685, plus stacked #4697, #4750, #4712)
+
+* Ownership moved to Matt. The Skyline part of the goal (inspection back to zero errors on the
+  net10 line) is tracked in his TODO.
+* 4 of this branch's 12 commits had already landed by content through #4648 (WebClient migration
+  and prohibition, master, 2026-09-10): `3d1e03b3b3`, `a7ba7007f6`, `54c3d374c1`, `f6180de116`.
+* **Not carried forward:** 8 commits remain only on
+  `origin/Skyline/work/20260823_resharper_cleanup` (244 behind the port branch on 2026-10-02).
+  They cover projects outside `Skyline.sln` (SkylineBatch, AutoQC, SharedBatch, CommonUtil),
+  which #4685's inspection does not see:
+  `d75c9b1b8a` (net472 build and test prerequisites for SkylineBatch and AutoQC), `e03778809f`,
+  `bb760ed8d0`, `38eb21a434`, `7d55c6b316`, `50ff57ef89` (warning cleanup), and two real bug
+  fixes: `47513caf32` (AutoQC suite hanging on a modal Skyline error dialog) and `1a99335fa3`
+  (DNS failures reported as connection failures on net8). Matt's TODO, section "Overlap with
+  TODO-20260823_resharper_cleanup", lists the 5 files that would conflict with #4685's sweep
+  when these move forward. Do not delete the branch until those commits are carried forward
+  or explicitly abandoned.
