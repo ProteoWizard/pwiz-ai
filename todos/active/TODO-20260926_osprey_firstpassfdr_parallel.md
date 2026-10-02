@@ -677,3 +677,69 @@ before the review.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
+
+## INDEX: every FirstPassFDR performance opportunity found, with measured sizes
+
+One place to look when sizing the next change, so nothing has to be reconstructed from the
+review-triage section above (where several of these were recorded only as findings that were
+set aside). All figures are `[PATH]` buckets from the instrumented runs: **8 files,
+33,459,602 rows, idle box**, scaled to 82 files by the row ratio **x10.55**. Each is a
+measurement, not an estimate, except where marked.
+
+| # | opportunity | 8 files | ~82 files | shape |
+|---|---|---|---|---|
+| 1 | **`--model-diagnostics` accumulator** in `sink.Accept`, per row | 29.5 s | **~311 s** in pass 2; **~690 s** stage-wide | a flag, not a refactor - and verified purely additive |
+| 2 | the two **peptide-keyed lookups** (`expPeptByPeptide`, `minRunBothByPeptide` on a `(string,bool)` tuple) | 18.6-20.5 s | **~196-216 s** | needs entry_id-keyed maps; costs memory |
+| 3 | the four **`uint`-keyed lookups + arithmetic** in the assign loop | ~23 s | ~243 s | already cheap per probe; little headroom |
+| 4 | **`sink.Accept`, the actual record write** | 6.2 s | ~65 s | I/O + serialization |
+| 5 | **`FdrScoresSidecar.ReadRecords` reads 36 bytes per record** while its sibling `TryWalkRecords` chunks `RECORDS_PER_CHUNK = 2048` | 2.8-3.1 s | ~30 s | pure buffering fix; this is what `swSidecar` measures |
+| 6 | pass 2's **`apex_rt` column** could leave the walk | part of 7.4 s | - | see the correction below |
+| 7 | pass 2's **five per-file array copies** | **<1 s** | ~9 s | NOT a time item - a ~90-120 MB/file memory item |
+| 8 | the streamer **cannot abort early** | not timed | - | correctness-shaped; see below |
+| 9 | ~**33.5M peptide string allocations per pass** - the reader allocates a fresh string per row, no interning (0.67% / 1.9% reference matches against 17.0% / 16.2% value matches) | not timed | - | GC pressure; would also feed #2 |
+
+Done and merged into this branch: the **per-file run-q sort, 37.3 s -> ~400 s at 82 files**.
+
+### Two corrections to the review's framing of these, so nobody chases the wrong number
+
+* **#6 is a column, not the walk.** The review implied pass 2's third parquet walk becomes
+  recoverable because `FdrScoreRecord` carries `ApexRt` (it does, field 5). It does not: pass 2
+  still reads **peptide, charge and the decoy flag** per row from the parquet
+  (`PercolatorScorer.cs:1188-1191`), and the sidecar carries none of them. So the walk stays;
+  only the `apex_rt` column can be dropped, `StubColumns.ApexRt` -> `StubColumns.Core`, a
+  column-level saving inside the 7.4 s walk. The in-code comment calling the whole walk's "~7%"
+  unrecoverable "until an interface change" is nonetheless now **misleading** - widening the
+  streamer by one value is that interface change, and it buys the column.
+* **#7 is memory, not time.** The five arrays are a real copy on the sidecar path - four of the
+  five (`fLabels`, `fEntryIds`, `fPeptides`, `fCharges`) duplicate `buffer` fields the assign
+  loop could read directly, and `fScores` must stay because it comes off the sidecar. But
+  `swFill` measures that whole loop at **0.5-0.9 s at 8 files**, so the time is ~9 s at 82
+  files. Take it for the ~90-120 MB per file, not for the clock.
+
+### #8, stated properly
+
+`CompletedScoreStreamer`'s callback returns `void`, so the reader cannot stop a sidecar it has
+already decided is wrong. Both rejection tests - the length check and the positional entry-id
+check - run only AFTER `tryStream` returns, so an oversized sidecar, or one whose very first
+entry_id mismatches, still costs a full ~4.2M-record decode per file per pass to reach a verdict
+that was available immediately. Making it `Func<..., bool>` would also let the entry-id compare
+move into the callback, deleting the `entryIds` array entirely (written once, read once).
+
+### Ordering advice
+
+1 is the largest and needs no code - it is a question about whether production runs want the
+diagnostics report. 5 and 8 are small, self-contained and carry no determinism risk. 2 is the
+biggest code change and the only one with a memory trade, so it wants a decision first. 3 has
+little headroom. 7 is worth folding into whatever touches the assign loop rather than doing
+alone.
+
+### What is NOT a route, measured
+
+* **A one-row memo on the peptide lookups is refuted.** Adjacent rows never share an entry_id -
+  0 of 33.46M, and 0 of 68.35M - so the premise that a precursor's ~6 rows sit together does not
+  hold on this path. A memo would hit 17.7% at best and 96% of those hits would still pay a full
+  string compare.
+* **`ProgressReporter.Report` is not the cost**, despite being called once per row: an
+  uncontended lock plus a `Stopwatch.Elapsed` read, ~1.5 s over the pass.
+* **The parquet walk is the one SUPERLINEAR bucket** (3.27x for 2.04x rows). Never extrapolate
+  walk costs linearly; everything else here tracks rows to within 2%.
