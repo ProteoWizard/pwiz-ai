@@ -9,8 +9,8 @@
 - **Status**: **ROOT CAUSE FIXED UPSTREAM AND NOW VERIFIED ON THE FIXED TIP** (2026-10-01: 82 files with zero empty rows, and par3 vs par4 byte-identical - see the section at the END). The `FrozenModelScorer`
   shared scratch buffer, fixed 2026-09-28 in `fcd59201a3` (#4727 / #4706), two days after
   the runs below. See the RESOLVED section at the end; read it before anything above it,
-  which is the investigation as it stood before the cause was known. No action remains except
-  the gate-branch disposal decision, which is Brendan's: dropping it is recommended.
+  which is the investigation as it stood before the cause was known. NOTHING IS OPEN: the gate
+  branch was DROPPED 2026-10-02 on Brendan's go-ahead - see the end of this file.
 - **Module**: `osprey`
 - **Severity**: was **HIGH** (wrong results, silently, exit code 0) - now fixed upstream
 
@@ -365,8 +365,7 @@ the gate has nothing left to catch, and `/code-review max` found it defective on
 Deleting a branch is not something to do unasked, so it waits on Brendan. The worktree is clean
 and the branch ref is intact if it is wanted.
 
-**Status: verification COMPLETE.** The only thing left is the gate-branch disposal decision,
-which is a yes/no for Brendan, not work.
+**Status: COMPLETE.** Nothing is open - the gate branch was dropped 2026-10-02 (see below).
 
 ## Resolution
 
@@ -382,8 +381,37 @@ which is a yes/no for Brendan, not work.
   * An 8-file par3 vs par4 comparison was byte-identical (before the fix, 4 of 83 rows differed).
 * The 2026-09-26 par3 and par4 pass-2 measurements stay invalid. Only fresh runs on the fixed
   tip count.
-* Gate branch `Skyline/work/20260926_osprey_pass2_empty_run_gate` (`695ac9e779`, never pushed,
-  worktree `D:\Users\brendanx\proj\pwiz-gate`): Brendan's decision is recorded in the handoff
-  file in `ai/.tmp` on the machine that holds that worktree. Act on it there. `/code-review max`
-  found the gate defective on its own terms. If a backstop is wanted later, build it fresh
-  against the experiment-level predicate.
+* Gate branch `Skyline/work/20260926_osprey_pass2_empty_run_gate` (`695ac9e779`, never pushed):
+  **DROPPED 2026-10-02** on Brendan's go-ahead, from the machine holding the `pwiz-gate`
+  worktree. `/code-review max` found the gate defective on its own terms. If a backstop is
+  wanted later, build it fresh against the experiment-level predicate. Details and the recovery
+  window are in the section below.
+
+### 2026-10-02: gate branch DROPPED, on Brendan's go-ahead
+
+`Skyline/work/20260926_osprey_pass2_empty_run_gate` is deleted. Nothing is open on this TODO
+now.
+
+Verified before deleting: never pushed (no `origin` ref), worktree clean, and the commit was
+reachable from that branch alone. The dropped commit was
+
+```
+695ac9e779  osprey: Added a second-pass gate that fails a run which silently lost a file
+            4 files, +185/-11
+            Osprey.Core/OspreyEnvironment.cs, Osprey.Tasks/OspreyReportWriter.cs,
+            Osprey.Tasks/SecondPassFdrTask.cs, Osprey.Test/EmptyRunGateTest.cs (82 lines)
+```
+
+**Recovery, if it is ever wanted:** the SHA above is the whole handle. It is unreachable now, so
+it survives only in the `pwiz-gate` worktree reflog
+(`.git/worktrees/pwiz-gate/logs/HEAD`) until gc prunes it - roughly 30 days by
+`gc.reflogExpireUnreachable`, and immediately if that worktree is removed, after which only
+`git fsck --lost-found` would find it. That is the intended outcome: the recommendation above
+was to build any future gate fresh against the experiment-level predicate rather than rebase
+this one, because upstream moved user-facing text to RESX (#4721) and replaced
+`Action<string> logInfo` with `IOspreyLog` / `LogTag.COUNT` (#4718), so the old shape no longer
+applies. The 82-line `EmptyRunGateTest.cs` is the part most worth reading before writing a
+replacement, and the test's INTENT is described in this TODO rather than only in that file.
+
+The `pwiz-gate` worktree itself was switched to a detached HEAD at the port-branch tip
+(`536a31115e`) so the branch could be deleted; the checkout is clean and idle.
