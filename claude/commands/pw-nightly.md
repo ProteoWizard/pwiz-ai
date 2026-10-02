@@ -23,7 +23,7 @@ Nightly tests run from **8:01 AM to 8:00 AM** the next calendar day. The report_
 get_daily_test_summary(report_date="YYYY-MM-DD")
 ```
 
-This queries all 6 test folders and saves a full report to `ai/.tmp/nightly-report-YYYYMMDD.md`.
+This queries all 7 test folders and saves a full report to `ai/.tmp/nightly-report-YYYYMMDD.md`.
 
 ## Follow-up Investigation
 

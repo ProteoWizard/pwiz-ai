@@ -100,7 +100,7 @@ Test results are organized into folders under `/home/development/` on skyline.ms
 - **Integration** - Large branch validation before merge (e.g., PR #3687)
 - **Performance Tests** - Perf regression detection
 
-All 6 test folders are accessible via the MCP server by specifying the `container_path` parameter.
+All 7 test folders are accessible via the MCP server by specifying the `container_path` parameter.
 
 ## Data Location
 
@@ -296,7 +296,7 @@ query_table(
 
 | Tool | Description |
 |------|-------------|
-| `get_daily_test_summary(report_date)` | Query all 6 folders, save report to ai/.tmp/ |
+| `get_daily_test_summary(report_date)` | Query all 7 folders, save report to ai/.tmp/ |
 | `save_test_failure_history(test_name, start_date, container_path)` | Collect stack traces for a test, detect patterns |
 | `save_test_leak_history(test_name, start_date, container_path)` | Leak timeline for a test with bytes/handles and git hash |
 | `save_run_log(run_id, part)` | Save log section (full/git/build/testrunner/failures) to ai/.tmp/ |
@@ -312,7 +312,7 @@ query_table(
 
 ### Daily Test Summary
 
-The primary entry point for daily test review. Queries all 6 test folders in one call:
+The primary entry point for daily test review. Queries all 7 test folders in one call:
 
 ```
 get_daily_test_summary(report_date="2025-12-14")
@@ -454,7 +454,7 @@ To add new custom queries (like `handleleaks_by_computer`), see [MCP Development
 ## Recently Implemented
 
 - `/pw-nightly` slash command for daily test review ✓
-- `get_daily_test_summary` - Query all 6 folders in one call ✓
+- `get_daily_test_summary` - Query all 7 folders in one call ✓
 - `save_test_failure_history` - Stack trace pattern grouping ✓
 - `save_run_log` - Full log download via HTTP endpoint ✓
 - `save_run_xml` - Structured XML test data via HTTP endpoint ✓

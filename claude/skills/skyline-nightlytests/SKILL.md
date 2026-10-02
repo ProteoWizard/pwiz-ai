@@ -11,7 +11,7 @@ description: Use this skill when looking at nightly test results or investigatin
 
 | Tool | Purpose |
 |------|---------|
-| `get_daily_test_summary(report_date)` | Daily report for all 6 folders → ai/.tmp/ |
+| `get_daily_test_summary(report_date)` | Daily report for all 7 folders → ai/.tmp/ |
 | `save_test_failure_history(test_name, start_date, container_path)` | Stack trace pattern analysis → ai/.tmp/ |
 | `save_run_log(run_id)` | Full test log for grep/search → ai/.tmp/ |
 | `get_run_failures(run_id)` | Stack traces for a specific run |
@@ -26,6 +26,7 @@ description: Use this skill when looking at nightly test results or investigatin
 | Release Branch | 540 min | release |
 | Release Branch Performance Tests | 720 min | release |
 | Integration | 540 min | assigned |
+| Integration Leak Detection | 720 min | assigned |
 | Integration with Perf Tests | 720 min | assigned |
 
 ## Typical Workflow
