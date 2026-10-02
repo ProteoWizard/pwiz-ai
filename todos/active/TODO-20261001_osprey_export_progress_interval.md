@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261001_osprey_export_progress_interval` (worktree `C:\proj\pwiz-4708`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-10-01
-- **Status**: In review - #4756 green, awaiting Brendan
+- **Status**: In review - #4756 green at 208e536d82 incl. Perf/Regression, awaiting Brendan
 - **Module**: `osprey`
 - **PR**: [#4756](https://github.com/ProteoWizard/pwiz/pull/4756)
 - **Follows**: `ai/todos/completed/TODO-20260923_osprey_carafe_export.md` (#4708)
@@ -62,3 +62,7 @@ Follow-ups to the #4708 training export, found validating it on SEA-AD (82 Astra
   disk ~22 of ~28 s per run; further gains are storage (cached export ~5 s/run) or exporting straight-through.
 - Review-fix exe on cold runs 72-75 + pool-01..04: 29-33 s (pools 19-21 s), 82/82 byte-identical;
   `run.reviewfix-72-75-pool1-4.log`.
+- 2026-10-02: merged the port branch (#4752 translations, #4676 installers) -> 208e536d82. Designer.cs conflict
+  (adjacent entries); #4752's TestArgumentTextComesFromArguments rejected the literal ".spectra.bin" in the new
+  damaged-cache message, so it drops the remedy sentence like #4752's messages. 642/642, inspection 0.
+  TeamCity: Perf/Regression 4198756 (48 PASS / 0 FAIL, 1:01:49), Windows .NET 4198775, Linux .NET 4198776.
