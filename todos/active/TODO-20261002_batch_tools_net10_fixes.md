@@ -9,8 +9,8 @@ never got a PR, onto the .NET 10 port branch.
 - **Checkout**: `C:\proj\review` (BRENDANX-UW6)
 - **Module**: `skyline`
 - **Created**: 2026-10-02
-- **Status**: In Progress - squashed to `94ad5f6fb8` (local, not pushed); review triaged; all green
-- **PR**: (pending)
+- **Status**: PR open - #4763 into the port branch, awaiting CI and review
+- **PR**: [#4763](https://github.com/ProteoWizard/pwiz/pull/4763)
 - **Salvaged from**: `completed/TODO-20260823_resharper_cleanup.md` (superseded by Matt's #4685,
   `TODO-20260917_resharper_warning_reduction.md`)
 
@@ -62,7 +62,9 @@ All net472 branches and two-target comments from the original commits were dropp
 - [x] Run `TestHttpClientWithProgressIntegration` and `CodeInspection`
 - [x] Run the AutoQC and SkylineBatch suites
 - [x] `/code-review max`, triage
-- [ ] Open the PR into `Skyline/work/20260612_net8_port`, label `skyline`
+- [x] Open the PR into `Skyline/work/20260612_net8_port`, label `skyline` - #4763
+- [ ] CI green, Copilot review addressed (`/pw-respond 4763`)
+- [ ] Follow-up for review findings #5 and #6: `backlog/TODO-http_failure_simulator_fidelity.md`
 
 ## Progress Log
 
@@ -173,3 +175,9 @@ Final verification (all on `94ad5f6fb8`'s content): Skyline build;
 `TestHttpClientWithProgressIntegration`, `TestPanoramaDownloadFile`, `CodeInspection`,
 `TestRInstaller` pass; AutoQC 18/18 and SkylineBatch 39/39, both with `-RunInspection` at zero
 warnings. Logs: `build4.log`, `tests4.log`, `tests5.log`, `autoqc5.log`, `skylinebatch5.log`.
+
+### 2026-10-02 - PR #4763 opened
+
+Pushed `94ad5f6fb8` and opened #4763 into `Skyline/work/20260612_net8_port` with label `skyline`.
+Brendan chose to keep review findings #5 and #6 out of this PR and fix them in a follow-up:
+`backlog/TODO-http_failure_simulator_fidelity.md`.
