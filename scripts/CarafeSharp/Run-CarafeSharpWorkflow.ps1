@@ -84,6 +84,9 @@ param(
     [int]$Threads = 16,
     [string]$ProteinFdr = '0.01',
     [switch]$ModelDiagnostics,
+    # Osprey's spectra cache, default <WorkDir>\spectra-cache. A .spectra.bin depends only on its input
+    # file, so a second round of the loop over the same runs can share the first round's.
+    [string]$CacheDir,
     [switch]$Preflight
 )
 
@@ -286,7 +289,7 @@ $libGen = @(
     '-valid', '-na', '0', '-fast')
 if ($preset.CarafeExtra) { $libGen += $preset.CarafeExtra }
 
-$cacheDir = Join-Path $WorkDir 'spectra-cache'
+$cacheDir = if ($CacheDir) { $CacheDir } else { Join-Path $WorkDir 'spectra-cache' }
 $ospreyCommon = @(
     '--decoys-in-library',
     '--resolution', $preset.Resolution,
