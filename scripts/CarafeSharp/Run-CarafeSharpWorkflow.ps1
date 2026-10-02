@@ -47,6 +47,10 @@
 .PARAMETER Device
     gpu (default; a CPU-only CarafeSharp build falls back to the CPU) or cpu.
 
+.PARAMETER RtModel
+    alphapeptdeep (default) or chronologer: CarafeSharp's -rt_model for the initial library (stage 2) and
+    the fine-tuning and final library (stage 4/5).
+
 .EXAMPLE
     pwsh -File ./ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1 -Preflight `
         -MzmlSourceDir D:\GitHub-Repo\maccoss\osprey\example_test_data\stellar -OspreyExe <exe>
@@ -87,6 +91,7 @@ param(
     # Osprey's spectra cache, default <WorkDir>\spectra-cache. A .spectra.bin depends only on its input
     # file, so a second round of the loop over the same runs can share the first round's.
     [string]$CacheDir,
+    [ValidateSet('alphapeptdeep', 'chronologer')] [string]$RtModel = 'alphapeptdeep',
     [switch]$Preflight
 )
 
@@ -311,6 +316,9 @@ $newLib       = Join-Path $WorkDir 'osprey_new_library'
 $projectDir   = Join-Path $WorkDir 'osprey_project'
 $libraryBlib  = 'carafe_spectral_library.blib'
 
+# Only a non-default -rt_model is passed, so the script still drives CarafeSharp builds that predate it.
+$rtModelArgs = if ($RtModel -ne 'alphapeptdeep') { @('-rt_model', $RtModel) } else { @() }
+
 $digestCommon = @(
     '-enzyme', '2', '-miss_c', '1', '-minLength', '7', '-maxLength', '35',
     '-min_pep_charge', '2', '-max_pep_charge', $maxCharge)
@@ -331,7 +339,7 @@ if ($StageList -contains '1b') {
 
 if ($StageList -contains '2') {
     Invoke-Step 'Stage 2: initial library' $CarafeSharpExe (@(
-        '-db', $trainFasta, '-o', $initialLib, '-pairing_manifest', $trainPairing) + $libGen)
+        '-db', $trainFasta, '-o', $initialLib, '-pairing_manifest', $trainPairing) + $libGen + $rtModelArgs)
 }
 
 if ($StageList -contains '3') {
@@ -345,7 +353,7 @@ if ($StageList -contains '3') {
 if ($StageList -contains '4-5') {
     Invoke-Step 'Stage 4/5: fine-tune + final library' $CarafeSharpExe (@(
         '-db', $libFasta, '-i', $trainBlib, '-ms', $trainMzml, '-o', $newLib,
-        '-pairing_manifest', $libPairing) + $libGen + @('-tf', 'all'))
+        '-pairing_manifest', $libPairing) + $libGen + @('-tf', 'all') + $rtModelArgs)
 }
 
 if ($StageList -contains '6') {
