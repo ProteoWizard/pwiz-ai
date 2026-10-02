@@ -53,7 +53,7 @@ Reference: Carafe2 for timsTOF DIA (PMC13060252, doi 10.64898/2026.03.27.714846)
       a committed TSV parity test against a Carafe `-ccs` reference
 - [x] Unchanged without `-ccs` (developer's request): the workflow's stages 1a-5 on Stellar (CPU, same Osprey), with
       #4717's build and the branch's, give identical libraries, Osprey results, export data and fine-tuned models; only
-      timestamps, paths and the library file identity hash differ (`D:	est\carafesharp-runs\ccs-ab\compare_ab.txt`,
+      timestamps, paths and the library file identity hash differ (`D:\test\carafesharp-runs\ccs-ab\compare_ab.txt`,
       `compare_ab_explained.txt`)
 - [x] Merged into #4717 (016105f3ba) with the test-data fetch/verify switch (7cd987b21f): 83/83, inspection 0, pushed
 - [ ] Later: check the library in Skyline with a timsTOF run (IM filtering from the library), and in
