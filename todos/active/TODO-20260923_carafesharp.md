@@ -551,6 +551,11 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   - Inspection on a fresh worktree needs CommonUtil and `Shared/ProteowizardWrapper` built with
     `-p:Platform=x64` first (the #4725 out-of-solution reference gap; worked around locally, nothing changed there).
   - Brendan's CHANGES_REQUESTED review on #4717 stands until he re-reviews.
+- [x] Ion mobility for timsTOF (`-ccs`, 2026-10-01/02, developer's request): merged into #4717 (016105f3ba).
+  Details, the parity against Carafe's Python and jar, and the unchanged-without-`-ccs` workflow A/B are in
+  `ai/todos/active/TODO-20261001_carafesharp_tims_im.md`.
+- [x] Brendan's review item 3, test data fetch/verify (7cd987b21f): `build.ps1 -TestData Fetch|Verify`. #4717's two
+  answered Copilot threads resolved (2026-10-01). Brendan not yet told that his items and the split are done.
 - Follow-ups from review: training outputs are written in place, so a rerun into an existing -o folder can
   mix two runs' models (make the model folder commit atomically); the Astral parity test reads each
   reference TSV twice (read once with a combined predicate).

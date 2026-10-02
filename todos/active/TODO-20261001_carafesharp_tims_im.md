@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261001_carafesharp_tims_im` (worktree `D:\Dev\pwiz-carafesharp-im`)
 - **Base**: `Skyline/work/20260923_carafesharp` (PR [#4717](https://github.com/ProteoWizard/pwiz/pull/4717), CarafeSharp)
 - **Created**: 2026-10-01
-- **Status**: In progress
+- **Status**: Merged into #4717 (016105f3ba, 2026-10-02); follow-ups below
 - **Module**: `osprey`
-- **PR**: (pending; to open against #4717's branch)
+- **PR**: none of its own: merged into [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) at the developer's request
 - **Follows**: `ai/todos/active/TODO-20260923_carafesharp.md`
 
 ## Objective
@@ -51,7 +51,11 @@ Reference: Carafe2 for timsTOF DIA (PMC13060252, doi 10.64898/2026.03.27.714846)
       in the spectrum, duplicated test setup, table indentation. Red before green: the clip and `-tf` tests
       fail without their fixes. Not done (recorded below): efficiency, ion mobility units, model-class reuse,
       a committed TSV parity test against a Carafe `-ccs` reference
-- [ ] Full gate with data and inspection; commit; PR against #4717's branch
+- [x] Unchanged without `-ccs` (developer's request): the workflow's stages 1a-5 on Stellar (CPU, same Osprey), with
+      #4717's build and the branch's, give identical libraries, Osprey results, export data and fine-tuned models; only
+      timestamps, paths and the library file identity hash differ (`D:	est\carafesharp-runs\ccs-ab\compare_ab.txt`,
+      `compare_ab_explained.txt`)
+- [x] Merged into #4717 (016105f3ba) with the test-data fetch/verify switch (7cd987b21f): 83/83, inspection 0, pushed
 - [ ] Later: check the library in Skyline with a timsTOF run (IM filtering from the library), and in
       DIA-NN (`IonMobility` column)
 
