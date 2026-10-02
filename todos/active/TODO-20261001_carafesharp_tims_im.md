@@ -1,7 +1,7 @@
 # TODO-20261001_carafesharp_tims_im.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261001_carafesharp_tims_im` (worktree `D:\Dev\pwiz-carafesharp-im`)
+- **Branch**: `Skyline/work/20261001_carafesharp_tims_im` (local only, merged into #4717; worktree and branch removed 2026-10-02)
 - **Base**: `Skyline/work/20260923_carafesharp` (PR [#4717](https://github.com/ProteoWizard/pwiz/pull/4717), CarafeSharp)
 - **Created**: 2026-10-01
 - **Status**: Merged into #4717 (016105f3ba, 2026-10-02); follow-ups below
