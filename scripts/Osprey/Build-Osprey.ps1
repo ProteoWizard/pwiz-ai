@@ -439,6 +439,30 @@ try {
             exit 1
         }
 
+        # inspectcode resolves a reference to a project outside the solution (pwiz-sharp, CommonUtil,
+        # ProteowizardWrapper) through that project's OUTPUT assembly, evaluated under the properties
+        # it runs with: bin\$Platform\$Configuration. The solution build above does not write there:
+        # since #4725, pwiz_tools\Osprey\Directory.Build.targets gives out-of-solution references
+        # Platform=AnyCPU in a solution build, so they land in bin\$Configuration. On a fresh checkout
+        # that left every pwiz-sharp type unresolved (~515 "Cannot resolve symbol" errors on clean
+        # code), and on an older one it inspected against stale pre-#4725 bin\x64 assemblies. A
+        # PROJECT build carries no solution configuration, so that target stays quiet and Platform
+        # flows down: building the test project, whose references reach every out-of-solution
+        # project, fills bin\$Platform\$Configuration with current assemblies. The same fix Skyline's
+        # inspection uses (#4685: it pre-builds Skyline.csproj, not Skyline.sln).
+        $testProj = Join-Path $ospreyRoot 'Osprey.Test/Osprey.Test.csproj'
+        Write-Host "Building $(Split-Path -Leaf $testProj) ($Configuration|$Platform) so out-of-solution references exist where inspectcode resolves them" -ForegroundColor Cyan
+        $prebuildArgs = @($testProj) + ($buildArgs | Select-Object -Skip 1)
+        if ($useDotnetMsbuild) {
+            & dotnet msbuild @prebuildArgs
+        } else {
+            & $msbuildPath @prebuildArgs
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Pre-inspection build of $testProj failed with exit code $LASTEXITCODE" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
         Write-Host "Inspecting Osprey.sln, one pass per target framework (typically 2-5 minutes)..." -ForegroundColor Cyan
         $inspectStart = Get-Date
 
