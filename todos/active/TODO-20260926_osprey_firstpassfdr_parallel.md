@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: 2026-10-03: 50a3be90e6 pushed as DRAFT PR #4765. Next: CHS 446-file `-Task FirstPassFDR` sweep on the i9 / 64 GB (par 1/2/4/...) to measure per-lane memory and speedup, then write the lane-count resolver from those numbers. See "2026-10-03: pushed as draft" at the END.
+- **Status**: 2026-10-03: DRAFT PR #4765, tip e3c823a92b (port branch merged in, incl. #4715 gbdt; 648/648 unit; regression gates NOT yet re-run on the merge). Next: CHS 446-file `-Task FirstPassFDR` sweep on the i9 / 64 GB (par 1/2/4/...) to measure per-lane memory and speedup, then write the lane-count resolver from those numbers. See "2026-10-03: pushed as draft" at the END.
 - **Module**: `osprey`
 - **PR**: #4765 (draft)
 
@@ -922,9 +922,24 @@ exe snapshotted to `<test root>\osprey-runs\_bin\<tag>` and passed with `-Exe`:
 | arm | exe | `-ParallelFiles` |
 |---|---|---|
 | baseline | port-branch tip | 0 |
-| lanes-1 | 50a3be90e6 | 0 (plain loop; isolates the non-lane wins such as pass-2 run-q reuse) |
-| lanes-2 / lanes-4 | 50a3be90e6 | 2 / 4 |
-| lanes-6/8 | 50a3be90e6 | only if lanes-4's peak leaves room |
+| lanes-1 | branch tip | 0 (plain loop; isolates the non-lane wins such as pass-2 run-q reuse) |
+| lanes-2 / lanes-4 | branch tip | 2 / 4 |
+| lanes-6/8 | branch tip | only if lanes-4's peak leaves room |
+
+### 2026-10-03: merged the port branch (e3c823a92b) - gates still owed
+
+#4715 (gbdt; `OSPREY_FDR_MODEL` replaces `--fdr-method`) landed on the port branch and
+conflicted in `PercolatorScorer.cs` and `FdrTest.cs`. Resolution: the lane structure kept;
+#4715's tree scoring moved into the lanes - pass-1 `ScoreRows` and the pass-2 rescore path both
+go through `ScoresBeforeRowLoop`, and under trees the standardized vectors are kept only when
+`accumulateTreeFeatures` (the report asked for the distributions), so the in-order sum replay
+stays exact. Tests: the two duplicated sink comparers were unified onto `AssertSinksIdentical`;
+#4715's flush/resume check became arm 6 of `TestStreamingFirstPassMatchesProjection`, with
+`RunScopeFlushes.Replay` adapted to `CompletedScoreStreamer`; `TestStreamingFirstPassTrainsGbdt`
+gained a 4-lane arm. **648/648 unit tests pass** (MACS2 saturated by DiaNN, so 6.8 min).
+**Not re-run on the merge: `regression.ps1 -Dataset Stellar` and `regression-parallel.ps1
+-Dataset All`** - run them on the i9 before the CHS sweep, since the baseline arm (port-branch
+tip) now also carries #4715.
 
 * `-ParallelFiles` is REQUIRED for lanes to engage; 0/1 takes the plain loop.
 * `-LinkFrom` makes the runner pin `OSPREY_VERSION_OVERRIDE` itself ("LinkFrom: pinned ...");
