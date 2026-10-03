@@ -26,10 +26,17 @@ a ~23 s read floor, Stage 6 ~57 s/run cold vs ~4.5 s warm compute - ~33-35 s/run
 
 ## Tasks
 - [x] Calibration + Stage 6 subset re-score use serial block reads; 642/642, inspection 0
-- [ ] `regression.ps1 -Dataset Stellar` (byte-identical vs golden)
-- [ ] Cold A/B on SEA-AD: calibration (PerFileScoring from caches, 4-file legs) and Stage 6 (PerFileRescoring
-  -LinkFrom, alternating exe every 6 files)
+- [x] `regression.ps1 -Dataset Stellar` PASSED (byte-identical vs golden)
+- [x] DIAGNOSTIC switches `OSPREY_SERIAL_WINDOW_READS=0` (old arm, same exe) and
+  `OSPREY_SERIAL_READ_SCOPE=process` (for --parallel-files); commit ae4f5959c8
+- [x] Cold A/B on SEA-AD (P=1): calibration pass 1 55.4 -> 23.1 s/file, Stage 6 85.5 -> 54.9 s/file; all
+  scoring and Stage 6 outputs byte-identical to the completed run (calibration.json: timestamp only)
+- [x] /code-review max on ae4f5959c8: 14 low-severity findings, no correctness bugs. Fixed in 580788a7ac: the =0
+  switch gated at the two call sites (base-equivalent arm), startup log line naming the switches, scope read
+  once, PROCESS_BLOCK_READ_LOCK, stale comments. Open for Brendan: warm serial reads (first-read-serial policy
+  in the index instead of call-site choices), NVMe unmeasured, pre-GC LOH garbage (post-GC unaffected).
 - [ ] Night session (fresh context): extended SEA-AD testing + `--parallel-files` 2/3/4 scaling on the i9
+  (i9-14900K, 24 cores = 8P + 16E, 32 logical, 128 GB) - see the handoff
 - [ ] /code-review, PR, TeamCity incl. Perf/Regression
 
 ## Progress Log
@@ -37,3 +44,5 @@ a ~23 s read floor, Stage 6 ~57 s/run cold vs ~4.5 s warm compute - ~33-35 s/run
 ### 2026-10-02
 - Branch from port branch ebde3bf6cd. Exe snapshot `D:\test\osprey-runs\_bin\coldreads-wip1`; baseline
   `D:\test\osprey-runs\_bin\export-reviewfix-wip` (#4756 code, same scoring/rescore read path as the base).
+
+**Next session handoff**: read `ai/.tmp/handoff-20261002_osprey_cold_window_reads.md` before starting work.
