@@ -439,3 +439,44 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
     pinned), `-TestCategory Astral -RequireData` 4 of 4.
   - Logs: `ai/.tmp/sessions/20260927-054c052f/golden-{stellar,astral}.log`, `build-requiredata.log`,
     `build-astral.log`.
+
+### 2026-10-02/03 - Chronologer docs, run alignment (-rt_align kde)
+
+- docs/07-chronologer.md (a2c6d99b04, local): HI (% ACN at elution), its scale (iRT = 7.254 x HI - 45.47; 0.87 min
+  per HI on the 24-min gradients), network, encoding, library, the fine-tune step by step, Chronologer's own
+  multi-source training, HI to minutes for new gradients and chemistries.
+- Mike: several runs of an experiment must be put on one scale. Today one row per form from its best run, one rt_max:
+  run drift is target noise, different gradients silently wrong. Drift measured on the matrix 3-file searches
+  (`run_drift.py`): Stellar <= 0.01 min, ZT Scan 0.02-0.04, Astral _60 vs _49 up to 0.16 min (a stretch); a smooth
+  per-run map leaves 0.005-0.018.
+- Built (e8911f24b3, local): `KdeRidgeAlignment` (Chronologer's KDE_align; knots match its own to 1e-9, 20k points at
+  grid 3000 < 1 s), `MonotoneMap`, `RtAlignment` (per-run maps onto pretrained Chronologer HI, pointwise median map
+  back to minutes, spread, rt_maps.json). `-rt_align none|kde`, `-rt_select best|median`. Rows converted to HI
+  through their run's map before selection; Chronologer fine-tunes on HI (in a fixed line's units, folded out after),
+  saves an HI model; libraries in the median map's minutes (also from a saved model; pretrained + maps = minutes
+  without fine-tune). Mike: library minutes default = pointwise median of the runs' maps, not the most-ID run.
+  97/97 tests, inspection 0.
+- Replicate experiment (Astral 49/55/60, search of the pretrained-Chronologer library with exports in
+  `C:\temp\osprey-runs\multirun\astral-train3`; `Run-AlignExperiment.ps1`, `eval_align.py`,
+  `multirun\align-report.txt`), -tf rt, library of DIA-NN's 130k peptides, scored against DIA-NN per run:
+
+  | arm | minutes median abs err (49/55/60) | order err | last-bin order |
+  |---|---|---|---|
+  | single _55 | 0.100 / 0.094 / 0.106 | 0.091 | 0.152 |
+  | single kde | 0.097 / 0.092 / 0.104 | 0.090 | 0.153 |
+  | three unaligned | 0.097 / 0.094 / 0.110 | 0.091 | 0.155 |
+  | three kde best | 0.097 / 0.091 / 0.103 | 0.090 | 0.153 |
+  | three kde median | 0.097 / 0.091 / 0.103 | 0.090 | 0.151 |
+
+  Small, consistent: on replicates drift (+-0.05 min about the median run) is half the model's per-peptide error
+  (0.09), so alignment is safe and slightly better; unaligned pooling shifts library minutes +0.011 min. Aligned
+  library sits on the median run (-0.048 / +0.001 / +0.058 vs 49/55/60). Mixed-gradient test (Astral + ZT Scan)
+  running: `Run-MixedExperiment.ps1`, `eval_mixed.py`.
+- Mixed-gradient experiment (`Run-MixedExperiment.ps1`, `eval_mixed.py`, `multirun\mixed-report.txt`): Astral _55
+  (24 min) and ZT Scan D1 (11.4 min), -tf rt, library of both datasets' DIA-NN peptides. Order error (isotonic, mean of
+  3 runs) Astral / ZT: astral-kde 0.090 / 0.054; zt-kde 0.119 / 0.045; both-kde 0.092 / 0.053; both unaligned 0.099 /
+  0.135 (last bin 0.456 / 0.131). Unaligned mixing breaks; aligned, one model serves both (Astral within 2%; ZT diluted
+  by 85k Astral rows to 23k ZT, still better than Astral's model). Minutes through each training run's own map: 0.092 /
+  0.055; through the median map (default) 2.8 / 3.4 min wrong: the median of two gradients is neither. Spread flags
+  it (6.4 min against 0.095 for replicates). Next (proposed): -rt_reference <run> and a warning or iRT when the maps
+  spread; -rt_align kde default (Mike); per-source balance in the loss.
