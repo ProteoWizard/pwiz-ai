@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: 2026-10-03 night: commit 50a3be90e6 parallelizes the FDR stages on ordered file lanes. All gates green (639/639 unit, Stellar, -Dataset All 48/0/0). 82-file FirstPassFDR 7308.5 s -> 3233.0 s (-55.8%), outputs byte-identical. Ready for PR review; not pushed. See the night section at the END.
+- **Status**: 2026-10-03: 50a3be90e6 pushed as DRAFT PR #4765. Next: CHS 446-file `-Task FirstPassFDR` sweep on the i9 / 64 GB (par 1/2/4/...) to measure per-lane memory and speedup, then write the lane-count resolver from those numbers. See "2026-10-03: pushed as draft" at the END.
 - **Module**: `osprey`
-- **PR**: none
+- **PR**: #4765 (draft)
 
 ## Goal
 
@@ -900,6 +900,47 @@ Pass 1 holds ~1 GB per file in flight at 4.2M rows, x2 lanes of look-ahead. Poss
 standardized-vector copy exists only for the feature-contribution sums - verify their consumers and
 skip it when no diagnostics are requested. First real test after the PR: 446-file CHS on the
 64 GB i9 (memory constraint + quiet benchmark; MACS2 has no reliable quiet time).
+
+## 2026-10-03: pushed as draft PR #4765; measure on the i9 BEFORE writing the resolver
+
+MACS2 was still saturated at session start (foreign DiaNN on ~69 of 72 cores since 10-02 14:00,
+85.6 GB). Decision with Brendan: push `50a3be90e6` as a DRAFT PR and run the CHS measurement on
+the i9 first, then write the resolver from what it shows. Reasons: the resolver's memory cap
+needs bytes per lane in flight, which so far is only a SEA-AD estimate (~1 GB at 4.2M rows);
+MACS2's 512 GB never makes a memory cap bind; and `50a3be90e6` still takes the lane count
+directly from `--parallel-files`, so a hand-set sweep on the i9 measures exactly the curve the
+resolver will choose a point on. The same numbers decide whether the pass-1 standardized-copy
+cut (handoff item 2) is required for 64 GB or only nice to have.
+
+Not yet done on this commit: `/code-review max` (do it before marking ready).
+
+### i9 measurement plan (CHS 446 files, `Run-Chs.ps1`, `-WhatIf` first)
+
+All arms `-Task FirstPassFDR -LinkFrom <processed CHS run> -LogMemory`, same `-Threads`, each
+exe snapshotted to `<test root>\osprey-runs\_bin\<tag>` and passed with `-Exe`:
+
+| arm | exe | `-ParallelFiles` |
+|---|---|---|
+| baseline | port-branch tip | 0 |
+| lanes-1 | 50a3be90e6 | 0 (plain loop; isolates the non-lane wins such as pass-2 run-q reuse) |
+| lanes-2 / lanes-4 | 50a3be90e6 | 2 / 4 |
+| lanes-6/8 | 50a3be90e6 | only if lanes-4's peak leaves room |
+
+* `-ParallelFiles` is REQUIRED for lanes to engage; 0/1 takes the plain loop.
+* `-LinkFrom` makes the runner pin `OSPREY_VERSION_OVERRIDE` itself ("LinkFrom: pinned ...");
+  if that line is missing, stop - the stage would re-run Stages 1-4.
+* `--memstamp` is always on; `-LogMemory` adds the post-GC probes that answer "will it fit".
+* Record per arm: stage wall, pass 0/1/2 `[PATH]` buckets, peak and post-GC floor
+  (`ai/scripts/perfviz.py <log> --files 446`), outputs identical to baseline. Derive bytes per
+  lane in flight = (peak at N - peak at 1) / look-ahead files at N, normalized by pass 0's max
+  rows per file. Post the table on #4765.
+
+Then: write the resolver from those numbers (CPU cap ~`NThreads / 2`, memory cap from
+`SystemMemory.AvailablePhysicalBytes` against bytes/row x pass 0's row counts, pass-1 look-ahead
+lanes + 1, log the binding cap, `--parallel-files` back to PerFile* only); decide the pass-1
+standardized-copy cut; unit-test the resolver; `/code-review max`; gates (unit, Stellar,
+`regression-parallel -Dataset All`); re-run CHS with the resolver choosing and confirm the peak
+fits 64 GB; `gh pr ready 4765`; ask before TeamCity.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
