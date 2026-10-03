@@ -62,6 +62,44 @@ pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot 'C:\other\locati
 pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot './skyline_26_1'
 ```
 
+## ⚠️ CRITICAL: Pick a Checkout Primed for the Branch You Are Working On
+
+While the .NET 10 port is underway, a machine holds two incompatible kinds of pwiz checkout:
+
+| Primed for | Builds | Root `b.bat` contains |
+|---|---|---|
+| `master`, release branches | Boost.Build: C++ ProteoWizard, Skyline on .NET Framework 4.7.2 | `pwiz_tools\build-apps.bat 64 ... toolset=msvc-14.x` |
+| `Skyline/work/20260612_net8_port` and branches off it | .NET SDK: pwiz-sharp, Skyline, Osprey and tools on .NET 10 | `pwiz_tools\%~1\build.bat --build-only ...` |
+
+**The branch that is checked out does not tell you which one a checkout is.** Switching a
+master-primed checkout to a port-based branch leaves its Boost.Build output and its
+master-style `b.bat` behind. `Build-Skyline.ps1 -SourceRoot` will then compile Skyline and
+"succeed" on top of that state, and many tests pass, so nothing obviously breaks. Check the
+root `b.bat` (`type <checkout>\b.bat`) before you build in a checkout. Both file sets are spelled
+out in ai/docs/new-machine-setup.md (Phase 4.2 for master, 4.5 for the port branch).
+
+**To work on a port-based branch, use a checkout already primed for the port branch.** If none is
+free, ask the developer to prime one. That means `clean.bat -cpp` at the checkout root, the three
+port-style `b.bat` / `bs.bat` / `bo.bat` from new-machine-setup.md 4.5 (they are gitignored, so
+nothing replaces them for you), and `.\bs.bat`. Bare `.\bs.bat` builds **Release** only; run
+`.\bs.bat Debug` too if you will build or test Debug.
+
+**Symptoms of a mis-primed checkout**, all seen on 2026-10-02 in a master-primed checkout
+switched to a port-based PR branch (PR #4763):
+
+* A full `-RunInspection` reports thousands of `CSharpErrors` (4504 unresolved symbols) on a
+  tree that compiles.
+* Tests that look for a built `SkylineCmd.exe` find none, or find a stale net472 one left in
+  `bin\x64\Release` (11 of 38 SkylineBatch tests failed this way).
+* Results that differ from TeamCity for the same branch.
+
+**A broken build is not a place to establish confidence, even when you are sure you did not
+break it.** If the base itself is failing locally, stop and fix the environment, or ask the
+developer, before trusting any result from it. Do not explain the failures away and continue.
+The comparison that matters is with a working build of the same branch, such as the TeamCity
+results for the port branch. Your change has to fit into that build, not into whatever the
+local checkout happens to produce.
+
 ## ⚠️ CRITICAL: Never Call MSBuild Directly
 
 **All builds MUST use the `Build-*.ps1` scripts**, never call `msbuild.exe` directly:

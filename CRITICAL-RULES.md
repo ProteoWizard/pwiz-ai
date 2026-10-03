@@ -82,6 +82,11 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - **DO NOT** introduce new build systems
 - **DO NOT** reformat unrelated code
 - Update Jamfile or Visual Studio project when adding sources
+- Build and test a port-based branch (`Skyline/work/20260612_net8_port` and branches off it) only
+  in a checkout primed for it: the root `b.bat` calls `pwiz_tools\%~1\build.bat`, not
+  `build-apps.bat`. See ai/docs/build-and-test-guide.md ("Pick a Checkout Primed for the Branch")
+- A failing local base is a stop signal, not background noise: fix the environment or ask before
+  trusting any result from it, even when you did not cause the failure
 
 ## PowerShell Scripts
 - **ALL** `.ps1` scripts require PowerShell 7+ (`pwsh.exe`)
