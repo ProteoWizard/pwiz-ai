@@ -141,6 +141,13 @@ things that move needs:
 - [x] 2026-10-02 (0e37412223, 0adbe00148): read-only shared tools in External Tools; no
       reinstall/update of shared tools. Live test via folderowners.txt: owner's mods/reports
       reach the user, the user's own stay personal, owner's later additions merge in.
+- [x] 2026-10-03 (18785efeaa): removed the 23 pwiz-sharp projects 272d9433ab had added to
+      Skyline.sln; with them in the solution, TeamCity's Skyline Code Inspection inspected
+      pwiz-sharp (1156 warnings). PR #4634 (AssignOutOfSolutionProjectReferenceConfiguration)
+      already lets VS build them out of solution. Nick to confirm VS Debug/Release builds.
+- [ ] Local full inspection (-RunInspection) cannot pass here even with the base sln: it pins
+      net10.0-windows, so net10.0 projects lose their packages, and ProteowizardWrapper cannot
+      resolve the out-of-solution pwiz-sharp DLLs. Build-Skyline.ps1 problem, separate work.
 - [ ] Connector bugs seen: skyline_add_report NREs while the Start Page shows; File > Exit
       returns a JSON parse error because Skyline exits before replying
 - [ ] Verify in a real per-machine install with a standard user
