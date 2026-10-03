@@ -4,12 +4,12 @@
 - **Branch**: `Skyline/work/20260924_osprey_gbdt_lean_path`
 - **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
-- **Status**: In review - Brendan approved the direction 2026-10-02; TeamCity Perf/Regression 4199269 running (post-Parquet 6)
+- **Status**: Completed
 - **GitHub Issue**: [#4491](https://github.com/ProteoWizard/pwiz/issues/4491) and
   [#4543](https://github.com/ProteoWizard/pwiz/issues/4543) (one PR, per #4543's Sequencing; developer decision
   2026-09-25)
 - **Module**: `osprey`
-- **PR**: [#4715](https://github.com/ProteoWizard/pwiz/pull/4715) (base: the port branch; review requested from Brendan, who triggers Perf/Regression)
+- **PR**: [#4715](https://github.com/ProteoWizard/pwiz/pull/4715) (merged 2026-10-03 into `Skyline/work/20260612_net8_port`)
 - **Worktree**: `D:\Dev\pwiz-osprey-gbdt`
 
 ## Objective
@@ -116,7 +116,7 @@ do not suit a linear SVM.
 - [x] Merged the port branch again for Parquet.Net 6 (#4751, which had no Osprey Perf/Regression of its
   own) as `da7c93cf6b`, no conflicts. Gate 647/647, inspection clean. Stellar regression PASSED on the
   port head alone (`e60a58be42`) and on the merge (`ai/.tmp/regression-4715-parquet6-stellar.log`).
-- [ ] TeamCity Perf/Regression on `da7c93cf6b`: build
+- [x] TeamCity Perf/Regression on `da7c93cf6b`: PASSED, build
   [4199269](https://teamcity.labkey.org/build/4199269) - also Parquet 6's first full Osprey run
 
 ## Parked review findings (developer, 2026-09-25: fix when gbdt feature work starts)
@@ -199,3 +199,17 @@ StellarGenDecoyEntrap command line, once per `--fdr-method`. Script:
   corrupts 49% of concurrent scores at 2 threads; two real 3-file Stellar Stage 6 runs at `--parallel-files 3` were
   byte-identical to sequential (the per-file scoring loops are milliseconds long and did not overlap).
 - `07-fdr-control.md:~586` still says production scores are normalized "(3g)"; no production path runs 3g.
+
+### 2026-10-03 - Merged
+
+PR #4715 merged as commit `aae172e475` into `Skyline/work/20260612_net8_port`. Shipped: `OSPREY_FDR_MODEL=gbdt`
+trains and persists gradient-boosted trees on the default streaming first pass (#4491); `--fdr-method` is gone
+with no alias, replaced by the experimental `OSPREY_FDR_MODEL`, and the simple FDR method, the unreachable
+Mokapot value and the `non-percolator-fdr` resident token were deleted (#4543); the enum is now
+`FdrClassifier { LinearSvm, Gbdt }`, with "Percolator" documented as the framework rather than a classifier
+(Brendan's review). Two port-branch merges were folded in during review: the #4752 translations (26 orphaned
+ja/zh-Hans strings removed) and Parquet.Net 6 (#4751). TeamCity Perf/Regression passed on both sides of the
+Parquet merge (4199249 on `bed647a1a9`, 4199269 on `da7c93cf6b`), which also served as Parquet 6's first full
+Osprey run. Deferred, unchanged: the parked gbdt robustness findings above (pass-2 model loads do not check
+marker/classifier; `--task` nodes must share `OSPREY_FDR_MODEL`), to be taken up when gbdt feature work starts.
+No new issues filed.
