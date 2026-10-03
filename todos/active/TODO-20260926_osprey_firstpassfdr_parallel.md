@@ -4,9 +4,7 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: Item 1 implemented and measured (~400 s at 82 files), 5 commits, all gates green -
-  but **NOT PR-ready**: /code-review max found real issues, incl. that the "one writer" safety
-  premise is FALSE. Read the 2026-10-01/02 review section at the END. Not pushed, no PR.
+- **Status**: 2026-10-03 night: commit 50a3be90e6 parallelizes the FDR stages on ordered file lanes. All gates green (639/639 unit, Stellar, -Dataset All 48/0/0). 82-file FirstPassFDR 7308.5 s -> 3233.0 s (-55.8%), outputs byte-identical. Ready for PR review; not pushed. See the night section at the END.
 - **Module**: `osprey`
 - **PR**: none
 
@@ -747,3 +745,161 @@ alone.
 `ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work. The two sections
 that matter most here are "`/code-review max` says NOT PR-ready" (the fix set) and the INDEX
 above (what is left to win, with measured sizes).
+
+## 2026-10-02: findings 1, 3 and 4 are CLOSED - they belong to issue #4764, not to this PR
+
+Brendan's framing, which is the right one and settles the whole family. Sidecar reuse is gated on
+three independent questions, cheapest first:
+
+1. **Is the FORMAT the same?** `FdrScoresSidecar.FormatVersion`, enforced at every reader.
+2. **Is the SOFTWARE the same?** `osprey.version`. Enforced for `.scores.parquet`
+   (`ParquetScoreCache.CheckParquetMetadata:1997-2033`, hard fail on any difference including the
+   daily component). **NOT enforced for the task-validity sidecars - that is a bug.**
+3. **Are the SETTINGS the same?** The validity key.
+
+The key is for level 3 only: settings differences that must invalidate a sidecar even when the
+format and the software are unchanged. An algorithm change is a level-2 event - it cannot reach a
+cohort without a new build, and the build version is `YEAR.ORDINAL.BRANCH.DOY`. So nothing about
+algorithm changes belongs in the key, and the only reason finding 1 looked like it needed a key
+term is that level 2 is missing, leaving the key as the only visible lever.
+
+### Verified at source while settling this
+
+* `TaskValiditySidecar.Write` records `task`, `version`, `validity_key` and `inputs`
+  (`TaskValiditySidecar.cs:110-128`).
+* The file has exactly TWO readers - `IsValid:162` and `TryReadValidityKey:187` - and both extract
+  `validity_key` only. **`version` and `inputs` are write-only.** Nothing in Osprey reads either.
+* The base key is `search=<hash>;library=<hash>` plus the pick arm and blib term
+  (`OspreyTask.cs:228-234`). No software version anywhere in it.
+* `PerFileResumeDriver.IsCurrent:54-58` is `File.Exists() && TaskValiditySidecar.IsValid()`, so the
+  per-file FDR resume gate inherits the gap.
+* `FirstPassFdrTask.cs:3332` claims that gate selects files carrying a sidecar "this build wrote".
+  **False today** - it tests the key. Listed in #4764 as part of the fix.
+* Failure shape: resume a cohort the next day with no settings changed. Stage 4 refuses yesterday's
+  parquet on the version and re-scores; FirstPassFDR then ADOPTS yesterday's
+  `.1st-pass.fdr_scores.bin` because the key matches and `inputs` is not compared. Fresh Stage 4,
+  stale Stage 5, one directory.
+* Residual limit after any fix: same-day builds share a version string, because artifacts stamp the
+  numeric `OspreyVersion.Current`, not `InformationalVersion` with its git hash.
+
+### Consequences for this branch
+
+* **Finding 1 (no validity-key term for the q-values): CLOSED, no code.** Filed as
+  **issue #4764**. Do NOT add `;pass2readsq=1` - a constant someone must remember to bump is a rule
+  enforced by human memory. Do NOT bump `FdrScoresSidecar.FormatVersion` - it invalidates three
+  tasks' keys and hard-refuses every existing v7 file, for a format that did not move.
+* **Findings 3 and 4: CLOSED by the same argument.** Identity drift is already covered by the
+  search/library/reconciliation terms at level 3; a wrong-build sidecar is level 2 (#4764).
+* **The pass-1 compare ("make pass 1 compare instead of discard") is DROPPED from this PR.** It was
+  a bespoke runtime guard for a structural gap, and it is not free - it needs a mismatch policy and
+  plumbing to carry a pass-1 refusal into pass 2.
+* **This PR does not wait on #4764.** Pass 1 already adopts `doneScores` off the sidecar
+  (`PercolatorScorer.cs:1048`), so a stale directory already hands back the previous build's
+  scores, model and counts. The q-values riding the same path is a strictly smaller increment on a
+  hole that is already larger than it.
+
+### The fix set that remains for PR-readiness
+
+Findings 13 and 5b (docs - and the false comment at `FirstPassFdrTask.cs:3332` is the same family,
+now that the truthful statement is "format + key, and level 2 is missing, tracked by #4764"),
+5 (lazy allocation - a real cold-path regression), 8 / 11 / 11b (the two tests that pass with the
+feature broken), 12 and 15 (one-liners), 6 (instrumentation attribution). Then re-gate and open
+the PR.
+
+Also done this session: the idle `pwiz-gate` worktree was removed (`git worktree remove`
+succeeded; the now-empty directory was still held by a process and needs one `rmdir`).
+
+## 2026-10-02/03 night session: FirstPassFDR on ordered file lanes
+
+### The design: produce in parallel, consume in order
+
+`Osprey.Core/OrderedFileLanes.cs`. `Run(count, lanes, produce, consume)`: `produce(i)` runs on up
+to `lanes` dedicated threads that take files from one shared counter in order; `consume(i, result)`
+runs on the calling thread for file 0, 1, 2, ... exactly as the plain loop would. Cross-file state
+is only ever touched by the consumer, so output is the sequential loop's output **by construction**
+- no argument about merge associativity is needed for anything left in the consumer. At most
+2 x lanes files are produced-but-unconsumed (bounded memory, independent of cohort size). A
+failure is reported for the first file IN ORDER that failed, as the original exception.
+`RunWhile` lets a consumer stop the walk (phases that `return false` on a bad file).
+`For` is the unordered form: dynamic one-at-a-time dispatch, no look-ahead bound.
+
+Lane count: `RunPlan.FileLanes` = `EffectiveFileParallelism` (`--parallel-files`), never below 1.
+Sequential runs (the regression gate never passes `--parallel-files`) take the plain loop.
+
+Where a consumer-side reduction was still the bottleneck, it was moved to the lanes only when it
+is EXACT under per-file reduction + in-order merge (each argued in a doc comment):
+* clamp floors: minimums, lookup-only -> `PercolatorQValues.ExperimentQClampFloors`, sharded,
+  merged from the lanes (no order needed).
+* streaming competition (default max mode): first-seen maxima with global ordinals (prefix sums
+  of pass 0's row counts) -> `StreamingFirstPassQ.FileReduction`; mean-best-N stays row by row
+  (it sums a float floor); the consumer falls back row by row if any file's count disagreed.
+* contribution report: float SUMS replayed row by row in order (`AddSums`); integer histograms
+  merged per file (`MergeHistograms`).
+* `--model-diagnostics` accumulator: `ModelDiagnosticsData.Accumulator.FileFold`; the row-by-row
+  `Add` is now a thin wrapper over the same fold, so there is one implementation.
+* sink: `IFdrFileLaneSink.PrepareFile` (lane) / `AcceptPrepared` (in order) - the sink folds mdiag
+  and the passing-precursor set on the lane.
+* protein FDR reduce: `FirstPassProteinFdrAccumulator.Merge`.
+
+### Phases converted
+FirstPassFDR pass 0 (decode ahead), training-subset load, pass 1, pass 2, protein FDR reduce +
+resolve, FDRBench pass-1 rows, compaction (`ComputeFirstPassBaseIds`), Stage-6 planning scan +
+plan (`PlanFile`/`IdentifyFile` take the file's refit explicitly). Plus `FdrScoresSidecar.ReadRecords`
+chunked (INDEX #5), and PerFileScoring/PerFileRescoring switched from `Parallel.For` range chunks to
+`OrderedFileLanes.For` (TODO-20260930_osprey_parallel_files_static_partitioning).
+
+### Review findings closed by this work
+5 (lazy allocation), 5b/13 (docs rewritten: several writers; what protects the reader), 6 (cost
+attribution: feature load and score separated; lane vs in-order buckets), 8/11/11b (read-backs
+counted; sentinel arm proves pass 2 EMITS the stored q; one-too-many record placed FIRST and
+decoupled from arm 3; zero-row guard), 12 (experiment aggregate compared), 15 (recompute keyed on
+the scores). False "this build wrote" comment corrected (issue #4764).
+
+### Measurements (8 SEA-AD files, isolated FirstPassFDR, --parallel-files 4, contended box)
+
+A foreign DiaNN held ~68 of 72 logical CPUs all evening, so absolute times are inflated; the
+A-B-A bracket (baseline / lanes / baseline) is what makes the comparison fair.
+
+| arm | FirstPassFDR | Percolator part |
+|---|---|---|
+| baseline 5472611c53 (A) | 1054.5 s | 605.4 s |
+| lanes-v1 (passes 0-2 + train load) | 755.8 s | 346.0 s |
+| baseline (A2) | 1004.7 s | 583.3 s |
+
+-26.6% on the stage, -41.8% on the Percolator part, with only the score passes on lanes.
+Outputs byte-identical: 72 files, 0 differences (normalizing only generatedUtc and run-dir paths
+in stamps). lanes-v2 (all phases) results and the 82-file comparison: see the handoff
+`ai/.tmp/handoff-20261002_night_file_lanes.md` and later entries.
+
+Bucket notes: lanes-v2 pass 1 is LANE-bound at par4 (~352 s summed / 4), biggest lane buckets run-q
+sort, feature load, clamp floors (per-key shard locking - since batched per shard). Pass 2 is
+consumer-bound on the mdiag merge (41.7 s contended).
+
+**Next session handoff**: read `ai/.tmp/handoff-20261002_night_file_lanes.md` first.
+
+### Final results (2026-10-03 04:01)
+
+| check | result |
+|---|---|
+| unit tests | 639/639 |
+| regression.ps1 -Dataset Stellar (v3) | PASSED |
+| regression-parallel.ps1 -Dataset All (v3) | 48 PASS / 0 FAIL / 0 SKIP, PASSED |
+| 8-file FirstPassFDR, par4 / par8 | 550.0 s / 545.5 s vs baseline ~1030 s (-47%); 72 files 0 differences |
+| **82-file FirstPassFDR, par4** | **7308.5 s -> 3233.0 s (-55.8%, 2.26x)**; 664 files 0 differences |
+
+Both 82-file arms ran on the same contended box (foreign DiaNN ~68 of 72 CPUs), so the ratio, not
+the absolutes, is the result. A quiet-box re-measure is the obvious follow-up. Commit 50a3be90e6.
+
+### Decision 2026-10-03: lane count comes from --threads and free memory, not --parallel-files
+
+Brendan: `--parallel-files` was created to bound the PerFile* tasks (~10-15 GB per file) and is the
+wrong knob here. FirstPassFDR is the memory-apex stage, so its lane count should derive from
+`--threads` (divided, since lanes are mostly single-threaded) and be capped by available memory
+measured against real per-file sizes (pass 0 knows every file's row count before the heavy passes).
+Pass 1 holds ~1 GB per file in flight at 4.2M rows, x2 lanes of look-ahead. Possible ~70% cut: the
+standardized-vector copy exists only for the feature-contribution sums - verify their consumers and
+skip it when no diagnostics are requested. First real test after the PR: 446-file CHS on the
+64 GB i9 (memory constraint + quiet benchmark; MACS2 has no reliable quiet time).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
