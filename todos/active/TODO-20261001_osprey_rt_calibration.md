@@ -480,3 +480,43 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
   0.055; through the median map (default) 2.8 / 3.4 min wrong: the median of two gradients is neither. Spread flags
   it (6.4 min against 0.095 for replicates). Next (proposed): -rt_reference <run> and a warning or iRT when the maps
   spread; -rt_align kde default (Mike); per-source balance in the loss.
+
+### 2026-10-03 - -rt_reference, sparse-run tiers, -rt_align kde default
+
+- Mike: no per-source balance in the loss. A form counts once, so the run with more peptides carries more weight,
+  which is wanted. (Chronologer's per-source Laplace scale is about noise, not size; not taken.)
+- `-rt_reference <run>` (name or unique end, e.g. `_55`): the library in that training run's minutes. Without it, when
+  the runs' 95th-percentile distance from their median passes 5% of its span (`RtAlignment.IsWide`; replicates 0.4%,
+  Astral+ZT 30%), the library is iRT with a warning naming the runs. Refused without maps or with AlphaPeptDeep.
+- `RtMapFit` (Core): each run's map in Osprey's tiers (`Calibrator.SelectFitPlan`): KDE ridge >= 1000 forms (Mike's
+  number); robust LOESS (bw 0.3, widening to 0.3 x 200 / n below 200); Theil-Sen line below 100 if it spans half the
+  run; < 15 forms or a failed fit leaves the whole training unaligned with a WARNING (not an error, now that kde is
+  the default). PAV makes LOESS monotone. rt_maps.json records each run's fit.
+- Does KDE need 1000? Measured with a temporary harness (`ai/.tmp/sessions/20260927-054c052f/rt-map-fit-report.txt`,
+  `ScratchRtMapFitExperiment.cs.txt`), 95th percentile of the disagreement of shared forms between runs' maps:
+
+  | forms/run | 3 Astral replicates KDE / LOESS (min; raw 0.185) | Astral + ZT KDE / LOESS (HI) |
+  |---|---|---|
+  | all | 0.070 / 0.070 | 0.27 / 0.47 |
+  | 1000 | 0.115 / 0.094 | 0.30 / 0.45 |
+  | 300 | | 0.34 / 0.48 |
+  | 200 | 0.179 / 0.136 | |
+  | 100 | 0.26 / 0.15 | |
+
+  KDE wins across gradients at every size (LOESS's 30% window bends differently per gradient shape; on replicates the
+  bias cancels); on replicates LOESS is less noisy below the full run, and KDE at 100 is worse than unaligned. Kept
+  KDE >= 1000.
+- `-rt_align kde` is now the default (`TrainingSettings.DEFAULT_RT_ALIGNMENT`); `-rt_align none` is Carafe's. A `-tf ms2`
+  training with aligned runs gives a pretrained-Chronologer library in the runs' median minutes.
+- docs 07 (new "Aligning the runs" section with both experiments), 06 (`rt_maps.json`), 01 updated.
+- Commit `00d768491f`; gate 98/98, inspection 0 (`gate-tiers.log`). Goldens remade for the default: Stellar
+  `b64f178ecf` (KDE on 20,791 forms; held-out RT pretrained MAE 0.0063 -> 0.0058, fine-tuned 0.0037 -> 0.0035),
+  Astral `7180cb9d8f` (KDE on 77,073; 0.0067 -> 0.0061, 0.0039 -> 0.0037). MS2 identical. Logs
+  `golden-{stellar,astral}-aligned.log`. Full Astral libraries old vs new against DIA-NN (~2,660 observed precursors
+  per run): isotonic order error 0.083-0.086 both, past 20 min halved (20-22: 0.39-0.41 -> 0.20-0.26; >22:
+  0.82-1.01 -> 0.40-0.53); raw minutes past 20 min worse (0.33-0.41 -> 0.60-0.68), the map extended past Osprey's
+  last training point at 19.87 min.
+- Pushed to #4717 (Mike: "please push"): `7e03af27c1..7180cb9d8f` (docs 07, KDE alignment, tiers + default, both
+  goldens). PR body update drafted in `ai/.tmp/sessions/20260927-054c052f/pr4717-body-align-draft.md`, not posted.
+  With the test data: `-RequireData` 98/98, `-TestCategory Astral -RequireData` 4/4
+  (`build-{requiredata,astral}-aligned.log`).
