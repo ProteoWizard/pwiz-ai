@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_gbdt_lean_path`
 - **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
-- **Status**: In Progress
+- **Status**: In review - Brendan approved the direction 2026-10-02; TeamCity Perf/Regression 4199249 running
 - **GitHub Issue**: [#4491](https://github.com/ProteoWizard/pwiz/issues/4491) and
   [#4543](https://github.com/ProteoWizard/pwiz/issues/4543) (one PR, per #4543's Sequencing; developer decision
   2026-09-25)
@@ -100,7 +100,19 @@ do not suit a linear SVM.
   - "A loaded tree model has null `FoldWeights`": no change needed. The `PercolatorResults` constructor
     initializes both lists to empty.
   - The replies are drafted in `ai/.tmp/sessions/20260923-carafesharp/night/copilot-replies-draft.md`, not posted.
-- [ ] Brendan review + TeamCity Perf/Regression
+- [x] Brendan review (2026-10-02): approved the direction - the classifier choice reads as experimental and
+  the main line is Percolator with the linear SVM. Two follow-up commits from the review, pushed:
+  - `707a6efc2a`: merged the port branch (#4752 translations conflicted in 8 files). Deleted the 26 ja/zh-Hans
+    strings orphaned by this branch's resx deletions, restored the #4752 format arguments in
+    `CompactionGateRefusals` (a silent literal `{0}` otherwise), regenerated Designers and the ja/zh-Hans
+    help pages, and fixed a hand-typed `--help` in `TestBadOptionValuesAreUsageErrors` that the new
+    `TestArgumentTextComesFromArguments` inspection caught. Gate: 643/643, inspection clean.
+  - `bed647a1a9`: renamed `FdrMethod` to `FdrClassifier { LinearSvm, Gbdt }` (and `config.FdrClassifier`), and
+    documented "Percolator" as the framework, not a classifier (Brendan's request). `OspreyConfig` is not
+    serialized, so no key or output changed. Gate: 647/647, inspection clean;
+    `regression.ps1 -Dataset Stellar` PASSED (`ai/.tmp/regression-4715-stellar.log`).
+- [ ] TeamCity Perf/Regression: triggered 2026-10-02 on `pull/4715`, build
+  [4199249](https://teamcity.labkey.org/build/4199249)
 
 ## Parked review findings (developer, 2026-09-25: fix when gbdt feature work starts)
 
