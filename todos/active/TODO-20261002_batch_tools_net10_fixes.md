@@ -181,3 +181,10 @@ warnings. Logs: `build4.log`, `tests4.log`, `tests5.log`, `autoqc5.log`, `skylin
 Pushed `94ad5f6fb8` and opened #4763 into `Skyline/work/20260612_net8_port` with label `skyline`.
 Brendan chose to keep review findings #5 and #6 out of this PR and fix them in a follow-up:
 `backlog/TODO-http_failure_simulator_fidelity.md`.
+
+### 2026-10-02 - Review round 1 (Brendan, 3 comments) - `db27b076b5`
+
+* `CommonException.Message` simplified to `return ExceptionDetail?.ToString() ?? base.Message;`
+* Restored two `HttpClientWithProgress` lines whose only change was a dropped trailing space
+* Gate: Skyline build; HTTP, Panorama, RInstaller and CodeInspection tests; AutoQC 18/18 and
+  SkylineBatch 39/39 with zero inspection warnings. All 3 threads replied to and resolved.
