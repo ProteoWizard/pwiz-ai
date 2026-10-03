@@ -188,3 +188,40 @@ Brendan chose to keep review findings #5 and #6 out of this PR and fix them in a
 * Restored two `HttpClientWithProgress` lines whose only change was a dropped trailing space
 * Gate: Skyline build; HTTP, Panorama, RInstaller and CodeInspection tests; AutoQC 18/18 and
   SkylineBatch 39/39 with zero inspection warnings. All 3 threads replied to and resolved.
+
+### 2026-10-03 - CI failures untied; re-verified on a correctly primed checkout; merged port head (`df20c5bdef`)
+
+**TeamCity on `db27b076b5`:**
+* "Skyline code inspection" error: since #4685 this is a step inside the Skyline Windows .NET
+  build (4199254), not a separate config. inspectcode's internal build hit
+  `MSB3021 ... Google.Protobuf.dll ... Access to the path is denied` on agent
+  `pwiz-windows-i-097d4f6119150d8d6` and exited with code 4 before inspecting anything.
+* Perf/Tutorial: `TestDiaTtofDiaUmpireTutorial` (`Expected:<14107>. Actual:<14094>`) also fails
+  on the port head build (4200795) and on every PR into it that was checked.
+  `TestAlphaPeptDeepBuildLibrary` (SQLite `CantOpen` on the existing `rat_consensus_final_true_lib.blib`)
+  also failed on #4758, which does not contain this PR.
+
+**Mistake recorded:** all verification up to this point ran in `C:\proj\review` while it was still
+primed for master (Boost.Build `b.bat`, net472 leftovers). That gave 4648 bogus inspection issues
+and a stale net472 SkylineCmd.exe, and it should have stopped the work rather than been explained
+away. Brendan re-primed it (`clean.bat -cpp`, port-style `b.bat`/`bs.bat`/`bo.bat`, `.\bs.bat`).
+The guidance is now in `ai/docs/build-and-test-guide.md` ("Pick a Checkout Primed for the Branch")
+and `ai/CRITICAL-RULES.md`. Next mistake: running `Build-Skyline.ps1` without `-VendorLicenses`
+rebuilt pwiz-sharp tools without vendor support over the `bs.bat` vendor build, and Skyline then
+failed with MSB3030 copy errors. That is also in the guide now.
+
+**Re-verified on the primed checkout** (Release, `-VendorLicenses`), after merging
+`origin/Skyline/work/20260612_net8_port` (`e60a58be42`, adds #4751 and #4758) into the branch:
+* Build passes. `TestHttpClientWithProgressIntegration`, `TestPanoramaDownloadFile`,
+  `TestRInstaller`, `CodeInspection` pass.
+* `tcinspect.ps1` (the CI script): "success - No inspections at WARNING or above".
+  (`Build-Skyline.ps1 -RunInspection` still reports 547 unresolved-symbol artifacts, none in PR
+  files. The guide now says to use `tcinspect.ps1`.)
+* AutoQC 18/18 and SkylineBatch 39/39, both inspection-clean.
+* `TestAlphaPeptDeepBuildLibrary` fails, and **fails on the port head control too**: on `e60a58be42`
+  with no PR code in the same checkout, 1 pass and 1 fail. It is intermittent on the port branch,
+  not caused by this PR. A first hypothesis (missing #4751 stale-BlibBuild fix) was disproven by
+  the merged branch still failing.
+
+Logs: `ai/.tmp/sessions/20261002-batchfix/reverify/`, `control-porthead/`, `loop-porthead/`,
+`tcinspect-pr-merged/`.

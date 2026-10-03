@@ -94,6 +94,24 @@ no-vendor mode over the `bs.bat` vendor build, and Skyline fails with dozens of
 `Build-Skyline.ps1` in such a checkout, and match the bootstrap's configuration with
 `-Configuration`.
 
+**For a CI-equivalent inspection verdict on the port branch, run `tcinspect.ps1`, not
+`Build-Skyline.ps1 -RunInspection`.** TeamCity runs `pwiz_tools\Skyline\tcinspect.ps1` inside the
+Skyline Windows .NET build (#4685). That script builds `Skyline.csproj` with `Platform=x64` first, so
+ReSharper can resolve pwiz-sharp's out-of-solution assemblies. `Build-Skyline.ps1 -RunInspection`
+does not. On a correctly primed checkout it still reports hundreds of unresolved-symbol
+`CSharpErrors` (547 on 2026-10-03, mostly `CVID`/`Spectrum` in `MsDataFileImpl.cs`), while
+`tcinspect.ps1` on the same tree reports none:
+
+```powershell
+cd <checkout>\pwiz_tools\Skyline
+pwsh -File .\tcinspect.ps1 -ReportPath <somewhere outside the checkout>\inspectcode_report.xml
+```
+
+It uses the pinned ReSharper version, exits 0 by design, and prints its verdict
+("success - No inspections at WARNING or above"). It does not post a GitHub status without
+TeamCity's token. A full run takes about 10 minutes, so launch it detached
+(ai/docs/long-running-jobs-guide.md).
+
 **Symptoms of a mis-primed checkout**, all seen on 2026-10-02 in a master-primed checkout
 switched to a port-based PR branch (PR #4763):
 
