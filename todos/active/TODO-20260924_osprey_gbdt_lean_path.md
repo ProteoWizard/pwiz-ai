@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260924_osprey_gbdt_lean_path`
 - **Base**: `Skyline/work/20260612_net8_port` (899f348f3d)
 - **Created**: 2026-09-24
-- **Status**: In review - Brendan approved the direction 2026-10-02; TeamCity Perf/Regression 4199249 running
+- **Status**: In review - Brendan approved the direction 2026-10-02; TeamCity Perf/Regression 4199269 running (post-Parquet 6)
 - **GitHub Issue**: [#4491](https://github.com/ProteoWizard/pwiz/issues/4491) and
   [#4543](https://github.com/ProteoWizard/pwiz/issues/4543) (one PR, per #4543's Sequencing; developer decision
   2026-09-25)
@@ -111,8 +111,13 @@ do not suit a linear SVM.
     documented "Percolator" as the framework, not a classifier (Brendan's request). `OspreyConfig` is not
     serialized, so no key or output changed. Gate: 647/647, inspection clean;
     `regression.ps1 -Dataset Stellar` PASSED (`ai/.tmp/regression-4715-stellar.log`).
-- [ ] TeamCity Perf/Regression: triggered 2026-10-02 on `pull/4715`, build
-  [4199249](https://teamcity.labkey.org/build/4199249)
+- [x] TeamCity Perf/Regression on `bed647a1a9` (pre-Parquet 6): build
+  [4199249](https://teamcity.labkey.org/build/4199249) PASSED (2026-10-02)
+- [x] Merged the port branch again for Parquet.Net 6 (#4751, which had no Osprey Perf/Regression of its
+  own) as `da7c93cf6b`, no conflicts. Gate 647/647, inspection clean. Stellar regression PASSED on the
+  port head alone (`e60a58be42`) and on the merge (`ai/.tmp/regression-4715-parquet6-stellar.log`).
+- [ ] TeamCity Perf/Regression on `da7c93cf6b`: build
+  [4199269](https://teamcity.labkey.org/build/4199269) - also Parquet 6's first full Osprey run
 
 ## Parked review findings (developer, 2026-09-25: fix when gbdt feature work starts)
 
