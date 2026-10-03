@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260909_osprey_parallel_parquet_read`
 - **Base**: **must be stacked on PR #4751** (`Skyline/work/20260929_Net10_Parquet6`, Parquet.Net 6.1.0) - see the 2026-10-01 section at the END. The 2026-09-30 rebase onto `ed25627d81` (`b9c380515e`) is superseded.
 - **Created**: 2026-09-10 (night session), TODO written 2026-09-17
-- **Status**: 2026-10-03: #4751 (Parquet.Net 6.1) has MERGED into the port branch (`e60a58be42`), so the blocker is gone. Next is the measurement, not the port: size the parquet walk at CHS scale on the i9 (see "2026-10-03: what the i9 should decide" below). Local tip `b9c380515e` (rebased on `ed25627d81`, gate-green); origin still holds the pre-rebase `0401012ede` until force-pushed. No PR.
+- **Status**: 2026-10-03: #4751 (Parquet.Net 6.1) has MERGED into the port branch (`e60a58be42`), so the blocker is gone. Next is the measurement, not the port: size the parquet walk at CHS scale on the i9 (see "2026-10-03: what the i9 should decide" below). Tip `b9c380515e` (rebased on `ed25627d81`, gate-green), pushed to origin 2026-10-03. No PR.
 - **Module**: `osprey`
 - **PR**: none
 - **Worktree**: `D:\Users\brendanx\proj\pwiz-parqread` (pushed to origin 2026-09-17; the worktree is disposable once merged)
@@ -19,11 +19,8 @@ any Parquet.Net fork (the old `skylinedev\Parquet.Net` 4.25 checkout is write-si
 can be ignored). The re-port onto 6.1 will conflict across ~800 lines of `ParquetScoreCache.cs`,
 whose read surface is now async-first and wrapped.
 
-**Branch on origin is STALE.** Origin holds `0401012ede`, the pre-rebase version stacked on
-`a9ee510ada` (which landed as #4652). The rebased `b9c380515e` was not pushed - the force-push
-was refused by the auto-mode permission check and left for Brendan. Nothing on origin is lost by
-overwriting it. If the i9 cannot see `b9c380515e`, rebase `0401012ede` itself; it is the same
-change.
+**Origin is current.** Brendan force-pushed `b9c380515e` over the pre-rebase `0401012ede`
+(stacked on `a9ee510ada`, which landed as #4652), so the i9 can check the branch out directly.
 
 **A new reason the prize may have shrunk.** The FDR lanes work (PR #4765,
 TODO-20260926_osprey_firstpassfdr_parallel.md) now decodes several FILES concurrently in
