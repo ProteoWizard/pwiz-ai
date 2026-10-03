@@ -7,8 +7,9 @@
   intentional merge of `origin/chambem2/pwiz-sharp`.
 - **PR**: #4620, **draft**, stacked on #4619 so the diff shows only the installer work
 - **Created**: 2026-08-25
-- **Status**: pushed and green (Release solution build, CodeInspection,
-  TestUserConfigMigration). Waiting on Brendan to verify DigiCert signing.
+- **Status**: Superseded - PR #4620 closed unmerged 2026-09-01; replaced by the installer
+  work in TODO-20260903_Net10Installer.md
+- **Completed**: 2026-10-02 (closed as superseded)
 - **Module**: `skyline`
 
 ## Why
@@ -163,3 +164,15 @@ Tools folder so an administrator install's tools reach ordinary users. All three
 SkylineCmd genuinely uses a different user.config than Skyline, and admin-installed tools land
 in a machine-wide folder while the menu entries stay in a per-user `Settings.Default.ToolList` -
 but none of them are caused by the .NET 8 port, so they were cut from this branch.
+
+## Resolution
+
+**Status**: Superseded. PR #4620 was closed without merging on 2026-09-01.
+
+The .NET 10 Skyline ships through the installer work in TODO-20260903_Net10Installer.md, which
+picked up the three deferred items above (user.config location, SkylineCmd sharing Skyline's
+settings, admin-installed tools) and migrates settings from an existing ClickOnce install. PR #4620
+stays as the record of the ClickOnce publish and signing mechanics, and the findings above
+(settings not surviving a net8 ClickOnce update, deploymentProvider, the certificate path,
+dotnet-mage) remain valid reference. The Remaining checklist and the unfixed defects here
+(`-SkipBuild`, CodeInspection rewriting `publish\`) were not carried forward.

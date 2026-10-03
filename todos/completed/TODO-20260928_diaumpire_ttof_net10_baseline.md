@@ -5,7 +5,8 @@
   `Skyline/work/20260612_net8_port`, PR #4619, after #4735 merged into it)
 - **Module**: `skyline`
 - **Created**: 2026-09-28
-- **Status**: PR open; waiting for Nick to confirm the new values on other machines (NICKSH)
+- **Status**: Superseded - #4740 closed in favor of chambm's #4738, merged 2026-10-01
+- **Completed**: 2026-10-02 (closed as superseded)
 - **PR**: #4740 closed 2026-09-29 in favor of chambm's #4738 (same TestDiaTtofDiaUmpireTutorial.json
   byte-for-byte, plus the FullFileset re-record and CleanUpPersistentDir in a `finally`)
 
@@ -112,6 +113,19 @@ pwsh -File ai/scripts/Skyline/Run-Tests.ps1 -TestName TestDiaTtofDiaUmpireTutori
 Downloads folder (`D:\Downloads\Tutorials\DIA-TTOF` on NICKSH) and is shared by all checkouts,
 so do not run two checkouts at once. On a master checkout use `-Target Solution` the first time;
 building TestPerf alone left stale test DLLs that fail to load in TestRunner.
+
+## Resolution
+
+**Status**: Superseded. PR #4740 was closed on 2026-09-29 in favor of chambm's #4738, which
+merged into `Skyline/work/20260612_net8_port` on 2026-10-01 as `85ba710950` ("skyline:
+Re-baselined the TTOF DIA-Umpire tutorial tests and fixed their cleanup on failure"). #4738 carries
+the same TestDiaTtofDiaUmpireTutorial.json byte for byte, re-records FullFileset, and moves
+`CleanUpPersistentDir` into a `finally` (Next steps item 4, first part). The Bruker fix went in
+separately as #4735.
+
+Not resolved here: the machine dependence on NICKSH (IrtIntercept -66.862, different scoring
+coefficients) was never root-caused, so the re-baselined values may still fail on machines like
+it. Next steps 1-2 describe how to find the first divergence if it comes back.
 
 ## Related: the Bruker fix already on this branch
 

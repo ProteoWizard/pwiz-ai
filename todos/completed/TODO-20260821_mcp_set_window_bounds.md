@@ -7,6 +7,7 @@
 - **Base**: `master`
 - **Created**: 2026-08-21
 - **Status**: Superseded - branch never pushed and its checkout deleted; rebuilt under TODO-20260916_mcp_methodedit_gaps.md (#4671)
+- **Completed**: 2026-10-02 (closed as superseded)
 - **GitHub Issue**: (none)
 - **PR**: (not yet opened)
 
@@ -143,6 +144,13 @@ fine. Not a symptom of anything in this branch.
   direction. The stale base is also why the first pass invented `ScreenRectangle`: the
   `Rectangle` it should have reused arrived in master with the graph click/zoom verbs (#4452),
   which the old base predates. **Fetch before branching, not after.**
+
+## Resolution
+
+**Status**: Superseded. No PR was opened; the branch was never pushed and its checkout was
+deleted. The window-bounds verb is being rebuilt under TODO-20260916_mcp_methodedit_gaps.md
+(#4671), where it was split into separate window verbs. The design decisions and notes above are
+kept as reference for that work.
 
 ## References
 
