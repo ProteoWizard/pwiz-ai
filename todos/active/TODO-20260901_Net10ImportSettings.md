@@ -30,8 +30,16 @@ things that move needs:
   SID is the user, or an enabled group such as an elevated admin's Administrators). Ownership,
   not writability, is the rule (Nick's call): a non-admin given write access to Program Files
   still gets a personal file.
+- A `folderowners.txt` beside the exe overrides ownership: one user name per line (bare name,
+  `DOMAIN\name` or `DOMAIN/name`); only listed users use the user.config there, and an empty
+  file lists nobody. Without it, the folder owner decides. Added so the shared-settings path
+  can be tested without changing a folder's owner (which needs elevation).
 - Everyone else gets a personal user.config and Tools folder under
-  `%LOCALAPPDATA%\ProteoWizard\<install folder leaf>`.
+  `%LOCALAPPDATA%\Skyline\<folder>` (not `ProteoWizard`, which users don't connect with
+  Skyline; `Skyline\mcp\tmp` already lives there). `<folder>` is the install folder's name when
+  it sits directly under Program Files (the per-machine install), and otherwise the name plus
+  `_<Adler-32 of the upper-cased full path>` (e.g. `net10.0-windows_1234567890`), so Debug and
+  Release builds or copies don't share. Program Files (x86) counts as "otherwise".
 - For a non-owned install, the user.config beside the exe is the administrator's shared file.
   `ImportedSettingsUpdater.ForSharedSettings()` three-way merges it into the personal one at
   startup (base = `shared.base.user.config`). That is how admin-installed tools reach ordinary
@@ -118,6 +126,12 @@ things that move needs:
 - [x] 2026-10-02: merged `Skyline/work/20260612_net8_port` (f1f1a0e96f). The two conflicts were
       line endings only; the base branch keeps those files CRLF in the index, so they were
       re-staged with autocrlf off.
+- [x] 2026-10-02: drove the Release build through the AI connector: owner installs PRM
+      Conductor; folder set to Administrators-owned (icacls /setowner, elevated); non-owner gets
+      a personal user.config with the admin's tools merged in and installs Skyline-PRISM into
+      a personal Tools folder; admin later adds Protter and the non-owner sees it beside PRISM.
+- [x] 2026-10-02 (dc29d64164): folderowners.txt; personal root renamed to Skyline; path
+      checksum in personal folder names. Re-checked live with an empty and a listed file.
 - [ ] Verify in a real per-machine install with a standard user
 - [ ] PR test plan: build.ps1 output, download page links, Import Settings from an installed
       Skyline, startup update check finds a newer version
