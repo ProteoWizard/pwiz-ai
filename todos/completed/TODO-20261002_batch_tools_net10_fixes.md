@@ -9,8 +9,8 @@ never got a PR, onto the .NET 10 port branch.
 - **Checkout**: `C:\proj\review` (BRENDANX-UW6)
 - **Module**: `skyline`
 - **Created**: 2026-10-02
-- **Status**: PR open - #4763 into the port branch, awaiting CI and review
-- **PR**: [#4763](https://github.com/ProteoWizard/pwiz/pull/4763)
+- **Status**: Completed
+- **PR**: [#4763](https://github.com/ProteoWizard/pwiz/pull/4763) (merged 2026-10-03 into `Skyline/work/20260612_net8_port`)
 - **Salvaged from**: `completed/TODO-20260823_resharper_cleanup.md` (superseded by Matt's #4685,
   `TODO-20260917_resharper_warning_reduction.md`)
 
@@ -63,8 +63,8 @@ All net472 branches and two-target comments from the original commits were dropp
 - [x] Run the AutoQC and SkylineBatch suites
 - [x] `/code-review max`, triage
 - [x] Open the PR into `Skyline/work/20260612_net8_port`, label `skyline` - #4763
-- [ ] CI green, Copilot review addressed (`/pw-respond 4763`)
-- [ ] Follow-up for review findings #5 and #6: `backlog/TODO-http_failure_simulator_fidelity.md`
+- [x] CI green (no Copilot review); Brendan's 3 review comments addressed (`/pw-respond 4763`)
+- [ ] Follow-up for review findings #5 and #6: `backlog/TODO-http_failure_simulator_fidelity.md` (deferred, not started)
 
 ## Progress Log
 
@@ -225,3 +225,24 @@ failed with MSB3030 copy errors. That is also in the guide now.
 
 Logs: `ai/.tmp/sessions/20261002-batchfix/reverify/`, `control-porthead/`, `loop-porthead/`,
 `tcinspect-pr-merged/`.
+
+### 2026-10-03 - Merged
+
+PR #4763 merged into `Skyline/work/20260612_net8_port` as `077ebe41e8`. It reaches master with #4619.
+TeamCity on the final head `df20c5bdef`: Skyline Windows .NET 1806 tests passed, Skyline code
+inspection "No inspections at WARNING or above", Core Windows .NET and Docker/Wine green.
+Perf/Tutorial was not re-run on the final head; its last run failed only on
+`TestDiaTtofDiaUmpireTutorial` and `TestAlphaPeptDeepBuildLibrary`, both shown to fail on the port
+branch without this PR.
+
+Shipped: DNS failures classified correctly on .NET 10 (`NameResolutionError`, or inner
+`HostNotFound`/`NoData`/`NoRecovery`/`TryAgain`) with realistic DNS and connection-failure
+simulations; the `LongWaitDlg` hang fix with `TestFinishBeforeDialogShown`; the shared Debug/Release
+SkylineCmd lookup for the AutoQC and SkylineBatch tests; zero ReSharper warnings in both batch-tool
+solutions; and the remaining salvage from `Skyline/work/20260823_resharper_cleanup`.
+
+Deferred:
+* Review findings #5 (ConnectionLost never classified on .NET 10) and #6 (raw status-code text
+  instead of the friendly messages): `backlog/TODO-http_failure_simulator_fidelity.md`.
+* `TestAlphaPeptDeepBuildLibrary` intermittent SQLite `CantOpen` on the port branch: reproduced
+  locally in about 4 minutes, not yet investigated.
