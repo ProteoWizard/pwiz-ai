@@ -5,7 +5,8 @@
 - **Checkout**: `I:\git_i\sky_tutorial`
 - **Base**: `master`
 - **Created**: 2026-09-16
-- **Status**: In Progress
+- **Status**: Completed
+- **Completed**: 2026-09-19
 - **GitHub Issue**: (none; noted under "Minor" in #4671)
 - **Module**: `skyline`
 - **PR**: [#4678](https://github.com/ProteoWizard/pwiz/pull/4678)
@@ -33,3 +34,17 @@ document's own layout name "<document>.sky.view" as a whole file name. The worka
 
 ### 2026-09-16
 - Split out of the #4671 work at the point Nick asked what the double extension was.
+
+### 2026-09-19 - Merged
+
+PR #4678 squash-merged into master as `e5420479ff`, titled "skyline: Changed the window layout
+dialogs to filter on ".view" instead of ".sky.view"".
+
+## Resolution
+
+**Status**: Completed.
+
+The File > Export/Import > Window Layout dialogs filter on and default to ".view", so a typed
+"Name.view" or "Name.sky.view" is saved exactly as typed, and the export dialog suggests the
+document's own "<document>.sky.view". The strip-the-duplicate workaround in ShowExportLayoutDlg
+and `EXT_SKY_VIEW` are gone.

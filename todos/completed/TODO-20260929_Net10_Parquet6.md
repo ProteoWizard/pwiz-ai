@@ -4,8 +4,9 @@
 - **Branch**: `Skyline/work/20260929_Net10_Parquet6`
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-29
-- **Status**: In Progress
-- **GitHub Issue**: (none)
+- **Status**: Completed
+- **Completed**: 2026-10-02
+- **GitHub Issue**: #4762 (fixed here; closed by hand since the PR targets the port branch)
 - **Module**: `skyline`
 - **PR**: [#4751](https://github.com/ProteoWizard/pwiz/pull/4751)
 
@@ -125,6 +126,21 @@ osprey and pwiz (BiblioSpec) code.
 - [x] Applied the `_DeploySkylineCmd` hunks of `15dc5be3b7` (not its server GC hunk), which made
   TestCmdLineAssociateProteins pass. It was the only Test.dll failure (420 of 421 passed).
 - [x] Committed and pushed `9abe7ccc3e`; replied to and resolved the Copilot thread
+- [x] #4762 (Matt): `dotnet publish` of Osprey shipped the stock NuGet `Parquet.dll`, because the
+  after-Build copy only patched `$(OutDir)` and publish copies package assets from the NuGet cache.
+  `ParquetNet.targets` now removes the package's `Parquet.dll` from `RuntimeCopyLocalItems` (after
+  `ResolvePackageAssets`, unconditionally, so transitive consumers like Osprey.exe are covered) and
+  the patched `Reference` is `Private=true`; the after-Build copy is gone. `ExcludeAssets="runtime"`
+  was tried first and dropped every Parquet.Net dependency (CommunityToolkit.HighPerformance,
+  Snappier, ZstdSharp, ...), failing 28 Osprey tests, because NuGet applies it to dependencies too.
+  A README publish now ships the patched dll and all five dependencies.
+- [x] Skyline `Program.Main` shows a message after the 32-bit check when the loaded `Parquet.dll`
+  lacks the fork's `ParquetRowGroupWriter.PrepareColumnAsync` (`WriteColumnsAsync` was the 4.x
+  fork's method and exists in neither 6.1 build). It warns and keeps starting, since Skyline only
+  calls `WriteColumnAsync`, which the stock dll has. Committed `a31a3f35e8`.
+- [x] Merged the port branch twice: the CRLF restore (`3f9a7ab674`) conflicted on four csproj only
+  on line endings; kept our content in CRLF, staged with `hash-object --no-filters` because
+  `core.autocrlf=true` re-normalized a plain `git add` to LF
 
 ## Notes
 
@@ -140,9 +156,34 @@ osprey and pwiz (BiblioSpec) code.
   hint. Protein, Peptide, Fragment_Ion, Replicate_Name and File_Name are dictionary-encoded. The
   review reported 18,388 bytes for 4.x and 33,634 without the hint; those numbers were not
   re-measured.
-- Fork DLL delivery is still a copy after Build. A project whose bin `Parquet.dll` is loaded by a
-  running process fails a no-op build, because the stock package DLL is copied in before the fork
-  is copied back. `dotnet publish` (Osprey's `package.ps1`) ships the stock NuGet DLL, which lacks
-  the Thrift read fix. Osprey had this on master already. A repo-local package feed would fix both.
+- Fork DLL delivery was a copy after Build, which `dotnet publish` bypassed; fixed for #4762 by
+  removing the package's dll from the copy-local items (see Progress). A repo-local package feed
+  remains the cleaner long-term answer.
 - Files written by the fork record `created_by` as `Parquet.Net version ${VERSION} (build
   ${GITHUB_SHA})`, because the fork build does not substitute `Globals.cs`.
+
+### 2026-10-02 - Merged
+
+PR #4751 squash-merged into `Skyline/work/20260612_net8_port` as `e60a58be42`, titled
+"skyline: Upgraded to Parquet.Net version 6", with all ten TeamCity checks green (Skyline Windows
+1,806 tests, Core Windows 650, Core Linux 421, Osprey Windows and Linux 642 each, code inspection
+clean). #4762 closed by hand with a comment crediting Matt, since `Fixes` only auto-closes on
+master. No human approval was recorded.
+
+## Resolution
+
+**Status**: Completed (merged into the .NET 10 port branch, not master).
+
+Skyline's report exporter, the DIA-NN search dialog, the Osprey score cache and pwiz-sharp's
+BiblioSpec DIA-NN reader moved from Parquet.Net 4.25.0 to the patched 6.1.0-osprey3 fork.
+`Shared/Lib/Parquet/ParquetNet.targets` makes every opted-in project compile against and deploy the
+patched `Parquet.dll`, and drops the package's own dll from build, publish and deps.json (#4762).
+Along the way: WinForms-safe writer creation and disposal, dictionary encoding of report strings,
+TIMESTAMP(MILLIS) DateTimes, a `ProducerConsumerWorker` that cannot deadlock a producer after a
+consumer fails, tool deploys from the folder each tool was built into, and a Skyline startup
+message when the loaded Parquet.dll is not the patched build.
+
+Not done: the Osprey README still documents `net8.0` publish commands (Nick: not needed); master
+keeps the 4.25.0 setup with the publish bug (Nick: Osprey on master does not matter); the
+`Dispose` path of `ProducerConsumerWorker` can still block with two or more consumers on a bounded
+queue smaller than the consumer count (pre-existing, no such caller).
