@@ -47,12 +47,17 @@ See [announcement-usage.md](announcement-usage.md) for containers using Announce
 | documents_metadata | corex | Attachment metadata (excludes binary blob) | `list_attachments()` |
 
 Available in: `/home/support`, `/home/issues`. Pending: `/home/software/Skyline` (for wiki attachments).
+Where corex is missing, `list_wiki_attachments()` falls back to the attachment names on the wiki edit page.
 
-### Wiki (`/home/software/Skyline`)
+### Wiki (`/home/software/Skyline`) - no longer used
 | Query | Schema | Description | Used By |
 |-------|--------|-------------|---------|
-| wiki_page_content | wiki | Full page content by name | `get_wiki_page()` |
-| wiki_page_list | wiki | All pages with metadata (no body) | `list_wiki_pages()` |
+| wiki_page_content | wiki | Full page content by name | (none) |
+| wiki_page_list | wiki | All pages with metadata (no body) | (none) |
+
+These still exist on skyline.ms but only wrap `CurrentWikiVersions`. The wiki tools
+query that table directly (see below) so they also work on panoramaweb.org and other
+servers that don't have these saved queries.
 
 ## Base Tables Used Directly
 
@@ -66,6 +71,7 @@ These tables are queried directly by server.py without custom queries:
 | memoryleaks | testresults | (test folders) | `get_run_leaks()` |
 | handleleaks | testresults | (test folders) | `get_run_leaks()` |
 | documents | corex | /home/support, /home/issues | `list_attachments()`, `get_attachment()` |
+| CurrentWikiVersions | wiki | (any folder, any server) | `list_wiki_pages()`, `get_wiki_page()`, `update_wiki_page()` |
 
 ## Proposed Queries (Not Yet Used)
 

@@ -1,7 +1,8 @@
 """Wiki tools for LabKey MCP server.
 
-This module contains tools for reading and updating wiki pages on skyline.ms,
-including the LabKey tutorial documentation.
+This module contains tools for reading and updating wiki pages on skyline.ms
+(including the LabKey tutorial documentation), panoramaweb.org, or any other
+LabKey server passed as `server`.
 """
 
 import base64
@@ -14,6 +15,7 @@ from typing import Optional
 from urllib.parse import quote, urlencode
 
 import labkey
+from labkey.exceptions import QueryNotFoundError
 
 from .common import (
     get_server_context,
@@ -23,12 +25,53 @@ from .common import (
     encode_waf_body,
     LabKeySession,
     _server_url,
+    _split_server,
     DEFAULT_SERVER,
     DEFAULT_WIKI_CONTAINER,
     WIKI_SCHEMA,
 )
 
 logger = logging.getLogger("labkey_mcp")
+
+
+def _query_current_wiki_versions(
+    server: str,
+    container_path: str,
+    columns: str,
+    page_name: str = None,
+    max_rows: int = -1,
+    sort: str = None,
+) -> dict:
+    """Query the built-in wiki.CurrentWikiVersions table.
+
+    The table is queried directly rather than through a saved query so the
+    wiki tools work on any LabKey server (skyline.ms, panoramaweb.org, a local
+    dev server). The saved queries wiki_page_list and wiki_page_content exist
+    only on skyline.ms and add nothing beyond a column list and a Name filter.
+    """
+    server_context = get_server_context(server, container_path)
+    filter_array = [labkey.query.QueryFilter("Name", page_name, "eq")] if page_name else None
+    return labkey.query.select_rows(
+        server_context=server_context,
+        schema_name=WIKI_SCHEMA,
+        query_name="CurrentWikiVersions",
+        columns=columns,
+        filter_array=filter_array,
+        max_rows=max_rows,
+        sort=sort,
+    )
+
+
+def _wiki_file_stem(server: str, container_path: str, page_name: str) -> str:
+    """Build a filename stem unique to the server, container, and page.
+
+    Page names repeat across containers ("default" exists in most folders) and
+    across servers, so a stem built from the page name alone lets one fetch
+    silently overwrite another.
+    """
+    _, host = _split_server(server)
+    parts = [host, container_path.strip("/").replace("/", "-"), page_name]
+    return "--".join(re.sub(r"[^A-Za-z0-9._-]+", "_", part) for part in parts)
 
 
 def _get_wiki_page_metadata(
@@ -40,8 +83,9 @@ def _get_wiki_page_metadata(
     """Get wiki page metadata needed for updates (entityId, rowId, pageVersionId).
 
     Fetches page metadata from two sources:
-    1. Database query (wiki_page_content) for title and rendererType - authoritative
-    2. Wiki edit page HTML for entityId, rowId, pageVersionId - not in wiki schema
+    1. wiki.CurrentWikiVersions for title and rendererType - authoritative
+    2. Wiki edit page HTML for entityId, rowId, pageVersionId, and attachment
+       names - not in the wiki schema
 
     Args:
         page_name: Wiki page name
@@ -51,20 +95,16 @@ def _get_wiki_page_metadata(
 
     Returns:
         Tuple of (metadata_dict, session) where metadata_dict has:
-        entityId, rowId, pageVersionId, name, title, rendererType, parent
+        entityId, rowId, pageVersionId, name, title, rendererType, parent,
+        attachments (list of attachment file names)
     """
     if session is None:
         session, _ = get_labkey_session(server)
 
     # Step 1: Query database for authoritative title and rendererType
     # These should NOT come from HTML parsing - they're database fields
-    server_context = get_server_context(server, container_path)
-    db_result = labkey.query.select_rows(
-        server_context=server_context,
-        schema_name=WIKI_SCHEMA,
-        query_name="wiki_page_content",
-        max_rows=1,
-        parameters={"PageName": page_name},
+    db_result = _query_current_wiki_versions(
+        server, container_path, "Name,Title,RendererType,Version", page_name=page_name, max_rows=1
     )
 
     if not db_result or not db_result.get("rows"):
@@ -89,7 +129,7 @@ def _get_wiki_page_metadata(
 
     # Debug: Save HTML to temp file for inspection
     tmp_dir = get_tmp_dir()
-    debug_file = tmp_dir / f"wiki-edit-{page_name}.html"
+    debug_file = tmp_dir / f"wiki-edit-{_wiki_file_stem(server, container_path, page_name)}.html"
     debug_file.write_text(html, encoding="utf-8")
     logger.info(f"Saved wiki edit page HTML to {debug_file}")
 
@@ -102,6 +142,14 @@ def _get_wiki_page_metadata(
     version_match = re.search(r'pageVersionId:\s*(\d+)', html)
     parent_match = re.search(r'parent:\s*(\d+)', html)
 
+    # Attachment names appear in LABKEY._wiki.setAttachments([{name: '...', ...}])
+    # on every LabKey server, unlike the corex schema list_wiki_attachments prefers
+    attachments_match = re.search(r"setAttachments\((\[.*?\])\);", html, re.S)
+    attachment_names = [
+        name.replace("\\'", "'").replace("\\\\", "\\")
+        for name in re.findall(r"name:\s*'((?:[^'\\]|\\.)*)'", attachments_match.group(1))
+    ] if attachments_match else []
+
     if entity_match and row_match and version_match:
         return ({
             "entityId": entity_match.group(1),
@@ -111,6 +159,7 @@ def _get_wiki_page_metadata(
             "parent": parent_match.group(1) if parent_match else "",
             "pageVersionId": int(version_match.group(1)),
             "rendererType": db_renderer,  # From database, not HTML
+            "attachments": attachment_names,
         }, session)
 
     raise Exception(f"Could not find wiki metadata in edit page for '{page_name}'")
@@ -126,14 +175,8 @@ def register_tools(mcp):
     ) -> str:
         """[D] List wiki pages. → wiki.md"""
         try:
-            server_context = get_server_context(server, container_path)
-
-            result = labkey.query.select_rows(
-                server_context=server_context,
-                schema_name=WIKI_SCHEMA,
-                query_name="wiki_page_list",
-                max_rows=500,
-                sort="Name",
+            result = _query_current_wiki_versions(
+                server, container_path, "Name,Title,RendererType,Version,Modified", max_rows=500, sort="Name"
             )
 
             if result and result.get("rows"):
@@ -165,16 +208,11 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
-        """[D] Wiki page content. Saves to ai/.tmp/wiki-{page_name}.md. → wiki.md"""
+        """[D] Wiki page content. Saves to ai/.tmp/wiki-{host}--{container}--{page}.md. → wiki.md"""
         try:
-            server_context = get_server_context(server, container_path)
-
-            result = labkey.query.select_rows(
-                server_context=server_context,
-                schema_name=WIKI_SCHEMA,
-                query_name="wiki_page_content",
-                max_rows=1,
-                parameters={"PageName": page_name},
+            result = _query_current_wiki_versions(
+                server, container_path, "Name,Title,Body,RendererType,Version,Modified",
+                page_name=page_name, max_rows=1,
             )
 
             if not result or not result.get("rows"):
@@ -208,9 +246,7 @@ def register_tools(mcp):
             # Determine output path
             output_dir = get_tmp_dir()
 
-            # Sanitize page name for filename
-            safe_name = page_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
-            output_file = output_dir / f"wiki-{safe_name}.md"
+            output_file = output_dir / f"wiki-{_wiki_file_stem(server, container_path, page_name)}.md"
             output_file.write_text(content, encoding="utf-8")
 
             # Calculate metadata
@@ -351,13 +387,33 @@ def register_tools(mcp):
             # Query for attachments
             server_context = get_server_context(server, container_path)
 
-            result = labkey.query.select_rows(
-                server_context=server_context,
-                schema_name="corex",
-                query_name="documents_metadata",
-                parameters={"ParentEntityId": entity_id},
-                max_rows=100,
-            )
+            try:
+                result = labkey.query.select_rows(
+                    server_context=server_context,
+                    schema_name="corex",
+                    query_name="documents_metadata",
+                    parameters={"ParentEntityId": entity_id},
+                    max_rows=100,
+                )
+            except QueryNotFoundError as e:
+                # corex is an external schema configured only in some skyline.ms
+                # folders. Fall back to the names listed on the wiki edit page,
+                # which every LabKey server provides (no sizes or types).
+                logger.info(f"corex.documents_metadata unavailable ({e}); using edit page attachment list")
+                names = metadata.get("attachments", [])
+                if not names:
+                    return f"No attachments found for wiki page '{page_name}'"
+                return "\n".join([
+                    f"Found {len(names)} attachment(s) for wiki page '{page_name}':",
+                    f"  entityId: {entity_id}",
+                    "",
+                    *(f"  - {name}" for name in names),
+                    "",
+                    "(Sizes and types unavailable: the corex schema is not configured in this folder.)",
+                    "",
+                    "To download an attachment:",
+                    f'  get_wiki_attachment("{page_name}", "filename")',
+                ])
 
             if not result or not result.get("rows"):
                 return f"No attachments found for wiki page '{page_name}'"

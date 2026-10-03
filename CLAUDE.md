@@ -231,7 +231,7 @@ Before writing code, read these files:
 - **skyline-exceptions** → For exception reports, triage, or LabKey exception queries
 - **tutorial-documentation** → For tutorial HTML, tutorial tests (TestTutorial/), or screenshots
 - **skyline-screenshots** → For ImageComparer, screenshot diffs, or s-XX.png references
-- **skyline-wiki** → For reading/updating wiki pages on skyline.ms
+- **skyline-wiki** → For reading/updating wiki pages on skyline.ms or panoramaweb.org
 - **ai-context-documentation** → For ai/ folder docs, TODOs, or .claude/ files
 
 ## Debugging Behavior

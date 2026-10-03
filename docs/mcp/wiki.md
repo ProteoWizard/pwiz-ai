@@ -1,12 +1,13 @@
 # Wiki Documentation Access
 
-Access and update wiki pages on skyline.ms via the LabKey MCP server.
+Access and update wiki pages on skyline.ms, panoramaweb.org, or any other LabKey
+server via the LabKey MCP server.
 
 ## Data Location
 
 | Property | Value |
 |----------|-------|
-| Server | `skyline.ms` |
+| Server | `skyline.ms` by default; any LabKey server via `server` (see [Other LabKey Servers](#other-labkey-servers)) |
 | Schema | `wiki` |
 | Tables | `CurrentWikiVersions`, `AllWikiVersions` |
 
@@ -54,7 +55,7 @@ get_wiki_page("DeployToDockerHub", container_path="/home/development")
 | Tool | Description |
 |------|-------------|
 | `list_wiki_pages(container_path)` | List all pages with metadata (no body) |
-| `get_wiki_page(page_name)` | Get full page content, save to `ai/.tmp/wiki-{name}.md` |
+| `get_wiki_page(page_name)` | Get full page content, save to `ai/.tmp/wiki-{host}--{container}--{page}.md` |
 | `update_wiki_page(page_name, body_file, title)` | Update page content from local file (optional title change) |
 | `list_wiki_attachments(page_name)` | List attachments for a wiki page |
 | `get_wiki_attachment(page_name, filename)` | Download attachment from wiki page |
@@ -70,12 +71,15 @@ list_wiki_pages()
 ```
 get_wiki_page("tutorial_method_edit")
 ```
-Returns metadata and saves full content to `ai/.tmp/wiki-tutorial_method_edit.md`.
+Returns metadata and saves full content to
+`ai/.tmp/wiki-skyline.ms--home-software-Skyline--tutorial_method_edit.md`. The file
+name includes the server and container, so same-named pages (`default` exists in
+most folders) never overwrite each other. The tool prints the path it wrote.
 
 **Update a wiki page:**
 ```
 # 1. Download current page
-get_wiki_page("AIDevSetup")  # saves to ai/.tmp/wiki-AIDevSetup.md
+get_wiki_page("AIDevSetup")  # saves to ai/.tmp/wiki-skyline.ms--home-software-Skyline--AIDevSetup.md
 
 # 2. Copy to working file (strip markdown header), apply edits with Edit tool
 # 3. Upload from file
@@ -94,6 +98,35 @@ list_wiki_attachments("NewMachineBootstrap")
 get_wiki_attachment("NewMachineBootstrap", "new-machine-setup.md")
 ```
 Text files are returned directly; binary files (PDF, images) are saved to `ai/.tmp/attachments/`.
+
+## Other LabKey Servers
+
+Every wiki tool takes `server` and `container_path`, so the same tools work on
+panoramaweb.org, a local dev server, or any other LabKey instance. Credentials come
+from a `machine <host>` entry in your netrc. To default a whole MCP instance to
+another server, register it with `LABKEY_SERVER` (see
+[ai/mcp/LabKeyMcp/README.md](../../mcp/LabKeyMcp/README.md)).
+
+```
+list_wiki_pages(server="https://panoramaweb.org", container_path="/MacCoss")
+get_wiki_page("default", server="https://panoramaweb.org", container_path="/MacCoss")
+```
+
+What differs from skyline.ms:
+
+- **No server-side setup needed.** The tools read the built-in
+  `wiki.CurrentWikiVersions` table, which every LabKey server has.
+- **Attachment listings may lack sizes.** `list_wiki_attachments` uses
+  `corex.documents_metadata` for sizes and types where that external schema is
+  configured (some skyline.ms folders). Elsewhere it lists the attachment names
+  from the page's edit view, without sizes or types. Downloads work either way.
+- **Allowed HTML depends on the account's permissions.** On panoramaweb.org, an
+  account without the script and style permission gets
+  `400 Illegal element <style>` from `update_wiki_page`. Inline `style="..."`
+  attributes are allowed, so write styles inline.
+- **There is no create tool.** `update_wiki_page` only changes existing pages.
+  Create a page in the LabKey UI, or POST to `wiki-saveWiki.view` with the editor's
+  new-page defaults (`entityId`, `rowId` and `parent` null, `pageVersionId` -1).
 
 ## Permissions
 
@@ -147,10 +180,11 @@ Some wiki pages are kept in sync with files committed to the repository. The ai/
 
 For pages that can be edited (simple HTML without iframes/scripts):
 
-1. **Download current content**: `get_wiki_page("PageName")` → saved to `ai/.tmp/wiki-PageName.md`
+1. **Download current content**: `get_wiki_page("PageName")` → saved to
+   `ai/.tmp/wiki-skyline.ms--home-software-Skyline--PageName.md` (the tool prints the path)
 2. **Copy to working file**: Strip the markdown header (first 9 lines) to get raw HTML:
    ```bash
-   tail -n +10 ai/.tmp/wiki-PageName.md > ai/.tmp/wiki-PageName-updated.html
+   tail -n +10 ai/.tmp/wiki-skyline.ms--home-software-Skyline--PageName.md > ai/.tmp/wiki-PageName-updated.html
    ```
 3. **Apply edits**: Use the Edit tool to make changes — diffs are visible and reviewable
 4. **Upload from file**: `update_wiki_page("PageName", body_file="ai/.tmp/wiki-PageName-updated.html")`
@@ -160,10 +194,10 @@ The wiki maintains full version history, so changes can be reverted if needed.
 
 ## Server-Side Queries
 
-| Query | Description |
-|-------|-------------|
-| `wiki_page_list` | All pages without body content |
-| `wiki_page_content` | Single page with full body (parameterized) |
+The wiki tools no longer use saved queries. `wiki_page_list` and `wiki_page_content`
+still exist on skyline.ms (definitions in `ai/mcp/LabKeyMcp/queries/wiki/`), but they
+only wrap `CurrentWikiVersions`. The tools query that table directly so they also
+work on servers that don't have the saved queries.
 
 ## Searching All Wiki Pages Site-Wide
 
@@ -224,26 +258,22 @@ is not reachable through the MCP, and `core.ShortURL` is not exposed as a query.
 `{server}/{container}/{view_name}` verbatim and appends nothing. `view_name="wiki-page"`
 returns HTTP 404; `view_name="wiki-page.view"` works.
 
-**`get_wiki_page` collides on same-named pages in different containers.** The
-output filename derives from the page name alone (`ai/.tmp/wiki-{page_name}.md`),
-ignoring the container. Fetching `default` from both `/home/software/Skyline` and
-`/home/software/Skyline/events` writes both to `ai/.tmp/wiki-default.md` — the
-second silently overwrites the first. Easy to miss when the calls run in
-parallel. Fetch, rename, then fetch the next:
-
-```bash
-get_wiki_page("default", container_path="/home/software/Skyline")
-cp ai/.tmp/wiki-default.md ai/.tmp/wiki-home-default.md
-get_wiki_page("default", container_path="/home/software/Skyline/events")
-```
+**Git Bash rewrites container paths passed to scripts.** When a script run from
+Git Bash takes a container argument, `/MacCoss` arrives as
+`C:/Program Files/Git/MacCoss` and LabKey answers `404: No such folder or workbook`.
+Prefix the command with `MSYS_NO_PATHCONV=1`, and give the script's own path in
+Windows form (`D:/...`), because the prefix also stops `/d/...` from being converted.
+MCP tool calls are not affected.
 
 **Saved wiki bodies use CRLF line endings.** Splitting on `'\n---\n'` to strip
 the markdown header fails — use `re.search(r'\r?\n---\r?\n', text)`. Plain `diff`
 also reports *every* line as changed when comparing an edited LF file against the
 CRLF original; use `diff --strip-trailing-cr` to see the real changes.
 
-**`<style>` blocks are permitted, and LabKey rewrites the markup.** Wiki bodies
-may contain `<style>` (unlike `<script>` and `<iframe>`). The HTML cleaner
+**`<style>` blocks are permitted on skyline.ms, and LabKey rewrites the markup.**
+For the skyline.ms Agents group, wiki bodies may contain `<style>` (unlike
+`<script>` and `<iframe>`). panoramaweb.org rejects `<style>` from accounts without
+the script and style permission; see [Other LabKey Servers](#other-labkey-servers). The HTML cleaner
 normalizes self-closing tags — `<hr class="x" />` becomes `<hr class="x">` — and
 may emit the style block twice in the rendered page. Both are harmless, but
 account for them when grepping a fetched page to confirm an update landed.

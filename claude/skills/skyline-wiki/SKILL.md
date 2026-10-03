@@ -1,6 +1,6 @@
 ---
 name: skyline-wiki
-description: Use this skill when reading or updating wiki pages on skyline.ms.
+description: Use this skill when reading or updating wiki pages on skyline.ms, panoramaweb.org, or another LabKey server.
 ---
 
 # Skyline Wiki Documentation
@@ -35,10 +35,14 @@ These wiki pages are synced with committed files in the repository:
 
 **Data location**: skyline.ms → /home/software/Skyline → wiki.CurrentWikiVersions
 
+**Other servers**: every tool takes `server` and `container_path`, e.g.
+`get_wiki_page("default", server="https://panoramaweb.org", container_path="/MacCoss")`.
+See ai/docs/mcp/wiki.md (Other LabKey Servers) for the differences.
+
 **MCP tools available**:
 - `list_wiki_pages()` - All pages with metadata
 - `get_wiki_page(page_name)` - Full content to ai/.tmp/
-- `update_wiki_page(page_name, new_body, title)` - Update content
+- `update_wiki_page(page_name, body_file, title)` - Update content
 - `list_wiki_attachments(page_name)` - List attached files
 - `get_wiki_attachment(page_name, filename)` - Download attachment
 
