@@ -4,10 +4,46 @@
 - **Branch**: `Skyline/work/20260909_osprey_parallel_parquet_read`
 - **Base**: **must be stacked on PR #4751** (`Skyline/work/20260929_Net10_Parquet6`, Parquet.Net 6.1.0) - see the 2026-10-01 section at the END. The 2026-09-30 rebase onto `ed25627d81` (`b9c380515e`) is superseded.
 - **Created**: 2026-09-10 (night session), TODO written 2026-09-17
-- **Status**: Rebased to `b9c380515e` and gate-green on `ed25627d81` (2026-09-30), but that base is SUPERSEDED - needs re-porting onto #4751, and its benchmark needs re-establishing on Parquet.Net 6 first. No PR. Do not push.
+- **Status**: 2026-10-03: #4751 (Parquet.Net 6.1) has MERGED into the port branch (`e60a58be42`), so the blocker is gone. Next is the measurement, not the port: size the parquet walk at CHS scale on the i9 (see "2026-10-03: what the i9 should decide" below). Local tip `b9c380515e` (rebased on `ed25627d81`, gate-green); origin still holds the pre-rebase `0401012ede` until force-pushed. No PR.
 - **Module**: `osprey`
 - **PR**: none
 - **Worktree**: `D:\Users\brendanx\proj\pwiz-parqread` (pushed to origin 2026-09-17; the worktree is disposable once merged)
+
+## 2026-10-03: what the i9 should decide
+
+**State.** #4751 (Parquet.Net 6.1, built from `maccoss-developers\skylinedev\Parquet.Net6` via
+`Shared\Lib\Parquet\ParquetNet.targets`) merged into the port branch as `e60a58be42`. This
+branch is pwiz-only - `b9c380515e` touches `ParquetScoreCache.cs`, `IOTest.cs` and the new
+`ParquetReadPipelineBenchTest.cs`, and uses only the public read API, so it needs NO change in
+any Parquet.Net fork (the old `skylinedev\Parquet.Net` 4.25 checkout is write-side history and
+can be ignored). The re-port onto 6.1 will conflict across ~800 lines of `ParquetScoreCache.cs`,
+whose read surface is now async-first and wrapped.
+
+**Branch on origin is STALE.** Origin holds `0401012ede`, the pre-rebase version stacked on
+`a9ee510ada` (which landed as #4652). The rebased `b9c380515e` was not pushed - the force-push
+was refused by the auto-mode permission check and left for Brendan. Nothing on origin is lost by
+overwriting it. If the i9 cannot see `b9c380515e`, rebase `0401012ede` itself; it is the same
+change.
+
+**A new reason the prize may have shrunk.** The FDR lanes work (PR #4765,
+TODO-20260926_osprey_firstpassfdr_parallel.md) now decodes several FILES concurrently in
+FirstPassFDR, which overlaps most of what decoding row groups in parallel within one file buys
+there. The serial-decode case that remains is a single large file, or any stage still reading
+files one at a time.
+
+**Measure before porting - the #4765 CHS sweep already produces the data.** Its pass 0/1/2
+`[PATH]` lines carry the `parquet walk` bucket (summed over lanes) next to the pass wall clock.
+From the CHS 446-file `-Task FirstPassFDR` arms:
+* walk share of pass wall at lanes-1 (the serial ceiling this branch could attack), and
+* the same at lanes-4: if the walk is no longer on the critical path once files overlap, this
+  branch is worth little in FirstPassFDR.
+* The walk is the one SUPERLINEAR bucket (3.27x for 2.04x rows at 8->16 files), so only a
+  measurement at 446 files settles it; do not extrapolate from 8.
+* Also look at the stages the lanes do NOT cover (PerFileRescoring hydrate, SecondPassFDR) for
+  serial single-file reads.
+
+Decide: port onto the port branch (expect the conflict above), or park this branch with the
+numbers recorded.
 
 ## What it does
 
