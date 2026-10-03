@@ -46,6 +46,12 @@ things that move needs:
   users. The first run merges against a missing base rather than copying, so InstallationId and
   ImportedSettingsPath are never taken over.
 - `ToolDescriptionHelpers.GetToolsDirectory` follows the settings folder.
+- `ToolDescription.IsReadOnly`: a tool whose ToolDirPath is not in the user's Tools folder (an
+  admin-installed tool, for a non-owner) is read-only. External Tools disables Remove and every
+  field for it (Move Up/Down still work; they only order the user's menu). Hand-defined tools
+  with no ToolDirPath stay editable. `ToolInstaller.UnpackZipTool` refuses to reinstall or
+  update a read-only tool (it would delete the admin's folder), before touching annotations;
+  covers Tool Store, Tool Updates, install from zip and --tool-add-zip.
 
 ### Three-way merge (`Properties/Settings.cs`, `Util/Xml.cs`)
 
@@ -132,6 +138,11 @@ things that move needs:
       a personal Tools folder; admin later adds Protter and the non-owner sees it beside PRISM.
 - [x] 2026-10-02 (dc29d64164): folderowners.txt; personal root renamed to Skyline; path
       checksum in personal folder names. Re-checked live with an empty and a listed file.
+- [x] 2026-10-02 (0e37412223, 0adbe00148): read-only shared tools in External Tools; no
+      reinstall/update of shared tools. Live test via folderowners.txt: owner's mods/reports
+      reach the user, the user's own stay personal, owner's later additions merge in.
+- [ ] Connector bugs seen: skyline_add_report NREs while the Start Page shows; File > Exit
+      returns a JSON parse error because Skyline exits before replying
 - [ ] Verify in a real per-machine install with a standard user
 - [ ] PR test plan: build.ps1 output, download page links, Import Settings from an installed
       Skyline, startup update check finds a newer version
