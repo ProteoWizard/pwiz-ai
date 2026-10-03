@@ -84,6 +84,16 @@ port-style `b.bat` / `bs.bat` / `bo.bat` from new-machine-setup.md 4.5 (they are
 nothing replaces them for you), and `.\bs.bat`. Bare `.\bs.bat` builds **Release** only; run
 `.\bs.bat Debug` too if you will build or test Debug.
 
+**Build in the same vendor mode as the bootstrap.** The port-style `b.bat` passes
+`--i-agree-to-the-vendor-licenses`, and TeamCity builds with vendor readers too. Unless the
+checkout has `pwiz-sharp\Directory.Build.user.props` (written by
+`pwiz-sharp\i-agree-to-the-vendor-licenses.bat`), `Build-Skyline.ps1` builds **without** vendor
+support (it prints "Vendor support DISABLED"). Then it rebuilds the pwiz-sharp tool outputs in
+no-vendor mode over the `bs.bat` vendor build, and Skyline fails with dozens of
+`MSB3030: Could not copy ... Clearcore2.*.dll / baf2sql_c.dll` errors. Pass `-VendorLicenses` to
+`Build-Skyline.ps1` in such a checkout, and match the bootstrap's configuration with
+`-Configuration`.
+
 **Symptoms of a mis-primed checkout**, all seen on 2026-10-02 in a master-primed checkout
 switched to a port-based PR branch (PR #4763):
 
