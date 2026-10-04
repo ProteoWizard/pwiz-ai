@@ -534,3 +534,18 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
   RT metrics back to the pre-alignment goldens'. Astral libraries by RT bin against DIA-NN (unaligned / HI / minutes):
   order 0.084 all; 20-22 min order 0.405 / 0.235 / 0.410, minutes 0.369 / 0.627 / 0.364 (the regression export's
   training stops at 19.87 min). `-RequireData` 99/99, Astral 4/4. Not pushed yet.
+- Mike: "The entire point of adding chronologer was to improve the late timepoints." The regression's late-gradient
+  gap came from its training exports: v1 searched Carafe's AlphaPeptDeep starting library and found nothing past
+  19.8 min. Mike: remake them from a search of the Chronologer starting library. Done (local, not published):
+  `Run-ExportV2.ps1` (workflow stages 2-3 on the testfiles packages' own train FASTA + pairing, CarafeSharp 58bfcdf18a,
+  Osprey 492dc3d, mzML input), `Build-ExportV2Packages.ps1` -> `C:/temp/carafesharp-testdata-zips/`
+  carafesharp-export-v2.zip (Stellar, 60,340,034 B, 68cec32b...) and carafesharp-export-astral-v2.zip (Astral,
+  144,142,305 B, d0970c80...). Stellar 27,424 precursors (v1 22,761), 2,015 past 20 min; Astral 98,142 (v1 86,886),
+  4,212 past 20 min. Masking parity stays on carafesharp-export-v1. pwiz: `7f2b7368b6` (testdata.json, regression.ps1),
+  goldens `37477a43d4`, `d781a0ae3d`, docs `e6367e1016`; pwiz-ai `5e844d2f` (packaging script).
+- Golden libraries against DIA-NN, v1 -> v2 export (`score_golden_libraries.py`; `C:/temp/osprey-runs/export-v2/
+  {stellar,astral}-golden-libraries.txt`), median min: Stellar after 22 min minutes 1.363 -> 0.125, order 0.452 ->
+  0.043; Astral after 22 min minutes 1.836 -> 0.140, order 0.884 -> 0.106; 20-22 min Astral minutes 0.364 -> 0.151.
+  Overall unchanged or better (Stellar 0.094 -> 0.088, Astral 0.104 -> 0.102 minutes).
+- Open: the packaging script's comment says publish only .raw exports; these read the mzML (spectra cache identical
+  to .raw's). Upload of the two zips to PanoramaWeb perftests needs Mike.
