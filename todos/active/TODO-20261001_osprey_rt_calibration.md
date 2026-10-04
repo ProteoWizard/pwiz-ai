@@ -549,3 +549,12 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
   Overall unchanged or better (Stellar 0.094 -> 0.088, Astral 0.104 -> 0.102 minutes).
 - Open: the packaging script's comment says publish only .raw exports; these read the mzML (spectra cache identical
   to .raw's). Upload of the two zips to PanoramaWeb perftests needs Mike.
+- Mike: rerun from .raw (mzML only as a backup). The .raw are on W: (BLENCATHRA's D:,
+  `W:/GitHub-Repo/maccoss/osprey/example_test_data/{stellar,astral}`), SHA-256 equal to v1's READMEs; copied to
+  `C:/temp/osprey-runs/raw/`. Osprey built with `Build-Osprey.ps1 -VendorReader` from the PR head (e6367e1016, Osprey
+  code = 492dc3d), snapshot `_bin/osprey-e6367e1-vendor`; `Run-ExportV2Raw.ps1` (stage 3 only, the same starting
+  libraries, fresh spectra cache). The .raw exports equal the mzML ones record for record (only the footer's Osprey
+  version differs). Packages rebuilt from them: carafesharp-export-v2.zip 60,339,997 B, 059a2e16...;
+  carafesharp-export-astral-v2.zip 144,142,263 B, 26fd07fb... (the mzML builds kept as `*.mzml-unpublished`).
+  pwiz `9fe180d11f` (testdata.json, regression.ps1), goldens `2613ea333d`, `caba0f3588` (only the input SHA-256 and
+  provenance changed), docs `a810d1d892`. Not pushed; upload to PanoramaWeb pending Mike.

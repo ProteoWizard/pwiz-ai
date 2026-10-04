@@ -48,7 +48,7 @@
     with the landed Osprey before publishing).
 .PARAMETER RegressionTrainingExport
     The Stellar _21 training export parquet for carafesharp-export-v2: Osprey's search of CarafeSharp's
-    Chronologer starting library (Run-CarafeSharpWorkflow.ps1 stages 2 and 3 on the testfiles package's
+    Chronologer starting library, written from the .raw (Run-CarafeSharpWorkflow.ps1 stages 2 and 3 on the testfiles package's
     train FASTA and pairing manifest).
 .PARAMETER AstralTrainingExport
     The Astral _55 training export parquet for carafesharp-export-astral-v2, made as RegressionTrainingExport.
@@ -68,8 +68,8 @@ param(
     [string]$ExampleData = 'D:\GitHub-Repo\maccoss\osprey\example_test_data',
     [string]$ReferenceStaging = 'D:\test\carafesharp-testdata-staging',
     [string]$TrainingExport = 'D:\test\osprey-runs\carafe-june-train\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.training.parquet',
-    [string]$RegressionTrainingExport = 'C:\temp\osprey-runs\export-v2\stellar\osprey_train\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.training.parquet',
-    [string]$AstralTrainingExport = 'C:\temp\osprey-runs\export-v2\astral\osprey_train\Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.training.parquet',
+    [string]$RegressionTrainingExport = 'C:\temp\osprey-runs\export-v2-raw\stellar\osprey_train\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.training.parquet',
+    [string]$AstralTrainingExport = 'C:\temp\osprey-runs\export-v2-raw\astral\osprey_train\Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.training.parquet',
     # What Osprey read to write the export. Publish only a .raw export; mzML is for dry runs.
     [ValidateSet('raw', 'mzML')] [string]$ExportSource = 'raw',
     [string]$ExportProvenance,
