@@ -32,7 +32,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.common import make_authenticated_request  # noqa: E402
 
 SERVER = "skyline.ms"
-# folder -> scheduled duration (minutes); runs shorter than duration-10 are candidates
+# folder -> scheduled duration (minutes); any run shorter than that is a candidate. Completed
+# runs post exactly the scheduled duration, and crashes can land minutes before the end
+# (SKYLINE-DEV6 run 85746 crashed at 534 of 540).
 FOLDERS = {
     "Nightly x64": 540, "Release Branch": 540, "Integration": 540,
     "Integration Leak Detection": 720,
@@ -67,7 +69,7 @@ def main():
     for folder, sched in FOLDERS.items():
         rows = api(folder, {"schemaName": "testresults", "query.queryName": "testruns",
                             "query.columns": "id,userid/username,posttime,duration",
-                            "query.duration~lt": str(sched - 10), "query.posttime~gte": a.since,
+                            "query.duration~lt": str(sched), "query.posttime~gte": a.since,
                             "query.maxRows": "100000"})
         for r in rows:
             runs.append({"folder": folder, "id": str(r["id"]), "computer": r["userid/username"],
