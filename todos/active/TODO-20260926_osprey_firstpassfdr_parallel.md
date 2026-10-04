@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b` on MACS2; `C:\proj\pwiz-work1` on the i9 from 2026-10-03)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: 2026-10-03: DRAFT PR #4765, tip e3c823a92b (port branch merged in, incl. #4715 gbdt; 648/648 unit; regression gates NOT yet re-run on the merge). Next: CHS 446-file `-Task FirstPassFDR` sweep on the i9 / 64 GB (par 1/2/4/...) to measure per-lane memory and speedup, then write the lane-count resolver from those numbers. See "2026-10-03: pushed as draft" at the END.
+- **Status**: 2026-10-04: DRAFT PR #4765. Local commits `9e51dbf5e7` (gated planned reads + library identity) and `a52a22eff9` (defaults flipped + BlockReadTest) in `C:\proj\pwiz-work1`, NOT pushed. CHS 446: 8,717 s (4 lanes) vs 17,145 s same-day baseline, byte-identical. Next: lane resolver, push, /code-review max, gates.
 - **Module**: `osprey`
 - **PR**: #4765 (draft)
 
@@ -1318,3 +1318,6 @@ in default and in forced-legacy mode. Parity arms registered in
 Deleted `C:\test\osprey-runs` (May astral/stellar, 112 GB), `C:\d\test`, `C:\temp\wsl-ubuntu-22.04-backup.tar`
 (33.5 GB), `C:\dev` (9.4 GB). WSL `Ubuntu-22.04` perf data cleared inside the distro (148 GB); the vhdx needs
 an elevated `Optimize-VHD` to shrink (199 GB on disk, ~7 GB used).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
