@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261002_osprey_cold_window_reads` (worktree `C:\proj\pwiz-4708`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-10-02
-- **Status**: In progress
+- **Status**: In review - #4767 open (2026-10-04); --parallel-files study runs separately
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4767](https://github.com/ProteoWizard/pwiz/pull/4767)
 - **Follows**: `ai/todos/completed/TODO-20261001_osprey_export_progress_interval.md` (#4756)
 
 ## Objective
