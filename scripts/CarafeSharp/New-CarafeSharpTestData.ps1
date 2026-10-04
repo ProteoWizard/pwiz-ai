@@ -7,8 +7,12 @@
 
       carafesharp-testfiles-v1         Stellar Carafe 2.2 references, stage-1 builds, library references
       carafesharp-testfiles-astral-v1  Astral Carafe 2.2 references (optional; TestCategory=Astral)
-      carafesharp-export-v1            the Stellar _21 Osprey training export
-      carafesharp-export-astral-v1     the Astral _55 Osprey training export (the Astral golden's)
+      carafesharp-export-v1            the Stellar _21 Osprey training export of Carafe's starting library
+                                       (masking parity)
+      carafesharp-export-v2            the Stellar _21 Osprey training export of the Chronologer starting
+                                       library (the Stellar golden's)
+      carafesharp-export-astral-v2     the Astral _55 Osprey training export of the Chronologer starting
+                                       library (the Astral golden's; v1 was of Carafe's)
 
     testdata.json is the one definition of what a package holds: its "contents" entries (files, or
     folders ending in '/'), each folder's "include" and "exclude" name patterns, and the package's
@@ -27,7 +31,8 @@
     A package is never republished under the same name: extraction never overwrites, so a changed
     package needs a new version suffix.
 .PARAMETER Package
-    A package id from testdata.json (testfiles, astral, export, astral-export), or All (default).
+    A package id from testdata.json (testfiles, astral, export, regression-export, astral-export), or All
+    (default).
 .PARAMETER PackageList
     testdata.json. Default: the sibling pwiz checkout's pwiz_tools/CarafeSharp/testdata.json.
 .PARAMETER StagingRoot
@@ -41,8 +46,12 @@
 .PARAMETER TrainingExport
     The Stellar _21 training export parquet for carafesharp-export-v1 (regenerate it from .raw
     with the landed Osprey before publishing).
+.PARAMETER RegressionTrainingExport
+    The Stellar _21 training export parquet for carafesharp-export-v2: Osprey's search of CarafeSharp's
+    Chronologer starting library (Run-CarafeSharpWorkflow.ps1 stages 2 and 3 on the testfiles package's
+    train FASTA and pairing manifest).
 .PARAMETER AstralTrainingExport
-    The Astral _55 training export parquet for carafesharp-export-astral-v1, written from .raw.
+    The Astral _55 training export parquet for carafesharp-export-astral-v2, made as RegressionTrainingExport.
 .PARAMETER ExportSource
     What Osprey read to write the training export: raw (the default, and the only kind to publish)
     or mzML (the June export, for dry runs).
@@ -59,7 +68,8 @@ param(
     [string]$ExampleData = 'D:\GitHub-Repo\maccoss\osprey\example_test_data',
     [string]$ReferenceStaging = 'D:\test\carafesharp-testdata-staging',
     [string]$TrainingExport = 'D:\test\osprey-runs\carafe-june-train\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.training.parquet',
-    [string]$AstralTrainingExport = 'D:\test\osprey-runs\carafe-export-astral-raw\Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.training.parquet',
+    [string]$RegressionTrainingExport = 'C:\temp\osprey-runs\export-v2\stellar\osprey_train\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.training.parquet',
+    [string]$AstralTrainingExport = 'C:\temp\osprey-runs\export-v2\astral\osprey_train\Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.training.parquet',
     # What Osprey read to write the export. Publish only a .raw export; mzML is for dry runs.
     [ValidateSet('raw', 'mzML')] [string]$ExportSource = 'raw',
     [string]$ExportProvenance,
@@ -89,6 +99,9 @@ $sources = @{
     }
     export = [ordered]@{
         "stellar/$(Split-Path -Leaf $TrainingExport)" = $TrainingExport
+    }
+    'regression-export' = [ordered]@{
+        "stellar/$(Split-Path -Leaf $RegressionTrainingExport)" = $RegressionTrainingExport
     }
     'astral-export' = [ordered]@{
         "astral/$(Split-Path -Leaf $AstralTrainingExport)" = $AstralTrainingExport
@@ -140,11 +153,20 @@ changes whenever Osprey's export does. Unpack into <Downloads>\Perftests\. MANIF
 every file and is the zip's last entry.
 $(if ($ExportProvenance) { "`n$ExportProvenance`n" })
 "@
+    'regression-export' = @"
+The Osprey training export (--training-export) of Stellar HeLa run _21, read from $ExportSource, searching
+CarafeSharp's Chronologer starting library as the CarafeSharp workflow does, that the Stellar golden
+regression (pwiz_tools/CarafeSharp/regression.ps1) fine-tunes from. Kept apart from the Carafe references
+because it changes whenever Osprey's export does. Unpack into <Downloads>\Perftests\. MANIFEST.sha256
+lists every file and is the zip's last entry.
+$(if ($ExportProvenance) { "`n$ExportProvenance`n" })
+"@
     'astral-export' = @"
-The Osprey training export (--training-export) of Astral HeLa run _55, read from $ExportSource, that the
-Astral golden regression (pwiz_tools/CarafeSharp/regression.ps1 -Dataset Astral) fine-tunes from. Kept
-apart from the Carafe references because it changes whenever Osprey's export does. Unpack into
-<Downloads>\Perftests\. MANIFEST.sha256 lists every file and is the zip's last entry.
+The Osprey training export (--training-export) of Astral HeLa run _55, read from $ExportSource, searching
+CarafeSharp's Chronologer starting library as the CarafeSharp workflow does, that the Astral golden
+regression (pwiz_tools/CarafeSharp/regression.ps1 -Dataset Astral) fine-tunes from. Kept apart from the
+Carafe references because it changes whenever Osprey's export does. Unpack into <Downloads>\Perftests\.
+MANIFEST.sha256 lists every file and is the zip's last entry.
 $(if ($ExportProvenance) { "`n$ExportProvenance`n" })
 "@
 }
