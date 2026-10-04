@@ -944,6 +944,10 @@ Parquet interop gotchas:
 
 ## Environment variable reference
 
+**Adding a switch that exists only for parity with a superseded path** (including the OFF arm a default
+flip leaves behind)? Register it in **ai/todos/backlog/TODO-osprey_parity_path_retirement.md** in the
+same change - the central catalogue of parity-only code that must eventually be removed.
+
 ### What an env var IS here, and how much hardening it deserves
 
 **Environment variables are development and diagnostic instrumentation. They are not a
