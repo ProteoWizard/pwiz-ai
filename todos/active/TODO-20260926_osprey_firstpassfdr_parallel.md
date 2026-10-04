@@ -1289,3 +1289,32 @@ diagnostics JSON differs only in `generatedUtc`.** (`ai/.tmp/sessions/20261003-4
 Next (morning, with Brendan): default policy for the gate/planned reads (HDD only measured); lane resolver
 (3 vs 4 lanes: 1.6% for no extra peak at 446); push `9e51dbf5e7`, `/code-review max`, gates, mark ready.
 Further byte cuts (each <= ~5 min at 446): fuse the ~7 per-file sidecar reads; pass 0 + training fusion.
+
+## 2026-10-04: SSD (C:, NVMe) - 128 files, v6 exe, all byte-identical to the HDD 1-lane arm
+
+| arm | FirstPassFDR | peak private |
+|---|---|---|
+| 1 lane, plain | 2,394.3 s (HDD: 3,788.2 s) | 21.1 GB |
+| 3 lanes, plain | 1,195.0 s | 31.3 GB |
+| 3 lanes, planned + library identity, no gate | 1,155.4 s | 26.4 GB |
+| 3 lanes, planned + library identity, gate | **1,123.5 s** | 25.1 GB |
+| 6 lanes, planned + library identity, no gate | **955.5 s** | **40.2 GB** |
+
+* Lanes alone scale on SSD (2.0x at 3 lanes) where they bought 9% on the HDD.
+* The gate does not hurt on this SSD - slightly better (1,123.5 vs 1,155.4 s) - so it defaults ON.
+* More lanes keep paying on SSD (6 lanes -15% vs 3) at ~5 GB private per extra lane: the resolver's
+  memory cap is what bounds SSD machines. Logs: `C:\test\osprey-runs\chs-seer\runs\chs-128files-...ssd-*`.
+
+### Defaults flipped (Brendan 2026-10-04): new read path is the default
+
+`OSPREY_BLOCK_READ_MB` default 4 (0 = parity), `OSPREY_BLOCK_READ_GATE` default on (0 = off),
+`OSPREY_STUB_IDENTITY` default 1 (0 = parity, 2 = verify). `BlockReadTest` added (LibraryIdentity;
+BlockReadStream byte equivalence over random seeks/reads, three read entry points, gate on/off). 649/649
+in default and in forced-legacy mode. Parity arms registered in
+`ai/todos/backlog/TODO-osprey_parity_path_retirement.md` (A14-A16).
+
+### Disk cleanup 2026-10-04 (C:)
+
+Deleted `C:\test\osprey-runs` (May astral/stellar, 112 GB), `C:\d\test`, `C:\temp\wsl-ubuntu-22.04-backup.tar`
+(33.5 GB), `C:\dev` (9.4 GB). WSL `Ubuntu-22.04` perf data cleared inside the distro (148 GB); the vhdx needs
+an elevated `Optimize-VHD` to shrink (199 GB on disk, ~7 GB used).
