@@ -1250,3 +1250,42 @@ pass 0 is seek-bound (two spans per row group).
 inside the baseline's pass 1 (started 21:39). Clean phases: library 38 s, pass 0 611 s, training load 960 s,
 train 53 s, and everything after pass 1. Report pass 1 as inflated; cross-check against Sep n4646 pass 1
 (66.5 min) and the cold 128-file 1-lane pass 1 x3.48 (~67 min).
+
+### Same-day baseline (port tip `aae172e475`, 1 lane, plain reads, mdiag ON, same rehashed source): 17,145.3 s (4.76 h)
+
+`chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compactfpfdr446-baseline-port\run.log`. Peak private 22.5 GB.
+**v5 (3 lanes + gate + cuts A/B) 9,253.3 s vs 17,145.3 s = 1.85x (-46%) like for like.**
+
+| phase | baseline | v5 | |
+|---|---|---|---|
+| library + pass 0 | 649 s | 411 s | 1.6x |
+| training load | 960 s | 980 s | disk floor |
+| train | 53 s | 45 s | |
+| pass 1 | 4,225 s (nightly overlap 21:50-22:25) | 2,009 s | 2.1x |
+| pass 2 | 3,455 s | 981 s | 3.5x |
+| coassign + mdiag | 664 s | 522 s | 1.3x |
+| protein FDR + resolve | ~1,699 s | 540 s | 3.1x |
+| trim | 350 s | 336 s | |
+| planning pass 1 | 1,748 s | 1,237 s | 1.4x |
+| planning pass 2 | 3,342 s | 2,193 s | 1.5x |
+
+Pass 1 inflation is probably ~4 min (Sep 66.5 min; 128-file 1-lane x3.48 ~67 min) -> ~1.83x clean.
+
+### v6 at 446 files, 3 lanes: 8,856.5 s (2.46 h) - 1.94x vs the same-day baseline
+
+`_bin\blockread-v6` (commit `9e51dbf5e7`, local): v5 + survivor loads via library identity + pass 2 skips
+coelution_sum + parquet/sidecar split in the `[PATH]` block-read stats. Peak private 24.3 GB. Read
+1,119 GB (758 parquet + 361 sidecar), 7,766 s of disk time. Log:
+`chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compactfpfdr446-l3-v6\run.log`.
+Phases: lib+pass0 406, training 982, pass 1 2,012, pass 2 849, coassign 493, protein 528, trim 324,
+planning 1,129 + 2,081 s. 128-file v6: 1,997.3 s, 514 outputs byte-identical, 648/648 in modes 0 and 1.
+4-lane 446 run with v6 started 05:02 (`...compactfpfdr446-l4-v6`).
+**v6 at 446 files, 4 lanes: 8,716.8 s (2.42 h)** - 1.6% faster than 3 lanes, peak 24.5 GB vs 24.3 GB (at 446 the
+peak is in pass 2 / planning and barely moves with lanes). vs same-day baseline: **1.97x**. Phases: lib+pass0
+393, training 987, pass 1 1,947, pass 2 778, coassign 504, protein 523, trim 336, planning 1,129 + 2,068 s.
+**446 byte identity: v6 (3 and 4 lanes) vs the same-day baseline - 1,786 of 1,786 outputs identical; the
+diagnostics JSON differs only in `generatedUtc`.** (`ai/.tmp/sessions/20261003-4765i9/hash446-*.txt`)
+
+Next (morning, with Brendan): default policy for the gate/planned reads (HDD only measured); lane resolver
+(3 vs 4 lanes: 1.6% for no extra peak at 446); push `9e51dbf5e7`, `/code-review max`, gates, mark ready.
+Further byte cuts (each <= ~5 min at 446): fuse the ~7 per-file sidecar reads; pass 0 + training fusion.
