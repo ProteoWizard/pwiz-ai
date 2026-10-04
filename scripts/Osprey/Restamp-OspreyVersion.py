@@ -49,22 +49,39 @@ join's own provenance honest; that is the only reason to prefer it.
 Every change is recorded in `osprey-version-restamp.json` beside the artifacts
 and is exactly reversible by running the tool again in the other direction.
 
+The SEARCH HASH (`osprey.search_hash`, and the `search=` term of every
+PerFileScoring validity key) can be moved the same way, for the case where the hash
+RECIPE changed but the settings did not - e.g. #4679 re-encoded the decoy-pairing
+manifest term from its path to a file-identity hash, so every parquet scored before
+it is refused although nothing about the search differs. Prove that first: dump the
+current build's hash input, rewrite only the changed term in the old form, and show
+it reproduces the stored hash. `--reason` is required and lands in the provenance.
+
+The run directories are a hard-link farm, so a parquet inode is usually shared by
+many runs. The tool refuses to patch a shared inode in place; `--break-links` copies
+each one to its own inode first (one file's worth of disk per parquet).
+
 Usage:
     Restamp-OspreyVersion.py <dir> [<dir> ...] --to 26.1.1.243 [--from 26.1.1.233]
-                                    [--dry-run] [--quiet]
+                                    [--break-links] [--dry-run] [--quiet]
+    Restamp-OspreyVersion.py <dir> --search-hash-from <old> --search-hash-to <new>
+                                    --reason "<evidence>" [--break-links] [--dry-run]
 """
 import argparse
 import datetime
 import json
 import os
 import re
+import shutil
 import sys
 from glob import glob
 
 import pyarrow.parquet as pq
 
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
+HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 KEY = b"osprey.version"
+SEARCH_KEY = b"osprey.search_hash"
 # Every PerFileScoring completion marker for a stem, not just the parquet's. Missing the
 # calibration one let a run pin the wrong version from it and refuse the parquet in 1 second.
 TASK_GLOB = "*.PerFileScoring.osprey.task"
@@ -93,8 +110,8 @@ def footer_window(fh, size):
     return start, size - 8
 
 
-def locate_version_offset(path, current):
-    """Absolute file offset of the version VALUE bytes, located structurally."""
+def locate_version_offset(path, current, key=KEY):
+    """Absolute file offset of the VALUE bytes stored under `key`, located structurally."""
     cur = current.encode()
     size = os.path.getsize(path)
     with open(path, "rb") as fh:
@@ -102,31 +119,48 @@ def locate_version_offset(path, current):
         fh.seek(start)
         footer = fh.read(end - start)
 
-    hits = [m.start() for m in re.finditer(re.escape(KEY), footer)]
+    hits = [m.start() for m in re.finditer(re.escape(key), footer)]
     if len(hits) != 1:
         raise PatchError("expected exactly 1 '%s' key in the footer, found %d"
-                         % (KEY.decode(), len(hits)))
-    key_end = hits[0] + len(KEY)
+                         % (key.decode(), len(hits)))
+    key_end = hits[0] + len(key)
 
     # Thrift writes the KeyValue value right after the key: a field header and a
     # varint length, a handful of bytes.  Searching a small window rather than the
     # whole footer is what keeps this from matching a version-shaped string that
     # happens to live in column statistics.
-    window = footer[key_end:key_end + 16]
+    window = footer[key_end:key_end + 16 + len(cur)]
     vhits = [m.start() for m in re.finditer(re.escape(cur), window)]
     if len(vhits) != 1:
-        raise PatchError("expected exactly 1 occurrence of %r within 16 bytes after the key, "
-                         "found %d" % (current, len(vhits)))
+        raise PatchError("expected exactly 1 occurrence of %r starting within 16 bytes after "
+                         "the key, found %d" % (current, len(vhits)))
     return start + key_end + vhits[0], size
 
 
-def patch_parquet(path, current, new, dry_run):
+def break_hard_link(path):
+    """Give `path` its own inode by copy + rename, leaving every sibling link untouched.
+
+    The run directories are a hard-link farm (`-LinkFrom` stages by hard link), so one
+    scores.parquet inode is commonly shared by dozens of run directories. An in-place
+    patch of a shared inode silently restamps every one of them, while the task files
+    beside it - rewritten by rename - change in this directory only, leaving the other
+    directories with a patched parquet and unpatched markers.
+    """
+    if os.stat(path).st_nlink <= 1:
+        return False
+    tmp = path + ".unlink.tmp"
+    shutil.copyfile(path, tmp)
+    os.replace(tmp, path)
+    return True
+
+
+def patch_parquet(path, current, new, dry_run, key=KEY):
     if len(new) != len(current):
         raise PatchError(
-            "version lengths differ (%r -> %r); the in-place patch needs equal lengths. "
+            "value lengths differ (%r -> %r); the in-place patch needs equal lengths. "
             "A streamed rewrite would be required, which re-encodes row groups."
             % (current, new))
-    off, size_before = locate_version_offset(path, current)
+    off, size_before = locate_version_offset(path, current, key)
     if dry_run:
         return off, size_before
 
@@ -139,7 +173,7 @@ def patch_parquet(path, current, new, dry_run):
     # Read back through a real parquet reader.  Confirming the bytes changed proves
     # nothing about whether the footer still parses.
     f = pq.ParquetFile(path)
-    got = (f.schema_arrow.metadata or {}).get(KEY, b"").decode()
+    got = (f.schema_arrow.metadata or {}).get(key, b"").decode()
     if got != new:
         raise PatchError("read-back says %r, expected %r" % (got, new))
     if os.path.getsize(path) != size_before:
@@ -192,17 +226,143 @@ def patch_task(path, current, new, dry_run):
         raise PatchError("task validity_key changed during rewrite")
 
 
+def patch_task_search(path, current, new, dry_run):
+    """Replace the `search=<hash>` term of the validity key, byte-exact like patch_task."""
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    doc = json.loads(raw.decode("utf-8"))
+    key = doc.get("validity_key") or ""
+    old_term = "search=%s" % current
+    if key.count(old_term) != 1:
+        raise PatchError("validity_key does not carry exactly one %r" % old_term)
+    if dry_run:
+        return
+    needle = old_term.encode()
+    if raw.count(needle) != 1:
+        raise PatchError("expected exactly 1 %r in the task file, found %d"
+                         % (old_term, raw.count(needle)))
+    patched = raw.replace(needle, ("search=%s" % new).encode())
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as fh:
+        fh.write(patched)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    with open(path, "r", encoding="utf-8") as fh:
+        back = json.load(fh)
+    if back.get("validity_key") != key.replace(old_term, "search=%s" % new):
+        raise PatchError("task read-back validity_key is not the expected rewrite")
+
+
+def restamp_search_hash(args):
+    """--search-hash-from/--search-hash-to: move osprey.search_hash and the search= term."""
+    total_ok = total_skip = total_fail = 0
+    for d in args.dirs:
+        parquets = sorted(glob(os.path.join(d, "*.scores.parquet")))
+        print("\n=== %s  (%d parquet) ===" % (d, len(parquets)))
+        record = []
+        for p in parquets:
+            stem = os.path.basename(p)[: -len(".scores.parquet")]
+            tasks = sorted(glob(os.path.join(d, stem + TASK_GLOB)))
+            try:
+                md = pq.ParquetFile(p).schema_arrow.metadata or {}
+                cur = md.get(SEARCH_KEY, b"").decode()
+                if cur == args.search_hash_to:
+                    total_skip += 1
+                    continue
+                if cur != args.search_hash_from:
+                    raise PatchError("parquet search hash is %r, --search-hash-from says %r"
+                                     % (cur, args.search_hash_from))
+                if not tasks:
+                    raise PatchError("no %s beside the parquet" % TASK_GLOB)
+                for t in tasks:
+                    with open(t, encoding="utf-8") as fh:
+                        vk = json.load(fh).get("validity_key") or ""
+                    if ("search=%s" % cur) not in vk:
+                        raise PatchError("%s does not carry search=%s" % (os.path.basename(t), cur))
+                linked = os.stat(p).st_nlink
+                if linked > 1 and not args.break_links and not args.dry_run:
+                    raise PatchError("parquet inode is shared by %d links; an in-place patch would "
+                                     "change every sibling run directory. Pass --break-links."
+                                     % linked)
+                broke = False
+                if args.break_links and not args.dry_run:
+                    broke = break_hard_link(p)
+                off, _ = patch_parquet(p, cur, args.search_hash_to, args.dry_run, SEARCH_KEY)
+                for t in tasks:
+                    patch_task_search(t, cur, args.search_hash_to, args.dry_run)
+                total_ok += 1
+                record.append({"stem": stem, "search_hash_from": cur,
+                               "search_hash_to": args.search_hash_to, "parquet_offset": off,
+                               "broke_hard_link": broke,
+                               "tasks": [os.path.basename(t) for t in tasks]})
+                if not args.quiet:
+                    print("    %srehash  %s  (+%d task file(s))%s"
+                          % ("would " if args.dry_run else "", stem, len(tasks),
+                             "  [own inode]" if broke else ""))
+            except Exception as exc:                       # noqa: BLE001 - reported per file
+                total_fail += 1
+                print("    FAIL  %s: %s" % (stem, exc))
+        write_provenance(d, record, args, {"search_hash_to": args.search_hash_to,
+                                           "reason": args.reason})
+    verb = "would rehash" if args.dry_run else "rehashed"
+    print("\n%s %d, skipped %d, failed %d" % (verb, total_ok, total_skip, total_fail))
+    return 1 if total_fail else 0
+
+
+def write_provenance(d, record, args, header):
+    if not record or args.dry_run:
+        return
+    side = os.path.join(d, "osprey-version-restamp.json")
+    prev = []
+    if os.path.exists(side):
+        with open(side, encoding="utf-8") as fh:
+            prev = json.load(fh)
+    entry = {"utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+             "tool": os.path.basename(__file__)}
+    entry.update(header)
+    entry["files"] = record
+    prev.append(entry)
+    with open(side, "w", encoding="utf-8") as fh:
+        json.dump(prev, fh, indent=2)
+    print("    provenance -> %s" % side)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dirs", nargs="+")
-    ap.add_argument("--to", required=True, help="target version, e.g. 26.1.1.243")
+    ap.add_argument("--to", default=None, help="target version, e.g. 26.1.1.243")
     ap.add_argument("--from", dest="from_", default=None,
                     help="only restamp files currently at this version (a safety filter)")
+    ap.add_argument("--search-hash-from", default=None,
+                    help="current osprey.search_hash; required with --search-hash-to")
+    ap.add_argument("--search-hash-to", default=None,
+                    help="new osprey.search_hash (also rewrites search= in the validity keys)")
+    ap.add_argument("--reason", default=None,
+                    help="with --search-hash-to: the evidence that the settings are identical")
+    ap.add_argument("--break-links", action="store_true",
+                    help="give each shared parquet its own inode (copy + rename) before patching")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
-    if not VERSION_RE.match(args.to):
+    if args.search_hash_to or args.search_hash_from:
+        if args.to:
+            print("restamp the version and the search hash in separate invocations",
+                  file=sys.stderr)
+            return 2
+        for v in (args.search_hash_from, args.search_hash_to):
+            if not v or not HASH_RE.match(v):
+                print("--search-hash-from and --search-hash-to must both be 64-hex SHA-256 values",
+                      file=sys.stderr)
+                return 2
+        if not args.reason:
+            print("--search-hash-to needs --reason: what proves the settings are identical",
+                  file=sys.stderr)
+            return 2
+        return restamp_search_hash(args)
+
+    if not args.to or not VERSION_RE.match(args.to):
         print("--to %r is not a YEAR.ORDINAL.BRANCH.DOY version" % args.to, file=sys.stderr)
         return 2
 
@@ -237,6 +397,13 @@ def main():
                     if tv != cur:
                         raise PatchError("%s reads %r but the parquet reads %r"
                                          % (os.path.basename(t), tv, cur))
+                linked = os.stat(p).st_nlink
+                if linked > 1 and not args.break_links and not args.dry_run:
+                    raise PatchError("parquet inode is shared by %d links; an in-place patch would "
+                                     "change every sibling run directory. Pass --break-links."
+                                     % linked)
+                if args.break_links and not args.dry_run:
+                    break_hard_link(p)
                 off, _ = patch_parquet(p, cur, args.to, args.dry_run)
                 for t in tasks:
                     patch_task(t, cur, args.to, args.dry_run)

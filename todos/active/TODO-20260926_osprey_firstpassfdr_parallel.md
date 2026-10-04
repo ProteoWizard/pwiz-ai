@@ -1,7 +1,7 @@
 # TODO: Parallelize FirstPassFDR - 86% of the stage is serial per-file work
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b`)
+- **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b` on MACS2; `C:\proj\pwiz-work1` on the i9 from 2026-10-03)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
 - **Status**: 2026-10-03: DRAFT PR #4765, tip e3c823a92b (port branch merged in, incl. #4715 gbdt; 648/648 unit; regression gates NOT yet re-run on the merge). Next: CHS 446-file `-Task FirstPassFDR` sweep on the i9 / 64 GB (par 1/2/4/...) to measure per-lane memory and speedup, then write the lane-count resolver from those numbers. See "2026-10-03: pushed as draft" at the END.
@@ -959,3 +959,294 @@ fits 64 GB; `gh pr ready 4765`; ask before TeamCity.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
+
+## 2026-10-03 (i9, `C:\proj\pwiz-work1`): gates on the merge, then a 64-file knee sweep
+
+* `regression-parallel.ps1 -Dataset All` on e3c823a92b: **48 PASS / 0 FAIL / 0 SKIP in 36:18**
+  (log `ai/.tmp/sessions/20261003-4765i9/regression-parallel-e3c823a92b.log`). The merge gate owed above is paid.
+* Exes: baseline `D:\test\osprey-runs\_bin\port-aae172e475`, branch `_bin\lanes-e3c823a92b` (both v26.1.1.276).
+* Source run for `-LinkFrom`: `chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact4650-secondpass`.
+  **Pass `-LibraryDir ...\sea-ad\lib\target+decoy+entrapment-20260817`** - the runner's default
+  resolves `target+decoy+entrapment` (Jun 30 build, a different file), which would change the
+  library hash and re-score Stages 1-4.
+* **D: on the i9 is a single spinning HDD** (ST12000NM002J). Every pass walks every file's
+  parquet (~1.05 GB/file), so concurrent lanes may seek-thrash here where MACS2 did not. The knee
+  subset is therefore 64 files (~67 GB parquet > 64 GB RAM) to keep walks cold, as at 446.
+* Plan (agreed with Brendan): find the lane knee on 64 files (1/2/4/6/8, timing arms WITHOUT
+  `-LogMemory`), derive bytes/lane from peak deltas and experiment-wide growth from a second size,
+  then ONE 446-file run at the predicted feasible lane count, killed early if it pages.
+
+### Search-hash refusal of every pre-#4679 parquet, and the restamp that fixed it
+
+The first arm failed in 3 min: `.scores.parquet ... was scored with different search settings
+(settings hash dd85be27...; this run c115153c...)`. #4679 (`e904ed8e95`) changed the
+`decoy_pairing_manifest` term of `SearchParameterHash` from `Some("<path>")` to
+`Some(<file-identity hash>)`, so **every parquet scored before #4679 is refused by current builds**,
+with no override (OSPREY_VERSION_OVERRIDE does not cover it). Proved identical settings: dumped the
+v26.1.1.276 hash input (throwaway build, reverted), restored only that term in the old form ->
+reproduces `dd85be27` exactly; the unchanged input -> `c115153c`.
+
+`Restamp-OspreyVersion.py` gained `--search-hash-from/--search-hash-to --reason` (patches the footer
+`osprey.search_hash` and the `search=` term of every PerFileScoring validity key) and `--break-links`.
+**The chs-seer runs are a hard-link farm: one parquet inode was shared by 71 run directories**, so the
+tool now REFUSES an in-place patch of a shared inode (the version mode too - it used to patch the
+shared parquet in place while replacing only this directory's task files). Rehashed sources, own
+inodes, provenance in `osprey-version-restamp.json`:
+`chs-seer\runs\chs-64files-rehash-c115153c-src`, `chs-128files-rehash-c115153c-src`.
+
+### 64-file knee (branch exe e3c823a92b, threads 30, mdiag on, no -LogMemory)
+
+| phase (s) | 1 lane | 2 lanes | 4 lanes |
+|---|---|---|---|
+| library + classify | 25 | 24 | 18 |
+| pass 0 walk | 84 | 25 | 22 |
+| training feature load | 126 | **241** | 145 |
+| train | 38 | 38 | 38 |
+| pass 1 | 392 | 239 | 239 |
+| pass 2 | 258 | 124 | 120 |
+| coassign + mdiag | 24 | 25 | 25 |
+| protein FDR + resolve | 114 | 65 | 47 |
+| trim / compaction | 11 | 6 | 4 |
+| recon planning pass 1 | 100 | 111 | 112 |
+| recon planning pass 2 | 288 | 259 | 247 |
+| **FirstPassFDR** | **1459.9** | **1157.2** | **1016.3** |
+| peak private MB | 19,126 | 24,071 | 30,758 |
+
+Outputs byte-identical across 1/2/4 lanes (258 of 259 files; the 259th is
+`out.1st-pass.model-diagnostics.json`, differing only in `generatedUtc`).
+
+Findings:
+* **Passes 1 and 2 plateau at 2 lanes** (pass-1 wall 232.1 s at 2, 232.7 s at 4). Summed lane time
+  doubles 2->4 (460 -> 902 s): I/O buckets (walk + feature load 162 -> 515 s) AND the allocation-heavy
+  CPU buckets (run-q sort 123/145/175, clamp floors 72/85/128 s at 1/2/4) - GC / memory-bandwidth
+  contention as well as the disk.
+* **D: is one HDD.** Training feature load got SLOWER with 2 lanes (126 -> 241 s).
+* **The 64-file subset is page-cache WARM for the columns this stage reads.** Per file the stage reads
+  features (21 columns, ~470 MB of a 1.34 GB file) plus walk columns (~70 MB): ~35 GB for 64 files,
+  which fits in cache. Planning pass 2 additionally reads `cwt_candidates` (334 MB/file, the largest
+  column) -> ~56 GB, does not fit -> that phase is cold even at 64 files, and it barely scales
+  (288 -> 247 s). At 446 files every phase is cold (~240 GB of feature+walk columns per full read).
+* The training-subset load reads EVERY row's features to keep ~0.15% of rows, then pass 1 reads the
+  same feature columns again: two full feature reads per run (~210 GB each at 446).
+* Next: 128-file arms at 1/2/4 lanes (~69 GB of columns cycling through ~40 GB of cache = cold), which
+  is also the second point for experiment-wide memory growth.
+
+### Cold 128 files, 1 lane (branch exe): 3,788 s - reads blow up, CPU scales with rows
+
+| bucket | 64 files (warm) | 128 files (cold) | ratio (rows x1.96) |
+|---|---|---|---|
+| pass 1 parquet walk | 52.7 s | 281.7 s | 5.3x |
+| pass 1 feature load | 61.3 s | 297.5 s | 4.9x |
+| pass 1 run-q sort | 122.7 s | 265.8 s | 2.2x |
+| pass 2 parquet walk | 27.5 s | 246.3 s | 9.0x |
+| pass 2 sidecar load | 2.6 s | 87.1 s | 33x |
+| planning pass 2 | 288 s | 860 s | 3.0x |
+| FirstPassFDR | 1,459.9 s | 3,788.2 s | 2.6x |
+
+Linear per-file projection to 446: ~13,200 s (3.7 h) at 1 lane, vs 4.87 h for Sep's exe
+(`chs-446files-...-stages567-n4646`, v26.1.1.243, mdiag off). Training load reads ~60 GB in 277 s
+(~217 MB/s) - disk-bound at 1 lane. The cold walk is SEEK-bound: pass 2 walk ~9 GB in 246 s
+(~36 MB/s), ~200 column-chunk reads per file.
+
+**Historical correction:** the ~1 h CHS-446 FirstPassFDR times in old logs are re-entries
+("every output but the model-diagnostics product is current; folding the report"). Every cold
+CHS-446 FirstPassFDR on the i9 took 17,000-19,500 s (4.8-5.4 h).
+
+### Row-group layout makes reads plannable
+
+Per 38 MB row group (36 per file): walk columns (entry_id, is_decoy, sequence, modified_sequence,
+charge, scan_number, apex_rt) all in the FIRST 3.8 MB; the 21 features one contiguous span at
+27.1-38.2 MB; blobs (cwt_candidates 9.2 MB, fragments, reference XICs) between.
+
+### Parallel row-group read branch (#4751-era, `b9c380515e`): PARK for FirstPassFDR on HDD
+
+Cold cost is seeks, not decode (warm walk 0.8 s/file vs cold 2.2 s/file); lanes already decode
+files in parallel; N readers per file x L lanes multiplies seeking on one spindle. Its own bench:
+"only pays on cached data". #4751 (Parquet.Net 6) is merged into the port branch (`e60a58be42`)
+and both today's exes carry it - the Sep CHS baselines ran 4.25.
+
+### Block-read prototype v1 (fixed 4 MB blocks + process gate): WORSE - do not repeat
+
+`OSPREY_BLOCK_READ_MB=4 OSPREY_BLOCK_READ_GATE=1`, 128 files, 4 lanes, stopped after training:
+pass 0 read 35.1 GB (needs ~9 GB: ~2 blocks per row group, 4x overshoot) and took 251 s vs 173 s
+plain; training load 50 GB at ~98 MB/s vs 217 MB/s plain - gated 4 MB reads alternating between
+lanes' files cost a seek each. Lesson: the read size must follow the column layout. v2 plans exact
+spans from the row-group footer (see below).
+
+### Block-read prototype v2: planned spans from the row-group footer + process gate
+
+`BlockReadStream` (`Osprey.IO`), `OSPREY_BLOCK_READ_MB` (on/off + sidecar block size) and
+`OSPREY_BLOCK_READ_GATE`. `SyncParquetReader.OpenRowGroupReader` hands the stream each row group's
+column-chunk extents; the stream learns which chunks the reader touches and on a miss reads the whole
+span of touched chunks around the requested one (gaps <= 1 MB read through, cap 64 MB), as one read
+under the process-wide gate. Sidecars (no row groups) use fixed blocks. Counters (`BlockReadStats`,
+`Osprey.Core`) logged on `[PATH]` at phase boundaries. 648/648 unit tests pass with it ON.
+Exes: `_bin\blockread-v2` (planned + gate), `_bin\blockread-v3` (+ more phase-boundary stats).
+
+**Cold 128 files (393.8M rows), diagnostics on, threads 30:**
+
+| phase (s) | 1 lane plain | 4 lanes plain | 4 lanes v2 + gate |
+|---|---|---|---|
+| library + classify | 25 | 25 | 30 |
+| pass 0 walk | 173 | 166 | 82 |
+| training feature load | 277 | 468 | 269 |
+| train | 35 | 38 | 39 |
+| pass 1 | 1,161 | 944 | 609 |
+| pass 2 | 780 | 489 | 293 |
+| coassign + mdiag | 47 | 47 | 51 |
+| protein FDR + resolve | 224 | 96 | 115 |
+| trim / compaction | 20 | 7 | 7 |
+| planning pass 1 | 186 | 199 | 131 |
+| planning pass 2 | 860 | 976 | 576 |
+| **FirstPassFDR** | **3,788.2** | **3,455.1 (-9%)** | **2,201.9 (-42%)** |
+
+* **On a cold HDD lanes alone buy 9%; lanes + planned gated reads buy 42%.** Without the gate 4 lanes
+  make the training load 69% SLOWER than 1 lane (468 vs 277 s): the spindle thrashes between files.
+* With the gate, pass 1 and pass 2 are DISK-BOUND: pass 1 disk time 567 s of 601 s wall (71.5 GB,
+  ~126 MB/s), pass 2 ~262 s of 292 s (26.9 GB). Training load is at the disk floor (58.7 GB at
+  ~223 MB/s). Further wins there need FEWER BYTES.
+* The stage read 411 GB in total; 243 GB of it AFTER pass 2 (coassign, protein FDR, planning) -
+  ~1.9 GB/file, more than the 1.34 GB file. `LoadFdrStubsFromParquet` (planning, twice per file) reads
+  walk + start/end/bounds + `fragment_coelution_sum` (feature span); CWT is 334 MB/file. v3 logs
+  per-phase bytes to find the rest.
+* Projection to 446 (x3.48): ~2.1 h at 4 lanes v2 + gate, vs ~3.7 h at 1 lane today, vs 4.87 h Sep.
+
+### 2 lanes + gate (v3) and per-phase bytes (cold 128 files)
+
+2 lanes + gate: **2,462.8 s** (4 lanes 2,201.9 s, +12%), peak 22.4 GB vs 28.1 GB. At 2 lanes pass 1
+is not disk-saturated (disk busy 525 of 697 s): the per-lane CPU (~275 s) does not hide behind the
+reads. Expect 3 lanes to be the sweet spot on this box (arm running).
+
+| phase | GB | MB/file | disk s | wall s |
+|---|---|---|---|---|
+| pass 0 | 11.3 | 88 | 119 | 122 |
+| training load | 58.7 | 459 | 259 | 273 |
+| pass 1 | 71.5 | 559 | 525 | 697 |
+| pass 2 | 26.9 | 210 | 232 | 350 |
+| coassign + mdiag | 28.4 | 222 | 5 (cache) | 44 |
+| protein FDR + resolve | 34.6 | 270 | 8 (cache) | 128 |
+| trim | 14.2 | 111 | 3 (cache) | 10 |
+| planning pass 1 | 65.5 | 512 | 103 | 155 |
+| planning pass 2 | 100.3 | 784 | 516 | 609 |
+| total | 411.4 | 3,214 | 1,770 | 2,463 |
+
+* coassign / protein FDR / trim read 77 GB from CACHE at 128 files; at 446 (~270 GB) they will be cold.
+* **Planning loads survivors through `FirstPassSurvivorLoader`: the full parquet stub span (~234 MB/file,
+  walk + RT bounds + `fragment_coelution_sum` from the feature span) plus the full score sidecar
+  (~110 MB) - to keep 29.3M of 393.8M rows (7.4%). Twice per file, plus `cwt_candidates` (334 MB) in
+  pass 2.** Byte cut: a per-file survivor sidecar written at trim (which already walks every file and
+  knows the survivors), ~25 MB/file, read by both planning passes. ~660 MB/file -> ~290 GB / ~24 min at
+  446. No memory cost. The same loader serves later stages - check SecondPassFDR's reads.
+
+### 3 lanes + gate: the knee (cold 128 files, v3)
+
+| lanes (gate) | FirstPassFDR | pass 1 | pass 2 | planning p2 | peak private |
+|---|---|---|---|---|---|
+| 2 | 2,462.8 s | 697 | 350 | 609 | 22.4 GB |
+| **3** | **2,243.6 s** | **635** | **320** | **584** | **25.2 GB** |
+| 4 | 2,201.9 s | 609 | 293 | 576 | 28.1 GB |
+
+~2.9 GB private per extra lane (includes uncollected garbage). Outputs byte-identical across l1 plain,
+l4 plain and l4 v2+gate (514 files; the diagnostics JSON excluded, generatedUtc only).
+
+Superlinear phases (Sep 446 `n4646` 1-lane vs 128-file x3.48): protein FDR + resolve 2.4x, planning
+pass 1 2.9x, planning pass 2 1.25x, passes 1/2 linear. Revised 446 projection for 4 lanes v2 + gate:
+~9,500 s (~2.6 h) vs 4.87 h Sep; ~1.5 h with the byte cuts; ~1-1.25 h floor on this HDD.
+
+### Byte cuts WITHOUT new sidecar files (Brendan 2026-10-03: avoid new sidecars; Mike is
+### concerned about the count; a new one needs a large benefit). Survivor sidecar SHELVED.
+
+`entry_id` is uint32 = `LibraryEntry.Id` (high bit = decoy, low 31 = base id). Verified on CHS:
+`is_decoy == (entry_id & 0x80000000) != 0` on every row (6.25M rows, 2 files), and within a file every
+entry_id appears exactly once (one row per precursor per file). The parquet's peptide, charge and
+is_decoy are functions of entry_id given the resident library.
+
+* **Cut A** (`_bin\blockread-v4-libident`): `LibraryIdentity` (Osprey.Core; two int arrays by base id,
+  O(1)); `ReadFdrStubScalars(..., LibraryIdentity)` skips is_decoy/charge/modified_sequence and takes
+  them from the library, falling back per row group if any id is missing. `OSPREY_STUB_IDENTITY`
+  1 = library, 2 = verify (reads both, InvalidOperationException on first mismatch). Wired into the 3
+  FirstPassFDR call sites (streaming passes, protein FDR reduce/resolve, FDRBench). SecondPassFDR not
+  touched (it holds only the retained library). 648/648 in modes 0, 1 and 2 (no mismatch on test data).
+* **Cut B** (`_bin\blockread-v5-cutB`): `StubColumns.SkipCoelutionSum` for walks that never use
+  `fragment_coelution_sum` (protein resolve/reduce, FDRBench) - it sits in the feature span and cost a
+  second read per row group; and `TryStreamFirstPassFileScores` in library mode streams the existing
+  score sidecar alone (records in parquet-row order + library identity), no parquet, no 3.1M-entry
+  dictionary per file; falls back to the joined walk if any id is missing. 648/648 in modes 0 and 1.
+* Next: cold 128-file A/B (3 lanes + gate, v5, mode 1) with byte-identity vs `hash128-l1.txt`; then the
+  446 run. Still to examine: co-assignment's apex read (sidecar carries apex RT), pass 2's walk, and the
+  planning survivor loads (fuse with trim), all without new files.
+
+### 446 rehash source (no new sidecar - a working copy of existing artifacts)
+
+`chs-seer\runs\chs-446files-rehash-c115153c-src`: first 128 linked from the 128-file source, other 318
+linked from the kept Sep run then copied + rehashed (`--break-links`), so the kept run stays pristine.
+~16 s/file uncontended; any other disk activity (even unit tests on D:) slows it several-fold.
+
+### D: cleanup 2026-10-03 (Brendan): 494 GB -> 4.1 TB free
+
+Kept one full run per cohort + current work: `chs-446files-...-compact4650-secondpass`,
+`chs-64/128/446files-rehash-c115153c-src`, `seaad-82files-...-logtag-progress-20260925_174500`,
+`tdp43-163files-...-pickrun3-ourlib`. 112 dirs deleted (list:
+`ai/.tmp/sessions/20261003-4765i9/delete-list.txt`). Today's sweep logs:
+`chs-seer\runs\_logs-20261003-fpfdr-sweep\`.
+
+### Follow-up (separate PR, Brendan 2026-10-03): cut the `.osprey.task` count
+
+~Half of the ~8,000 files in a 446-file run directory are `.osprey.task` markers (one per artifact).
+For PerFile* tasks one marker per input file is enough: a task failing midway invalidating all of that
+file's outputs costs little rework. Not this PR.
+
+### Cuts A + B measured (cold 128 files, 3 lanes + gate, `_bin\blockread-v5-cutB`, OSPREY_STUB_IDENTITY=1)
+
+**2,127.6 s** vs 2,243.6 s (3 lanes + gate, v3) and 3,788.2 s (1 lane plain): **-44%** overall.
+Peak private 23.1 GB vs 25.2 GB. Total read 376 GB vs 411 GB. **514 outputs byte-identical** to the
+1-lane plain-read arm (`hash128-l1.txt`; diagnostics JSON not compared - its reference was deleted in
+the cleanup; the same-day 446 baseline will provide one).
+
+| phase | 3 lanes + gate (v3) | + cuts A/B (v5) |
+|---|---|---|
+| pass 0 | 82 s, 11.3 GB, peak 15.3 GB | 84 s, 5.9 GB, peak 7.8 GB |
+| pass 1 | 635 s | 582 s (wall 574 s) |
+| pass 2 | 320 s | 251 s |
+| protein FDR + resolve | 104 s | 73 s |
+| planning pass 1 | 138 s | 191 s (code unchanged - cache-state noise) |
+| planning pass 2 | 584 s | 559 s |
+
+Log: `chs-seer\runs\chs-128files-libdecoy-r1.0-protein-compactsub128-l3-gate-libident\run.log`.
+446 run launched 18:37 with the same exe and switches:
+`chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compactfpfdr446-l3-gate-libident`.
+
+## 2026-10-03 RESULT: CHS 446 files, FirstPassFDR 9,253.3 s (2.57 h) vs 17,516.9 s (4.87 h) - 1.89x
+
+`_bin\blockread-v5-cutB`, 3 lanes, `OSPREY_BLOCK_READ_MB=4 OSPREY_BLOCK_READ_GATE=1 OSPREY_STUB_IDENTITY=1`,
+threads 30, model diagnostics ON, cold, i9-14900 / 64 GB / single HDD. Peak private **26.5 GB**. Read
+1,284 GB with 8,279 s of disk time (89% of the stage). Log:
+`chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compactfpfdr446-l3-gate-libident\run.log`.
+
+| phase | Sep `n4646` (1 lane, v26.1.1.243, mdiag OFF) | today | |
+|---|---|---|---|
+| library + pass 0 walk | 23.2 min | 6.8 min | 3.4x |
+| training feature load | 20.7 min | 16.3 min | disk floor (201 GB at ~208 MB/s) |
+| train | 0.8 min | 0.75 min | |
+| pass 1 | 66.5 min | 33.5 min | 2.0x, disk-bound |
+| pass 2 | 53.3 min | 16.4 min | 3.3x |
+| coassign + mdiag | (mdiag off) | 8.7 min | extra work Sep did not do |
+| protein FDR + resolve | 30.8 min | 9.0 min | 3.4x |
+| trim / compaction | 3.1 min | 5.6 min | cold sidecar re-read |
+| planning pass 1 | 31.5 min | 20.6 min | disk-bound, 223 GB |
+| planning pass 2 | 62.1 min | 36.6 min | |
+| **total** | **291.9 min** | **154.2 min** | **1.89x** |
+
+Caveat: Sep ran with mdiag OFF; today's run has it ON (coassign 8.7 min plus the accumulator in the
+passes), so 1.89x understates the like-for-like gain. A same-day baseline (port tip `aae172e475`,
+1 lane, plain reads, mdiag ON, same rehashed source) was queued to run next:
+`chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compactfpfdr446-baseline-port`.
+
+Remaining byte targets at 446 (no new files): planning pass 1 survivor loads (223 GB, 20.6 min) and
+pass 2 (36.6 min); trim + protein reduce + coassign each re-read the sidecars (fuse: ~5-10 min);
+pass 0 is seek-bound (two spans per row group).
+
+**Same-day baseline contamination:** nightly tests ran 21:50 - ~22:25 (35 min, stopped by Brendan), entirely
+inside the baseline's pass 1 (started 21:39). Clean phases: library 38 s, pass 0 611 s, training load 960 s,
+train 53 s, and everything after pass 1. Report pass 1 as inflated; cross-check against Sep n4646 pass 1
+(66.5 min) and the cold 128-file 1-lane pass 1 x3.48 (~67 min).
