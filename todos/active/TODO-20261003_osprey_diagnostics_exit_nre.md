@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261003_osprey_diagnostics_exit_nre`
 - **Base**: `Skyline/work/20260612_net8_port` (077ebe41e8)
 - **Created**: 2026-10-03
-- **Status**: In Progress
+- **Status**: In review - PR #4766 opened 2026-10-04
 - **GitHub Issue**: none (found by the 2026-10-02 coverage run; Brendan asked for the fix directly)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4766](https://github.com/ProteoWizard/pwiz/pull/4766)
 - **Worktree**: `C:\proj\pwiz-osprey`
 
 ## Objective
