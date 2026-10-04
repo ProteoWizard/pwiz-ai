@@ -520,3 +520,17 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
   goldens). PR body update drafted in `ai/.tmp/sessions/20260927-054c052f/pr4717-body-align-draft.md`, not posted.
   With the test data: `-RequireData` 98/98, `-TestCategory Astral -RequireData` 4/4
   (`build-{requiredata,astral}-aligned.log`).
+- Mike: the plan is DIA run -> Osprey -> fine-tune -> save the model and reuse it, even for targeted assays, with no
+  iRT step; HI is right only for mixed gradients. Changed (`58bfcdf18a`): runs on one gradient (not `IsWide`) train on
+  their aligned minutes, so the saved network predicts minutes itself; runs on different gradients still train
+  Chronologer on HI with the maps (AlphaPeptDeep there warns). The maps are kept either way (`-rt_reference`,
+  provenance, `-tf ms2`); `-rt_reference` on a minutes model goes median minutes -> HI -> run minutes
+  (`RtAlignment.MedianToRunMinutes`). New `TestRtAlignmentMixedGradients`. Gate 99/99, inspection 0.
+- Experiment (`Run-MinutesExperiment.ps1`, `eval_minutes.py`, `C:\temp\osprey-runs\multirun\minutes-report.txt`): minutes
+  model, one Astral run 0.100 min (as unaligned), three runs 0.099 with drift removed (mean offset +0.003 vs +0.015);
+  last RT bin 0.170 / 0.171 vs 0.169 unaligned and 0.166 / 0.167 HI. HI+map better only at the gradient's start
+  (0.084 vs 0.097 min, first eighth of `_60`).
+- Goldens remade again (Stellar `7323f690dc`, Astral `77dec9157e`; the HI pair `b64f178ecf`/`7180cb9d8f` superseded):
+  RT metrics back to the pre-alignment goldens'. Astral libraries by RT bin against DIA-NN (unaligned / HI / minutes):
+  order 0.084 all; 20-22 min order 0.405 / 0.235 / 0.410, minutes 0.369 / 0.627 / 0.364 (the regression export's
+  training stops at 19.87 min). `-RequireData` 99/99, Astral 4/4. Not pushed yet.
