@@ -1,11 +1,11 @@
-# Opening the formatting dialog for one dot plot redraws the other one
+﻿# Opening the formatting dialog for one dot plot redraws the other one
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260929_formatting_dlg_redraw` (pwiz3 as of 2026-09-29)
 - **Module**: `skyline`
 - **Base**: `master` (`05b8c93b3a`)
 - **Created**: 2026-09-29
-- **Status**: In Progress
+- **Status**: Completed - merged 2026-10-05 as `0c7a9167a6`
 - **GitHub Issue**: none
 - **PR**: [#4745](https://github.com/ProteoWizard/pwiz/pull/4745)
 - **Commit**: `b2116a5de5`
@@ -154,6 +154,21 @@ machine - bjam reports "Did not find command for MSVC toolset" and fails 730 tar
 `.bat` still exits 0, so the real verdict is the `...failed updating N targets...` line in `build64.log`.
 Changed to `toolset=msvc-14.3` to match pwiz2's copy (the file is untracked in every checkout, so this is a
 local change only).
+
+## 2026-10-05 - Merged
+
+Squash-merged as `0c7a9167a6`, alongside #4495.
+
+Shipped two guards, each with a regression test proven to fail without its fix:
+
+* `_initializing` on `VolcanoPlotFormattingDlg`, so loading the checkboxes from settings during
+  construction no longer writes a setting its own value and broadcasts `PropertyChanged` to both plots.
+* `RenderState` on `SummaryRelativeAbundanceGraphPane`, so the pane returns early when nothing it draws
+  from has changed - which stops a volcano formatting edit from rebuilding it.
+
+Both limits of the `RenderState` guard are stated in the PR body and still stand: it is all-or-nothing, so
+a change to a peptide the plot does not even draw still rebuilds it, and it does not cover the selection
+path. Both want per-point incremental rendering - see `TODO-20260929_selection_label_churn.md`.
 
 ## Out of scope for this branch - selection-change churn
 

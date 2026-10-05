@@ -7336,3 +7336,23 @@ The port moved SkylineTester's output from `pwiz_tools\Skyline\bin\x64\Release` 
 
 **Verification needs a distro repro** - unzip a SkylineTester.zip outside any checkout and run it -
 because every path here behaves differently in a developer tree.
+
+## 2026-09-17: DPI - the port will fix icon sizes, grid metrics and fixed splitters for free
+
+Measured on this machine with a throwaway WinForms app (net9.0-windows; no .NET 10 SDK
+installed here, so 9 stands in for 10 - re-run to confirm). At 150%, DPI-aware
+(`HighDpiMode.SystemAware` and `PerMonitorV2` gave identical numbers):
+
+| 96-DPI default | unaware | DPI-aware |
+|---|---|---|
+| `ToolStrip.ImageScalingSize` 16 | 16 | 24 |
+| `DataGridViewColumn.Width` 100 | 100 | 150 |
+| row height / header height / row-header width | 25 / 23 / 41 | 33 / 34 / 62 |
+| fixed-panel `SplitterDistance` (design 100) | 117 | 167 |
+
+.NET Framework scales none of these in system-aware mode, which is why issue #4599 work
+scales them by hand. **When the port turns DPI awareness on, audit those hand fixes for
+double-scaling**: `DpiUtil.ScaleToolStripImages`, the tree `ImageList` scaling
+(`ScaleImageForList`), and `DpiUtil.ScaleFixedPanel` become redundant; the layout-literal
+fixes (wizard page offsets, code-built dialogs, ZedGraph/MSGraph, missing `AutoScaleMode`)
+stay. Detail and the per-fix keep/drop list: `TODO-20260820_dpiAwareness.md`.

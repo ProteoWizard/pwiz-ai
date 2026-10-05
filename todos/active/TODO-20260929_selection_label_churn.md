@@ -1,9 +1,9 @@
-# Selection changes churn the dot plot labels
+﻿# Selection changes churn the dot plot labels
 
 ## Branch Information
-- **Branch**: TBD - piggybacking on `Skyline/work/20260521_labelSamplingFix` (pwiz2), per the developer
+- **Branch**: TBD - branch from master; #4495 merged 2026-10-05 so there is nothing to stack on
 - **Module**: `skyline`
-- **Base**: PR [#4495](https://github.com/ProteoWizard/pwiz/pull/4495)
+- **Base**: `master`
 - **Created**: 2026-09-29
 - **Status**: Design agreed, not yet implemented
 
@@ -101,6 +101,14 @@ recomputing.
 
 ## Verification
 
-Re-run the churn measurement (temporary `TestSelectionChangeTiming` in `LabelLayoutSweep.cs`, gated on
-`SKYLINE_SELECTION_TIMING`) and require 0 unexpected appearances or disappearances. That harness is
-throwaway; a permanent version asserting zero churn would be a good regression test.
+Require 0 unexpected appearances or disappearances, against the baseline above.
+
+**The measuring harness no longer exists** - it was a temporary `TestSelectionChangeTiming` added to
+`LabelLayoutSweep.cs` and reverted, and the sweep tool itself was then taken out of #4495 and parked on
+`Skyline/work/20260929_labelLayoutSweep` (see `TODO-label_layout_sweep_tool.md`). So this needs rewriting
+before the fix can be measured. It was about 40 lines: open the document, show the Relative Abundance plot,
+apply a label-everything rule, then for each of ten protein selections capture the visible label texts from
+`pane.Layout.LabeledPoints` and diff consecutive sets, excluding the two proteins whose selection changed.
+
+A permanent version asserting zero churn would be a good regression test, and unlike the throwaway it would
+keep working.

@@ -1,11 +1,11 @@
-# Fix aggressive label sampling in Volcano / Relative Abundance plots
+﻿# Fix aggressive label sampling in Volcano / Relative Abundance plots
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260521_labelSamplingFix` (pwiz2 as of 2026-09-22)
 - **Module**: `skyline`
 - **Base**: `master`
 - **Created**: 2026-07-21
-- **Status**: In Progress
+- **Status**: Completed - merged 2026-10-05 as `93b88ee0c8`
 - **GitHub Issue**: [#4330](https://github.com/ProteoWizard/pwiz/issues/4330)
 - **PR**: [#4495](https://github.com/ProteoWizard/pwiz/pull/4495)
 
@@ -380,6 +380,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 `Fixes #4330` is already in the PR description, so the squash message does not repeat it.
+
+## 2026-10-05 - Merged
+
+Squash-merged as `93b88ee0c8`. Master had been red on `TestNativeMessageBox` (from #4748, unrelated); once
+that cleared, CI went green and both layout PRs were merged together.
+
+Shipped: sampler cap uses the min of its two rates rather than their product, the per-cell cap counts label
+candidates instead of data point markers, a post-annealer prune hides labels that overlap another label or
+cover a foreign marker, and `GraphObjList.FindPoint` respects `IsVisible`.
+
+**Follow-up left open:** the label layout sweep tool is parked on `Skyline/work/20260929_labelLayoutSweep`,
+branched from this PR before the revert. It needs `git merge origin/master` now that the squash has landed,
+after which its PR shows only the tool's own diff. See `TODO-label_layout_sweep_tool.md` in the backlog.
 
 ## Notes
 
