@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b` on MACS2; `C:\proj\pwiz-work1` on the i9 from 2026-10-03)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: 2026-10-04: DRAFT PR #4765. Local commits `9e51dbf5e7` (gated planned reads + library identity) and `a52a22eff9` (defaults flipped + BlockReadTest) in `C:\proj\pwiz-work1`, NOT pushed. CHS 446: 8,717 s (4 lanes) vs 17,145 s same-day baseline, byte-identical. Next: lane resolver, push, /code-review max, gates.
+- **Status**: 2026-10-04: DRAFT PR #4765, pushed at `854e1ac734` (lane resolver + inspection fixes on top of `9e51dbf5e7` / `a52a22eff9`). Gates green: inspection 0/0, unit 650/650, regression-parallel All 48/0/0. `/code-review max` running. Next: triage findings, CHS 446 re-run with the resolver choosing, PR description, ask before TeamCity.
 - **Module**: `osprey`
 - **PR**: #4765 (draft)
 
@@ -1318,6 +1318,32 @@ in default and in forced-legacy mode. Parity arms registered in
 Deleted `C:\test\osprey-runs` (May astral/stellar, 112 GB), `C:\d\test`, `C:\temp\wsl-ubuntu-22.04-backup.tar`
 (33.5 GB), `C:\dev` (9.4 GB). WSL `Ubuntu-22.04` perf data cleared inside the distro (148 GB); the vhdx needs
 an elevated `Optimize-VHD` to shrink (199 GB on disk, ~7 GB used).
+
+## 2026-10-04 (i9): lane resolver, inspection gate green, pushed
+
+### FirstPassFDR lane resolver (`854e1ac734`)
+`Osprey.Core/FdrLaneResolver.cs`: lanes = min(`--threads` / 2, free memory x 0.5 / (1,600 B x largest
+file's rows), 8, files). Resolved in FirstPassFdrTask once projections (or the resident pool) give row
+counts; stored on `RunPlan.FirstPassFdrLanes` (read by FirstPassFdrTask and Stage6Planner).
+`RunPlan.FileLanes` (= `--parallel-files`) still drives the rescore / Stage 7 lanes. One log line names
+the binding limit. `OSPREY_FDR_FILE_LANES=N` forces it (re-read per access, so tests can override).
+Constants from the measurements above: 4.6 GB/extra lane on SSD without the gate at ~3.08M rows/file
+(~1,500 B/row, rounded up); x0.5 because free memory is measured before the stage's experiment-wide
+growth (~20 GB at 446); max 8 (6 is the largest measured). Predicted i9/446: ~5 lanes by memory.
+**Behavior change:** runs without `--parallel-files` (regression gate, TeamCity) now take lanes in
+FirstPassFDR. Stellar log: "First-pass FDR file lanes: 3 (limited by file count; 16 threads, 42.7 GB
+free, 0.7 GB per lane, 3 files)". Runner `-ParallelFiles` no longer sets these lanes - use the env var.
+SubsetPipelineTest's sequential vs parallel-files arms now pin 1 lane vs 1 per file.
+
+### Inspection gate: 22 warnings, all from this PR (`cf8294ae18` fixes them)
+Base `aae172e475` 0/0. Per-commit inspection (`ai/.tmp/sessions/20261004-lanes/inspect-commits.txt`):
+`f1fd603cd6` 0, `50a3be90e6` +15, `e3c823a92b` +0, `9e51dbf5e7` +7. Blame misattributes some to base
+commits: the lanes commit wrapped older lines in closures. The gate resolves references now (0 errors;
+the 427-phantom state of 2026-09-30 is gone in this checkout).
+
+### Gates on `854e1ac734`
+Inspection 0/0; unit 650/650; `regression.ps1 -Dataset Stellar` PASSED; `regression-parallel.ps1
+-Dataset All` 48 PASS / 0 FAIL / 0 SKIP in 36:37 (`ai/.tmp/sessions/20261004-lanes/`).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
