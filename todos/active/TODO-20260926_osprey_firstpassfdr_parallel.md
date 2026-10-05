@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b` on MACS2; `C:\proj\pwiz-work1` on the i9 from 2026-10-03)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: 2026-10-04: DRAFT PR #4765, pushed at `854e1ac734` (lane resolver + inspection fixes on top of `9e51dbf5e7` / `a52a22eff9`). Gates green: inspection 0/0, unit 650/650, regression-parallel All 48/0/0. `/code-review max` running. Next: triage findings, CHS 446 re-run with the resolver choosing, PR description, ask before TeamCity.
+- **Status**: 2026-10-05 night session: PR #4765 at `da435b4868`, review findings fixed, all gates green (inspection 0/0, unit 651/651 in default / pre-PR-read / verify modes, regression-parallel All 48/0/0, TeamCity Perf/Regression SUCCESS on `d74f44daac`, re-run on `da435b4868`), CHS 446 final byte-identical. Next: Brendan's review and merge.
 - **Module**: `osprey`
 - **PR**: #4765 (draft)
 
@@ -1344,6 +1344,32 @@ the 427-phantom state of 2026-09-30 is gone in this checkout).
 ### Gates on `854e1ac734`
 Inspection 0/0; unit 650/650; `regression.ps1 -Dataset Stellar` PASSED; `regression-parallel.ps1
 -Dataset All` 48 PASS / 0 FAIL / 0 SKIP in 36:37 (`ai/.tmp/sessions/20261004-lanes/`).
+
+## 2026-10-04/05 night session: /code-review max fixed, TeamCity green, CHS 446 final
+
+`/code-review max 4765` (100 min, 15 findings). Fixed in `d74f44daac` (2 of the groups by worktree
+subagents): resolver 0 free -> 1 lane (SystemMemory returns 0 when exhausted); zero-charge guard and
+STUB_IDENTITY=2 verify restored under library identity (`RequireFileCharges`); the sidecar-only stream
+requires one record per parquet row, strictly ascending ids, else the join; OOM no longer swallowed in
+the protein-q resolve; `OrderedFileLanes.For` throws an AggregateException for >1 concurrent failure and
+stops started lanes on a thread-start failure (ordered Run keeps "first failure in file order");
+flaky Sleep test -> CountdownEvent; BlockReadStream: block size clamped 1-1024 MB in long, delivered
+chunks not re-read in a row group, head/footer probes read exactly (a miss fills a block only when it
+continues the previous read), block allocated lazily; pass-1 standardized copy skipped unless
+--model-diagnostics or --verbose reads the contribution report; runPick and the competition maps
+released before pass 2. Dropped: #5 Stage 7 look-ahead side effect (needs two independent failures,
+costs a re-run), #6 cross-build sidecar adoption (= #4764), #11 int ordinals past 2^31 (pre-existing).
+`da435b4868`: STUB_IDENTITY=2 leaves a zero charge to RequireCharge (found by the verify-mode unit run).
+
+Stellar block-read bytes after the fixes: training load 0.54 -> 0.2 GB, PerFileRescoring 4.6 -> 1.1 GB.
+
+**CHS 446 final (`d74f44daac`, resolver: 3 lanes, limited by memory, 42.7 GB free, 6.1 GB/lane):
+11,745.2 s, peak 23.0 GB (v6: 24.3 GB), 1,786/1,786 outputs byte-identical to the baseline.** The wall
+time is CONTAMINATED: SkylineNightly ran from `D:\Nightly` (same single HDD) 21:52 - morning; every
+phase slowed 20-85% including untouched ones. **The nightly runs on this box at ~21:50 every night - do
+not schedule HDD timing arms after ~21:30.** Clean check, NVMe A-B-A (128 files, 3 lanes, gate):
+v6 1,218.5 s / final 1,256.5 s / v6 1,554.8 s; final reads 274 vs 328 GB in 145 vs 159-179 s of disk.
+No regression; the bracket drifted 28% with the nightly's CPU load.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
