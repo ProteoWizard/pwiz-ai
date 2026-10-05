@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261003_osprey_diagnostics_exit_nre`
 - **Base**: `Skyline/work/20260612_net8_port` (077ebe41e8)
 - **Created**: 2026-10-03
-- **Status**: In review - PR #4766 opened 2026-10-04
+- **Status**: Completed
 - **GitHub Issue**: none (found by the 2026-10-02 coverage run; Brendan asked for the fix directly)
 - **Module**: `osprey`
-- **PR**: [#4766](https://github.com/ProteoWizard/pwiz/pull/4766)
+- **PR**: [#4766](https://github.com/ProteoWizard/pwiz/pull/4766) (merged 2026-10-05)
 - **Worktree**: `C:\proj\pwiz-osprey`
 
 ## Objective
@@ -36,3 +36,14 @@ Capture the local `sink` in the handler, so each handler closes the sink its own
 
 - [x] `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`: 647/647, inspection clean; the test log no longer shows the
   exit-time `Unhandled exception` (present in every run on 2026-10-02)
+- [x] TeamCity Osprey Windows .NET, Osprey Linux .NET, native shims, Wine container: all green
+
+## Progress Log
+
+### 2026-10-05 - Merged
+
+PR #4766 merged into `Skyline/work/20260612_net8_port` as commit b3ba3bcb34. The `ProcessExit` handler now closes
+the sink its own `Initialize` call created, so test hosts no longer print the exit-time NullReferenceException.
+Before merging, the branch was rebuilt onto the rewritten port branch (f1300c7a06): the port branch had been
+force-pushed, leaving the PR showing ~2,400 files; the single commit was cherry-picked (405c15d5b1), 651/651 and
+inspection clean, and force-pushed with lease.
