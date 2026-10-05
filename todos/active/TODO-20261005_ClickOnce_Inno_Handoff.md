@@ -7,7 +7,8 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4773](https://github.com/ProteoWizard/pwiz/pull/4773) (draft; to be merged into the
+  "Release 26.1.1" branch once it is created from master, not into master)
 - **Checkout**: I:\git_i\sky_26_1_1
 
 ## Objective
@@ -44,6 +45,8 @@ other side, which reads what this leaves, is PR #4755 (`Skyline/work/20260901_Ne
 
 ## Progress
 
-- [x] 2026-10-05 (93381d6b0b, local): built and tested on net472; Upgrade*FunctionalTest and
+- [x] 2026-10-05 (93381d6b0b): built and tested on net472; Upgrade*FunctionalTest and
       CodeInspection pass, quick inspection clean
+- [x] 2026-10-05: pushed, draft PR #4773 opened against master
+- [ ] Retarget #4773 to the Release 26.1.1 branch once it exists
 - [ ] Try against a real ClickOnce Skyline-daily once an installer and manifest are published
