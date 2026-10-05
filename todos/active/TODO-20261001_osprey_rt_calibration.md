@@ -558,3 +558,7 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
   carafesharp-export-astral-v2.zip 144,142,263 B, 26fd07fb... (the mzML builds kept as `*.mzml-unpublished`).
   pwiz `9fe180d11f` (testdata.json, regression.ps1), goldens `2613ea333d`, `caba0f3588` (only the input SHA-256 and
   provenance changed), docs `a810d1d892`. Not pushed; upload to PanoramaWeb pending Mike.
+- 2026-10-04: Mike uploaded both v2 zips to Panorama perftests; anonymous downloads match testdata.json (size and
+  SHA-256). v1 zips kept (export-v1 still read by masking parity; astral-v1 by older commits). Pushed to #4717
+  (Mike: "yes"): `7180cb9d8f..a810d1d892`. PR body updated (run alignment, the minutes model, the v2 exports and the
+  late-gradient table, test plan); posted copy `ai/.tmp/sessions/20260927-054c052f/pr4717-body-posted.md`.
