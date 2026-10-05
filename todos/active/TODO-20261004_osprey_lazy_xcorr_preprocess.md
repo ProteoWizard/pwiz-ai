@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261004_osprey_lazy_xcorr_preprocess` (worktree `C:\proj\pwiz-4708`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-10-04
-- **Status**: In progress - committed locally (0acf90c078), not pushed; night session takes it to a PR
+- **Status**: PR open (#4768), awaiting TeamCity + Perf/Regression; not merged
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4768](https://github.com/ProteoWizard/pwiz/pull/4768)
 - **Follows**: `ai/todos/completed/TODO-20261002_osprey_cold_window_reads.md` (#4767)
 
 ## Objective
@@ -61,11 +61,23 @@ pass: 428,269 preprocessings (25.8% of today). A cache kept across all 3 passes:
   `D:\test\osprey-runs\_bin\lazyxcorr-wip1`: all 3 `.scores.parquet` and all 9 Stage 6 outputs byte-identical.
   Stage 6 84.3 -> 64.6 s (-23%). PerFileScoring 244.8 / 241.0 / 241.1 s old vs 252.2 / 251.1 / 241.0 s new:
   inconclusive (expected gain <1%).
-- [ ] Paired SEA-AD PerFileScoring A/B (positions 1-10, warm, new/old/new/old; per-file
-  `[TIMING] Coelution scoring`): running 2026-10-04 18:43 -> ~20:06. Runs 1-2: new 1,180.1 s vs old 1,187.4 s.
-  Report: `python C:\proj\ai\.tmp\sessions\20260930-night\lazypaired_report.py`.
-- [ ] Astral regression golden (TeamCity Perf/Regression runs it; locally `regression.ps1 -Dataset Astral`)
-- [ ] /code-review, PR, TeamCity Windows + Linux + Perf/Regression
+- [x] Paired SEA-AD PerFileScoring A/B (positions 1-10, warm, new/old/new/old; per-file
+  `[TIMING] Coelution scoring`), 2026-10-04 18:43-20:07, log
+  `ai/.tmp/sessions/20260930-night/lazypaired.log`, report `lazypaired_report.py`:
+  - wall: new 1,180.1 / 1,218.1 s, old 1,187.4 / 1,209.8 s
+  - coelution total: new 867.6 / 894.0 s, old 871.7 / 889.0 s
+  - paired per file (n=10): mean +0.04 s/file (-0.01%), sd 1.36 s, sem 0.43 s; run-to-run noise
+    old sd 1.85 s, new sd 2.51 s (mean drift +1.7 / +2.6 s 2nd run vs 1st)
+  - all 10 `.scores.parquet` byte-identical across all 4 runs
+  - **Decision: no PerFileScoring slowdown - on-demand stays for ALL xcorr use (no flag).**
+- [x] `regression.ps1 -Dataset Astral` PASSED vs the golden masters (2,105 s, incl. HPC 4-task chain), log
+  `ai/.tmp/sessions/20261004-night/astral-golden.log`
+- [x] /code-review max: no live bug; fixed: filled rows served after release (+ test that fails on the old
+  gate), cache contract docs, on-demand divergence entry, stale line citations, ASCII +/-. Dropped: thread
+  assert, list-mutation guard (contract documented), VisitedBins reuse, unit-res lazy fill. Commit fbac3063f9
+- [x] Pushed, PR #4768 opened (2026-10-04 ~20:45)
+- [ ] TeamCity Windows + Linux (auto on push)
+- [ ] Perf/Regression - trigger was BLOCKED by the auto-mode classifier; asked Brendan to trigger or allow
 
 ## Decision recorded
 Brendan (2026-10-04): keep on-demand for all xcorr use unless the paired A/B shows it slows PerFileScoring;
