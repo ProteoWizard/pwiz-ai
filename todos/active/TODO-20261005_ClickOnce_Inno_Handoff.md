@@ -44,5 +44,6 @@ other side, which reads what this leaves, is PR #4755 (`Skyline/work/20260901_Ne
 
 ## Progress
 
-- [ ] Build and test on net472
+- [x] 2026-10-05 (93381d6b0b, local): built and tested on net472; Upgrade*FunctionalTest and
+      CodeInspection pass, quick inspection clean
 - [ ] Try against a real ClickOnce Skyline-daily once an installer and manifest are published
