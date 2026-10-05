@@ -1383,3 +1383,17 @@ run q-values, and the /code-review max fixes. CHS 446 on one HDD / 64 GB: 17,145
 identical. Owed after merge: an uncontested HDD 446 timing of the merged code (Brendan, 2026-10-05).
 Follow-ups not in this PR: fuse the ~7 per-file sidecar reads; pass 0 + training fusion; the
 `.osprey.task` count (separate PR); int row ordinals past 2^31 (pre-existing).
+
+### 2026-10-05 - Uncontested timing of the merged code (port tip `effd991447`)
+
+Quiet i9 (no nightly), `_bin\merged-effd991447`, resolver 3 lanes (memory: 45.2 GB free, 6.1 GB/lane).
+**FirstPassFDR 9,450.0 s (2.63 h) vs 17,145.3 s same-day baseline = 1.81x; 1,786/1,786 byte-identical;
+peak 22.6 GB.** But 6.7% SLOWER than the pre-review build `9e51dbf5e7` at 3 lanes (8,856.5 s), while
+reading LESS: 933 GB vs 1,119 GB, in MORE disk time (8,434 s vs 7,766 s) over more reads (465,227 vs
+382,901). Phases vs pre-review: pass 0 501 vs 344 s, protein FDR+resolve 641 vs 528, planning 1,253 +
+2,222 vs 1,129 + 2,081, pass 1 2,064 vs 2,012, pass 2 889 vs 849, training load 956 vs 982.
+Suspect: the review's BlockReadStream changes trade bytes for seeks on one HDD - row group 0 now reads
+each touched chunk separately (spans stop at delivered chunks) and probes read exactly; each extra read
+is a seek. NVMe showed no loss (A-B-A). Next: HDD 128-file A/B of d74f44daac's BlockReadStream vs
+9e51dbf5e7's with everything else fixed, then decide whether to restore span extension through
+delivered chunks when the gap is small (re-reading a few MB is cheaper than a seek on an HDD).
