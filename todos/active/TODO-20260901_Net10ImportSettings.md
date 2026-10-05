@@ -41,7 +41,7 @@ things that move needs:
   `_<Adler-32 of the upper-cased full path>` (e.g. `net10.0-windows_1234567890`), so Debug and
   Release builds or copies don't share. Program Files (x86) counts as "otherwise".
 - For a non-owned install, the user.config beside the exe is the administrator's shared file.
-  `ImportedSettingsUpdater.ForSharedSettings()` three-way merges it into the personal one at
+  `SharedSettingsMerger.ForSharedSettings()` three-way merges it into the personal one at
   startup (base = `shared.base.user.config`). That is how admin-installed tools reach ordinary
   users. The first run merges against a missing base rather than copying, so InstallationId and
   ImportedSettingsPath are never taken over.
@@ -69,8 +69,9 @@ things that move needs:
 - `SettingsImporter` saves and backs up user.config before replacing it, and `RevertImport`
   restores it on cancel or failure. `CopyTools` returns false when canceled, and then
   FinishImport (and the uninstall) never runs.
-- "Keep these settings up to date" records the source; `ImportedSettingsUpdater` merges its
-  changes at startup.
+- "Keep these settings up to date" records the source; `SharedSettingsMerger.ForImportedSettings()`
+  merges its changes at startup. Secondary use: the checkbox may be removed before shipping if
+  nobody finds it useful (Nick, 2026-10-04); the admin-shared merge is the real feature.
 - ClickOnce settings folders are matched to installations by file version. Two `*.exe_*`
   folders holding user.config for the same version (a dev build stamped with a shipped version)
   would be ambiguous; accepted as not worth handling.
