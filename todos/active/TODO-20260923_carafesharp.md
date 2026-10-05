@@ -11,7 +11,7 @@
   also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR.
   Osprey's training export, folded in for a while, landed on its own as #4708 (squash-merged into the base, 2026-10-01).
   Since 2026-10-01 the diff is CarafeSharp and the trigger configs only (Brendan's request).
-- **Osprey PR**: [#4757](https://github.com/ProteoWizard/pwiz/pull/4757), the `osprey.ms2_mass_analyzers` footer,
+- **Osprey PR**: [#4757](https://github.com/ProteoWizard/pwiz/pull/4757) (merged 2026-10-05 as `1ee7a12bd1`), the `osprey.ms2_mass_analyzers` footer,
   split out of #4717 (branch `Skyline/work/20261001_osprey_ms2_analyzers`, worktree `D:\Dev\pwiz-osprey-analyzers`).
 - **Companion**: `ai/todos/completed/TODO-20260923_osprey_carafe_export.md` (the Osprey side, #4708, completed); #4757 is tracked here
 
@@ -628,6 +628,19 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   - Writing is fully hidden: 0.0 s after prediction, and waits under 1 s.
   - The draft PR body is in `ai/.tmp/sessions/20260923-carafesharp/night/speed-pr-body.md`. Open the PR after
     the developer reviews it and #4717 settles.
+
+### 2026-10-05 - #4757 merged; port branch history rewritten
+- **Port branch rewrite (Matt, 2026-10-05 21:06 UTC):** the port branch's early history was consolidated into
+  five commits and everything after it replayed. Files are identical; commit IDs changed. The old tip is
+  `0f79141d23fe`, the new one `f1300c7a06`. Every branch built on the old history must move onto the new one.
+- **#4757 rebased and merged (Brendan):** its 2 commits moved onto the new tip with an identical patch
+  (`git patch-id`), built, `TestSourceRunMetadata` and `TestSubsetTrainingExport*` passed, then squash-merged
+  into the port branch as `1ee7a12bd1`. The branch `Skyline/work/20261001_osprey_ms2_analyzers` is deleted;
+  the worktree `D:\Dev\pwiz-osprey-analyzers` can be discarded.
+- **#4717 still on the old history:** 140 commits and 35 merges after `0f79141d23fe`, some merging branches
+  since squash-merged into the port. Plan: merge `0f79141d23fe` into the branch, `git reset --soft` onto the
+  new port tip, and commit once. The branches built on it (write-speed, regression, Chronologer) need the
+  same fix before their next push.
 
 ## Next steps
 
