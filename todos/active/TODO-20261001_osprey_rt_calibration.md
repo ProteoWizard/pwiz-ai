@@ -562,3 +562,12 @@ default, CarafeSharp's regression goldens (Stellar, Astral) change.
   SHA-256). v1 zips kept (export-v1 still read by masking parity; astral-v1 by older commits). Pushed to #4717
   (Mike: "yes"): `7180cb9d8f..a810d1d892`. PR body updated (run alignment, the minutes model, the v2 exports and the
   late-gradient table, test plan); posted copy `ai/.tmp/sessions/20260927-054c052f/pr4717-body-posted.md`.
+- 2026-10-04/05: `/code-review max` of 89c75b3808..a810d1d892 (10 angles, 5 verifiers, gap sweep): 15 findings,
+  12 fixed in `4377922e10` with tests (mixed gradients from a saved minutes model restart from pretrained on HI;
+  -rt_reference uses the training normalizer recorded in rt_maps.json; same-stem runs named by folder; LOESS PAV
+  blocks one knot each; KDE tier needs r > 0.5; -rt_reference checked before training; an unmappable run loses only
+  its RT rows; no-overlap runs are wide, null spreads in JSON; carafemodel-1 keeps AlphaPeptDeep; lenient lineage
+  origins; PositionalEncoding temporaries held; one Core median), 3 dropped (-model_dir default, reused -o,
+  carafemodel-1 Chronologer description). Gate 99/99, inspection 0, -RequireData 99/99, both regression goldens
+  PASSED all SAME. Pushed (`a810d1d892..4377922e10`, Mike: "Yes to all 3"); PR test plan updated; reviews requested
+  from brendanx67 and nickshulman.
