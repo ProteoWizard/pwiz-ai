@@ -6,7 +6,7 @@
 - **Created**: 2026-10-04
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4771](https://github.com/ProteoWizard/pwiz/pull/4771)
 
 ## Objective
 
@@ -35,23 +35,31 @@ This is the `master` release planned in `TODO-20260929_autoqc_net10_readiness.md
       `InstallDir`
 - [x] `SkylineSettings` uses the Inno Setup install before ClickOnce and administrative installs
 - [x] New SharedBatch settings `SkylineInnoCmdPath` and `SkylineDailyInnoCmdPath`
-- [x] AutoQC finds the installs again after `Settings.Upgrade()`, and logs the Skyline each option uses
+- [x] AutoQC logs the Skyline each option uses
 - [x] `SkylineInstallationsTest.TestFindInnoSkyline`, plus a test seam `TestInnoRegistryKey`. Both test suites point
       it at an empty key so a developer's own Inno Setup install does not change which Skyline the tests run
 - [x] `/code-review max`. Fixed findings 1, 2, 6, 7, 8, 10, 13, 14, 15. Dropped 3, 5, 11, 12. Applied 4 (registry
       only)
+- [x] Committed as `0075a8822d` (Inno Setup discovery) and pushed
+- [x] Reordered AutoQC startup like Skyline Batch, committed as `cdb95f602b` and pushed. `Settings.Upgrade()` runs
+      first, then `InitSkylineSettings()`, then the configuration migration (`MigrateConfigsIfRequired`). Fixes a
+      pre-existing bug. After an AutoQC update, a user with no installed Skyline was asked for the Skyline folder
+      again, and `Upgrade()` then copied the previous version's `SkylineCustomCmdPath` over the answer.
+      `InitSkylineSettings()` now saves the folder chosen in the Find Skyline dialog
+- [x] Tested an AutoQC upgrade by hand on the developer machine (fake 26.1.1.273 `user.config` with stale runner,
+      Inno Setup and custom paths). Discovery replaced the stale runner and Inno Setup paths, the custom folder was
+      kept, and `InstalledVersion` became 26.1.1.274
+- [x] AutoQC 18 of 18, SkylineBatch 39 of 39 (with R installed), ReSharper inspection clean for both solutions
+- [x] Opened PR #4771
 
 ### Remaining
-- [ ] Commit the change (local only)
-- [ ] Reorder AutoQC startup like Skyline Batch. Run `Settings.Upgrade()` first, then `InitSkylineSettings()`, then
-      the configuration migration (`UpdateIfNecessary`). Fixes a pre-existing bug. After an AutoQC update, a user with
-      no installed Skyline is asked for the Skyline folder again, and `Upgrade()` then copies the previous version's
-      `SkylineCustomCmdPath` over the answer. Replaces the second `FindSkyline()` call
-- [ ] Check how `LocalFileSettingsProvider.Upgrade` treats a setting missing from the previous `user.config`
-- [ ] Test an AutoQC upgrade by hand (run the Debug `AutoQC.exe`, raise its version, run again)
+- [ ] Add the `skyline` label to PR #4771
+- [ ] `/code-review max` on the branch (both commits). Running
 - [ ] Test on the `AutoQC-Test` VM with a real Inno Setup install from the port branch. Q3 cases C and E from
       `ClickOnce baseline`, case D (all-users, HKLM) from `MSI baseline`
-- [ ] Open the PR
+- [ ] On the VM `clean` checkpoint (no Skyline), check the Find Skyline dialog is not shown again after an AutoQC
+      version bump, and the chosen folder is kept
+- [ ] Copilot review of PR #4771
 
 ## Key Files
 
