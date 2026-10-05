@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260930_osprey_pass2_runq_reuse` (worktree `pwiz-net10b` on MACS2; `C:\proj\pwiz-work1` on the i9 from 2026-10-03)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `ed25627d81`
 - **Created**: 2026-09-26
-- **Status**: 2026-10-05 night session: PR #4765 at `da435b4868`, review findings fixed, all gates green (inspection 0/0, unit 651/651 in default / pre-PR-read / verify modes, regression-parallel All 48/0/0, TeamCity Perf/Regression SUCCESS on `d74f44daac`, re-run on `da435b4868`), CHS 446 final byte-identical. Next: Brendan's review and merge.
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: #4765 (draft)
+- **PR**: [#4765](https://github.com/ProteoWizard/pwiz/pull/4765) (merged 2026-10-05 into `Skyline/work/20260612_net8_port` as `effd991447`)
 
 ## Goal
 
@@ -1371,5 +1371,15 @@ not schedule HDD timing arms after ~21:30.** Clean check, NVMe A-B-A (128 files,
 v6 1,218.5 s / final 1,256.5 s / v6 1,554.8 s; final reads 274 vs 328 GB in 145 vs 159-179 s of disk.
 No regression; the bracket drifted 28% with the nightly's CPU load.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260930_osprey_pass2_runq_reuse.md` before starting work.
+### 2026-10-05 - Merged
+
+PR #4765 squash-merged into `Skyline/work/20260612_net8_port` as `effd991447` (head `da435b4868`).
+Shipped: FirstPassFDR and Stage 6 planning on ordered file lanes (byte-identical by construction), the
+lane count from `FdrLaneResolver` (threads / 2, free memory, max 8; `--parallel-files` bounds PerFile*
+only), planned and gated block reads of score parquets and library identity (both default on, parity
+switches catalogued in `ai/todos/backlog/TODO-osprey_parity_path_retirement.md`), pass 2 reading stored
+run q-values, and the /code-review max fixes. CHS 446 on one HDD / 64 GB: 17,145 s same-day baseline ->
+8,857 s (pre-review build, 3 lanes, quiet) / 11,745 s (final build, contended by the nightly); outputs
+identical. Owed after merge: an uncontested HDD 446 timing of the merged code (Brendan, 2026-10-05).
+Follow-ups not in this PR: fuse the ~7 per-file sidecar reads; pass 0 + training fusion; the
+`.osprey.task` count (separate PR); int row ordinals past 2^31 (pre-existing).
