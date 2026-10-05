@@ -100,19 +100,25 @@ things that move needs:
 - A `{` in a product name breaks ISCC (it starts an Inno constant). Accepted: we pick the
   names, and the failure can only happen at build time.
 
-## Planned: automatic upgrade from .NET Framework Skyline (not written yet)
+## First start (`ToolsUI/FirstLaunchImport.cs`, done 2026-10-05: 936c7a7bec, 821f6cee37)
 
-- The old .NET Framework Skyline (or Skyline-daily) downloads the installer, records a handoff
-  (maybe in the registry) saying where it is installed, then runs the installer.
-- The new Skyline sees that it was launched by the old one, imports the old Skyline's settings
-  automatically, and uninstalls the old Skyline without asking.
-- The Import Settings dialog is only for the unusual case, such as a user who downloaded the
-  installer directly from the website. Then we ask where to import settings from.
-- Suggestion: have the handoff record the old Skyline's exact user.config path
-  (`ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.PerUserRoamingAndLocal).FilePath`),
-  not just its install folder. The new Skyline then imports from a known file, and the
-  version-matching guess in `Program.MigrateSettingsFromClickOnceInstallation` (which today
-  picks a ClickOnce installation on first run without asking) becomes only a fallback.
+- Runs once per settings file (`CheckedForSettingsToImport`, never merged from shared settings;
+  any finished import also sets it). Called from Program.Main before the main window.
+- Handoff: `HKCU\Software\MacCossLabUW\ImportSettingsFrom`, value named for the assembly
+  (Skyline / Skyline-daily) = path to the older Skyline's user.config. Imported silently,
+  InstallationId taken over, and the `UninstallCommand` user setting in that user.config is
+  run. The value (and the key once empty) is deleted as it is read. Not the installer's
+  `Software\MacCossLabUW\<Product>` install record key, which its uninstaller deletes.
+- No handoff: if `SkylineInstallations` finds older installations (same assembly name, version
+  <= current), shows ImportSettingsDlg; Cancel = defaults.
+- Replaced the silent ClickOnce migration (`MigrateSettingsFromClickOnceInstallation`) and
+  `ToolsCopyPending`. Import with progress lives in `SettingsImporter.Import`, shared with
+  Tools > Options.
+- STILL TO DO, in the .NET Framework release/daily code: before running the installer, save
+  its own uninstall command as an `UninstallCommand` user setting (ClickOnce:
+  `rundll32.exe dfshim.dll,ShArpMaintain <name>.application, ...`), and write the registry
+  value with `ConfigurationManager.OpenExeConfiguration(PerUserRoamingAndLocal).FilePath`.
+- Removed "Keep these settings up to date" (and `ImportedSettingsPath`) on 2026-10-05.
 
 ## Tests
 
@@ -154,4 +160,7 @@ things that move needs:
 - [ ] Verify in a real per-machine install with a standard user
 - [ ] PR test plan: build.ps1 output, download page links, Import Settings from an installed
       Skyline, startup update check finds a newer version
-- [ ] Automatic upgrade handoff from .NET Framework Skyline (above), probably a separate branch
+- [x] 2026-10-05: PR description rewritten for buddy testers, screenshots in
+      nickshulman/pr-assets pwiz/4755-installer-settings
+- [ ] Older-version half of the handoff (UninstallCommand setting + registry value), in the
+      .NET Framework code, probably a separate branch
