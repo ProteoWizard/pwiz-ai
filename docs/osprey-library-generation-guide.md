@@ -28,9 +28,10 @@ Two things are easy to confuse:
 
 - **Generation** (this guide): build a new library from a FASTA with Carafe.
   Needs a GPU, a peptdeep environment, and about an hour for Stellar.
-- **Derivation** ([`New-SeaAdLibrary.ps1`](../scripts/Osprey/SEA-AD/New-SeaAdLibrary.ps1)):
+- **Derivation** ([`Build-EntrapmentVariant.py`](../scripts/Osprey/Library/Build-EntrapmentVariant.py)):
   subset or strip an *existing* library (entrapment ratio, decoy removal). No
-  Carafe, no GPU. Prefer this when it suffices.
+  Carafe, no GPU, any dataset. Prefer this when it suffices. See
+  [Deriving variants](#deriving-variants-without-carafe).
 
 ---
 
@@ -539,6 +540,46 @@ a real case needs one, widen it deliberately and record what was measured.
 
 ---
 
+## Deriving variants without Carafe
+
+[`ai/scripts/Osprey/Library/Build-EntrapmentVariant.py`](../scripts/Osprey/Library/Build-EntrapmentVariant.py)
+turns any library directory in the Carafe entrapment layout
+(`carafe_spectral_library.tsv` + `osprey_library_db_pairing.tsv`, and the peptide
+FASTA when present) into a ratio subset and/or a decoy-stripped gendecoy library.
+It streams the spectral library, so memory does not grow with it, and writes a
+`PROVENANCE.txt` (source, ratio, salt, tool revision, counts, rebuild command)
+into the output directory last.
+
+```powershell
+python ai/scripts/Osprey/Library/Build-EntrapmentVariant.py build `
+    --source-dir <r=1.0 dir> --output-dir <variant dir> --ratio 0.1 [--salt b] [--gendecoy]
+python ai/scripts/Osprey/Library/Build-EntrapmentVariant.py check-nesting --source-dir <dir>
+python ai/scripts/Osprey/Library/Build-EntrapmentVariant.py stats --source-dir <dir>
+```
+
+- **Selection is a stable hash, not a shuffle.** A `peptide_pair_index` keeps its
+  entrapment (target-side and decoy-side) when `blake2b(salt + index) / 2^64 < r`.
+  That is deterministic on any machine and **nested** - r=0.1 is a subset of r=0.25
+  is a subset of r=0.5 - so a ratio series differs only by entrapment added. A
+  different `--salt` is an independent draw at the same ratio.
+- **The gendecoy arm needs no libdecoy variant on disk.** Selection is per pair,
+  so `--gendecoy` at the same ratio and salt carries exactly the same entrapment.
+- **Decoys are the `decoy_` ProteinID prefix**, never the `Decoy` column (0 on
+  every row). `--gendecoy` fails if it drops nothing.
+- **Entrapment absent from the manifest is dropped**, not kept, so an unclassifiable
+  row cannot leak into every ratio. `stats` counts them. On the 2026-07-27 SEA-AD
+  delivery that is 962,007 rows: N-terminal-Met-clipped entrapment (library
+  `ATTTRQK`, manifest `MATTTRQK`), while the clipped *targets* are kept - so its
+  variants realize r=0.0967 at a nominal 0.1. The 2026-08-17 rebuild has none.
+
+The library's own `-entrapment_ratio` (Carafe, [above](#the-algorithm)) is the
+alternative when a library is being generated anyway; derivation exists for the
+common case of reusing a delivered r=1.0 set. SEA-AD's naming wrapper is
+[`New-SeaAdLibrary.ps1`](../scripts/Osprey/SEA-AD/New-SeaAdLibrary.ps1), which
+the SEA-AD and TDP-43 runners resolve by `-Ratio`/`-DecoyMode`.
+
+---
+
 ## Artifacts on disk
 
 As of 2026-08-01, on BRENDANX-UW25:
@@ -607,7 +648,8 @@ Sharing a built library across machines: the delivered libraries are 2.5 GB
 - [`ai/scripts/Osprey/Run-FdrBench.ps1`](../scripts/Osprey/Run-FdrBench.ps1) - the FDP oracle
 - [`ai/docs/osprey-development-guide.md`](osprey-development-guide.md) - FDRBench
   entrapment validation doctrine (the oracle wins over parity)
-- [`ai/scripts/Osprey/SEA-AD/`](../scripts/Osprey/SEA-AD/) - deriving library variants
-  without Carafe
+- [`ai/scripts/Osprey/Library/`](../scripts/Osprey/Library/) - deriving library
+  variants without Carafe; [`SEA-AD/New-SeaAdLibrary.ps1`](../scripts/Osprey/SEA-AD/New-SeaAdLibrary.ps1)
+  wraps it with the runners' folder naming
 - Wen et al., "Assessment of FDR control ... using entrapment," Nature Methods
   22:1454 (2025); FDRBench: github.com/Noble-Lab/FDRBench

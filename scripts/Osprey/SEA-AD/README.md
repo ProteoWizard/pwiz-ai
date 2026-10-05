@@ -66,17 +66,20 @@ one library. The runner picks the variant from `-DecoyMode` and `-Ratio`.
 ## The library variants
 
 Only the r=1.0 set is downloaded. `New-SeaAdLibrary.ps1` derives the rest and owns the
-naming convention `Run-SeaAd.ps1` resolves, so both sides stay in step:
+naming convention `Run-SeaAd.ps1` resolves, so both sides stay in step. The derivation itself
+is the dataset-agnostic
+[`../Library/Build-EntrapmentVariant.py`](../Library/Build-EntrapmentVariant.py); the wrapper
+only maps the folder names onto its arguments:
 
 | folder | arm | built by |
 |---|---|---|
 | `target+decoy+entrapment` | r=1.0 libdecoy | downloaded |
-| `target+decoy+entrapment-r<ratio>` | fractional libdecoy | `subset-entrapment-ratio.py` |
-| `target+entrapment-r<ratio>-gendecoy` | gendecoy | `strip-decoys.py` |
+| `target+decoy+entrapment-r<ratio>` | fractional libdecoy | `build --ratio <ratio>` |
+| `target+entrapment-r<ratio>-gendecoy` | gendecoy | `build --ratio <ratio> --gendecoy` |
 
 ```powershell
-.\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode libdecoy   # subset from the 1:1 set
-.\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode gendecoy   # strip decoys from that subset
+.\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode libdecoy   # subset of the 1:1 set
+.\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode gendecoy   # same subset, decoy rows stripped
 ```
 
 **The unsuffixed `target+decoy+entrapment` is Mike's original 2026-07-27 delivery, and it is
@@ -97,10 +100,23 @@ also present. Both load as the same decoy entry_id, and on the current build fir
 aborts at 82 files with "Experiment-scope values disagree across observations of entry_id
 2147809020". The 08-17 rebuild does not have that row.
 
-A gendecoy variant derives from the libdecoy variant at the **same ratio** (built first if
-missing), so the two arms differ only in where the decoys come from. Selection is a seeded
-shuffle (default 2024), so the same ratio built on two machines picks the same quartets and
-the runs are comparable across boxes.
+Selection is a stable hash of each `peptide_pair_index` (blake2b of salt + index, kept when
+below the ratio), so it is deterministic across machines and **nested**: r=0.1 is a subset of
+r=0.25 is a subset of r=0.5. A gendecoy variant therefore carries exactly the entrapment of the
+libdecoy variant at the same ratio, and the two arms differ only in where the decoys come
+from; both are built straight from the r=1.0 set. `-Salt b` draws an independent subset at the
+same ratio - that is how `target+decoy+entrapment-r0.5b` was built.
+
+The ratio variants on BRENDANX-UW25 (r0.5, r0.25, r0.1, r0.5b, r0.1-gendecoy, r1.0-gendecoy,
+2026-07-30) were built by this hash rule. On 2026-10-05 the current script rebuilt r0.1,
+r0.1-gendecoy and r0.5b byte for byte (SHA256 of all three files) and its selection matched the
+manifests of all six; it also rebuilt `target+entrapment-r1.0-20260817-gendecoy`'s library
+byte for byte (that folder holds an unfiltered copy of the source manifest instead, which
+Osprey does not read in gendecoy mode). Before 2026-10-05 `New-SeaAdLibrary.ps1` instead called a seeded-shuffle tool
+(`tools/subset-entrapment-ratio.py`, now removed) that picks an unrelated subset at the same
+ratio; a fractional variant built by it on another machine is not comparable with these and
+should be rebuilt. Each variant built since carries a `PROVENANCE.txt` (source, ratio, salt,
+tool revision).
 
 Budget for it: the source library is ~13 GB and each variant is a full streamed copy. A
 fresh variant has no `.libcache`, so Osprey builds one on its first use.
@@ -279,8 +295,8 @@ Measured, not guessed - these cost real time to learn:
   comparison, only its wall time.
 * **Decoys are marked by the `decoy_` ProteinID PREFIX, not the `Decoy` column**, which is
   0 on every row of these Carafe entrapment libraries. Filtering on the column is a silent
-  no-op. Never "fix" the column. (`strip-decoys.py` hard-fails when it drops nothing,
-  precisely so this cannot pass unnoticed.)
+  no-op. Never "fix" the column. (`Build-EntrapmentVariant.py --gendecoy` hard-fails when it
+  drops nothing, precisely so this cannot pass unnoticed.)
 * **Arms only compare on ID counts at the same entrapment ratio.** Yield rises as the
   ratio shrinks - a 1:1 marker library perturbs the search and suppresses detections -
   while the ratio-corrected FDP estimator stays valid at any r.
@@ -354,13 +370,13 @@ Measured, not guessed - these cost real time to learn:
 | `../Common/OspreyDatasetRun.psm1` | the shared runner engine, also used by `../TDP43/` |
 | `Run-SeaAd.ps1` | the runner: decoy arm x ratio x pass-2 mode x pick model, `-WhatIf` |
 | `Invoke-SeaAdChain.ps1` | queue several arms one at a time on a single box |
-| `New-SeaAdLibrary.ps1` | derive ratio-subset and gendecoy library variants |
+| `New-SeaAdLibrary.ps1` | derive ratio-subset and gendecoy library variants (wraps `../Library/Build-EntrapmentVariant.py`) |
 | `Convert-SeaAdRaw.ps1` | .raw -> mzML (only if not using the pre-converted share) |
 | `convert-one.cmd` | the msconvert command line, verbatim; cmd-specific quoting |
 | `Clear-StandbyCache.ps1` | evict the OS file cache before a timing run |
 | `Test-SpectraCache.ps1` | verify `.spectra.bin` are complete and will actually be USED |
 | `Measure-Stage6Rescore.ps1` | measure one stage's resident memory vs file count (#4472) |
-| `tools/*.py` | library derivation and the FDP readers |
+| `tools/*.py` | the FDP readers |
 
 ### Copying caches between machines
 

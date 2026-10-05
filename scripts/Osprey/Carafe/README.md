@@ -108,8 +108,9 @@ Osprey itself resolves through `Dataset-Config.ps1` (`Get-OspreyExe`), so
 ## Related
 
 - [`ai/docs/osprey-library-generation-guide.md`](../../../docs/osprey-library-generation-guide.md) - the recipe and its validation
-- [`../SEA-AD/New-SeaAdLibrary.ps1`](../SEA-AD/New-SeaAdLibrary.ps1) - *derive* a variant
-  (entrapment ratio subset, decoy strip) from an existing library, no Carafe needed.
+- [`../Library/Build-EntrapmentVariant.py`](../Library/Build-EntrapmentVariant.py) - *derive* a
+  variant (entrapment ratio subset, decoy strip) from an existing library, no Carafe needed
+  (SEA-AD naming wrapper: [`../SEA-AD/New-SeaAdLibrary.ps1`](../SEA-AD/New-SeaAdLibrary.ps1)).
   Use that when you already have a library; use this folder when you need a new one.
 - [`../Run-FdrBench.ps1`](../Run-FdrBench.ps1) - the FDP oracle that consumes stage 6's
   `FDRBench-Input.tsv`

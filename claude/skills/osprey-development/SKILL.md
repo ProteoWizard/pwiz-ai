@@ -118,7 +118,8 @@ entrapment", "why is measured FDP X?") needs:
   is over-identified, and over-estimates FDP by ~1.6x where real Arabidopsis peptides
   give ~1.1x. Driver: `ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Preflight`.
   To *derive* a variant from an existing library instead of building one, use
-  `ai/scripts/Osprey/SEA-AD/New-SeaAdLibrary.ps1` (no Carafe, no GPU).
+  `ai/scripts/Osprey/Library/Build-EntrapmentVariant.py` (no Carafe, no GPU; any dataset;
+  `SEA-AD/New-SeaAdLibrary.ps1` wraps it with the runners' folder naming).
 
 Cross-impl parity work additionally needs:
 - **`ai/docs/osprey-development-guide.md`** - steel-thread parity

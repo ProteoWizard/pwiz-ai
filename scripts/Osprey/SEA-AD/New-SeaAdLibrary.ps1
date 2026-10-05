@@ -1,24 +1,29 @@
 <#
 .SYNOPSIS
-    Build a SEA-AD library variant (entrapment ratio subset, or the gendecoy arm's
-    decoy-stripped library) from the delivered 1:1 target+decoy+entrapment set.
+    Build a library variant (entrapment ratio subset, or the gendecoy arm's
+    decoy-stripped library) from a delivered 1:1 target+decoy+entrapment set.
 
 .DESCRIPTION
     Only ONE library is downloaded: the r=1.0 target+decoy+entrapment set. Every other
-    variant is derived from it, and this script owns the naming convention that
-    Run-SeaAd.ps1 resolves, so -Ratio and -DecoyMode stay plain parameters on both sides
-    instead of a path to remember:
+    variant is derived from it, and this script owns the naming convention that the
+    runners resolve (Run-SeaAd.ps1, TDP43\Run-Tdp43.ps1 via Common\OspreyDatasetRun.psm1),
+    so -Ratio and -DecoyMode stay plain parameters on both sides instead of a path to
+    remember:
 
         target+decoy+entrapment              r=1.0 libdecoy (the delivered source)
-        target+decoy+entrapment-r<ratio>     fractional libdecoy  (subset-entrapment-ratio.py)
-        target+entrapment-r<ratio>-gendecoy  gendecoy arm         (strip-decoys.py)
+        target+decoy+entrapment-r<ratio>     fractional libdecoy
+        target+entrapment-r<ratio>-gendecoy  gendecoy arm (decoy rows stripped)
 
-    A gendecoy variant is derived from the libdecoy variant at the SAME ratio, which is
-    built first if it does not exist. That chaining is the point: the two arms then differ
-    only in where the decoys come from, not in which entrapment peptides are present.
+    The work is done by the dataset-agnostic ..\Library\Build-EntrapmentVariant.py; this
+    wrapper only maps the convention onto its --source-dir / --output-dir / --ratio /
+    --salt / --gendecoy. Both arms are built straight from the r=1.0 source. Selection is
+    a stable hash of each peptide_pair_index, so a gendecoy variant carries exactly the
+    entrapment peptides of the libdecoy variant at the same ratio and salt - the two arms
+    differ only in where the decoys come from - without the libdecoy variant having to
+    exist on disk.
 
-    Derivation is deterministic (seeded shuffle, default 2024), so the same ratio built on
-    two machines selects the same quartets and the runs are comparable across boxes.
+    Selection is deterministic and nested: the same ratio built on two machines picks the
+    same pairs, and r=0.1 is a subset of r=0.25 is a subset of r=0.5.
 
 .PARAMETER Ratio
     Target entrapment ratio. '1.0' is the delivered set; a fraction subsets it.
@@ -28,7 +33,22 @@
     gendecoy : additionally strip the decoy rows so Osprey generates its own.
 
 .PARAMETER LibraryRoot
-    Directory holding the variants. Defaults to -LibraryDir / $env:OSPREY_SEAAD_LIB.
+    Directory holding the variants. Defaults to $env:OSPREY_SEAAD_LIB.
+
+.PARAMETER Build
+    Which delivered r=1.0 set to derive from: empty is 'target+decoy+entrapment', and a
+    value such as '20260817' is 'target+decoy+entrapment-20260817'. The tag carries into
+    every derived name, so variants of two builds never share a folder.
+
+.PARAMETER Salt
+    Selection salt (letters/digits). Empty (the default) is the series every run so far
+    uses. A non-empty salt is an independent draw at the same ratio and is appended to the
+    ratio in the folder name: -Ratio 0.5 -Salt b is 'target+decoy+entrapment-r0.5b'. The
+    runners do not resolve salted names; pass the folder with -LibraryDir.
+
+.PARAMETER Seed
+    Obsolete. The seeded-shuffle selection it controlled was retired 2026-10-05 (it chose
+    a different subset from the libraries actually in use). Passing it is an error.
 
 .EXAMPLE
     # Both arms of a decoy A/B at r=0.1, from the delivered 1:1 set.
@@ -47,11 +67,9 @@ param(
     [Parameter(Mandatory)][string]$Ratio,
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$LibraryRoot,
-    # Which delivered r=1.0 set to derive from: empty is 'target+decoy+entrapment', and a value
-    # such as '20260817' is 'target+decoy+entrapment-20260817'. The tag carries into every
-    # derived name, so variants of two builds never share a folder.
     [string]$Build = '',
-    [int]$Seed = 2024,
+    [ValidatePattern('^[A-Za-z0-9]*$')] [string]$Salt = '',
+    [Nullable[int]]$Seed,
     [string]$Python,
     [switch]$Force,
     [switch]$WhatIf
@@ -59,7 +77,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $readme = Join-Path $PSScriptRoot 'README.md'
-$tools = Join-Path $PSScriptRoot 'tools'
+$builder = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\Library\Build-EntrapmentVariant.py'))
+
+if ($null -ne $Seed) {
+    throw ("-Seed is obsolete: the seeded-shuffle selection was retired because it picks a " +
+           "different subset from the libraries in use. Use -Salt for an independent draw. " +
+           "See $readme.")
+}
+if ($Ratio -eq '1.0' -and $Salt) {
+    Write-Warning "-Salt has no effect at -Ratio 1.0 (every pair is kept); ignoring it."
+    $Salt = ''
+}
 
 if (-not $LibraryRoot) { $LibraryRoot = [Environment]::GetEnvironmentVariable('OSPREY_SEAAD_LIB') }
 if (-not $LibraryRoot -or -not (Test-Path $LibraryRoot)) {
@@ -75,14 +103,14 @@ if (-not $Python) {
 if (-not $Python) { throw "Python not found on PATH. Pass -Python <path to python.exe>." }
 
 function Get-VariantPath {
-    param([string]$Mode, [string]$R)
+    param([string]$Mode, [string]$R, [string]$S = '')
     $b = if ($Build) { "-$Build" } else { '' }
     $name = if ($Mode -eq 'gendecoy') {
-        "target+entrapment-r$R$b-gendecoy"
+        "target+entrapment-r$R$S$b-gendecoy"
     } elseif ($R -eq '1.0') {
         "target+decoy+entrapment$b"
     } else {
-        "target+decoy+entrapment$b-r$R"
+        "target+decoy+entrapment$b-r$R$S"
     }
     Join-Path $LibraryRoot $name
 }
@@ -93,30 +121,30 @@ if (-not (Test-Path (Join-Path $source 'carafe_spectral_library.tsv'))) {
            "it; download it first. See $readme for the URL.")
 }
 
-# A gendecoy variant strips the libdecoy variant at the same ratio, so build that first.
-$steps = @()
-$libdecoyDir = Get-VariantPath -Mode 'libdecoy' -R $Ratio
-if ($Ratio -ne '1.0' -and -not (Test-Path (Join-Path $libdecoyDir 'carafe_spectral_library.tsv'))) {
-    $steps += [pscustomobject]@{ Kind = 'subset'; From = $source; To = $libdecoyDir }
+$target = Get-VariantPath -Mode $DecoyMode -R $Ratio -S $Salt
+if ($target -eq $source) {
+    Write-Host "Nothing to build: r=1.0 libdecoy is the delivered set itself ('$source')." -ForegroundColor Green
+    return
 }
-if ($DecoyMode -eq 'gendecoy') {
-    $gendecoyDir = Get-VariantPath -Mode 'gendecoy' -R $Ratio
-    $steps += [pscustomobject]@{ Kind = 'strip'; From = $libdecoyDir; To = $gendecoyDir }
-}
-
-$target = Get-VariantPath -Mode $DecoyMode -R $Ratio
-if (-not $steps) {
-    Write-Host "Nothing to build: '$target' already exists." -ForegroundColor Green
+# PROVENANCE.txt is written last, so its presence is what marks a finished build. Older
+# variants (built before 2026-10-05) have none; for those the library file stands in.
+$done = (Test-Path (Join-Path $target 'PROVENANCE.txt')) -or
+        (Test-Path (Join-Path $target 'carafe_spectral_library.tsv'))
+if ($done -and -not $Force) {
+    Write-Host "Nothing to build: '$target' already exists (use -Force to rebuild)." -ForegroundColor Green
     return
 }
 
+$pyArgs = @($builder, 'build', '--source-dir', $source, '--output-dir', $target, '--ratio', $Ratio)
+if ($Salt) { $pyArgs += @('--salt', $Salt) }   # omitted when empty: the script defaults to ''
+if ($DecoyMode -eq 'gendecoy') { $pyArgs += '--gendecoy' }
+
 Write-Host ""
-Write-Host "=== SEA-AD library build ===" -ForegroundColor Cyan
+Write-Host "=== library variant build ===" -ForegroundColor Cyan
 Write-Host ("  root   : {0}" -f $LibraryRoot)
-Write-Host ("  target : {0}  (r={1}, {2})" -f (Split-Path $target -Leaf), $Ratio, $DecoyMode)
-foreach ($s in $steps) {
-    Write-Host ("  step   : {0,-6} {1} -> {2}" -f $s.Kind, (Split-Path $s.From -Leaf), (Split-Path $s.To -Leaf))
-}
+Write-Host ("  source : {0}" -f (Split-Path $source -Leaf))
+Write-Host ("  target : {0}  (r={1}, {2}, salt '{3}')" -f (Split-Path $target -Leaf), $Ratio, $DecoyMode, $Salt)
+Write-Host ("  command: {0} {1}" -f $Python, ($pyArgs -join ' '))
 Write-Host ""
 
 if ($WhatIf) {
@@ -124,37 +152,11 @@ if ($WhatIf) {
     return
 }
 
-foreach ($s in $steps) {
-    if ((Test-Path (Join-Path $s.To 'carafe_spectral_library.tsv')) -and -not $Force) {
-        Write-Host ("skip {0}: '{1}' already exists (use -Force to rebuild)" -f $s.Kind, $s.To) -ForegroundColor Yellow
-        continue
-    }
-    New-Item -ItemType Directory -Force -Path $s.To | Out-Null
-    $sw = [Diagnostics.Stopwatch]::StartNew()
+$sw = [Diagnostics.Stopwatch]::StartNew()
+& $Python @pyArgs
+if ($LASTEXITCODE -ne 0) { throw "Build-EntrapmentVariant.py failed ($LASTEXITCODE)." }
+$sw.Stop()
 
-    if ($s.Kind -eq 'subset') {
-        Write-Host ("subsetting to r={0} (seed {1})..." -f $Ratio, $Seed) -ForegroundColor Cyan
-        & $Python (Join-Path $tools 'subset-entrapment-ratio.py') `
-            --src $s.From --out $s.To --ratio $Ratio --seed $Seed
-        if ($LASTEXITCODE -ne 0) { throw "subset-entrapment-ratio.py failed ($LASTEXITCODE)." }
-    } else {
-        Write-Host "stripping decoy rows..." -ForegroundColor Cyan
-        & $Python (Join-Path $tools 'strip-decoys.py') `
-            (Join-Path $s.From 'carafe_spectral_library.tsv') `
-            (Join-Path $s.To 'carafe_spectral_library.tsv')
-        if ($LASTEXITCODE -ne 0) { throw "strip-decoys.py failed ($LASTEXITCODE)." }
-        # The manifest travels with the stripped library: it still describes the
-        # target/entrapment pairing the FDP oracle reads, and only the decoy arms of it
-        # go unused. Copying it keeps the folder self-describing.
-        $man = Join-Path $s.From 'osprey_library_db_pairing.tsv'
-        if (Test-Path $man) { Copy-Item $man (Join-Path $s.To 'osprey_library_db_pairing.tsv') -Force }
-    }
-
-    $sw.Stop()
-    $sizeGb = [math]::Round((Get-Item (Join-Path $s.To 'carafe_spectral_library.tsv')).Length / 1GB, 2)
-    Write-Host ("  done in {0:hh\:mm\:ss}, library {1} GB" -f $sw.Elapsed, $sizeGb) -ForegroundColor Green
-}
-
-Write-Host ""
-Write-Host ("Built: {0}" -f $target) -ForegroundColor Green
+$sizeGb = [math]::Round((Get-Item (Join-Path $target 'carafe_spectral_library.tsv')).Length / 1GB, 2)
+Write-Host ("Built: {0}  ({1:hh\:mm\:ss}, library {2} GB)" -f $target, $sw.Elapsed, $sizeGb) -ForegroundColor Green
 Write-Host ("Run it with: .\Run-SeaAd.ps1 -DecoyMode {0} -Ratio {1}" -f $DecoyMode, $Ratio)

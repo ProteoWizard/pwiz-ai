@@ -40,6 +40,9 @@ ai/scripts/Osprey/
     Run-CarafeOspreyWorkflow.ps1  6-stage Carafe + Osprey library build
     tools/                      natural-entrapment generator, m/z occupancy
 
+  Library/                      derive variants of an existing library (no Carafe)
+    Build-EntrapmentVariant.py  entrapment-ratio subset / gendecoy strip, streamed
+
   SubsetData/                   regenerate Osprey.Test's small real-data zips (README.md)
 
   Compare/                      cross-impl bridge (used rarely now)
@@ -199,8 +202,10 @@ pwsh -File ./ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Preflight
 ```
 
 To *derive* a variant from a library you already have (entrapment ratio subset,
-decoy strip), use [`SEA-AD/New-SeaAdLibrary.ps1`](SEA-AD/New-SeaAdLibrary.ps1)
-instead -- no Carafe, no GPU.
+decoy strip), use [`Library/Build-EntrapmentVariant.py`](Library/Build-EntrapmentVariant.py)
+instead -- no Carafe, no GPU, any dataset.  For the SEA-AD/TDP-43 folder naming
+the runners resolve, call it through
+[`SEA-AD/New-SeaAdLibrary.ps1`](SEA-AD/New-SeaAdLibrary.ps1).
 
 ## Performance
 
