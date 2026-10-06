@@ -40,7 +40,10 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
 ## Tasks
 - [x] Wire `ProfilerHooks.StartMeasure/SaveAndStopMeasure` around the PerFileScoring per-file loop (nothing called
       them; `Profile-Osprey.ps1 -ScopeToMainSearch` recorded nothing) - committed 971f4227bb
-- [ ] SEA-AD 82-file end-to-end baseline at the port tip (launched 2026-10-06 11:53, snapshot
+- [x] SEA-AD 82-file end-to-end baseline at the port tip: **4 h 12 m (15,139.8 s) vs 510 min on 2026-08-12,
+      -51%.** PerFileScoring 2 h 00 m (was 4 h 11 m, -52%), FirstPassFDR 29 m (1 h 16 m, -62%),
+      PerFileRescoring 1 h 20 m (2 h 42 m, -50%), SecondPassFDR 23 m (~28 m). Peak private 46.5 GB (FirstPassFDR;
+      was 52.1 GB), floor falling. PerFileScoring is still the largest stage (48%). (launched 2026-10-06 11:53, snapshot
       `D:\test\osprey-runs\_bin\port-490a4d3825-hooks`, run dir
       `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-port490a4d-20261006_115333`);
       compare to 2026-08-12 (510 min; PerFileScoring 4 h 11 m)

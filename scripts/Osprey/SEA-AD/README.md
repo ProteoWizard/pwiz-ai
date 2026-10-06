@@ -270,7 +270,14 @@ can still fail them:
 
 Measured, not guessed - these cost real time to learn:
 
-* **Full 82-file run from scratch: ~8.5 h** at `--threads 30` **with** `.spectra.bin`
+* **Full 82-file run, port branch at 490a4d3825 (2026-10-06): 4 h 12 m** at `--threads 30`, files
+  sequential, `.spectra.bin` present - half the 2026-08 figure below, after the PerFileScoring speedups
+  (#4768, #4770, #4779, #4781) and FirstPassFDR's ordered file lanes (#4765). Stages: PerFileScoring
+  2 h 00 m, FirstPassFDR 29 m, PerFileRescoring 1 h 20 m, SecondPassFDR 23 m; peak private 46.5 GB (in
+  FirstPassFDR), memory floor falling across files. Run dir
+  `runs\seaad-82files-libdecoy-r1.0-protein-compact-port490a4d-20261006_115333`. The 2026-08 numbers
+  that follow are kept as the before picture.
+* **Full 82-file run from scratch (2026-08): ~8.5 h** at `--threads 30` **with** `.spectra.bin`
   present. Without the caches, add the parse time (~4.5 min/file uncached from HDD).
   This said ~7.5 h and that under-stated it by an hour, which matters when you are
   deciding whether a run fits before a deadline. Two independent runs, six weeks and two
