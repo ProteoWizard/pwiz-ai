@@ -2,11 +2,11 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261005_osprey_per_stage_parallel_files` (worktree `pwiz-net10b` on MACS2)
-- **Base**: `Skyline/work/20260612_net8_port`, STACKED on PR #4765 (`Skyline/work/20260930_osprey_pass2_runq_reuse`, branched at `e3c823a92b`) - see "Base" below
+- **Base**: `Skyline/work/20260612_net8_port` at `2937deaae8` (after #4765 merged as `f7021e609c`) - see "Base" below
 - **Created**: 2026-10-05 (backlog item `TODO-osprey_parallel_files_scaling.md`, created 2026-10-04, adopted and widened)
 - **Status**: In Progress - branch created, no code yet
 - **Module**: `osprey`
-- **PR**: (pending - open only after #4765 merges)
+- **PR**: (pending)
 - **Follows**: `ai/todos/completed/TODO-20261002_osprey_cold_window_reads.md` (#4767)
 
 ## Objective
@@ -65,7 +65,15 @@ SEA-AD PerFileScoring only (calibration + first-pass scoring) from cold `.spectr
 - Logs and samples on the 128 GB box: `C:\proj\ai\.tmp\sessions\20260930-night\pfsweep-*` and
   `D:\test\osprey-runs\sea-ad\runs\pfsweep-*\run.log`.
 
-## Where the count lives today (read 2026-10-05 on `e3c823a92b`)
+## Where the count lives today (read 2026-10-05; updated for #4765 as merged)
+
+**Since #4765 merged:** first-pass FDR has its own count, `RunPlan.FirstPassFdrLanes`, chosen by
+`Osprey.Core/FdrLaneResolver.cs` from `--threads` / 2 and free memory over the largest file's row count,
+capped at `MAX_LANES = 8`, overridable with `OSPREY_FDR_FILE_LANES`. Leave it alone here.
+`RunPlan.FileLanes` - the rescore and second-pass per-file phases - is still `EffectiveFileParallelism`,
+i.e. scoring's count. That is the coupling `--parallel-files-rescoring` breaks.
+
+Earlier reading (on `e3c823a92b`, still accurate for the per-file stages):
 
 * Parsed in `Osprey/OspreyCommandArgs.cs` (`OspreyArgNames`), stored on `OspreyConfig`; an environment
   fallback in `OspreyEnvironment` applies only when the argument is absent.
@@ -111,17 +119,16 @@ SEA-AD PerFileScoring only (calibration + first-pass scoring) from cold `.spectr
 - [ ] Gates: Build-Osprey Debug -RunTests; `regression.ps1 -Dataset Stellar`; `regression-parallel.ps1 -Dataset All`
 - [ ] Measure: TDP-43 SpectraCache at lanes 1 / 8 / 16 from E: on MACS2 (quiet box); scoring vs rescoring
       curves (see the sweep below)
-- [ ] `/code-review max`, then PR against the port branch once #4765 has merged
+- [ ] `/code-review max`, then PR against the port branch
 
-## Base: stacked on #4765, and why
+## Base
 
-`OrderedFileLanes` and the switch of PerFileScoring/PerFileRescoring from `Parallel.For` range chunks to
-`OrderedFileLanes.For` exist only on #4765's branch. Branching from the port branch would either duplicate
-that or conflict with it in exactly the files the per-stage flags touch. So: branch from #4765's tip, open the
-PR only after #4765 squash-merges, then `git merge origin/Skyline/work/20260612_net8_port` and resolve (the
-squash-merged parent re-introduces its content on both sides; see the stacked-PR note in
-`ai/docs/version-control-guide.md`). This also closes
-`ai/todos/active/TODO-20260930_osprey_parallel_files_static_partitioning.md` via #4765.
+Started stacked on #4765's tip (`e3c823a92b`) because `OrderedFileLanes` existed only there. #4765 then
+merged (squash `f7021e609c`, carrying more than `e3c823a92b`: `FdrLaneResolver`, `BlockReadStream`, ...),
+and the port branch itself was REBASED at the same time (forced update `aae172e475...2937deaae8`; e.g.
+#4715 is now `ec10fd3f95`). The branch had no commits of its own, so it was repointed at the port tip
+`2937deaae8` (`git checkout -B`); the remote copy needed one force-push (no PR existed). #4765 also closes
+`ai/todos/active/TODO-20260930_osprey_parallel_files_static_partitioning.md`.
 
 Related: `ai/todos/active/TODO-20260908_osprey_parallel_files_cache_sizing.md` (AUTO mode ignored memory
 on cache-only cohorts) is code-complete on a LOCAL branch on MACS2 based on master. Its fix lives in
@@ -162,3 +169,4 @@ What to look for:
 - Brendan proposed per-stage `--parallel-files-*` flags after the TDP-43 SpectraCache run showed caching
   scales differently again (sequential by design; 8 hand-made shards ran ~5x faster with E: still 43% idle).
 - Branch created from #4765's tip `e3c823a92b` in `pwiz-net10b`. No code yet.
+- #4765 merged the same day; branch repointed at the (rebased) port tip `2937deaae8`. Still no code.
