@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20261005_osprey_perfilescoring_round2` (`C:\proj\pwiz-scanmajor`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at dfcb8d17ef (#4777)
 - **Created**: 2026-10-05
-- **Status**: PR #4781 ready to merge (median selection + cosine sweep); TeamCity Perf/Regression 4203270 SUCCESS 2026-10-06 06:33
-- **PR**: #4781
+- **Status**: Completed
+- **PR**: [#4781](https://github.com/ProteoWizard/pwiz/pull/4781) (merged 2026-10-06)
 - **Module**: `osprey`
 - **Follows**: `ai/todos/completed/TODO-20261004_osprey_mz_lookup.md` (#4770),
   `ai/todos/completed/TODO-20261005_osprey_scan_major.md` (#4779),
@@ -110,3 +110,13 @@ Skyline nightlies were running on the box: read proportions, not absolute second
   (~1-2%); per-fragment terms recomputed across the 5 SG offsets (~1%); CWT SmallMedianInPlace (~1.8%, A/B).
 - Noted, not changed: ComputeCosineAtScan's 1e-12 norm guard vs Rust's 1e-10 (pre-existing; only synthetic
   intensities < 1e-20 reach it).
+
+### 2026-10-06 - Merged
+
+PR #4781 merged into the port branch as commit 213b66b9de. Shipped: MedianMath (Hoare's FIND, ported from
+Skyline's QNthItem) for the Tukey median polish medians, and the SG-weighted cosine kernel moved to the m/z
+bucket index with in-loop accumulation - data-identical output, cosine kernel 9.6% -> 4.7% and NanMedian
+5.7% -> 2.1% of ScoreWindow thread time. Deferred to a next round (no issues filed): RT-ordered XIC blocks
+(XIC extraction still ~25% of ScoreWindow), the redundant second median polish per candidate, the remaining
+binary searches in HasMatch / ApexFragmentMatchSet, per-fragment terms across the SG offsets, and the CWT
+small median. Also pending from Brendan: an end-to-end SEA-AD timing on the port tip.
