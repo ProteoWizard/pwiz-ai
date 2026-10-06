@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261005_osprey_per_stage_parallel_files` (worktree `pwiz-net10b` on MACS2)
 - **Base**: `Skyline/work/20260612_net8_port` at `2937deaae8` (after #4765 merged as `f7021e609c`) - see "Base" below
 - **Created**: 2026-10-05 (backlog item `TODO-osprey_parallel_files_scaling.md`, created 2026-10-04, adopted and widened)
-- **Status**: In Progress - branch created, no code yet
+- **Status**: In Progress - SpectraCache lanes coded (uncommitted, untested); per-stage flags next; ONE PR
 - **Module**: `osprey`
 - **PR**: (pending)
 - **Follows**: `ai/todos/completed/TODO-20261002_osprey_cold_window_reads.md` (#4767)
@@ -178,3 +178,29 @@ What to look for:
 - #4765 merged the same day; branch repointed at the (rebased) port tip `2937deaae8`. Still no code.
 - The hand-sharded TDP-43 caching finished: 2 h 08 m, 163/163 caches verified, ~3.6x over sequential
   (not the ~8x the first minutes suggested). The per-file slowdown under concurrency is open.
+
+### 2026-10-06 (00:30) - #4778 merged; SpectraCache lanes coded (uncommitted); ONE PR decided
+
+- #4778 (cache-only auto sizing, a prerequisite touching `FileParallelismResolver`) merged as
+  `cc6e7040ca`; this branch repointed at that port tip and force-pushed to match (no commits of its own).
+- **Decision: one PR** - SpectraCache on lanes AND the per-stage flags together; the flags are what make
+  the caching lanes controllable, and both touch the same resolution code.
+- Coded, NOT yet built or tested, uncommitted in `pwiz-net10b`:
+  * `SpectraCacheTask.Run` -> 1 lane = the plain loop; N lanes = numbered legend +
+    `OrderedFileLanes.For` + `MultiProgressReporter.BeginFile(fileIdx, 1)` + `BeginSegment()`; per-file
+    body extracted to `CacheFile(ctx, fileIdx, nFiles)`; `built` counted with `Interlocked`. The read gate
+    stays OFF (`EnsureSpectraCache(inputFile, false, ...)`) - gating would serialize the lanes.
+  * Lane count from `PerFileScoringTask.ResolveFileParallelism` (made internal) - to be replaced by the
+    per-stage `--parallel-files-caching` resolution. Its sequential-default log line says "to score" -
+    reword when the per-stage messages land.
+  * New resource `SpectraCacheTask_Run_Caching__0__files___1__at_a_time_` (resx + Designer, English only;
+    `OspreyLocalizedResourcesTest` skips keys a satellite lacks).
+  * `SubsetPipelineTest`: after the existing spectra-cache leg, a `--parallel-files <runs>` leg asserting
+    the legend line and byte-identical caches vs the one-lane run.
+- TDP-43 caches copied D: -> E: (`robocopy /J /MT:8`, 553.9 GB in 3 h 42 m, 44.7 MB/s) and verified
+  163/163 against the `.raw` files in `E:\...\tpd43-plasma-ev\raw`. The `.raw` files are NOT deleted
+  (awaiting Brendan); the D: copies in `D:\Users\brendanx\test\osprey-runs\tdp43\cache` are kept until a
+  search has read from E:.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261005_osprey_per_stage_parallel_files.md` before starting work.
