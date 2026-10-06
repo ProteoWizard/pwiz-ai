@@ -174,6 +174,10 @@ things that move needs:
 - [x] 2026-10-06 (9b855cb63c): renamed to PortableSettingsProvider; ToolDescription.Equals(object)
       and HashCode-based GetHashCode; MergeChanges(IEnumerable, IEnumerable); removed
       RegisteredInstallationsTest and SkylineInstallationsTest; split PortableSettingsProviderTest.
+- [x] 2026-10-06 (08fe79e1ab): Setup.iss /LAUNCH starts Skyline after a silent install (checked
+      with a throwaway installer: launches with /LAUNCH, not without, unknown switches ignored);
+      first-start Import Settings asks "Do you want to import settings from one of these previous
+      versions?" with Import / Don't Import (ImportSettingsDlg ctor takes userInitiated)
 - [ ] Possible gap: truly uninstalled installations are probably not found (ClickOnce search
       starts from the Apps\2.0 store, installer search from Programs and Features). Nick wants
       uninstalled ones supported; unverified whether the ClickOnce store folder survives uninstall.

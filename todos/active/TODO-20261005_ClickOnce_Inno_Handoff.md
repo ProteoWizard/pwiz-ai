@@ -49,5 +49,8 @@ other side, which reads what this leaves, is PR #4755 (`Skyline/work/20260901_Ne
 - [x] 2026-10-05 (93381d6b0b): built and tested on net472; Upgrade*FunctionalTest and
       CodeInspection pass, quick inspection clean
 - [x] 2026-10-05: pushed, draft PR #4773 opened against master
+- [x] 2026-10-06 (0a65582e3c): installer runs with /SILENT /SUPPRESSMSGBOXES /NORESTART
+      /CURRENTUSER /LAUNCH; /LAUNCH is #4755's Setup.iss switch (08fe79e1ab), and Inno ignores
+      unknown switches, so an older installer still installs, just without launching
 - [ ] Retarget #4773 to the Release 26.1.1 branch once it exists
 - [ ] Try against a real ClickOnce Skyline-daily once an installer and manifest are published
