@@ -106,6 +106,10 @@ mechanical .NET 10 / C# library re-targeting, with nothing the legacy app had le
     reader and leaves them out of everything shown, as the conversion log already did
   - the remote-account dev pre-fill keyed on an exe folder named `msvc-*` or `bin`; SDK builds run
     from bin\Debug|Release\net10.0-windows, so it never fired. Now matches that layout (DataSourceTest)
+  - MSConvertGUI after browsing to one file (both since #4099): the box shows only its name, so Add
+    took the output folder from a bare name and output went to the program folder; and the box kept
+    the added file as its source, so typed paths were ignored. Fixed with the full path and by letting
+    edited text replace the source (UI Automation check fails both against the old MainForm)
   - left alone: the heatmap title's "isolation m/z 0" (it parses "[lo-hi]" as a number; legacy),
     per-scan TIC equal to the frame TIC (C++ `TimsSpectrum::getTIC` does the same), and
     `TimeMzHeatmapForm`'s own grid-row walk
