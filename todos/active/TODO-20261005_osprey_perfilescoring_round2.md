@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261005_osprey_perfilescoring_round2` (`C:\proj\pwiz-scanmajor`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at dfcb8d17ef (#4777)
 - **Created**: 2026-10-05
-- **Status**: PR #4781 open (median selection + cosine sweep); TeamCity Perf/Regression build 4203270 queued 2026-10-06 ~01:20
+- **Status**: PR #4781 ready to merge (median selection + cosine sweep); TeamCity Perf/Regression 4203270 SUCCESS 2026-10-06 06:33
 - **PR**: #4781
 - **Module**: `osprey`
 - **Follows**: `ai/todos/completed/TODO-20261004_osprey_mz_lookup.md` (#4770),
@@ -102,7 +102,8 @@ Skyline nightlies were running on the box: read proportions, not absolute second
   `TopFragmentExtractor.FindClosestPeakInWindow` in the cosine kernel, removed dead `oldRow`, shifted 16 doc line
   refs (38a4ef6862). Triage notes: `ai/.tmp/sessions/20261005-pfs2/review-triage.md`.
 - After the review fixes: gate 655/655 + inspection 0/0; regression Stellar PASS, Astral PASS (all modes).
-- PR #4781 opened against the port branch; TeamCity Perf/Regression 4203270 on `pull/4781`, Agent 1.
+- PR #4781 opened against the port branch; TeamCity Perf/Regression 4203270 on `pull/4781` (38a4ef68), Agent 1:
+  queued 01:17, ran 05:52-06:33, SUCCESS ("Osprey regression PASSED", all four datasets).
 - Next round candidates, by size: RT-ordered XIC blocks (XIC extraction ~25% of ScoreWindow; each spectrum is
   re-read once per 512-candidate library-order block, ~36x per window - an estimate, measure first); redundant
   second median polish per scored candidate (~1.6%); HasMatch / ApexFragmentMatchSet still binary-search
