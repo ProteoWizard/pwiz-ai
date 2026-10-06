@@ -1,12 +1,12 @@
 # TODO: --parallel-files uses static contiguous buckets, not a shared work queue
 
 ## Branch Information
-- **Branch**: not started
+- **Branch**: none of its own - fixed inside `Skyline/work/20260930_osprey_pass2_runq_reuse`
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
 - **Created**: 2026-09-30
-- **Status**: Observed and measured on a live 82-file run; no code written
+- **Status**: Completed - fixed by #4765 (merged 2026-10-05 as `f7021e609c`)
 - **Module**: `osprey`
-- **PR**: none
+- **PR**: [#4765](https://github.com/ProteoWizard/pwiz/pull/4765)
 
 ## Observation
 
@@ -119,3 +119,21 @@ par3 on 2026-09-26 (4,253.2 s vs 4,127.9 s). Different bucket boundaries give di
 imbalance at different N, so static partitioning is one candidate explanation - but that
 measurement is also contaminated by the `FrozenModelScorer` race, so it has to be
 re-measured on fixed code before drawing any conclusion.
+
+## Completion (2026-10-05)
+
+Fixed by **#4765** (`osprey: Changed FirstPassFDR to run its per-file phases on ordered file lanes with
+planned disk reads`, squash `f7021e609c` on the port branch), not by a branch of its own. #4765 added
+`Osprey.Core/OrderedFileLanes.cs`, whose `For` hands files out one at a time from a shared counter (no
+look-ahead bound, no ordering), and moved both sites onto it:
+
+* `Osprey.Tasks/PerFileScoringTask.cs:360` - `OrderedFileLanes.For(config.InputFiles.Count, effectiveParallelism, ...)`
+* `Osprey.Tasks/PerFileRescoreTask.cs:1203` - `OrderedFileLanes.For(nTotalFiles, parallelism, ...)`
+
+(line numbers at port tip `2937deaae8`). This is the "explicit work queue" option from the Fix section,
+with `MaxDegreeOfParallelism` replaced by the lane count. Gate: #4765's byte-identical regression gates
+(`regression.ps1 -Dataset Stellar`, `regression-parallel.ps1 -Dataset All` 48/0/0) ran with this change in.
+
+Not done here, and now tracked in `TODO-20261005_osprey_per_stage_parallel_files.md`: re-measuring the
+PerFileRescoring par3-vs-par4 slowdown on fixed code, which that TODO's per-stage
+`--parallel-files-rescoring` work needs anyway.
