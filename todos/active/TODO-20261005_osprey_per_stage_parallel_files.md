@@ -227,6 +227,47 @@ What to look for:
 - Logs: run dir `D:\Users\brendanx\test\osprey-runs\tdp43\runs\tdp43-163files-libdecoy-r1.0-protein-compact-lanes8\run.log`;
   `runs\launch--lanes8-20261006_002542.log`; 30 s samples `runs\iosample--lanes8-*.csv`.
 - Runner: `-ParallelFilesCaching/-Scoring/-Rescoring` in `OspreyDatasetRun.psm1` + the three wrappers.
+- Regression gates on `2b1984e1ad`: Stellar 5/5 PASS; `regression-parallel.ps1 -Dataset All` 48 PASS /
+  0 FAIL / 0 SKIP in 39 m 29 s. TeamCity Perf/Regression NOT triggered (Brendan's call).
+- The session hit the Max 5x usage limit after ~04:08; the sweep below finished unattended.
+
+#### Caching lane sweep: where the in-process 10% went (MACS2, 03:36-04:08)
+
+Same first 8 TDP-43 `.raw` files (E: -> scratch on D:, deleted after each leg), one leg at a time, box
+otherwise idle, exe `_bin\26.1.1.279-4bebdc8f3e-vendor-4bebdc8f3e`. Script:
+`ai/.tmp/sessions/20261006-night/Run-CacheLaneSweep.ps1`; results
+`D:\Users\brendanx\test\osprey-runs\tdp43\runs\sweep-20261006\sweep-summary.log` (per-leg run dirs beside it).
+
+| Leg | 8 files wall | vs default |
+|---|---|---|
+| solo: 1 file, 1 lane | 152 s (one file) | - |
+| lanes8: 8 lanes, Server GC default (72 heaps) | 505 s | - |
+| wksgc: 8 lanes, `DOTNET_gcServer=0` | 435 s | -14% |
+| heaps8: 8 lanes, Server GC, `DOTNET_GCHeapCount=8` | **400 s** | **-21%** |
+| procs8: 8 processes x 1 file | 404 s | -20% |
+
+- **The in-process gap is the GC's heap count, not lanes:** 8 Server GC heaps match 8 processes exactly.
+  Even workstation GC beat the 72-heap default - the opposite of Skyline's history, where workstation
+  GC was the bottleneck and Server GC was what closed the gap to multi-process.
+- **The ~2.6x per-file slowdown under concurrency is NOT GC** (400 s for 8 vs 152 s alone in every
+  8-at-once leg, separate processes included): it is in the vendor decode or the memory system.
+
+**Limits of this result - read before acting on it:**
+- **One rep per leg.** Noise is unmeasured; the 400 vs 404 tie and the 14% / 21% steps could move.
+- **One machine, and an unusual one:** MACS2 is 2 sockets x Xeon Gold 6354 (18C/36T each, 72 logical,
+  2 NUMA nodes, 2 Windows processor groups). Server GC's default is one heap (and one GC thread) per
+  logical processor, so 72 here; cross-socket heap traffic and 72-way GC thread coordination are
+  plausible parts of the cost. Whether it transfers to a single-socket i9 (e.g. i9-14900K: 32 logical,
+  one NUMA node, hybrid P/E cores -> 32 heaps) is UNKNOWN - expect a smaller effect, but measure.
+- **One workload:** 8 single-threaded Thermo decodes allocating multi-GB spectrum lists. The scoring
+  stage allocates from 30+ threads and may WANT many heaps - do not generalize `GCHeapCount=8` to the
+  scoring or re-scoring stages without their own A/B.
+- **8 lanes only.** Not measured: heap count = lanes at 4 / 16, `GCHeapAffinitizeMask`, or
+  `DOTNET_GCConserveMemory`. Heap count cannot change at run time, so acting on this means an env var
+  or runtimeconfig setting chosen per process (e.g. the runner setting `DOTNET_GCHeapCount` for
+  `-Task SpectraCache` runs), not a code change inside one process.
+- **Next measurement:** repeat solo / lanes8 / heaps8 / procs8 with 3 reps on MACS2, then on an i9
+  with any vendor `.raw` set (the script's paths are MACS2-specific; parameterize DataDir/RunsRoot).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261005_osprey_per_stage_parallel_files.md` before starting work.
