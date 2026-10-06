@@ -7356,3 +7356,120 @@ double-scaling**: `DpiUtil.ScaleToolStripImages`, the tree `ImageList` scaling
 (`ScaleImageForList`), and `DpiUtil.ScaleFixedPanel` become redundant; the layout-literal
 fixes (wizard page offsets, code-built dialogs, ZedGraph/MSGraph, missing `AutoScaleMode`)
 stay. Detail and the per-fix keep/drop list: `TODO-20260820_dpiAwareness.md`.
+
+## 2026-10-05/06: The branch history curated 710 -> 47, and the rename probe replaced by a handle query
+
+Two things landed in this stretch, plus one piece of work that is deliberately parked.
+
+### The vendor rename probe was asking the wrong question
+
+`VendorReaderTestHarness.AssertFilesUnlocked` renamed the vendor fixture and back, treating a
+sharing violation as proof that we leaked a handle. It failed intermittently on CI and never
+reproduced locally: ~200 isolated runs, 16 pinned whole-suite runs, then 10 whole-suite runs at
+2 CPUs (220 suite executions) all produced **zero** rename failures. The 2026-09-23 conclusion that
+the `Collect/WaitForPendingFinalizers/Collect` form was marginal is **withdrawn** - with the retry
+budget removed and the process pinned to one core the probe still passed 20/20, `testhost` affinity
+verified at mask 1.
+
+A Restart Manager lock reporter (`pwiz/src/TestHarness/FileLockReporter.cs`) was added to name the
+holder at the point of failure. It answered on its **first CI build** (#500, the merge commit):
+
+    pid 6000 msconvert, started 14:23:58 -> ... holding FT-HCD-MSX.raw
+
+`Installer.Tests.Install_PerUser_DeploysAndConvertsVendorFile` runs msconvert against the **shared**
+fixtures in place (`PwizSharpPaths.CppVendorTestData`), and with all 22 suites running concurrently
+it holds `FT-HCD-MSX.raw` open while `Thermo.Tests` tries to rename it. A **test-isolation bug, not
+a lifetime bug** - which is why the ownership audit was clean and why it never reproduced locally.
+`Analysis.Tests/SpectrumList_LockmassRefinerTests` is a second instance against the Waters fixtures
+(builds its path by hand rather than through the accessor), and plausibly explains the
+`Lockmass_ATEHLSTLSEK_*` failure and CI #426.
+
+The fix replaces the rename with "does **this process** hold a handle on the path":
+
+- Windows: Restart Manager on the path, filtered to our own pid (reuses the reporter).
+- Linux: `/proc/self/fd`, self-scoped by construction. **New coverage** - POSIX allows renaming an
+  open file and a directory containing one (verified `rc=0` both ways), so the rename probe could
+  never fail on Linux and had been vacuous there since the port.
+- Anything else: `Unsupported`, which warns and skips. Deliberately not a pass.
+
+Proven by breaking the Thermo dispose chain twice: disabling `~ThermoRawFile` caught the undisposed
+probe, and dropping `_raw.Dispose()` from `SpectrumList_Thermo.DisposeCore` caught the disposed
+path. Note breaking `DisposeCore` alone is **masked by the finalizer**, because the MSData is already
+unreachable when the probe's GC runs - that is the probe behaving correctly, not a gap.
+
+Accepted limitations, documented at the code: Windows RM sees open file handles only, so a self-held
+**current directory** is a false negative (verified by reproduction); Linux misses an `mmap`-only
+leak, which `/proc/self/maps` would cover.
+
+Still open and unrelated: `Lazy_MzxmlWithNoScanEndTags_ReadsEachScanBounded` is a **wall-clock**
+assertion (`swWalk.ElapsedMilliseconds < 10_000`) that failed at 10990 ms under 2-CPU starvation.
+It measures the agent as much as the code; a ratio against a measured single-scan read would be the
+durable form. `Reader_UNIFI_HarnessAgainstReferenceUrls` fails 10/10 environmentally
+(democonnect.waters.com returns Oracle `ORA-04031` on auth) and should be read out of any flake count.
+
+### The branch history was curated to 47 commits
+
+Decided ahead of the merge, since 4619 merges as a regular merge/rebase rather than a squash, so
+all 710 commits would otherwise land on a master that is ~96% linear (38 merges per 1000).
+
+Shape: **5 area slices** for the solo window + **42 tail commits**.
+
+- Solo window = mainline commits 1..291 (2026-06-30 .. 2026-08-24), **510 commits, Matt only**.
+  Base `43b5aaf064` - the newest master commit the window contains, found with `git merge-base`.
+  Using merge #281's master side instead would have silently folded Rita Chupalov's `43b5aaf064`
+  (13 files) into the Skyline slice under the wrong name. **Derive the base, never read it off a
+  merge's second parent.**
+- Slices, in order: other+cpp (39) -> pwiz-sharp (847) -> BiblioSpec (80) -> Shared (92) ->
+  Skyline (569) = 1627 files, partition defined by *exclusion* so it is provably exhaustive.
+- Tail: 9 of Matt's author-runs squashed (two combined so the Spectronaut add/revert cancels),
+  6 master merges recreated with `commit-tree` carrying their original resolved trees, 4 internal
+  merges dropped, and **27 of Brendan's/Nick's/Mike's/Brian's commits replayed verbatim** - same
+  author, date, message, content.
+- Result `f1300c7a06`, force-pushed with an explicit lease. Verified: tree **byte-identical** to the
+  pre-rewrite tip, `origin/master` still an ancestor (so the merge stays a fast-forward).
+
+**Recovery: `archive/net10-port-full-history` -> `0f79141d23`, pushed.** The full 710-commit
+history, every intermediate tree and every original SHA is recoverable from it:
+
+    git push origin archive/net10-port-full-history:Skyline/work/20260612_net8_port --force
+
+Three silent failures the verification caught, all of which produced plausible-looking runs:
+
+1. `.gitattributes` sets `diff=astextplain` for `*.dot`, so `git diff` emits headers with **no
+   hunks** and `git apply` created all 8 `pwiz-sharp/docs/*.dot` files **empty**. Diff output is not
+   round-trippable once a textconv driver is configured - the slices are now built with
+   content-addressed `git update-index --index-info` instead.
+2. Python `subprocess` with `text=True` translates `\n` to `\r\n` on Windows, so index lines arrived
+   with a trailing CR; git printed `Ignoring path ...` to **stderr and exited 0**. A silent no-op
+   that made all five slices produce the base tree. Pipe **bytes**, and treat `Ignoring path` as
+   fatal. The same hazard would have put a trailing CR on every line of every commit message.
+3. A **stale `origin/master`** ref made a genuine master merge look internal, so it was dropped -
+   which would have lost two of Rita's commits from the final tree. Refetch before classifying.
+
+Only the first was visible in the build output.
+
+### Consequences for everyone else
+
+- Collaborators holding the branch must `git fetch origin && git reset --hard
+  origin/Skyline/work/20260612_net8_port`, cherry-picking any unpushed work across first.
+- **PR 4658** (`Retire the C++ tree and hoist the C# port`) is stacked on this branch, so its
+  merge-base is stale and must be re-derived before it can merge. It merges **before** 4619, so this
+  is on the critical path.
+- PR 4619 review threads anchored to rewritten commits have orphaned.
+
+### Parked: Spectronaut parquet support for BlibBuild
+
+Biognosys' "Skyline" export is two **parquet** files, not TSV. Three blockers were found and fixed:
+stock Parquet.Net 4.25.0 cannot read footers written by parquet-cpp-arrow 24 (the patched
+`Shared/Lib/Parquet` build can, and is now referenced directly as `Parquet.dll` on master's side of
+that work); the columns use Spectronaut's underscore dialect (`Precursor_Id`, `File_Name`, `RT_End`,
+optional `Fragment_Charge`, string `Proteotypic`, NaN `IM`); and mods are written as Unimod titles
+rather than `(UniMod:N)`. With all three handled the untouched export builds a 27 MB blib, and a
+27-precursor fixture + reference check was added.
+
+**That work is NOT on the branch.** It was committed as `7ffb167521`, pushed by mistake, and
+reverted by `5bd83dae8b`; the curation then cancelled both. It survives **only** in
+`archive/net10-port-full-history` - cherry-pick `7ffb167521` from there to resurrect it.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
