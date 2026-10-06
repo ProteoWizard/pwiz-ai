@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261005_osprey_charge_check_once` (`C:\proj\pwiz-work1` on the i9)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at `1ee7a12bd1`
 - **Created**: 2026-10-05
-- **Status**: Committed locally (not pushed). Gates: inspection 0/0, unit 651/651. Next: push, /code-review, PR.
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4777](https://github.com/ProteoWizard/pwiz/pull/4777) (merged 2026-10-05 into `Skyline/work/20260612_net8_port` as `dfcb8d17ef`)
 
 ## Problem
 
@@ -37,9 +37,18 @@ throws does not mark the file. Outputs: 514/514 identical to the merged arm and 
 Logs: `D:\test\osprey-runs\chs-seer\runs\chs-128files-...-hdd-ab-*`; builds `D:\test\osprey-runs\_bin\{blockab-*,chargeonce}`.
 
 ## Remaining
-- [ ] Push, `/code-review` (diff is ~30 lines), open PR against the port branch with label `osprey`
-- [ ] regression-parallel All on the branch; TeamCity Perf/Regression before merge (ask first)
-- [ ] Optional: CHS 446 uncontested on the fix (expect ~8,850 s)
+- [x] Push, open PR #4777 against the port branch with label `osprey`
+- [x] TeamCity Perf/Regression green (triggered by Brendan). `/code-review max` was cut off by a usage
+      limit; Brendan judged the ~30-line, A/B-tested change did not need it. The local
+      regression-parallel run was also cut off; TeamCity runs the same legs.
+- [ ] Deferred: CHS 446 uncontested on the fix (expect ~8,850 s); SEA-AD multi-machine benchmark
+      postponed by Brendan to let the port branch settle
+
+### 2026-10-05 - Merged
+
+PR #4777 squash-merged as `dfcb8d17ef`: the library-identity zero-charge check runs on a file's first
+walk per process only, recovering the 2.6% (128 files) / 6.7% (446 files) HDD cost #4765's review fix
+added. Outputs byte-identical.
 
 ## Notes
 - 2026-10-05: the port branch was force-pushed after #4765 merged (`effd991447` -> `f7021e609c`, same
