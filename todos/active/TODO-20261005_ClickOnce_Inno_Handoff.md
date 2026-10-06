@@ -24,7 +24,8 @@ other side, which reads what this leaves, is PR #4755 (`Skyline/work/20260901_Ne
   than the ClickOnce one, the usual UpgradeDlg offers it; otherwise (not published, unreadable,
   not newer) the ClickOnce update runs as before.
 - `InstallUrl` and `ProductName` are application settings with the .NET 10 branch's values
-  (skyline.ms daily @files/Skyline-daily, Skyline-daily).
+  (`https://skyline.ms/_webdav/home/software/Skyline/daily/@files/`, Skyline-daily), so the
+  manifest is `.../@files/Skyline-daily.json`.
 - On accept (`AppDeploymentWrapper.InstallPublishedVersion`): download
   `<ProductName>-Setup-<version>.exe` to %TEMP% with progress, then `InstallerHandoff.Record`:
   - saves the ClickOnce uninstall command (HKCU Uninstall entry whose UninstallString is a
