@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261004_osprey_lazy_xcorr_preprocess` (worktree `C:\proj\pwiz-4708`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619))
 - **Created**: 2026-10-04
-- **Status**: PR open (#4768), awaiting TeamCity + Perf/Regression; not merged
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#4768](https://github.com/ProteoWizard/pwiz/pull/4768)
+- **PR**: [#4768](https://github.com/ProteoWizard/pwiz/pull/4768) (merged 2026-10-05)
 - **Follows**: `ai/todos/completed/TODO-20261002_osprey_cold_window_reads.md` (#4767)
 
 ## Objective
@@ -76,8 +76,9 @@ pass: 428,269 preprocessings (25.8% of today). A cache kept across all 3 passes:
   gate), cache contract docs, on-demand divergence entry, stale line citations, ASCII +/-. Dropped: thread
   assert, list-mutation guard (contract documented), VisitedBins reuse, unit-res lazy fill. Commit fbac3063f9
 - [x] Pushed, PR #4768 opened (2026-10-04 ~20:45)
-- [ ] TeamCity Windows + Linux (auto on push)
-- [ ] Perf/Regression - trigger was BLOCKED by the auto-mode classifier; asked Brendan to trigger or allow
+- [x] TeamCity Osprey Windows .NET, Osprey Linux .NET, native shims, Wine container: all green on 7f1997f459
+- [x] Perf/Regression #292 SUCCESS (Brendan triggered) on 1a4e47baf9, the pre-rewrite head; the merged head
+  7f1997f459 carries the same two commits rebuilt onto the rewritten port branch (Brendan chose to merge on #292)
 
 ## Decision recorded
 Brendan (2026-10-04): keep on-demand for all xcorr use unless the paired A/B shows it slows PerFileScoring;
@@ -96,4 +97,11 @@ is already sorted by EntryId). Verify there is no cross-window step between pass
 ### 2026-10-04
 - Profiles, coverage measurement, change, Astral A/B as above. Paired SEA-AD A/B running at handoff.
 
-**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261004_osprey_lazy_xcorr_preprocess.md` before starting work.
+### 2026-10-05 - Merged
+
+PR #4768 merged into `Skyline/work/20260612_net8_port` as commit 2937deaae8. HRAM xcorr preprocesses each window
+spectrum on demand from one held scratch (identical values); a filled row is served after release. Astral Stage 6
+84.3 -> 64.6 s; first-pass scoring unchanged (paired SEA-AD +0.04 s/file). Before merging, the branch was rebuilt
+onto the force-pushed port branch (f1300c7a06): its two commits were cherry-picked (f94d1f2b68, 7f1997f459) and
+force-pushed with lease, since the old history made the PR show ~2,400 files. The window-major Stage 6 follow-on
+was measured (-16% of Stage 6) and shelved - see TODO-20261004_osprey_window_major_stage6.md.
