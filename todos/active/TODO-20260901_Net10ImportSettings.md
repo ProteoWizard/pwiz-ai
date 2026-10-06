@@ -24,7 +24,7 @@ things that move needs:
 
 ## Design
 
-### Settings location (`Util/UserConfigSettingsProvider.cs`)
+### Settings location (`Util/PortableSettingsProvider.cs`, was UserConfigSettingsProvider)
 
 - user.config lives beside the exe only when the current user OWNS the install folder (owner
   SID is the user, or an enabled group such as an elevated admin's Administrators). Ownership,
@@ -122,14 +122,15 @@ things that move needs:
 
 ## Tests
 
-- Unit: TestUserConfigSettingsProvider, TestSettingsListMerge, TestClickOnceInstallations,
-  TestRegisteredInstallations
+- Unit: TestOwnerKeepsSettingsBesideExecutable, TestFolderOwnersFileDecidesWhoSharesSettings,
+  TestUnreadableSettingsFallBackToDefaults (PortableSettingsProviderTest), TestSettingsListMerge,
+  TestClickOnceInstallations
 - Functional: TestImportSettings, TestManagingSearchTools, Upgrade*FunctionalTest,
   TestInstallTools, TestConfigureToolsDlg, TestToolStore
 
 ## Progress
 
-- [x] UserConfigSettingsProvider, ClickOnceInstallations, Import Settings dialog
+- [x] PortableSettingsProvider, ClickOnceInstallations, Import Settings dialog
 - [x] Startup update check against the JSON manifest; InstallUrl as a folder plus ProductName
 - [x] Installer: channel ProgIds, any file name characters in the product name, portable zip,
       download page
@@ -162,5 +163,17 @@ things that move needs:
       Skyline, startup update check finds a newer version
 - [x] 2026-10-05: PR description rewritten for buddy testers, screenshots in
       nickshulman/pr-assets pwiz/4755-installer-settings
-- [ ] Older-version half of the handoff (UninstallCommand setting + registry value), in the
-      .NET Framework code, probably a separate branch
+- [x] Older-version half of the handoff (UninstallCommand setting + registry value): draft
+      PR #4773 (Skyline/work/20261005_ClickOnce_Inno_Handoff), for the Release 26.1.1 branch
+- [x] 2026-10-06 (3dcb23fb2b): ClickOnceMaintenanceDialog answers the ClickOnce uninstall
+      dialog with Remove (dfsvc window, heading = deployment name, five buttons in order).
+      Nick tested end to end from a test folder: import plus silent removal work.
+- [x] 2026-10-06 (6990377e01): merged the force-pushed base; old base tip 0f79141d23 was the
+      real ancestor, so Skyline files kept ours, Osprey took theirs; fixed a duplicated
+      InitUiThreadExceptionHandling and a resurrected SkylineNet8Stubs.cs from the bad merge base.
+- [x] 2026-10-06 (9b855cb63c): renamed to PortableSettingsProvider; ToolDescription.Equals(object)
+      and HashCode-based GetHashCode; MergeChanges(IEnumerable, IEnumerable); removed
+      RegisteredInstallationsTest and SkylineInstallationsTest; split PortableSettingsProviderTest.
+- [ ] Possible gap: truly uninstalled installations are probably not found (ClickOnce search
+      starts from the Apps\2.0 store, installer search from Programs and Features). Nick wants
+      uninstalled ones supported; unverified whether the ClickOnce store folder survives uninstall.
