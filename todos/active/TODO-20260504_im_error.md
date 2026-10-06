@@ -1,18 +1,19 @@
 # TODO-20260504_im_error.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260504_im_error`
-- **Base**: `master`
+- **Branch**: `Skyline/work/20261006_im_error_net10` (was `Skyline/work/20260504_im_error`)
+- **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port branch; was `master`)
 - **Created**: 2026-05-04
 - **Module**: `skyline`
-- **Status**: PR open; all review threads resolved; awaiting TeamCity on the 2026-10-01 master
-  merge, then human re-review
+- **Status**: PR #4787 open against the port branch; awaiting TeamCity, then human re-review
 - **GitHub Issue**: [#4183](https://github.com/ProteoWizard/pwiz/issues/4183)
 - **Source Issue**: [skyline.ms #774](https://skyline.ms/home/issues/issues-details.view?issueId=774)
-- **PR**: [#4301](https://github.com/ProteoWizard/pwiz/pull/4301) (opened 2026-06-14, base master;
-  retitled `skyline: Added observed ion mobility and CCS to chromatogram extraction` + `skyline`
-  label 2026-10-01)
-- **HEAD (current)**: `03185408f4` (master merge 2026-10-01, on top of `7e3163eecb`)
+- **PR**: [#4787](https://github.com/ProteoWizard/pwiz/pull/4787) (opened 2026-10-06, base
+  `Skyline/work/20260612_net8_port`). Supersedes
+  [#4301](https://github.com/ProteoWizard/pwiz/pull/4301) (base master, closed 2026-10-06; its
+  review history stays there)
+- **HEAD (current)**: `c166f4f09a` (42 commits rebased onto the port branch 2026-10-06)
+- **HEAD (old branch, #4301)**: `03185408f4` (master merge 2026-10-01, on top of `7e3163eecb`)
 - **HEAD (historical, 2026-06-13)**: `35447af24` (2nd master sync, 0 behind origin/master as of 2026-06-13). Commits
   since 1st merge: `3754a390b` (apex-of-valid + scale source + decode guard), `07f4ea1ef`
   (Full Scan CCS-error target + golden refresh), `35447af24` (merge origin/master, 9 commits,
@@ -367,10 +368,29 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
   (csharp, c-cpp, java-kotlin) were still running when checked.
 - Added the missing `skyline:` title prefix and `skyline` label to the PR.
 
+## Moved to the .NET 10 port branch (2026-10-06)
+- New work targets the port branch, so the branch's own 42 commits were rebased with
+  `--onto origin/Skyline/work/20260612_net8_port origin/master` (the port contains current
+  master). `294ee432b6` dropped as already upstream.
+- Conflicts were mechanical: `ChromCollector.cs` doc comments (merged both),
+  `SpectraChromDataProvider.cs` (port style drops `(float?)null` casts), and the SDK-style
+  `Test`/`SkylineTester`/`Skyline.csproj` (kept the port's; globbing picks up the new files).
+  No csproj diff vs the port. Cache format: port still at v19, so v20 does not collide.
+- A rebase rewrites an open PR's branch, which needs a force-push - forbidden by the
+  version-control rules (Nick had pushed to it). So the rebased commits went to a NEW branch
+  and PR #4787; #4301 was closed with a pointer.
+- Green on the port (Debug, net10.0-windows): build; ChromPeakTest + ChromTransitionTest (26);
+  TestIntensityAccumulator; TestIonMobility; TestFullScanGraph; CodeInspection.
+- Checkout setup needed for the port build in `C:\Dev\ObservedIM`: `MSBUILDDISABLENODEREUSE=1`
+  (mis-cased `observedim` session path caused WFO1000) and `i-agree-to-the-vendor-licenses.bat`
+  (msparser extraction for MascotShim).
+
 ## Remaining before merge
 - [x] Push branch; open PR #4301; Copilot rounds + `/pw-respond`; Nick's review addressed
 - [x] `/code-review max` on the branch (2026-09-24/25, fixes in `f1f68ea37c`, `7e3163eecb`)
-- [ ] TeamCity green on `03185408f4`
+- [x] Rebase onto the .NET 10 port branch; open PR #4787; close #4301
+- [ ] TeamCity green on #4787 (includes PerfWatersSonarTest and the full en-US/fr functional
+      suite, not yet rerun on the port)
 - [ ] Request human re-review (Nick reviewed in July; code changed a lot since)
 - [ ] Re-capture tutorial s-19 (SmallMolLibraries; now shows the observed-IM/CCS tooltip) in
       en/ja/zh-CHS and update its caption
@@ -389,6 +409,7 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
 
 ## Notes
 - Long-standing request (skyline.ms #774, opened 2021-03-04 by Brian Pratt).
-- POST-RELEASE PATCH phase: enhancement is master-only, no cherry-pick.
+- POST-RELEASE PATCH phase: enhancement is not for the release branch, no cherry-pick.
+  Lands on the .NET 10 port branch (which is to become master).
 - IMoffset branch (`wip/im-window-offset`) is conceptually related (IM filter window
   machinery) but does not overlap with this error-measurement work.
