@@ -36,9 +36,15 @@ spindle". That assumption is wrong on SSD storage:
 
 * One file at a time: file 1 cached in **167.6 s** at ~20 MB/s, CPU 4% -> ~7.7 h for 163 files.
 * Sharded by hand into 8 runner processes (`Run-Tdp43.ps1 -Task SpectraCache -SkipFirstFiles 21*i
-  -NumFiles 21`, shared `-CacheDir`): E: delivered **~140 MB/s aggregate**, CPU ~22%, ETA ~1.5 h.
-* E: was NOT the limit: queue length 0.8, read latency 0.4 ms, 59 KiB reads, 43% idle. Each file is bound
-  by its own single-threaded decode, so lanes should scale nearly linearly well past 8 here.
+  -NumFiles 21`, shared `-CacheDir`): **2 h 08 m wall** (16:51:02 -> 18:59:41), all 163 caches
+  (553.9 GB, 27,550,939 MS2 records) PASSED `Test-SpectraCaches.ps1`. Shards took 5,597-7,718 s.
+* **Speedup ~3.6x, not 8x.** Per-file time per shard rose from 168 s (alone) to ~350-370 s (8 at once);
+  aggregate E: read was ~140 MB/s in the first minutes and ~102 MB/s averaged over the run. Contiguous
+  blocks also left shard 7 (16 files) idle for its last ~35 min - lanes with one-at-a-time dispatch fix that.
+* At 2 minutes in, E: did not look like the limit: queue length 0.8, read latency 0.4 ms, 59 KiB reads,
+  43% idle, CPU ~22%. So the per-file slowdown under concurrency is UNEXPLAINED - candidates: E: degrading
+  as more of it is read concurrently, memory bandwidth / cache contention in the decoders, the Thermo
+  reader's own locking. Measure lanes 1/4/8/16 and E: vs D: inputs before claiming a scaling curve.
 * The cache is built in memory and written in one burst per file (2.10 GB in ~2 s to D:), so a lane holds
   one parse buffer until its file saves.
 * Run dirs: `D:\Users\brendanx\test\osprey-runs\tdp43\runs\tdp43-*e2d-cache*`; caches in
@@ -170,3 +176,5 @@ What to look for:
   scales differently again (sequential by design; 8 hand-made shards ran ~5x faster with E: still 43% idle).
 - Branch created from #4765's tip `e3c823a92b` in `pwiz-net10b`. No code yet.
 - #4765 merged the same day; branch repointed at the (rebased) port tip `2937deaae8`. Still no code.
+- The hand-sharded TDP-43 caching finished: 2 h 08 m, 163/163 caches verified, ~3.6x over sequential
+  (not the ~8x the first minutes suggested). The per-file slowdown under concurrency is open.
