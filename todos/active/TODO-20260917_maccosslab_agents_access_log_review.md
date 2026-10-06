@@ -2,11 +2,13 @@
 
 ## Branch Information
 - **Repository**: `uw-maccosslab/maccosslab-agents` (local checkout `~/dev/ai-dev/maccosslab-agents`)
-- **Branch**: `main` (initial scaffold)
-- **Base**: `main` (new repository)
+- **Branch**: none active. Phases 0-3 and the local no-bill run path are on `main`
+  (`9e7dd8c`, PR #1 merged 2026-10-06). Start a new `work/` branch for the next piece of work
+- **Base**: `main`
 - **Created**: 2026-09-16 (started 2026-09-17)
-- **Status**: In Progress
-- **PR**: (none yet)
+- **Status**: In Progress (Phase 4 remaining)
+- **PR**: https://github.com/uw-maccosslab/maccosslab-agents/pull/1 (merged 2026-10-06,
+  `work/20261001_access_log_review_local_run`)
 - **Objective**: Create a new `maccosslab-agents` repository and build an agent that reviews
   the last 24 hours of panoramaweb.org Apache and LabKey Server access logs and produces a
   report that helps Skyline staff fix slow pages and block bots
@@ -310,6 +312,8 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
       09-16): staff should identify the owner (whois) before any action
 - [ ] The mod_qos snippets in the trial reports (separate WebDAV pool, per-IP limit, row-ID
       pool) are untested proposals; staff must try them on staging
+- [x] **Local no-bill run path** (MCP server + Claude Code subagent, `/access-log-review`):
+      first end-to-end run succeeded 2026-10-06; merged in PR #1 (`9e7dd8c`)
 - [ ] **First live API run** on the dev window: needs `ANTHROPIC_API_KEY` (or `ant auth
       login`) and approval, since it is billed. Compare with the trial report, then review with
       staff and tune the prompt
@@ -354,8 +358,88 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
 - Blocker: no API credentials on this machine (the user's Claude Pro plan doesn't cover the
   API).
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260918_maccosslab_agents_access_log_review.md` before starting work.
+### 2026-09-25 (built but not logged at the time)
+- Added a second, **no-API-bill** way to run the review: an MCP server (`mcp_server.py`, new
+  `access-log-review-mcp` entry point) driven by an `access-log-review` Claude Code subagent
+  on the session's model, so no Anthropic API bill. `mcp_server.py` is a thin adapter over
+  the same `sources`/`aggregate`/`tools`/`render` pipeline; its `start_review` returns
+  `agent.SYSTEM_PROMPT` verbatim, so the prompt has one source. Added `tests/test_mcp_server.py`
+  (wiring only). New dependency `mcp>=1.2`. This solves the "no credentials" blocker for
+  running the review locally.
+- Also changed the billed CLI's `EFFORT` from `high` to `medium` in `agent.py`.
+- This work was left **uncommitted** and its wiring was placed in the wrong repos: the
+  `.mcp.json` sat at the non-git ai-dev root (with hardcoded absolute paths), and the subagent
+  and slash command were untracked in the pwiz-ai repo under `ai/claude/`.
+
+### 2026-10-01
+- **Relocated all the subagent/MCP wiring into the `maccosslab-agents` repo** so it owns the
+  feature end to end (the previous session had scattered it). `maccosslab-agents` is now a
+  **self-contained Claude Code project**: in-repo `.mcp.json` (relative command
+  `.venv/bin/access-log-review-mcp`, no hardcoded paths — the server's base dir defaults to
+  the checkout root), `.claude/agents/access-log-review.md`, `.claude/commands/access-log-review.md`,
+  and `.claude/settings.json` (auto-approves the MCP tools). You now **launch Claude Code from
+  the maccosslab-agents checkout** to run `/access-log-review`.
+- Removed the out-of-place files: the ai-dev-root `.mcp.json` and the two untracked
+  `access-log-review.md` files under `ai/claude/` (pwiz-ai left clean).
+- Updated `maccosslab-agents` README/CLAUDE.md to document the self-contained layout; added
+  `.claude/settings.local.json` to its `.gitignore`.
+- Diagnosed why the local run failed earlier: the `access_log_review` MCP server was never
+  connected in the ai-dev-root session (project `.mcp.json` server sat unapproved,
+  `enabledMcpjsonServers=[]`), so the subagent spawned with zero tools. The server itself is
+  healthy (clean stdio `initialize`). Fixed by the relocation + launching from the checkout.
+- 84 tests pass. Committed the relocation + the 09-25 work on branch
+  `work/20261001_access_log_review_local_run` (`8daba2d`, off `main`); **not pushed**, no PR yet.
+- Next: from the maccosslab-agents checkout, approve the MCP server and run
+  `/access-log-review --end 2026-09-17T07:00-07:00 --hours 24`; compare with the trial reports.
+  This end-to-end run must happen in a session launched from the checkout (not the ai-dev root).
+
+### 2026-10-05
+- **Fixed the MCP output-cap blocker** (the user chose accessor tools over trimming or raising
+  `MAX_MCP_OUTPUT_TOKENS`). `start_review` now returns compact JSON text (a dict result was
+  serialized by the MCP library with `indent=2`) with `instructions` (SYSTEM_PROMPT, verbatim),
+  `summary_layout`, and a **headline summary** (`headline_summary`): list entries keep their
+  scalars, statuses, and short scalar lists; `top_clients_*` keep only ranking metrics;
+  `slowest_requests` and `prolonged_flood_analyses` are omitted; `rate_limiting` keeps its
+  counts, floods, and `prolonged_flood_count`.
+- New tool **`summary_section(section, index=0)`** serves any full section from the summary
+  held in memory; prolonged floods come back one per call, so many-flood days don't grow any
+  single result. The subagent instructions now say to read `rate_limiting`, every prolonged
+  flood, `crawlers`, `top_user_agents`, `slow_pages`, and `slowest_requests` in full.
+- Measured (chars/3): dev window `start_review` ~47.7K -> **~15.3K tokens**; flood window
+  ~15.5K; the largest section (`slow_pages`) ~9K; one flood ~4.3K. All
+  under the 25K cap. Script: `ai/.tmp/sessions/20261005-access-log/measure_sections.py`.
+- **Live run failed**: the user ran `/access-log-review` (24 h ending 2026-10-05 08:00) and
+  Claude Code rejected `start_review`'s 50,358-character result as over the cap. So the
+  chars/3 calibration was wrong: this JSON counts at **2 or fewer chars/token**. The
+  instructions were in that result, so the subagent stopped after 2 calls.
+- **Redesigned without relying on any ratio**: `start_review` returns only `instructions`,
+  `summary_layout`, `overview` (window, inputs, totals), and a `sections` index (~9.3K
+  chars). `summary_section(section, start=0)` serves every other section, paging lists so
+  each result is at most `MAX_RESULT_CHARS` = 20,000 (follow `next_start`). Headline
+  summaries were dropped. The subagent reads every section (16 calls on both test windows;
+  largest result 18.4K chars, `slow_pages` in 2 pages).
+- 86 tests pass (including a paging test that each page fits the limit). README and
+  CLAUDE.md updated.
+
+### 2026-10-06
+- **Live end-to-end run succeeded** (run by the user in a fresh session launched from the
+  checkout). Committed `b5fcca7`, pushed the branch, and opened PR #1
+  (https://github.com/uw-maccosslab/maccosslab-agents/pull/1).
+- **PR #1 merged** into `main` as `9e7dd8c` (2026-10-06). It contains the MCP server and
+  subagent run path (`8daba2d`) and the output-limit fix (`b5fcca7`). The local no-bill run
+  is now the working way to produce reports: launch Claude Code from the maccosslab-agents
+  checkout and run `/access-log-review [--end <ISO8601+offset>] [--hours N]`.
+- Cleanup done: the checkout is on `main` at `9e7dd8c`, and the merged
+  `work/20261001_access_log_review_local_run` branch is deleted locally and on GitHub.
+- Next:
+  1. Compare the live report with the trial reports in `reports/`, review with staff, and
+     tune the prompt (still open in Phase 3).
+  2. Phase 4: daily cron run on the separate machine after the log copy, plus failure
+     logging. Decide whether the scheduled run uses the billed CLI or a headless Claude Code
+     run of the subagent.
+
+The handoff files (`ai/.tmp/handoff-20261002_…` and `handoff-20260918_…`) are obsolete; the
+blocker they describe is fixed and merged.
 
 ## Success Criteria
 - Private `uw-maccosslab/maccosslab-agents` repository exists with a documented structure
