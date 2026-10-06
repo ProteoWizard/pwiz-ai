@@ -73,7 +73,30 @@ beyond the window-major branch).
   wall 209.0 [cold after SEA-AD] / 166.4 s); Stellar + Astral regression tests PASSED vs golden masters
   (`mzfix-*-regression.log`)
 - [x] Merged port branch (#4765) as 12971fe153: 652/652, inspection 0, Stellar regression test PASSED; pushed, PR #4770
-- [ ] TeamCity Windows + Linux (auto on push); Perf/Regression (manual - ask before triggering)
+- [x] Rebuilt onto the force-pushed port branch (f1300c7a06) 2026-10-05: 3 commits cherry-picked (7750333ab7,
+  28d87b34b6, 722b5b1eaf), 652/652, inspection 0, force-pushed with lease; Brendan then merged the port branch
+  (#4766, #4757) as cac0dd89e1
+- [x] TeamCity Osprey Windows .NET, Osprey Linux .NET, native shims, Wine container: all green on cac0dd89e1
+- [x] Perf/Regression #293 SUCCESS on 12971fe153 (the pre-rewrite head); not re-run on the rebuilt head -
+  Brendan's call (later changes are rebase/merge churn)
+- [x] Memory A/B, 2026-10-05 18:33-18:56: SEA-AD 3 files, PerFileScoring, base f1300c7a06 vs PR 722b5b1eaf,
+  interleaved x2 via Run-SeaAd.ps1 (--memstamp), `ai/scripts/perfviz.py` on each run.log
+  (`D:\test\osprey-runs\sea-ad\runs\memab-*`, since deleted; drivers/logs in `ai/.tmp/sessions/20261004-night/`):
+
+  | | base 1 | base 2 | PR 1 | PR 2 |
+  |---|---|---|---|---|
+  | private (process) peak | 30.4 GB | 31.7 GB | 30.4 GB | 26.5 GB |
+  | managed peak | 17.9 GB | 20.5 GB | 21.0 GB | 21.0 GB |
+  | managed median (p50) | 10.2 GB | 10.3 GB | 11.4 GB | 10.9 GB |
+  | sustained 60 s managed | 10.7 GB | 10.3 GB | 11.1 GB | 10.6 GB |
+  | wall | 7:00 | 6:08 | 4:42 | 4:38 |
+
+  Private peak (what decides whether a run fits) does not rise. Live managed memory +~0.35 GB sustained /
+  +~0.9 GB median - the index's one int per peak for the concurrent windows' spectra, as designed (estimate was
+  0.35-0.7 GB). Managed peak is noisy (base runs differ by 2.6 GB). The index lives exactly as long as its
+  spectrum, so it adds no O(files) term; perfviz flags a rising floor equally in both arms over only 3 files.
+  Caveat: --memstamp includes uncollected garbage (shape, not live bytes); OSPREY_LOG_MEMORY=1 post-GC probes not run.
+  An earlier attempt on the Astral bed failed: `D:\test\osprey-runs\astral` had been deleted.
 
 ## Experiment: scan-major prefilter (nightlywork/osprey_scan_major_prefilter, worktree C:\proj\pwiz-scanmajor)
 Stacked on 75d20c76d8; sub-agent, 2026-10-05 00:00-01:00. Status file `ai/.tmp/agent-scanmajor-status.md`.
