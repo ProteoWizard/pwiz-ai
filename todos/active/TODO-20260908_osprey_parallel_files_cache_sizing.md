@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260908_osprey_parallel_files_cache_sizing`
 - **Base**: `Skyline/work/20260612_net8_port` at `2937deaae8` (re-based 2026-10-05; was `master`)
 - **Created**: 2026-09-08
-- **Status**: Re-gating on the port branch before the PR (2026-10-05)
+- **Status**: Draft PR #4778 - gates green, review findings fixed; ready to mark ready for review (2026-10-05)
 - **Owner**: the MACS2 per-stage parallel-files session (took it over 2026-10-05), worktree `pwiz-net10b`
 - **Machine**: MACS2 - the original commit `cef106ecd8` was never pushed; kept as local branch
   `backup/20260908_cache_sizing-cef106ecd8`
@@ -81,3 +81,30 @@ through `ArtifactPaths.ResolveCacheDir`, which honors `--cache-dir` first, so a 
 live in a separate folder (as TDP-43 on MACS2 now does) is sized correctly too.
 
 Ship this BEFORE the per-stage work: that branch changes `FileParallelismResolver` as well.
+
+### Gates and review (2026-10-05)
+
+* `47fad86a03`: 651/651 unit tests, inspection clean (the 2026-09-30 "427 phantom errors" inspection
+  problem is gone), `regression.ps1 -Dataset Stellar` PASSED. Draft PR #4778 opened.
+* `/code-review max 4778`: 14 findings (8 confirmed, 5 plausible after verification). Fixed in
+  `4ba19efd2e`:
+  * fall back to the cache whenever an input MEASURES 0, not only when it is absent - covers truncated
+    sources and the exists-then-deleted race; `SafeFileLength` back to its base shape
+  * size files through a handle (`File.OpenHandle` + `RandomAccess.GetLength`), so a symlinked source
+    or cache reports its target, and a dangling link reads 0 and falls back
+  * resolver parameter REQUIRED (the old one-argument call silently reverted the fix)
+  * `ResolveAuto`: zero free memory with a known estimate -> 1 (as `FdrLaneResolver`), and the RAM-fit
+    quotient clamped to `int.MaxValue` (a tiny estimate overflowed it)
+  * production wiring testable: `PerFileScoringTask.EstimateInputBytes` (internal), tested beside the
+    data and with a separate `--cache-dir` (reusing `ArtifactPathsTest.WithArtifactDirs`, now internal),
+    plus a 2-input auto decision. **Negative control run**: wiring it with no resolver fails the test
+    (`Expected:<12288>. Actual:<0>`)
+  * comments: multiplier now documented as scaling cache sizes too; "core count" -> min(file count,
+    cores); test no longer pins the multiplier's value; cleanup guarded
+* Deferred, not fixed here: failing CLOSED when no size signal exists at all (the deliberate
+  "Deliberately NOT changed" decision above - Brendan's call), a shared input-sizing seam, the duplicated
+  vendor-bundle walk.
+* Reported to Brendan, outside this PR: `OspreyCommandArgs.cs:473` drops a POSITIONAL input whose source
+  was deleted after caching (requires `File.Exists || Directory.Exists`), with only an "Unknown argument"
+  warning, while `-i` accepts it - a #4616 gap.
+* After the fixes: 651/651, inspection clean. Stellar not re-run - it never exercises auto mode.
