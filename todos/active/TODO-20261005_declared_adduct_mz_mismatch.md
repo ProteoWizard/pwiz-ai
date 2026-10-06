@@ -22,7 +22,7 @@ mismatched m/z an error instead.
 
 - [x] Regression test `PasteMoleculesTest.TestDeclaredMassOffsetAdductMzMismatch` (red before fix)
 - [x] Fix: return no match when a real adduct was declared and its m/z disagrees
-- [ ] Build and run the test on the port branch
+- [x] Build and run the test on the port branch (red without fix, green with it)
 - [ ] Small-molecule regression sweep on the port branch
 - [ ] CodeInspection + full ReSharper inspection
 - [ ] `/code-review max`
@@ -33,8 +33,8 @@ mismatched m/z an error instead.
 
 - **Test name**: `TestDeclaredMassOffsetAdductMzMismatch` (in `TestPasteMolecules`)
 - **Test project**: TestFunctional
-- **Fails without fix**: yes, on master 2026-09-29 ("No errors" instead of the mismatch error)
-- **Passes on fix**: yes on master 2026-09-29; not yet verified on the port branch
+- **Fails without fix**: yes, on master 2026-09-29 and on the port branch 2026-10-05 ("No errors" instead of the mismatch error)
+- **Passes on fix**: yes, on master 2026-09-29 and on the port branch 2026-10-05 (net10.0-windows, vendor readers on)
 
 ## Related
 
@@ -54,3 +54,10 @@ passed alone (known intermittent). Work was left uncommitted on a master-based b
 
 Filed #4776. Created this branch from `origin/Skyline/work/20260612_net8_port` in `master_clean`
 and applied the two-file change cleanly. Original changes kept in a stash on the old branch.
+
+Built net10.0-windows. The test's expected message used `(float)` casts, which format with
+shortest round-trip digits on .NET Core (`379.29953`) while the product uses `G7` (`379.2995`);
+switched to the file's existing `Mz7()` helper. `TestProperData` initially got 0 results because
+this checkout's pwiz-sharp had been built without vendor readers; rebuilding with
+`Build-Skyline.ps1 -VendorLicenses` fixed that. With the fix stashed the test fails with
+"No errors"; with it restored `TestPasteMolecules` passes (59s).
