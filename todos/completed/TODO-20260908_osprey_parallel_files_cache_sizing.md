@@ -4,12 +4,12 @@
 - **Branch**: `Skyline/work/20260908_osprey_parallel_files_cache_sizing`
 - **Base**: `Skyline/work/20260612_net8_port` at `2937deaae8` (re-based 2026-10-05; was `master`)
 - **Created**: 2026-09-08
-- **Status**: Draft PR #4778 - gates green, review findings fixed; ready to mark ready for review (2026-10-05)
+- **Status**: Completed
 - **Owner**: the MACS2 per-stage parallel-files session (took it over 2026-10-05), worktree `pwiz-net10b`
 - **Machine**: MACS2 - the original commit `cef106ecd8` was never pushed; kept as local branch
   `backup/20260908_cache_sizing-cef106ecd8`
 - **Module**: `osprey`
-- **PR**: [#4778](https://github.com/ProteoWizard/pwiz/pull/4778) (draft until `/code-review max` and the Stellar gate are done)
+- **PR**: [#4778](https://github.com/ProteoWizard/pwiz/pull/4778) (merged 2026-10-05)
 
 ## Problem
 
@@ -64,7 +64,7 @@ once caches are sized the branch only fires when neither source nor cache exists
 
 ## Still to do
 
-* Open the PR (`osprey:` prefix + `osprey` label) after `/code-review max`.
+* [x] Open the PR (`osprey:` prefix + `osprey` label) after `/code-review max` - #4778.
 * Consider whether the runner should be able to REQUEST auto at all --
   `Run-SeaAd.ps1 -ParallelFiles` is `[int]` where 0 means "omit the flag", so
   there is no way to pass bare `--parallel-files` through `OspreyDatasetRun.psm1`.
@@ -108,3 +108,15 @@ Ship this BEFORE the per-stage work: that branch changes `FileParallelismResolve
   was deleted after caching (requires `File.Exists || Directory.Exists`), with only an "Unknown argument"
   warning, while `-i` accepts it - a #4616 gap.
 * After the fixes: 651/651, inspection clean. Stellar not re-run - it never exercises auto mode.
+
+### 2026-10-05 - Merged
+
+PR #4778 merged into `Skyline/work/20260612_net8_port` as commit `cc6e7040ca` (2026-10-06 06:53 UTC),
+after TeamCity Osprey Windows/Linux .NET (654 tests each) and Osprey Windows .NET Perf/Regression
+(build 4202931, on the final code) passed. Shipped: auto `--parallel-files` sizes an input from its
+spectra cache whenever its source measures 0 (deleted, truncated, dangling link), honoring
+`--cache-dir`; file sizing through a handle so symlinks report their target; zero free memory with a
+known estimate -> one file at a time; RAM-fit overflow clamped. Deferred: failing closed when no input
+size can be read at all, a shared input-sizing seam, the duplicated bundle walk; the runner's inability
+to request bare auto mode moves to `TODO-20261005_osprey_per_stage_parallel_files.md`. The positional
+input gap in `OspreyCommandArgs.cs:473` was reported to Brendan, not filed.
