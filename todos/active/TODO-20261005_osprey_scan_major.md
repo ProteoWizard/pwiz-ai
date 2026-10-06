@@ -31,6 +31,22 @@ SCIEX, Agilent, Waters and 3D timsTOF. So the switches are a migration aid (A/B 
 per-vendor selector; once trusted, the candidate-major `=0` arms can be retired, and future timsTOF/ZT work
 should build on the scan-major sweep rather than the candidate-major loop.
 
+## Future direction (Brendan, 2026-10-05)
+
+- **Rolling join by RT**: yes - candidates are bucketed by start scan (counting sort; with a global RT tolerance
+  this is predicted-RT order), enter an active list at their start scan and leave at their end scan or as soon
+  as the prefilter passes. This is the RT-ordered rolling join Skyline's extraction relies on.
+- **Convergence with Skyline**: when fixed isolation windows disappear (diagonalPASEF, raw scanning-quad data),
+  the per-window join should become one RT-ordered sweep over all of a file's spectra, matching each spectrum to
+  the candidates whose RT range AND precursor/IM range it covers - today's per-window join is that algorithm
+  restricted to one window.
+- **Possibly drop `.spectra.bin`**: Skyline needs no binary cache because it makes linear sweeps over the data
+  file. The cache exists in Osprey largely for random access by window across passes (calibration sampling,
+  first-pass scoring, Stage 6 re-score). Questions to measure before deciding: memory of a whole-file sweep
+  (active candidates of every window at once, bounded by the RT tolerance), the pass count (calibration must
+  precede scoring - at least 2 sweeps; can Stage 6 piggyback?), and cold-read cost on HDD for large cohorts
+  (a linear sweep is the best-case read pattern, but mzML/vendor parse cost is what the cache avoids today).
+
 ## Rebase onto the rewritten port branch (2026-10-05)
 
 The five commits were cherry-picked onto ff78a4c2bc (the #4770 squash), which already holds the three bucket-index
