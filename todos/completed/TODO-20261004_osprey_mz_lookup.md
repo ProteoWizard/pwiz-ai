@@ -5,11 +5,9 @@
 - **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619)) at 12a0431bbe;
   independent of #4768 (different code)
 - **Created**: 2026-10-04 (night session)
-- **Status**: Ready for PR (local only, not pushed): 75d20c76d8 = index + calibrator + review fixes; all gates green.
-  Stacked experiment branch `nightlywork/osprey_scan_major_prefilter` (C:\proj\pwiz-scanmajor) @ 7bec5ec504 adds
-  scan-major prefilter/XIC/calibration: all gates green, reviewed. Brendan to decide: one PR or two.
+- **Status**: Completed (#4770 merged). The scan-major experiment branch stays local - see its section
 - **Module**: `osprey`
-- **PR**: [#4770](https://github.com/ProteoWizard/pwiz/pull/4770) (opened 2026-10-05; independent of #4768, merges cleanly either order)
+- **PR**: [#4770](https://github.com/ProteoWizard/pwiz/pull/4770) (merged 2026-10-05)
 
 ## Objective
 
@@ -173,6 +171,19 @@ Stacked on 75d20c76d8; sub-agent, 2026-10-05 00:00-01:00. Status file `ai/.tmp/a
   likely breaks on diaPASEF (inferred) and explodes on diagonalPASEF. Skyline keys by (window group, m/z, width)
   and assigns precursors by 2D m/z x IM overlap (SpectrumFilter.cs:410-461, 1229-1244). Design question for
   later: a window-group abstraction with IM-aware candidate assignment.
+
+### 2026-10-05 - Merged
+
+PR #4770 merged into `Skyline/work/20260612_net8_port` as commit ff78a4c2bc. Shipped: `MzBucketIndex` (one bucket
+per peak, exact binary-search lower bound in O(1) expected, binary-search fallback for empty/non-finite/unsorted
+input), built lazily per `Spectrum` and rebuilt if `Mzs` is reassigned; used by the scoring prefilter, XIC
+extraction and the calibration prefilter and apex lookups. PerFileScoring: Astral 3 files 245.8 -> 166 s wall
+(-32%); SEA-AD 10 files coelution -33.7%/file, wall -26%; memory peak unchanged (A/B above). All outputs
+data-identical. Merged on Perf/Regression #293 (pre-rewrite head) by Brendan's call.
+
+Not in this PR: the scan-major prefilter / XIC / calibration passes (`nightlywork/osprey_scan_major_prefilter`,
+`C:\proj\pwiz-scanmajor`, a further ~-16% Astral / -17% SEA-AD wall), held pending the timsTOF/ZT Scan window
+model decision; the branch still sits on the pre-rewrite history and needs a rebase onto ff78a4c2bc before use.
 
 ## Ideas not yet tried
 - Calibrator (calibration pass scoring ~13 s/Astral file) uses the same searches - switch to the Spectrum forms.
