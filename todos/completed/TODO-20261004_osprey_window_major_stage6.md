@@ -6,7 +6,7 @@
 - **Stacked on**: `Skyline/work/20261004_osprey_lazy_xcorr_preprocess` (on-demand HRAM xcorr cache) - rebase onto
   the port branch once that PR merges; its PR must merge first
 - **Created**: 2026-10-04 (night session)
-- **Status**: SHELVED (Brendan, 2026-10-05) - do not PR. ~3.3 s/file (61.0 -> 51.0 s on the 3-file bed) does not
+- **Status**: Completed (shelved, not merged) - Brendan, 2026-10-05: do not PR. ~3.3 s/file (61.0 -> 51.0 s on the 3-file bed) does not
   justify the restructuring, and the one-sweep/shared-per-window design (incl. the per-window speculative forced
   pass, whose waste grows with how many windows cover a precursor) ties Stage 6 harder to Thermo-style disjoint
   isolation windows just as timsTOF (diaPASEF, diagonalPASEF) and SCIEX ZT Scan DIA become the priority. #4768
@@ -74,3 +74,33 @@ decode each window once, score every pass against it, share one on-demand xcorr 
 
 ### 2026-10-04 (night)
 - First cut written and building (see Design).
+
+### 2026-10-05 - Shelved
+
+Measured, reviewed and gated, then shelved by Brendan. No further work is planned. The branch stays local as a
+measured reference: `Skyline/work/20261004_osprey_window_major_stage6` in `C:\proj\pwiz-stage6` (9dc8c5fcda +
+3970b9c88c), stacked on the pre-rewrite #4768 commits. It was never pushed and has no PR. It is not rebased onto the
+port branch force-pushed on 2026-10-05.
+
+## Resolution
+
+**Status**: Shelved - not merged, no PR.
+
+**Why**: the gain was about 3.3 s per Astral file (Stage 6 61.0 -> 51.0 s for 3 files, -16%, byte-identical), in a
+stage that is not the bottleneck, for about +350/-130 lines of restructuring: a multi-pass window API and a
+per-window speculative forced pass. #4768 had already taken most of Stage 6's gain (84.3 -> 64.6 s) with no
+restructuring. The decisive reason is the data ahead. Bruker timsTOF (diaPASEF, diagonalPASEF) and SCIEX ZT Scan
+DIA (scanning quadrupole; see PR #4710's demux) do not have Thermo-style disjoint isolation windows.
+- The one-sweep design shares per-window state across passes.
+- Its forced pass resolves the cross-window CWT dependency by force-scoring each window's misses and discarding the
+  rows of targets CWT found in an overlapping window.
+- That waste grows with how many windows cover a precursor: small for adjacent windows, large for staggered or
+  sliding ones.
+
+Tying Stage 6 harder to the window model, just as that model is about to be revisited for non-Thermo data, was
+judged the wrong trade.
+
+**If revisited**: decide the window model for timsTOF/ZT Scan first (a window-group abstraction with ion-mobility
+aware candidate assignment; see TODO-20261004_osprey_mz_lookup.md, "Non-Thermo data assessment"). Then re-measure
+against the current Stage 6, which also carries the review cleanup's open items (a two-overlapping-window fixture
+test; moving the sweep time off the "Re-scored" log line).
