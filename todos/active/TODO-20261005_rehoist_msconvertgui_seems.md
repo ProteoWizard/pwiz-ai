@@ -60,8 +60,9 @@ mechanical .NET 10 / C# library re-targeting, with nothing the legacy app had le
   small LRU; `MSDataList` reads every run and disposes vendor handles; `AboutForm` used
   `Assembly.ReflectionOnlyLoad` (throws on .NET Core). SeeMS now reads Shimadzu/UIMF/UNIFI/
   Mobilion too. `getPrecursorSpectrum` (threw NotImplemented) restored.
-- **Library** (C# had no port): `WhittakerSmoother` (tridiagonal O(n) solve of cpp's dense
-  system; test pins it to the dense solve) and `IsolationWindowFilter` (+ tests).
+- **Library** (C# had no port): `IsolationWindowFilter` (+ tests), for SeeMS's precursor-spectrum
+  commands. `WhittakerSmoother` was ported too, then removed: SeeMS's menu has not offered it since
+  2009 and msconvert never exposed smoothing, so nothing could reach it.
 - **Smoke** (UI Automation + screenshots): SeeMS opens Thermo and Shimadzu files, data
   processing / annotation panels and About open; MSConvertGUI's Browse opens the shared Open
   Data Source dialog with Remote Accounts.
