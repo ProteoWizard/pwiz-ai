@@ -23,8 +23,8 @@ mismatched m/z an error instead.
 - [x] Regression test `PasteMoleculesTest.TestDeclaredMassOffsetAdductMzMismatch` (red before fix)
 - [x] Fix: return no match when a real adduct was declared and its m/z disagrees
 - [x] Build and run the test on the port branch (red without fix, green with it)
-- [ ] Small-molecule regression sweep on the port branch
-- [ ] CodeInspection + full ReSharper inspection
+- [x] Small-molecule regression sweep on the port branch (25/26; see log)
+- [x] CodeInspection test (passed); full ReSharper inspection (no issues in changed files; run broken, see log)
 - [ ] `/code-review max`
 - [ ] PR to `Skyline/work/20260612_net8_port`
 - [ ] Draft a reply to Haley (workaround: `C27H46O` with `[M(-4.0313)+H]` or `[M(-2.01565)+H]`)
@@ -61,3 +61,15 @@ switched to the file's existing `Mz7()` helper. `TestProperData` initially got 0
 this checkout's pwiz-sharp had been built without vendor readers; rebuilding with
 `Build-Skyline.ps1 -VendorLicenses` fixed that. With the fix stashed the test fails with
 "No errors"; with it restored `TestPasteMolecules` passes (59s).
+
+Sweep (same 26-test list as 2026-09-29): 18/19 non-tutorial tests and 7/7 small-molecule
+tutorials passed. `TestTutorial` is not built by the default `Build-Skyline.ps1` target;
+needed `-Target TestTutorial`. `TestMixedPolarityFullScan` fails its GC-leak check ("SkylineWindow,
+SrmDocument not garbage collected") with the fix, and also WITHOUT it on the port branch (1 pass,
+3 fails in 4 solo runs), so it is pre-existing on the port branch, not caused by this change. See
+TODO-20260710_mixedpolarity_fullscan_teardown_hang.
+
+Inspection: CodeInspection test passed. Full ReSharper inspection reported 393 issues, none in
+the two changed files; almost all are "cannot resolve symbol" errors in shared projects
+(318 in `MsDataFileImpl.cs`; JetBrains.Annotations, Newtonsoft in CommonUtil), i.e. the local
+net10 inspection can't resolve package references. Rely on TeamCity's inspection for the PR.
