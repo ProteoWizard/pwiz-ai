@@ -47,8 +47,10 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
       `D:\test\osprey-runs\_bin\port-490a4d3825-hooks`, run dir
       `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-port490a4d-20261006_115333`);
       compare to 2026-08-12 (510 min; PerFileScoring 4 h 11 m)
-- [ ] Miss filter for m/z lookups (per-spectrum occupancy bitmap; exact: only rules out windows with no peak);
-      kill if XIC share does not drop >= 30% with a non-overlapping coelution A/B
+- [x] Miss filter for m/z lookups - **abandoned (no gain).** Quiet 3-rep A/B, coelution sum over 3 files: baseline
+      72.1/70.3/70.0 s, filter 71.1/71.8/71.3 s (overlapping); calibration ~1 s slower every rep. Data-identical.
+      Scoped profile: XIC extraction 25.1% -> 27.3% of ScoreWindow; prefilter's HasTopNFragmentMatch 8.0% -> 4.4%,
+      but index construction 2.5% -> 3.7% (bitmap build). Patch: `miss-filter-abandoned.patch`.
 - [ ] Calibration CPU breakdown (after the miss filter)
 - [ ] Median polish: reuse the pick's winner polish in the feature pass (~1.4%); bound-skip of non-winning peaks
 - [ ] Optional: re-measure --parallel-files 1 vs 4 (process-wide lock) on 12 SEA-AD files with current code;
@@ -67,3 +69,8 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
 - Queued: `ai/.tmp/sessions/20261005-pfs2/after-seaad-chain.ps1` (detached, waits on the SEA-AD driver pid 9680),
   then a 3-rep interleaved A/B port-490a4d3825-hooks vs missfilter-wip1 (`missab.log`, also the identity check)
   and scoped profiles of both (`sprofile-*`). Log: `after-seaad-chain.log`.
+- SEA-AD baseline done (see Tasks): 4 h 12 m, -51% vs 2026-08-12. Miss filter measured and abandoned; reverted.
+- Two hypotheses about XIC extraction cost are now ruled out by measurement: traversal order (rolling join) and the
+  cost of the miss path (bitmap). The ~25% share does not move with either; what dominates inside that loop is not
+  known. Further XIC work should start from a finer measurement (line-level sampling or hardware counters), not
+  another guess.
