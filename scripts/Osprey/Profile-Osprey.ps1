@@ -33,7 +33,11 @@
 
 .PARAMETER ScopeToMainSearch
     Drive dotTrace via the API so the .dtp snapshot contains only the
-    main-search loop (bracketed by ProfilerHooks.Start/SaveAndStop).
+    PerFileScoring per-file loop - every file's spectra load, calibration,
+    coelution scoring and parquet write - bracketed by
+    ProfilerHooks.StartMeasure/SaveAndStopMeasure in PerFileScoringTask.Run.
+    Library load and decoy generation are excluded: a process pays them
+    once however many files it scores, so they distort a one-file profile.
     Requires Osprey to be built with the JetBrains.Profiler.Api
     reference.
 
