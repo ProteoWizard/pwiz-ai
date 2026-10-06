@@ -1,53 +1,61 @@
 # TODO-20261005_McpForwardCompatibility.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261005_McpForwardCompatibility` (checkout `I:\git_i\sky_chatgpt`)
-- **Base**: `Skyline/work/20261005_CodexMcp` (PR [#4772](https://github.com/ProteoWizard/pwiz/pull/4772)), itself on
-  `Skyline/work/20260612_net8_port`
+- **Branch**: `Skyline/work/20261005_CodexMcp` (checkout `I:\git_i\sky_chatgpt`). Started as
+  `Skyline/work/20261005_McpForwardCompatibility`, fast-forwarded into the Codex branch and deleted (never pushed);
+  PR #4772 now covers Codex support and compatibility with earlier Skyline-dailies.
+- **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-10-05
-- **Status**: In progress (local commits only, nothing pushed)
+- **Status**: Filtering working and tested live; commits d4db7dfe98 + 602a20debb local, not pushed
 - **Module**: `skyline`
-- **PR**: (none yet)
+- **PR**: [#4772](https://github.com/ProteoWizard/pwiz/pull/4772) (also see TODO-20261005_CodexMcp.md)
 
 ## Objective
 
 There is one Tool Store, so Skyline 26.2 release users and Skyline-daily users run the same AI Connector. A new
 connector must be safe to publish even when it has tools the released Skyline does not support: the MCP server
-should offer each user only what their running Skyline can do, and never send a call an older Skyline would
-misread.
+should offer each user only what their running Skyline can do.
 
 After 26.2 ships, existing `IJsonToolService` methods are frozen in behavior (external tools depend on them), so
-the signatures in a Skyline's `SkylineTool.dll` fully describe what it supports. New behavior arrives as new
-methods.
+the methods in a Skyline's `SkylineTool.dll` fully describe what it supports. New behavior arrives as new methods.
 
-## Design
-- **Read the running Skyline's interface, not a version number.** Release and daily diverge and cherry-picks
-  cross between them, so version comparisons cannot say which methods exist. `JsonToolServer` builds its dispatch
-  table from `typeof(IJsonToolService).GetMethods()`, so the interface in the running Skyline's `SkylineTool.dll`
-  is exactly what it accepts, including parameter names, types and defaults. Same idea as
-  `ToolServiceTestHarnessForm.btnUpdateMethods_Click`.
-- **Use `System.Reflection.MetadataLoadContext`** to read the signatures without loading or running the other
-  `SkylineTool.dll` (the server compiles in its own `IJsonToolService`; this avoids type-identity clashes).
-- **Locate the DLL** through a new install-folder field Skyline writes into `connection-*.json`, falling back to
-  `Process.MainModule` for older dailies (MainModule fails when Skyline runs elevated and the server does not).
-- **Filter the tool list**: each MCP tool declares the Skyline methods it calls (attribute); after connecting or
-  switching instances the server hides tools whose methods are missing and sends `notifications/tools/list_changed`
-  (ModelContextProtocol 0.8.0-preview). With no Skyline connected, list everything. Clients that ignore list changes
-  still get the existing "not available in <version>" error (-32601 path in `SkylineTools.Invoke`).
-- **Enforce the declarations**: in test mode (`SKYLINE_MCP_TEST`), `SkylineConnection` fails any call to a method
-  the calling tool did not declare; `TestSkylineMcp` exercises the tools.
-- **Never send an argument the target signature lacks.** `JsonToolServer.Dispatch` checks too-few arguments but
-  silently drops extra ones, so an older Skyline would ignore a newer optional parameter and return wrong results.
-  With the signature known, the server omits (or refuses) such arguments. Also make `Dispatch` reject extra
-  arguments with ERROR_INVALID_PARAMS, ideally before 26.2 branches.
+## Design (as built)
+- **Minimum version** `MainForm.MIN_SKYLINE_VERSION` = 26.1.1.083, the first released daily with the JSON-RPC
+  `IJsonToolService` (replaced checks of 061 in the message and 070 in code). Nick's call: easy to test against;
+  it need not work perfectly there, and no code is added just for old dailies.
+- **Hand-coded declarations**, not call-graph analysis (a tool may later prefer a new method and fall back, which
+  analysis would over-report). `[RequiresJsonToolServiceMethod(nameof(IJsonToolService.X))]` (AllowMultiple) names
+  the newest method a tool needs beyond the minimum; methods are only ever added. 25 tools declared; image tools and
+  `new_document` (SetUiMode only when uiMode is passed) left undeclared on purpose.
+- **`ToolAvailability`**: reads the targeted Skyline's `SkylineTool.dll` (folder of the process's MainModule) with
+  System.Reflection.Metadata, collecting `SkylineTool.IJsonToolService` method names; cached per path + timestamp.
+  Unreadable or no Skyline -> no filtering (the -32601 "not available in <version>" error still applies).
+- **Program.cs**: list-tools filter hides unsupported tools; call-tool filter sends `notifications/tools/list_changed`
+  once when the target's method set differs from what the client last listed. Continuations, no async/await.
+- `SkylineConnection.GetTargetProcessId()` mirrors TryConnect's choice without connecting (does not reproduce its
+  skip-to-next-instance on a failed connect).
+- `QueryAvailableMethods` removed (d4db7dfe98): names only, no parameters; nothing called it.
 
-## Tasks
-- [x] Remove `QueryAvailableMethods` (Dispatch special case + `JsonToolServerTest` call): d4db7dfe98, superseded by
-  reading the interface. Older dailies still answer it; nothing calls it.
-- [ ] `Dispatch`: reject calls with more arguments than the method has
-- [ ] Install folder in the connection file; server-side lookup with MainModule fallback
-- [ ] MetadataLoadContext reader for `IJsonToolService` signatures
-- [ ] Per-tool method declarations + test-mode enforcement
-- [ ] Tool-list filtering and list_changed on connect/switch
-- [ ] Argument trimming/refusal against the target signature
-- [ ] Verify against a release-like and a daily-like Skyline (method sets differ)
+## Verified
+- [x] TestSkylineMcp, TestJsonToolServer, CodeInspection pass
+- [x] Stdio probe of the deployed server with 083 running: listChanged=true, 41 of 66 tools listed
+- [x] Live in Claude Code with 083, 209, 265 running: 41 / 60 / 65 tools; `skyline_set_instance` to 083 dropped 24
+  tools via list_changed without reconnecting, `skyline_set_instance(0)` restored them
+
+## Findings
+- Released dailies with the interface: 083 (36 methods), 097 (41), 159 (46), 209 (61), 265 (66); 058 has none.
+  Pre-freeze signature changes: ImportFasta/ImportProperties/SelectSettingsListItems void -> ActionResult (through
+  159; `DescribeAction` NREs on null there, accepted), graphId -> formId rename (same meaning).
+- Deployment is shared: one `~/.skyline-mcp/server`, a connector copy per Skyline install. `McpServerDeployer`
+  compares the apphost exe's timestamp and size; the apphost is 162,304 bytes in every build, so only the
+  timestamp decides. Installed copies keep ZIP (build) timestamps, so an older connector normally does not
+  downgrade, but nothing guarantees it. When files are locked it kills running servers (`StopMcpServerProcesses`).
+
+## Remaining
+- [ ] Deploy by FileVersion (only when the connector's server is newer) instead of apphost timestamp/size
+- [ ] `Dispatch`: reject calls with more arguments than the method has (silent drop today), before 26.2 branches
+- [ ] Test: relaunching AI Connector in an older Skyline makes it most recent -> next call re-filters
+- [ ] Test: targeted Skyline exits -> fallback and tools restored
+- [ ] Possibly: install folder in the connection file (MainModule fails for an elevated Skyline)
+- [ ] Possibly: argument trimming against target signatures (needs parameter metadata, not just names)
+- [ ] Update the PR title/description for the broader scope when pushing

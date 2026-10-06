@@ -5,7 +5,8 @@
 - **Base**: `Skyline/work/20260612_net8_port` (the connector is net10 there; master's connector is net472,
   where `ProcessStartInfo.ArgumentList` does not exist)
 - **Created**: 2026-10-05
-- **Status**: PR open, awaiting human review and a live checkbox test
+- **Status**: PR open; scope widened 2026-10-05 to also cover compatibility with earlier Skyline-dailies (MCP tool
+  filtering), tracked in TODO-20261005_McpForwardCompatibility.md. Local commits d4db7dfe98, 602a20debb not pushed
 - **Module**: `skyline`
 - **PR**: [#4772](https://github.com/ProteoWizard/pwiz/pull/4772)
 
