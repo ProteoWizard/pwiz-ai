@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261005_osprey_per_stage_parallel_files` (worktree `pwiz-net10b` on MACS2)
 - **Base**: `Skyline/work/20260612_net8_port` at `2937deaae8` (after #4765 merged as `f7021e609c`) - see "Base" below
 - **Created**: 2026-10-05 (backlog item `TODO-osprey_parallel_files_scaling.md`, created 2026-10-04, adopted and widened)
-- **Status**: In Progress - SpectraCache lanes coded (uncommitted, untested); per-stage flags next; ONE PR
+- **Status**: In Progress - PR #4780 open (lanes + per-stage flags + review fixes); regression gates and TDP-43 timing pending
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4780](https://github.com/ProteoWizard/pwiz/pull/4780)
 - **Follows**: `ai/todos/completed/TODO-20261002_osprey_cold_window_reads.md` (#4767)
 
 ## Objective
@@ -113,14 +113,14 @@ Earlier reading (on `e3c823a92b`, still accurate for the per-file stages):
 
 ## Tasks
 
-- [ ] SpectraCache on `OrderedFileLanes.For`, honoring the shared count; 1 lane == today's loop
-- [ ] `--parallel-files-caching / -scoring / -rescoring` args (+ usage text, resx, `OspreyArgNames`)
-- [ ] Per-stage resolution and `RunPlan` properties; rescoring resolves its own instead of inheriting
-- [ ] `[PATH]` logging of count + source per stage
+- [x] SpectraCache on `OrderedFileLanes.For`, honoring the shared count; 1 lane == today's loop
+- [x] `--parallel-files-caching / -scoring / -rescoring` args (+ usage text, resx, `OspreyArgNames`)
+- [x] Per-stage resolution and `RunPlan` properties; rescoring resolves its own instead of inheriting
+- [x] Logging of count + source per stage (the existing `File parallelism: N (...)` line names the deciding flag)
 - [ ] Runner support: `-ParallelFilesCaching/-Scoring/-Rescoring` in `OspreyDatasetRun.psm1` + dataset wrappers
-- [ ] Docs: `pwiz_tools/Osprey/docs/20-command-line.md`, Help `CommandLine.html` (en; ja/zh-Hans need the
+- [x] Docs: `pwiz_tools/Osprey/docs/20-command-line.md`, Help `CommandLine.html` (en; ja/zh-Hans need the
       translation flow)
-- [ ] Tests: arg precedence matrix (`OspreyCommandArgsTests`); SpectraCache 1 lane vs N lanes byte-identical
+- [x] Tests: arg precedence matrix (`OspreyCommandArgsTests`); SpectraCache 1 lane vs N lanes byte-identical
       caches; `SubsetPipelineTest` leg with different per-stage values producing identical outputs
 - [ ] Gates: Build-Osprey Debug -RunTests; `regression.ps1 -Dataset Stellar`; `regression-parallel.ps1 -Dataset All`
 - [ ] Measure: TDP-43 SpectraCache at lanes 1 / 8 / 16 from E: on MACS2 (quiet box); scoring vs rescoring
@@ -201,6 +201,32 @@ What to look for:
   163/163 against the `.raw` files in `E:\...\tpd43-plasma-ev\raw`. The `.raw` files are NOT deleted
   (awaiting Brendan); the D: copies in `D:\Users\brendanx\test\osprey-runs\tdp43\cache` are kept until a
   search has read from E:.
+
+### 2026-10-06 (night session) - PR #4780 opened; TDP-43 re-cached on 8 in-process lanes
+
+- Commits: `4bebdc8f3e` SpectraCache lanes; `48a6706364` per-stage flags; `2b1984e1ad` review fixes
+  (`/code-review max 4780`: 15 findings, 11 fixed, 4 dropped - pre-existing zero-MS2 cache left on
+  disk, decision-line placement, progress display at 100% during a lane's write, unstamped lane blocks).
+- Review fixes worth knowing: `--parallel-files* 0` is now an explicit 1 (the sequential default yields
+  to `OSPREY_MAX_PARALLEL_FILES`, an explicit "off" must not); the env cap no longer applies to caching
+  (Test-PerfGate -SplitSpectraCache sets it); mzML parses on caching lanes still take the read gate;
+  `SystemMemory` forces a gen0 GC before its first reading (it reported all RAM free at startup);
+  auto re-scoring keeps scoring's count rather than re-probing lower.
+- **TDP-43, 163 Thermo .raw on E: -> D:\...\tdp43\cache-lanes8, ONE process, `--parallel-files 8`,
+  exe `_bin\26.1.1.279-4bebdc8f3e-vendor-4bebdc8f3e`**: 00:25:42 -> 02:47:59, **2 h 22 m 12 s**
+  (`[TIMING] Total pipeline: 8532.4s`), exit 0. 163/163 PASSED `Test-SpectraCaches.ps1`, 27,550,939
+  MS2 records (same as the hand-sharded set). Per file: min 295 s, median 410 s, max 532 s
+  (alone: 167.6 s -> 2.45x slower per file at 8 lanes). Speedup ~3.2x over sequential (27,320 s est.).
+  E: read mean 84.5 MB/s (max 147), queue 0.58, 0.36 ms/read; D: write mean 58 MB/s; >= 349 GB free.
+  Box otherwise idle, except two ~5 min Debug build+test overlaps (~00:33 and ~01:57).
+- **In-process lanes were ~10% SLOWER than 8 hand-sharded processes** (2 h 08 m, 7,719 s). Sample at
+  ~00:45: 5.4-7.5 cores busy, decode threads 68-84% each, kernel time only 0.35 cores, ~70 server-GC
+  threads ~2% each, process WS ~40 GB. So the per-file slowdown is user-mode work, not disk or page
+  zeroing; candidates: memory-bandwidth/cache contention in the decoder, Server GC over one shared
+  40 GB heap (separate processes each had their own). Not yet discriminated.
+- Logs: run dir `D:\Users\brendanx\test\osprey-runs\tdp43\runs\tdp43-163files-libdecoy-r1.0-protein-compact-lanes8\run.log`;
+  `runs\launch--lanes8-20261006_002542.log`; 30 s samples `runs\iosample--lanes8-*.csv`.
+- Runner: `-ParallelFilesCaching/-Scoring/-Rescoring` in `OspreyDatasetRun.psm1` + the three wrappers.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261005_osprey_per_stage_parallel_files.md` before starting work.

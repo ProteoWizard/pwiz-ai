@@ -52,6 +52,9 @@ param(
     [string]$IncludePattern,
     [int]$Threads = 30,
     [int]$ParallelFiles = 0,
+    [int]$ParallelFilesCaching = 0,
+    [int]$ParallelFilesScoring = 0,
+    [int]$ParallelFilesRescoring = 0,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
                  'SecondPassFDR', 'ModelDiagnostics', 'TrainingExport')]

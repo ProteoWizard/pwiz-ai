@@ -199,6 +199,13 @@ function Invoke-OspreyDatasetRun {
         # per-file scoring time) and the parquet write (14%) are the candidates; the main
         # search (55%) should be roughly throughput-neutral.
         [int]$ParallelFiles = 0,
+        # Per-stage overrides of -ParallelFiles (--parallel-files-caching / -scoring / -rescoring),
+        # each for its stage only; 0 = not passed, so the stage falls back to -ParallelFiles. The
+        # stages scale differently: a Thermo decode is single-threaded (TDP-43: 8 caching lanes
+        # ~3.2x over sequential), while one scoring file already keeps the CPU at 80-96%.
+        [int]$ParallelFilesCaching = 0,
+        [int]$ParallelFilesScoring = 0,
+        [int]$ParallelFilesRescoring = 0,
         # HPC split: run exactly ONE pipeline task instead of the whole run. Combined with
         # -LinkFrom this makes a single-phase re-measurement cost only that phase - e.g. Stage 5
         # at 163 files is ~75 min instead of the 18 h a full run takes.
@@ -529,6 +536,9 @@ function Invoke-OspreyDatasetRun {
     }
     if ($Task) { $cliArgs += @('--task', $Task) }
     if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
+    if ($ParallelFilesCaching -gt 0) { $cliArgs += @('--parallel-files-caching', "$ParallelFilesCaching") }
+    if ($ParallelFilesScoring -gt 0) { $cliArgs += @('--parallel-files-scoring', "$ParallelFilesScoring") }
+    if ($ParallelFilesRescoring -gt 0) { $cliArgs += @('--parallel-files-rescoring', "$ParallelFilesRescoring") }
     # --cache-dir only when -CacheDir is given. A post-scoring --task leg names its runs by
     # their data files (the -i paths in the data directory), and Osprey resolves each
     # .spectra.bin beside its source on its own (ai/docs/osprey-run-layout.md: the cache "is
@@ -603,7 +613,13 @@ function Invoke-OspreyDatasetRun {
                 $(if ($ParallelFiles -gt 1) {
                     " -> ~$([int]($Threads / $ParallelFiles)) per file (--threads is DIVIDED across them)" }
                   else { '' }))
-    Write-Host ("  pass 2   : {0}   fdrbench pass {1}   model-diagnostics {2}   training-export {3}" -f
+    if ($ParallelFilesCaching -gt 0 -or $ParallelFilesScoring -gt 0 -or $ParallelFilesRescoring -gt 0) {
+        $stageText = { param($n) if ($n -gt 0) { "$n" } else { 'shared' } }
+        Write-Host ("  per stage: caching {0}   scoring {1}   rescoring {2}  (shared = the files-at-once count above)" -f
+                    (& $stageText $ParallelFilesCaching), (& $stageText $ParallelFilesScoring),
+                    (& $stageText $ParallelFilesRescoring))
+    }
+    Write-Host ("  pass 2   :{0}   fdrbench pass {1}   model-diagnostics {2}   training-export {3}" -f
                 $Pass2Mode, $FdrBenchPass, $(if ($mdiag) { 'on' } else { 'OFF' }),
                 $(if ($TrainingExport -or $Task -eq 'TrainingExport') { 'on' } else { 'off' }))
     # Nothing Osprey logs records the pick model, so this banner line and the run.log START
@@ -976,7 +992,7 @@ function Invoke-OspreyDatasetRun {
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' files=$($inputs.Count) threads=$Threads " +
-     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag trainexport=$([bool]$TrainingExport) perfstats=$(-not $NoPerfStats) " +
+     "parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring task='$Task' mdiag=$mdiag trainexport=$([bool]$TrainingExport) perfstats=$(-not $NoPerfStats) " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
@@ -992,7 +1008,7 @@ function Invoke-OspreyDatasetRun {
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })

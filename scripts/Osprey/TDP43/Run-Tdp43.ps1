@@ -82,6 +82,9 @@ param(
     [string]$ExcludePattern,
     [int]$Threads = 30,
     [int]$ParallelFiles = 0,
+    [int]$ParallelFilesCaching = 0,
+    [int]$ParallelFilesScoring = 0,
+    [int]$ParallelFilesRescoring = 0,
     [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring',
                  'CompactPerFileRescoring','SecondPassFDR','TrainingExport')]
     [string]$Task,
