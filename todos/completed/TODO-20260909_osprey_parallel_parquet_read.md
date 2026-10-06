@@ -4,10 +4,35 @@
 - **Branch**: `Skyline/work/20260909_osprey_parallel_parquet_read`
 - **Base**: **must be stacked on PR #4751** (`Skyline/work/20260929_Net10_Parquet6`, Parquet.Net 6.1.0) - see the 2026-10-01 section at the END. The 2026-09-30 rebase onto `ed25627d81` (`b9c380515e`) is superseded.
 - **Created**: 2026-09-10 (night session), TODO written 2026-09-17
-- **Status**: 2026-10-03: #4751 (Parquet.Net 6.1) has MERGED into the port branch (`e60a58be42`), so the blocker is gone. Next is the measurement, not the port: size the parquet walk at CHS scale on the i9 (see "2026-10-03: what the i9 should decide" below). Tip `b9c380515e` (rebased on `ed25627d81`, gate-green), pushed to origin 2026-10-03. No PR.
+- **Status**: **Closed 2026-10-04 - NOT implemented (parked).** The CHS measurement on the i9 (PR #4765) showed cold FirstPassFDR reads are seek-bound, not decode-bound, so the fix that shipped was planned, gated span reads (`BlockReadStream`, now the default) instead. Branch `b9c380515e` stays on origin, unported. See "2026-10-04: DECISION" at the top.
 - **Module**: `osprey`
 - **PR**: none
 - **Worktree**: `D:\Users\brendanx\proj\pwiz-parqread` (pushed to origin 2026-09-17; the worktree is disposable once merged)
+
+## 2026-10-04: DECISION - parked, not ported. Why, with the numbers.
+
+Measured on the i9 (i9-14900, 64 GB, one HDD) during PR #4765, CHS cohort, cold, `[PATH]` buckets
+(full tables in `ai/todos/completed/TODO-20260926_osprey_firstpassfdr_parallel.md`):
+
+* **Cold reads are seek-bound, not decode-bound.** 128 files, 1 lane: the pass 2 parquet walk read ~9 GB
+  in 246 s (~36 MB/s against ~200 MB/s sequential) - about 200 small column-chunk reads per file across
+  36 row groups. The same walk warm costs ~0.8 s/file vs ~2.2 s/file cold, so decode is the minority of
+  the cost this branch would parallelize.
+* **The FDR lanes already decode several files at once** in FirstPassFDR, which covers what intra-file
+  row-group parallelism would buy there.
+* **On one spindle it makes the access pattern worse.** N readers per file x L file lanes interleaves more
+  seeks; ungated 4 lanes already made the cold training load 69% slower than 1 lane (468 vs 277 s). The
+  branch's own benchmark says it "only pays on cached data".
+* **What shipped instead (#4765):** `BlockReadStream` reads each row group's touched column chunks as one
+  span, planned from the footer, under a process-wide disk gate, decoding concurrently on the lanes.
+  CHS 446 files: FirstPassFDR 8,717 s vs 17,145 s same-day baseline, byte-identical. On the SSD the gate
+  did not hurt (1,124 s vs 1,155 s at 3 lanes, 128 files).
+
+**When to revisit (not the HDD low-bar machine):** an SSD or warm-cache machine, where reads are cheap
+and lanes kept scaling (SSD 6 lanes 15% faster than 3) - intra-file decode parallelism is most plausible
+there; and stages the lanes do not cover (PerFileRescoring hydrate, SecondPassFDR), which were NOT measured.
+A revisit should re-port onto the async-first Parquet.Net 6 read surface and decode from buffers that the
+planned span reads already fetched, not open N readers per file.
 
 ## 2026-10-03: what the i9 should decide
 
