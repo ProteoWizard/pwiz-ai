@@ -54,6 +54,23 @@ benchmark on three machines:
 
 ## Progress Log
 
+### 2026-10-06 - MACS2 (NUMA PowerEdge) run started 12:51
+
+Same analysis as the i9 runs, at runner defaults - match these when comparing:
+- **Code**: port tip `490a4d3825` (#4781 on top of #4778 `08e46aedd9`; the history after the 10-06
+  force-push). Release build snapshot `D:\Users\brendanx\test\osprey-runs\_bin\port-490a4d3825`
+  (version `26.1.1.279-490a4d3825`). If an i9 built a different SHA, note it - #4781 changes PerFileScoring.
+- **Library**: `target+decoy+entrapment-20260817` (passed with `-LibraryDir`; the runner's default
+  still resolves Mike's unsuffixed 07-27 delivery - see the SEA-AD README).
+- **Inputs**: 82 `.spectra.bin` only, no mzML on disk (cache-only; 82/82 structurally valid,
+  13,400,091 MS2). Data, library and run dir all on D: (10K HDD RAID-5).
+- **Settings** (runner defaults): libdecoy r1.0, protein-compact, `--threads 30`, files 1 at a time,
+  FDRBench both passes, model diagnostics on.
+- **Box**: 2 x Xeon Gold 6354 (72 logical), ~420 GB free at start; CPU 15% from another active user
+  at launch (other users' processes are not visible - record load beside the result).
+- Run dir: `D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-port-490a4d3825`;
+  launcher log and 30 s CPU/disk samples (`launch-` / `iosample-port-490a4d3825-*`) in `sea-ad\runs`.
+
 ### 2026-10-06 - Planned
 Created at handoff from the #4765 / #4777 session. **Next session handoff**: For detailed startup
 protocol, read `ai/.tmp/handoff-20261006_osprey_seaad_benchmark_port.md` before starting work.
