@@ -46,6 +46,10 @@ should build on the scan-major sweep rather than the candidate-major loop.
   (active candidates of every window at once, bounded by the RT tolerance), the pass count (calibration must
   precede scoring - at least 2 sweeps; can Stage 6 piggyback?), and cold-read cost on HDD for large cohorts
   (a linear sweep is the best-case read pattern, but mzML/vendor parse cost is what the cache avoids today).
+  Brendan (2026-10-05): Skyline's mzML reads are proven very efficient, on HDD too, precisely because they are a
+  linear sweep through the file - in prior perf work they beat mz5 (HDF5-based, with no linear guarantee for a
+  spectrum-by-spectrum walk). So a sweep-based Osprey reading mzML directly is a credible alternative to the
+  cache, to be measured in a future iteration.
 
 ## Rebase onto the rewritten port branch (2026-10-05)
 
