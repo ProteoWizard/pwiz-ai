@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261005_osprey_scan_major` (worktree `C:\proj\pwiz-scanmajor`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), branched at ff78a4c2bc (#4770)
 - **Created**: 2026-10-05 (from the night-session experiment branch `nightlywork/osprey_scan_major_prefilter`)
-- **Status**: PR #4779 open; awaiting TeamCity Windows + Linux and Perf/Regression
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#4779](https://github.com/ProteoWizard/pwiz/pull/4779)
+- **PR**: [#4779](https://github.com/ProteoWizard/pwiz/pull/4779) (merged 2026-10-05)
 - **Follows**: `ai/todos/completed/TODO-20261004_osprey_mz_lookup.md` (#4770)
 
 ## Objective
@@ -61,7 +61,7 @@ identical to the experiment branch's (only hunk offsets differ). Old tip kept lo
 - [x] Debug build, unit tests 654/654, inspection 0 (log `ai/.tmp/sessions/20261004-night/scanpr-debug.log`)
 - [x] Stellar + Astral regression tests PASSED vs golden masters (`scanpr-*-regression.log`, 20:49)
 - [x] Pushed `Skyline/work/20261005_osprey_scan_major`, PR #4779 opened 2026-10-05 ~20:52
-- [ ] TeamCity Windows + Linux (auto on push); Perf/Regression (ask)
+- [x] TeamCity checks green (3/3); Perf/Regression #295 SUCCESS on b85e9b010f (the merged head)
 
 ## Open items (from the two code reviews; for the PR discussion)
 - Make the switches overridable (not `static readonly`) and add a `=0` SubsetPipelineTest leg - today no test
@@ -136,3 +136,12 @@ Stacked on 75d20c76d8; sub-agent, 2026-10-05 00:00-01:00. Status file `ai/.tmp/a
 
 ### 2026-10-05
 - Experiment results above (night session); rebased onto ff78a4c2bc as Skyline/work/20261005_osprey_scan_major.
+
+### 2026-10-05 - Merged
+
+PR #4779 merged into `Skyline/work/20260612_net8_port` as commit 01a3a9c5f6. Shipped: scan-major (RT-ordered rolling
+join) scoring prefilter, first-pass XIC extraction (byte-budgeted candidate blocks) and calibration prefilter, each
+with an `OSPREY_SCAN_MAJOR_*` switch that restores the candidate-major loop. PerFileScoring on top of #4770: Astral
+-19% wall, SEA-AD 10 files -17% wall; data-identical outputs. Deferred to follow-ups (see "Open items"): overridable
+switches + a `=0` test leg, registering the `=0` arms for retirement, a shared sweep helper, scan-major for Stage 6
+override passes, ZT Scan re-measure, and the future-direction questions (whole-file sweep, dropping `.spectra.bin`).
