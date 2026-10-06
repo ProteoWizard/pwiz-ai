@@ -2,13 +2,14 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260908_osprey_parallel_files_cache_sizing`
-- **Base**: `master`
+- **Base**: `Skyline/work/20260612_net8_port` at `2937deaae8` (re-based 2026-10-05; was `master`)
 - **Created**: 2026-09-08
-- **Status**: Code complete, gate green; PR not opened
-- **Machine**: MACS2 - the branch is local there, not pushed (confirmed 2026-09-12; it is not
-  on origin or on BRENDANX-UW8)
+- **Status**: Re-gating on the port branch before the PR (2026-10-05)
+- **Owner**: the MACS2 per-stage parallel-files session (took it over 2026-10-05), worktree `pwiz-net10b`
+- **Machine**: MACS2 - the original commit `cef106ecd8` was never pushed; kept as local branch
+  `backup/20260908_cache_sizing-cef106ecd8`
 - **Module**: `osprey`
-- **PR**: none yet
+- **PR**: [#4778](https://github.com/ProteoWizard/pwiz/pull/4778) (draft until `/code-review max` and the Stellar gate are done)
 
 ## Problem
 
@@ -67,3 +68,16 @@ once caches are sized the branch only fires when neither source nor cache exists
 * Consider whether the runner should be able to REQUEST auto at all --
   `Run-SeaAd.ps1 -ParallelFiles` is `[int]` where 0 means "omit the flag", so
   there is no way to pass bare `--parallel-files` through `OspreyDatasetRun.psm1`.
+  (Belongs with the runner changes in `TODO-20261005_osprey_per_stage_parallel_files.md`.)
+
+## 2026-10-05: re-based onto the port branch
+
+Osprey development moved to the .NET 10 port branch after this was written, and the fix was never pushed.
+Cherry-picked `cef106ecd8` onto the port tip `2937deaae8`: applied cleanly (`FileParallelism.cs`,
+`PerFileScoringTask.cs`, `FileParallelismResolverTests.cs`, 70+/10-), now `47fad86a03`. The commit
+message was corrected to the repo's attribution format (the original carried the harness's
+model-named trailer and session URL). Checked on the new base: `SpectraCache.GetCachePath` resolves
+through `ArtifactPaths.ResolveCacheDir`, which honors `--cache-dir` first, so a cohort whose caches
+live in a separate folder (as TDP-43 on MACS2 now does) is sized correctly too.
+
+Ship this BEFORE the per-stage work: that branch changes `FileParallelismResolver` as well.
