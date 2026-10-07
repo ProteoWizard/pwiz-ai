@@ -203,12 +203,14 @@ Requesters" below.
 | Total lines | Maximum 10 lines including blank lines (the reporter-credit line does not count against this) |
 | Prohibited | Emojis, markdown links |
 
-**The TODO reference carries no path, on purpose.** A TODO moves through
-`todos/active/` -> `todos/completed/` -> `todos/completed/YYYY/MM/` by design: `/pw-uptodos-complete`
-makes the first move when the PR merges, and `/pw-archivetodos` makes the second, keeping only
-the most recent two months at the root. So an `active/` path is wrong from the merge onward and
-a `completed/` path expires about two months later - either way the message is wrong shortly
-after it is written and stays wrong forever in a public log. Measured on 2026-08-22: of 204 TODOs referenced by recent pwiz
+**The TODO reference in a commit carries no path, on purpose.** A TODO moves from
+`todos/active/` to its final home `todos/completed/YYYY/MM/` (year and month of its file name
+date) when the PR merges: `/pw-complete` and `/pw-uptodos-complete` make that move in one
+step as of 2026-10-07, and `/pw-archivetodos` now only sweeps up the older files that were
+left loose under `todos/completed/`. So an `active/` path is wrong from the merge onward -
+the message is wrong shortly after it is written and stays wrong forever in a public log.
+(The PR description is different: it is editable, so it links the file at its current path
+and `/pw-complete` repoints the link to the final one; see "PR Description Format".) Measured on 2026-08-22: of 204 TODOs referenced by recent pwiz
 master commits, 3 were still where the message said and 197 were not. The filename is
 the durable identifier and `todos` is the deepest folder that is true at every stage;
 GitHub's file finder locates the file by name in one step. This applies to the
@@ -228,7 +230,8 @@ be found ... you may not have access". **Both pwiz and pwiz-ai are public**, so 
 permanent link in an open source log which reads as a citation, resolves for one person, and
 is dead for every other reader on the internet. The `See TODO-*.md in pwiz-ai/todos` reference
 is the supported way to point at the reasoning: pwiz-ai is public too, so it resolves for
-anyone. As of 2026-08-22, 45 commits on pwiz-ai master already carry the trailer, exposing 12
+anyone (and in the PR description it is a clickable link to the file; see "PR Description
+Format"). As of 2026-08-22, 45 commits on pwiz-ai master already carry the trailer, exposing 12
 session ids; squash-merge has kept it off pwiz master. Existing ones stay - rewriting pushed
 public history is not worth it - but do not add more.
 
@@ -354,10 +357,21 @@ Fixes #XXXX
 - [x] Test that was run
 - [x] Another test that was run
 
-See TODO-YYYYMMDD_feature_name.md in pwiz-ai/todos
+See [TODO-YYYYMMDD_feature_name.md](https://github.com/ProteoWizard/pwiz-ai/blob/master/todos/active/TODO-YYYYMMDD_feature_name.md) in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+**Link the TODO by name in the PR description.** The `See TODO-...` line is a markdown
+link whose text is the file name and whose target is the file's current location on
+pwiz-ai master (`todos/active/` while the PR is open). GitHub renders it as clickable
+text beside the issue link, which is what gets a reviewer to open the full TODO; a bare
+file name does not. The TODO must already be pushed to pwiz-ai master when the PR opens,
+or the link 404s. This is a PR-description rule only: commit messages keep the plain
+`See TODO-YYYYMMDD_feature_name.md in pwiz-ai/todos` line, since links in git history
+are noise and the squash subject's `(#NNNN)` already points at the PR. When
+`/pw-complete` moves the file to `todos/completed/YYYY/MM/`, it rewrites the link in the PR
+description to the new path, so a merged PR keeps pointing at the final write-up.
 
 If the PR is already open and missing its label, add it without reopening the
 description:

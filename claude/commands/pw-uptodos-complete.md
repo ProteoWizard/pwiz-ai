@@ -20,5 +20,5 @@ For each TODO ready to complete:
 - Add the PR reference if missing
 - Add a "### YYYY-MM-DD - Merged" entry to the Progress Log with merge commit
 - Add a "## Resolution" section with status and fix summary
-- Move to ai/todos/completed/
+- Move to ai/todos/completed/YYYY/MM/ (year/month of the file name date, the same folder /pw-archivetodos would use)
 - Commit and push changes

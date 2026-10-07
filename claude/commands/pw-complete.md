@@ -268,27 +268,46 @@ were filed.>
 
 ## Step 3 — Move and push (if not already moved)
 
-Only if the TODO is still in `todos/active/`:
+Only if the TODO is still in `todos/active/`. The file goes straight to its final home,
+`todos/completed/YYYY/MM/` where `YYYY` and `MM` come from the `TODO-YYYYMMDD_` prefix
+of the file name (the same folder `/pw-archivetodos` would file it under later), so the
+PR link rewritten below never breaks again:
 
 ```bash
 cd C:/proj/ai
 git pull origin master                  # avoid colliding with another session
-git mv todos/active/TODO-YYYYMMDD_<slug>.md todos/completed/
-git add todos/completed/TODO-YYYYMMDD_<slug>.md
+mkdir -p todos/completed/YYYY/MM
+git mv todos/active/TODO-YYYYMMDD_<slug>.md todos/completed/YYYY/MM/   # YYYY/MM from the file name date
+git add todos/completed/YYYY/MM/TODO-YYYYMMDD_<slug>.md
 git commit -m "Completed TODO for #NNNN - <feature>"
 git push origin master
 ```
 
-If it was already in `todos/completed/`, commit only the final-write
+If it was already in `todos/completed/` (at the root or under `YYYY/MM/`), commit only the final-write
 edits and push:
 
 ```bash
 cd C:/proj/ai
 git pull origin master
-git add todos/completed/TODO-YYYYMMDD_<slug>.md
+git add todos/completed/YYYY/MM/TODO-YYYYMMDD_<slug>.md
 git commit -m "Final TODO update for #NNNN - merged"
 git push origin master
 ```
+
+**Then repoint the TODO link in the PR description.** The description links the
+TODO by name at its `todos/active/` path (see "PR Description Format" in the
+version-control skill); after the move that link 404s. Rewrite it to the
+`todos/completed/YYYY/MM/` path so a merged PR keeps pointing at the final write-up:
+
+```bash
+gh pr view <N> --json body --jq .body > C:/proj/ai/.tmp/sessions/<session>/pr-body.md
+# replace todos/active/TODO-YYYYMMDD_<slug>.md with todos/completed/YYYY/MM/TODO-YYYYMMDD_<slug>.md
+# in that file (Edit tool), then:
+gh pr edit <N> --body-file C:/proj/ai/.tmp/sessions/<session>/pr-body.md
+```
+
+Editing a merged PR's description is allowed and harmless. If the description has
+no link (an older PR with the plain `See TODO-...` line), leave it alone.
 
 ## Step 4 — Verify the PR is actually merged
 
@@ -396,15 +415,18 @@ gh issue close <issue-N> --comment "## Completion Summary
 - <bullet 1>
 - <bullet 2>
 
-See TODO-YYYYMMDD_<slug>.md in pwiz-ai/todos for full engineering context."
+See [TODO-YYYYMMDD_<slug>.md](https://github.com/ProteoWizard/pwiz-ai/blob/master/todos/completed/YYYY/MM/TODO-YYYYMMDD_<slug>.md) in pwiz-ai/todos for full engineering context."
 ```
+
+The link points at the final `todos/completed/YYYY/MM/` location from Step 3, so the
+closed issue, like the merged PR, opens the finished write-up in one click.
 
 ## Final report
 
 End with a short status to the user:
 
 - PR #NNNN: merged as `<short SHA>` on YYYY-MM-DD
-- TODO moved to `ai/todos/completed/TODO-YYYYMMDD_<slug>.md`
+- TODO moved to `ai/todos/completed/YYYY/MM/TODO-YYYYMMDD_<slug>.md`
 - Local master at `<short SHA>` (matches upstream)
 - Work branch `Skyline/work/YYYYMMDD_<slug>` deleted (local + remote; if a
   stacked open PR blocked the remote delete, say so explicitly)

@@ -254,6 +254,8 @@ Fixes #XXXX
 
 - [x] TestName - description
 
+See [TODO-YYYYMMDD_feature.md](https://github.com/ProteoWizard/pwiz-ai/blob/master/todos/active/TODO-YYYYMMDD_feature.md) in pwiz-ai/todos
+
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
@@ -264,6 +266,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>
   attribution block asks for; see the commit rules above
 - Bullet points use `* ` prefix in Summary
 - Test plan uses `- [x]` checkboxes
+- **The TODO line is a markdown link**: text = the file name, target = the file on
+  pwiz-ai master (`todos/active/...` while the PR is open). Reviewers click it; a bare
+  name goes unread. Push the TODO to pwiz-ai master before `gh pr create` or the link
+  404s. Commit messages keep the plain `See TODO-...md in pwiz-ai/todos` form (no links
+  in git history). `/pw-complete` rewrites the link to `todos/completed/YYYY/MM/` when it moves
+  the file
 - No emojis
 
 ## Crediting reporters

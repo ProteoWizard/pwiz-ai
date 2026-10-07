@@ -164,7 +164,7 @@ git push origin master
 5. Move TODO to completed and push to pwiz-ai:
 ```bash
 cd ai
-git mv todos/active/TODO-YYYYMMDD_feature.md todos/completed/
+git mv todos/active/TODO-YYYYMMDD_feature.md todos/completed/YYYY/MM/   # year/month of the file name date
 git commit -m "Move TODO to completed - ready for merge"
 git push origin master
 ```

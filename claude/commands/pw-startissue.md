@@ -252,12 +252,14 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 **For pwiz issues:**
 1. Update TODO Progress Log with completion summary
 2. **For exception/nightly-fix issues**: confirm the Regression Test section is filled with a test name, project, and red->green verification (or an explicit rationale if no test was added). See [ai/docs/validation-cycle-principles.md](../../docs/validation-cycle-principles.md).
-3. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
+3. Move TODO: `git mv todos/active/TODO-*.md todos/completed/YYYY/MM/` (year/month of the file name date)
 4. Commit to pwiz-ai master (format per `/version-control`)
 5. Create PR to pwiz master — **title prefixed with the module and the matching
    module label applied**, both read from the TODO's `Module` field (use
    `Fixes #$ARGUMENTS` to auto-close the issue; description per
-   `/version-control`):
+   `/version-control`, including the `See [TODO-...md](url) in pwiz-ai/todos`
+   link to the TODO at its current path on pwiz-ai master, which must be pushed
+   before the PR opens or the link 404s):
 
    ```bash
    gh pr create \
@@ -271,7 +273,7 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 
 **For pwiz-ai issues:**
 1. Update TODO Progress Log with completion summary
-2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
+2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/YYYY/MM/` (year/month of the file name date)
 3. Commit to pwiz-ai master (format per `/version-control`)
 4. Close issue: `gh issue close $ARGUMENTS --comment "Completed. See TODO-*.md in pwiz-ai/todos"`
 

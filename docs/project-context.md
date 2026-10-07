@@ -247,10 +247,11 @@ Place private helpers after the public methods that use them; keep helpers close
 ### Context Management
 - Always read `TODO-YYYYMMDD.md` for current branch context
 - Update TODO file with every commit
-- **Move** the TODO to `ai/todos/completed/` when the PR merges (`git mv`) — never
+- **Move** the TODO to `ai/todos/completed/YYYY/MM/` (year/month of its file name date) when the PR merges (`git mv`) — never
   delete it. The TODO is the durable engineering record, and the squash commit on
-  `master` references its path (`See TODO-...md in pwiz-ai/todos`). `/pw-complete`
-  Step 3 does this move.
+  `master` references its path (`See TODO-...md in pwiz-ai/todos`) and the PR
+  description links it by name (`See [TODO-...md](url) in pwiz-ai/todos`).
+  `/pw-complete` Step 3 does this move and repoints the PR's link to that final path.
 - Follow branch naming conventions: `Skyline/work/YYYYMMDD_description`
 
 ### Code Quality
