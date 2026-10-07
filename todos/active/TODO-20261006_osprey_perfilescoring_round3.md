@@ -4,8 +4,9 @@
 - **Branch**: `Skyline/work/20261006_osprey_perfilescoring_round3` (`C:\proj\pwiz-scanmajor`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), at 490a4d3825 (the 2026-10-06 force-pushed history)
 - **Created**: 2026-10-06
-- **Status**: In progress - next: measure the calibration read-lock hold. Branch has one LOCAL commit (971f4227bb,
-  profiler hooks), not pushed; working tree clean. Build tree last built with the (reverted) miss filter - rebuild.
+- **Status**: In progress - next: median polish winner reuse. Branch has two LOCAL commits (971f4227bb profiler
+  hooks, pooled window reads), not pushed; working tree clean. Snapshot of the pooled build:
+  `D:\test\osprey-runs\_bin\pooledreads-wip1`.
 - **Module**: `osprey`
 - **PR**: none
 - **Follows**: `ai/todos/completed/TODO-20261005_osprey_perfilescoring_round2.md` (#4781)
@@ -57,11 +58,14 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
       lock wait + kernel copy); ScoreResolvedCalibrationEntry 82 s (LowerBound 28, LibCosine 15, CWT 13);
       FindCalibrationCandidatesScanMajor 28 s; xcorr preprocess 9 s. 334 serialized window reads (2 passes x 167)
       at ~35 ms each = the calibration wall time: the read lock is the critical path.
-- [ ] Calibration read lock: measure the lock hold per read (temporary stopwatch). Lead: each read allocates a
-      fresh ~35 MB byte[] whose pages fault in during ReadExactly INSIDE the lock (own time 43 s is high for a
-      copy). If faults are a meaningful part of the ~35 ms, A/B a reused per-thread block buffer (env-gated,
-      identical by construction); keep only on non-overlapping quiet reps. Do NOT turn serial reads off: cold HDD
-      reads need them (parallel-files sweep, +21% without).
+- [x] Calibration read lock - **committed (pooled blocks).** Lock timing, file 49 (`rddbg.log`): 334 reads, 12.6 GB;
+      hold 9.4 s total (median 24.4 ms) vs 7.3 s re-reading into a resident buffer -> page faults ~22% of the
+      hold; waits 121 s thread; the copy itself runs ~1.7 GB/s from the file cache. `ArrayPool<byte>.Shared`
+      blocks in LoadWindowSerialRead: quiet 3-rep A/B calibration sum 33.3/31.3/31.9 -> 28.3/27.7/28.3 s
+      (-11%, ~1.2 s/file, non-overlapping); coelution unchanged; data-identical. Memory not yet checked (pool
+      keeps up to ~30 x 64 MB) - check on the next SEA-AD run. Remaining levers: pass 2 loads whole windows at
+      +/-0.54 min tolerance (read less), memory-mapped reads (no copy; needs a cold-HDD measurement).
+      Do NOT turn serial reads off: cold HDD reads need them (parallel-files sweep, +21% without).
 - [ ] Median polish: reuse the pick's winner polish in the feature pass (~1.4%); bound-skip of non-winning peaks
 - [ ] Optional: re-measure --parallel-files 1 vs 4 (process-wide lock) on 12 SEA-AD files with current code;
       hand numbers to `TODO-20261005_osprey_per_stage_parallel_files.md`
