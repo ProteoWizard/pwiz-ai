@@ -93,6 +93,36 @@ runs of `490a4d3825` are the comparisons that mean something.
 - Output: 6,654 protein groups at 1%; FDRBench inputs for both passes written to the run dir.
   Entrapment FDP not yet computed (SEA-AD README harvest tools).
 
+### 2026-10-06/07 night - MACS2 FirstPassFDR sweep: 16 lanes + 36 GC heaps = 970 s (-21%)
+
+`--task FirstPassFDR -LinkFrom <fast1> -Fresh --threads 72`, PR #4780 build, one leg at a time
+(`sea-ad\runs\fdr-sweep-20261006\sweep-summary.log`; per-leg run dirs beside it; script
+`.tmp/sessions/20261006-night/Run-FdrSweep.ps1`). Every leg reads the same 271.8 GB (104,210 block reads).
+
+| leg | FDR lanes | read gate | GC heaps | FirstPassFDR | read / gate wait (summed) |
+|---|---|---|---|---|---|
+| l8 (COLD cache - discard) | 8 | on | 72 | 1,582 s | 529 / 2,159 s |
+| l8w | 8 | on | 72 | 1,474 s | 193 / 67 s |
+| l16 | 16 | on | 72 | 1,227 s | 182 / 293 s |
+| l24 | 24 | on | 72 | 1,326 s | 257 / 1,101 s |
+| l16g0 | 16 | OFF | 72 | 1,357 s | 252 / 0 s |
+| l24g0 | 24 | OFF | 72 | 1,339 s | 323 / 0 s |
+| l16h8 | 16 | on | 8 | 1,027 s | |
+| l16h16 | 16 | on | 16 | 1,099 s | 126 / 186 s |
+| **l16h36** | 16 | on | **36** | **970 s** | |
+| l24h16 | 24 | on | 16 | 1,040 s | |
+
+- 16 lanes > 8 (the `FdrLaneResolver.MAX_LANES` cap) > 24; past 16 the lanes queue on the read gate.
+- The block-read gate HELPS even with warm files: off cost +11% at 16 lanes (more total read time).
+- **Server GC heap count is the biggest lever**: 72 heaps (default, one per logical CPU on this 2-socket
+  box) -> 36 (one per physical core) cut 21% at 16 lanes; 8 and 16 also beat 72.
+- The FIRST leg of any sweep reads cold (the previous sweep evicted the files): l8 paid 336 s extra read.
+- Scoring check (8 files, 4 lanes; `scoring-sweep-20261006`): p4r 664 s, p4h16 498 s, p4h36 506 s - but the
+  box was CONTENDED by another user (p4r coelution 24k cand/s per lane vs 48k at 18:05 for the identical
+  config), so only the relative order holds: fewer heaps did not hurt scoring and probably helped.
+- Single rep per leg throughout; noise unmeasured. One 2-socket NUMA box: the i9s have 32 heaps by default.
+- Applied: full run `-fast2` (01:03:55) = fast1 + `OSPREY_FDR_FILE_LANES=16` + `DOTNET_GCHeapCount=36`.
+
 ### 2026-10-06 (evening) - MACS2 tuned: 2 h 09 m with per-stage file parallelism
 
 Brendan's results for the default-settings race: i9-14900 128 GB **4:12**, MACS2 4:19, i9-14900 64 GB
