@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4790](https://github.com/ProteoWizard/pwiz/pull/4790)
 
 ## Objective
 
@@ -23,15 +23,27 @@ text, so BiblioSpec's PepXMLreader failed: `' ' is an unexpected token. The expe
 token is ';'` (it reads `&est` as an entity reference). TeamCity's data path has no `&`.
 
 MSFragger's `FixPercolatorPepXml` already escaped bare ampersands; Comet and Tide did not.
+Master passes because there TestDiaTtofDiaUmpireTutorial searches with MSAmanda (mzIdentML
+written by a real XML writer); the port switched it to Comet. Expat rejects a bare `&` too,
+so the C# BlibBuild port is not the cause.
 
 ## Changes
 
-- [x] Extended `Test/CometPercolatorPepXmlTest.cs` with a raw-`&` header and an
-      already-escaped `&amp;` header; asserts the output parses and round-trips both paths
-      (red: same XmlException as the tutorial)
-- [x] Added `AbstractDdaSearchEngine.EscapeBareAmpersands` (MSFragger's regex, moved)
-- [x] Called it per line in the Comet, Tide and MSFragger `FixPercolatorPepXml` copies
-- [x] TestCometPercolatorQValueAnnotation green; CodeInspection green
-- [ ] `/code-review max` before PR
-- [ ] Open PR against the port branch
+- [x] First commit: per-line escape in all three rewrites (via a new base-class helper)
+- [x] `/code-review max`: escape ran BEFORE the PSM key was parsed from `spectrum=`, so an
+      `&` in a spectrum's folder/file name mis-keyed every PSM to q=1 (silent data loss).
+      MSFragger had this ordering bug since 2024.
+- [x] Escape only what is written; keys from the raw line
+- [x] Consolidated escapers onto `PathEx.EscapePathForXML` with a stricter pattern
+      (complete char refs only, `[0-9]` not `\d`); deleted unused `XmlUtil.EscapePath`
+- [x] Replaced the three hand-synced `FixPercolatorPepXml` copies with one
+      `PercolatorPepXmlAnnotator` (Model/DdaSearch), configured per engine (spectrum-ID
+      parser, rank separator, q-value anchor/placement)
+- [x] `Test/PercolatorPepXmlTest.cs` (renamed from CometPercolatorPepXmlTest): one check
+      run for all three engines, incl. `&` in spectrum ID; verified it fails with the
+      ordering bug reintroduced. `UtilTest.TestEscapePathForXML` extended.
+- [x] Unit tests + CodeInspection green
+- [x] TestDdaSearchComet/CometAutoTolerance/Tide/MsFragger green before the refactor
+- [x] Same functional tests green after the refactor
+- [x] Open PR against the port branch (#4790)
 - [ ] Confirm TestDiaTtofDiaUmpireTutorial passes with the `T&est` data path
