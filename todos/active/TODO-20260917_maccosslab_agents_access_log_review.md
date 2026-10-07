@@ -320,8 +320,43 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
 - [ ] Trend comparison improves once daily summaries accumulate in `reports/`
 
 ### Phase 4: Scheduling
-- [ ] Run daily on the separate machine (cron), after the log copy process finishes
-- [ ] Failure logging if the run fails or the input logs are missing
+Branch `work/20261006_scheduled_review`. Design agreed 2026-10-06, modeled on the PR report
+pipeline (`ai/docs/pr-report-guide.md`, `ai/scripts/Invoke-PRReport.ps1`), for Linux/WSL2.
+Only this TODO changes in pwiz-ai; everything else lives in maccosslab-agents.
+
+| Topic | Decision |
+|---|---|
+| Pipeline | Python entry point `access-log-review-pipeline`, 3 phases each runnable alone (`--phase validate\|review\|email\|all`, `--end` for backfill, `--dry-run`); manifest + logs in gitignored `runs/<date>/`, kept 30 days |
+| validate | Plain Python, head/tail of each file, no Claude. Fails on missing source, unreadable file, late start, early end, or a hole between files |
+| review | `claude -p --agent access-log-review`, strict MCP config (access_log_review only), the 11 tools listed explicitly, `--permission-prompts none`, `--output-format json`; skipped if validate fails |
+| email | **Plain Python** `smtplib`: full report inline as HTML with inline styles + Markdown plain text; `[ERROR]` email when validate or review failed. Recipients, sender, SMTP host in `config.toml`; password and `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) in `~/.config/maccosslab-agents/env` |
+| Incomplete logs | Error email immediately, no retry; rerun by hand with `--end` |
+| Scheduler | Both: systemd user timer (`Persistent=true`, linger) on native Linux; Windows Task Scheduler running `wsl.exe` on WSL2, because the WSL VM shuts down when idle |
+
+- [x] Step 1: `validate.py` + 6 tests (`ee403ee`). Real data: 0.02-0.05 s per window
+- [x] Step 2: `pipeline.py` (`b517266`): `config.toml` + arguments, `runs/<date>/`
+      manifest and log, ff-only `main` update, validate, headless review (reuses `.mcp.json`
+      with `--strict-mcp-config`; tool list read from the MCP server), `--dry-run`, 30-day
+      cleanup. 105 tests pass. Real run (user, 2026-10-07, window ending 2026-10-05 08:00):
+      passed, 43 turns, 307 s; CLI cost estimate $1.80
+- [x] Step 3: `mailer.py` (`82ff9da`; named so it can't shadow the stdlib `email` package):
+      inline-style HTML from the shared markdown-it parser, metadata comment as footer,
+      `[ERROR]` email (gaps / review reason, log path, rerun command), SMTP with STARTTLS and
+      retries on transient errors only. `--phase email` reuses the saved manifest.
+      120 tests pass. Real 10-05 report as email: 51.7 KB HTML (Gmail clips at ~102 KB)
+- [ ] Step 3 test send: needs `[email]` in `config.toml` and `SMTP_PASSWORD` in the env file
+- [x] Step 4: `schedule.py` (`c977880`). Changed from the plan at the user's request:
+      `--schedule [HH:MM]` only **writes** the files to gitignored `schedule/` and prints the
+      install/check/run/remove commands; it installs nothing. Linux: systemd user
+      `.service` + `.timer` (`Persistent=true`, 2 h limit, linger). WSL2: Task Scheduler XML
+      (UTF-16; StartWhenAvailable, 2 h, InteractiveToken) running `wsl.exe -d <distro> -u
+      <user> --cd <root> -- .venv/bin/access-log-review-pipeline`; installed with
+      `schtasks.exe /Create /XML`. Run time from `[schedule] run_at` (default 07:30).
+      126 tests pass
+- [ ] Step 4 install and trigger: done by the user (instructions given 2026-10-07)
+- [ ] Step 5: README, CLAUDE.md, TODO; PR when asked
+- [ ] User setup: SMTP account and sender, `claude setup-token` on the run machine, the log
+      copy job's schedule (defaults until known: window end 07:00, run 07:30)
 
 ## Open Questions
 - None at present
@@ -437,6 +472,26 @@ agent after writing the summary and saves `reports/access-log-report-<end>.md`.
   2. Phase 4: daily cron run on the separate machine after the log copy, plus failure
      logging. Decide whether the scheduled run uses the billed CLI or a headless Claude Code
      run of the subagent.
+
+- Started Phase 4 on `work/20261006_scheduled_review`: agreed the pipeline design (see the
+  Phase 4 section) and finished step 1, the validate phase (`ee403ee`, 92 tests pass).
+- **Data finding from the validator**: `examples/.../apache/access.log` (linked from the
+  checkout's `logs/`) now holds 2026-10-05 traffic, so the dev window (ending 2026-09-17
+  07:00) has **no Apache requests from 09-17 00:00 to 07:00**. Dev-window runs since that
+  file was replaced used incomplete Apache data. The full-read check in `sources.py` misses
+  holes like this because it compares only the overall earliest and latest times. The
+  window ending 2026-10-05 08:00 is complete in both sources. **That window is the reference
+  window from now on** (user decision); the 09-17 Apache sample isn't restored.
+
+### 2026-10-07
+- Step 2 done and committed (`b517266`). The user ran the tests, `pip install -e .`, a dry
+  run, and a real `--phase review --end 2026-10-05T08:00-07:00`: validate ok for both sources,
+  review passed in 43 turns (307 s), report written. 105 tests pass.
+- Step 3 built and committed (`82ff9da`), tested against a fake SMTP server; 120 tests pass.
+  The real test send waits on the SMTP account, sender, and a test recipient.
+- The test send is on hold (the user can't set up the email account yet).
+- Step 4 built and committed (`c977880`); the user installs and triggers it themselves.
+- Next: step 5 (README, CLAUDE.md), then push and PR when asked.
 
 The handoff files (`ai/.tmp/handoff-20261002_…` and `handoff-20260918_…`) are obsolete; the
 blocker they describe is fixed and merged.
