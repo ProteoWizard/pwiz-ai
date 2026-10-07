@@ -28,6 +28,28 @@ which ~133 s is serialized window reads (mostly lock wait), so ~80/20 coelution/
 Within window scoring: XIC lookups 25%, xcorr preprocess 13.5%, CWT 12%, rest of SG sweep ~10%, prefilter 7.6%,
 median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z lookups per file, 19% hits.
 
+## Where PerFileScoring profiling stands (2026-10-07) - read this before more PerFileScoring perf work
+
+- SEA-AD PerFileScoring: 4 h 11 m (2026-08) -> 2 h 00 m (2026-10-06), via #4767 serial block reads, #4768 lazy
+  xcorr, #4770 m/z bucket index, #4779 scan-major prefilter/XIC/calibration, #4781 median selection + cosine
+  index, and (round 3, local) pooled calibration read blocks (-11% calibration).
+- Per file (Astral 49, quiet, library excluded): coelution 58% of wall, calibration 25%, parquet write 13%.
+- Window scoring has no single hotspot above ~27%, and every item with a known fix is now under ~2% of it:
+  XIC extraction 27% (see below), xcorr preprocess 13.5% (each touched spectrum once, already on demand), CWT
+  12%, rest of SG sweep ~10%, prefilter 7.6%, median polish ~7% (duplicate polish ~1.4%).
+- XIC extraction, attributed with temporary NoInlining (2026-10-07, `sprofile-xic-attrib-report.xml`): 65% of
+  it is the body of `MzBucketIndex.LowerBound` (~17% of window scoring, ~1.6 billion calls/file, ~68 ns of thread
+  time each); loop overhead 20%, `ClosestPeakFrom` 5.5%, the intensity write 1.8%. 68 ns is far above the
+  arithmetic, so it is cache misses on `_start`/`mzs` or branch mispredicts in the bucket scan - telling them
+  apart needs hardware counters (VTune / WPR PMU). Upper bound if made 4x cheaper: ~12% of window scoring,
+  ~7% of PerFileScoring, ~3.5% of a SEA-AD run.
+- Ruled out by measurement (do not retry): rolling join (+4%), miss-filter bitmap (no gain), reading only the
+  spectra calibration needs (95% coverage), producer/consumer scoring thread (cores already full).
+- Conclusion: PerFileScoring has reached diminishing returns for code changes on this machine. The large remaining
+  lever is parallelism on bigger machines: MACS2 (72 threads) ran SEA-AD in 2:09 with `--threads 72
+  --parallel-files-scoring 4 --parallel-files-rescoring 8` vs 4:19 at defaults
+  (`TODO-20261006_osprey_seaad_benchmark_port.md`).
+
 ## Decisions
 - **Rolling join for XICs: abandoned (measured slower).** One scan-major rolling join per window (spectra and
   candidates both in RT order, scored on completion, entries re-sorted by index) was data-identical but coelution
