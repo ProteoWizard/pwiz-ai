@@ -46,4 +46,9 @@ so the C# BlibBuild port is not the cause.
 - [x] TestDdaSearchComet/CometAutoTolerance/Tide/MsFragger green before the refactor
 - [x] Same functional tests green after the refactor
 - [x] Open PR against the port branch (#4790)
-- [ ] Confirm TestDiaTtofDiaUmpireTutorial passes with the `T&est` data path
+- [x] TestDiaTtofDiaUmpireTutorial passes with the `T&est` data path (1292 s, Quickee Debug)
+- [x] Copilot review: numeric refs now kept only for legal XML Chars; PercolatorPepXmlTest
+      consolidated into one TestMethod (e5d792eb3f); both threads replied (marked as
+      Claude Code replies) and resolved
+- [x] Deferred PSM key-matching bugs (dotted Tide stems, Comet drive-root folder) -> #4791
+- [ ] TeamCity green, human review
