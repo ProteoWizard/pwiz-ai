@@ -2,13 +2,13 @@
 
 ## Branch Information
 - **Repository**: `uw-maccosslab/maccosslab-agents` (local checkout `~/dev/ai-dev/maccosslab-agents`)
-- **Branch**: none active. Phases 0-3 and the local no-bill run path are on `main`
-  (`9e7dd8c`, PR #1 merged 2026-10-06). Start a new `work/` branch for the next piece of work
+- **Branch**: `work/20261006_scheduled_review` (Phase 4 pipeline, PR #2, pushed). Phases 0-3
+  and the local no-bill run path are on `main` (`9e7dd8c`, PR #1 merged 2026-10-06)
 - **Base**: `main`
 - **Created**: 2026-09-16 (started 2026-09-17)
 - **Status**: In Progress (Phase 4 remaining)
-- **PR**: https://github.com/uw-maccosslab/maccosslab-agents/pull/1 (merged 2026-10-06,
-  `work/20261001_access_log_review_local_run`)
+- **PR**: https://github.com/uw-maccosslab/maccosslab-agents/pull/2 (Phase 4, open). Earlier:
+  https://github.com/uw-maccosslab/maccosslab-agents/pull/1 (merged 2026-10-06)
 - **Objective**: Create a new `maccosslab-agents` repository and build an agent that reviews
   the last 24 hours of panoramaweb.org Apache and LabKey Server access logs and produces a
   report that helps Skyline staff fix slow pages and block bots
@@ -357,7 +357,8 @@ Only this TODO changes in pwiz-ai; everything else lives in maccosslab-agents.
 - [x] Step 5: README (daily pipeline section, setup, scheduling, module map) and CLAUDE.md
       (pipeline rules, gitignored `runs/`/`schedule/`, `mailer.py` naming, `--schedule`
       installs nothing); also corrected the CLI's default effort to `medium` (`e932239`)
-- [ ] Push `work/20261006_scheduled_review` and open a PR (when the user asks)
+- [x] Pushed `work/20261006_scheduled_review` and opened PR #2
+      (https://github.com/uw-maccosslab/maccosslab-agents/pull/2), 2026-10-07
 - [ ] User setup: SMTP account and sender, `claude setup-token` on the run machine, the log
       copy job's schedule (defaults until known: window end 07:00, run 07:30)
 
@@ -495,7 +496,8 @@ Only this TODO changes in pwiz-ai; everything else lives in maccosslab-agents.
 - The test send is on hold (the user can't set up the email account yet).
 - Step 4 built and committed (`c977880`); the user installs and triggers it themselves.
 - Step 5 done (`e932239`). The branch has 5 local commits (`ee403ee`..`e932239`), not pushed.
-- Open: push and PR when asked; the user's email test send and schedule install/trigger.
+- Pushed the branch and opened PR #2. Open: review and merge PR #2; the user's email test
+  send and schedule install/trigger.
 
 The handoff files (`ai/.tmp/handoff-20261002_…` and `handoff-20260918_…`) are obsolete; the
 blocker they describe is fixed and merged.
