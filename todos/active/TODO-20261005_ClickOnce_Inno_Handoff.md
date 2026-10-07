@@ -2,13 +2,12 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261005_ClickOnce_Inno_Handoff`
-- **Base**: `master`
+- **Base**: `Skyline/skyline_26_1_1` (branched from master)
 - **Created**: 2026-10-05
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#4773](https://github.com/ProteoWizard/pwiz/pull/4773) (draft; to be merged into the
-  "Release 26.1.1" branch once it is created from master, not into master)
+- **PR**: [#4773](https://github.com/ProteoWizard/pwiz/pull/4773), into `Skyline/skyline_26_1_1`
 - **Checkout**: I:\git_i\sky_26_1_1
 
 ## Objective
@@ -52,5 +51,5 @@ other side, which reads what this leaves, is PR #4755 (`Skyline/work/20260901_Ne
 - [x] 2026-10-06 (0a65582e3c): installer runs with /SILENT /SUPPRESSMSGBOXES /NORESTART
       /CURRENTUSER /LAUNCH; /LAUNCH is #4755's Setup.iss switch (08fe79e1ab), and Inno ignores
       unknown switches, so an older installer still installs, just without launching
-- [ ] Retarget #4773 to the Release 26.1.1 branch once it exists
+- [x] #4773 retargeted to `Skyline/skyline_26_1_1` and out of draft; description updated 2026-10-06
 - [ ] Try against a real ClickOnce Skyline-daily once an installer and manifest are published
