@@ -51,5 +51,8 @@ other side, which reads what this leaves, is PR #4755 (`Skyline/work/20260901_Ne
 - [x] 2026-10-06 (0a65582e3c): installer runs with /SILENT /SUPPRESSMSGBOXES /NORESTART
       /CURRENTUSER /LAUNCH; /LAUNCH is #4755's Setup.iss switch (08fe79e1ab), and Inno ignores
       unknown switches, so an older installer still installs, just without launching
+- [x] 2026-10-07 (3f1592c28b): re-stored the new InstallerHandoff.cs as CRLF for a Copilot
+      thread. Against CRITICAL-RULES.md (stored endings stay as autocrlf leaves them); left in
+      place since the file is new and the squash shows it as added either way. Not a precedent.
 - [x] #4773 retargeted to `Skyline/skyline_26_1_1` and out of draft; description updated 2026-10-06
 - [ ] Try against a real ClickOnce Skyline-daily once an installer and manifest are published

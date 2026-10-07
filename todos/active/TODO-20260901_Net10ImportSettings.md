@@ -138,8 +138,9 @@ things that move needs:
       ownership rule for per-machine installs, URL escaping, stale ja/zh-Hans UpgradeDlg text
       removed. All 8 threads resolved (the `{` and ClickOnce same-version threads were declined).
 - [x] 2026-10-02: merged `Skyline/work/20260612_net8_port` (f1f1a0e96f). The two conflicts were
-      line endings only; the base branch keeps those files CRLF in the index, so they were
-      re-staged with autocrlf off.
+      line endings only; they were re-staged with autocrlf off to match the base branch's
+      storage. Do not repeat that by default: per CRITICAL-RULES.md, stored line endings stay
+      as master has them; write CRLF on disk and run fix-crlf.ps1 instead.
 - [x] 2026-10-02: drove the Release build through the AI connector: owner installs PRM
       Conductor; folder set to Administrators-owned (icacls /setowner, elevated); non-owner gets
       a personal user.config with the admin's tools merged in and installs Skyline-PRISM into
