@@ -52,6 +52,44 @@ benchmark on three machines:
 - The port branch was force-pushed on 2026-10-05 (#4765's merge `effd991447` became `f7021e609c`,
   same patch-id). Update with `git pull --ff-only`; never merge the old history back.
 
+## Handoff: tune the 128 GB i9 from the MACS2 lessons (beat its 4:12)
+
+Question to answer: do the MACS2 lessons transfer to a single-socket 32-thread desktop with excess RAM,
+or is the i9 already at its optimum? Expect much less than MACS2's 2x - one i9 file already keeps the CPU
+80-96% busy (2026-10-04 sweep: P=3 gave -12%). Every lever below is an experiment, not a setting to copy.
+
+**Build**: PR #4780 (branch `Skyline/work/20261005_osprey_per_stage_parallel_files`, tip `c84de72a6e`, on the
+current port tip) - it adds `--parallel-files-caching/-scoring/-rescoring` and runner switches
+`-ParallelFilesScoring/-ParallelFilesRescoring` (pwiz-ai master). Build Release, snapshot to `_bin`.
+
+**Method that worked on MACS2** (keep it - the box noise and cache state fooled single runs twice):
+- Measure one stage at a time. Scoring: the first 8 files, `-Task PerFileScoring -NumFiles 8`, fresh tag per
+  leg (a reused tag resumes instead of re-scoring). FirstPassFDR: `-Task FirstPassFDR -LinkFrom <the 4:12
+  run> -Fresh` (hard-links Stage 1-4; regenerates only FirstPassFDR; pins the version stamp).
+- The FIRST leg after anything else reads cold (MACS2: +300-650 s on FirstPassFDR). Run a throwaway warm-up
+  leg, or discard leg 1. Compare `[PATH] ... block reads ... read Ns, gate wait Ns` to spot a cold leg.
+- Repeat the winner; alternate A/B legs. Compare the CPU-bound `Coelution scoring: ... cand/s` per lane to
+  separate CPU contention from disk.
+- `DOTNET_*` and `OSPREY_FDR_FILE_LANES` pass through the runner (it strips only its own OSPREY_* list).
+- Each full 82-file run writes ~200 GB to the run dir: check free space first.
+
+**Experiments, in order**
+1. Threads: `--threads 32` (all logical). The runner default is 30, so this is ~free here (MACS2 gained 1.44x
+   from 30 -> 72 only because 30 left most of its cores idle).
+2. Scoring lanes `-ParallelFilesScoring 2 / 3 / 4` (threads divide by lanes). MACS2 plateaued at ~2.2x once all
+   cores were busy - the i9 is already near that, so look for 5-15%, and watch memory (~10-15 GB per lane).
+3. Re-scoring lanes `-ParallelFilesRescoring 2 / 4` - lighter per file; probably the i9's best remaining lever.
+   It also sets Stage 7's per-run fold width (MACS2 SecondPassFDR halved at 8 lanes).
+4. FirstPassFDR lanes: default resolver = min(threads/2, free RAM / 7.4 GB, 8). Try `OSPREY_FDR_FILE_LANES=12/16`
+   only if RAM allows (~7.4 GB per lane on SEA-AD). MACS2: 16 best, 24 worse (queued on the read gate).
+5. GC heaps: Server GC defaults to one heap per logical CPU (32 here). Try `DOTNET_GCHeapCount=24` (physical
+   cores, 8P+16E) and `16`. MACS2 (2 sockets, 72 heaps): 36 heaps cut FirstPassFDR ~20% and made it repeatable;
+   on scoring the effect was lost in noise. One socket -> expect smaller; possibly none.
+6. Keep `OSPREY_BLOCK_READ_GATE` ON - off cost +11% on MACS2's RAID with warm files; on an HDD it should be worse.
+7. Then one full run with the best per-stage values; compare per task (`[TASK] X:done (Ns)`) with the 4:12 run.
+
+Record results under the Progress Log as "i9 128 GB tuning", with the same per-task table shape.
+
 ## Progress Log
 
 ### 2026-10-06 - MACS2 (NUMA PowerEdge) run started 12:51
@@ -122,6 +160,37 @@ runs of `490a4d3825` are the comparisons that mean something.
   config), so only the relative order holds: fewer heaps did not hurt scoring and probably helped.
 - Single rep per leg throughout; noise unmeasured. One 2-socket NUMA box: the i9s have 32 heaps by default.
 - Applied: full run `-fast2` (01:03:55) = fast1 + `OSPREY_FDR_FILE_LANES=16` + `DOTNET_GCHeapCount=36`.
+
+**Replicated (04:00-05:16)**: r16a 1,528 s (COLD, read 775 s - discard), r16b (36 heaps) 980, r16a2 (72) 1,047,
+r16b2 (36) 990. So 36 heaps: **970 / 980 / 990 s** (three runs within 2%); 72 heaps warm: 1,047 / 1,227 s.
+The heap-count win for FirstPassFDR is real and repeatable (-6% to -20%, and far less variable).
+
+**Full runs with the best FDR settings were NOT faster end to end - the shared box's noise dominates:**
+- `-fast2` (01:03:55 -> 03:22:52): **2 h 18 m 51 s** (8,330.6 s), exit 0, 6,654 protein groups. Per task vs
+  fast1: scoring 4,408.6 (+19%), FirstPassFDR 1,288.8 (+5%; 16 lanes confirmed in the log), rescoring 1,971.0
+  (-3%), SecondPassFDR 658.9 (-18%). Coelution per lane was 15-20% lower in every 10-file bucket.
+- Heap A/B on scoring (8 files, 4 lanes, warm-up leg first; `scoring-sweep-20261006`): 72 heaps 356 / 475 s,
+  36 heaps 359 / 315 s. The SAME config spread 356-475 s within 15 minutes: other users' load (invisible to
+  us) is larger than any heap effect on scoring, so fast2's slow scoring cannot be pinned on the heaps.
+- `-fast3` (05:17:08, repeat of fast2) **FAILED at 06:33:13: D: full** ("There is not enough space on the
+  disk" writing first-pass intermediates after PerFileScoring = 4,151.8 s). Each full run writes ~200 GB;
+  this session's runs reached ~1.1 TB of D:. fast3's intermediates were deleted (150 GB), logs kept.
+  Check free space before every full run (`Get-DiskUsage.ps1`, hard-link aware).
+
+**Conclusions for MACS2**
+- Stable gains: `--threads 72` + per-stage lanes (2:09 vs 4:19); FirstPassFDR 16 lanes + 36 GC heaps
+  (~980 s vs ~1,220 s in isolation). The read gate stays on.
+- Not established: that the full-run total improves beyond 2:09 - two runs of the same config took 2:09
+  (fast1, 72 heaps) and 2:18 (fast2, 36 heaps), and scoring varies +-20% with other users' load.
+- To measure MACS2 cleanly, the box needs to be quiet (or measure each config 2-3x and use the minimum).
+
+**Candidate default-code changes (each needs its own A/B, incl. the i9s)**
+1. `FdrLaneResolver.MAX_LANES` 8 -> 16, still bounded by threads/2 and free memory (64 GB i9 stays low).
+2. Runner default `-Threads 30` -> all logical processors (no change on a 32-thread i9; 2.4x the cores here).
+3. GC heaps: `System.GC.HeapCount` in runtimeconfig is one fixed number for every machine - unsuitable.
+   First check whether .NET's adaptive heap sizing (DATAS) is active in Osprey's process; if it is off,
+   enabling it may beat any fixed count. Otherwise runners/docs set `DOTNET_GCHeapCount` per machine.
+4. Leave the block-read gate on (off cost +11% at 16 lanes, warm).
 
 ### 2026-10-06 (evening) - MACS2 tuned: 2 h 09 m with per-stage file parallelism
 
