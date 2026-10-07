@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260820_dpiAwareness` (pwiz1)
-- **Base**: `master`
+- **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-10-07; was `master`)
 - **Created**: 2026-08-20
 - **Status**: In Progress
 - **GitHub Issue**: [#4599](https://github.com/ProteoWizard/pwiz/issues/4599)
@@ -44,6 +44,16 @@ on a branch and inventories the breakage to size the real fix.
   at 150%+ would newly see scaled geometry - affects LabelLayoutTest English
   pins and tutorial screenshot capture (96 DPI assumption).
 
+## Tool packages to re-publish after the DPI fixes (2026-10-07)
+
+- [ ] QuaSAR args collector (Executables/Tools/QuaSAR/ArgsCollector): rebuild
+      QuaSAR.dll from the fixed QuaSARUI designer (tab control anchored to the
+      client, title box anchored right), repackage the tool zip, publish to the
+      Tool Store, and replace QuaSAR-1_0.zip inside skyline.ms/tutorials/
+      QuaSARTutorial.zip (the tutorial installs that 2014 DLL; Quasar s-06).
+- [ ] MSstats args collectors (Executables/Tools/MSstats/ArgsCollectors): same
+      packaging path (MSstats-1_0.zip in MSstatsTutorial.zip); layout looked
+      intact at 150%, only the tutorial capture clipped (fixed in the tutorial).
 ## Tasks
 
 - [x] Flip `Properties/app.manifest` to system-DPI-aware +
@@ -700,6 +710,70 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-07 - PUSHED and RETARGETED (developer approved)
+
+- Gate on the rebased build: 19 tests in two batches (gate-net10-rebased-a/b.log)
+  ALL PASSED; the updated Run-Tests.ps1 names the log after the test list, so
+  19 names in one run exceeded the path limit - keep gate lists short.
+- git push --force-with-lease: 0389b02887 -> dfacbe4418 (forced update).
+- PR #4602 base is now Skyline/work/20260612_net8_port; 14 commits, MERGEABLE.
+- Branch Information below still says master as the base in places; the PR
+  now targets the port branch.
+### 2026-10-07 - REBASED onto the rewritten port history (email: branch safe to target again)
+
+The port branch history was rewritten twice (archive tag 0f79141d23fe = the
+history we merged at 553a145871; proposal/net10-port-history-v1 = yesterday;
+current tip e35b05852f, 109 commits past our merge point incl. #4658 "hoist
+the C# port into the classic layout"). Our branch carried the OLD port
+commits through merge 8eb6af85b0, so a merge would drag ~90 dead commits into
+the PR; a plain rebase would replay the 12 pre-merge commits against the port
+with conflicts in every ported file. Done instead:
+- backup/dpiAwareness-premerge-history = the old tip 4e606b401a (local).
+- Branch reset onto origin/.../net8_port; diff(553a145871 -> 8eb6af85b0) = the
+  12 pre-merge commits as the merge resolved them (verified: exactly our 12
+  commits, no master drift) applied 3-way as ONE commit 14d5e1f6f8. Conflicts:
+  WizardPages.cs using block (kept System.Drawing only), Skyline.csproj (LF vs
+  CRLF only, took the port version).
+- The 13 post-merge commits cherry-picked (same subjects, new hashes
+  26f6b7c60f..dfacbe4418). Conflicts: ComparePeakPickingDlg/
+  EditPeakScoringModelDlg zh-Hans resx (port re-wrote them; our tweaks were
+  reverted later anyway -> port version), DefineAnnotationDlg.zh-Hans.resx
+  (port version + our six anchor entries re-applied; a first attempt left
+  conflict markers in ac1be07774 - caught by git grep and amended).
+- VERIFIED: diff(553a145871, old tip) == diff(new port tip, HEAD) over all 79
+  files we touched, ignoring EOL: 1470 = 1470 lines, 0 differing. No conflict
+  markers in HEAD. 14 commits on top of the port tip, all RitaCh.
+- Harness stash popped cleanly (Program.cs, runner, TestFunctional.cs merged).
+Next: build + gate on the new base, then push --force-with-lease and retarget
+PR #4602 base to Skyline/work/20260612_net8_port (developer confirmation).
+### 2026-10-07 - round 3 COMMITTED (not pushed)
+
+- 6e94d74c34 tutorials: BeginDragDisplay edge-aware pointer (only that hunk of
+  TestFunctional.cs staged; the 3 LOCAL harness hunks remain unstaged) +
+  MSstatsTutorialTest centering the tool dialog.
+- 4e606b401a QuaSAR dialog (QuaSARUI.cs + Designer).
+Branch: 13 commits on top of the port merge; nothing pushed.
+### 2026-10-07 - round 3: docking cue, MSstats clipping, QuaSAR dialog, SmallMolQuant combo row
+
+- GroupedStudies1 s-04/05/06 docking cues: DigitalRune indicators are 96-DPI
+  bitmaps at 96-DPI edge offsets (binary DLL, fork source outside the repo);
+  BeginDragDisplay now keeps the 96-DPI pixel distance from an edge for
+  proportions within 0.25 of it (EdgeAwareOffset). Verified: cues match 96 DPI.
+  Indicators stay small for users -> port-side list (DigitalRune rebuild).
+- MSstats s-07/s-08: the tool dialog opened outside the Skyline window; the
+  tutorial now centers it on the window before the window screenshot (same
+  composition as before, whole dialog visible). Verified.
+- Quasar s-06: QuaSARUI source IS in the repo (Executables/Tools/QuaSAR/
+  ArgsCollector). Fixed: tabControl anchored to the client, tboxTitle anchored
+  right and 8 px narrower, FitTabPagesToContent on load (the font autoscale
+  grows the pages more than the client). Verified with a locally built DLL
+  swapped into the cached tutorial download (Downloads/Tutorials/
+  QuaSARTutorial.zip on D:; original kept as .orig). The tutorial and users get
+  it only after the tool package is rebuilt and republished (TODO section
+  above). The developer built the tool project with the .NET CLI (the hook
+  blocks direct builds and no wrapper target covers tool projects).
+- SmallMolQuant s-02 combo row: fresh capture row0H=34 under the 34-px overlay.
+- All four re-captured and in the gallery.
 ### 2026-10-06 - round 2 COMMITTED (not pushed)
 
 - 5b9b4675d4 grids: CommonDataGridView row padding, BoundDataGridView Format/
