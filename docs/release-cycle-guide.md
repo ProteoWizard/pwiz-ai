@@ -6,11 +6,16 @@ For detailed release procedures, see `ai/docs/release-guide.md`.
 
 ## Current State
 
-**Phase**: POST-RELEASE PATCH (Major release shipped)
-**Release Branch**: `Skyline/skyline_26_1`
+**Phase**: POST-RELEASE PATCH (Major release shipped), plus the .NET 10 cut-over
+**Release Branch**: `Skyline/skyline_26_1` (26.1 patches, .NET 4.7.2)
 **Released Version**: Skyline 26.1.0.057 (Feb 26, 2026)
-**Master Version**: 26.1.1.xxx (daily builds)
-**Branch Created**: 2026-01-04
+**.NET 4.7.2 daily branch**: `Skyline/skyline_26_1_1`, created 2026-10-06 from tag
+`Skyline-daily-26.1.1.279` (the last 4.7.2 Skyline-daily from master). Treat it like a
+release branch: 4.7.2 fixes and Skyline-daily patches go there (versions stay 26.1.1.DDD);
+everything else goes to master
+**Master Version**: 26.1.2.xxx once the .NET 10 port branch is promoted (26.1.1.xxx until
+then); see `ai/todos/active/TODO-20261006_net10_cutover.md`
+**Branch Created**: 2026-01-04 (`skyline_26_1`), 2026-10-06 (`skyline_26_1_1`)
 
 ## Release Cycle Phases
 
@@ -188,7 +193,8 @@ Example: Jan 4, 2026 with SKYLINE_YEAR=26 → DDD = (26-26)*365 + 4 = 004
 
 | Phase | Version Pattern | Example | Product | skyline.ms Container |
 |-------|-----------------|---------|---------|---------------------|
-| Daily (master) | YY.N.1.DDD | 26.1.1.007 | Skyline-daily.exe | `/home/software/Skyline/daily` |
+| Daily (master, .NET 10) | YY.N.2.DDD | 26.1.2.280 | Skyline-daily.exe | `/home/software/Skyline/daily` |
+| Daily (.NET 4.7.2, `Skyline/skyline_26_1_1`) | YY.N.1.DDD | 26.1.1.278 | Skyline-daily.exe | `/home/software/Skyline/daily` |
 | FEATURE COMPLETE | YY.0.9.DDD | 26.0.9.007 | Skyline-daily.exe | `/home/software/Skyline/daily` |
 | Release | YY.N.0.DDD | 26.1.0.045 | Skyline.exe | `/home/software/Skyline` |
 
@@ -202,7 +208,7 @@ Every published release is tagged. Tags let you navigate from a version number t
 
 | Release Type | Tag Format | Example |
 |--------------|------------|---------|
-| Daily (beta) | `Skyline-daily-YY.N.1.DDD` | `Skyline-daily-25.1.1.147` |
+| Daily (beta) | `Skyline-daily-YY.N.1.DDD` (4.7.2 line) / `Skyline-daily-YY.N.2.DDD` (.NET 10 master) | `Skyline-daily-26.1.2.280` |
 | Feature Complete | `Skyline-daily-YY.N.9.DDD` | `Skyline-daily-26.0.9.004` |
 | Official Release | `Skyline-YY.N.0.DDD` | `Skyline-26.1.0.045` |
 
@@ -228,7 +234,7 @@ git tag --contains <commit-hash>
 When an exception report or test failure occurs on a specific version:
 
 1. **Parse the version** to determine branch and approximate date:
-   - `B=1` → master (daily), `B=9` → release branch (feature complete), `B=0` → release
+   - `B=2` → master (.NET 10 daily), `B=1` → `Skyline/skyline_26_1_1` (.NET 4.7.2 daily), `B=9` → release branch (feature complete), `B=0` → release
 2. **Find the tag**: `git tag -l "Skyline-daily-YY.N.B.*"` or `git tag -l "Skyline-YY.N.0.*"`
 3. **Check if the fix is in a later tag**:
    ```bash
@@ -249,8 +255,9 @@ When an exception report or test failure occurs on a specific version:
 
 | Branch | Local Folder (relative to project root) | Purpose |
 |--------|-------------|---------|
-| `master` | `pwiz` | Ongoing development |
-| `Skyline/skyline_26_1` | `skyline_26_1` | Current release branch |
+| `master` | `pwiz` | Ongoing development (.NET 10 after the cut-over) |
+| `Skyline/skyline_26_1_1` | `daily` | .NET 4.7.2 Skyline-daily releases and patches (26.1.1.DDD) |
+| `Skyline/skyline_26_1` | `skyline_26_1` | Current release branch (26.1 patches) |
 | `Skyline/skyline_25_1` | `skyline_25_1` | Previous release (reference) |
 
 ## Updating This Document

@@ -34,7 +34,7 @@ Skyline has four distinct release types, each with a different workflow:
 |-----------|------|--------|-------------|
 | `YY` | Year | 24, 25, 26... | Year of release (also base year for day calculation) |
 | `N` | Ordinal | 0, 1, 2... | Release number within year (0 = first/unreleased, 1 = first official) |
-| `B` | Branch | 0, 1, 9 | Build type: 0=release, 1=daily, 9=feature complete |
+| `B` | Branch | 0, 1, 2, 9 | Build type: 0=release, 1=daily (.NET 4.7.2 line on `Skyline/skyline_26_1_1`), 2=daily (.NET 10 master, from 26.1.2), 9=feature complete |
 | `DDD` | Day | 001-365 | Zero-padded day of year from git commit date |
 
 ### Jamfile.jam Constants
@@ -1114,7 +1114,7 @@ quickbuild.bat -j12 --abbreviate-paths pwiz_tools\Skyline//Skyline.exe --officia
 
 | Release Type | Tag Format | Example |
 |--------------|------------|---------|
-| Daily (beta) | `Skyline-daily-YY.N.1.DDD` | `Skyline-daily-25.1.1.147` |
+| Daily (beta) | `Skyline-daily-YY.N.1.DDD` (4.7.2 line) / `Skyline-daily-YY.N.2.DDD` (.NET 10 master) | `Skyline-daily-26.1.2.280` |
 | Feature Complete | `Skyline-daily-YY.N.9.DDD` | `Skyline-daily-26.0.9.004` |
 | Official Release | `Skyline-YY.N.0.DDD` | `Skyline-26.1.0.045` |
 
