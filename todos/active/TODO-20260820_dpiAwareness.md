@@ -700,6 +700,300 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-06 - round 2 COMMITTED (not pushed)
+
+- 5b9b4675d4 grids: CommonDataGridView row padding, BoundDataGridView Format/
+  layout widths, DataGridViewEx header rule.
+- 068ce4c3f2 dialogs: CommonAlertDlg, FormEx button images, ViewLibraryDlg,
+  BuildLibraryDlg, DefineAnnotationDlg (+3 resx), ImportTransitionListColumnSelectDlg.
+Working tree after: harness only (Program.cs, runner Program.cs + manifest,
+TestFunctional.cs, AbstractFunctionalTestEx.cs, TestTutorial/*.cs,
+DpiPaneSweepTest.cs) plus the developer's ImageExtractor edits (not mine).
+Branch now has 11 commits on top of the merge of the port; nothing pushed.
+### 2026-10-06 18:45 - round 2 COMPLETE: all re-captures in, final gate green
+
+- Combo overlay root cause: a DataSource set before the grid has a handle binds
+  only at handle creation, after ResizeComboBoxes ran (dump: row0Min=3,
+  row0Pad=0). Fix: DataBindingComplete -> ResizeComboBoxes (guarded). Verified
+  SmallMolecules s-02: row0Min=34 row0Pad=9 row0H=34, first data row visible.
+- DIA after-phase timeout at ClickChromatogram (line 466) was transient: re-run
+  31/31 both phases.
+- Final gate gate-net10-grids5.log (8 tests incl. TestReplicatePivotGrid,
+  TestAlertDlg, TestLibraryExplorer, TestPeakScoringModel) ALL PASSED on the
+  final binaries (build-port-34).
+- Gallery tutorials/index.html rebuilt by the last run; every tutorial has
+  fresh captures with all fixes except the usual (TargetedMSMS 16 after,
+  MSstats 8, Quasar 6).
+- Commit proposals: commit-a-grids.txt (CommonDataGridView, BoundDataGridView,
+  DataGridViewEx) and commit-b-dialogs.txt (CommonAlertDlg, FormEx,
+  ViewLibraryDlg, BuildLibraryDlg, DefineAnnotationDlg + 3 resx,
+  ImportTransitionListColumnSelectDlg). Not committed.
+- NOT MINE, left alone: Executables/DevTools/ImageExtractor (csproj, Program.cs,
+  README.md) modified in the working tree by another session.
+### 2026-10-06 - evening: clip mistake, pivot test, final gates
+
+- My harness change scaling ClipBitmap rects by the DPI factor was wrong for
+  callers that pass physical rects (ClipTargets, ClipGridToolbarSelection,
+  ClipSkylineWindowShotWithForms, LiveReports/MethodEdit derived rects): those
+  clips came out 1.5x too large at 150% (MethodEdit s-21 1418 vs 950, LiveReports
+  s-45, DIA s-24/25, PeakPicking s-16, ...). Reverted; only the three literal
+  rects in AuditLogTutorialTest are scaled. Affected tutorials re-captured
+  (chain10: MethodEdit, DIA, PeakPicking, Ms1Filtering, ExistingQuant,
+  LiveReports, AuditLog, GroupedStudies1). MethodEdit clips verified ratio 1.0.
+- gate-net10-grids4.log: TestReplicatePivotGrid failed once (column widths
+  180-199 vs 200, alignment timing); re-run 3x on the same binaries
+  (gate-pivot-1..3.log) all PASSED -> flaky, not the change. gate3 (8 tests)
+  PASSED on the same product code.
+- DefineAnnotationDlg verified in GroupedStudies1 s-69: identical layout to
+  96 DPI with the load-time anchors + scaled 442.
+- OPEN: ImportTransitionListColumnSelectDlg placeholder row still 25 with the
+  34-px overlay after MinimumHeight + padding; dump extended (rows, autoRows,
+  row0Min, row0Pad) - probe queued (chain11).
+- Build-Skyline.ps1 -Target has no TestUtil; use TestTutorial (builds TestUtil).
+### 2026-10-06 - round-2 follow-ups during the re-capture (17:00)
+
+- DefineAnnotationDlg revisited: the test helper AddAnnotation sets Height=442
+  raw (now Scale in the local harness), and with pure Top anchors the shorter
+  dialog shrank the applies-to list instead of the values box, which would
+  change the committed 96-DPI tutorial shots. Final design: resx anchors all
+  from the top (both tab pages, incl. the Calculated tab: lblAggregateOperation,
+  comboAggregateOperation, availableFieldsTree1), and OnLoad applies the
+  original resizing anchors once the pages have their final size.
+- ImportTransitionListColumnSelectDlg: fresh capture still showed the combo
+  overlay (34) over the placeholder row (25) although MinimumHeight was set;
+  now also pads the placeholder cells by the shortfall (AllCells counts it).
+- Verified on fresh captures: AuditLog s-24 buttons, s-23 no scrollbars;
+  TargetedMSMS s-08 no hscroll; PeakPicking s-09 columns; SRM s-17 grid 469
+  high; Ms1Filtering s-11 list rows; SmallMolQuant s-01/06/16; MSstats s-03
+  arrows; CustomReports s-03 height.
+- Quasar before-phase failed at document load (0 shots) - re-run queued.
+- Chains: chain4 (after sweep: build Skyline, re-capture SmallMolecules/
+  SmallMolQuant/SmallMolMethodDevCEOpt, gate3), chain5 (Quasar), chain6 (full
+  build incl. TestUtil, re-capture GroupedStudies1, gate4 = final gate).
+### 2026-10-06 - developer review round 2 (233 marks, 35 bugs, down to 3% diff) -> fixes, full re-capture running
+
+Export dpi-tutorial-review-net10 (1).json (15:10). Dispositions:
+- PRODUCT (uncommitted; build-port-27; commit proposal commit-grids3.txt):
+  CommonAlertDlg AddButton Width (runtime Button kept raw 75 -> "Registe"/
+  "Continu" clipped, AuditLog s-24) + Scale(LABEL_*_PADDING) (MessageDlg hscroll,
+  TargetedMSMS s-08: label 24+619 > 663-vscroll); FormEx.ScaleButtonImages
+  (Button.Image 96-DPI bitmaps: adduct arrows SmallMolQuant s-06, tool macro
+  arrows MSstats s-03; exact-type Button only, shared images scaled once via
+  ImageListScaler.ScaleImage); ViewLibraryDlg listPeptide.ItemHeight scaled
+  (LibraryExplorer s-09, Ms1Filtering s-11); BuildLibraryDlg gridInputFiles
+  Dock=Fill + tabFiles.Padding (anchored-in-TabPage short on .NET, SRM s-17:
+  236 high in a 630 dialog); DataGridViewEx header rule now only for headers
+  that fit on one line at 96 DPI (PeakPicking s-06/09/11/13/25/26: Percentage
+  Contribution widened, Score Name fill column squeezed).
+- ALREADY FIXED, pre-fix captures: row density (AbsoluteQuant s-15,
+  SmallMolecules s-02), DefineAnnotationDlg (GroupedStudies1 s-65/68/69/74),
+  Format(Width) (LiveReports s-68/69).
+- HARNESS (local): ResizeFormOnScreen sites (SmallMolQuant s-01 600x300 -> the
+  20pt prompt after 3 newlines fell below the visible box; s-16/18/20 857/780;
+  SmallMolMethodDevCEOpt s-01 1070), CustomReports s-03 viewEditor.Height 600,
+  AuditLog s-23 width 1140 -> 1160 (.NET text wider; scrollbars), AuditLog
+  s-04/s-20 clip rectangles (fixed earlier; s-20 now shows only the wider
+  audit log window - arrangement, left).
+- EXTERNAL TOOL FORMS, not Skyline: MSstats GroupComparisonUi/SampleSizeUi
+  (s-07/s-08 cropped/misplaced), QuaSARUI (Quasar s-06 overlapping buttons) -
+  tool assemblies under Executables/Tools; report to the tool owners.
+- SRM s-18 library explorer position: tutorial placement, left.
+- OPEN: ImportTransitionListColumnSelectDlg combo row overlapping first data row
+  (SmallMolecules s-02 etc.) - judge on the fresh capture; LiteDropDownList is a
+  runtime Button (raw 23 px) so the product Scale(combo.Height) is right.
+Full re-capture started 15:40 (tut-net10-driver6.out); gate run-gate-grids2.ps1
+queued behind it (gate-net10-grids3.log).
+### 2026-10-06 - "message column shows less text at 150%" = Format(Width=512) applied raw
+
+Developer question on AuditLog s-16. Root cause: [Format(Width = 512)] on
+AuditLogRow/AuditLogDetailRow message properties (plus one Width = 300) is
+applied by AbstractViewContext.CreateGridViewColumn as raw pixels - a second
+raw-width path next to the saved-layout widths. Fix: BoundDataGridView.
+ScaleFormatWidth right after CreateGridViewColumn (DeviceDpi/96). Measured
+AuditLog at 150%: message 512 -> 768, 562 -> 843 (build-port-26). Commit
+proposal commit-grids2.txt updated (second bullet now covers both sources).
+Gallery generators now append ?v=<mtime> to image links - re-captured shots
+keep their names and the browser was showing cached copies.
+### 2026-10-06 - developer review of the .NET tutorial gallery: "grids smaller, horizontal scrollbars"
+
+Export dpi-tutorial-review-net10.json (42 marks, 14 bugs). Dispositions:
+- PRODUCT (uncommitted, built build-port-23, commit proposal commit-grids2.txt):
+  (1) row density - WinForms default row = Font.Height + 9 with the 9 unscaled
+  (22 -> 28 at 150%); CommonDataGridView ctor/OnFontChanged scales the padding
+  (-> 33), skips grids that set their own height. Measured rowTplH=33.
+  (2) view-layout column widths are raw pixels (BoundDataGridView 223/283) ->
+  scaled on apply, unscaled on store (DeviceDpi/96). Not visible in the gallery
+  (tutorial widths come from AutoResizeColumn + pixel extras) - persisted
+  layouts only; developer may veto. (3) DefineAnnotationDlg (GroupedStudies1
+  s-74, broken on 4.7.2 at 150% too): Bottom-anchored tbxValues/lblAppliesTo/
+  checkedListBoxAppliesTo in a TabPage misplaced by autoscale -> Top anchors
+  (resx x3); verified in form batch 98.
+- HARNESS (local, never commit): tutorial pixel sizes - ResizeFormOnScreen
+  (AbstractFunctionalTestEx.cs, NEW locally modified file; covers
+  SmallMolMethodDevCEOpt s-01 1070, SmallMolQuant s-20 780, 6 sites), ClipBitmap
+  rect x DPI factor (AuditLog s-03/s-04/s-20 clips), AuditLog
+  ShowAndPositionAuditLog Size(772+..,354) + column extras, SetGridFormToFullWidth
+  +35. These made the 150% captures physically smaller; not product bugs.
+- s-19/s-23 scrollbars: gone with the +35 scaling and the row heights.
+- SRM s-18 (library explorer position): tutorial positions, left alone.
+Session switched from RDP to the local console (2 x 3840x2160, still 144 DPI)
+during verification; captures fine. Gate: run-gate-grids.ps1 (TestAnnotations,
+TestAnnotationsWithOldReports, TestDocumentGrid, TestAuditLog,
+TestReplicatePivotGrid, TestEditDialogs) -> gate-net10-grids.log.
+Developer: no full re-capture until they say so.
+### 2026-10-05 - tutorial sweep COMPLETE and clean (16:24): 609 .NET pairs, nothing .NET-specific
+
+Contamination root cause (probe-foreground.log): in the DPIUNAWARE before phase
+GetForegroundWindow stayed on the Windows Terminal for the whole phase - the
+runner's SetForegroundWindow has no foreground rights there, Skyline opens
+behind the terminal, CopyFromScreen captures the terminal. The after phase
+does get the foreground. Not developer interaction (reproduced twice with the
+same geometry). Fix in the harness: Boost-Foreground.ps1 (Alt press +
+SetForegroundWindow on the first "Skyline*" window of the runner process, once)
+launched by run-tutorialshots.ps1 for every before phase; run-before-fix.ps1
+re-captured SRM + MethodRefinement before (tut-net10-beforefix-20261005-1619.log),
+dark-pixel scan clean. Final scores (layout-scores.json, 609 tutorial pairs,
+309 > 2%): 28 above the cut only on .NET; all checked by eye = pixel-fixed
+windows (AuditLog s-02/s-09), the 11% width growth, or dialog placement (SRM
+s-17 10%, s-01..07 ~3%: identical to 4.7.2 at 150%). The 100% before-phase
+blanks (MethodEdit s-14/s-17, LiveReports s-03/s-07, GroupedStudies1 s-01,
+Ms1Filtering s-17) are the same on 4.7.2. Gallery for the developer:
+ai/.tmp/dpi-sweep/tutorials/index.html.
+Port-side issues to report with the PR: (1) Skyline.csproj BlibBuild/BlibFilter
+Content include path lacks x64 (see entry below) -> TestFullScanId hang,
+TestManageLibraryRuns, tutorial library builds; (2) nothing else new.
+### 2026-10-05 - .NET tutorial sweep DONE (22 tutorials, 16:04); no .NET-specific regressions found
+
+Log sessions/20260910-dpi/tut-net10-20261005-1414.log. After the BlibBuild copy
+every tutorial that passed on 4.7.2 passed on .NET in both phases with the same
+shot counts; Ms1Filtering 44/44 (library build works now). MethodEdit re-run
+16:04 (tut-net10-20261005-1604.log) 23/23 both phases. Same-as-4.7.2 failures:
+TargetedMSMS after at ValidatePeakTooltips (hard-coded 96-DPI hover points,
+16 shots), MSstats 8, Quasar 6 (external tools).
+CONTAMINATION: the Claude Code terminal was in front of the Skyline window
+during SRM before (all 25) and MethodRefinement before (s-01/02/09/17/21) -
+dark-pixel scan (>8% near-black) found them; AuditLog before/s-20 is the
+menu-capture black band also on 4.7.2; other hits are bar charts. Re-capture
+of SRM + MethodRefinement queued behind MethodEdit (tut-net10-20261005-1607.log).
+4.7.2 scores regenerated into dpi-sweep/layout-scores-net472.json
+(make_layout_diff_net472.py) for a per-shot comparison: 586 .NET pairs, 259
+>2% on both builds (reviewed on 4.7.2), 16 above the cut only on .NET - top
+ones checked by eye (AuditLog s-02/s-09 Time column truncates on both builds,
+pixel-fixed window; CustomReports s-24, Ms1Filtering s-07, PeakPicking s-02,
+DIA s-16, GroupedStudies s-09..12 = the 11% width growth). Gallery:
+dpi-sweep/tutorials/index.html (namespace dpitut2:, export
+dpi-tutorial-review-net10.json); 4.7.2 gallery kept at tutorials-net472/.
+### 2026-10-05 - .NET tutorial sweep started; BlibBuild missing from staging = the "score-type hang"
+
+Developer: "let's do the tutorial sweep first". 4.7.2 captures preserved as
+dpi-sweep/tutorials-net472 (gallery namespace dpitut:); the .NET gallery uses
+dpitut2: and exports dpi-tutorial-review-net10.json. Runner:
+sessions/20260910-dpi/run-tutorial-net10.ps1 (detached pwsh, 25-min per-phase
+timeout that kills the runner; log tut-net10-<ts>.log, per-phase
+tut-net10-<Name>-<phase>.log). Started 14:14, screen verified 144 DPI.
+MethodEdit after FAILED 399s: WaitForConditionUI(Grid.ScoreTypesLoaded) 360 s
+timeout in BuildLibraryDlg. ROOT CAUSE (port-side, report to Brendan):
+Skyline.csproj Content include copies BlibBuild/BlibFilter from
+pwiz-sharp\Tools\BiblioSpec\src\<tool>in\$(Configuration)
+et10.0, but the
+x64 build writes bind\Release
+et10.0, so the Condition fails and neither
+exe reaches Skyline's output or staging (only 7za/Skyline-daily/testhost/runner
+exes there). Same cause as "BlibFilter.exe not staged" (TestManageLibraryRuns)
+and the TestFullScanId hang. Sweep workaround (no product change): cp -rn of
+both tools' net10.0 output dirs into bin/staging/Release and
+bin/x64/Release/net10.0-windows at 14:23. MethodEdit (both phases) must be
+re-run with -Only TestMethodEditTutorial after the sweep; Ms1Filtering runs
+after the copy so it may pass in the sweep.
+### 2026-10-05 - round-2 fixes COMMITTED (3 commits, not pushed)
+
+Developer verified EditSpectrumFilterDlg resizing interactively ("looks good")
+after the follow-ups: places-bar icons (lookInImageList) in BaseFileDialogNE,
+header width measured single-line via TextRenderer + Scale(36)/Scale(16)
+reserve so Linked Peptides titles no longer wrap (Amino Acid cols 171).
+Gates: gate-net10-headers.log (4 tests), gate-net10-dock.log (3 tests) PASSED.
+- 438e6f81b2 docking fix (ComparePeakPickingDlg.cs, EditPeakScoringModelDlg
+  .resx; the inert 7f0989086f resx size tweaks restored to the port values)
+- 75fde2549c DataGridViewEx column scaling + header width, ColorGrid opt-out,
+  ImportTransitionListColumnSelectDlg, EditSpectrumFilterDlg anchors x3 resx,
+  SpectrumLibraryInfoDlg width
+- 49aa17c73c ImageListScaler (CommonBaseUI) + 5 call sites incl. file dialog
+  places bar
+Working tree after the commits: only the local harness/tutorial sweep files
+(Program.cs FormScreenshotDir, the runner Program.cs + app.manifest,
+TestFunctional.cs, 19 tutorial tests, DpiPaneSweepTest.cs) + pre-existing
+untracked junk. Nothing pushed.
+Remaining from the port plan: report port-side issues (TestFullScanId hang,
+BlibFilter not staged, tutorial tests hanging in form mode), retarget PR #4602
+base to the port branch, /code-review max, revert harness before ready.
+### 2026-10-05 - developer review of the .NET gallery (59 reviewed, 15 bugs) -> round-2 fixes (verified at 150%)
+
+Export dpi-sweep-review-net10 (1).json. The 15 marks and what was done:
+- Plot scaling x3 (ComparePeakPickingDlg, EditPeakScoringModelDlg Features/
+  Model): the docking fix above. Commit proposal commit-dock.txt (awaiting
+  "commit").
+- Designer column widths x5 (EditCEDlg 48/80/80, EditIsotopeEnrichmentDlg
+  50/50/105, EditLinkedPeptidesDlg 20, RTDetails 148/80/80/80,
+  MetadataRuleSetEditor 178x4): .NET makes only the DEFAULT width DPI-dependent
+  (100 -> 150); designer/resx widths stay 96-DPI pixels. Central fix:
+  DataGridViewEx.OnHandleCreated scales fixed-width columns once (skips
+  auto-sized columns and the DPI default width); property
+  ScaleDesignerColumnWidths for opt-out, used by ColorGrid which sizes its own.
+- ImportTransitionListColumnSelectDlg "columns too large": the branch scaled
+  auto-generated columns (already the DPI default on .NET) -> block removed.
+- EditSpectrumFilterDlg "buttons missing": btnOk/btnCancel/cbCreateCopy/
+  btnReset were Right-anchored inside the fixed-width dock-right buttonPanel and
+  the .NET anchor layout pushed them to X=-193 -> anchored Left (resx x3).
+- SpectrumLibraryInfoDlg "buttons clipped": TableLayoutPanel children at their
+  preferred width (long ID line, grid) exceed the dialog -> dialog now widens
+  to tableLayoutPanel1.GetPreferredSize before the height formula.
+- ListView/TreeView icons x4 (ExportLiveReportDlg, ManageViewsForm,
+  ViewEditor.ChooseColumnsView, WatersConnectSaveMethodFileDialog): NEW
+  pwiz.Common.Controls.ImageListScaler in Shared/CommonBaseUI (reachable from
+  Common and CommonFileDialogs): rebuilds an ImageList at DeviceDpi/96 with
+  32-bit bicubic copies. Called in ChooseViewsControl, ManageLayoutsForm,
+  AvailableFieldsTree, ExportLiveReportDlg, BaseFileDialogNE (file list).
+- MetadataRuleSetEditor "font small / grid narrower": header text measures like
+  every other grid; the 178-px columns are the width family.
+- SpectrumGridForm: developer set OK after seeing the fix.
+Build green (build-port-18). Gate at 96 DPI (11 tests, gate-net10-round2.log) ALL
+PASSED. VERIFIED in form mode at 150% (batch-95, 13:06-13:13, both phases,
+gallery + scores rebuilt): EditSpectrumFilterDlg buttons at X=10 and visible;
+SpectrumLibraryInfoDlg 1155 wide, OK inside; EditCEDlg cols 72/120/120,
+EditIsotopeEnrichmentDlg 75/75/158, RTDetails 323/120/120/120,
+MetadataRuleSetEditor 267x4, EditLinkedPeptidesDlg 1083/30,
+ImportTransitionListColumnSelectDlg 150x4 (was 338); icons in
+ManageViewsForm, ViewEditor tree and ExportLiveReportDlg tree at 24 px.
+Commit proposals: commit-dock.txt, commit-grids.txt, commit-icons.txt.
+Verified list for the record: EditSpectrumFilterDlg,
+SpectrumLibraryInfoDlg, EditCEDlg, EditIsotopeEnrichmentDlg, RTDetails,
+MetadataRuleSetEditor, EditLinkedPeptidesDlg, ImportTransitionListColumnSelectDlg,
+ExportLiveReportDlg, ManageViewsForm, ViewEditor.ChooseColumnsView.
+### 2026-10-02/05 - re-run done (205 pairs); the two graphs were NOT the overhang class - ZedGraph in TabPage collapses on .NET (FIXED by docking)
+
+RE-RUN (22:56-00:38): 205 complete pairs (187 forms + 18 panes); 32 still
+missing vs 4.7.2, almost all port-side: TestMethodEditTutorial and
+TestMs1Tutorial time out 360 s in WaitForConditionUI exactly like the
+library-build hang (both build a library/proteome), TestDdaSearch needs
+MSFragger, the rest network/vendor. Layout diff: 61/205 over 2%, 32 over 5%.
+Fresh dumps confirm SpectrumLibraryInfoDlg hdrH=34 and the Spectrum Grid
+label at 151 - but zedGraphRoc/zedGraphMProphet were STILL 422x362.
+
+ROOT CAUSE (table of every ZedGraphControl in the dumps): all SEVEN graphs
+hosted in a TabPage (ComparePeakPickingDlg x3, EditPeakScoringModelDlg x4)
+come out ~422x362 at 150% on .NET regardless of designer size; every graph
+hosted in a Panel/SplitterPanel/form scales correctly. The overhang resx
+tweaks (7f0989086f) did nothing for them - reverted in the docking commit.
+FIX: Dock=Fill for the four model-dialog graphs (resx; tab-page padding set to
+0 so they stay flush), and ComparePeakPickingDlg docks each graph below its
+strip via TabPage.Padding(top = graph.Top) + Dock=Fill (ctor helper).
+MEASURED at 150% (probe-net10-graphs2.log): zedGraphRoc 1059x810 under the
+52 px strip, Qq 1059x814, Files 1059x813; model graphs 747x685 = page.
+GOTCHA: the first measurement ran while the RDP session was DISCONNECTED -
+the runner log shows "# Screen: WinDisc 1920x1200" and dpiFactor=1; a
+disconnected session is a 96-DPI virtual display, so check the dump header
+and the Screen line before trusting any capture made unattended over RDP.
+Gate: gate-net10-dock.log. Commit proposal: commit-dock.txt.
 ### 2026-10-01 - .NET form sweep DONE (16:20-17:56) + three more .NET-only defects fixed (uncommitted)
 
 RESULT: 189 complete pairs (4.7.2 had 237 captures). 47 forms missing on .NET:
