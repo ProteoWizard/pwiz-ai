@@ -93,6 +93,49 @@ runs of `490a4d3825` are the comparisons that mean something.
 - Output: 6,654 protein groups at 1%; FDRBench inputs for both passes written to the run dir.
   Entrapment FDP not yet computed (SEA-AD README harvest tools).
 
+### 2026-10-06 (evening) - MACS2 tuned: 2 h 09 m with per-stage file parallelism
+
+Brendan's results for the default-settings race: i9-14900 128 GB **4:12**, MACS2 4:19, i9-14900 64 GB
+5:00. Goal set: a MACS2 configuration that beats the i9s.
+
+**PerFileScoring sweep** (first 8 files, `--task PerFileScoring`, PR #4780 build `_bin\pr4780-c84de72a6e`,
+fresh run dir per leg, box quiet; `sea-ad\runs\scoring-sweep-20261006\sweep-summary.log`):
+
+| leg | threads | scoring lanes | caches | wall (8 files, incl. ~20 s library) |
+|---|---|---|---|---|
+| base | 30 | 1 | D: | 736 s |
+| t72 | 72 | 1 | D: | 512 s |
+| p4 | 72 | 4 | D: | 327 s |
+| p8 | 72 | 8 | D: | 318 s |
+| p8e | 72 | 8 | E: | 343 s |
+
+Scoring is CPU-bound at a plateau: coelution throughput summed over lanes is ~95k cand/s for one file at
+30 threads, ~212k (4 x 53k) at p4, ~208k (8 x 26k) at p8 - ~2.2x once all 72 logical (36 physical) cores
+are busy, however they are split. Read gate wait 0 s. E: was no help.
+
+**Full run `-fast1`**: same data / library / D: disks / analysis as the 12:51 baseline, PR #4780 build,
+`--threads 72 --parallel-files-scoring 4 --parallel-files-rescoring 8`. 18:17:39 -> 20:27:19,
+**2 h 09 m 36 s** (`Total pipeline: 7776.0s`), exit 0, 6,654 protein groups at 1% (same as baseline).
+
+| task | baseline (s) | fast1 (s) | change |
+|---|---|---|---|
+| PerFileScoring | 8,162.9 | 3,715.6 | -54% (2.2x) |
+| FirstPassFDR | 1,206.0 | 1,221.6 | 0% - already at the 8-lane cap |
+| PerFileRescoring | 4,542.4 | 2,034.2 | -55% (2.2x) |
+| SecondPassFDR | 1,653.3 | 800.9 | -52% (Stage 7 fold on 8 lanes + 72 threads) |
+| **total** | **15,567.9** | **7,776.0** | **-50%** |
+
+- Memory: private peak 59.7 GB (FirstPassFDR), PerFileScoring 57.7 GB, PerFileRescoring 35.2 GB.
+  Two reporting gaps of exactly 30 s during FirstPassFDR candidate-peak scoring (19:22-19:23).
+- Box load: CPU median 25.8%, p90 81%; >= 389 GB free.
+- Run dir `D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-fast1`;
+  launcher `.tmp/sessions/20261006-night/Launch-SeaAdFast.ps1`.
+
+**Next on MACS2** (FirstPassFDR is now the largest unchanged cost, 16% of the run):
+- FirstPassFDR lanes past the cap: `OSPREY_FDR_FILE_LANES=16` (MAX_LANES = 8 today).
+- Rescoring lanes 4 vs 8 vs 16 - only 8 was tried; the scoring plateau suggests 4 may match it.
+- `DOTNET_GCHeapCount` (72 Server GC heaps by default) on the lanes stages, per the caching sweep.
+
 ### 2026-10-06 - Planned
 Created at handoff from the #4765 / #4777 session. **Next session handoff**: For detailed startup
 protocol, read `ai/.tmp/handoff-20261006_osprey_seaad_benchmark_port.md` before starting work.
