@@ -2,13 +2,14 @@
 
 ## Branch Information
 - **Repository**: `uw-maccosslab/maccosslab-agents` (local checkout `~/dev/ai-dev/maccosslab-agents`)
-- **Branch**: `work/20261006_scheduled_review` (Phase 4 pipeline, PR #2, pushed). Phases 0-3
-  and the local no-bill run path are on `main` (`9e7dd8c`, PR #1 merged 2026-10-06)
+- **Branch**: none (all work merged to `main`). Phase 4 was `work/20261006_scheduled_review`;
+  the local no-bill run path was `work/20261001_access_log_review_local_run`
 - **Base**: `main`
 - **Created**: 2026-09-16 (started 2026-09-17)
-- **Status**: In Progress (Phase 4 remaining)
-- **PR**: https://github.com/uw-maccosslab/maccosslab-agents/pull/2 (Phase 4, open). Earlier:
-  https://github.com/uw-maccosslab/maccosslab-agents/pull/1 (merged 2026-10-06)
+- **Status**: Completed
+- **PR**: [#2](https://github.com/uw-maccosslab/maccosslab-agents/pull/2) (merged 2026-10-07,
+  `5c69532`); earlier [#1](https://github.com/uw-maccosslab/maccosslab-agents/pull/1)
+  (merged 2026-10-06, `9e7dd8c`). Phases 0-2 went to `main` directly before PRs
 - **Objective**: Create a new `maccosslab-agents` repository and build an agent that reviews
   the last 24 hours of panoramaweb.org Apache and LabKey Server access logs and produces a
   report that helps Skyline staff fix slow pages and block bots
@@ -203,13 +204,15 @@ Modules: `urls.py` (page classification), `rules.py` (the server's Apache rules)
 - [ ] Deferred to Phase 3 tools or later: ASN lookup (needs an offline database), reverse-DNS
       verification of crawlers (network calls), robots.txt compliance (needs the site's
       robots.txt), sequential-ID crawl detection
-- [ ] Recommendations for `mod_qos` (currently only the one global Panorama Public limit
+- [x] Recommendations for `mod_qos` (currently only the one global Panorama Public limit
       plus `QS_ErrorResponseCode 429`; no per-client limits), e.g. per-client limits
       (`QS_ClientEventLimitCount` or similar), a regex fix (`[Pp]`, and covering the other
-      spellings). Phase 3 (agent), using the summary's `rate_limiting` section
-- [ ] User-agent block review: new crawlers that get past the `mod_rewrite` rules (no "bot"
+      spellings). Phase 3 (agent), using the summary's `rate_limiting` section. Done: the
+      system prompt's Rate limiting section asks for concrete mod_qos snippets
+- [x] User-agent block review: new crawlers that get past the `mod_rewrite` rules (no "bot"
       in the name, e.g. Baiduspider), and which agents the catch-all blocks. Recommend changes
-      in the same `RewriteCond`/`RewriteRule` form. Phase 3 (agent), using `crawlers`
+      in the same `RewriteCond`/`RewriteRule` form. Phase 3 (agent), using `crawlers`. Done:
+      the prompt's Bots and crawlers section, checked with `test_block_pattern`
 
 Dev window results (2026-09-16 07:00 to 2026-09-17 07:00):
 - `targetedms-showpeptidelist`: 4,957 requests, 102K server seconds (54% of all page time),
@@ -505,6 +508,30 @@ Only this TODO changes in pwiz-ai; everything else lives in maccosslab-agents.
   crashed phases skipped the error email (phases now guarded); configured dirs never reached
   `start_review` (now passed as absolute paths); DST-day windows (now wall-clock, 23/25 h);
   no SMTP password without TLS, port 465 support, no retry of permanent SMTP errors.
+- Replaced a developer's user name in `test_schedule.py` with a generic `user` (`5d55200`).
+
+### 2026-10-07 - Merged
+
+PR #2 merged as commit `5c69532` (squash; the branch's 7 commits `ee403ee`..`5d55200`).
+Shipped Phase 4: `access-log-review-pipeline`, a daily unattended run in three phases
+(validate with no Claude, headless review via the `access-log-review` subagent, SMTP email of
+the report or an `[ERROR]` notice), a manifest and log per run in `runs/<date>/`, and
+`--schedule`, which writes a systemd user timer (Linux) or a Task Scheduler task running
+`wsl.exe` (WSL2) and prints the install commands without installing anything. 137 tests pass.
+Together with PR #1 (local no-bill run path, `9e7dd8c`) and Phases 0-3 on `main`, the
+repository now produces the daily report this TODO set out to build.
+
+**Not done, deliberately left for later** (no follow-up issues filed):
+- Real email send: waits on an SMTP account, sender, and recipients (`config.toml [email]`
+  and `SMTP_PASSWORD` in `~/.config/maccosslab-agents/env`)
+- Installing and triggering the schedule on the run machine (the developer does this; the
+  WSL2 commands were given 2026-10-07), plus `claude setup-token` there and the log copy
+  job's timing for `[schedule] run_at`
+- The billed CLI's first live API run (no API credentials; the no-bill path is used instead)
+- Analysis ideas never built: ASN lookup, robots.txt compliance, sequential-ID crawl
+  detection, response-size vs `%D` reporting, Apache-only vs Tomcat count difference
+- Staff follow-ups from the trial reports: identify WebDAV client `160.62.2.16`; try the
+  proposed mod_qos snippets on staging
 
 The handoff files (`ai/.tmp/handoff-20261002_…` and `handoff-20260918_…`) are obsolete; the
 blocker they describe is fixed and merged.
