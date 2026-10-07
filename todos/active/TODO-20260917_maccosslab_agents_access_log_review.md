@@ -354,7 +354,10 @@ Only this TODO changes in pwiz-ai; everything else lives in maccosslab-agents.
       `schtasks.exe /Create /XML`. Run time from `[schedule] run_at` (default 07:30).
       126 tests pass
 - [ ] Step 4 install and trigger: done by the user (instructions given 2026-10-07)
-- [ ] Step 5: README, CLAUDE.md, TODO; PR when asked
+- [x] Step 5: README (daily pipeline section, setup, scheduling, module map) and CLAUDE.md
+      (pipeline rules, gitignored `runs/`/`schedule/`, `mailer.py` naming, `--schedule`
+      installs nothing); also corrected the CLI's default effort to `medium` (`e932239`)
+- [ ] Push `work/20261006_scheduled_review` and open a PR (when the user asks)
 - [ ] User setup: SMTP account and sender, `claude setup-token` on the run machine, the log
       copy job's schedule (defaults until known: window end 07:00, run 07:30)
 
@@ -491,7 +494,8 @@ Only this TODO changes in pwiz-ai; everything else lives in maccosslab-agents.
   The real test send waits on the SMTP account, sender, and a test recipient.
 - The test send is on hold (the user can't set up the email account yet).
 - Step 4 built and committed (`c977880`); the user installs and triggers it themselves.
-- Next: step 5 (README, CLAUDE.md), then push and PR when asked.
+- Step 5 done (`e932239`). The branch has 5 local commits (`ee403ee`..`e932239`), not pushed.
+- Open: push and PR when asked; the user's email test send and schedule install/trigger.
 
 The handoff files (`ai/.tmp/handoff-20261002_…` and `handoff-20260918_…`) are obsolete; the
 blocker they describe is fixed and merged.
