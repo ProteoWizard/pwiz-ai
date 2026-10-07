@@ -498,6 +498,13 @@ Only this TODO changes in pwiz-ai; everything else lives in maccosslab-agents.
 - Step 5 done (`e932239`). The branch has 5 local commits (`ee403ee`..`e932239`), not pushed.
 - Pushed the branch and opened PR #2. Open: review and merge PR #2; the user's email test
   send and schedule install/trigger.
+- `/code-review high` on PR #2 (run by the user): 10 findings, all verified against the code
+  (3 reproduced) and fixed in `0f2bddf`, pushed; 137 tests pass. Main ones: the scheduler
+  limit equaled the review timeout (now 90 min review, 3 h scheduler, test enforces the gap);
+  a quoted `<!--` in a report cut off the email (meta comment now found from the end);
+  crashed phases skipped the error email (phases now guarded); configured dirs never reached
+  `start_review` (now passed as absolute paths); DST-day windows (now wall-clock, 23/25 h);
+  no SMTP password without TLS, port 465 support, no retry of permanent SMTP errors.
 
 The handoff files (`ai/.tmp/handoff-20261002_…` and `handoff-20260918_…`) are obsolete; the
 blocker they describe is fixed and merged.
