@@ -66,6 +66,11 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
       keeps up to ~30 x 64 MB) - check on the next SEA-AD run. Remaining levers: pass 2 loads whole windows at
       +/-0.54 min tolerance (read less), memory-mapped reads (no copy; needs a cold-HDD measurement).
       Do NOT turn serial reads off: cold HDD reads need them (parallel-files sweep, +21% without).
+- [x] Read only the spectra calibration needs (Brendan's Skyline RT-pass idea) - **not worth building, measured.**
+      Coverage, file 49 (`rcdbg.log`): pass 1 (+/-4.77 min) needs 100% of scans in-range, 91.9% used; pass 2
+      (+/-0.57 min) 95.3% in-range (95-96% every window), 91.0% used. ~1,195 entries per window cover the whole
+      gradient; even the ~4,500 pass-1 winners (~27/window) would cover ~93%. Skyline's pass pays because it uses a
+      handful of standards.
 - [ ] Median polish: reuse the pick's winner polish in the feature pass (~1.4%); bound-skip of non-winning peaks
 - [ ] Optional: re-measure --parallel-files 1 vs 4 (process-wide lock) on 12 SEA-AD files with current code;
       hand numbers to `TODO-20261005_osprey_per_stage_parallel_files.md`
