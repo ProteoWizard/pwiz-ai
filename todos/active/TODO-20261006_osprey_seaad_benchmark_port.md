@@ -71,6 +71,28 @@ Same analysis as the i9 runs, at runner defaults - match these when comparing:
 - Run dir: `D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-port-490a4d3825`;
   launcher log and 30 s CPU/disk samples (`launch-` / `iosample-port-490a4d3825-*`) in `sea-ad\runs`.
 
+**MACS2 result: 4 h 19 m 28 s** (12:51:35 -> 17:11:03, `[TIMING] Total pipeline: 15567.9s`), exit 0.
+
+| task | MACS2 port `490a4d3825` (s) | i9 reference 09-25, older code (s) |
+|---|---|---|
+| PerFileScoring | 8,162.9 | 12,694.6 |
+| FirstPassFDR | 1,206.0 (8 FDR lanes: 30 threads, 429.6 GB free, 7.4 GB/lane) | 4,444.2 |
+| PerFileRescoring | 4,542.4 | 6,301.3 |
+| SecondPassFDR | 1,653.3 | 1,263.6 |
+| **total** | **15,567.9 (4 h 19 m)** | **~24,660 (6 h 51 m)** |
+
+The two columns differ in BOTH machine and code, so neither ratio is a speedup of the code. The i9
+runs of `490a4d3825` are the comparisons that mean something.
+- Memory (perfviz, `--files 82`): private peak 56.2 GB in FirstPassFDR (managed 40.3 GB); PerFileScoring
+  priv 26.5 GB, PerFileRescoring 34.4 GB, SecondPassFDR 15.8 GB. Floors FALLING (-222 MB/file total);
+  no reporting gap >= 30 s (max 28 s). The 64 GB i9's FirstPassFDR lane count will be lower (less free RAM).
+- SecondPassFDR block reads: 356,611 reads, 835.6 GB (548.7 GB parquet), read 802.9 s, gate wait 722.1 s
+  - the one task slower than the i9 reference, and the one that reads the most from D:.
+- Box load (30 s samples): CPU median 7.5%, p90 19.7%, one spike to 95% (other users); >= 397 GB free
+  throughout; D: read mean 51 MB/s (max 314).
+- Output: 6,654 protein groups at 1%; FDRBench inputs for both passes written to the run dir.
+  Entrapment FDP not yet computed (SEA-AD README harvest tools).
+
 ### 2026-10-06 - Planned
 Created at handoff from the #4765 / #4777 session. **Next session handoff**: For detailed startup
 protocol, read `ai/.tmp/handoff-20261006_osprey_seaad_benchmark_port.md` before starting work.
