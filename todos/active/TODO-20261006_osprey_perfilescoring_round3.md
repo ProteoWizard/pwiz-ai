@@ -121,4 +121,12 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
   SEA-AD) -> XIC only after a line-level measurement.
 
 ### 2026-10-07
-- Calibration breakdown recorded (Tasks). Session context getting full; handoff next.
+- Calibration breakdown recorded (Tasks). Read-lock timing -> pooled blocks committed (2c9afdefca). Calibration
+  scan coverage measured (95%) -> reading less not worth it. XIC attribution: 65% is `MzBucketIndex.LowerBound`
+  body (see "Where PerFileScoring profiling stands"). Survey of completed perf TODOs done (summary in the handoff).
+- Session closed with PerFileScoring at diminishing returns. Open decision for Brendan: PR the two local commits
+  (profiler hooks + pooled reads; memory check on the next SEA-AD run), then pick the next task - FirstPassFDR's
+  listed opportunities or a fresh PerFileRescoring profile.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261006_osprey_perfilescoring_round3.md` before starting work.
