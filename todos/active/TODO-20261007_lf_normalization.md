@@ -6,7 +6,7 @@
 > follow-up PR (`.git-blame-ignore-revs` with `5747ede7c9` and `9e2b516bcb`, `.editorconfig`
 > comment, CodeInspectionTest decision), the `-X renormalize` merges on the open port-branch PRs,
 > and the T+1 ai/ cleanup. **Follow-up PR [#4792](https://github.com/ProteoWizard/pwiz/pull/4792)
-> opened 2026-10-08**: `.git-blame-ignore-revs`, `.editorconfig` comment, and the CodeInspection
+> merged 2026-10-08 as `77da67c3f3`**: `.git-blame-ignore-revs`, `.editorconfig` comment, and the CodeInspection
 > mixed-endings check removed (open question 2 decided by Brendan: remove). **`-X renormalize` merges
 > pushed 2026-10-08** (fast-forward, no force) to #4790 #4787 #4780 #4772 #4769 #4755 #4710 #4602, each
 > with a PR comment giving owners `git pull -X renormalize`; all show MERGEABLE. Still to do: #4782 #4724
