@@ -13,6 +13,40 @@
 > Remaining after merge: follow-up PR (`.git-blame-ignore-revs`, CodeInspectionTest), the
 > `-X renormalize` merge on every open port-branch PR (I can push those for the seven moved
 > on 2026-10-06; no force-push needed), the ai/ cleanup in Phase T+1.
+> **Trap found 2026-10-07 (fixed in `5ee5a8ba7d`):** a `-text` pin stops git from *filtering*
+> a path, but `git add --renormalize .` still re-adds every file from the working tree, and on a
+> Windows checkout `core.autocrlf` has already written that tree as CRLF. So 438 pinned
+> fixtures whose stored form was LF came out stored CRLF: content identical, bytes not. The
+> verification "no unpinned i/crlf remain" cannot see this because the files are pinned. The
+> right procedure is renormalize, then `git checkout <base> --pathspec-from-file=<pinned
+> files the commit touched>` (paths with spaces break a shell loop; use the file form), then
+> verify `git diff --name-only <base> HEAD | git check-attr --stdin text` lists no `unset`
+> file whose blob differs from the base. Also learned: the BiblioSpec golden-file tests take
+> their inputs from `tests/inputs.tar.bz2` via an MSBuild target with an `obj\` stamp, and a
+> reused agent that flips between the old and new layouts can lose the extracted files while
+> keeping the stamp (bt83 #22029/#22030 on one cloud agent, 69 "Couldn't open" failures).
+> **Second trap, same day (fixed in `c73242d100`): do not pin text fixtures `-text` at all.**
+> A `-text` file checks out LF on Windows, which is not what any developer or Windows agent
+> ever saw for an LF-stored fixture (autocrlf gave CRLF), and it breaks fixtures whose
+> companions hash the CRLF bytes: `UpgradeWithFilesTree.sky` + `.skyl` failed
+> TestFilesTreeForm on bt209 #22108 with the "audit log does not match" dialog. Rule: the
+> normalization must reproduce the old Windows bytes exactly, which plain `text=auto` does;
+> only Linux checkouts of formerly CRLF-stored fixtures change, and the Linux/Wine
+> configurations on the PR are the test of that. The pins that stay are the pre-existing
+> ones (cpp TestData, mzML/mzXML, vendor reader data via nested .gitattributes). Final PR
+> shape: `.gitattributes` + 3,182 renormalized files, three commits (normalize, restore the
+> wrongly re-added pinned files, drop the pins).
+> **State at handoff 2026-10-07 evening:** head `c73242d100`. Green: bt17 Core Linux (424),
+> bt83 Core Windows (657), Osprey Linux (655), Core Windows .NET. **Red: bt209, one test,
+> `TestFilesTreeForm`** (audit-log hash mismatch on `UpgradeWithFilesTree.sky` + `.skyl` in
+> `TestFunctional/FilesTreeFormTest.data`, builds 4205656/4205723). It passed on the first
+> head where that file was stored CRLF and fails where it is LF-stored as at the base, yet
+> Brendan reproduces it locally in `C:\proj\review` with the file `w/crlf` on disk, so the
+> stale-working-copy explanation is insufficient. Skyline Windows .NET and the Docker/Wine
+> container were cancelled and never re-run on this head. Use `C:\proj\review` (on the PR
+> branch); no `C:\proj\wt` worktrees.
+> **Next session handoff**: For detailed startup protocol, read
+> `ai/.tmp/handoff-20261007_lf_normalization.md` before starting work.
 > Execution plan for GitHub issue [ProteoWizard/pwiz#4604](https://github.com/ProteoWizard/pwiz/issues/4604)
 > (opened 2026-08-22). Original plan follows.
 
