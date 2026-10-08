@@ -355,29 +355,31 @@ try {
     if ($renormalize -eq "true") {
         Add-Result "Git merge.renormalize" "OK" "true" $true
     } else {
-        Add-Result "Git merge.renormalize" "MISSING" "Run: git config --global merge.renormalize true" $false
+        Add-Result "Git merge.renormalize" "MISSING" "Run: pwsh -File ai/scripts/Configure-Git.ps1 (or /pw-configure-git)" $false
     }
 } catch {
     Add-Result "Git merge.renormalize" "ERROR" "Could not check git config" $false
 }
 
-# blame.ignoreRevsFile is per clone: set globally, git blame fails in every checkout without the
-# file (the .NET 4.7.2 branches). Check each checkout under the project root that has the file.
+# blame.ignoreRevsFile is global and absolute, pointing at a per-user copy of pwiz's
+# .git-blame-ignore-revs that Configure-Git.ps1 writes. A per-clone relative setting is wrong:
+# git blame fails outright when the file is missing, which it is on every .NET 4.7.2 branch.
 try {
-    $unset = @()
-    $withFile = Get-ChildItem $projRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { Test-Path (Join-Path $_.FullName ".git-blame-ignore-revs") }
-    foreach ($checkout in $withFile) {
-        $value = & git -C $checkout.FullName config --local blame.ignoreRevsFile 2>$null
-        if ($value -ne ".git-blame-ignore-revs") { $unset += $checkout.Name }
-    }
-    if (-not $withFile) {
-        Add-Result "Git blame.ignoreRevsFile" "INFO" "no checkout with .git-blame-ignore-revs" $true
-    } elseif ($unset.Count -eq 0) {
-        Add-Result "Git blame.ignoreRevsFile" "OK" "set in $($withFile.Count) checkout(s)" $true
+    $blameFile = & git config --global blame.ignoreRevsFile 2>$null
+    $relative = @(Get-ChildItem $projRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
+        (Test-Path (Join-Path $_.FullName ".git")) -and
+        ($v = & git -C $_.FullName config --local blame.ignoreRevsFile 2>$null) -and
+        -not [System.IO.Path]::IsPathRooted($v)
+    } | ForEach-Object { $_.Name })
+    if ($relative.Count -gt 0) {
+        Add-Result "Git blame.ignoreRevsFile" "WARN" ("per-clone setting breaks blame on branches without the file, in: " +
+            ($relative -join ", ") + ". Run: pwsh -File ai/scripts/Configure-Git.ps1") $false
+    } elseif ($blameFile -and (Test-Path $blameFile)) {
+        Add-Result "Git blame.ignoreRevsFile" "OK" $blameFile $true
+    } elseif ($blameFile) {
+        Add-Result "Git blame.ignoreRevsFile" "WARN" "$blameFile is missing, so git blame fails. Run: pwsh -File ai/scripts/Configure-Git.ps1" $false
     } else {
-        Add-Result "Git blame.ignoreRevsFile" "INFO" ("not set in: " + ($unset -join ", ") +
-            ". In each: git config blame.ignoreRevsFile .git-blame-ignore-revs") $true
+        Add-Result "Git blame.ignoreRevsFile" "INFO" "not set (optional). Run: pwsh -File ai/scripts/Configure-Git.ps1" $true
     }
 } catch {
     Add-Result "Git blame.ignoreRevsFile" "ERROR" "Could not check git config" $false

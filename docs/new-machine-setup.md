@@ -268,6 +268,10 @@ CRLF: a branch cut before the normalization, or `Skyline/skyline_26_1_1` and old
 release branches, which were never normalized. Without it, those need `-X renormalize` on every
 command, and a plain merge conflicts on every formerly CRLF-stored file the branch touched.
 
+These three need nothing cloned. After the repositories are cloned (1.10),
+`ai/scripts/Configure-Git.ps1` (or `/pw-configure-git`) applies them again together with the
+blame setting; on an existing machine, that command alone is all you need.
+
 Verify:
 ```powershell
 git config --global core.autocrlf
@@ -410,10 +414,9 @@ Copy-Item ai\claude\settings-defaults.local.json ai\claude\settings.local.json
 # Clone pwiz
 git clone git@github.com:ProteoWizard/pwiz.git
 
-# Make local git blame skip tree-wide formatting commits (the LF normalization, the BOM pass).
-# Per clone, not --global: git blame fails in any checkout without this file, which includes
-# the .NET 4.7.2 branches. GitHub's blame view reads the file on its own.
-if (Test-Path pwiz\.git-blame-ignore-revs) { git -C pwiz config blame.ignoreRevsFile .git-blame-ignore-revs }
+# Apply the git settings, including making git blame skip tree-wide formatting commits
+# (the LF normalization, the BOM pass). Safe to rerun; same as /pw-configure-git.
+pwsh -File .\ai\scripts\Configure-Git.ps1
 ```
 
 > **If the pwiz clone dies mid-transfer** with `Connection reset by peer` /
