@@ -347,6 +347,42 @@ try {
     Add-Result "Git pull.rebase" "ERROR" "Could not check git config" $false
 }
 
+# pwiz stores text LF since the 2026-10-08 normalization (#4789); merges and cherry-picks to or
+# from a branch still stored CRLF (one cut before it, or a .NET 4.7.2 release branch) need
+# renormalize, and this makes it the default.
+try {
+    $renormalize = & git config --global merge.renormalize 2>$null
+    if ($renormalize -eq "true") {
+        Add-Result "Git merge.renormalize" "OK" "true" $true
+    } else {
+        Add-Result "Git merge.renormalize" "MISSING" "Run: git config --global merge.renormalize true" $false
+    }
+} catch {
+    Add-Result "Git merge.renormalize" "ERROR" "Could not check git config" $false
+}
+
+# blame.ignoreRevsFile is per clone: set globally, git blame fails in every checkout without the
+# file (the .NET 4.7.2 branches). Check each checkout under the project root that has the file.
+try {
+    $unset = @()
+    $withFile = Get-ChildItem $projRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName ".git-blame-ignore-revs") }
+    foreach ($checkout in $withFile) {
+        $value = & git -C $checkout.FullName config --local blame.ignoreRevsFile 2>$null
+        if ($value -ne ".git-blame-ignore-revs") { $unset += $checkout.Name }
+    }
+    if (-not $withFile) {
+        Add-Result "Git blame.ignoreRevsFile" "INFO" "no checkout with .git-blame-ignore-revs" $true
+    } elseif ($unset.Count -eq 0) {
+        Add-Result "Git blame.ignoreRevsFile" "OK" "set in $($withFile.Count) checkout(s)" $true
+    } else {
+        Add-Result "Git blame.ignoreRevsFile" "INFO" ("not set in: " + ($unset -join ", ") +
+            ". In each: git config blame.ignoreRevsFile .git-blame-ignore-revs") $true
+    }
+} catch {
+    Add-Result "Git blame.ignoreRevsFile" "ERROR" "Could not check git config" $false
+}
+
 # 4. Visual Studio
 Write-Host "Checking Visual Studio..." -ForegroundColor Gray
 $vsVersions = @()

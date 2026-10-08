@@ -257,7 +257,16 @@ After installation, **restart the terminal** (type `exit`, then <kbd>Win</kbd>+<
 ```powershell
 git config --global core.autocrlf true
 git config --global pull.rebase false
+git config --global merge.renormalize true
 ```
+
+Git stores every text file with LF line endings (`.gitattributes` has `* text=auto`, since the
+2026-10-08 normalization, #4789). `core.autocrlf` gives you CRLF in the Windows working copy, which
+is what Visual Studio expects. `merge.renormalize` makes merges, cherry-picks and rebases compare
+files after line-ending normalization, so they work across a branch that is still stored with
+CRLF: a branch cut before the normalization, or `Skyline/skyline_26_1_1` and older .NET 4.7.2
+release branches, which were never normalized. Without it, those need `-X renormalize` on every
+command, and a plain merge conflicts on every formerly CRLF-stored file the branch touched.
 
 Verify:
 ```powershell
@@ -266,6 +275,9 @@ git config --global core.autocrlf
 
 git config --global pull.rebase
 # Should output: false
+
+git config --global merge.renormalize
+# Should output: true
 ```
 
 ### 1.6 SSH Key Setup
@@ -397,6 +409,11 @@ Copy-Item ai\claude\settings-defaults.local.json ai\claude\settings.local.json
 
 # Clone pwiz
 git clone git@github.com:ProteoWizard/pwiz.git
+
+# Make local git blame skip tree-wide formatting commits (the LF normalization, the BOM pass).
+# Per clone, not --global: git blame fails in any checkout without this file, which includes
+# the .NET 4.7.2 branches. GitHub's blame view reads the file on its own.
+if (Test-Path pwiz\.git-blame-ignore-revs) { git -C pwiz config blame.ignoreRevsFile .git-blame-ignore-revs }
 ```
 
 > **If the pwiz clone dies mid-transfer** with `Connection reset by peer` /
@@ -1187,6 +1204,7 @@ Run these verification commands:
 ```powershell
 # Git configured
 git config --global core.autocrlf  # Should be: true
+git config --global merge.renormalize  # Should be: true
 
 # Repository cloned (run from your project root)
 Test-Path pwiz\pwiz_tools\Skyline\Skyline.sln  # Should be: True
@@ -1872,7 +1890,7 @@ If the setup was interrupted before `ai/` was cloned, note the improvements need
 ## Success Criteria
 
 The setup is complete when:
-1. `git config --global core.autocrlf` returns `true`
+1. `git config --global core.autocrlf` and `git config --global merge.renormalize` both return `true`
 2. `pwiz\pwiz_tools\Skyline\Skyline.sln` exists (relative to your project root)
 3. `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe` exists
    (the standard build brands the artifact `Skyline-daily.exe`, **not** `Skyline.exe` — checking
