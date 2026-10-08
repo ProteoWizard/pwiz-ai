@@ -91,6 +91,9 @@ param(
     [string]$Framework = "Auto",  # Which build path to use. Auto detects it from Skyline.csproj.
 
     [Parameter(Mandatory=$false)]
+    [string]$DistroZips = $null,  # net8 only: e.g. "SkylineNightly.zip" or "SkylineTester.zip,BiblioSpec.zip" - after the build, makes these distro zips the way build.bat does (into bin\staging\<Config>)
+
+    [Parameter(Mandatory=$false)]
     [switch]$VendorLicenses = $false  # net8 only: pass -p:IAgreeToVendorLicenses=true so the
                                      # pwiz-sharp vendor projects link their real readers
 )
@@ -405,6 +408,27 @@ if ($buildExitCode -ne 0) {
 }
 
 Write-Host "`n✅ Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
+
+# Distro zips, the same three steps pwiz_tools/Skyline/build.bat runs for its *.zip arguments:
+# build SkylineTester (not in the project list above), stage it, then its DistroZips target.
+if ($DistroZips -and $Target -ne 'Clean') {
+    if (-not $isNet8) {
+        Write-Host "-DistroZips is for the .NET build; on net472 use build.bat or bs.bat." -ForegroundColor Red
+        exit 1
+    }
+    $zipList = ($DistroZips -split '[,;]' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join '%3B'
+    $testerProj = 'SkylineTester\SkylineTester.csproj'
+    Write-Host "`nDistro zips: $($zipList -replace '%3B', ', ')" -ForegroundColor Yellow
+    & dotnet restore $testerProj -nologo "-v:$Verbosity"
+    if ($LASTEXITCODE -ne 0) { Write-Host "dotnet restore SkylineTester failed" -ForegroundColor Red; exit 1 }
+    & dotnet build $testerProj -f $SdkTfm --no-restore -nologo $net8Props "-v:$Verbosity"
+    if ($LASTEXITCODE -ne 0) { Write-Host "dotnet build SkylineTester failed" -ForegroundColor Red; exit 1 }
+    & pwsh -NoProfile -File (Join-Path $skylineRoot 'Stage-Tests.ps1') -Configuration $Configuration -Projects SkylineTester
+    if ($LASTEXITCODE -ne 0) { Write-Host "Staging SkylineTester failed" -ForegroundColor Red; exit 1 }
+    & dotnet build $testerProj -f $SdkTfm --no-restore -nologo $net8Props "-v:$Verbosity" -t:DistroZips "-p:DistroZips=$zipList"
+    if ($LASTEXITCODE -ne 0) { Write-Host "DistroZips target failed" -ForegroundColor Red; exit 1 }
+    Write-Host "✅ Distro zips in bin\staging\$Configuration" -ForegroundColor Green
+}
 
 # Run tests if requested
 if ($RunTests -and $Target -ne "Clean") {
