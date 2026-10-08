@@ -1,8 +1,11 @@
 # TODO-20261007_lf_normalization.md -- Normalize stored line endings to LF repo-wide (pwiz #4604)
 
-> **Status: Completed 2026-10-08.** PR [#4789](https://github.com/ProteoWizard/pwiz/pull/4789)
-> (merged 2026-10-08 into `Skyline/work/20260612_net8_port` as `9e2b516bcb`). Follow-ups carried in
-> `TODO-20261006_net10_cutover.md` step 0.3. History of the work follows.
+> **Status: IN PROGRESS 2026-10-08 - normalization merged, follow-up open.** PR
+> [#4789](https://github.com/ProteoWizard/pwiz/pull/4789) merged 2026-10-08 into
+> `Skyline/work/20260612_net8_port` as `9e2b516bcb`. Remaining before this TODO completes: the
+> follow-up PR (`.git-blame-ignore-revs` with `5747ede7c9` and `9e2b516bcb`, `.editorconfig`
+> comment, CodeInspectionTest decision), the `-X renormalize` merges on the open port-branch PRs,
+> and the T+1 ai/ cleanup. History of the work follows.
 >
 > **Was: IN PROGRESS 2026-10-07.** PR [#4789](https://github.com/ProteoWizard/pwiz/pull/4789)
 > (`Skyline/work/20261007_lf_normalization`, commit `f67b961167`) is open against the port
