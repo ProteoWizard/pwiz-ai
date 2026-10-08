@@ -16,6 +16,46 @@ from .common import (
 
 logger = logging.getLogger("teamcity_mcp")
 
+# Fields for build lists that span configurations: which config, branch, agent and commit each
+# build was, and when it started, so a sequence of builds on one agent or of one commit reads
+# as a timeline.
+_TIMELINE_FIELDS = (
+    "build(id,number,status,state,branchName,startDate,queuedDate,"
+    "buildType(id),agent(name),revisions(revision(version)))"
+)
+
+
+def _locator_value(value: str) -> str:
+    """Quote a locator dimension value: parentheses keep commas and colons in the value from being
+    read as locator syntax, and the whole value is URL-encoded for the query string."""
+    return urllib.parse.quote(f"({value})", safe="")
+
+
+def _format_timeline(builds, show_agent: bool, show_config: bool = True) -> list:
+    """One line per build, oldest first: start time, ID, config, branch, status, commit, agent."""
+    rows = []
+    for b in builds:
+        revision = b.find("revisions/revision")
+        build_type = b.find("buildType")
+        agent = b.find("agent")
+        state = b.get("state") or ""
+        status = b.get("status") or ""
+        # The XML API returns the dates as child elements, e.g. <startDate>20261007T154249-0700</startDate>,
+        # which sort correctly as text.
+        when = b.findtext("startDate") or b.findtext("queuedDate") or ""
+        shown = f"{when[0:4]}-{when[4:6]}-{when[6:8]} {when[9:11]}:{when[11:13]}" if len(when) >= 13 else when
+        parts = [shown, f"ID {b.get('id')}"]
+        if show_config:
+            parts.append(build_type.get("id") if build_type is not None else "?")
+        parts.append(b.get("branchName") or "<default>")
+        parts.append(status if state == "finished" else (state.upper() or status))
+        parts.append((revision.get("version") or "")[:10] if revision is not None else "")
+        if show_agent:
+            parts.append(agent.get("name") if agent is not None else "(no agent)")
+        rows.append((when, "  ".join(p for p in parts if p)))
+    rows.sort(key=lambda r: r[0])
+    return [r[1] for r in rows]
+
 
 def register_tools(mcp):
     """Register build-related tools."""
@@ -254,10 +294,138 @@ def register_tools(mcp):
             return f"Error getting build log: {e}"
 
     @mcp.tool()
+    async def search_builds_by_agent(
+        agent_name: str,
+        build_type_id: str = None,
+        count: int = 20,
+    ) -> str:
+        """List recent builds on one agent, across every configuration, oldest first.
+
+        Use this to reconstruct what an agent's checkout held before a failing build: build
+        configs on an agent can share one checkout directory (e.g. C:\\pwiz), so a file left by
+        one PR's build can be what the next build of a different PR runs against.
+
+        Args:
+            agent_name: Exact agent name (e.g. 'MacCoss TeamCity Agent 1',
+                        'pwiz-windows-i-0d401c3437a3dc2a6'). Agents that have since
+                        disconnected are still found.
+            build_type_id: Optional config ID to narrow the list (e.g. 'bt209').
+            count: Maximum number of builds (default 20, most recent).
+
+        Returns:
+            One line per build: start time, build ID, config, branch, status, commit.
+        """
+        try:
+            parts = [f"agentName:{_locator_value(agent_name)}"]
+            if build_type_id:
+                parts.append(f"buildType:{build_type_id}")
+            # defaultFilter:false includes personal, canceled and failed-to-start builds, and
+            # state:any includes running ones; the default hides exactly the builds that explain
+            # an agent's state.
+            parts += ["defaultFilter:false", "state:any", f"count:{count}"]
+            fields = urllib.parse.quote(_TIMELINE_FIELDS, safe="(,)")
+            root = tc_request_xml(f"/app/rest/builds?locator={','.join(parts)}&fields={fields}")
+            builds = root.findall("build")
+            if not builds:
+                return f"No builds found on agent '{agent_name}'."
+            lines = [f"{len(builds)} build(s) on {agent_name}, oldest first:", ""]
+            lines += _format_timeline(builds, show_agent=False)
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Error searching builds by agent: {e}", exc_info=True)
+            return f"Error searching builds by agent: {e}"
+
+    @mcp.tool()
+    async def search_builds_by_revision(
+        revision: str,
+        count: int = 50,
+    ) -> str:
+        """List every build of one commit, across all configurations and agents, oldest first.
+
+        Use this to find which agents checked out a given commit - for instance a head that
+        changed .gitattributes, whose working files can outlive it on agents that reuse their
+        checkout.
+
+        Args:
+            revision: Full 40-character commit SHA. TeamCity matches revisions exactly; a
+                      short SHA finds nothing.
+            count: Maximum number of builds (default 50).
+
+        Returns:
+            One line per build: start time, build ID, config, branch, status, agent.
+        """
+        try:
+            if not re.fullmatch(r"[0-9a-fA-F]{40}", revision or ""):
+                return (
+                    f"'{revision}' is not a full 40-character SHA. TeamCity matches revisions "
+                    f"exactly; expand it first with `git rev-parse {revision}`."
+                )
+            parts = [f"revision:{revision}", "defaultFilter:false", "state:any", f"count:{count}"]
+            fields = urllib.parse.quote(_TIMELINE_FIELDS, safe="(,)")
+            root = tc_request_xml(f"/app/rest/builds?locator={','.join(parts)}&fields={fields}")
+            builds = root.findall("build")
+            if not builds:
+                return f"No builds found for revision {revision}."
+            lines = [f"{len(builds)} build(s) of {revision[:10]}, oldest first:", ""]
+            lines += _format_timeline(builds, show_agent=True)
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Error searching builds by revision: {e}", exc_info=True)
+            return f"Error searching builds by revision: {e}"
+
+    @mcp.tool()
+    async def list_agents(
+        connected_only: bool = True,
+        name_contains: str = None,
+    ) -> str:
+        """List TeamCity build agents and whether each is connected, authorized and enabled.
+
+        Cloud agents (pwiz-windows-i-*, pwiz-linux-i-*) are created per demand and disappear;
+        a persistent agent such as 'MacCoss TeamCity Agent 1' keeps its checkout between builds.
+        Use this to tell whether an agent that ran a suspect build still exists.
+
+        Args:
+            connected_only: Only agents connected now (default True). False also lists
+                            disconnected agents TeamCity still remembers.
+            name_contains: Optional case-insensitive substring filter on the agent name
+                           (e.g. 'windows', 'Agent 1').
+
+        Returns:
+            One line per agent: name, connected, authorized, enabled, pool.
+        """
+        try:
+            locator = "connected:true,authorized:any" if connected_only else "connected:any,authorized:any"
+            fields = urllib.parse.quote("agent(id,name,connected,authorized,enabled,pool(name))", safe="(,)")
+            root = tc_request_xml(f"/app/rest/agents?locator={locator}&fields={fields}")
+            agents = root.findall("agent")
+            if name_contains:
+                needle = name_contains.lower()
+                agents = [a for a in agents if needle in (a.get("name") or "").lower()]
+            if not agents:
+                return "No agents match."
+            lines = [f"{len(agents)} agent(s):", ""]
+            for a in sorted(agents, key=lambda a: a.get("name") or ""):
+                pool = a.find("pool")
+                flags = [
+                    "connected" if a.get("connected") == "true" else "disconnected",
+                    "authorized" if a.get("authorized") == "true" else "unauthorized",
+                    "enabled" if a.get("enabled") == "true" else "disabled",
+                ]
+                pool_name = pool.get("name") if pool is not None else ""
+                lines.append(f"{a.get('name')}  (id {a.get('id')})  " + ", ".join(flags)
+                             + (f"  pool: {pool_name}" if pool_name else ""))
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Error listing agents: {e}", exc_info=True)
+            return f"Error listing agents: {e}"
+
+    @mcp.tool()
     async def trigger_build(
         build_type_id: str,
         branch: str = None,
         agent_name: str = None,
+        clean_sources: bool = False,
+        comment: str = None,
     ) -> str:
         """Trigger a new build on TeamCity.
 
@@ -285,6 +453,13 @@ def register_tools(mcp):
             agent_name: Agent name to run on (e.g., 'MacCoss TeamCity Agent 1').
                         The agent ID is resolved automatically by name lookup.
                         If not specified, TeamCity assigns an available agent.
+            clean_sources: True deletes the build's whole checkout directory and checks out
+                           fresh ("Delete all files before the build"). Use it when an agent's
+                           working files may be stale - git rewrites only files whose content
+                           changed, so a file left by an earlier build (for example under a
+                           since-removed .gitattributes pin) survives a normal checkout. The
+                           checkout directory can be shared by several configs on that agent.
+            comment: Optional text recorded on the build, saying why it was queued.
 
         Returns:
             Build queue info with ID and URL for monitoring.
@@ -332,6 +507,11 @@ def register_tools(mcp):
                     return f"Agent not found: '{agent_name}'"
                 payload["agent"] = {"id": agents[0]["id"]}
 
+            if clean_sources:
+                payload["triggeringOptions"] = {"cleanSources": True}
+            if comment:
+                payload["comment"] = {"text": comment}
+
             body = json.dumps(payload)
             data = tc_post(
                 "/app/rest/buildQueue", body,
@@ -355,6 +535,8 @@ def register_tools(mcp):
             ]
             if agent_name:
                 lines.append(f"Agent: {agent_name} (id: {payload['agent']['id']})")
+            if clean_sources:
+                lines.append("Clean sources: yes (checkout directory deleted before the build)")
             if web_url:
                 lines.append(f"URL: {web_url}")
 

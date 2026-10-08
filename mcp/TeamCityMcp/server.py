@@ -6,6 +6,8 @@ including:
 - Detailed build status (step, progress, estimated time)
 - Structured test failure data (test names, stack traces)
 - PR build status aggregation
+- Build timelines by agent and by commit, and the list of connected agents
+- Triggering builds, optionally on one agent with a clean checkout
 
 Authentication is handled via config file at ~/.teamcity-mcp/config.json.
 

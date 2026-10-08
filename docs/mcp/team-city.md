@@ -12,9 +12,12 @@ See [setup.md](setup.md#teamcity-mcp) for installation instructions.
 
 | Tool | Description |
 |------|-------------|
-| `trigger_build` | Trigger a new build, optionally on a specific agent and branch |
+| `trigger_build` | Trigger a new build, optionally on a specific agent and branch, with a clean checkout and a comment |
 | `cancel_build` | Cancel a queued or running build by ID |
 | `search_builds` | Find builds by config ID, branch, state (running/finished/queued) |
+| `search_builds_by_agent` | One agent's recent builds across all configs, oldest first |
+| `search_builds_by_revision` | Every build of one commit (full SHA) across all configs, with its agent |
+| `list_agents` | Agents connected now (or all remembered), with authorized/enabled state and pool |
 | `get_build_status` | Detailed status for a single build (progress, step, agent) |
 | `get_failed_tests` | Structured test failures with names and stack traces |
 | `get_test_summary` | Pass/fail/muted test counts for a build |
@@ -38,7 +41,7 @@ search_builds(build_type_id="bt209", branch="pull/4038", state="running")
 search_builds(build_type_id="bt209", branch="pull/4038", count=3)
 ```
 
-**Important**: `search_builds` defaults to finished builds only. Pass `state="running"` to find in-progress builds.
+With no `state`, `search_builds` returns builds in every state, including queued and running ones. Pass `state="running"` to see only in-progress builds.
 
 **Query freshness.** A `search_builds` result is a snapshot of that instant. Before
 asserting that a build did or did not run (or pass), re-run the query right then -
@@ -59,6 +62,26 @@ get_build_log(build_id=3867235, search="Could not load|Caught exception")
 ```
 
 The `get_failed_tests` tool returns what the TeamCity "Tests" tab shows. For failures where the test result is minimal (e.g., "Exit status: 1"), use `get_build_log` with a search pattern to find the actual diagnostic output in the surrounding log.
+
+### When a failure follows the agent, not the commit
+
+Several configs on one agent can share one checkout directory (`C:\pwiz` on Windows agents), and
+git rewrites only files whose content changed. So a working file left by one PR's build can be
+what the next build of a different PR runs against. Case, 2026-10-07: a head that pinned
+`**/*.data/** -text` checked test fixtures out LF; the next head dropped the pin without changing
+any blob, every agent that had built the pinned head kept LF files, and TestFilesTreeForm failed
+on two PRs only on those agents.
+
+```
+search_builds_by_revision(revision="<full 40-char SHA>")   # which agents built the suspect head
+search_builds_by_agent(agent_name="<agent>", count=20)      # what ran there before the failure
+list_agents(name_contains="<agent>")                        # does it still exist (cloud agents go away)
+trigger_build(build_type_id="bt209", branch="pull/<N>", agent_name="<agent>",
+              clean_sources=True, comment="<why>")          # wipe its checkout and re-test
+```
+
+A clean-sources build deletes that agent's whole checkout directory, which other configs on the
+agent share, so say so to whoever owns the agent (for "MacCoss TeamCity Agent 1", Matt).
 
 ## Triggering and Cancelling Builds
 
