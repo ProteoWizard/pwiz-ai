@@ -521,7 +521,20 @@ function Invoke-OspreyDatasetRun {
                "run over the same files> so every stage BEFORE $Task is hard-linked into the output " +
                "directory first, or -Resume into a directory that already has them.")
     }
-    $cliArgs = @('-i') + $inputs
+    # Windows caps a command line at 32,767 characters. The 446-file CHS cohort under a long data
+    # path (E:\Users\...\chs-seer\raw) needs ~35,500 with -i and fails at CreateProcess with an
+    # error that never says "too many inputs". Past a safe margin, hand Osprey the list in a file
+    # instead: --input-list paths are indistinguishable from -i paths once parsed (OspreyCommandArgs).
+    # The file is written into the output directory once it exists (below), and named in the banner.
+    $inputListPath = $null
+    $inputChars = ($inputs | Measure-Object -Property Length -Sum).Sum + $inputs.Count
+    if ($inputChars -gt 24000) {
+        $inputListPath = Join-Path $OutDir 'inputs.txt'
+        $cliArgs = @('--input-list', $inputListPath)
+    }
+    else {
+        $cliArgs = @('-i') + $inputs
+    }
     $cliArgs += @(
         '-l', $libraryPath,
         '-o', $blib,
@@ -671,6 +684,12 @@ function Invoke-OspreyDatasetRun {
     if (-not $WhatIf) {
         New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
         $OutDir = (Resolve-Path $OutDir).Path
+        if ($inputListPath) {
+            Set-Content -Path $inputListPath -Value $inputs -Encoding utf8
+        }
+    }
+    if ($inputListPath) {
+        Write-Host ("  inputs   : {0} paths ({1:N0} chars) passed with --input-list {2}" -f $inputs.Count, $inputChars, $inputListPath)
     }
 
     # Optional hard-link resume (same-file-set source only). How MUCH is linked depends on
