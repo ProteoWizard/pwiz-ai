@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261006_osprey_perfilescoring_round3` (`C:\proj\pwiz-scanmajor`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), at 490a4d3825 (the 2026-10-06 force-pushed history)
 - **Created**: 2026-10-06
-- **Status**: In progress - next: median polish winner reuse. Branch has two LOCAL commits (971f4227bb profiler
-  hooks, pooled window reads), not pushed; working tree clean. Snapshot of the pooled build:
-  `D:\test\osprey-runs\_bin\pooledreads-wip1`.
+- **Status**: In progress - PerFileScoring closed; now FirstPassFDR / PerFileRescoring (see 2026-10-07
+  evening). Rebased on e35b05852f; two LOCAL commits (hooks, pooled reads), not pushed; one measured
+  UNCOMMITTED change (sidecar write buffer, FdrScoresSidecar.cs).
 - **Module**: `osprey`
 - **PR**: none
 - **Follows**: `ai/todos/completed/TODO-20261005_osprey_perfilescoring_round2.md` (#4781)
@@ -127,6 +127,35 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
 - Session closed with PerFileScoring at diminishing returns. Open decision for Brendan: PR the two local commits
   (profiler hooks + pooled reads; memory check on the next SEA-AD run), then pick the next task - FirstPassFDR's
   listed opportunities or a fresh PerFileRescoring profile.
+
+### 2026-10-07 (evening) - moved on to FirstPassFDR and PerFileRescoring
+- Rebased onto the port tip e35b05852f (#4658 layout hoist); clean, 655/655. Local commits now
+  9d5dce85e4 (hooks) + 197f2b3a7d (pooled reads). Snapshot `D:\test\osprey-runs\_bin\round3-e35b05852f`.
+- Added `-ProfileTo <dtp>` to `OspreyDatasetRun.psm1` / `Run-SeaAd.ps1` (dotTrace sampling with the
+  runner's exact environment). Harness + reports: `ai/.tmp/sessions/20261007-fdr/` (`Run-FdrAB.ps1`
+  interleaved 12-file A/B linked from the 10-06 run; `stage6_phases.py`; `top.py`; `prof/`).
+- **This box's D: is a SATA HDD** and 144 GB of scores parquet + 358 GB of spectra.bin do not fit in
+  128 GB RAM: both stages are largely disk-bound at 82 files. FirstPassFDR reads 170 GB of parquet
+  (972 s of its 1,742 s is serialized read time). Per-phase (82 files, 10-06 log): planning pass 2
+  398 s (+61 GB: 44 GB is the cwt_candidates column, 542 MB/file), pass 1 341 s (+46 GB), training
+  load 245 s (+40 GB for 300k rows) + SVM 57 s, pass 2 201 s, pass 0 134 s, planning pass 1 132 s.
+- **Sidecar write buffer - measured, data-identical, UNCOMMITTED** (`FdrScoresSidecar.WriteInternal`
+  FileStream 4 KB -> 1 MB). Profile: lanes blocked 229 s in OSFileStreamStrategy.Write (38k
+  WriteFile calls per 155 MB sidecar). Warm 12-file A/B, 2 interleaved reps: stage 256/266 s ->
+  220/222 s (-15%), pass 1 66-77 s -> 31-32 s; 36 outputs byte-identical. Also covers Stage 6's
+  2nd-pass sidecars. Snapshot `sidecarbuf-wip1`.
+- FirstPassFDR CPU (warm 12-file profile): `LoadPinFeaturesFromParquet` builds a double[21] for EVERY
+  row (~830 MB/file) to keep ~3.6k training rows - a sparse load is byte-identical (ResolveFeatureRow
+  only indexes by ParquetIndex); `LinearSvmClassifier.Train` 439 s thread (~57 s wall, fixed);
+  per-file LOESS refit ~17 s CPU/file. Planning decodes every row's CWT list but only rows failing
+  DetermineAction's Keep test use it (~6.3M of 353M, 1.8%). Not reading the column at all needs the
+  CWT pick deferred to the rescoring node (it already reads the column when it writes the reconciled
+  parquet) - a sidecar-contract change, Brendan's call.
+- PerFileRescoring (82 files 4,825 s): rescore 1,897 s, write 1,773 s, next-file hydrate ~817 s,
+  gap-fill 299 s. **Rescore is the spectra.bin read**: 4.37 GB/file read serially at ~200 MB/s (82 x
+  4.37 GB ~ 1,790 s); 12-file profile has ~7,250 s of thread time waiting in LoadWindowSerialRead for
+  ~1.7% of peaks. Next measurement: RT coverage of rescore targets per window (how much of each
+  window the targets' scoring spans actually need) - decides whether reading less is worth building.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261006_osprey_perfilescoring_round3.md` before starting work.
