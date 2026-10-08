@@ -45,6 +45,27 @@
 > stale-working-copy explanation is insufficient. Skyline Windows .NET and the Docker/Wine
 > container were cancelled and never re-run on this head. Use `C:\proj\review` (on the PR
 > branch); no `C:\proj\wt` worktrees.
+> **RESOLVED 2026-10-07 night (no PR change needed):** the TestFilesTreeForm failure was a stale
+> working copy on the agents, not the PR. Head `5ee5a8ba7d` pinned `**/*.data/** -text`, so a Windows
+> checkout of it wrote those LF-stored fixtures as LF. `c73242d100` dropped the pin without changing
+> any blob, and git does not rewrite an unmodified working file when only its attribute changes, so
+> any agent that had checked out `5ee5a8ba7d` kept LF fixtures. All three bt209 failures ran on "MacCoss
+> TeamCity Agent 1"; the #4787 failure (Skyline Windows .NET #508, 4205601) ran on cloud agent
+> i-0d401c right after bt83 4205588 built `5ee5a8ba7d` in the same `C:\pwiz`. The fixture itself is
+> right: base64(SHA1) of the LF blob converted to CRLF equals the `.skyl` hash `zK3t...`. The "local
+> repro" was SkylineTester's cumulative failure column: TestFilesTreeForm passed at 18:55 in
+> `C:\proj\review\pwiz_tools\Skyline\SkylineTester-20261007-204442.log`; that run's one failure was
+> TestDdaSearchDependencyErrors (crux.exe 0xC0000135 inside the Docker worker, environmental).
+> **Verified:** bt209 4205764 queued with "Delete all files before the build" on Agent 1 (which also
+> clears its stale `obj\`): 1806/1806 at the unchanged head. Wine container 4205659 on the head ran
+> 336 passed / 0 failed (same as port head) and was red only through its bt209 snapshot dependency.
+> Lesson: an attribute-only change (adding or removing `-text`) never rewrites working files, so
+> pinning a path and unpinning it leaves every machine that saw the pinned head with the pinned bytes;
+> fix with a clean checkout, not a code change.
+> **Merge probe of the open port-branch PRs** (`git merge -X renormalize c73242d100` into each PR head,
+> throwaway clone): clean for #4790 #4787 #4780 #4772 #4769 #4755 #4710 #4602; #4782 #4724 #4717 #4339
+> #4750 conflict, but every one already conflicts with the port head alone, so the normalization adds
+> no new conflicts. A plain merge (GitHub's button) conflicts on #4790 #4787 #4769 #4755 #4602.
 > **Next session handoff**: For detailed startup protocol, read
 > `ai/.tmp/handoff-20261007_lf_normalization.md` before starting work.
 > Execution plan for GitHub issue [ProteoWizard/pwiz#4604](https://github.com/ProteoWizard/pwiz/issues/4604)

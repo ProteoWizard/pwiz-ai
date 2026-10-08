@@ -33,6 +33,36 @@
 | Nightly trigger config | master -> `ProteoWizard_SkylineWindowsNetPerfTutorialTests`; release -> the cpp perf/tutorial config |
 | Nightly results (screenshot 2026-10-06) | Integration: 8 machines, 1 failure (TestRInstaller, UW5), 1 hang (TestFilesTreeForm, UW6); Leak: 1 leak (AgilentMseChromatogramTest, UW8); Perf: clean. Comparable to a normal master day |
 
+## State checked 2026-10-07 night
+
+- **0.5 is in place**: Matt moved the .NET steps into the parent configs. bt209 on the port head
+  (4205492) ran 1806 tests and its versioned settings publish `SkylineNightly.zip` and
+  `SkylineTester.zip`; bt83, bt17 and the Wine container now post .NET results under the old names.
+- **0.6 is already done**: master's required contexts are now `teamcity - Core Windows x86_64`,
+  `teamcity - Skyline master and PRs (Windows x86_64)`, `Skyline code inspection`, `teamcity - Core
+  Linux x86_64` (strict). The port head posts all four green, and `origin/master` is still an
+  ancestor of the port head (fast-forward OK).
+- **Three reds on #4619 that are not required but will show on every master commit after the
+  fast-forward:**
+  - `Core subset source tarball` (bt81) and `BiblioSpec subset source tarball`: both have a
+    `buildDependencyTrigger` on bt17 with `branchFilter +:*` and run `scripts/misc/tcbuild.sh`,
+    which #4658 deleted ("Cannot run program scripts/misc/tcbuild.sh"). bt17 now builds .NET, so they
+    can only fail. Their dependents `ProteoWizard_WindowsX86subsetNoVendorDll` and
+    `ProteoWizard_BiblioSpecLinuxX8664subset` go with them. **Matt**: pause them, or re-point the
+    trigger at a cpp release-branch config if 4.7.2 source tarballs are still published.
+  - CodeQL `Analyze (java-kotlin)`: the repo's CodeQL default setup lists `java-kotlin`. Master passes
+    because it still has the 9 `pwiz/utility/bindings/java` RAMPAdapter files; the port deleted them,
+    leaving only the `.teamcity` Kotlin DSL, which autobuild cannot compile ("CodeQL could not process
+    any code written in Java/Kotlin"). **At promotion** (admin, same moment as the fast-forward):
+    ```
+    gh api -X PATCH repos/ProteoWizard/pwiz/code-scanning/default-setup --input - <<'EOF'
+    {"state":"configured","languages":["actions","c-cpp","csharp","javascript-typescript","python"]}
+    EOF
+    ```
+- "MacCoss TeamCity Agent 1" got a full clean checkout 2026-10-07 21:31 (bt209 4205764), which
+  clears the stale `obj\` noted in 2.4; its `zSmartTrigger` clone is a separate directory and is
+  untouched.
+
 ## The sequence
 
 ### Phase 0: this week, before any branch moves
