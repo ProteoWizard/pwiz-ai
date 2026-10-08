@@ -7,7 +7,10 @@
 > comment, CodeInspectionTest decision), the `-X renormalize` merges on the open port-branch PRs,
 > and the T+1 ai/ cleanup. **Follow-up PR [#4792](https://github.com/ProteoWizard/pwiz/pull/4792)
 > opened 2026-10-08**: `.git-blame-ignore-revs`, `.editorconfig` comment, and the CodeInspection
-> mixed-endings check removed (open question 2 decided by Brendan: remove). History of the work follows.
+> mixed-endings check removed (open question 2 decided by Brendan: remove). **`-X renormalize` merges
+> pushed 2026-10-08** (fast-forward, no force) to #4790 #4787 #4780 #4772 #4769 #4755 #4710 #4602, each
+> with a PR comment giving owners `git pull -X renormalize`; all show MERGEABLE. Still to do: #4782 #4724
+> #4717 #4339 #4750 (they conflict with the port head regardless; owners resolve). History of the work follows.
 >
 > **Was: IN PROGRESS 2026-10-07.** PR [#4789](https://github.com/ProteoWizard/pwiz/pull/4789)
 > (`Skyline/work/20261007_lf_normalization`, commit `f67b961167`) is open against the port
