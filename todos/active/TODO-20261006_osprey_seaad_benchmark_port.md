@@ -131,6 +131,32 @@ runs of `490a4d3825` are the comparisons that mean something.
 - Output: 6,654 protein groups at 1%; FDRBench inputs for both passes written to the run dir.
   Entrapment FDP not yet computed (SEA-AD README harvest tools).
 
+### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
+
+19:48:45 -> 05:22:52, **9 h 34 m 30 s** (`Total pipeline: 34470.3s`), exit 0, 5,573 protein groups at 1%.
+Settings as launched (below): caches on E:, outputs on D:, threads 72, scoring 4 / rescoring 8 lanes,
+FDR 16 lanes, 36 GC heaps.
+
+| task | CHS 446 (s) | per file | SEA-AD 82 fast1 (s) | per file |
+|---|---|---|---|---|
+| PerFileScoring | 22,105.1 (6 h 08 m) | 49.6 s | 3,715.6 | 45.3 s |
+| FirstPassFDR | 4,660.2 (1 h 18 m) | 10.4 s | 1,221.6 | 14.9 s |
+| PerFileRescoring | 5,265.1 (1 h 28 m) | 11.8 s | 2,034.2 | 24.8 s |
+| SecondPassFDR | 2,423.5 (40 m) | 5.4 s | 800.9 | 9.8 s |
+| **total** | **34,470.3** | | **7,776.0** | |
+
+- The i9's CHS reference (README): first FDR pass 4 h 46 m, second 69 min - MACS2 1 h 18 m and 40 min.
+- Memory: private peak 116.8 GB (FirstPassFDR, 16 lanes x 446 files), PerFileRescoring 70.1 GB, scoring
+  55.2 GB, SecondPassFDR 59.2 GB; floors FALLING; >= 348 GB free throughout.
+- 10 reporting gaps of 30-58 s, all inside FirstPassFDR's 1.34 B-candidate Percolator scoring (progress
+  granularity at this scale, not stalls).
+- E: as the input disk: read mean 62 MB/s (max 640), 0.16 ms mean / 6.1 ms max per read - no sign of the
+  post-write collapse. Box CPU median 49%, p90 92% (includes other users).
+- Coelution averaged 22.7k cand/s per lane vs ~51k on SEA-AD - but per-file scoring time is similar
+  (49.6 vs 45.3 s), so CHS files simply carry more/costlier candidates; not comparable across datasets.
+- Run dir `D:\Users\brendanx\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-fast`;
+  samples `chs-seer\runs\iosample-chs446-fast-20261007_194815.csv`.
+
 ### 2026-10-07 - MACS2 input disk A/B (cold reads): E: beats D:; CHS 446 launched reading from E:
 
 Every SEA-AD run above read its caches from D: - and with ~420 GB of file cache vs 346 GB of SEA-AD caches,
