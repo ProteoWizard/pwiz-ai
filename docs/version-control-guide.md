@@ -489,7 +489,7 @@ auto-start something slow, weigh that overlap against the wasted Copilot pass.
 
      Find the right checkout with `mcp__status__get_project_status()` - sibling
      checkouts differ and the branch under review is often NOT in `C:\proj\pwiz`.
-     Naming the target (`/code-review max 4610`) is safer than relying on the
+     Naming the target (`/code-review medium 4610`) is safer than relying on the
      working directory. `.claude/hooks/Deny-CodeReviewInAiRepo.ps1` blocks the
      `ai/` case; pass `pwiz-ai` in the arguments to review `ai/` deliberately.
    - **Verify every finding before acting on it.** The reviewer can be
@@ -499,8 +499,8 @@ auto-start something slow, weigh that overlap against the wasted Copilot pass.
      a distinct literal value, so it does fail. Reproduce or refute each finding
      against the code. Pushing back with the reason is a legitimate outcome;
      auto-applying the list is not.
-   - **Triage into two buckets - fix now, or drop.** `/code-review max` returns
-     about 15 findings every time because 15 is its cap; it is already choosing
+   - **Triage into two buckets - fix now, or drop.** At `high` and above the
+     review returns about 15 findings every time because 15 is its cap; it is already choosing
      not to mention more, so the count says nothing about how much is worth
      doing, and a re-run after fixing a batch returns another 15 indefinitely.
      Fix what is worth fixing now. Drop the rest with a one-line reason each -
@@ -518,13 +518,24 @@ auto-start something slow, weigh that overlap against the wasted Copilot pass.
      left worth posting; "fix these, file those" is the same relocation of the
      backlog. PR size is not a reason to defer a finding - the team prefers larger,
      higher-quality steps over smaller ones carrying known issues.
-   - **Default to `max` for any code change.** The effort levels - `low`,
-     `medium`, `high`, `xhigh`, `max` - all run locally against the Max
-     subscription with **no extra billing**, so there is no cost reason to hold
-     back. `max` is the highest effort available for free; use it. Step down
-     only for genuinely trivial diffs (comment, doc, or rename-only), where the
-     wall time is the only thing you are spending. For calibration, `xhigh` on
-     #4460 took roughly 10.5 minutes and 138k tokens.
+   - **Default to `medium`.** The levels are `low`, `medium`, `high`, `xhigh`,
+     `max`; the tool describes `low`/`medium` as fewer, high-confidence findings
+     and `high` through `max` as broader coverage that includes uncertain ones.
+     Pick by the change, not by "highest available":
+     - `medium` - the default for a code change.
+     - `high` - a large or risky diff: core algorithms, concurrency, file
+       formats, anything whose failure is silent.
+     - `max` (or `xhigh`) - only when the developer asks for it, for a hard
+       problem, on a subscription with the limits to carry it.
+
+     Two costs drove this (Brendan, 2026-10-08). **Limits:** most of the team
+     is on lower-limit accounts, and `max` spends them fast - on a 3-file,
+     46-line Osprey diff it ran 63 minutes, 380k tokens and 131 tool calls, and
+     that session hit its 4-hour usage limit. (`xhigh` on #4460: ~10.5 min,
+     138k tokens.) **Triage:** `max` always fills its ~15-finding cap with
+     uncertain findings, and the working session struggles not to act on them;
+     the fixes then add new defects and guard against misuse that is unlikely,
+     which slows the branch down rather than hardening it.
 2. **Open the PR** once the branch is green (build + tests + zero-warning
    inspection) and the findings are settled. Copilot reviews it automatically;
    use **`/pw-respond <PR#>`** to address its comments and resolve the threads.
@@ -537,8 +548,8 @@ of the effort ladder above** - they are a separate, **billed**, multi-agent
 repeatedly ran about half an hour, timed out, and produced no usable findings
 while still incurring cost.
 
-Recommendation for this project: **do not use it.** `max` is free under the
-subscription, runs locally, and actually finishes on a repo this size. If a
+Recommendation for this project: **do not use it.** The local levels run on the
+subscription and actually finish on a repo this size. If a
 change feels risky enough to want a third opinion, a human reviewer is the
 better spend.
 

@@ -16,7 +16,7 @@
 # paid in full before the mistake is visible.
 #
 # Escape hatch: pass "pwiz-ai" in the skill arguments to review ai/ changes on
-# purpose (e.g. `/code-review max pwiz-ai`). Reviewing real committed changes in
+# purpose (e.g. `/code-review medium pwiz-ai`). Reviewing real committed changes in
 # this repo is legitimate - doing it BY ACCIDENT while aiming at a pwiz PR is
 # what this blocks.
 #
@@ -82,14 +82,14 @@ while a pwiz PR went unreviewed.
 CRITICAL: cd to the checkout that holds the PR branch FIRST, then review.
 
     cd <the pwiz checkout for this PR>     # e.g. C:/proj/daily, C:/proj/pwiz
-    /code-review max
+    /code-review medium
 
 Use mcp__status__get_project_status() to see which checkout holds which branch -
 sibling checkouts differ, and the branch under review is often NOT in C:/proj/pwiz.
 
 To review changes in THIS repo on purpose, say so in the arguments:
 
-    /code-review max pwiz-ai
+    /code-review medium pwiz-ai
 "@
 
 [Console]::Error.WriteLine($message)

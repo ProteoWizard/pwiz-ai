@@ -326,7 +326,7 @@ weigh that overlap against the wasted Copilot pass.)
      nobody asked about. Measured 2026-08-25: 27 minutes and 157k tokens spent
      reviewing another session's work-in-progress script while the pwiz PR it was
      aimed at went unreviewed, with only one line at the very end of the output
-     hinting at the mismatch. Naming the target (`/code-review max 4610`) is the
+     hinting at the mismatch. Naming the target (`/code-review medium 4610`) is the
      safest form, since it does not infer the target from the working directory.
      `.claude/hooks/Deny-CodeReviewInAiRepo.ps1` blocks the `ai/` case; to review
      `ai/` changes on purpose, pass `pwiz-ai` in the arguments.
@@ -336,7 +336,7 @@ weigh that overlap against the wasted Copilot pass.)
      distinct offset with a distinct literal and does fail. Reproduce or
      refute each finding against the code. Pushing back with the reason is
      a legitimate outcome; auto-applying is not.
-   - **Triage into two buckets: fix now, or drop.** `/code-review max` returns
+   - **Triage into two buckets: fix now, or drop.** At `high` and above it returns
      ~15 findings every time because 15 is its cap, so the count carries no
      information and a re-run yields another 15. Fix what is worth it; drop the
      rest with a one-line reason each. Never file the leftovers as issues or
@@ -344,13 +344,13 @@ weigh that overlap against the wasted Copilot pass.)
      after triage and report before fixing anything - and raise the bar to real
      defects in shipped behavior only. Do not merge with open findings; PR size
      is not a reason to defer one. Details in the guide ("Pre-Review Workflow").
-   - **Default to `max` for code changes.** The effort levels
-     (`low` / `medium` / `high` / `xhigh` / `max`) all run locally on the
-     Max subscription with NO extra billing, so use the highest effort the
-     change warrants. `max` is the ceiling. Drop to a lower level only for
-     genuinely trivial diffs - comment, doc, or rename-only changes - where
-     the wall time is the only thing being spent. For reference, `xhigh` on
-     #4460 took ~10.5 min and ~138k tokens.
+   - **Default to `medium`.** Use `high` for a large or risky diff (core
+     algorithms, concurrency, file formats, silent failure modes). Use `max`
+     or `xhigh` only when the developer asks, for a hard problem, on a
+     subscription with the limits for it. Most of the team is on lower-limit
+     accounts: `max` on a 3-file, 46-line diff ran 63 min / 380k tokens and
+     that session hit its 4-hour limit. And `max` fills its cap with uncertain
+     findings that sessions then over-fix. Details in the guide.
 2. **Open the PR** once the branch is green (build + tests + inspection)
    and the findings are settled. Copilot reviews automatically; use
    **`/pw-respond <PR#>`** to address and resolve its threads.
@@ -359,8 +359,8 @@ weigh that overlap against the wasted Copilot pass.)
 this project.** It is a different animal from the effort levels above: a
 **billed** multi-agent **cloud** review, and pwiz is too large for it.
 Brendan's attempts repeatedly ran ~30 minutes, timed out, and returned
-nothing useful while still incurring cost. `max` is both free under the
-subscription and actually completes here, so there is no case for ultra on
+nothing useful while still incurring cost. The local levels run on the
+subscription and actually complete here, so there is no case for ultra on
 pwiz.
 
 **The AI reviews do not stack.** Copilot plus `/code-review` is already two

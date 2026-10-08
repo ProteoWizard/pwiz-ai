@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20261006_osprey_perfilescoring_round3` (`C:\proj\pwiz-scanmajor`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), at 490a4d3825 (the 2026-10-06 force-pushed history)
 - **Created**: 2026-10-06
-- **Status**: PR-ready pending `/code-review max` + Brendan's go-ahead. Rebased on e35b05852f; THREE local
-  commits, not pushed: 9d5dce85e4 hooks, 197f2b3a7d pooled reads, 0b879300ae sidecar 1 MB write buffer.
-  Stellar + Astral regressions PASS on the branch. Stacked on it:
+- **Status**: Reviewed and fixed; waiting on the port branch becoming master, then PR to master. Rebased on
+  9e2b516bcb (#4789); FOUR local commits, not pushed (hooks, reads, sidecar buffer, 02c467d8cf review fix).
+  Stellar + Astral regressions PASS (before the review fix; the validity branch's Stellar gate covers it).
+  Stacked on it:
   `TODO-20261007_osprey_self_validating_artifacts.md` (C:\proj\pwiz-validity).
 - **Module**: `osprey`
 - **PR**: none
@@ -166,6 +167,20 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
   decode CWT only for rows failing the Keep test in planning (or defer the CWT pick to the rescoring node -
   a sidecar-contract change, Brendan's call); measure rescore-target RT coverage per window before
   building any "read less spectra" path in Stage 6.
+- Port moved to 9e2b516bcb (#4789 LF normalization): ran `/pw-configure-git`, rebased with `-X renormalize`
+  (diff identical, no CRLF blobs); 655/655 + inspection 0/0. Brendan: NO PR until the port branch becomes
+  master; then target master.
+- `/code-review max` (9 findings). Fixed in 02c467d8cf: the pooled calibration blocks (ArrayPool.Shared kept
+  a 32/64 MiB array per thread through the main search, ~2-3.5 GiB at 32 threads; power-of-two commit; rent
+  outside the try) -> per-worker exact-size buffer scoped to the calibration loop
+  (`LoadWindowSerialRead(int, ref byte[])`, Calibrator.CalibrationWorker), IOTest buffer-reuse pass,
+  ProfilerHooks docs, sidecar comment. Dropped: IDE-dotCover takeover (unreproduced; the same bracket predates
+  3a6e017b9e), try/finally around the bracket (90-line re-indent for a profiler edge case), shared buffer
+  constant (style), decode double copy (pre-existing, unmeasured).
+- Cost of the fix, interleaved A/B on 4 warm SEA-AD files (`ai/.tmp/sessions/20261008-validity/calibration-ab.log`,
+  runs `seaad-4files-...ab{pool,worker}N`): RT calibration pooled 34.7s median (34.1-35.2, n=3 warm) vs
+  worker buffer 36.6s (35.3-37.8, n=4), ~0.45 s/file. The shared pool's arrays outlive each FILE, so files
+  2+ read into resident pages; that cross-file reuse was part of the -11%. Kept the bounded-memory version.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261007_osprey_self_validating_artifacts.md` before starting work.

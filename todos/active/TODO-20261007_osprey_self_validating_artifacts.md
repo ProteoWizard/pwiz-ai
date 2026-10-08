@@ -6,9 +6,9 @@
 - **Base**: `Skyline/work/20260612_net8_port`, STACKED on `Skyline/work/20261006_osprey_perfilescoring_round3`
   (0b879300ae: carries the FdrScoresSidecar 1 MB write buffer this work touches again)
 - **Created**: 2026-10-07
-- **Status**: Implemented and committed (4654250f4c, local, not pushed). Gate 649/649 + inspection 0/0,
-  `regression-parallel -Dataset All` 48 PASS / 0 FAIL. Next: `/code-review max`, then PR stacked on the perf
-  round 3 PR (Brendan's go-ahead). The matching ai/scripts changes are UNCOMMITTED in C:\proj\ai on purpose
+- **Status**: Rebased onto port 9e2b516bcb (#4789 LF normalization), local, not pushed. Unit 649/649,
+  inspection 0/0, Stellar regression PASS, 9b resume drill PASS. Next: `/code-review max` triage; NO PR
+  until Brendan says the port branch has become master (then target master). The matching ai/scripts changes are UNCOMMITTED in C:\proj\ai on purpose
   - commit them when this branch merges (see 2026-10-08 entry).
 - **Module**: `osprey`
 - **PR**: none
@@ -93,8 +93,8 @@ held, and it is the source of several defects (below).
       Compare-StraightThroughResume-CSharp, CHS runner); docs 00 (P9, P10, P14, HPC "every artifact travels with
       its stamp"), 14 §8, 15, 20, 22, DIVERGENCES
 - [x] 9a. Gates: unit + inspection (649/649, 0/0); `regression-parallel.ps1 -Dataset All` 48/0 (33.5 min)
-- [ ] 9b. SEA-AD subset resume drill (kill mid-FirstPassFDR and mid-PerFileRescoring, resume, compare) -
-      needs the ai/scripts changes, so run it from C:\proj\ai with this branch's build
+- [x] 9b. SEA-AD subset resume drill (kill mid-FirstPassFDR and mid-PerFileRescoring, resume, compare) -
+      both legs blib-identical to straight-through at 1e-9 (2026-10-08 entry)
 - [ ] 10. `/code-review max` in C:\proj\pwiz-validity, then PR (base: perf round 3 branch until it merges)
 - [ ] 11. Commit the ai/scripts changes when this branch merges (they assume embedded stamps)
 - [ ] Follow-ups (separate work): per-file copies of the experiment-wide stratum.json / model.json
@@ -141,6 +141,37 @@ held, and it is the source of several defects (below).
   CHS updated; Restamp-OspreyVersion.py and Repair-Stages1to4Stamps.ps1 marked legacy-only. Also the
   `-ProfileTo` runner switch (OspreyDatasetRun.psm1 + Run-SeaAd.ps1). Holding them because master/port
   builds still rely on linked .osprey.task files.
+
+- Port branch moved to 9e2b516bcb (#4789, repo-wide LF normalization). Ran `/pw-configure-git`
+  (merge.renormalize=true), then rebased BOTH local branches with `-X renormalize` (perf onto the port,
+  validity `--onto` perf from 0b879300ae). Diffs identical in size before/after (3 files +34/-12; 72 files
+  +1890/-1627), no branch file stored CRLF. Gates on the new base: perf 655/655 + inspection 0/0,
+  validity 649/649 + inspection 0/0.
+- Brendan: NO PRs yet - the port branch is being promoted to master; PRs will target master once it is.
+  Until then, drive both branches to fully validated (review, regression, 9b drill).
+- Validity `regression.ps1 -Dataset Stellar` on the new base: PASS (all 5 legs).
+- 9b drill, 12-file SEA-AD, exe snapshot `D:\test\osprey-runs\_bin\validity-rebased-9e2b516`, runs under
+  `D:\test\osprey-runs\sea-ad\runs\seaad-12files-...drill{A,B,C}-20261008_*`:
+  - A (reference, -LinkFrom the pre-stamp 10-06 82-file run): pre-stamp parquets read stale and were
+    recomputed (PerFileScoring 1056.6s); the hard-linked source files were replaced, not written through.
+  - B: killed at 6/12 `.1st-pass.fdr_scores.bin`; resume "6 of 12 files already have up-to-date first-pass
+    intermediate files", reused the saved model; blib vs A: 0 differences at 1e-9.
+  - C: killed with file 5 holding `.scores-reconciled.parquet` but neither 2nd-pass binary; resume skipped
+    PerFileScoring + FirstPassFDR ("outputs valid"), `rescore-resume: adopted=4 rescore=8` (file 5 correctly
+    NOT adopted); blib vs A: 0 differences at 1e-9.
+  - Runner fix found by the drill (held with the other ai/scripts changes): `-Resume` did not pin
+    OSPREY_VERSION_OVERRIDE, so resuming a -LinkFrom-started run (pinned to the source's version) saw every
+    artifact stale and restarted PerFileScoring. OspreyDatasetRun.psm1 now pins from the run dir's own stamps.
+
+- Perf branch `/code-review max` (9 findings) triaged. FIX (UNCOMMITTED in C:\proj\pwiz-scanmajor, gate 655/655 +
+  inspection 0/0): 1+2+7 replaced ArrayPool.Shared with a per-worker exact-size buffer
+  (`LoadWindowSerialRead(int, ref byte[])`, Calibrator `CalibrationWorker`; Stage 6 keeps per-call alloc) + IOTest
+  buffer-reuse pass; 4 ProfilerHooks/csproj docs; 9 "small records" comment. DROPPED: 3 (unreproduced; same
+  bracket existed before 3a6e017b9e), 5 (90-line re-indent for a profiler edge case), 6 (style, unmeasured),
+  8 (pre-existing, unmeasured).
+- Calibration A/B: worker buffer ~0.45 s/file slower than the pool, kept for bounded memory (numbers in the
+  perf TODO). Committed as 02c467d8cf on the perf branch; validity rebased onto it (commit unchanged, 72 files
+  +1890/-1627), 649/649 + inspection 0/0.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261007_osprey_self_validating_artifacts.md` before starting work.
