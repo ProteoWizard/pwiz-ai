@@ -6,9 +6,9 @@
   PR #4772 now covers Codex support and compatibility with earlier Skyline-dailies.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-10-05
-- **Status**: Filtering working and tested live; commits d4db7dfe98 + 602a20debb local, not pushed
+- **Status**: Completed (Remaining items deferred, see Progress Log)
 - **Module**: `skyline`
-- **PR**: [#4772](https://github.com/ProteoWizard/pwiz/pull/4772) (also see TODO-20261005_CodexMcp.md)
+- **PR**: [#4772](https://github.com/ProteoWizard/pwiz/pull/4772) (merged 2026-10-08; also see TODO-20261005_CodexMcp.md)
 
 ## Objective
 
@@ -58,4 +58,14 @@ the methods in a Skyline's `SkylineTool.dll` fully describe what it supports. Ne
 - [ ] Test: targeted Skyline exits -> fallback and tools restored
 - [ ] Possibly: install folder in the connection file (MainModule fails for an elevated Skyline)
 - [ ] Possibly: argument trimming against target signatures (needs parameter metadata, not just names)
-- [ ] Update the PR title/description for the broader scope when pushing
+- [x] Update the PR title/description for the broader scope when pushing
+
+## Progress Log
+
+### 2026-10-08 - Merged
+
+PR #4772 merged to master as commit 93c1b9a5 (admin override). Shipped `RequiresJsonToolServiceMethod` on 25 tools,
+`ToolAvailability` filtering with `tools/list_changed`, a single `MIN_SKYLINE_VERSION` (26.1.1.083), and removal of
+`QueryAvailableMethods`. The other unchecked Remaining items were not done and are deferred: FileVersion-based
+deployment, `Dispatch` rejecting extra arguments (wanted before 26.2 branches), the two re-filter tests, the install
+folder in the connection file, and argument trimming.

@@ -5,10 +5,10 @@
 - **Base**: `Skyline/work/20260612_net8_port` (the connector is net10 there; master's connector is net472,
   where `ProcessStartInfo.ArgumentList` does not exist)
 - **Created**: 2026-10-05
-- **Status**: PR open; scope widened 2026-10-05 to also cover compatibility with earlier Skyline-dailies (MCP tool
-  filtering), tracked in TODO-20261005_McpForwardCompatibility.md. Local commits d4db7dfe98, 602a20debb not pushed
+- **Status**: Completed. Scope widened 2026-10-05 to also cover compatibility with earlier Skyline-dailies (MCP tool
+  filtering), tracked in TODO-20261005_McpForwardCompatibility.md
 - **Module**: `skyline`
-- **PR**: [#4772](https://github.com/ProteoWizard/pwiz/pull/4772)
+- **PR**: [#4772](https://github.com/ProteoWizard/pwiz/pull/4772) (merged 2026-10-08)
 
 ## Objective
 
@@ -49,3 +49,11 @@ uncommitted changes on the port branch; Claude finished, reviewed and opened the
   candidate for separate work.
 - `startup_timeout_sec`, stale status label, managed/cloud-layer skyline entries, Kill() of a shim's child tree:
   edge cases, not worth the code.
+
+## Progress Log
+
+### 2026-10-08 - Merged
+
+PR #4772 merged to master as commit 93c1b9a5 (admin override: unapproved, branch behind master). Shipped the Codex
+checkbox in the AI Connector setup panel (CLI writes, `~/.codex` reads) together with the MCP tool filtering from
+TODO-20261005_McpForwardCompatibility.md. Not done before merge: toggling the Codex checkbox in a live AI Connector.
