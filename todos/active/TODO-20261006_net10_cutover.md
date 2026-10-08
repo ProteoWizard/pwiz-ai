@@ -63,6 +63,32 @@
   clears the stale `obj\` noted in 2.4; its `zSmartTrigger` clone is a separate directory and is
   untouched.
 
+## Promotion day 2026-10-08
+
+- #4619 merged to master 08:20 PDT as `156dab478b`. TeamCity's settings commit `2ec86be8ef` (09:17)
+  wrote the pre-port C++ configs back over 28 `.teamcity` files; Matt restored them in #4795
+  (`3f290fc763`) after moving master from branch protection to rulesets (now requires a review;
+  #4801 went in with `--admin`).
+- **SkylineNightly broke on the first .NET master build.** The installed .NET Framework
+  SkylineNightlyShim updates by extracting five fixed names; from the .NET zip it installed
+  launcher .exe files without their .dll, so SkylineNightly showed no window and the shim
+  replaced itself with a stub that cannot start. Also: .NET keeps user settings in
+  `%LOCALAPPDATA%\SkylineNightly\SkylineNightly_Path_*`, not `University_of_Washington\SkylineNightly.exe_Url_*`,
+  and Upgrade() never looks across, so every machine would have lost its nightly folder and runs;
+  and saving in the .NET window registered `SkylineNightly.dll` as the task. Fixed in #4801
+  (`c45b2fa5ca`): single-file SkylineNightly.exe and SkylineNightlyShim.exe in the zip, shim
+  extracts every entry, task registers the shim, first run imports the earlier settings.
+  Follow-up #4803 (Copilot): import skips an unreadable settings file.
+- Verified on BRENDANX-UW5 via `SKYLINE_NIGHTLY_BRANCH=pull/4801`: the old 4.7.2 shim installed
+  the single-file programs, the new shim then updated itself, settings carried over, and a
+  master run started with the .NET 10 UI. Every machine was then set to `pull/4801` or was
+  already mid-run. **Clear `SKYLINE_NIGHTLY_BRANCH` on each machine once bt209 master has a
+  successful build of `c45b2fa5ca` or later**, or they keep taking that PR's frozen zip and miss
+  later SkylineNightly fixes such as #4803.
+- Lesson for the next runtime change: test SkylineNightly's self-update from the port branch's
+  bt209 build (`SKYLINE_NIGHTLY_BRANCH=pull/<N>` on one machine) before promoting. That one run
+  would have caught all three problems.
+
 ## The sequence
 
 ### Phase 0: this week, before any branch moves
