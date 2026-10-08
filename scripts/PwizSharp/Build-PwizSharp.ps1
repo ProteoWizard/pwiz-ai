@@ -11,8 +11,8 @@
     project (or the solution), then run one test project with an optional test filter.
 
     Vendor licenses: the vendor projects gate their real readers on IAgreeToVendorLicenses. It is
-    passed automatically when pwiz-sharp\Directory.Build.user.props exists (created by
-    pwiz-sharp\i-agree-to-the-vendor-licenses.bat) or when -VendorLicenses is given; without
+    passed automatically when Directory.Build.user.props exists beside Pwiz.sln (created by
+    i-agree-to-the-vendor-licenses.bat) or when -VendorLicenses is given; without
     either, vendor readers build in no-vendor mode and vendor tests come back Inconclusive.
 
 .PARAMETER Project
@@ -40,8 +40,21 @@
     way the Linux CI leg does: NativeVendorsAvailable false, vendor readers and their tests
     compiled out. This is the local check for "does it still build without the SDKs".
 
+.PARAMETER Property
+    Extra MSBuild properties, passed as -p:<value> to both build and test, e.g.
+    -Property TreatWarningsAsErrors=false,MSBuildTreatWarningsAsErrors=false
+    to collect every warning in one pass instead of stopping at the first project with one
+
+.PARAMETER Rebuild
+    Rebuild everything (--no-incremental). An incremental build does not recompile up-to-date
+    projects, so it does not re-report their warnings - use this to confirm a warning-free tree.
+
+.PARAMETER LogFile
+    Also write a normal-verbosity MSBuild file log (every warning and error) to this path
+
 .PARAMETER SourceRoot
-    Path to the pwiz checkout root (auto-detected if not specified)
+    Path to the pwiz checkout root (auto-detected if not specified). Pwiz.sln is found at the
+    checkout root (current layout) or under pwiz-sharp/ (older branches).
 
 .PARAMETER Summary
     Show only errors, test results and the final line
@@ -75,6 +88,15 @@ param(
     [switch]$NoVendorLicenses = $false,
 
     [Parameter(Mandatory=$false)]
+    [string[]]$Property = @(),
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Rebuild = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$LogFile = $null,
+
+    [Parameter(Mandatory=$false)]
     [string]$SourceRoot = $null,
 
     [Parameter(Mandatory=$false)]
@@ -83,28 +105,47 @@ param(
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Script location: ai/scripts/PwizSharp/ - target: <pwiz root>/pwiz-sharp/
+# Script location: ai/scripts/PwizSharp/ - target: the directory holding Pwiz.sln, which is the
+# pwiz checkout root since #4658 hoisted the C# port out of pwiz-sharp/
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 
+function Find-SharpRoot([string]$checkoutRoot) {
+    foreach ($candidate in @($checkoutRoot, (Join-Path $checkoutRoot 'pwiz-sharp'))) {
+        if (Test-Path (Join-Path $candidate 'Pwiz.sln')) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
+# The on-disk casing of a path. A mis-cased checkout path reaches MSBuild's project cache, and
+# Roslyn's .editorconfig section matching is case-sensitive, so diagnostics the root
+# .editorconfig demotes (WFO1000) come back as errors.
+function Get-CanonicalPath([string]$path) {
+    $info = [System.IO.DirectoryInfo]::new($path)
+    if (-not $info.Parent) {
+        return $info.FullName.ToUpperInvariant()
+    }
+    $name = ($info.Parent.GetFileSystemInfos($info.Name) | Select-Object -First 1).Name
+    return Join-Path (Get-CanonicalPath $info.Parent.FullName) $name
+}
+
 if ($SourceRoot) {
-    $pwizRoot = (Resolve-Path $SourceRoot).Path
+    $pwizRoot = Get-CanonicalPath (Resolve-Path $SourceRoot).Path
+    $sharpRoot = Find-SharpRoot $pwizRoot
+    if (-not $sharpRoot) {
+        Write-Error "No Pwiz.sln in $pwizRoot or $pwizRoot\pwiz-sharp - is this checkout on a branch that carries pwiz-sharp?"
+        exit 1
+    }
 } else {
     $siblingPath = Join-Path (Split-Path -Parent $aiRoot) 'pwiz'
     $childPath = Split-Path -Parent $aiRoot
-    if (Test-Path (Join-Path $siblingPath 'pwiz-sharp')) {
-        $pwizRoot = $siblingPath
-    } elseif (Test-Path (Join-Path $childPath 'pwiz-sharp')) {
-        $pwizRoot = $childPath
-    } else {
-        Write-Error "Cannot find pwiz-sharp. Tried:`n  $siblingPath`n  $childPath`nUse -SourceRoot to specify the pwiz checkout root."
+    $sharpRoot = (Find-SharpRoot $siblingPath) ?? (Find-SharpRoot $childPath)
+    if (-not $sharpRoot) {
+        Write-Error "Cannot find Pwiz.sln. Tried:`n  $siblingPath`n  $childPath`nUse -SourceRoot to specify the pwiz checkout root."
         exit 1
     }
-}
-$sharpRoot = Join-Path $pwizRoot 'pwiz-sharp'
-if (-not (Test-Path (Join-Path $sharpRoot 'Pwiz.sln'))) {
-    Write-Error "No Pwiz.sln under $sharpRoot - is this checkout on a branch that carries pwiz-sharp?"
-    exit 1
 }
 
 if ($RunTests -and -not $TestProject) {
@@ -123,6 +164,9 @@ if ($NoVendorLicenses) {
     $props += '-p:IAgreeToVendorLicenses=false'
 } elseif ($VendorLicenses) {
     $props += '-p:IAgreeToVendorLicenses=true'
+}
+foreach ($p in $Property) {
+    $props += "-p:$p"
 }
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
@@ -144,6 +188,12 @@ try {
 
     $buildStart = Get-Date
     $buildArgs = @('build', $Project, '-nologo') + $props + @('-v:minimal')
+    if ($Rebuild) {
+        $buildArgs += '--no-incremental'
+    }
+    if ($LogFile) {
+        $buildArgs += @('-fl', "-flp:logfile=$([System.IO.Path]::GetFullPath($LogFile, $initialLocation.Path));verbosity=normal")
+    }
     Write-Host "`ndotnet build $Project" -ForegroundColor Yellow
     if ($Summary) {
         $buildOutput = & dotnet @buildArgs 2>&1
