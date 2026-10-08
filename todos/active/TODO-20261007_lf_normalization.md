@@ -5,7 +5,9 @@
 > `Skyline/work/20260612_net8_port` as `9e2b516bcb`. Remaining before this TODO completes: the
 > follow-up PR (`.git-blame-ignore-revs` with `5747ede7c9` and `9e2b516bcb`, `.editorconfig`
 > comment, CodeInspectionTest decision), the `-X renormalize` merges on the open port-branch PRs,
-> and the T+1 ai/ cleanup. History of the work follows.
+> and the T+1 ai/ cleanup. **Follow-up PR [#4792](https://github.com/ProteoWizard/pwiz/pull/4792)
+> opened 2026-10-08**: `.git-blame-ignore-revs`, `.editorconfig` comment, and the CodeInspection
+> mixed-endings check removed (open question 2 decided by Brendan: remove). History of the work follows.
 >
 > **Was: IN PROGRESS 2026-10-07.** PR [#4789](https://github.com/ProteoWizard/pwiz/pull/4789)
 > (`Skyline/work/20261007_lf_normalization`, commit `f67b961167`) is open against the port
@@ -318,7 +320,8 @@ T-0 morning; the list changes daily.
 
 1. Which day does #4658 merge into the port branch, and which day is the promotion? The
    normalization goes between them, on its own day.
-2. Keep the `CodeInspectionTest` mixed-endings check as a `.bat`-only guard, or delete it?
+2. ~~Keep the `CodeInspectionTest` mixed-endings check as a `.bat`-only guard, or delete it?~~
+   Decided 2026-10-08: delete (#4792).
 3. Does the auto cherry-pick workflow stay pointed at `skyline_26_1`, move to
    `skyline_26_1_1`, or get retired now that cross-runtime back-ports need hand work?
 
