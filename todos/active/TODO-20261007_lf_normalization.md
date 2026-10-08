@@ -59,7 +59,7 @@
 > **Verified:** bt209 4205764 queued with "Delete all files before the build" on Agent 1 (which also
 > clears its stale `obj\`): 1806/1806 at the unchanged head. Wine container 4205659 on the head ran
 > 336 passed / 0 failed (same as port head) and was red only through its bt209 snapshot dependency;
-> the re-run 4205767 is green. **#4789 at 23:10: all checks green except the two tarball configs (same on #4619).**
+> the re-run 4205767 is green. **#4789 at 22:45: all checks green except the two tarball configs (same on #4619).**
 > Lesson: an attribute-only change (adding or removing `-text`) never rewrites working files, so
 > pinning a path and unpinning it leaves every machine that saw the pinned head with the pinned bytes;
 > fix with a clean checkout, not a code change.
