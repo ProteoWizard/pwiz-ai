@@ -6,7 +6,7 @@
 - **Created**: 2026-10-08
 - **Status**: PR open, awaiting TeamCity
 - **Module**: `skyline`
-- **PR**: (see below)
+- **PR**: #4799
 
 ## Objective
 
