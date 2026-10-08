@@ -4,7 +4,8 @@
 - **Branch**: none - a measurement of `Skyline/work/20260612_net8_port` (port tip `dfcb8d17ef` or later)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
 - **Created**: 2026-10-06
-- **Status**: Not started. Handoff written 2026-10-06.
+- **Status**: i9 run DONE 2026-10-06: 5 h 00 m vs 6 h 51 m (-27.1%). Waiting on Brendan's other two machines.
+  Open finding: FirstPassFDR picked 1 lane.
 - **Module**: `osprey`
 - **PR**: none (measurement only)
 
@@ -37,13 +38,15 @@ benchmark on three machines:
 
 ## Plan
 
-- [ ] Build Release from the port tip in `C:\proj\pwiz-work1`, snapshot to `D:\test\osprey-runs\_bin\port-<sha>`
-- [ ] `Run-SeaAd.ps1 -WhatIf` with runner defaults (libdecoy, r1.0, protein-compact, threads 30,
+- [x] Build Release from the port tip in `C:\proj\pwiz-work1`, snapshot to `D:\test\osprey-runs\_bin\port-<sha>`
+- [x] `Run-SeaAd.ps1 -WhatIf` with runner defaults (libdecoy, r1.0, protein-compact, threads 30,
       ParallelFiles 0, model diagnostics on) and `-Exe <snapshot>`; confirm cached mzML + .spectra.bin
-- [ ] Full run, uncontested (see the nightly constraint below)
-- [ ] Harvest per the SEA-AD README: perfviz (peak fits 64 GB, no gap >= 30 s), entrapment FDP tools
-- [ ] Per-task and per-phase table vs the reference; FirstPassFDR lane decision line; peak private
-- [ ] Record results here; compare with Brendan's other two machines when available
+- [x] Full run, uncontested (see the nightly constraint below)
+- [x] Harvest per the SEA-AD README: perfviz (peak fits 64 GB, no gap >= 30 s), entrapment FDP tools
+- [x] Per-task and per-phase table vs the reference; FirstPassFDR lane decision line; peak private
+- [ ] Record results here (i9 done); compare with Brendan's other two machines when available
+- [ ] FirstPassFDR lanes: `-LinkFrom` A/B at `OSPREY_FDR_FILE_LANES=2`/`3`, then decide on a
+      collect-before-measure fix in `FirstPassFdrTask.ResolveFileLanes` (Brendan to decide)
 
 ## Constraints
 - SkylineNightly runs on this i9 from ~21:50 out of `D:\Nightly` - the same single HDD as the
@@ -294,3 +297,122 @@ are busy, however they are split. Read gate wait 0 s. E: was no help.
 ### 2026-10-06 - Planned
 Created at handoff from the #4765 / #4777 session. **Next session handoff**: For detailed startup
 protocol, read `ai/.tmp/handoff-20261006_osprey_seaad_benchmark_port.md` before starting work.
+
+### 2026-10-06 - Launched (i9, 64 GB)
+- The port branch had been force-pushed AGAIN since the handoff: local `dfcb8d17ef` was ahead 42 /
+  behind 80. Its tree is identical to origin's `7028447045` (#4777), so the content was already
+  upstream. With Brendan's OK: saved it as `backup/net8_port-pre-rewrite-20261006` in pwiz-work1,
+  then `reset --hard` to origin. The tip is now `490a4d3825`, which adds #4779 (scan-major
+  first-pass fragment matching), #4778 (`--parallel-files auto` sizing) and #4781 (median polish
+  / SG cosine on the m/z index). **So this measures #4765/#4767/#4777 plus #4779/#4781**, and
+  PerFileScoring is expected to move too.
+- Exe snapshot: `D:\test\osprey-runs\_bin\port-490a4d3825` (Osprey v26.1.1.279).
+- To match the reference, data and library are passed explicitly: `-DataDir D:\test\osprey-runs\sea-ad\mzml`,
+  `-LibraryDir ...\lib\target+decoy+entrapment-20260817-ungated`. This shell had no
+  `OSPREY_SEAAD_DIR` set. 82/82 `.spectra.bin` present. No `OSPREY_*` tuning vars set (only
+  `OSPREY_TEST_BASE_DIR`).
+- Box quiet (no TestRunner/SkylineNightly). Ran `Clear-StandbyCache.ps1` first. Started 12:27:46,
+  so at ~6-8.5 h it should finish before the ~21:50 nightly. Nightly not skipped.
+- Run dir: `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-port-490a4d3825-bench-20261006_122746`
+  (`run.log`); console: `ai/.tmp/sessions/20261006-55ccd0be/seaad-bench.console.log`.
+- Early PerFileScoring pace (from `Scoring file N/82` timestamps): file 19 started at +30:04 vs
+  +47:14 in the reference; files 15->19 took ~107 s/file vs ~160 s/file. That is ~33% faster
+  (#4779/#4781 are the likely cause). Projected PerFileScoring is ~8,100 s vs 12,695 s; confirm at the end.
+- **PerFileScoring done: 8,297.3 s vs 12,694.6 s (-34.6%)**, at 14:46:03.
+- **FINDING - FirstPassFDR picked 1 lane, a near-miss on 2**: `First-pass FDR file lanes: 1 (limited
+  by memory; 30 threads, 29.3 GB free, 7.4 GB per lane, 82 files)`. In `FdrLaneResolver`, 2 lanes need
+  2 x 7.4 / `RAM_BUDGET_FRACTION` 0.5 = 29.6 GB free. The 7.4 GB comes from ~4.97 M rows in the largest
+  file x 1,600 B. The figure is 0.3 GB short. `FirstPassFdrTask.ResolveFileLanes` reads
+  `SystemMemory.AvailablePhysicalBytes()` with no collection first. In a straight-through run, the
+  PerFileScoring heap is still resident at that moment: memstamp read 13.3 / 22.0 GB, while the first column's
+  floor during the last scoring files was ~8 GB. So reclaimable garbage was very likely counted as
+  used. Candidate fix: a blocking compacting `GC.Collect` before measuring. It is cheap once per run,
+  and memory-band-guide's post-GC probe uses the same idea. Also recheck the 0.5 fraction now that
+  SEA-AD rows are ~1.6x CHS. CHS 446 got 3 lanes on this box. Judge the impact by FirstPassFDR wall time
+  vs a forced `OSPREY_FDR_FILE_LANES=2`/`3` run (a later A/B with `-LinkFrom`).
+- **FirstPassFDR done: 4,081.5 s vs 4,444.2 s (-8.2%)** at 1 lane, at 15:54:05. CHS improved much more
+  (4.76 h -> 2.6 h) at 3 lanes, which fits the lane count being the limiter here.
+- **PerFileRescoring done: 4,475.1 s vs 6,301.3 s (-29.0%)**, at 17:08:40.
+
+### 2026-10-06 - i9 results (exit 0 at 17:27:56)
+
+| task | this run (s) | reference (s) | change |
+|---|---:|---:|---:|
+| PerFileScoring | 8,297.3 | 12,694.6 | -34.6% |
+| FirstPassFDR | 4,081.5 | 4,444.2 | -8.2% (1 lane) |
+| PerFileRescoring | 4,475.1 | 6,301.3 | -29.0% |
+| SecondPassFDR | 1,155.7 | 1,263.6 | -8.5% |
+| **total** | **18,009.6 (5 h 00 m)** | **24,703.7 (6 h 51 m)** | **-27.1%** |
+
+- perfviz: private peak 29.3 GB (ref 25.7), FirstPassFDR peak 23.7 GB, floor FALLING, **0 gaps
+  >= 30 s** (max 23 s; the reference had 2).
+- Entrapment: pass 1 experiment n at true FDP <= 1% 46,183 vs 46,458 (-0.6%), at <= 0.75% 42,723 vs
+  43,620 (-2.1%); pass 2 FDP at reported q 1% 1.606% vs 1.745%; >= 41-run peptides 0.24% vs 0.21%.
+  The discovery set moved slightly; the change is not attributed (the reference exe was `13373c6b4f-dirty`).
+- Full write-up: `<run dir>\FINDINGS.md`; reader outputs in `<run dir>\harvest\`.
+
+### 2026-10-07 - vs BRENDANX-UW8 (i9-14900K, 128 GB): 4 h 12 m vs 5 h 00 m
+Cross-machine write-ups: `M:\home\brendanx\docs\Machines\BRENDANX-UW25\README.md` (corroboration
+log) and `..\BRENDANX-UW8\osprey-performance-vs-uw25.md`.
+- ~80% of the 2,870 s gap is **FirstPassFDR lanes**: UW8 had 5 (81.7 GB free), we had 1. The stage took 1,742 vs 4,082 s.
+  This raises the priority of the lane-resolver fix above.
+- About 800 s is coelution scoring at UW8's higher sustained clock (4.73 vs 2.55 GHz on the scalar
+  test; scoring only 1.25x faster). Calibration pass 1 scoring is identical on both machines
+  (~2,035 s): it streams the `.spectra.bin` at ~190 MB/s, so it looks HDD-bound (hypothesis).
+- The libraries match in size (6,174,152 vs 6,175,389). Both machines read from a SATA HDD.
+- **But they are different libraries**: UW8 used Mike's `-20260817` delivery, which the README calls standard.
+  Our `-ungated` is our own Carafe rebuild (same FASTA, our spectra/RT, no similarity gate; see
+  `TODO-20260801_decoy_similarity_gate.md`). The timing comparison stands, but ID counts do not compare.
+  Proposed to Brendan: make the runner default the canonical library and print a library
+  fingerprint in the banner and START line. Pending his answer.
+
+### 2026-10-07 - FirstPassFDR lane A/B (`--task FirstPassFDR -LinkFrom <bench run>`)
+Added `-FdrFileLanes N` to `Run-SeaAd.ps1` / `OspreyDatasetRun.psm1` (exports `OSPREY_FDR_FILE_LANES`,
+stripped otherwise; banner, START/DONE `fdrlanes=`, dir suffix `-fplanes<N>`). Standby cache cleared before each arm.
+
+| arm | lanes | free at decision | FirstPassFDR s | private peak | run dir suffix |
+|---|---:|---:|---:|---:|---|
+| straight-through bench | 1 (resolver) | 29.3 GB | 4,081.5 | 23.7 GB (stage) | `port-490a4d3825-bench-20261006_122746` |
+| task, auto | 3 (resolver) | **44.6 GB** | **2,050.5** | 23.9 GB | `fp-lanes-auto-20261007_142425` |
+| task, forced | 1 | - | 3,298.2 | ~19.9 GB (phase peak) | `fplanes1-20261007_145905` |
+| task, forced | 2 | - | 2,244.2 | 23.1 GB | `fplanes2-20261007_155542` |
+| task, forced | 4 | - | 2,011.0 | 28.5 GB, **2 gaps 30-32 s** | `fplanes4-20261007_163315` |
+
+- **Knee at 3 on this box (one HDD)**: 1->2 -1,054 s, 2->3 -194 s, 3->4 -39 s, with +4.6 GB and two
+  reporting gaps (32 s in pass-1 scoring at 16:41:21, 30 s in in-order recon planning at 17:00:07). The
+  resolver's existing formula gives exactly 3 at the correct free reading (44.6 x 0.5 / 7.4). **So no
+  leniency change. The fix is to read free memory after a collection.**
+- Fix on branch `Skyline/work/20261007_osprey_fdr_lanes_gc` (pwiz-work1, off port `e35b05852f`):
+  `FirstPassFdrTask.ResolveFileLanes` runs `GC.Collect(MaxGeneration, Aggressive, blocking, compacting)` +
+  `GC.Collect(0)` before `SystemMemory.AvailablePhysicalBytes()`, and only when no lane override is set
+  and there is more than 1 file. It does not touch `SystemMemory.cs` (#4780 edits it).
+- Local commit `3db02e8720` (not pushed). Debug build, 655/655 unit tests and inspection pass;
+  `regression.ps1 -Dataset Stellar` PASSED.
+- **Verification run (nightly turned off by Brendan)**: full straight-through 82 files, started 2026-10-07 ~17:15,
+  exe `_bin\fdrlanes-gc-3db02e8720` (v26.1.1.280), **canonical library `-20260817`** (via the new default,
+  byte-verified), runner defaults. Pass criteria: lane line ~44 GB free -> 3 lanes, and FirstPassFDR near
+  2,050 s rather than 4,082 s. This is also UW25's first run that is directly comparable with UW8.
+  - PerFileScoring 7,321.0 s (UW8 7,205.5 on the same library; yesterday's `-ungated` run here 8,297.3 incl. a
+    129 s libcache build).
+  - **Lane line: `3 (limited by memory; 30 threads, 45.2 GB free, 7.4 GB per lane, 82 files)`.** The collections
+    took ~2 s (19:17:23 -> :25), and private memory fell 20.5 -> 5.9 GB across them. Fix confirmed straight through.
+  - **FirstPassFDR 2,123.1 s vs 4,081.5 s yesterday (-1,958 s, -48%, ~33 min)**. It is within 73 s of the
+    task-mode 3-lane run (2,050 s), so the leftover-heap penalty is gone too. UW8 at 5 lanes: 1,742.5 s.
+  - PerFileRescoring 4,167.4, SecondPassFDR 938.2. **Total 14,550.2 s = 4 h 02 m** (UW8 4 h 12 m; 06 Oct here 5 h 00 m).
+    Peak private 30.9 GB, 0 gaps >= 30 s. Pass 1 experiment: 46,815 at 1% q (combined FDP 0.762%), 48,772 at true
+    FDP <= 1%. Write-up: `<run dir>\FINDINGS.md`, also copied to `M:\...\Machines\BRENDANX-UW25\seaad-82files-fdrlanes-gc-3db02e8720-20261007\`.
+  - Run dir: `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compact-fdrlanes-gc-3db02e8720-20261007_171521`
+- **Next**: open the PR for `3db02e8720` against the port branch (`/code-review` first). Push the `ai/` runner
+  changes (`-LibraryBuild` default 20260817, `LibraryFile:` fingerprint, `-FdrFileLanes`). Run the cross-machine
+  identity check with one exe snapshot on UW8 + UW25.
+
+- 1 -> 3 lanes in the same mode: -1,248 s (-38%), for ~+4.6 GB peak, i.e. ~2.3 GB per extra lane against
+  the resolver's 7.4 GB estimate (~3x conservative for SEA-AD).
+- **The straight-through 1-lane stage was 784 s slower than the task-mode 1-lane run** (4,082 vs 3,298 s).
+  So entering FirstPassFDR with PerFileScoring's heap resident costs time even at a fixed lane count. Do not
+  attribute that to lanes. A full GC at stage entry may recover it too. To verify straight through.
+- Library check (2026-10-07 15:54): UW25's `target+decoy+entrapment-20260817` passed UW8's
+  `verify-seaad-library.ps1`, **byte-identical** to the reference, although its mtime differs (08-18 vs 09-26).
+
+- A fresh `--task` process sees ~15 GB more free than the straight-through run did at the same point. So the
+  resolver's 1-lane choice came from PerFileScoring's leftover heap, not the cohort.

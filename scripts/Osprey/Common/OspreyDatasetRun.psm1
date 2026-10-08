@@ -67,20 +67,26 @@ function Resolve-DatasetLocation {
 
     -LibraryDir may name either the root holding the variants or one variant directly, so a
     machine that lays its libraries out differently is not locked out by the convention.
+
+    -Build selects which delivered r=1.0 set the variant derives from, with the same naming
+    as New-SeaAdLibrary.ps1 -Build: '' is the original 2026-07-27 'target+decoy+entrapment',
+    '20260817' is 'target+decoy+entrapment-20260817' and its derived variants.
 #>
 function Resolve-LibraryVariant {
     param(
         [string]$LibRoot,
         [string]$DecoyMode,
         [string]$Ratio,
+        [string]$Build = '',
         [string]$Readme
     )
+    $b = if ($Build) { "-$Build" } else { '' }
     $variant = if ($DecoyMode -eq 'gendecoy') {
-        "target+entrapment-r$Ratio-gendecoy"
+        "target+entrapment-r$Ratio$b-gendecoy"
     } elseif ($Ratio -eq '1.0') {
-        'target+decoy+entrapment'
+        "target+decoy+entrapment$b"
     } else {
-        "target+decoy+entrapment-r$Ratio"
+        "target+decoy+entrapment$b-r$Ratio"
     }
 
     $libDir = Join-Path $LibRoot $variant
@@ -90,7 +96,7 @@ function Resolve-LibraryVariant {
         } else {
             throw ("No library variant '$variant' under '$LibRoot', and '$LibRoot' is not " +
                    "itself a library directory. Build it with New-SeaAdLibrary.ps1 -Ratio " +
-                   "$Ratio -DecoyMode $DecoyMode, or pass -LibraryDir/-Library explicitly. " +
+                   "$Ratio -DecoyMode $DecoyMode$(if ($Build) { " -Build $Build" }), or pass -LibraryDir/-Library explicitly. " +
                    "See $Readme.")
         }
     }
@@ -264,9 +270,17 @@ function Invoke-OspreyDatasetRun {
         # Osprey's grid. Same reasoning as -SvmCTolerance: a parameter, stripped otherwise, and
         # recorded in the banner, run.log and the directory name (-cvals<value>).
         [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',
+        # FirstPassFDR file-lane count (OSPREY_FDR_FILE_LANES). 0 (the default) leaves it to
+        # Osprey's FdrLaneResolver. Changes wall clock and memory only, never output. A
+        # parameter for the same reason as -SvmCTolerance: stripped below, recorded in the
+        # banner, run.log START/DONE lines and the directory name (-fplanes<N>).
+        [ValidateRange(0, 64)] [int]$FdrFileLanes = 0,
         [string]$Tag = '',
         [string]$DataDir,
         [string]$LibraryDir,
+        # Which delivered r=1.0 set the library variant derives from (see Resolve-LibraryVariant).
+        # '' keeps the original naming, so runners that do not pass it are unchanged.
+        [string]$LibraryBuild = '',
         [string]$Library,
         [string]$CacheDir,
         [string]$OutDir,
@@ -377,7 +391,8 @@ function Invoke-OspreyDatasetRun {
 
     $libRoot = Resolve-DatasetLocation -Explicit $LibraryDir -EnvName $Dataset.EnvLibVar `
         -Fallbacks @() -What 'library directory' -DatasetName $dsName -Readme $readme
-    $libDir = Resolve-LibraryVariant -LibRoot $libRoot -DecoyMode $DecoyMode -Ratio $Ratio -Readme $readme
+    $libDir = Resolve-LibraryVariant -LibRoot $libRoot -DecoyMode $DecoyMode -Ratio $Ratio `
+        -Build $LibraryBuild -Readme $readme
 
     # Exactly-one-.tsv unless named: a library folder also holds the pairing manifest and a
     # FASTA, so guessing the first .tsv is how you silently search the wrong one.
@@ -398,6 +413,11 @@ function Invoke-OspreyDatasetRun {
             $libraryPath = $tsv[0].FullName
         }
     }
+    # Size + write time of the library file, cheap on a 12 GB TSV where a hash is not. It goes in
+    # the banner and run.log so two machines' runs can be checked for the same library from the
+    # logs alone - the folder name did not catch two different builds sharing a date tag.
+    $libItem = Get-Item $libraryPath
+    $libFingerprint = '{0} bytes, written {1:yyyy-MM-ddTHH:mm:ssZ}' -f $libItem.Length, $libItem.LastWriteTimeUtc
     $manifest = Join-Path $libDir 'osprey_library_db_pairing.tsv'
     if ($DecoyMode -eq 'libdecoy' -and -not (Test-Path $manifest)) {
         throw ("-DecoyMode libdecoy needs the pairing manifest '$manifest'. It ships with the " +
@@ -486,6 +506,7 @@ function Invoke-OspreyDatasetRun {
         # Empty when unset, so existing arms keep their names.
         $csel = if ($SvmCTolerance) { "-csel$SvmCTolerance" } else { '' }
         if ($SvmCValues) { $csel += "-cvals$($SvmCValues -replace ',', '_')" }
+        if ($FdrFileLanes -gt 0) { $csel += "-fplanes$FdrFileLanes" }
         $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$csel$Tag"
         if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
         $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
@@ -620,6 +641,7 @@ function Invoke-OspreyDatasetRun {
         }
     }
     Write-Host ("  library  : {0}" -f $libraryPath)
+    Write-Host ("  lib file : {0}" -f $libFingerprint)
     Write-Host ("  arm      : {0}  r={1}" -f $DecoyMode, $Ratio)
     Write-Host ("  files at once: {0}   threads {1}{2}" -f
                 $(if ($ParallelFiles -gt 0) { $ParallelFiles } else { '1 (sequential)' }), $Threads,
@@ -659,6 +681,9 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  svm C grid: {0}" -f $(if ($SvmCValues) {
                 "OSPREY_SVM_C_VALUES=$SvmCValues (EXPERIMENTAL) - moves the first-pass model" }
                 else { "Osprey's default (OSPREY_SVM_C_VALUES cleared)" }))
+    Write-Host ("  fdr lanes: {0}" -f $(if ($FdrFileLanes -gt 0) {
+                "OSPREY_FDR_FILE_LANES=$FdrFileLanes (forced; wall clock and memory only)" }
+                else { "Osprey's FdrLaneResolver (OSPREY_FDR_FILE_LANES cleared)" }))
     # Since pwiz #4507 (2026-09-12) every pass selection streams: pass 1 is emitted off the
     # per-file 1st-pass sidecars, so `1` no longer forces the resident pool and `both` really
     # writes .pass1 and .pass2. The two yellow banners that stood here - a resident-pool
@@ -962,6 +987,7 @@ function Invoke-OspreyDatasetRun {
     foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
                    'OSPREY_TRAIN_PICK_RUN', 'OSPREY_SVM_C_TOLERANCE', 'OSPREY_SVM_C_VALUES',
+                   'OSPREY_FDR_FILE_LANES',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
                    'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
                    'OSPREY_PROTEIN_COMPACT_QUALIFY',
@@ -985,6 +1011,7 @@ function Invoke-OspreyDatasetRun {
     # Only when given: unset is Osprey's own default, and the variable was stripped above.
     if ($SvmCTolerance) { $env:OSPREY_SVM_C_TOLERANCE = $SvmCTolerance }
     if ($SvmCValues) { $env:OSPREY_SVM_C_VALUES = $SvmCValues }
+    if ($FdrFileLanes -gt 0) { $env:OSPREY_FDR_FILE_LANES = "$FdrFileLanes" }
 
     $log = Join-Path $OutDir 'run.log'
     # NEVER truncate an existing run.log - rotate it to run-<stamp>.log first. A run.log is the
@@ -1010,12 +1037,13 @@ function Invoke-OspreyDatasetRun {
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' files=$($inputs.Count) threads=$Threads " +
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' fdrlanes=$FdrFileLanes files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring task='$Task' mdiag=$mdiag trainexport=$([bool]$TrainingExport) perfstats=$(-not $NoPerfStats) " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
     "Library: $libraryPath" | Add-Content -Path $log
+    "LibraryFile: $libFingerprint" | Add-Content -Path $log
     "OutDir: $OutDir" | Add-Content -Path $log
 
     Write-Host "Logging to $log" -ForegroundColor Cyan
@@ -1027,7 +1055,7 @@ function Invoke-OspreyDatasetRun {
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' fdrlanes=$FdrFileLanes parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })

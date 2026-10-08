@@ -83,6 +83,21 @@
     EXPERIMENTAL first-pass SVM C grid, exported as OSPREY_SVM_C_VALUES (a build that has the
     override). '0.1' fixes C for every fold and iteration. Empty leaves Osprey's grid.
 
+.PARAMETER LibraryBuild
+    Which delivered r=1.0 library set the variant is resolved from. The default '20260817' is
+    'target+decoy+entrapment-20260817' (and '...-20260817-r<ratio>' / 'target+entrapment-r<ratio>-20260817-gendecoy'
+    for the derived variants), the set every cross-machine comparison should use. '' selects
+    the original 2026-07-27 delivery 'target+decoy+entrapment'. Ignored when -LibraryDir names a
+    variant folder directly. The banner and run.log 'LibraryFile:' line record the file's size and
+    write time, so runs on different machines can be checked for the same library.
+
+.PARAMETER FdrFileLanes
+    Force the FirstPassFDR file-lane count (exported as OSPREY_FDR_FILE_LANES). 0, the default,
+    leaves it to Osprey's memory-based FdrLaneResolver. Lanes change wall clock and memory peak,
+    never output. The module strips the variable, so exporting it yourself has no effect.
+    Recorded in the banner, run.log START/DONE lines and the directory name (-fplanes<N>).
+    Pair with -Task FirstPassFDR -LinkFrom <completed run> for a ~30-70 min lane A/B.
+
 .PARAMETER LinkFrom
     Optional. Hard-link the per-file caches from a COMPLETED run over the same file set so
     this run resumes without re-parsing or re-scoring. What is linked is scoped by -Task:
@@ -168,9 +183,11 @@ param(
     [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
     [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
     [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',
+    [ValidateRange(0, 64)] [int]$FdrFileLanes = 0,
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
+    [string]$LibraryBuild = '20260817',
     [string]$Library,
     [string]$CacheDir,
     [string]$OutDir,
@@ -205,6 +222,9 @@ $dataset = @{
     Readme           = (Join-Path $PSScriptRoot 'README.md')
 }
 
+# @PSBoundParameters carries only what the caller passed, never this script's defaults, and the
+# module's own default for -LibraryBuild is '' (the 07-27 set). Forward SEA-AD's default explicitly.
+$PSBoundParameters['LibraryBuild'] = $LibraryBuild
 $exitCode = Invoke-OspreyDatasetRun -Dataset $dataset @PSBoundParameters
 # Propagate Osprey's exit code. Without this a failed run exits 0 and every
 # caller - including an overnight harness - reads the failure as success.

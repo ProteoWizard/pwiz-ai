@@ -82,17 +82,26 @@ only maps the folder names onto its arguments:
 .\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode gendecoy   # same subset, decoy rows stripped
 ```
 
-**The unsuffixed `target+decoy+entrapment` is Mike's original 2026-07-27 delivery, and it is
-NOT what the recent large Astral runs use.** Those (CHS, TDP-43, SEA-AD since late August) use
-`target+decoy+entrapment-20260817`, a later rebuild shared as
-`M:\home\brendanx\data\MacCoss\Osprey\AstralLib\target+decoy+entrapment-20260817.zip`. Extract
-it into the library root and pass it by name, since the runner's default still resolves the
-unsuffixed folder:
+**The canonical library is `target+decoy+entrapment-20260817`, and since 2026-10-07 it is the
+runner's default** (`-LibraryBuild 20260817`). It is a later rebuild shared as
+`M:\home\brendanx\data\MacCoss\Osprey\AstralLib\target+decoy+entrapment-20260817.zip`; extract it
+into the library root. Every machine in a cross-machine comparison must use it. The unsuffixed
+`target+decoy+entrapment` is Mike's original 2026-07-27 delivery, reachable with
+`-LibraryBuild ''`. `target+decoy+entrapment-20260817-ungated` is a different library (our own
+Carafe rebuild of the same FASTA, built for the decoy-similarity-gate investigation) even though
+its precursor count is within 0.02% of the canonical one - pass it by `-LibraryDir` only on purpose.
+
+`-LibraryBuild` applies to the derived variants too, with `New-SeaAdLibrary.ps1 -Build`'s
+naming, so `-Ratio 0.1` now resolves `target+decoy+entrapment-20260817-r0.1` and the gendecoy
+arm `target+entrapment-r1.0-20260817-gendecoy`. Build them from the canonical set:
 
 ```powershell
-.\Run-SeaAd.ps1 -LibraryDir "$env:OSPREY_SEAAD_LIB\target+decoy+entrapment-20260817"
 .\New-SeaAdLibrary.ps1 -Ratio 1.0 -DecoyMode gendecoy -Build 20260817   # its gendecoy arm
+.\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode libdecoy -Build 20260817
 ```
+
+The banner and the run.log `LibraryFile:` line record the library file's size and write time.
+Compare that line across machines before comparing any ID count.
 
 The 07-27 delivery also carries at least one decoy row merged with an identical target
 (`AQLKDTR`, ProteinID `decoy_...LZTR1...;sp|Q9Y250|LZTS1`) whose reversed decoy `TDKLQAR` is
