@@ -2,11 +2,11 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261005_osprey_per_stage_parallel_files` (worktree `pwiz-net10b` on MACS2)
-- **Base**: `Skyline/work/20260612_net8_port` at `2937deaae8` (after #4765 merged as `f7021e609c`) - see "Base" below
+- **Base**: `master` (retargeted 2026-10-08 after #4619 merged; started on `Skyline/work/20260612_net8_port`) - see "Base" below
 - **Created**: 2026-10-05 (backlog item `TODO-osprey_parallel_files_scaling.md`, created 2026-10-04, adopted and widened)
-- **Status**: In Progress - PR #4780 open (lanes + per-stage flags + review fixes); regression gates and TDP-43 timing pending
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#4780](https://github.com/ProteoWizard/pwiz/pull/4780)
+- **PR**: [#4780](https://github.com/ProteoWizard/pwiz/pull/4780) (merged 2026-10-08)
 - **Follows**: `ai/todos/completed/TODO-20261002_osprey_cold_window_reads.md` (#4767)
 
 ## Objective
@@ -117,15 +117,15 @@ Earlier reading (on `e3c823a92b`, still accurate for the per-file stages):
 - [x] `--parallel-files-caching / -scoring / -rescoring` args (+ usage text, resx, `OspreyArgNames`)
 - [x] Per-stage resolution and `RunPlan` properties; rescoring resolves its own instead of inheriting
 - [x] Logging of count + source per stage (the existing `File parallelism: N (...)` line names the deciding flag)
-- [ ] Runner support: `-ParallelFilesCaching/-Scoring/-Rescoring` in `OspreyDatasetRun.psm1` + dataset wrappers
+- [x] Runner support: `-ParallelFilesCaching/-Scoring/-Rescoring` in `OspreyDatasetRun.psm1` + dataset wrappers
 - [x] Docs: `pwiz_tools/Osprey/docs/20-command-line.md`, Help `CommandLine.html` (en; ja/zh-Hans need the
       translation flow)
 - [x] Tests: arg precedence matrix (`OspreyCommandArgsTests`); SpectraCache 1 lane vs N lanes byte-identical
       caches; `SubsetPipelineTest` leg with different per-stage values producing identical outputs
-- [ ] Gates: Build-Osprey Debug -RunTests; `regression.ps1 -Dataset Stellar`; `regression-parallel.ps1 -Dataset All`
+- [x] Gates: Build-Osprey Debug -RunTests; `regression.ps1 -Dataset Stellar`; `regression-parallel.ps1 -Dataset All`
 - [ ] Measure: TDP-43 SpectraCache at lanes 1 / 8 / 16 from E: on MACS2 (quiet box); scoring vs rescoring
-      curves (see the sweep below)
-- [ ] `/code-review max`, then PR against the port branch
+      curves (see the sweep below) - DEFERRED: only 8 lanes measured (2 h 22 m, plus the GC heap-count legs)
+- [x] `/code-review max`, then PR - #4780, retargeted to master after #4619 merged
 
 ## Base
 
@@ -269,5 +269,16 @@ otherwise idle, exe `_bin\26.1.1.279-4bebdc8f3e-vendor-4bebdc8f3e`. Script:
 - **Next measurement:** repeat solo / lanes8 / heaps8 / procs8 with 3 reps on MACS2, then on an i9
   with any vendor `.raw` set (the script's paths are MACS2-specific; parameterize DataDir/RunsRoot).
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261005_osprey_per_stage_parallel_files.md` before starting work.
+### 2026-10-08 - Merged
+
+#4619 (the .NET 10 port) merged into master first, so the PR was retargeted from the port branch to
+master: `git merge -X renormalize origin/master` into the branch was conflict-free and left exactly the
+PR's 26 Osprey files as the difference (655/655 unit tests on the merged tree). TeamCity passed and the
+branch had been tested on two other machines; merged by admin override of the review requirement.
+PR #4780 merged as commit `011dfc9ff2`. Shipped: `--parallel-files-caching`, `-scoring` and
+`-rescoring` overriding `--parallel-files` per stage (absent / bare = auto / N; `0` = an explicit single
+lane), each stage resolving and logging its own count (re-scoring no longer inherits scoring's),
+SpectraCache on `OrderedFileLanes.For` with byte-identical caches, the runners' per-stage switches, and
+docs. Deferred: the lanes 1 / 16 points of the caching curve, the scoring-vs-rescoring curves, and acting
+on the GC heap-count finding (Server GC with 72 heaps cost 21% at 8 caching lanes; one rep, one machine).
+No issues filed.
