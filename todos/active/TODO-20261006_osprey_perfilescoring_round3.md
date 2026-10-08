@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20261006_osprey_perfilescoring_round3` (`C:\proj\pwiz-scanmajor`)
 - **Base**: `Skyline/work/20260612_net8_port` (PR #4619), at 490a4d3825 (the 2026-10-06 force-pushed history)
 - **Created**: 2026-10-06
-- **Status**: In progress - PerFileScoring closed; now FirstPassFDR / PerFileRescoring (see 2026-10-07
-  evening). Rebased on e35b05852f; two LOCAL commits (hooks, pooled reads), not pushed; one measured
-  UNCOMMITTED change (sidecar write buffer, FdrScoresSidecar.cs).
+- **Status**: PR-ready pending `/code-review max` + Brendan's go-ahead. Rebased on e35b05852f; THREE local
+  commits, not pushed: 9d5dce85e4 hooks, 197f2b3a7d pooled reads, 0b879300ae sidecar 1 MB write buffer.
+  Stellar + Astral regressions PASS on the branch. Stacked on it:
+  `TODO-20261007_osprey_self_validating_artifacts.md` (C:\proj\pwiz-validity).
 - **Module**: `osprey`
 - **PR**: none
 - **Follows**: `ai/todos/completed/TODO-20261005_osprey_perfilescoring_round2.md` (#4781)
@@ -157,5 +158,14 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
   ~1.7% of peaks. Next measurement: RT coverage of rescore targets per window (how much of each
   window the targets' scoring spans actually need) - decides whether reading less is worth building.
 
+### 2026-10-08
+- Committed the sidecar write buffer (0b879300ae; FirstPassFDR -15% at 12 files, byte-identical). Stellar
+  (3.5 min) + Astral (22 min) regressions PASS on the branch. Rethought the sidecar files with Brendan ->
+  stacked branch, see TODO-20261007_osprey_self_validating_artifacts.md.
+- Open perf leads (not started): sparse training feature load (byte-identical, CPU/allocation only);
+  decode CWT only for rows failing the Keep test in planning (or defer the CWT pick to the rescoring node -
+  a sidecar-contract change, Brendan's call); measure rescore-target RT coverage per window before
+  building any "read less spectra" path in Stage 6.
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261006_osprey_perfilescoring_round3.md` before starting work.
+`ai/.tmp/handoff-20261007_osprey_self_validating_artifacts.md` before starting work.

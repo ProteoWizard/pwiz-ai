@@ -6,8 +6,10 @@
 - **Base**: `Skyline/work/20260612_net8_port`, STACKED on `Skyline/work/20261006_osprey_perfilescoring_round3`
   (0b879300ae: carries the FdrScoresSidecar 1 MB write buffer this work touches again)
 - **Created**: 2026-10-07
-- **Status**: Implemented (uncommitted) - unit gate 649/649 + inspection 0/0, Stellar regression PASS;
-  `regression-parallel -Dataset All` running; docs + ai/scripts updates delegated
+- **Status**: Implemented and committed (4654250f4c, local, not pushed). Gate 649/649 + inspection 0/0,
+  `regression-parallel -Dataset All` 48 PASS / 0 FAIL. Next: `/code-review max`, then PR stacked on the perf
+  round 3 PR (Brendan's go-ahead). The matching ai/scripts changes are UNCOMMITTED in C:\proj\ai on purpose
+  - commit them when this branch merges (see 2026-10-08 entry).
 - **Module**: `osprey`
 - **PR**: none
 
@@ -74,24 +76,31 @@ held, and it is the source of several defects (below).
 
 ## Phases (keep the build green; migrate task by task, delete the old mechanism last)
 
-- [ ] 1. Core: stamp type + per-family read/write helpers + dispatcher; unit tests (round-trip, wrong task /
+- [x] 1. Core: stamp type + per-family read/write helpers + dispatcher; unit tests (round-trip, wrong task /
       version / key, truncated, missing slot, JSON early-stop on a large file)
-- [ ] 2. PerFileScoring: parquet footer + calibration.json; per-file predicate over both
-- [ ] 3. FirstPassFDR: per-file 1st-pass sidecar, model/stratum json, reconciliation json; experiment sidecar,
+- [x] 2. PerFileScoring: parquet footer + calibration.json; per-file predicate over both
+- [x] 3. FirstPassFDR: per-file 1st-pass sidecar, model/stratum json, reconciliation json; experiment sidecar,
       retained base ids, diagnostics json; resume and compaction-gate checks
-- [ ] 4. PerFileRescoring: reconciled parquet + both 2nd-pass binaries (+ training parquet); per-file predicate
+- [x] 4. PerFileRescoring: reconciled parquet + both 2nd-pass binaries (+ training parquet); per-file predicate
       over all three; `HasWorkerStamp` and TrainingExport read the embedded producer
-- [ ] 5. SecondPassFDR: experiment sidecar, blib, diagnostics; decide blib / HTML slots
-- [ ] 6. Remove TaskValiditySidecar, the driver re-stamp, ClearStale; CanRehydrate on embedded stamps
-- [ ] 7. Tests: TaskValiditySidecar tests -> stamp tests; SubsetPipelineTest cut scenarios (they delete
+- [x] 5. SecondPassFDR: experiment sidecar, blib, diagnostics; decide blib / HTML slots
+- [x] 6. Remove TaskValiditySidecar, the driver re-stamp, ClearStale; CanRehydrate on embedded stamps
+- [x] 7. Tests: TaskValiditySidecar tests -> stamp tests; SubsetPipelineTest cut scenarios (they delete
       `*.osprey.task` to simulate a cut); add version-mismatch and stale-not-recertified cases
-- [ ] 8. Harness + docs: regression.ps1 (copies 2nd-pass stamps for the HPC leg, ~2115, ~2546);
+- [x] 8. Harness + docs: regression.ps1 (copies 2nd-pass stamps for the HPC leg, ~2115, ~2546);
       ai/scripts (OspreyDatasetRun -LinkFrom stage lists + version detection from stamps, New-OspreyResumeStage,
       Restamp-OspreyVersion.py and Repair-Stages1to4Stamps.ps1 likely retire, Test-Snapshot, Measure-Stage6Rescore,
       Compare-StraightThroughResume-CSharp, CHS runner); docs 00 (P9, P10, P14, HPC "every artifact travels with
       its stamp"), 14 §8, 15, 20, 22, DIVERGENCES
-- [ ] 9. Gates: unit + inspection, `regression-parallel.ps1 -Dataset All` byte-identical outputs (stamps aside),
-      SEA-AD subset resume drill (kill mid-FirstPassFDR and mid-PerFileRescoring, resume, compare)
+- [x] 9a. Gates: unit + inspection (649/649, 0/0); `regression-parallel.ps1 -Dataset All` 48/0 (33.5 min)
+- [ ] 9b. SEA-AD subset resume drill (kill mid-FirstPassFDR and mid-PerFileRescoring, resume, compare) -
+      needs the ai/scripts changes, so run it from C:\proj\ai with this branch's build
+- [ ] 10. `/code-review max` in C:\proj\pwiz-validity, then PR (base: perf round 3 branch until it merges)
+- [ ] 11. Commit the ai/scripts changes when this branch merges (they assume embedded stamps)
+- [ ] Follow-ups (separate work): per-file copies of the experiment-wide stratum.json / model.json
+      (82 x 9.6 MB); `OspreyTask.Inputs()` overrides now unused; the early ReconciledPaths decision in
+      PerFileRescoreTask (RescoredPoolPlan) no longer required; FirstPassFdrTask.MoveHarnessProductAside
+      was forced by the deleted driver re-stamp; stale `IsTaskAlreadyDone` and `--input-scores` mentions
 
 ## Progress Log
 
@@ -120,3 +129,18 @@ held, and it is the source of several defects (below).
     FirstPassFDR's `*.1st-pass.*` + `*.reconciliation.json` + output.blib instead of stamps.
 - Noted for later: `.1st-pass.stratum.json` (9.6 MB) and `.1st-pass.model.json` are written once PER
   FILE with identical bytes (82 x 9.6 MB = 790 MB at SEA-AD) - experiment-wide products stored per file.
+
+### 2026-10-08
+- Committed 4654250f4c (local). Full regression 48 PASS / 0 FAIL; unit 649/649; inspection 0/0.
+- Docs updated by delegated agent (00, 01, 11, 13, 14 section 8 rewritten, 15, 20, 22, DIVERGENCES, README);
+  stale code comments cleaned (comments only). Dead `OspreyTask.OutputInputs` + `TrainingExportWriter.RunInputs`
+  removed; 3 unused resource strings removed; user messages now say delete `*.1st-pass.*`.
+- ai/scripts changes (UNCOMMITTED in C:\proj\ai, deliberately): OspreyDatasetRun.psm1 -LinkFrom lists drop
+  stamp files and version detection reads the embedded calibration.json stamp with a legacy fallback;
+  New-OspreyResumeStage / Test-Snapshot / Measure-Stage6Rescore / Compare-StraightThroughResume-CSharp /
+  CHS updated; Restamp-OspreyVersion.py and Repair-Stages1to4Stamps.ps1 marked legacy-only. Also the
+  `-ProfileTo` runner switch (OspreyDatasetRun.psm1 + Run-SeaAd.ps1). Holding them because master/port
+  builds still rely on linked .osprey.task files.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261007_osprey_self_validating_artifacts.md` before starting work.
