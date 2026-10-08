@@ -2,7 +2,8 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261005_declared_adduct_mz_mismatch`
-- **Base**: `Skyline/work/20260612_net8_port` (.NET 10 port branch; PR targets it, not master)
+- **Base**: `master` (the .NET 10 port branch was promoted to master 2026-10-08; PR targets master)
+- **Checkout**: `C:\Dev\DeclaredAdduct` (created 2026-10-08 for this work; remove when the PR merges)
 - **Created**: 2026-10-05
 - **Status**: In Progress
 - **GitHub Issue**: [#4776](https://github.com/ProteoWizard/pwiz/issues/4776)
@@ -73,3 +74,11 @@ Inspection: CodeInspection test passed. Full ReSharper inspection reported 393 i
 the two changed files; almost all are "cannot resolve symbol" errors in shared projects
 (318 in `MsDataFileImpl.cs`; JetBrains.Annotations, Newtonsoft in CommonUtil), i.e. the local
 net10 inspection can't resolve package references. Rely on TeamCity's inspection for the PR.
+
+### 2026-10-08 - Moved to its own checkout on master
+
+The port branch was promoted to master (#4619) after the LF normalization (#4789). Moved the
+still-uncommitted two-file change out of `master_clean` (now reset to `master`) into a new
+checkout `C:\Dev\DeclaredAdduct`, recreating the branch from `origin/master`; the moved diff is
+byte-identical to the original. Needs a full build (`-VendorLicenses`) and a re-run of
+`TestPasteMolecules` before `/code-review max`.
