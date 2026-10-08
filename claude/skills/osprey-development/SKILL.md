@@ -7,7 +7,7 @@ description: ALWAYS load when working in pwiz_tools/Osprey (C# port), on maccoss
 
 Two trees, two convention sets:
 
-- **Osprey** (`pwiz_tools/Osprey` on the port branch - see "Base branch" below) - the C#
+- **Osprey** (`pwiz_tools/Osprey` on `master`) - the C#
   implementation, now the path forward for the Osprey DIA proteomics
   search tool. Lives in the pwiz repo. **Follows Skyline conventions
   in full.**
@@ -19,33 +19,19 @@ Two trees, two convention sets:
 Which convention set applies depends on which tree you are touching.
 The sections below are organized along that split.
 
-## Base branch: the .NET 10 port branch, NOT master
+## Base branch: master
 
-**All C# Osprey development happens on `Skyline/work/20260612_net8_port`**
-(the .NET 10 port, PR #4619). Osprey is no longer developed on `master`.
-Every Osprey work branch **starts from** the port branch and its PR
-**returns to** it:
+Osprey work branches from and returns to `master`, like Skyline (`Skyline/work/YYYYMMDD_name`,
+`gh pr create --label osprey`, squash subjects `osprey: ... (#N)`). The .NET 10 port
+(`Skyline/work/20260612_net8_port`, PR #4619) merged into master on 2026-10-08; a branch still
+based on it needs `git merge origin/master` (both sides already hold the port, so it is
+reconciliation, not re-derivation) and its PR retargeted to master.
 
-- Branch: `git checkout -b Skyline/work/YYYYMMDD_name origin/Skyline/work/20260612_net8_port`
-  in whichever checkout holds the port branch on this machine (it may be
-  `pwiz` itself or a sibling checkout; `mcp__status__get_project_status`
-  shows each checkout's branch). Never branch from master.
-- TODO header: `- **Base**: \`Skyline/work/20260612_net8_port\``.
-- PR: `gh pr create --base Skyline/work/20260612_net8_port --label osprey`.
-  Squash subjects are still `osprey: ... (#N)`.
-- Updating: `git merge origin/Skyline/work/20260612_net8_port`, never
-  `origin/master` (master lacks the port, so merging it in is backwards).
-- `/pw-complete`: sync the port branch, not master, after the merge.
-- When that checkout is not `<project-root>\pwiz`, every `Build-Osprey.ps1`
-  call needs `-SourceRoot <that checkout>`; without it the script builds
-  `pwiz` and "succeeds" against the wrong tree.
-- Output is `Release\net10.0` only; a `net8.0`/`net472` folder under `bin/` is a stale
-  build - delete it, never run it.
-
-Why (including why net10.0 only), and the TeamCity and VS x64 details: "Base branch while
-the .NET 10 port (PR #4619) is open" in `ai/docs/osprey-development-guide.md`. When
-#4619 merges into master this section is removed and Osprey work returns
-to master.
+- Osprey is `net10.0` only: a `net8.0`/`net472` folder under `bin/` is a stale build - delete
+  it, never run it. Why: "Osprey is .NET 10 only" at the top of `ai/docs/osprey-development-guide.md`.
+- When the checkout is not `<project-root>\pwiz`, every `Build-Osprey.ps1` call needs
+  `-SourceRoot <that checkout>`; without it the script builds `pwiz` and "succeeds" against the
+  wrong tree.
 
 ## Osprey (C#) - Skyline Conventions Apply
 
@@ -323,11 +309,9 @@ Backlog overview: `ai/scripts/Osprey/Get-OspreyBacklog.ps1` (see the guide's "Os
 
 ## Key Repositories
 
-- `pwiz_tools/Osprey` in the checkout holding the port branch - the C#
-  implementation. Lives in
+- `pwiz_tools/Osprey` - the C# implementation. Lives in
   `ProteoWizard/pwiz`. Branches and PRs follow Skyline conventions
-  (`Skyline/work/YYYYMMDD_*`, past-tense title, Co-Authored-By), but
-  base on `Skyline/work/20260612_net8_port` - see "Base branch" above.
+  (`Skyline/work/YYYYMMDD_*` from `master`, past-tense title, Co-Authored-By).
 - `C:\proj\osprey` -> `maccoss/osprey` (SSH). Primary Rust repo. New
   Rust branches and PRs go here
   (`gh pr create --repo maccoss/osprey`).

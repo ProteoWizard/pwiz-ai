@@ -21,6 +21,12 @@
 >   `cargo fmt` / `clippy -D warnings`, upstream commit prose); the `ai/*.md` Skyline
 >   rules do NOT apply there.
 
+**Osprey is .NET 10 (net10.0) only, and stays that way.** Unlike Skyline and ProteoWizard,
+Osprey has no reason to ship as .NET Framework 4.7.2 or .NET 8.0, so net472 and net8.0 are
+not coming back. Scripts and docs name `Release\net10.0`; a `net8.0` or `net472` folder under
+a checkout's `bin/` or `obj/` is a stale build to delete, never a fallback. (The port branch
+that brought this in was named `..._net8_port` for history; it targeted .NET 10.)
+
 **Status.** C# Osprey (`pwiz_tools/Osprey`) is the official Osprey: it ships with
 Skyline the way SkylineBatch and AutoQC do, and is versioned on the Skyline scheme
 (`YEAR.ORDINAL.BRANCH.DOY` from the Jamfile constants), not the old Rust release
@@ -1730,47 +1736,23 @@ EOF
 )"
 ```
 
-### Base branch while the .NET 10 port (PR #4619) is open
+### Base branch: master
 
-**All C# Osprey work starts from and returns to `Skyline/work/20260612_net8_port`**
-(Matt's .NET 10 port, pwiz#4619); Osprey is no longer developed on `master`. Branch
-from `origin/Skyline/work/20260612_net8_port` in whichever checkout holds that branch on
-the machine (`pwiz` itself on some, a sibling checkout on others) and update by merging
-that branch, not master.
-The port branch is the team's integration branch for
-nightly testing and is expected to become master once the release question is settled;
-merge-vs-squash of #4619 itself is Brendan's call.
+C# Osprey work branches from and returns to `master` (`gh pr create --label osprey`, squash
+subjects `osprey: ... (#N)`). From 2026-06 to 2026-10-08 it lived on the .NET 10 port branch
+`Skyline/work/20260612_net8_port` (pwiz#4619), which then merged into master. A branch still
+based on the port branch: `git merge origin/master` (both sides already hold the port, so the
+merge reconciles rather than re-derives; `-X renormalize` absorbs the #4789 LF normalization)
+and retarget its PR to master. After the merge the PR should show only its own files.
 
-**Osprey is .NET 10 (net10.0) only, and stays that way.** The branch name says `net8` for
-history; the port targets .NET 10. Unlike Skyline and ProteoWizard, Osprey has no reason
-to ship as .NET Framework 4.7.2 or .NET 8.0, so net472 and net8.0 are not coming back.
-Scripts and docs name `Release\net10.0`; a `net8.0` or `net472` folder under a checkout's
-`bin/` or `obj/` is a stale build to delete, never a fallback. (Master still declares
-`net472;net8.0` until #4619 merges; nothing new is built there.)
-
-Why not master: master's `Osprey Windows .NET` build is red on every new ephemeral
-TeamCity agent (`pwiz-windows-i-*`) - its `tcbuild.bat` wants a globally installed
-dotCover, while the port branch restores it from `.config/dotnet-tools.json` and carries
-the versioned `.teamcity/` settings. TeamCity builds the PR HEAD, not GitHub's merge
-ref, so retargeting a master-based branch alone fixes nothing: **merge the port branch
-in** (merge, never rebase, once the PR has review history).
-
-- New branches: `gh pr create --base Skyline/work/20260612_net8_port`; `/pw-complete`
-  works with the base and tracking branch swapped for master. Squash subjects are still
-  `osprey: ... (#N)`.
 - MARS (`maccoss/mars`) vendors `Osprey.ML/GradientBoostedTrees.cs` and `XorShift64`
-  (`dotnet/scripts/sync-osprey-ml.ps1`). Re-sync it from a port-branch checkout, never
-  master: the squared-error objective MARS trains with (#4595) is only on the port branch.
+  (`dotnet/scripts/sync-osprey-ml.ps1`); re-sync it from a current master checkout.
 - Build **x64** in Visual Studio: the solution's Any CPU configuration fails there
   because VS never builds out-of-solution project references (`ProteowizardWrapper`
   and pwiz-sharp are not in `Osprey.sln`); command-line `msbuild` is fine either way.
-- Pass `-SourceRoot <the port-branch checkout>` to `Build-Osprey.ps1`; it defaults to
-  `C:\proj\pwiz` and reports success on the wrong tree.
-- `Osprey Linux .NET` was red on the port branch itself while the Linux agent was being
-  provisioned; check `pull/4619` before reading it as a signal about your PR.
-
-**Delete this subsection** when #4619 merges and all Osprey work returns to master, but
-keep the net10.0-only paragraph: move it to the top of this guide.
+- Pass `-SourceRoot <checkout>` to `Build-Osprey.ps1` for any checkout other than the
+  default `<project-root>\pwiz`; without it the script builds that tree and reports success
+  on the wrong one.
 
 ## Differences from Skyline's WORKFLOW.md
 
