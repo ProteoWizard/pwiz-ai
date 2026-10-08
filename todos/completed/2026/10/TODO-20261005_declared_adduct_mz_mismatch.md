@@ -3,12 +3,12 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20261005_declared_adduct_mz_mismatch`
 - **Base**: `master` (the .NET 10 port branch was promoted to master 2026-10-08; PR targets master)
-- **Checkout**: `C:\Dev\DeclaredAdduct` (created 2026-10-08 for this work; remove when the PR merges)
+- **Checkout**: `C:\Dev\DeclaredAdduct` (created and removed 2026-10-08)
 - **Created**: 2026-10-05
-- **Status**: In Progress
+- **Status**: Abandoned (2026-10-08) - no PR
 - **GitHub Issue**: [#4776](https://github.com/ProteoWizard/pwiz/issues/4776)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: none (abandoned before PR)
 - **Requester/Reporter**: Haley (from support thread rowId 75665)
 
 ## Objective
@@ -80,5 +80,14 @@ net10 inspection can't resolve package references. Rely on TeamCity's inspection
 The port branch was promoted to master (#4619) after the LF normalization (#4789). Moved the
 still-uncommitted two-file change out of `master_clean` (now reset to `master`) into a new
 checkout `C:\Dev\DeclaredAdduct`, recreating the branch from `origin/master`; the moved diff is
-byte-identical to the original. Needs a full build (`-VendorLicenses`) and a re-run of
-`TestPasteMolecules` before `/code-review max`.
+byte-identical to the original. Built with `-VendorLicenses`; `TestPasteMolecules` passed (61s).
+
+### 2026-10-08 - Abandoned
+
+On review of the support thread, the reported behavior came from user error (the second row
+double-applies the 4 H loss), and changing how a declared adduct is matched against m/z risks
+destabilizing small-molecule import for lists that rely on the current fallback. Dropped the
+change: deleted `C:\Dev\DeclaredAdduct`, the 9/29 stash and branch in `master_clean`. Nothing
+was committed or pushed. The fix was the 6-line early `return null` in
+`ValidateFormulaWithMzAndAdduct` when `mzCalc.HasValue && !adduct.IsEmpty && !adduct.IsChargeOnly`,
+plus `PasteMoleculesTest.TestDeclaredMassOffsetAdductMzMismatch`, if it is ever revisited.
