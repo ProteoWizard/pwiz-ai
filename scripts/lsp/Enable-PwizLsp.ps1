@@ -72,6 +72,17 @@
 # later.
 $Global:PwizClaudeRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 
+# The checkout directory's on-disk spelling for a name typed in any case ('nowarn' -> 'NoWarn').
+# Windows resolves either, but the mis-cased path then spreads - into PWIZ_LSP_DIR, the session
+# hook's cd, the C# LSP, and every build started from them - and Roslyn matches .editorconfig
+# sections case-sensitively, so diagnostics the root .editorconfig turns off (WFO1000) come back
+# as build errors. Returns the name unchanged when no such directory exists.
+function Get-PwizCheckoutDirName([string] $Root, [string] $Name) {
+    $dir = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    if ($dir) { $dir.Name } else { $Name }
+}
+
 function Start-PwizClaude {
     [CmdletBinding()]
     param(
@@ -108,6 +119,7 @@ function Start-PwizClaude {
 
     # PWIZ_LSP_DIR holds the full pwiz_tools path, so append it to the checkout.
     if ($Checkout) {
+        $Checkout = Get-PwizCheckoutDirName $root $Checkout
         $env:PWIZ_LSP_DIR = Join-Path (Join-Path $root $Checkout) 'pwiz_tools'
         if (-not (Test-Path -LiteralPath $env:PWIZ_LSP_DIR)) {
             Write-Warning "$env:PWIZ_LSP_DIR not found -- starting anyway; the C# LSP will have no workspace."
@@ -115,10 +127,17 @@ function Start-PwizClaude {
     }
     elseif (-not $env:PWIZ_LSP_DIR) {
         if ($Global:PwizLspDefault) {
-            $env:PWIZ_LSP_DIR = Join-Path (Join-Path $root $Global:PwizLspDefault) 'pwiz_tools'
+            $env:PWIZ_LSP_DIR = Join-Path (Join-Path $root (Get-PwizCheckoutDirName $root $Global:PwizLspDefault)) 'pwiz_tools'
         }
         # else: leave PWIZ_LSP_DIR unset so the plugin's built-in default
         # (${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools) applies -- correct for single-clone.
+    }
+    else {
+        # Inherited from an earlier launch in this window, possibly typed in the wrong case.
+        $inheritedCheckout = Split-Path $env:PWIZ_LSP_DIR -Parent
+        if ((Split-Path $inheritedCheckout -Parent) -eq $root) {
+            $env:PWIZ_LSP_DIR = Join-Path (Join-Path $root (Get-PwizCheckoutDirName $root (Split-Path $inheritedCheckout -Leaf))) 'pwiz_tools'
+        }
     }
 
     if ($env:PWIZ_LSP_DIR) {
