@@ -58,7 +58,8 @@
 > TestDdaSearchDependencyErrors (crux.exe 0xC0000135 inside the Docker worker, environmental).
 > **Verified:** bt209 4205764 queued with "Delete all files before the build" on Agent 1 (which also
 > clears its stale `obj\`): 1806/1806 at the unchanged head. Wine container 4205659 on the head ran
-> 336 passed / 0 failed (same as port head) and was red only through its bt209 snapshot dependency.
+> 336 passed / 0 failed (same as port head) and was red only through its bt209 snapshot dependency;
+> the re-run 4205767 is green. **#4789 at 23:10: all checks green except the two tarball configs (same on #4619).**
 > Lesson: an attribute-only change (adding or removing `-text`) never rewrites working files, so
 > pinning a path and unpinning it leaves every machine that saw the pinned head with the pinned bytes;
 > fix with a clean checkout, not a code change.
@@ -67,7 +68,7 @@
 > #4750 conflict, but every one already conflicts with the port head alone, so the normalization adds
 > no new conflicts. A plain merge (GitHub's button) conflicts on #4790 #4787 #4769 #4755 #4602.
 > **Next session handoff**: For detailed startup protocol, read
-> `ai/.tmp/handoff-20261007_lf_normalization.md` before starting work.
+> `ai/.tmp/handoff-20261008_lf_normalization.md` before starting work.
 > Execution plan for GitHub issue [ProteoWizard/pwiz#4604](https://github.com/ProteoWizard/pwiz/issues/4604)
 > (opened 2026-08-22). Original plan follows.
 
