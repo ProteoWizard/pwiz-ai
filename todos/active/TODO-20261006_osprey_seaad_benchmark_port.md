@@ -131,6 +131,36 @@ runs of `490a4d3825` are the comparisons that mean something.
 - Output: 6,654 protein groups at 1%; FDRBench inputs for both passes written to the run dir.
   Entrapment FDP not yet computed (SEA-AD README harvest tools).
 
+### 2026-10-07 - MACS2 input disk A/B (cold reads): E: beats D:; CHS 446 launched reading from E:
+
+Every SEA-AD run above read its caches from D: - and with ~420 GB of file cache vs 346 GB of SEA-AD caches,
+much of fast1's input likely came from RAM. CHS (1,168.5 GB of caches) cannot fit on D: beside its ~1.1 TB of
+output, so the inputs must come from E:. A/B: 8 SEA-AD files, `--task PerFileScoring`, fast1 settings,
+outputs on D:; each leg read its OWN fresh unbuffered (`robocopy /J`) copy so no leg started in the file cache
+(session not elevated - cannot purge the standby list). `sea-ad\runs\ab-cold-20261007\ab-summary.log`.
+
+| leg | input | PerFileScoring | cal pass 1 mean (read-heavy) | coelution (CPU) |
+|---|---|---|---|---|
+| d1 / d2 / d3 | D: fresh copy | 524 / 464 / 479 s | 54.9 / 56.3 / 72.7 s | 35k / 42k / 48k |
+| e1 | E: fresh copy | 429 s | 44.6 s | 42k |
+| e3 | E: original (settled) files 9-16 | 419 s | 47.5 s | 49k |
+| e2 | E: fresh copy, right after 1.2 TB of writes | 1,298 s | 477.9 s | 45k |
+
+- E: is ~13% faster than D: overall and ~25% faster in the read-heavy phase (e3: E: reads to 329 MB/s, <= 0.5 ms).
+- e2: E: reads collapsed (cal 130-165 s, then ~800 s per file) while CPU was normal - transient, right after
+  the CHS copy (1.2 TB) plus 64 GB of A/B copies onto QLC drives. 90 min later a cold sequential read gave
+  143-164 MB/s per file and e3 was the fastest leg. **Let E: settle after large writes before a timed run.**
+
+**CHS copy**: 446 caches U: (Nexus) -> E: with `.tmp/sessions/20261006-night/Copy-ChsCaches.ps1` (unbuffered
+robocopy passes of finished files only), 08:21 -> 18:10, avg 36 MB/s (E: QLC write-bound; network had headroom).
+446/446 structurally valid, 84,323,746 MS2, every size equal to the Nexus copy.
+
+**CHS 446 run launched 19:48:45** (`.tmp/sessions/20261006-night/Launch-Chs.ps1`): PR #4780 build, caches on
+E:, run dir `D:\Users\brendanx\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-protein-compact-fast`,
+library 20260817, `--threads 72`, scoring 4 lanes, rescoring 8 lanes, `OSPREY_FDR_FILE_LANES=16`,
+`DOTNET_GCHeapCount=36`. Inputs via `--input-list` (the runner now falls back to it past 24,000 chars; -i
+would have been 35,458 > 32,767). Estimate ~11 h (fast1 x 5.4); i9 reference for its first FDR pass: 4 h 46 m.
+
 ### 2026-10-06/07 night - MACS2 FirstPassFDR sweep: 16 lanes + 36 GC heaps = 970 s (-21%)
 
 `--task FirstPassFDR -LinkFrom <fast1> -Fresh --threads 72`, PR #4780 build, one leg at a time
