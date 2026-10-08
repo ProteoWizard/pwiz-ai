@@ -83,7 +83,11 @@
     Mascot parser archive never extracts and BiblioSpec fails before any PR code compiles.
 0.2 **Land #4658** (retire the C++ tree) on the port branch. DONE 2026-10-07 by Matt
     (`6dd40d8c93`).
-0.3 **LF normalization** on the port branch, per `TODO-20261007_lf_normalization.md`. IN PROGRESS
+0.3 **LF normalization** on the port branch, per `TODO-20261007_lf_normalization.md`. **MERGED
+    2026-10-08 as `9e2b516bcb` (#4789).** Still to do: follow-up PR (`.git-blame-ignore-revs` with
+    `5747ede7c9` + `9e2b516bcb`, `.editorconfig` comment, CodeInspectionTest decision); the
+    `-X renormalize` merge on each open port-branch PR (probe 2026-10-07: clean for #4790 #4787
+    #4780 #4772 #4769 #4755 #4710 #4602); the T+1 ai/ cleanup in the LF TODO. Earlier: IN PROGRESS
     2026-10-07: PR #4789 open against the port branch, cut from `6dd40d8c93`; CI is the dry
     run. After it merges: follow-up PR (blame-ignore-revs, CodeInspectionTest), then the
     `-X renormalize` merge on every open port-branch PR before the promotion re-targets them.

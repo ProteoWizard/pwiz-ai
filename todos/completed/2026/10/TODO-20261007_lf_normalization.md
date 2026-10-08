@@ -1,6 +1,10 @@
 # TODO-20261007_lf_normalization.md -- Normalize stored line endings to LF repo-wide (pwiz #4604)
 
-> **Status: IN PROGRESS 2026-10-07.** PR [#4789](https://github.com/ProteoWizard/pwiz/pull/4789)
+> **Status: Completed 2026-10-08.** PR [#4789](https://github.com/ProteoWizard/pwiz/pull/4789)
+> (merged 2026-10-08 into `Skyline/work/20260612_net8_port` as `9e2b516bcb`). Follow-ups carried in
+> `TODO-20261006_net10_cutover.md` step 0.3. History of the work follows.
+>
+> **Was: IN PROGRESS 2026-10-07.** PR [#4789](https://github.com/ProteoWizard/pwiz/pull/4789)
 > (`Skyline/work/20261007_lf_normalization`, commit `f67b961167`) is open against the port
 > branch, cut from `6dd40d8c93` right after #4658 retired the C++ tree. 3,161 files, content
 > diff is `.gitattributes` only. Post-#4658 measurement: 11,141 tracked, 2,792 stored CRLF,
@@ -314,3 +318,18 @@ T-0 morning; the list changes daily.
 2. Keep the `CodeInspectionTest` mixed-endings check as a `.bat`-only guard, or delete it?
 3. Does the auto cherry-pick workflow stay pointed at `skyline_26_1`, move to
    `skyline_26_1_1`, or get retired now that cross-runtime back-ports need hand work?
+
+## Progress Log
+
+### 2026-10-08 - Merged
+
+PR #4789 squash-merged into `Skyline/work/20260612_net8_port` as `9e2b516bcb`, tree identical to the
+tested head `c73242d100`: `.gitattributes` plus 2,742 renormalized files against the port head
+`e35b05852f`. Final CI on that head: bt209 1806/1806 (clean checkout on Agent 1), Wine container
+336/0, bt83, bt17, Osprey Windows/Linux, native shims and code inspection green; only the two subset
+source tarball configs red, as on the port branch itself (they call the deleted `tcbuild.sh`). No
+fixture needed a `-text` pin. `Fixes #4604` is in the squash message, so the issue closes when the
+promotion fast-forwards master. Deferred, tracked in `TODO-20261006_net10_cutover.md` 0.3: the
+follow-up PR (`.git-blame-ignore-revs` with `5747ede7c9` and `9e2b516bcb`, `.editorconfig` comment,
+CodeInspectionTest decision), the `-X renormalize` merges on the open port-branch PRs, and the T+1
+ai/ cleanup. Open questions 2 and 3 above are still Brendan's.
