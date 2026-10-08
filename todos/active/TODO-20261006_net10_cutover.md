@@ -81,10 +81,9 @@
   Follow-up #4803 (Copilot): import skips an unreadable settings file.
 - Verified on BRENDANX-UW5 via `SKYLINE_NIGHTLY_BRANCH=pull/4801`: the old 4.7.2 shim installed
   the single-file programs, the new shim then updated itself, settings carried over, and a
-  master run started with the .NET 10 UI. Every machine was then set to `pull/4801` or was
-  already mid-run. **Clear `SKYLINE_NIGHTLY_BRANCH` on each machine once bt209 master has a
-  successful build of `c45b2fa5ca` or later**, or they keep taking that PR's frozen zip and miss
-  later SkylineNightly fixes such as #4803.
+  master run started with the .NET 10 UI; the variable was then cleared there. The other machines
+  were either fixed by hand with the PR's files or had not yet taken a .NET 10 build, so their next
+  scheduled update comes from master's build of `c45b2fa5ca`.
 - Lesson for the next runtime change: test SkylineNightly's self-update from the port branch's
   bt209 build (`SKYLINE_NIGHTLY_BRANCH=pull/<N>` on one machine) before promoting. That one run
   would have caught all three problems.
