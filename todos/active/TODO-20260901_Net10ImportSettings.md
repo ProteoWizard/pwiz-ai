@@ -139,8 +139,11 @@ things that move needs:
       removed. All 8 threads resolved (the `{` and ClickOnce same-version threads were declined).
 - [x] 2026-10-02: merged `Skyline/work/20260612_net8_port` (f1f1a0e96f). The two conflicts were
       line endings only; they were re-staged with autocrlf off to match the base branch's
-      storage. Do not repeat that by default: per CRITICAL-RULES.md, stored line endings stay
-      as master has them; write CRLF on disk and run fix-crlf.ps1 instead.
+      storage. Do not repeat that: since #4789 (2026-10-08) the port branch stores LF for all
+      text (`* text=auto`); update this branch with `git pull -X renormalize` /
+      `git merge -X renormalize`, never by re-staging (see TODO-20261007_lf_normalization.md).
+- [x] 2026-10-08: pulled Brendan's `-X renormalize` merge of #4789 (8325624033); local
+      uncommitted edits stashed and restored with `merge.renormalize=true`, diffs unchanged.
 - [x] 2026-10-02: drove the Release build through the AI connector: owner installs PRM
       Conductor; folder set to Administrators-owned (icacls /setowner, elevated); non-owner gets
       a personal user.config with the admin's tools merged in and installs Skyline-PRISM into
