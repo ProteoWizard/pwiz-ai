@@ -2,9 +2,10 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261006_osprey_perfilescoring_round3` (`C:\proj\pwiz-scanmajor`)
-- **Base**: `Skyline/work/20260612_net8_port` (PR #4619), at 490a4d3825 (the 2026-10-06 force-pushed history)
+- **Base**: `master` (the port branch merged as #4619 on 2026-10-08; rebased onto 3f353df610)
 - **Created**: 2026-10-06
-- **Status**: Reviewed and fixed; waiting on the port branch becoming master, then PR to master. Rebased on
+- **Status**: Reviewed, fixed and rebased onto master (655/655 + inspection 0/0); PR to master on Brendan's
+  go-ahead. Rebased on
   9e2b516bcb (#4789); FOUR local commits, not pushed (hooks, reads, sidecar buffer, 02c467d8cf review fix).
   Stellar + Astral regressions PASS (before the review fix; the validity branch's Stellar gate covers it).
   Stacked on it:

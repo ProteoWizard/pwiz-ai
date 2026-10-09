@@ -3,12 +3,12 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20261007_osprey_self_validating_artifacts` (`C:\proj\pwiz-validity`, a worktree of
   `C:\proj\pwiz-scanmajor`)
-- **Base**: `Skyline/work/20260612_net8_port`, STACKED on `Skyline/work/20261006_osprey_perfilescoring_round3`
-  (0b879300ae: carries the FdrScoresSidecar 1 MB write buffer this work touches again)
+- **Base**: `master` (the .NET 10 port merged as #4619 on 2026-10-08), STACKED on
+  `Skyline/work/20261006_osprey_perfilescoring_round3` (carries the FdrScoresSidecar 1 MB write buffer this
+  work touches again)
 - **Created**: 2026-10-07
-- **Status**: Rebased onto port 9e2b516bcb (#4789 LF normalization), local, not pushed. Unit 649/649,
-  inspection 0/0, Stellar regression PASS, 9b resume drill PASS. Next: `/code-review max` triage; NO PR
-  until Brendan says the port branch has become master (then target master). The matching ai/scripts changes are UNCOMMITTED in C:\proj\ai on purpose
+- **Status**: READY FOR PR. On master via the perf branch, local, not pushed. Review fixes 39fbb39ff2;
+  unit 649/649, inspection 0/0, regression -Dataset All 48/0, resume drill PASS (both kill points). The matching ai/scripts changes are UNCOMMITTED in C:\proj\ai on purpose
   - commit them when this branch merges (see 2026-10-08 entry).
 - **Module**: `osprey`
 - **PR**: none
@@ -95,7 +95,8 @@ held, and it is the source of several defects (below).
 - [x] 9a. Gates: unit + inspection (649/649, 0/0); `regression-parallel.ps1 -Dataset All` 48/0 (33.5 min)
 - [x] 9b. SEA-AD subset resume drill (kill mid-FirstPassFDR and mid-PerFileRescoring, resume, compare) -
       both legs blib-identical to straight-through at 1e-9 (2026-10-08 entry)
-- [ ] 10. `/code-review max` in C:\proj\pwiz-validity, then PR (base: perf round 3 branch until it merges)
+- [x] 10a. `/code-review max` in C:\proj\pwiz-validity - 15 findings triaged with Brendan, fixes in 39fbb39ff2
+- [ ] 10b. PR (base: perf round 3 branch until it merges, then master)
 - [ ] 11. Commit the ai/scripts changes when this branch merges (they assume embedded stamps)
 - [ ] Follow-ups (separate work): per-file copies of the experiment-wide stratum.json / model.json
       (82 x 9.6 MB); `OspreyTask.Inputs()` overrides now unused; the early ReconciledPaths decision in
@@ -171,7 +172,31 @@ held, and it is the source of several defects (below).
   8 (pre-existing, unmeasured).
 - Calibration A/B: worker buffer ~0.45 s/file slower than the pool, kept for bounded memory (numbers in the
   perf TODO). Committed as 02c467d8cf on the perf branch; validity rebased onto it (commit unchanged, 72 files
-  +1890/-1627), 649/649 + inspection 0/0.
+  +1890/-1627), 649/649 + inspection 0/0, Stellar PASS, `regression-parallel -Dataset All` 48/0 (29.5 min).
+- Validity `/code-review max` (resumed after the interruption; 899k tokens / 45 min for the resumed half):
+  15 findings, triage proposed to Brendan, awaiting his go-ahead and his call on #1 (--task ModelDiagnostics
+  on a newer build re-runs Stages 1-5: render when the two product stamps agree, or refuse naming
+  OSPREY_VERSION_OVERRIDE). Proposed fixes: #2 key-match worker pair in Stage 7, #4 one per-file rescoring
+  predicate, #3 FDRBench before blib, #5 non-.blib -o, #9 stratum/model stamp check, #10 pass from header byte,
+  #8 fold arms on "not current", #7 page out of SecondPassFDR outputs, #11 mode-3 stamp mask, #13/#15 comments
+  and doc summaries, U+2192 arrow. Dropped: #6 (pre-existing, transfer only), #12 (plausible only), #14, perf nits.
+- Brendan approved the fix list and option (a) for #1; #4619 merged, so both branches rebased onto master
+  (`-X renormalize`; diffs unchanged). Perf branch on master: 655/655 + inspection 0/0 (one inspectcode
+  AccessViolation crash on the first try, clean on re-run).
+- Review fixes committed 39fbb39ff2 (23 files): HasWorkerStamp requires scores + decoys to carry the reconciled
+  parquet's exact stamp; one per-file IsFileRescored (parquet current and, where protein-compact's worker
+  answers, the pair OR `osprey.rescored=0`) for the count and the skip; ModelDiagnostics renders when the
+  two first-pass stamps agree with each other and refuses a fold under another build naming
+  OSPREY_VERSION_OVERRIDE (new OspreyVersion.ENV_OVERRIDE); FDRBench before the blib; SQLite-header
+  fallback for non-.blib -o; pass label taken next to the extension; LoadFromAny pairs model+stratum only
+  with matching stamps and the compaction gate refuses a model not current; both diagnostics fold arms on
+  "not current"; mode-3 CompareExperimentBytes masks the stamp; stale comments. Tests: gate test now
+  stamps with the run's key and asserts another key is refused; TaskValidityKeyTest builds a real stamped
+  reconciled parquet. 649/649, inspection 0/0, Stellar PASS.
+- After the review fixes: `regression-parallel -Dataset All` 48 PASS / 0 FAIL / 0 SKIP (28 min, includes the
+  mode-3 HPC chain). Resume drill re-run on exe `_bin\validity-review-39fbb39`: C2 (kill at file 5's
+  reconciled parquet) adopted=4 rescore=8, B2 (kill at 5/12 first-pass sidecars) kept 5 and reused the
+  model; both blibs 0 differences vs drill A at 1e-9. READY FOR PRs (perf first, validity stacked on it).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261007_osprey_self_validating_artifacts.md` before starting work.
