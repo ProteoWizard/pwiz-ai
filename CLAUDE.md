@@ -233,6 +233,7 @@ Before writing code, read these files:
 - **proteowizard-translation** → For ja / zh-Hans translation: drafting, glossary, localization CSVs, translation-safe English
 - **skyline-screenshots** → For ImageComparer, screenshot diffs, or s-XX.png references
 - **skyline-wiki** → For reading/updating wiki pages on skyline.ms or panoramaweb.org
+- **panorama-access** → For listing, downloading, or uploading files on panoramaweb.org, and for getting access and storing the credential safely
 - **ai-context-documentation** → For ai/ folder docs, TODOs, or .claude/ files
 
 ## Debugging Behavior
