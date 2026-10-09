@@ -2,11 +2,11 @@
 
 ## Branch Information
 - **Repository**: `uw-maccosslab/maccosslab-agents` (local checkout `~/dev/ai-dev/maccosslab-agents`)
-- **Branch**: `work/20261009_pipeline_log_dirs`
+- **Branch**: `work/20261009_pipeline_log_dirs` (deleted after merge)
 - **Base**: `main`
 - **Created**: 2026-10-09
-- **Status**: In progress
-- **PR**: [#3](https://github.com/uw-maccosslab/maccosslab-agents/pull/3)
+- **Status**: Completed
+- **PR**: [#3](https://github.com/uw-maccosslab/maccosslab-agents/pull/3) (merged 2026-10-09)
 - **Objective**: Let `access-log-review-pipeline` take the Apache and Tomcat log
   locations as options, instead of always reading `<logs_dir>/apache` and
   `<logs_dir>/tomcat`
@@ -55,4 +55,12 @@ still forces the subdirectory names.
   `_analyze_prolonged_floods`). Dry run prints `Apache:` / `Tomcat:` lines instead of
   `Logs:`. 141 tests pass; dry run against the checkout shows the overrides in the prompt.
   `/code-review medium` found no bugs; fixed its blank-line nit (`45dcd4d`). Pushed and
-  opened PR #3. Next: review and merge.
+  opened PR #3.
+
+### 2026-10-09 - Merged
+
+PR #3 merged as commit `4729850`. `access-log-review-pipeline` and the billed
+`access-log-review` CLI take `--apache-dir` / `--tomcat-dir`; the pipeline also reads
+`apache_dir` / `tomcat_dir` from `config.toml`, and the MCP `start_review` tool accepts
+both. Validate and the review session use the same absolute paths from
+`pipeline.log_dirs()`. Nothing deferred; no follow-up issues.
