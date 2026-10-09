@@ -35,6 +35,23 @@ try {
     $checkoutResolved = (Resolve-Path -LiteralPath $checkout -ErrorAction SilentlyContinue).Path
     if (-not $checkoutResolved) { exit 0 }
 
+    # Resolve-Path keeps the casing as typed ('nowarn'), and a mis-cased checkout path
+    # breaks builds (Roslyn matches .editorconfig sections case-sensitively, so WFO1000
+    # comes back). Rebuild the path from each directory's on-disk name ('NoWarn').
+    $onDisk = (Split-Path -Qualifier $checkoutResolved).ToUpperInvariant() + '\'
+    foreach ($segment in ($checkoutResolved.Substring($onDisk.Length) -split '\\' | Where-Object { $_ })) {
+        $match = [IO.Directory]::GetDirectories($onDisk, $segment) | Select-Object -First 1
+        $onDisk = if ($match) { $match } else { Join-Path $onDisk $segment }
+    }
+    $casingWarning = ''
+    if ($onDisk -cne $checkoutResolved) {
+        $casingWarning = "`nPWIZ_LSP_DIR was launched mis-cased ($lspDir; on disk the checkout is $onDisk). " +
+            'The C# LSP has already indexed the mis-cased path, and builds started from it can fail ' +
+            'with WFO1000. Tell the user before doing any work: they should exit, re-load their ' +
+            "profile (or open a new terminal) so skyclaude has the casing fix, and relaunch."
+    }
+    $checkoutResolved = $onDisk
+
     # If the checkout IS the project root, this is a non-sibling layout: nothing to do.
     $proj = $env:CLAUDE_PROJECT_DIR
     if ($proj) {
@@ -105,7 +122,7 @@ try {
            "cd-guard permits this one target (it still blocks every other cd). Then use " +
            "checkout-relative paths so file and search work stays scoped to this checkout " +
            "and does not fan out across the sibling pwiz copies under the project root." +
-           $recovery
+           $casingWarning + $recovery
 
     $out = @{
         hookSpecificOutput = @{
