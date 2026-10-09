@@ -710,6 +710,150 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-08 - 200% FORM SWEEP: 4 real bugs found and fixed (uncommitted)
+
+Display at 200% (1720x720 logical), same harness; everything in -200 folders
+so the 150% results and review marks stay intact: raw/{after,before,layout}-200,
+done-200, progress-200.log, index-200.html (marks namespace dpisweep200),
+layout-scores-200.json, report sessions/20260910-dpi/post-sweep-report-200.txt.
+Drivers got an optional -Suffix; make_*_200.py are sed copies. Batches 1-24 +
+97 + panes 12:01-13:22 (73 min for the batches). 228 complete pairs, same set
+as 150%; batch results identical to the 150% run except GraphFullScan (test
+failure, below). Same 4 dark before-captures as always (NoModeUIDlg,
+PathChooserDlg, StartPage x2). 89 forms > 2% vs 61 at 150%: all of the top 30
+checked by eye, 3 real + 1 test failure, the rest are font-autoscale noise.
+Fixed (built Release + verified by re-capture at 200%, batches 89/88/87):
+- ComparePeakPickingDlg: resx lost $this.AutoScaleDimensions in d9025cb9a8
+  (designer re-save) -> no autoscale at all, 896x706 at 200% with 2x fonts.
+  The 23:30 note below calling the 150% size "persisted, layout correct" was
+  wrong - it was this. Restored; now 1911x1341. The only Skyline resx lacking
+  the entry (scan of all form resx).
+- PeptideSettingsUI: BORDER_BOTTOM_HEIGHT (16) added unscaled below the
+  internal-standard combo -> dialog 8 logical px short at 200%, Quantification
+  tab clipped its last field. DpiUtil.Scale(ComboIS, ...).
+- FindResultsForm: ListView ColumnHeader widths not autoscaled -> Type column
+  "Pepti..." at 200%. Scaled the two fixed columns in the ctor.
+- GraphChromatogram: TestFullScanGraph failed at 200% - test hook compares
+  click vs selected point with an unscaled 10 px tolerance (12 px apart at
+  200%); also the 20 px tracking-dot radius. Both DpiUtil.Scale(this, ...).
+Harness lessons: Build-Skyline.ps1 defaults to Debug and to NO vendor
+readers - the sweep needs -Configuration Release -VendorLicenses, or WIFF
+imports fail and tutorial tests sit in their 5-min WaitForConditionUI (looked
+like the known form-mode stall; it was my build). The 150% batch 10 stall
+(TestTargetedMSMSTutorial, 8 min after / 2 min before) is still the real
+pre-existing one.
+Gate at 96 DPI (Release): TestFullScanGraph, TestPeakBoundaryCompare,
+TestCalibration, TestPeakPickingTutorial - all PASS (78 s).
+
+Developer's gallery review (export dpi-sweep-review-200.json, saved in
+ai/.tmp/dpi-sweep): 5 forms marked bug, all unscaled icons. Root causes:
+- PanoramaFilePicker / PanoramaDirectoryPicker: PanoramaFolderBrowser's tree
+  imageList1 (and the file picker's listView fileIcons) never scaled ->
+  ImageListScaler.ScaleToDpi after InitializeComponent.
+- PublishDocumentDlgPanorama: the base dialog creates treeViewFolders.ImageList
+  in code and each subclass adds its icons -> ScaleToDpi after the adds in the
+  Panorama and Ardia subclasses (Ardia not in the sweep, same pattern).
+- ViewLibraryDlg: my earlier fix scaled listPeptide.ItemHeight, but DrawItem
+  still drew the 16-px-wide PeptideLib/MoleculeLib icon at the scaled row
+  height -> wrong aspect ratio. Icons now DpiUtil.ScaleImageForList in the
+  ctor; the tip hit-rect uses the scaled width automatically.
+- SpectrumGridForm: btnCancelReadingFile/btnRemoveFile take their glyph from an
+  ImageList by ImageKey; FormEx.ScaleButtonImages handled only Button.Image
+  and DockableFormEx never called it. Now scales the button's ImageList once
+  per list and DockableFormEx calls it too (also covers EditPepModsDlg's
+  btnEditLink1). Scan: no form scales an ImageList explicitly AND hangs it on
+  a Button, so nothing is scaled twice.
+Verified by re-capture at 200% (batches 86, 85): all five correct. Gallery
+index-200.html regenerated (review marks untouched).
+Gate run-gate-icons.ps1 (TestLibraryExplorer, TestPanorama,
+TestNavigationButtons, TestPublishToPanorama, TestAccessServer,
+TestSpectrumGrid, TestCrosslinking), twice: DPIUNAWARE shim then DPI-aware
+at 200% - all PASS both times (82 s each; gate-icons.log).
+Note: HKCU AppCompat Layers has a DPIUNAWARE entry for
+pwiz1\pwiz_tools\Skyline\bin\x64\Debug\Skyline-daily.exe - not mine
+(the sweep shims staging\Release\TestRunner.exe), left alone.
+Committed as 9150ef193c (11 files, 37+/10-), not pushed.
+
+### 2026-10-07 23:30 - POST-REBASE FORM SWEEP CLEAN: no DPI regressions from the port
+
+Third run (keeper) 18:35-18:43 + resumed 22:00-23:17, panes, batch 97 (18
+forms), scores, gallery sweep/index.html, report sessions/20260910-dpi/
+post-sweep-report.txt. 228 complete pairs (pre-rebase 205), 0 dark captures,
+nothing lost. 13 forms rose > 5 points or are new; checked by eye:
+- NoModeUIDlg 85 -> 91 (known high scorer), ComparePeakPickingDlg 0.2 -> 14:
+  the dialog now opens at 892x691 (a persisted/logical size x1.5) instead of
+  the font-autoscaled 1472x1033; layout correct, same as 96 DPI.
+- HeatMapGraph 7, MProphetFeaturesDlg 7: fine (dendrogram/list noise).
+- the rest are newly capturable pages with 2-16% (ImportPeptideSearchDlg
+  FastaPage 16%: wizard page, not checked further - no baseline).
+Geometry deviations vs pre-rebase (compare_net): all ours - alert buttons
+75 -> 125 (CommonAlertDlg fix), grid rows 28 -> 33 (row padding fix;
+SpectrumLibraryInfoDlg grid, RTDetails scrollbar track), EditCEDlg/
+EditIsotopeEnrichmentDlg horizontal scrollbar GONE (header rule revision),
+ComparePeakPickingDlg size as above.
+Side effect to know: RTDetails at 150% now shows a vertical scrollbar for 11
+rows where 96 DPI does not (33-px rows + 48-px header in a 1.52x grid).
+Port-side list additions: form-mode document-load stalls (TestOptimization
+batch 14, TestIrtTutorial batch 20 on run 1). BlibFilter/BlibBuild staging
+fixed upstream (TestManageLibraryRuns passes). Tutorial pass after the port:
+optional now - the forms are quiet.
+### 2026-10-07 18:35 - second run also unusable (TopMost hack), third run with a foreground keeper
+
+- The TopMost capture guard (form hook + pane test) was wrong twice: FindForm()
+  stops at a docked DockableForm (fixed with TopLevelControl), and raising
+  windows to topmost then made dialogs capture the Skyline window behind them
+  (CreateIrtCalculatorDlg, DocumentSettingsDlg, ReportErrorDlg gray; dark-
+  scan does not catch that). Both guards REMOVED; captures *-contaminated-1007b.
+- Replacement: sessions/20260910-dpi/Keep-Foreground.ps1 - loops every 400 ms,
+  whenever the foreground is not the runner and a runner top-level window
+  exists, Alt press + SetForegroundWindow (the tutorial-sweep approach, kept
+  alive for the whole batch). Wired into Run-FormBatch.ps1 and
+  Run-PaneSweep.ps1 (started before the runner, stopped after). It steals
+  focus from anything the person types during a batch - run sweeps unattended.
+- Verified batch 12 both phases: 0 dark. Third full run launched 18:35
+  (chain23: sweep + panes + batch 97 + compare -> post-sweep-report.txt).
+- Lesson for the harness: contamination comes in two kinds - the terminal
+  (dark-pixel scan finds it) and the wrong window behind a dialog (only a
+  visual check or a score jump finds it); treat score jumps on a new run as
+  suspect until the pairs are eyeballed.
+### 2026-10-07 17:17 - HANDOFF (usage limit): redo sweep running detached, pid 19120
+
+- Redo at batch 15 of 24 (log sessions/20260910-dpi/forms-net10-*.log of 16:3x,
+  progress in sweep/progress.log); it finishes on its own with the pane sweep,
+  make_layout_diff.py and make_sweep_gallery.py -> sweep/index.html.
+- Clean so far except EditPeakScoringModelDlg.ModelTab (after): owner window +
+  terminal over the dialog despite TopMost. NEXT: dark-scan all captures
+  (threshold 8% near-black), re-capture dark ones + batch 99 (the 5 dropped
+  forms) as an ad-hoc batch, rebuild scores/gallery, then compare with the
+  pre-rebase baseline: python compare_net.py sweep/raw/after-prerebase
+  sweep/raw/after, and layout-scores.json vs layout-scores-prerebase.json
+  (forms that rose > 5 points). Expected legit differences: alert buttons
+  75->125, grid row heights 28->33 (row padding fix), ComparePeakPickingDlg
+  size (check), EditCEDlg/EditIsotopeEnrichmentDlg hscroll 416->133 (check),
+  RTDetails vscroll (check).
+- Then the tutorial pass on the reviewed tutorials if the form sweep is quiet.
+### 2026-10-07 - post-rebase form sweep: first run contaminated, capture hook hardened, redo
+
+- Pre-rebase captures preserved as sweep/raw/{after,before,layout}-prerebase +
+  done-prerebase + index-prerebase.html; scores in layout-scores-prerebase.json
+  (make_layout_diff_prerebase.py).
+- First run 15:00-16:27: 54 captures (36 after, 18 before) showed the Claude Code
+  terminal (dark-pixel scan); the developer was typing in it during the run and
+  the runner has no foreground rights in either phase on the console session.
+  Set aside as *-contaminated-1007. The 64 "rose >5 points" forms were this.
+- Fix (local harness, TestFunctional.cs): TryCaptureFormScreenShot wraps the
+  capture in WithTopMost (FindForm().TopMost = true for the shot, restored
+  after) - works without foreground rights. Verified: batch 12 both phases with
+  the terminal active, 0 dark captures. Redo launched 16:5x (resumes via done).
+- Coverage vs pre-rebase (from the first run, still valid): 19 pairs gained
+  (ImportPeptideSearchDlg pages, settings tabs, PasteDlg, RefineDlg, ...);
+  BlibBuild/BlibFilter now staged by the port itself (#4658 hoist) so batch 99
+  = the 5 forms dropped from batches 1-2 (BuildLibraryDlg.FilesPage/
+  PropertiesPage, ViewLibraryDlg, BuildBackgroundProteomeDlg,
+  StatementCompletionForm) can be captured again - queue after the redo.
+- Known form-mode noise on the port: TestDiaTutorial audit-log diff (wizard
+  flow), TestIrtTutorial chromatogram-load timeout (batch 20 before),
+  MsFraggerDownloadDlg not shown once MSFragger is installed.
 ### 2026-10-07 - PUSHED and RETARGETED (developer approved)
 
 - Gate on the rebased build: 19 tests in two batches (gate-net10-rebased-a/b.log)
@@ -968,7 +1112,7 @@ tut-net10-<Name>-<phase>.log). Started 14:14, screen verified 144 DPI.
 MethodEdit after FAILED 399s: WaitForConditionUI(Grid.ScoreTypesLoaded) 360 s
 timeout in BuildLibraryDlg. ROOT CAUSE (port-side, report to Brendan):
 Skyline.csproj Content include copies BlibBuild/BlibFilter from
-pwiz-sharp\Tools\BiblioSpec\src\<tool>in\$(Configuration)
+pwiz-sharp\Tools\BiblioSpec\src\<tool>\bin\$(Configuration)
 et10.0, but the
 x64 build writes bind\Release
 et10.0, so the Condition fails and neither
