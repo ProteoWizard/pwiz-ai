@@ -30,7 +30,7 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    exactly on a shared edge counts in both bins (C++ too). Fix: `2 * maxDelta` (or #4710's rule: skip
    only channels whose upper edge <= peak) and half-open ranges (credit #4710). Deliberately departs
    from C++: update gold values, measure with the 6-run harness.
-3. **PR 2**: parallel solving (`solveThreads=N`, default 1 everywhere, library and msconvert), cache
+3. **PR 2a = [#4806](https://github.com/ProteoWizard/pwiz/pull/4806)** (single sweep, cache by cycle); **PR 2b**: parallel solving (`solveThreads=N`, default 1 everywhere, library and msconvert), cache
    sizing, single sweep, prefetch, jump handling, disposal/per-block errors, metadata without solving;
    MSConvertGUI Demultiplex panel gets a "Solve threads" box (default 1; tooltip: multiplies with
    files converted in parallel).
@@ -38,6 +38,35 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `DemultiplexScheme`, `DetectDemultiplexScheme`, `GetSpectrumMetadata` fix, and the
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
+
+## Status 2026-10-09 ~08:45 (handoff)
+
+- **#4805 open** (PR 1, parity fixes): Matt reviewing; Copilot left 1 comment (rename `Invariant` ->
+  `_invariant` and move it to the static data). Planned answer: move it (yes), keep PascalCase to match
+  `OverlapGoldStandardIntensities` / `MsxGoldStandardIntensities`, leave the thread for Matt. Brendan:
+  ALL review responses (Matt's and Copilot's) are for the next session (`/pw-respond 4805`).
+  TeamCity "Core Windows x86_64 (no vendor DLLs)" (bt143) failed twice (builds 4208264, 4208270, two
+  agents): every test project exits -2 in ~2 s under dotCover, "Coverage session finished but no
+  snapshots were created" - the tests never ran. Looks like CI infrastructure; not re-triggered.
+- **#4806 open** (PR 2a): single sweep + cache sized by cycle, 211.4 s -> 164.8 s single-threaded msconvert
+  demux on EV13, output identical. Matt requested. `/code-review medium` triage: dropped the
+  metadata-only fast path (a metadata spectrum must report the demultiplexed DefaultArrayLength, which
+  needs the solve); fixed cache size for DemuxBlockExtra and MS1, released identity strings, kept
+  spec.Index. Pre-existing on master, NOT fixed (follow-ups): MS1 pass-through returns the cached
+  Spectrum object itself after mutating Index/Id; the 1-deep solution cache (_lastSolution /
+  _lastSolvedSourceIndex) is unsynchronized - PR 2b's threading must own this.
+- **PR 1b finding (extractor search span):** the fix is right as code but LOSES identifications: 6-run
+  `pwiz-extractfix` 34,718 vs 38,088 with the defect (-8.8%, lower in all 6 runs). The defect narrows
+  the upper window of every bin above half the spectrum's top m/z; the full +/-10 ppm window apparently
+  adds interfering signal. In flight (queued 08:30, ~45 min): `pwiz-extractfix-5ppm` and
+  `pwiz-nnlsfix-5ppm` (env OSPREY_DEMUX_MASS_ERROR_PPM=5, snapshots `D:\test\osprey-runs\_bin\pwizdemux-*-ppm`)
+  into `D:\test\osprey-runs\pwiz-demux\eclipse-search6`; compare with
+  `python ai/scripts/Osprey/Compare/Compare-DemuxSearches.py --search name=<dir>\search ...`.
+  PR 1b = correct binning + a tolerance that does not lose IDs; deliberate msconvert behaviour change,
+  review with Matt. Uncommitted code in worktree `C:\proj\pwiz-demux-parity` (SpectrumPeakExtractor
+  search span + half-open bins; DemuxCache env override for measurement only).
+- **Next PRs:** 2b (solve-ahead threading, `solveThreads`, MSConvertGUI box), 3 (DetectScheme +
+  MsDataFileImpl option), then the Osprey PR. Matt reviews each; Mike's proposal comes last.
 
 ## Objective
 
