@@ -62,6 +62,12 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
   `pwiz-nnlsfix-5ppm` (env OSPREY_DEMUX_MASS_ERROR_PPM=5, snapshots `D:\test\osprey-runs\_bin\pwizdemux-*-ppm`)
   into `D:\test\osprey-runs\pwiz-demux\eclipse-search6`; compare with
   `python ai/scripts/Osprey/Compare/Compare-DemuxSearches.py --search name=<dir>\search ...`.
+  **5 ppm results (09:07, `eclipse-search6\compare-5ppm.txt`):** current span 10 ppm 38,088 (best);
+  current span 5 ppm 30,707 (-19.4%); corrected span 10 ppm 34,718; corrected span 5 ppm 36,122 (-5.2%).
+  No correct-binning variant beats the defect, and narrowing hurts, so it is not simply interference
+  from a too-wide window. The defect keeps the full LOWER half-window and truncates the upper one:
+  investigate an asymmetry (mux-spectrum centroids offset below the target's? interference from the
+  high side?) before PR 1b. Do NOT open PR 1b until a variant beats 38,088.
   PR 1b = correct binning + a tolerance that does not lose IDs; deliberate msconvert behaviour change,
   review with Matt. Uncommitted code in worktree `C:\proj\pwiz-demux-parity` (SpectrumPeakExtractor
   search span + half-open bins; DemuxCache env override for measurement only).

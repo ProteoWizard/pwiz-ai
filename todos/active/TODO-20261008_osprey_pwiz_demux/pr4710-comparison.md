@@ -30,7 +30,9 @@ C# = pwiz/analysis/Demux on master.
 | pwiz + covered windows | 35,103 | 0.46% |
 | #4710 covered_bins + natural three-point | 34,698 | 0.40% |
 
-Search-span and edge-count fixes: not yet measured.
+Search span (pwiz, NNLS fix in all): defect at 10 ppm 38,088; defect at 5 ppm 30,707; corrected at 10 ppm
+34,718; corrected at 5 ppm 36,122. #4710's binning is the corrected kind, which may explain part of the gap
+between #4710's engines and pwiz + fix.
 
 ## Integration and engineering (from the 2026-10-08 review of #4710)
 
