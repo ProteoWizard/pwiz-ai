@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260901_Net10ImportSettings`
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-01
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#4755](https://github.com/ProteoWizard/pwiz/pull/4755)
+- **PR**: [#4755](https://github.com/ProteoWizard/pwiz/pull/4755) (merged 2026-10-08 into master)
 
 ## Objective
 
@@ -182,6 +182,28 @@ things that move needs:
       with a throwaway installer: launches with /LAUNCH, not without, unknown switches ignored);
       first-start Import Settings asks "Do you want to import settings from one of these previous
       versions?" with Import / Don't Import (ImportSettingsDlg ctor takes userInitiated)
-- [ ] Possible gap: truly uninstalled installations are probably not found (ClickOnce search
-      starts from the Apps\2.0 store, installer search from Programs and Features). Nick wants
-      uninstalled ones supported; unverified whether the ClickOnce store folder survives uninstall.
+- [x] Uninstalled installations: decided 2026-10-07 to offer settings only with an existing
+      installation folder (its Tools folder is what an import copies), so leftover user.config
+      files with no installation are not offered.
+- [x] 2026-10-07 (8876d32325): ClickOnce settings are found in the ClickOnce data store
+      (Apps\2.0\Data\..\<installation folder>\Data\<version>\user.config), never by version
+      alone; the University_of_Washington\Skyline-daily.exe_* search offered developer-build
+      settings and found nothing on a clean VM. Rebuilt on Brendan/Matt's squash (d59bc9fb3a)
+      and merged the #4658 hoist (41fa737707; installer pieces moved to scripts\installer).
+
+### 2026-10-08 - Merged
+
+PR #4755 merged into master as 3f353df610 (admin override, no approvals; every TeamCity check
+passed: Skyline 1806 tests, Core Windows 657, Docker/Wine 340, code inspection clean). Shipped:
+the Inno installer with /LAUNCH, PortableSettingsProvider (user.config beside the exe for the
+folder owner, %LOCALAPPDATA%\Skyline otherwise, folderowners.txt override), the three-way merge
+of an all-users install's shared settings and tools (IMergeable.ThreeWayMerge), read-only shared
+external tools, first-start and Tools > Options import of older Skylines' settings and tools,
+the silent ClickOnce removal (ClickOnceMaintenanceDialog), and the startup update check. The
+.NET Framework side is #4773 (TODO-20261005_ClickOnce_Inno_Handoff.md), merged 2026-10-09.
+
+Deferred: the four buddy tests in the PR test plan; a real per-machine install run as a
+standard user; build.ps1's runtime download hangs in Invoke-WebRequest when the cache is
+empty (try $ProgressPreference = 'SilentlyContinue'); the .NET 10 build has no --official
+option (only developer/automated stamps); the installer's Start Menu shortcut has the same
+name as a still-installed ClickOnce Skyline-daily's; the connector bugs noted above.
