@@ -11,7 +11,7 @@
   Stacked on it:
   `TODO-20261007_osprey_self_validating_artifacts.md` (C:\proj\pwiz-validity).
 - **Module**: `osprey`
-- **PR**: none
+- **PR**: [#4808](https://github.com/ProteoWizard/pwiz/pull/4808)
 - **Follows**: `ai/todos/completed/TODO-20261005_osprey_perfilescoring_round2.md` (#4781)
 
 ## Objective

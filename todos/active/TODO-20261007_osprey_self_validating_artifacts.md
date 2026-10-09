@@ -11,7 +11,7 @@
   unit 649/649, inspection 0/0, regression -Dataset All 48/0, resume drill PASS (both kill points). The matching ai/scripts changes are UNCOMMITTED in C:\proj\ai on purpose
   - commit them when this branch merges (see 2026-10-08 entry).
 - **Module**: `osprey`
-- **PR**: none
+- **PR**: [#4809](https://github.com/ProteoWizard/pwiz/pull/4809) (stacked on #4808)
 
 ## Objective
 
