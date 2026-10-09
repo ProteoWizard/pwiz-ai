@@ -40,8 +40,9 @@ the same Osprey flags for every arm, experiment level at q <= 0.01:
 | #4710 default (weighted per-channel) | 36,453 | 0.44% | 32,036 |
 | #4710 msconvert-style engine | 35,664 | 0.41% | 31,458 |
 
-Higher in each of the six runs. Vendor file to cache on EV13 (1.24 GB .raw, 32 threads): 37.6 s, against
-44.0 s for #4710's default engine and 13.7 s for a plain read.
+Higher in each of the six runs. Vendor file to cache on EV13 (1.24 GB .raw, 32 threads, quiet machine):
+40-41 s, against 44.0 s for #4710's default engine, 24.0 s for its msconvert-style engine, and 13.7 s for
+a plain read (no demultiplexing).
 
 ## Test plan
 

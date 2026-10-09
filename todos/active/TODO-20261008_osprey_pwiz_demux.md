@@ -64,6 +64,7 @@ Differences from #4710's behaviour:
 | Osprey `--demux auto`, this branch (first) | 52.4 s | 158,700 MS2 into 102 bins |
 | + one sweep, in-order prefetch | 40.5 s | |
 | + read next batch while solving, 32/thread | **37.6 s** | peak WS 1.99 GB (plain read 1.95 GB) |
+| final branch (with the NNLS fix), 02:05 | 40.2 / 41.4 s | two runs |
 | #4710 `--demux auto`, weighted engine (default) | 44.0 s | parse 12.4 s + demux 27.9 s |
 | #4710, `OSPREY_DEMUX_ENGINE=msconvert` | 24.0 s | demux 6.6 s |
 
