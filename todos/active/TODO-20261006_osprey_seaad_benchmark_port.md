@@ -5,11 +5,10 @@
   benchmark found. Originally a measurement of `Skyline/work/20260612_net8_port`.
 - **Base**: `master` (PR #4619 merged 2026-10-08 as `156dab478b`; the fix was rebased onto master as `e703a48580`)
 - **Created**: 2026-10-06
-- **Status**: Fix verified (SEA-AD 82 files on UW25: 5 h 00 m -> 4 h 02 m). Rebased onto master after #4780,
-  revised from `/code-review max`, now `de09115ccf`: 655/655 tests, inspection clean, Stellar regression PASSED.
-  Ready for PR.
+- **Status**: Lane fix MERGED (#4804, 2026-10-09). Benchmark TODO stays active for the UW8 128 GB tuning
+  handoff below and the cross-machine identical-results check.
 - **Module**: `osprey`
-- **PR**: [#4804](https://github.com/ProteoWizard/pwiz/pull/4804)
+- **PR**: [#4804](https://github.com/ProteoWizard/pwiz/pull/4804) (merged 2026-10-09 as `4f4c74ea66`)
 
 ## Goal
 
@@ -47,8 +46,9 @@ benchmark on three machines:
 - [x] Harvest per the SEA-AD README: perfviz (peak fits 64 GB, no gap >= 30 s), entrapment FDP tools
 - [x] Per-task and per-phase table vs the reference; FirstPassFDR lane decision line; peak private
 - [ ] Record results here (i9 done); compare with Brendan's other two machines when available
-- [ ] FirstPassFDR lanes: `-LinkFrom` A/B at `OSPREY_FDR_FILE_LANES=2`/`3`, then decide on a
-      collect-before-measure fix in `FirstPassFdrTask.ResolveFileLanes` (Brendan to decide)
+- [x] FirstPassFDR lanes: `-LinkFrom` A/B at `OSPREY_FDR_FILE_LANES=1/2/3/4`, then the collect-before-measure
+      fix (#4804, merged)
+- [ ] Cross-machine identical-results check: one exe snapshot on UW8 + UW25, diff `out.blib` and pass counts
 
 ## Constraints
 - SkylineNightly runs on this i9 from ~21:50 out of `D:\Nightly` - the same single HDD as the
@@ -438,3 +438,12 @@ stripped otherwise; banner, START/DONE `fdrlanes=`, dir suffix `-fplanes<N>`). S
   - Redundant GCs under `OSPREY_LOG_MEMORY`: profiling runs only.
 - Not re-run at 82 files after the revision: the mechanism is unchanged (aggressive GC + gen0 refresh), and
   the retry only adds collections.
+
+### 2026-10-09 - #4804 merged
+PR #4804 merged (squash, `--admin` at Brendan's direction; CodeQL still running on the comment-only last
+commit) as `4f4c74ea66`. It shipped `SystemMemory.AvailablePhysicalBytesAfterCollect` (an aggressive GC, then a
+gen0 refresh repeated until newer) and FirstPassFDR calling it at every multi-file entry. On UW25 SEA-AD 82 files:
+1 -> 3 lanes, FirstPassFDR 4,082 -> 2,123 s, whole run 5 h 00 m -> 4 h 02 m. Copilot's one finding (the
+SystemMemory doc's zero-reading claim) was fixed in `4b06dc92cd`. The TODO stays in `active/` on purpose, because
+the UW8 tuning handoff and the identity check are still open; it was not moved to `completed/`. The local branch
+and remote branch were deleted after the ancestry check.
