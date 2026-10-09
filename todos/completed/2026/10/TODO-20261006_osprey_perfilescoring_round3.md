@@ -4,14 +4,13 @@
 - **Branch**: `Skyline/work/20261006_osprey_perfilescoring_round3` (`C:\proj\pwiz-scanmajor`)
 - **Base**: `master` (the port branch merged as #4619 on 2026-10-08; rebased onto 3f353df610)
 - **Created**: 2026-10-06
-- **Status**: Reviewed, fixed and rebased onto master (655/655 + inspection 0/0); PR to master on Brendan's
-  go-ahead. Rebased on
+- **Status**: Completed Rebased on
   9e2b516bcb (#4789); FOUR local commits, not pushed (hooks, reads, sidecar buffer, 02c467d8cf review fix).
   Stellar + Astral regressions PASS (before the review fix; the validity branch's Stellar gate covers it).
   Stacked on it:
   `TODO-20261007_osprey_self_validating_artifacts.md` (C:\proj\pwiz-validity).
 - **Module**: `osprey`
-- **PR**: [#4808](https://github.com/ProteoWizard/pwiz/pull/4808)
+- **PR**: [#4808](https://github.com/ProteoWizard/pwiz/pull/4808) (merged 2026-10-09)
 - **Follows**: `ai/todos/completed/TODO-20261005_osprey_perfilescoring_round2.md` (#4781)
 
 ## Objective
@@ -183,5 +182,13 @@ median polish ~7%. XIC counters (temporary instrumentation): 1.6 billion m/z loo
   worker buffer 36.6s (35.3-37.8, n=4), ~0.45 s/file. The shared pool's arrays outlive each FILE, so files
   2+ read into resident pages; that cross-file reuse was part of the -11%. Kept the bounded-memory version.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261007_osprey_self_validating_artifacts.md` before starting work.
+### 2026-10-09 - Merged
+
+PR #4808 merged as commit be284d2ab9 (squash; admin override of a branch policy that currently requires an
+approving review - a policy change Matt has not finished). Shipped: profiler hooks bracketing the PerFileScoring
+per-file loop, per-worker calibration read buffers (pooled-block gain kept within ~0.45 s/file while releasing
+the buffers after calibration), and the 1 MB FDR score sidecar write buffer (FirstPassFDR -15% at 12 SEA-AD
+files). Gates: 655/655 + inspection 0/0 on master bc948036a9; regression-parallel -Dataset All 48/0 (via the
+stacked #4809); TeamCity Osprey Perf/Regression build 4208780 SUCCESS; Copilot 0 findings. Not done here and
+left open in the Tasks list: median-polish reuse and the optional parallel-files re-measure. Stacked #4809
+(embedded validity stamps) retargeted to master.
