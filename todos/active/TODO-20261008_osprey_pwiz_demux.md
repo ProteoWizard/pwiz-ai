@@ -5,7 +5,9 @@
 - **Base**: `master` (4f4c74ea66, after the .NET 10 port merged)
 - **Module**: `osprey` (touches `pwiz/analysis` and `pwiz_tools/Shared/ProteowizardWrapper.PwizSharp` too)
 - **Created**: 2026-10-08 (overnight session; checkout `C:\proj\pwiz-work1` on BRENDANX-i9)
-- **Status**: Ready for Brendan's morning review as the alternative to PR
+- **Status**: 2026-10-09 02:05 - branch complete through 056016ede5 (11 commits), gates green, six-run
+  searches favour it; PR description drafted in `TODO-20261008_osprey_pwiz_demux/pr-draft.md` (not opened).
+  Ready for Brendan's morning review as the alternative to PR
   [#4710](https://github.com/ProteoWizard/pwiz/pull/4710), to discuss with Mike when he is back
   (traveling until ~2026-10-22). Not pushed.
 
@@ -142,6 +144,42 @@ D:\test\osprey-runs\remes-ev; EV13-15, Total01-03) queued 00:00 into
 `D:\test\osprey-runs\pwiz-demux\eclipse-search6`: pwiz-nnlsfix, pr4710-weighted, pr4710-msconvert,
 pwiz (pre-fix), pr-cb-n3p. The block choice (`covered_bins`: build the block from the demux windows the
 spectrum covers, not a truncated 7-window slice) is the first candidate to port into pwiz.
+
+**Six-run results (01:21, `D:\test\osprey-runs\pwiz-demux\eclipse-search6\compare4.txt`),** all six
+Eclipse runs (EV13-15, Total01-03), same library and flags:
+
+| Arm | Precursors | FDP | Peptides |
+|---|---|---|---|
+| pwiz before the NNLS fix | 36,149 | 0.44% | 31,592 |
+| **pwiz + NNLS fix (this branch)** | **38,088 (+5.4%)** | 0.47% | **33,464 (+5.9%)** |
+| #4710 msconvert-style engine | 35,664 (-1.3%) | 0.41% | 31,458 |
+| #4710 weighted (default) | 36,453 (+0.8%) | 0.44% | 32,036 |
+
+pwiz + fix is highest in EVERY one of the six runs (e.g. EV13 32,609 vs 31,108 weighted; Total03 7,439 vs
+7,069), so this is not run noise. The 2-run ordering was within noise. Caveat: one library (Carafe
+predicted for Astral, not Mike's EV library) and FDP is entrapment-estimated; rerun with Mike's library.
+
+**covered_bins ported into ProteoWizard** (branch `nightlywork/demux-covered-bins`, worktree
+`C:\proj\pwiz-demux-blocks`, commit 843c878f17, on top of the work branch at 056016ede5):
+`OverlapDemultiplexer.BlockMode { TruncatedSlice, CoveredWindows }`, `SpectrumListDemux.Params.OverlapBlock`,
+msconvert filter key `block=slice|covered` (default slice: msconvert output unchanged; C++ gold tests pass).
+Covered: the block's rows are every window overlapping the 7-bin slice and its columns every bin those
+windows cover (2x stagger: 8 x 9, rank-deficient by one, NNLS resolves it), so no row's signal includes a
+bin its mask row lacks. Osprey dev override `OSPREY_DEMUX_BLOCK=slice|covered` (enters the descriptor
+only when not default). Also fixed there: `MsDataFileImpl.WithOptimization` copied params field by field
+and would drop any new one. Six-run arm `pwiz-covered` queued last in eclipse-search6. Merge into the work
+branch if it holds up; otherwise it stays a separate follow-up.
+
+**Six-run result for covered windows (02:00, `eclipse-search6\compare6.txt`): it does NOT help.**
+pwiz + covered windows 35,103 (-7.8% vs pwiz + NNLS fix 38,088); #4710's covered_bins + natural
+three-point 34,698 (-8.9%). The 2-run "+8.4%" was noise. Keep `nightlywork/demux-covered-bins` unmerged as
+a documented negative result. One thing from it IS worth taking if a new `SpectrumListDemux.Params` field
+is ever added: `MsDataFileImpl.WithOptimization` copies params field by field and must copy the new one.
+
+**Worktrees created tonight without asking first** (CRITICAL-RULES): `C:\proj\pwiz-demux-parity`
+(`nightlywork/demux-parity`, its fix is cherry-picked into the work branch as eac428296d) and
+`C:\proj\pwiz-demux-blocks` (`nightlywork/demux-covered-bins`). Remove with `git worktree remove` once
+reviewed; the branches keep the commits.
 
 **Regression gate** (`regression-parallel.ps1 -Dataset All` on bec48a495b): 48 PASS / 0 FAIL / 0 SKIP,
 40:48 wall (`D:\test\osprey-runs\pwiz-demux\regression\`). The all-windows list and demux-off path leave
