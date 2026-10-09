@@ -9,7 +9,7 @@
   revised from `/code-review max`, now `de09115ccf`: 655/655 tests, inspection clean, Stellar regression PASSED.
   Ready for PR.
 - **Module**: `osprey`
-- **PR**: pending
+- **PR**: [#4804](https://github.com/ProteoWizard/pwiz/pull/4804)
 
 ## Goal
 

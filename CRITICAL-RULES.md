@@ -172,7 +172,7 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 ## Checkouts: Reuse One, Ask Before Creating One
 - **Ask the developer BEFORE creating a new pwiz checkout or worktree** (`git worktree add`, `git clone`, any new `<project-root>\pwiz-*` directory). Every one costs ~2 GB, is invisible to the scripts' `-SourceRoot` defaults, and outlives the session that made it.
 - First look for an existing one: `mcp__status__get_project_status()` lists every checkout with its branch and dirty state. Prefer a checkout already on the branch you need, then a CLEAN one you can switch (`git checkout -b ... origin/<base>`).
-- The standing set: `pwiz` (default; the scripts' `-SourceRoot` default), `pwiz-work1` / `pwiz-work2` (Osprey work on the .NET 10 port branch while PR #4619 is open), `pwiz-perfbase` (pinned baseline for `Test-PerfGate.ps1`). Never switch the branch of a checkout with uncommitted changes you did not make - ask.
+- The standing set: `pwiz` (default; the scripts' `-SourceRoot` default), `pwiz-work1` / `pwiz-work2` (a second and third branch worked in parallel; since the .NET 10 port merged on 2026-10-08, Osprey work branches from master like everything else), `pwiz-perfbase` (pinned baseline for `Test-PerfGate.ps1`). Never switch the branch of a checkout with uncommitted changes you did not make - ask.
 - If the developer approves a new one, record it and its removal condition in the TODO, and `git worktree remove` it when that work ends.
 
 ## NEVER
