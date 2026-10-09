@@ -7,7 +7,7 @@
 - **Base**: `origin/master` @ `93c1b9a5b8`
 - **Status**: PR open; awaiting TeamCity and review.
 - **GitHub Issue**: (none)
-- **PR**: (none)
+- **PR**: [#4810](https://github.com/ProteoWizard/pwiz/pull/4810)
 
 ## Objective
 
