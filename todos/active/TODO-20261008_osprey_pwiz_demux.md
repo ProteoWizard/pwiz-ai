@@ -269,3 +269,6 @@ every golden unchanged.
 
 ## Progress log
 - 2026-10-08 21:46 overnight session started (goal above). Commits on the branch: see `git log master..`.
+- 2026-10-09 ~08:50 #4805 and #4806 open (Matt reviewing); 5 ppm arms in flight.
+  **Next session handoff**: For detailed startup protocol, read
+  `ai/.tmp/handoff-20261009_pwiz_demux_prs.md` before starting work.
