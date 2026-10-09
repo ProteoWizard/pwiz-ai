@@ -17,7 +17,7 @@ Everything pwiz gains goes to master on its own, whether or not Osprey uses it. 
 master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #4710 comparison log:
 `TODO-20261008_osprey_pwiz_demux/pr4710-comparison.md`.
 
-1. **PR 1**, `Skyline/work/20261009_demux_nnls_iteration_limit` (3 commits from master): NNLS iteration
+1. **PR 1 = [#4805](https://github.com/ProteoWizard/pwiz/pull/4805)** (opened 2026-10-09), `Skyline/work/20261009_demux_nnls_iteration_limit` (4 commits from master): NNLS iteration
    limit keeps the last feasible x (as C++); bin snapping against the original ranges (as C++); 32 KB
    real-data fixture in `pwiz/analysis/spectrum_processing/SpectrumList_DemuxTest.data`
    (`EclipseNnlsFixture*.tsv`, README) matching C++ on all 246 peaks. Brendan: fixtures stay in their
