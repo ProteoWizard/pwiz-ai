@@ -13,7 +13,10 @@
 
 ## pwiz PRs, split out (decided 2026-10-09 with Brendan)
 
-Everything pwiz gains goes to master on its own, whether or not Osprey uses it. pwiz-sharp is
+Everything pwiz gains goes to master on its own, whether or not Osprey uses it. **Reviewer: Matt
+(`chambm`) on every pwiz demux PR** - the review bar inside pwiz core is higher, which is another
+reason to keep these as clear pwiz PRs. Brendan works them through with Matt BEFORE the final
+proposal to Mike (the Osprey PR replacing #4710 comes last). pwiz-sharp is
 master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #4710 comparison log:
 `TODO-20261008_osprey_pwiz_demux/pr4710-comparison.md`.
 
