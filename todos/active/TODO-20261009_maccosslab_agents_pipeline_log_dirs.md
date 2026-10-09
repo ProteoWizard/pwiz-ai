@@ -6,7 +6,7 @@
 - **Base**: `main`
 - **Created**: 2026-10-09
 - **Status**: In progress
-- **PR**: (not opened)
+- **PR**: [#3](https://github.com/uw-maccosslab/maccosslab-agents/pull/3)
 - **Objective**: Let `access-log-review-pipeline` take the Apache and Tomcat log
   locations as options, instead of always reading `<logs_dir>/apache` and
   `<logs_dir>/tomcat`
@@ -48,10 +48,11 @@ still forces the subdirectory names.
 ## Progress
 
 - 2026-10-09: Scoped; branch created.
-- 2026-10-09: Implemented and committed (`f72b851`, not pushed). `pipeline.log_dirs()` resolves the pair once;
+- 2026-10-09: Implemented and committed (`f72b851`). `pipeline.log_dirs()` resolves the pair once;
   `check_coverage(apache_dir, tomcat_dir, window)` and
   `_analyze_prolonged_floods(agg, window, apache_dir, tomcat_dir)` take the two
   directories. The billed CLI also got `--apache-dir` / `--tomcat-dir` (it shares
   `_analyze_prolonged_floods`). Dry run prints `Apache:` / `Tomcat:` lines instead of
   `Logs:`. 141 tests pass; dry run against the checkout shows the overrides in the prompt.
-  Next: `/code-review`, push, PR.
+  `/code-review medium` found no bugs; fixed its blank-line nit (`45dcd4d`). Pushed and
+  opened PR #3. Next: review and merge.
