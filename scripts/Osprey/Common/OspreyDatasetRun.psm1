@@ -667,7 +667,7 @@ function Invoke-OspreyDatasetRun {
     # is a guarantee about the run, not a report of a variable.
     Write-Host ("  memprobe : {0}" -f $(if ($LogMemory) {
                 'post-GC [MEM] probes ON (OSPREY_LOG_MEMORY=1) - forces GCs, do NOT compare wall time to an arm without it' }
-                else { 'off (default) - --memstamp shape only, no forced GCs' }))
+                else { 'off (default) - --memstamp shape only, no [MEM]-probe GCs' }))
     Write-Host "  train set: one run per precursor (pickrun3 default; OSPREY_TRAIN_PICK_RUN cleared)"
     Write-Host ("  exp agg  : {0}" -f $(if ($ExperimentAgg) {
                 "$ExperimentAgg (OSPREY_EXPERIMENT_AGG) - moves the experiment-wide discovery set" }

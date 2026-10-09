@@ -1,13 +1,15 @@
 # TODO: SEA-AD 82-file benchmark of the port branch at default settings (three machines)
 
 ## Branch Information
-- **Branch**: none - a measurement of `Skyline/work/20260612_net8_port` (port tip `dfcb8d17ef` or later)
-- **Base**: `Skyline/work/20260612_net8_port` (PR #4619)
+- **Branch**: `Skyline/work/20261007_osprey_fdr_lanes_gc` (pwiz-work1) - the FirstPassFDR lane fix this
+  benchmark found. Originally a measurement of `Skyline/work/20260612_net8_port`.
+- **Base**: `master` (PR #4619 merged 2026-10-08 as `156dab478b`; the fix was rebased onto master as `e703a48580`)
 - **Created**: 2026-10-06
-- **Status**: i9 run DONE 2026-10-06: 5 h 00 m vs 6 h 51 m (-27.1%). Waiting on Brendan's other two machines.
-  Open finding: FirstPassFDR picked 1 lane.
+- **Status**: Fix verified (SEA-AD 82 files on UW25: 5 h 00 m -> 4 h 02 m). Rebased onto master after #4780,
+  revised from `/code-review max`, now `de09115ccf`: 655/655 tests, inspection clean, Stellar regression PASSED.
+  Ready for PR.
 - **Module**: `osprey`
-- **PR**: none (measurement only)
+- **PR**: pending
 
 ## Goal
 
@@ -416,3 +418,23 @@ stripped otherwise; banner, START/DONE `fdrlanes=`, dir suffix `-fplanes<N>`). S
 
 - A fresh `--task` process sees ~15 GB more free than the straight-through run did at the same point. So the
   resolver's 1-lane choice came from PerFileScoring's leftover heap, not the cohort.
+
+### 2026-10-08 - Rebased onto master; `/code-review max` applied
+- #4619 merged (`156dab478b`), then #4780 (`011dfc9ff2`). Rebased the fix onto master (no PR yet, so allowed).
+- `/code-review max`: 11 findings, triaged. **Fixed**:
+  - The gen0 refresh can be turned into a background GC under DATAS (reproduced in a probe; one retry
+    fixes it). It now repeats until the GC record is newer (max 3).
+  - The collection now runs for every multi-file entry, including forced `OSPREY_FDR_FILE_LANES`, so
+    forced-vs-auto lane A/Bs share the same memory state. This removed the `availableBytes = 0` placeholder.
+  - The recipe moved into `SystemMemory.AvailablePhysicalBytesAfterCollect`, next to #4780's refresh.
+  - The comment now pairs the right timings and names the real cause: committed-but-free heap, not a stale
+    sample. Named GC arguments. Commit message cut to 10 lines.
+  - Runner banner: "no [MEM]-probe GCs".
+- **Dropped**:
+  - cgroup 75% hard-limit under-read: an existing `SystemMemory` behavior, out of scope.
+  - Skipping the collection when lanes cannot change: it conflicts with the forced-lane fix and costs ~2 s.
+  - No unit test of collect-then-read ordering: GC timing is not meaningfully unit-testable; the SEA-AD
+    lane line is the oracle.
+  - Redundant GCs under `OSPREY_LOG_MEMORY`: profiling runs only.
+- Not re-run at 82 files after the revision: the mechanism is unchanged (aggressive GC + gen0 refresh), and
+  the retry only adds collections.
