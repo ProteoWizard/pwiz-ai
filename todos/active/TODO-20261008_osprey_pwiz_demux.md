@@ -11,6 +11,31 @@
   [#4710](https://github.com/ProteoWizard/pwiz/pull/4710), to discuss with Mike when he is back
   (traveling until ~2026-10-22). Not pushed.
 
+## pwiz PRs, split out (decided 2026-10-09 with Brendan)
+
+Everything pwiz gains goes to master on its own, whether or not Osprey uses it. pwiz-sharp is
+master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #4710 comparison log:
+`TODO-20261008_osprey_pwiz_demux/pr4710-comparison.md`.
+
+1. **PR 1**, `Skyline/work/20261009_demux_nnls_iteration_limit` (3 commits from master): NNLS iteration
+   limit keeps the last feasible x (as C++); bin snapping against the original ranges (as C++); 32 KB
+   real-data fixture in `pwiz/analysis/spectrum_processing/SpectrumList_DemuxTest.data`
+   (`EclipseNnlsFixture*.tsv`, README) matching C++ on all 246 peaks. Brendan: fixtures stay in their
+   own project (no Osprey test reading pwiz data, or the reverse).
+2. **PR 1b** (after PR 1): `SpectrumPeakExtractor` search span uses the largest half-width (`maxDelta`)
+   where a bin is twice that, so high-m/z peaks lose the upper half of their window (C++ too); and a peak
+   exactly on a shared edge counts in both bins (C++ too). Fix: `2 * maxDelta` (or #4710's rule: skip
+   only channels whose upper edge <= peak) and half-open ranges (credit #4710). Deliberately departs
+   from C++: update gold values, measure with the 6-run harness.
+3. **PR 2**: parallel solving (`solveThreads=N`, default 1 everywhere, library and msconvert), cache
+   sizing, single sweep, prefetch, jump handling, disposal/per-block errors, metadata without solving;
+   MSConvertGUI Demultiplex panel gets a "Solve threads" box (default 1; tooltip: multiplies with
+   files converted in parallel).
+4. **PR 3** (stacked on PR 2): `SpectrumListDemux.DetectScheme`, `MsDataFileImpl` demultiplex option,
+   `DemultiplexScheme`, `DetectDemultiplexScheme`, `GetSpectrumMetadata` fix, and the
+   `WithOptimization` copy-every-field lesson from the covered-bins branch.
+5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
+
 ## Objective
 
 Give Osprey `--demux auto` with ONE demultiplexer: ProteoWizard's own (the C# port of msconvert's
