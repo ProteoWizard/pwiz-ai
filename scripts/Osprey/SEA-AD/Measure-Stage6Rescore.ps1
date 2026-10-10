@@ -50,8 +50,9 @@
 
     3. STAGE 7 SELF-GATES ON ITS OWN OUTPUTS. The driver skips a task whose output sidecars
        are already valid, so a repeat measurement against a populated dir exits 0 and
-       measures nothing. This deletes output.blib and *.2nd-pass.fdr_scores.bin (and their
-       .osprey.task sidecars) before every Stage-7 point.
+       measures nothing. This deletes output.blib and *.2nd-pass.fdr_scores.bin before every
+       Stage-7 point (each carries its validity stamp inside it, so deleting the artifact is
+       enough; the trailing-* patterns also sweep up legacy .osprey.task files).
     4. STAGE 7 WAS A REFUSED RESIDENT PATH BEFORE #4486. --task SecondPassFDR sets
        ExpectReconciledInput, which ResidentPoolTrigger used to map to the 'hpc-merge' token,
        so a pre-#4486 binary ABORTS unless OSPREY_ALLOW_UNFIXED_RESIDENT names it. #4486
@@ -458,8 +459,9 @@ foreach ($n in $counts) {
     Write-Host ("--- Stage 7: SecondPassFDR, {0} files ---" -f $n) -ForegroundColor Cyan
     # Stage 7 self-gates on ITS OWN outputs the way Stage 6 does on the pass-2 sidecars:
     # the driver skips a task whose output sidecar is already valid, so a second point
-    # would exit 0 having measured nothing. The .osprey.task stamps go with the outputs -
-    # deleting the blib alone leaves the stamp that declares it current.
+    # would exit 0 having measured nothing. The validity stamp is embedded in each output, so
+    # deleting the output removes it; the trailing '*' also clears any legacy .osprey.task
+    # file left by an older build in a reused directory.
     foreach ($pattern in @('output.blib*', '*.2nd-pass.fdr_scores.bin*')) {
         Get-ChildItem $phaseDir -Filter $pattern -File -ErrorAction SilentlyContinue | Remove-Item -Force
     }

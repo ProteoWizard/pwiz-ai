@@ -27,10 +27,11 @@
 
 .EXAMPLE
     # Pay for the diagnostics AFTER a run that finished without them (P16). -LinkThroughTask is
-    # what makes this a re-entry rather than a re-analysis: it stages each stage's outputs AND
-    # their .osprey.task stamps, so every pass sees that it has already run and folds its report
-    # instead of recomputing it. Without the switch the stamps are absent, the passes recompute,
-    # and the RIGHT report appears hours later with nothing in the artifact to say so.
+    # what makes this a re-entry rather than a re-analysis: it stages each stage's OWN outputs
+    # (each carrying its embedded validity stamp), so every pass sees that it has already run and
+    # folds its report instead of recomputing it. Without the switch those outputs are absent,
+    # the passes recompute, and the RIGHT report appears hours later with nothing in the artifact
+    # to say so.
     .\Run-Chs.ps1 -Plates 0059,0060,0061 -Task ModelDiagnostics -LinkThroughTask `
         -LinkFrom D:\test\osprey-runs\chs-seer\runs\<a completed run> -WhatIf
 #>

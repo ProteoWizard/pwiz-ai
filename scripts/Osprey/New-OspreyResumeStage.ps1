@@ -22,30 +22,37 @@
 
 .PARAMETER Include
     Artifact suffixes to link. Defaults to everything FirstPassFDR needs as INPUT: the Stage 1-4
-    parquets and calibrations with their PerFileScoring markers, the 1st-pass sidecars, the
-    per-file .1st-pass.model.json (without which a fully-resumable run retrains a model it has
-    already persisted), and the analysis-wide experiment sidecar.
+    parquets and calibrations, the 1st-pass sidecars, the per-file .1st-pass.model.json (without
+    which a fully-resumable run retrains a model it has already persisted), and the
+    analysis-wide experiment sidecar and retained base_id summary. Every artifact carries its
+    own validity stamp inside it, so there are no separate marker files to list.
 
 .PARAMETER KeepFraction
     Fraction of the per-file 1st-pass sidecars to carry across (1.0 = all). Use e.g. 0.9 to stage
     the partial-resume case: the missing tenth must be re-scored and the rest adopted.
 
 .PARAMETER StampKey
-    Validity key to write into a `<file>.FirstPassFDR.osprey.task` marker beside each staged
-    1st-pass sidecar. Osprey normally writes these itself as each sidecar lands; supply one here
-    to make a directory written by an older build resumable. The key must be the one THIS cohort
-    produces - the reconciliation term is hashed over the sorted input file stems, so a key
-    borrowed from a different file set is the one mistake that matters.
+    RETIRED - accepted so existing command lines still bind, but ignored with a warning. It
+    wrote a `<file>.FirstPassFDR.osprey.task` marker beside each staged 1st-pass sidecar so a
+    directory from an older build could be resumed. Osprey no longer reads marker files: the
+    validity stamp is embedded in each artifact, and rewriting it would mean rewriting the
+    (hard-linked) artifact. A directory written before embedded stamps reads as stale under a
+    current build and is recomputed; that is accepted. For reuse across builds of a directory
+    that DOES carry embedded stamps, set OSPREY_VERSION_OVERRIDE to the version it was written
+    with.
+
+.PARAMETER Version
+    RETIRED with -StampKey; ignored.
 
 .EXAMPLE
-    New-OspreyResumeStage.ps1 -Source <plate-dir> -Name guard-test-100 -StampKey 'search=...'
+    New-OspreyResumeStage.ps1 -Source <plate-dir> -Name guard-test-100 -KeepFraction 0.9
 #>
 #requires -Version 7
 param(
     [Parameter(Mandatory)] [string]$Source,
     [Parameter(Mandatory)] [string]$Name,
-    [string[]]$Include = @('.scores.parquet', '.scores.parquet.PerFileScoring.osprey.task',
-                           '.calibration.json', '.calibration.json.PerFileScoring.osprey.task',
+    [string[]]$Include = @('.scores.parquet',
+                           '.calibration.json',
                            '.1st-pass.fdr_scores.bin',
                            '.1st-pass.model.json'),
     [double]$KeepFraction = 1.0,
@@ -54,14 +61,19 @@ param(
     # not always FirstPassFDR's. A rescore interrupted mid-cohort leaves the PerFileRescoring
     # set partial instead, and that is the state the 2026-09-03 `anyPass2Present` defect hid in -
     # a resume that read 141 of 446 as "done" and rescored nothing. Staging it needs
-    # -PartialSuffixes '.scores-reconciled.parquet','.2nd-pass.fdr_scores.bin',... with the
-    # PerFileRescoring markers alongside.
+    # -PartialSuffixes '.scores-reconciled.parquet','.2nd-pass.fdr_scores.bin',... (each
+    # carries its own PerFileRescoring stamp, so there is nothing else to stage alongside).
     [string[]]$PartialSuffixes = @('.1st-pass.fdr_scores.bin'),
     [string]$StampKey,
-    [string]$Version = '26.1.1.243'
+    [string]$Version
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Source)) { throw "Source not found: $Source" }
+if ($StampKey -or $Version) {
+    Write-Warning ("-StampKey/-Version are retired and ignored: Osprey embeds the validity stamp " +
+                   "in each artifact and no longer reads .osprey.task markers. To reuse a source " +
+                   "written by another build, set OSPREY_VERSION_OVERRIDE to its version instead.")
+}
 $dest = Join-Path (Split-Path $Source -Parent) $Name
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Path $dest -Force | Out-Null
@@ -72,7 +84,7 @@ $stems = Get-ChildItem $Source -Filter '*.scores.parquet' -File |
 $keep = [Math]::Max(1, [int][Math]::Round($stems.Count * $KeepFraction))
 $sidecarStems = @($stems | Select-Object -First $keep)
 
-$linked = 0; $stamped = 0
+$linked = 0
 foreach ($stem in $stems) {
     foreach ($suf in $Include) {
         # The per-file sidecar is the one artifact the KeepFraction applies to; everything else
@@ -82,13 +94,6 @@ foreach ($stem in $stems) {
         if (-not (Test-Path $src)) { continue }
         New-Item -ItemType HardLink -Path (Join-Path $dest ($stem + $suf)) -Target $src | Out-Null
         $linked++
-        if ($StampKey -and ($PartialSuffixes -contains $suf)) {
-            # Written fresh, not linked: a marker must belong to THIS directory, so that
-            # deleting the staging copy can never reach back and invalidate the source.
-            @{ task = 'FirstPassFDR'; version = $Version; validity_key = $StampKey; inputs = @() } |
-                ConvertTo-Json | Set-Content -Path (Join-Path $dest ($stem + $suf + '.FirstPassFDR.osprey.task'))
-            $stamped++
-        }
     }
 }
 # Analysis-wide artifacts, not per stem. Matched by GLOB on the suffix rather than by literal
@@ -114,16 +119,11 @@ foreach ($suffix in $wideSuffixes) {
     if (Test-Path $src) {
         New-Item -ItemType HardLink -Path (Join-Path $dest $f) -Target $src | Out-Null
         $linked++
-        if ($StampKey) {
-            @{ task = 'FirstPassFDR'; version = $Version; validity_key = $StampKey; inputs = @() } |
-                ConvertTo-Json | Set-Content -Path (Join-Path $dest ($f + '.FirstPassFDR.osprey.task'))
-            $stamped++
-        }
     }
 }
 
 'staged   : {0}' -f $dest
 'stems    : {0}  (sidecars for {1})' -f $stems.Count, $sidecarStems.Count
-'links    : {0}   markers stamped: {1}' -f $linked, $stamped
+'links    : {0}' -f $linked
 'disk     : {0:N2} GB of hard links (costs nothing)' -f `
     ((Get-ChildItem $dest -File | Measure-Object Length -Sum).Sum / 1GB)

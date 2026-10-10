@@ -166,23 +166,32 @@ set. Two things are true at once and it is worth keeping them apart:
 * **Osprey's guard** (`ParquetScoreCache`) compares the parquet stamp to the current binary and
   hard-fails. `OSPREY_VERSION_OVERRIDE` is the sanctioned way past it - the code says so, and
   the stamp is pure provenance.
-* **The runner's check** reads the FIRST `*.osprey.task` in each source and throws when they
+* **The runner's check** reads each source's version from the embedded validity stamp (the
+  `osprey_validity` first property of a `*.calibration.json`), falling back to the first legacy
+  `*.osprey.task` for a source written before embedded stamps, and throws when the sources
   disagree. **`OSPREY_VERSION_OVERRIDE` does NOT rescue this** - the throw runs before the
-  override is consulted. In a completed run directory that first file is
-  `.1st-pass.fdr_scores.bin.FirstPassFDR.osprey.task`, a later stage's marker.
+  override is consulted.
 
-**Stage hard links, do not restamp.** Build one directory per leg holding links to only the
-four PerFileScoring artifacts (`.scores.parquet`, `.calibration.json`, and each one's
-`.PerFileScoring.osprey.task`). Every source then holds exactly one kind of task file, the
-version sets agree, and the join links from those. Hard links cost no disk and mutate nothing;
-`ai/.tmp/chs-stage-linksrc.ps1` is a worked example, and this is the cheaper answer.
+Every artifact now carries its own stamp - `osprey-validity/1;task=<Task>;version=<v>;key=<k>`
+as a JSON artifact's first property, a parquet footer entry (`osprey.validity`), a binary
+sidecar's trailer, or a blib `OspreyMetadata` row - and Osprey no longer writes or reads
+`.osprey.task` files. A run directory from a build before that change has no embedded stamps,
+so its artifacts read as stale under a current build and are recomputed; that is accepted.
 
-Restamping is the heavier alternative and needs *evidence*, because the guard asks "was this
-scored by exactly my binary?" while restamping asserts "this scoring is identical to my
-binary's". Establish that first by re-scoring a few of the same files on the new build and
-diffing with `../Compare-ScoreParquets.py`; `../Restamp-OspreyVersion.py` then patches the
-stamp in place. Do not restamp the later stages' markers - their binary sidecars embed the
-version internally, so moving the marker alone manufactures an inconsistency.
+**Pin the version, do not restamp.** For sources that carry embedded stamps, the supported
+route across builds is one `OSPREY_VERSION_OVERRIDE` naming the version they were written with.
+If legs disagree, build one directory per leg holding links to only the PerFileScoring
+artifacts (`.scores.parquet`, `.calibration.json`), re-score the odd legs on one build, or set
+the override yourself once you have evidence the artifacts are compatible. Hard links cost no
+disk and mutate nothing; `ai/.tmp/chs-stage-linksrc.ps1` is a worked example.
+
+Either way the claim needs *evidence*, because the guard asks "was this scored by exactly my
+binary?" while reuse asserts "this scoring is identical to my binary's". Establish that first by
+re-scoring a few of the same files on the new build and diffing with
+`../Compare-ScoreParquets.py`. `../Restamp-OspreyVersion.py` applies ONLY to directories written
+before embedded stamps (it patches the parquet `osprey.version` and the legacy
+`.PerFileScoring.osprey.task` markers); rewriting an embedded stamp would mean rewriting the
+artifact, so for newer directories `OSPREY_VERSION_OVERRIDE` is the only route.
 
 Measured on this dataset 2026-09-01: six files re-scored on 26.1.1.243 were bit-identical to
 their stored 26.1.1.233 and 26.1.1.238 originals, so `PerFileScoring` output is
@@ -204,7 +213,7 @@ $env:OSPREY_CHS_LIB = 'D:\test\osprey-runs\sea-ad\lib'
 **`-LinkThroughTask` is the part that is easy to get wrong and expensive to get wrong.**
 Without it, `-LinkFrom` stages only the stages strictly BEFORE `-Task`, which is right for a
 re-MEASUREMENT of one phase and wrong for a re-ENTRY. A re-entry needs each stage's own
-outputs *and their `.osprey.task` stamps* on disk, because the stamp is the only thing that
+outputs on disk, because the validity stamp embedded in each output is the only thing that
 tells a pass it has already run. Stage too little and both passes recompute - and they
 produce the CORRECT report, so no artifact and no gate can tell you it happened. The cost
 at 446 files is 4h46m for the first pass and 69 min for the second, against minutes for the
@@ -227,8 +236,9 @@ category. "No analysis" means no recomputation, not no I/O.
 
 **Two sources, in this order.** The completed Stage 7 run supplies the per-file artifacts
 and the 2nd-pass experiment sidecar; an older leg may be the only place the *pass-1*
-experiment sidecar's stamp survives, because staging used to drop the stamps of
-analysis-wide artifacts. The first source that has a given file wins, so listing the
+experiment sidecar (and, for directories written before embedded stamps, its `.osprey.task`
+stamp, which staging used to drop for analysis-wide artifacts) survives. Now that each
+artifact carries its own stamp, a completed run that holds the sidecar is enough on its own. The first source that has a given file wins, so listing the
 completed run first and the older leg second gets both. `-WhatIf` prints one
 `analysis-wide:` line per file with the source it came from - read them, and treat a
 `LinkFrom WARNING: no analysis-wide ...` as a staging error rather than a note.

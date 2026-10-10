@@ -105,6 +105,49 @@ function Resolve-LibraryVariant {
 
 <#
 .SYNOPSIS
+    The Osprey version a completed run directory was written by, or $null when it cannot tell.
+
+.DESCRIPTION
+    Every artifact carries its own validity stamp,
+    'osprey-validity/1;task=<Task>;version=<version>;key=<key>'. A JSON artifact holds it as
+    its FIRST property, "osprey_validity", so reading the head of one .calibration.json is
+    enough - no need to parse a document that can be tens of megabytes.
+
+    Directories written before embedded stamps have none; for them this falls back to the
+    "version" in the first legacy <artifact>.<Task>.osprey.task sidecar, so -LinkFrom still
+    pins and still compares versions across sources from older builds.
+#>
+function Get-SourceOspreyVersion {
+    param([Parameter(Mandatory)] [string]$Directory)
+
+    $stampPattern = '"osprey_validity"\s*:\s*"osprey-validity/1;task=[^;]*;version=([^;"]+);'
+    $jsons = @(Get-ChildItem (Join-Path $Directory '*.calibration.json') -File -ErrorAction SilentlyContinue |
+               Sort-Object Name | Select-Object -First 3)
+    foreach ($json in $jsons) {
+        $stream = [System.IO.File]::OpenRead($json.FullName)
+        try {
+            $buffer = New-Object byte[] ([int][Math]::Min($stream.Length, 8192))
+            $read = $stream.Read($buffer, 0, $buffer.Length)
+            $head = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $read)
+        } finally {
+            $stream.Dispose()
+        }
+        $m = [regex]::Match($head, $stampPattern)
+        if ($m.Success) { return $m.Groups[1].Value }
+    }
+
+    # Legacy: a directory written before embedded stamps.
+    $t = Get-ChildItem (Join-Path $Directory '*.osprey.task') -File -ErrorAction SilentlyContinue |
+         Select-Object -First 1
+    if (-not $t) { return $null }
+    $m = Get-Content $t.FullName -Raw | Select-String -Pattern '\d+\.\d+\.\d+\.\d+' |
+         Select-Object -First 1
+    if ($m) { return $m.Matches[0].Value }
+    return $null
+}
+
+<#
+.SYNOPSIS
     Run Osprey over one large dataset: decoy arm x ratio x pass-2 mode x pick model.
 
 .PARAMETER Dataset
@@ -223,8 +266,9 @@ function Invoke-OspreyDatasetRun {
         # The default (strictly before) is right when the task under test is meant to REGENERATE
         # its outputs - that is what a single-phase re-measurement is. It is wrong for a
         # diagnostics-only re-entry, where the whole point is that the task adopts a completed
-        # pass rather than recomputing it: with its own outputs and their .osprey.task markers
-        # absent, the task cannot see that it has already run and does the work again. That
+        # pass rather than recomputing it: with its own outputs (each carrying its embedded
+        # validity stamp) absent, the task cannot see that it has already run and does the
+        # work again. That
         # failure is SILENT and expensive - the re-run produces the RIGHT report, so only the
         # log line separates a 4h46m recompute from a minutes-long fold.
         [switch]$LinkThroughTask,
@@ -304,6 +348,11 @@ function Invoke-OspreyDatasetRun {
         # exports of a finished run without re-analysis, use -Task TrainingExport -Resume.
         [switch]$TrainingExport,
         [switch]$NoPerfStats,
+        # Run Osprey under dotTrace sampling and save the snapshot here (a .dtp path). The run is
+        # otherwise identical - same environment, same command line - so a cohort-scale stage
+        # (e.g. -Task FirstPassFDR -LinkFrom <run>) can be profiled without a hand-built copy of
+        # this runner's environment. Analyse with Reporter.exe as Profile-Osprey.ps1 does.
+        [string]$ProfileTo,
         [switch]$WhatIf
     )
 
@@ -717,6 +766,19 @@ function Invoke-OspreyDatasetRun {
         Write-Host ("  inputs   : {0} paths ({1:N0} chars) passed with --input-list {2}" -f $inputs.Count, $inputChars, $inputListPath)
     }
 
+    # -Resume continues a directory whose artifacts carry the version of the build that wrote
+    # them - which, after a -LinkFrom start, is the PINNED source version, not this exe's own.
+    # Unpinned, a resume of an interrupted -LinkFrom run sees every artifact as stale and
+    # recomputes from Stage 1 (observed: a 12-file SEA-AD resume restarted PerFileScoring).
+    # Pin from the directory's own stamps, as -LinkFrom does from its sources.
+    if ($Resume -and -not $LinkFrom -and -not $env:OSPREY_VERSION_OVERRIDE -and (Test-Path $OutDir)) {
+        $resumeVer = Get-SourceOspreyVersion -Directory $OutDir
+        if ($resumeVer) {
+            $env:OSPREY_VERSION_OVERRIDE = $resumeVer
+            Write-Host ("  Resume: pinned OSPREY_VERSION_OVERRIDE={0} from the run directory" -f $resumeVer)
+        }
+    }
+
     # Optional hard-link resume (same-file-set source only). How MUCH is linked depends on
     # -Task: enough to reach the task under test, and never the task's own outputs.
     if ($LinkFrom) {
@@ -731,10 +793,17 @@ function Invoke-OspreyDatasetRun {
         foreach ($src in $LinkFrom) {
             if (-not (Test-Path $src)) { throw "LinkFrom dir not found: $src" }
         }
-        # Osprey stamps a daily version into every .osprey.task and refuses to consume
-        # artifacts from a different build ("osprey version mismatch"). A -LinkFrom re-run on a
-        # newer binary is EXACTLY that case, so pin the source's version unless the caller
-        # already chose one. Without this the failure reads like a code bug.
+        # Osprey stamps a daily version into every artifact's embedded validity stamp (and,
+        # before embedded stamps, into every .osprey.task sidecar) and refuses to reuse
+        # artifacts from a different build - it recomputes them, or fails outright. A
+        # -LinkFrom re-run on a newer binary is EXACTLY that case, so pin the source's version
+        # unless the caller already chose one. Without this the linked bed is silently
+        # recomputed, or the failure reads like a code bug.
+        #
+        # Get-SourceOspreyVersion reads the embedded stamp first and falls back to a legacy
+        # .osprey.task, so a source written before embedded stamps still pins (its artifacts
+        # read as stale under a new build regardless - that is accepted - but the version
+        # agreement check below still means something for it).
         #
         # With SEVERAL sources the version has to AGREE across them. Pinning whichever one was
         # read first would let legs built on different days into one join, and only the odd
@@ -742,12 +811,8 @@ function Invoke-OspreyDatasetRun {
         # nothing pointing at the real cause. Refuse up front instead.
         $srcVers = [ordered]@{}
         foreach ($src in $LinkFrom) {
-            $t = Get-ChildItem (Join-Path $src '*.osprey.task') -ErrorAction SilentlyContinue |
-                 Select-Object -First 1
-            if (-not $t) { continue }
-            $m = Get-Content $t.FullName -Raw | Select-String -Pattern '\d+\.\d+\.\d+\.\d+' |
-                 Select-Object -First 1
-            if ($m) { $srcVers[$src] = $m.Matches[0].Value }
+            $v = Get-SourceOspreyVersion -Directory $src
+            if ($v) { $srcVers[$src] = $v }
         }
         $distinct = @($srcVers.Values | Sort-Object -Unique)
         if ($distinct.Count -gt 1) {
@@ -771,51 +836,44 @@ function Invoke-OspreyDatasetRun {
         # "could not run the frozen recompute". That reads as a code bug rather than as
         # "you linked too little", which is why this is a table and not a single list.
         $STAGE_ARTIFACTS = [ordered]@{
-            'PerFileScoring'   = @('.calibration.json', '.calibration.json.PerFileScoring.osprey.task',
-                                   '.scores.parquet', '.scores.parquet.PerFileScoring.osprey.task')
+            # Each artifact carries its validity stamp INSIDE itself (JSON first property,
+            # parquet footer, binary-sidecar trailer, blib metadata row), so linking the
+            # artifact links its stamp. There are no separate .osprey.task files to stage;
+            # those were retired when the stamps were embedded.
+            'PerFileScoring'   = @('.calibration.json', '.scores.parquet')
             # .1st-pass.stratum.json is the protein-compact stratum, split out of the model
             # sidecar by PR #4633 because a different phase produces it. Omitting it staged a
             # cohort that LOOKED complete - 6690 files, 0 missing - and then failed 11 minutes
             # into Stage 7 with "could not run the frozen recompute ... or protein stratum are
             # absent", which reads as a code bug rather than as "the link set is one artifact
-            # short". Its stamp travels with it for the same reason every other stamp does.
-            #
-            # The model sidecar's own stamp is here now too. It was the only per-run artifact
-            # staged without one, which is the state doc 00 says turns a valid reuse into a
-            # recompute "or worse".
+            # short".
             'FirstPassFDR'     = @('.1st-pass.fdr_scores.bin',
-                                   '.1st-pass.fdr_scores.bin.FirstPassFDR.osprey.task',
                                    '.1st-pass.model.json',
-                                   '.1st-pass.model.json.FirstPassFDR.osprey.task',
                                    '.1st-pass.stratum.json',
-                                   '.1st-pass.stratum.json.FirstPassFDR.osprey.task',
-                                   '.reconciliation.json',
-                                   '.reconciliation.json.FirstPassFDR.osprey.task')
+                                   '.reconciliation.json')
             # The per-run 2nd-pass sidecar and the decoy side of its competition are
             # PerFileRescoring outputs since issue #4486 - the worker computes and writes them,
             # and SecondPassFDR only folds them. This table still listed the sidecar under
-            # SecondPassFDR with the old stamp name, so `-Task SecondPassFDR -LinkFrom` staged
+            # SecondPassFDR under its old producer, so `-Task SecondPassFDR -LinkFrom` staged
             # NEITHER file and Stage 7 silently fell back to recomputing every file from the
             # 1st-pass sidecars. Two Stage-7 A/B measurements were taken that way before anyone
             # noticed: both arms ran the same fallback, so the comparison showed no difference
             # and read as "verification is free".
             #
             # Safe for the modes that do NOT have a per-file half (transfer, the retrain modes):
-            # those never write a PerFileRescoring-stamped sidecar, so nothing matches and
-            # nothing links.
+            # those never write a per-run 2nd-pass sidecar, so nothing matches and nothing
+            # links.
             'PerFileRescoring' = @('.scores-reconciled.parquet',
-                                   '.scores-reconciled.parquet.PerFileRescoring.osprey.task',
                                    '.2nd-pass.fdr_scores.bin',
-                                   '.2nd-pass.fdr_scores.bin.PerFileRescoring.osprey.task',
-                                   '.2nd-pass.fdr_decoys.bin',
-                                   '.2nd-pass.fdr_decoys.bin.PerFileRescoring.osprey.task')
+                                   '.2nd-pass.fdr_decoys.bin')
             # Analysis-wide outputs are not per-file, so there is nothing here to hard-link per
             # input. They are NOT absent from the relay, though - see $ANALYSIS_ARTIFACTS below.
             'SecondPassFDR'    = @()
             # -Task ModelDiagnostics is not a pipeline stage that produces per-file artifacts;
             # it sits at the END of the table so that "everything strictly before it" is the
             # WHOLE analysis. That is exactly the bed a diagnostics re-entry needs: it re-enters
-            # on a completed run and must find every stage's outputs, including their stamps.
+            # on a completed run and must find every stage's outputs (stamps included, since
+            # each output carries its own).
             'ModelDiagnostics' = @()
         }
         # Analysis-wide artifacts: ONE file for the whole cohort, named after the output blib's
@@ -830,17 +888,18 @@ function Invoke-OspreyDatasetRun {
         # instead of a silently different answer.
         $ANALYSIS_ARTIFACTS = [ordered]@{
             'PerFileScoring'   = @()
-            # EACH ARTIFACT'S .osprey.task STAMP TRAVELS WITH IT, exactly as the per-file
-            # table's entries carry theirs. It did not, and that is the expensive kind of
-            # omission: a staged bed held out.1st-pass.fdr_experiment.bin without its stamp,
-            # so a task asking "is this output current?" got NO for an artifact that was in
-            # fact complete, declined to adopt the finished first pass, and re-ran it - 4h46m
-            # on a 446-run cohort, to produce a report identical to the one the fold produces
-            # in minutes. Nothing in the output says which of the two happened.
-            # retained_base_ids.bin is deliberately unstamped here: no task declares it as an
-            # output, so there is no stamp to carry and asking for one would only warn.
+            # EACH ARTIFACT'S STAMP NOW TRAVELS INSIDE IT (the binary-sidecar trailer), so
+            # linking the file is the whole job. When stamps were separate .osprey.task files
+            # this was the expensive kind of omission: a staged bed held
+            # out.1st-pass.fdr_experiment.bin without its stamp, so a task asking "is this
+            # output current?" got NO for an artifact that was in fact complete, declined to
+            # adopt the finished first pass, and re-ran it - 4h46m on a 446-run cohort, to
+            # produce a report identical to the one the fold produces in minutes. Nothing in
+            # the output says which of the two happened. A missing ARTIFACT still has exactly
+            # that effect, which is why both FirstPassFDR outputs are listed.
+            # retained_base_ids.bin is now a declared FirstPassFDR output with its own embedded
+            # stamp, so it is part of the "is every output current?" question too.
             'FirstPassFDR'     = @('.1st-pass.fdr_experiment.bin',
-                                   '.1st-pass.fdr_experiment.bin.FirstPassFDR.osprey.task',
                                    '.1st-pass.retained_base_ids.bin')
             'PerFileRescoring' = @()
             # The analysis-wide 2nd-pass experiment sidecar is SecondPassFDR's own end-of-join
@@ -855,16 +914,14 @@ function Invoke-OspreyDatasetRun {
             # -LinkThroughTask carries the loop through SecondPassFDR - a plain
             # `-Task SecondPassFDR` re-measurement still stops before this row and regenerates
             # its own blib, which is what that mode is for.
-            'SecondPassFDR'    = @('.2nd-pass.fdr_experiment.bin',
-                                   '.2nd-pass.fdr_experiment.bin.SecondPassFDR.osprey.task',
-                                   '.blib', '.blib.SecondPassFDR.osprey.task')
+            'SecondPassFDR'    = @('.2nd-pass.fdr_experiment.bin', '.blib')
             'ModelDiagnostics' = @()
         }
         # Everything strictly BEFORE the task under test. No -Task keeps the historical
         # Stage 1-4 behavior, so existing callers are unaffected.
         #
         # -LinkThroughTask makes it INCLUSIVE, which is what a re-entry needs rather than a
-        # re-measurement: the task's own outputs and stamps have to be on disk for it to
+        # re-measurement: the task's own (self-stamped) outputs have to be on disk for it to
         # recognise that it has already run. See the parameter's own note for why getting this
         # wrong is silent.
         # -LinkUpTo wins over the -Task-derived default, and over -LinkThroughTask with it:
@@ -1050,7 +1107,19 @@ function Invoke-OspreyDatasetRun {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     # Out-Host, or Tee-Object's pipeline output becomes this function's return value and
     # the caller's `exit $exitCode` receives the whole transcript instead of the code.
-    & $ospreyExe @cliArgs *>&1 | Tee-Object -FilePath $log -Append | Out-Host
+    if ($ProfileTo) {
+        $dotTrace = Get-Command 'dottrace' -ErrorAction SilentlyContinue
+        if (-not $dotTrace) {
+            throw 'dottrace not found. Install: dotnet tool install --global JetBrains.dotTrace.GlobalTools'
+        }
+        "Profile: $ProfileTo" | Add-Content -Path $log
+        $traceArgs = @('start', '--profiling-type=Sampling', "--save-to=$ProfileTo", '--overwrite',
+                       '--propagate-exit-code', $ospreyExe, '--') + $cliArgs
+        & $dotTrace.Source @traceArgs *>&1 | Tee-Object -FilePath $log -Append | Out-Host
+    }
+    else {
+        & $ospreyExe @cliArgs *>&1 | Tee-Object -FilePath $log -Append | Out-Host
+    }
     $exit = $LASTEXITCODE
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +

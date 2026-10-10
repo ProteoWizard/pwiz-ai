@@ -141,6 +141,10 @@
     [COUNT] / [STAGE-WALL] lines the route checks and memory scripts read. Use it for a run
     whose purpose is to read the default log a user sees.
 
+.PARAMETER ProfileTo
+    Run Osprey under dotTrace sampling and save the snapshot to this .dtp path. Combine with
+    -Task X -LinkFrom <run> to profile one stage at cohort scale.
+
 .PARAMETER Fresh
     Timestamp the output directory name. Use when repeating an arm you have already run:
     Osprey adopts per-file caches it finds in the output directory, so reusing one turns a
@@ -200,6 +204,7 @@ param(
     [switch]$NoModelDiagnostics,
     [switch]$TrainingExport,
     [switch]$NoPerfStats,
+    [string]$ProfileTo,
     [switch]$WhatIf
 )
 

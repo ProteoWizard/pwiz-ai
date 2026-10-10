@@ -129,13 +129,12 @@ Copy-Item $blibInWork $coldBlib -Force
 Write-Host ("  COLD wall: {0:mm\:ss}; blib: {1} bytes" -f $rCold.wall, (Get-Item $coldBlib).Length) -ForegroundColor Green
 
 # ----- Phase WARM (resume) -----
-# Delete only the blib + any blib validity sidecar so SecondPassFDR re-runs while
-# every upstream task's outputs stay valid on disk (driver skips them ->
-# downstream Demand fires the pure Rehydrate paths).
+# Delete only the blib so SecondPassFDR re-runs while every upstream task's
+# outputs stay valid on disk (driver skips them -> downstream Demand fires the
+# pure Rehydrate paths). The blib carries its own validity stamp (an
+# OspreyMetadata row), and a task is only skipped when every declared output
+# exists, so deleting the blib is all it takes - there are no .osprey.task files.
 Remove-Item $blibInWork -Force
-Get-ChildItem -Path $workDir -Filter '*.osprey.task' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like 'output.blib*' -or $_.Name -like '*SecondPassFDR*' } |
-    Remove-Item -Force -ErrorAction SilentlyContinue
 Write-Host "[WARM] resume re-run (upstream outputs valid -> pure Rehydrate paths) ..." -ForegroundColor Cyan
 $rWarm = Invoke-Run -LogName 'warm.log'
 if (-not (Test-Path $blibInWork)) { Write-Host "WARM produced no output.blib" -ForegroundColor Red; exit 1 }

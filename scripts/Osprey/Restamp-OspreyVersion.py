@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 """Change the Osprey build stamp on per-file artifacts WITHOUT re-scoring them.
 
+LEGACY DIRECTORIES ONLY.  This applies only to run directories written by Osprey
+builds from BEFORE embedded validity stamps, i.e. directories that still hold
+`<artifact>.<Task>.osprey.task` sidecar files.  Current builds write no such
+files: every artifact carries its own stamp INSIDE itself
+(`osprey-validity/1;task=...;version=...;key=...` as a JSON first property, a
+parquet `osprey.validity` footer entry, a binary-sidecar trailer, or a blib
+OspreyMetadata row), and moving that version would mean rewriting the artifact.
+For those newer directories the supported route is OSPREY_VERSION_OVERRIDE on the
+consuming run, set to the version the artifacts were written with.  A directory
+with no `.osprey.task` files is reported and skipped (not an error).  Note that a
+current build reads legacy directories as stale regardless (they carry no
+embedded stamp), so this tool is now useful only with an Osprey build that still
+reads `.osprey.task` files.
+
 `ParquetScoreCache.CheckParquetMetadata` hard-fails on any `osprey.version`
 difference, including a different daily build of the same release line, so a
 cohort scored across two days cannot be joined even when the scoring is
@@ -20,8 +34,9 @@ the later stages' task files or their binary sidecars - those embed the version
 internally, so restamping the marker without the sidecar would create exactly
 the inconsistency this tool exists to avoid.
 
-That leaves `OspreyDatasetRun.psm1`'s auto-pin, which globs `*.osprey.task` and
-reads whichever sorts first - for a plate directory that is
+That leaves `OspreyDatasetRun.psm1`'s auto-pin, which for a legacy directory
+(no embedded stamp in its .calibration.json) falls back to globbing
+`*.osprey.task` and reading whichever sorts first - for a plate directory that is
 `.1st-pass.fdr_scores.bin.FirstPassFDR.osprey.task`, which this deliberately does
 NOT touch.  **Pass `OSPREY_VERSION_OVERRIDE` explicitly on the consuming run** so
 the auto-pin is skipped rather than reading a stamp from a stage that is about to
@@ -89,6 +104,20 @@ TASK_GLOB = "*.PerFileScoring.osprey.task"
 
 class PatchError(Exception):
     pass
+
+
+def has_legacy_tasks(d):
+    """True when `d` was written by a build that still wrote `.osprey.task` sidecars.
+
+    A directory without any has embedded stamps (or no Osprey output at all); there is
+    nothing this tool can safely patch there, so it is skipped with a note, not failed.
+    """
+    if glob(os.path.join(d, "*.osprey.task")):
+        return True
+    print("    no .osprey.task files - nothing to restamp. This tool applies only to "
+          "directories written before embedded validity stamps; for newer directories set "
+          "OSPREY_VERSION_OVERRIDE on the consuming run instead.")
+    return False
 
 
 def read_parquet_version(path):
@@ -260,6 +289,8 @@ def restamp_search_hash(args):
     for d in args.dirs:
         parquets = sorted(glob(os.path.join(d, "*.scores.parquet")))
         print("\n=== %s  (%d parquet) ===" % (d, len(parquets)))
+        if not has_legacy_tasks(d):
+            continue
         record = []
         for p in parquets:
             stem = os.path.basename(p)[: -len(".scores.parquet")]
@@ -370,6 +401,8 @@ def main():
     for d in args.dirs:
         parquets = sorted(glob(os.path.join(d, "*.scores.parquet")))
         print("\n=== %s  (%d parquet) ===" % (d, len(parquets)))
+        if not has_legacy_tasks(d):
+            continue
         record = []
         for p in parquets:
             stem = os.path.basename(p)[: -len(".scores.parquet")]

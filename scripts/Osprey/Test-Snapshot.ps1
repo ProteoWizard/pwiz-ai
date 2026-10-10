@@ -621,18 +621,18 @@ $stageConfig = @{
 
 # Artifacts that downstream stages need to enter at the right pipeline
 # checkpoint. Same patterns as Freeze-PostStage4 in Test-Regression.ps1.
-# .osprey.task validity sidecars are included so the resume-aware
-# gates in PerFileScoring / FirstPassFDR / PerFileRescore / SecondPassFDR see
-# their per-task signals at the next stage boundary instead of seeing
-# bare binaries with no metadata to validate.
+# Each artifact carries its own validity stamp (JSON first property, parquet
+# footer, binary-sidecar trailer), so copying the artifact is enough for the
+# resume-aware gates in PerFileScoring / FirstPassFDR / PerFileRescore /
+# SecondPassFDR to see their per-task signals at the next stage boundary.
+# (Osprey no longer writes or reads separate .osprey.task sidecars.)
 $downstreamArtifactPatterns = @(
     '*.scores.parquet',
     '*.scores-reconciled.parquet',
     '*.calibration.json',
     '*.1st-pass.fdr_scores.bin',
     '*.2nd-pass.fdr_scores.bin',
-    '*.reconciliation.json',
-    '*.osprey.task'
+    '*.reconciliation.json'
 )
 
 # ----------------------------------------------------------------------

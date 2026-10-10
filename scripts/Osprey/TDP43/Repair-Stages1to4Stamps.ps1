@@ -4,9 +4,23 @@
     Re-stamp the TDP-43 Stage 1-4 staging directory so -LinkFrom resumes again.
 
 .DESCRIPTION
+    LEGACY DIRECTORIES ONLY. This applies only to staging directories written by Osprey builds
+    from BEFORE embedded validity stamps - directories that still hold
+    <artifact>.<Task>.osprey.task sidecar files. Current builds write no such files: each
+    artifact carries its stamp INSIDE itself (the .calibration.json first property, the
+    .scores.parquet 'osprey.validity' footer entry), and changing it would mean rewriting the
+    artifact rather than patching a copy of a small JSON file. For those newer directories the
+    supported route for reuse across builds is OSPREY_VERSION_OVERRIDE; a validity-key change
+    (like the one below) means the artifacts must be recomputed. A -Source with no .osprey.task
+    files is reported and left alone (exit 0, no destination written). A current build reads
+    legacy directories as stale regardless, so this is useful only with a build that still
+    reads .osprey.task files.
+
     The Stages1to4 staging directory exists so a Stage 5/6 measurement costs ~70 minutes
     instead of hours: -LinkFrom hard-links its .scores.parquet / .calibration.json (plus
-    their .osprey.task stamps) into a fresh run, and Osprey skips PerFileScoring.
+    their .osprey.task stamps) into a fresh run, and Osprey skips PerFileScoring. NOTE: the
+    current OspreyDatasetRun.psm1 -LinkFrom no longer links .osprey.task files at all, so the
+    patched stamps this writes travel only with an older copy of that module or a manual link.
 
     pwiz cb9b68c60 made the peak-pick model participate in the resume validity key
     UNCONDITIONALLY (OspreyTask.ValidityKey -> OspreyEnvironment.PickValidityKeySuffix), so
@@ -39,6 +53,16 @@ $ErrorActionPreference = 'Stop'
 
 if (-not (Test-Path $Source)) {
     throw "Source staging directory not found: $Source"
+}
+
+# Checked BEFORE the destination is touched: a source with embedded stamps has nothing this
+# script can patch, and deleting/recreating -Destination for it would only destroy work.
+if (-not (Get-ChildItem -LiteralPath $Source -File -Filter '*.osprey.task' -ErrorAction SilentlyContinue |
+          Select-Object -First 1)) {
+    Write-Host ("No .osprey.task files in $Source - nothing to re-stamp. This script applies only " +
+                "to directories written before embedded validity stamps; for newer directories " +
+                "use OSPREY_VERSION_OVERRIDE (version) or recompute (validity-key change).")
+    return
 }
 
 # REFUSE to write into the source. The next statement deletes $Destination recursively, so
