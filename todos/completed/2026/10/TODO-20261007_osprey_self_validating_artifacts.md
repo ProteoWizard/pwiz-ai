@@ -7,11 +7,9 @@
   `Skyline/work/20261006_osprey_perfilescoring_round3` (carries the FdrScoresSidecar 1 MB write buffer this
   work touches again)
 - **Created**: 2026-10-07
-- **Status**: READY FOR PR. On master via the perf branch, local, not pushed. Review fixes 39fbb39ff2;
-  unit 649/649, inspection 0/0, regression -Dataset All 48/0, resume drill PASS (both kill points). The matching ai/scripts changes are UNCOMMITTED in C:\proj\ai on purpose
-  - commit them when this branch merges (see 2026-10-08 entry).
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#4809](https://github.com/ProteoWizard/pwiz/pull/4809) (stacked on #4808)
+- **PR**: [#4809](https://github.com/ProteoWizard/pwiz/pull/4809) (merged 2026-10-09)
 
 ## Objective
 
@@ -96,8 +94,8 @@ held, and it is the source of several defects (below).
 - [x] 9b. SEA-AD subset resume drill (kill mid-FirstPassFDR and mid-PerFileRescoring, resume, compare) -
       both legs blib-identical to straight-through at 1e-9 (2026-10-08 entry)
 - [x] 10a. `/code-review max` in C:\proj\pwiz-validity - 15 findings triaged with Brendan, fixes in 39fbb39ff2
-- [ ] 10b. PR (base: perf round 3 branch until it merges, then master)
-- [ ] 11. Commit the ai/scripts changes when this branch merges (they assume embedded stamps)
+- [x] 10b. PR #4809 (stacked on #4808, retargeted to master after it merged)
+- [x] 11. Commit the ai/scripts changes when this branch merges (they assume embedded stamps)
 - [ ] Follow-ups (separate work): per-file copies of the experiment-wide stratum.json / model.json
       (82 x 9.6 MB); `OspreyTask.Inputs()` overrides now unused; the early ReconciledPaths decision in
       PerFileRescoreTask (RescoredPoolPlan) no longer required; FirstPassFdrTask.MoveHarnessProductAside
@@ -198,5 +196,21 @@ held, and it is the source of several defects (below).
   reconciled parquet) adopted=4 rescore=8, B2 (kill at 5/12 first-pass sidecars) kept 5 and reused the
   model; both blibs 0 differences vs drill A at 1e-9. READY FOR PRs (perf first, validity stacked on it).
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261007_osprey_self_validating_artifacts.md` before starting work.
+### 2026-10-09 - Merged
+
+PR #4809 merged as commit af30974a4a (squash; admin override of the branch policy that currently requires an
+approving review). Rebased onto master bc948036a9 (#4780 per-stage parallel files and #4804 FirstPassFDR
+lanes came in cleanly), then retargeted to master after #4808 merged and updated by merging master. Shipped:
+validity stamps embedded in every artifact, the per-file done predicate, the review fixes (39fbb39ff2),
+README/workflow-diagram updates and per-task file counts in Osprey-workflow.html (per-run files first,
+experiment-wide in amber). Gates: 649/649 + inspection 0/0, regression-parallel -Dataset All 48/0, SEA-AD
+resume drill PASS, TeamCity Osprey Perf/Regression build 4208781 SUCCESS. Copilot never reviewed the PR
+(stacked, then no review after the retarget). The held ai/scripts changes (embedded-stamp versions of the
+runners and helpers, `-Resume` version pin, `-ProfileTo`) committed to pwiz-ai with this entry.
+
+Follow-ups, not done here: #4665 now carries the rule "PerFileRescoring always writes
+`<stem>.2nd-pass.fdr_scores.bin`" (protein-compact no-work runs plus transfer mode), which removes
+SecondPassFDR's per-run write path, the two-owner handling and the `osprey.rescored=0` exemption, and the
+diagram's tooltip caveat. Still open from the Tasks list: per-file copies of the experiment-wide
+stratum/model JSON, unused `OspreyTask.Inputs()` overrides, the early ReconciledPaths decision, and
+`MoveHarnessProductAside`.
