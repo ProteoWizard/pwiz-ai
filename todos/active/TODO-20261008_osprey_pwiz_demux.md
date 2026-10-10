@@ -39,6 +39,78 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Status 2026-10-10 (day session)
+
+Plan (Brendan): fix #4814's EncyclopeDIA test; then the replicated head-to-head against #4710 and the
+speed re-measure; the Osprey PR is posted LAST, only with current numbers, linking the HTML, and
+only if its speed is comparable to #4710's.
+
+- **`TestEncyclopeDiaSearchTutorialDraft` re-baselined and pushed on both stacks** (local runs pass,
+  `ai/.tmp/sessions/20261010-encyc/test-480{5,4}-final*.log`):
+  - #4805 (3d735adf22): 369/714/714/5013 (was 362/684/684/4786), first mass-error mean -0.2, click
+    point unchanged, audit logs en/fr/ja/tr/zh.
+  - #4814 (09255b6d53, then merge of #4805 14656bfb20 resolved to #4814's values): 366/698/698/4907,
+    third SD 2.4, audit logs; new click point (32.17265, 1.157e7) because the 3+ precursor of
+    DAPQDFHPDR (399.85, apex 3.3e7, the old click's peak) is no longer in the document and the
+    2+ is shown. Chromatograms come from the ORIGINAL wide_1a/1b mzML; demux only feeds EncyclopeDIA.
+  - So in EncyclopeDIA too the corrected span is slightly lower than #4805 alone (-2.1% transitions,
+    -2.2% peptides), one small dataset; two of the four searched files are pre-demuxed in the zip.
+  - One local run under a 32-thread Osprey load gave 366/699/699/4915 (others 4907, as CI);
+    msconvert's demux output is byte-identical run to run, so the spread is downstream (EncyclopeDIA).
+  - `TestDiaTtofDiaUmpireTutorial` (14107 vs 14094) fails on master's AWS agents too (build 4208235)
+    and passed on MacCoss Agent 1; not ours. Working copy: `C:\proj\pwiz-work2`.
+- **Osprey PR branch** `Skyline/work/20261010_osprey_pwiz_demux` (pwiz-work1, local, 9f43e6ddfc):
+  #4815 + merges of #4813 and #4814 heads + the Osprey part of `nightlywork/demux-pr-stack`. The
+  Osprey msconvert-fixture check is now structural only (#4814 departs from C++ on purpose; C++
+  parity is pwiz's test). Gate: 651/651, inspection clean. Provenance: EV13 cache = the
+  corrected-span arm's apart from #4805's snapping (24 bytes, cosine 1.0000;
+  `ai/.tmp/sessions/20261010-h2h/compare-ospreypr-vs-corrected.txt`).
+- **Head-to-head** (in flight): `ai/scripts/Osprey/Demux/Run-DemuxSearchArms.ps1` (new; shared
+  per-implementation demux cache, seeds via OSPREY_DIAG_SEED, SEED-KNOB guard), six runs, train
+  1.5M, seeds 42/1/2, into `D:\test\osprey-runs\pwiz-demux\h2h`. Arms: pr4710-weighted,
+  pr4710-msconvert (snapshot `_bin\pr4710-onmaster-seed` = #4710 merged with master + knob, local
+  branch `nightlywork/pr4710-on-master` in C:\proj\pwiz; Osprey.DemuxTool dropped from that sln, old
+  pwiz-sharp paths), pwiz (`_bin\pwizdemux-ospreypr-seed` = PR branch + knob,
+  `nightlywork/ospreypr-seed`).
+
+### Replicated head-to-head, 2026-10-10 (done)
+
+Six Eclipse runs, human Carafe + 1:1 entrapment, train 1.5M, experiment q <= 0.01
+(`D:\test\osprey-runs\pwiz-demux\h2h\compare-all.txt`):
+
+| Arm | Precursors s42 / s1 / s2 | Mean | Peptides mean | FDP range |
+|---|---|---|---|---|
+| pwiz (Osprey PR stack) | 37,436 / 37,928 / 37,468 | 37,611 | 32,921 | 0.47-0.52% |
+| #4710 weighted | 38,513 / 36,478 / 36,523 | 37,171 | 32,719 | 0.47-0.57% |
+| #4710 msconvert-style | 37,318 / 37,355 / 37,178 | 37,284 | 32,837 | 0.43-0.48% |
+
+Equivalent within the seed spread (pwiz +1.2% / +0.9% nominal); no #4710 engine to port.
+
+### Speed, 2026-10-10 08:09 (idle machine, `D:\test\osprey-runs\pwiz-demux\speed\speed.tsv`)
+
+EV13 `--task SpectraCache --demux auto`, interleaved, fresh cache: pwiz 38.8 / 38.6 s (57.4 s first,
+cold OS cache), peak WS 4.4 GB; #4710 weighted 42.8 / 41.4 / 45.2 s, 9.4 GB; #4710 msconvert-style
+21.9 / 22.9 / 23.1 s, 3.0 GB (parse 11.6 s to a plain .spectra.bin, then demux 6.6 s in memory).
+Known pwiz serial costs: metadata sweep ~10 s (`SpectrumList_Thermo.PopulatePrecursor`), vendor
+decode ~14 s on one accessor.
+
+### Profile of the pwiz path (dotTrace sampling, `D:\test\osprey-runs\pwiz-demux\profile\`)
+
+Brendan: "almost a negligible improvement from parallelization" - profile it. Root cause of the
+gap: `SpectrumList_Thermo.FindPrecursorIndex`, 22 s OWN time on the serialized read path. Eclipse DIA
+scans carry "Master Scan Number: 0"; the C++-parity code enters master-scan mode for a present key,
+the walk can never match scan 0 and its early exit (`masterScan > prev.Scan`) never fires, so every
+spectrum walks back to scan 1 (O(n^2)). Fix: return -1 when masterScan == 0 (same result).
+- Osprey `--demux auto` EV13: 40.0 s -> **23.9 s**, `.demux.spectra.bin` byte-identical
+  (`speed-master0\speed.tsv`). #4710 msconvert-style: 22.4 s.
+- msconvert plain vendor-centroid EV13: 29.4 s -> 21.9 s, mzML identical (`msconvert-master0\`).
+- Branch `Skyline/work/20261010_thermo_master_scan_zero` (pwiz-work2, 8df74945cb, from master, local,
+  NOT pushed); Thermo.Tests 15/15. Measurement copy on `nightlywork/thermo-master0` (pwiz-work1).
+- After the fix the solve workers dominate: ~429 s CPU (~13 s at 32 threads), ~47% of it MathNet
+  natural-spline construction in `BuildDeconvBlock` (closed form changes low bits: separate, gated).
+- `Profile-Osprey.ps1` gained `-ReportPrefixes` (e.g. 'Pwiz.','ThermoFisher','MathNet'); fixed its
+  swapped TOTAL TIME column headers.
+
 ## Status 2026-10-10 morning
 
 - **#4815** (PR 3: DetectScheme + MsDataFileImpl demultiplex option + Params record) opened against master,

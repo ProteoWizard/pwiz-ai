@@ -58,6 +58,8 @@ its output with DIA-NN, and hold the Python prototypes the C# was built from.
 | `Run-WiffSliceArm.ps1 -Exe <tool> -Name <arm> [-Flags ...] [-DiannExtra ...] [-ScanningSwath]` | The same, read from the `.wiff2` (needed for `--centroid events`; `--raw --centroid events` is the undemultiplexed control). Slow: the SDK reads profile at about an hour per replicate for the slice. |
 | `Run-FullArm.ps1 -Exe <tool> -Name <arm> [-Flags ...]` | Whole runs from `.wiff2`, the three in parallel, then a three-run search at the whole-run pinned settings. About 3.5 h of demux on an idle machine, then about 2 h of search. |
 | `Run-EclipseSearch.ps1 -Name <arm> -Tool <tool>` | The Eclipse runs through `--scheme staggered`, then an Osprey search. |
+| `Run-DemuxSearchArms.ps1 -Impl <name> -Exe <Osprey.exe> [-Engine weighted\|msconvert] [-Seeds 42,1,2]` | Six-run Eclipse search with `--demux auto`, one arm per seed (`<Root>\<Impl>-s<seed>`), the demux cache shared per implementation. Seeds other than 42 need a measurement build with `OSPREY_DIAG_SEED` (a `SEED-KNOB` file beside the exe). Compare n >= 3 seeds at `-MaxTrainSize 1500000` (default); pwiz #4812. |
+| `Measure-DemuxCacheSpeed.ps1 -Arms 'name=exe[=engine],...' [-Reps 3]` | Wall time and peak working set of `--task SpectraCache --demux auto` on EV13, arms interleaved, fresh cache each run, into `<Root>\speed.tsv`. Idle machine only. |
 | `Run-TimingAB.ps1 -Old <tool> -New <tool>` | Two tool builds on the same short range, timed, outputs diffed (`Diff-Mzml.py`). |
 
 ## Analysis

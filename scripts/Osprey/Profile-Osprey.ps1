@@ -152,7 +152,12 @@ param(
     # or "00:03:30"). Needed whenever the interesting part is a prefix of a much longer run -
     # profiling a 446-run resume's STARTUP, say, where the rescore that follows runs for
     # hours. Killing the process instead risks losing the snapshot entirely.
-    [string]$Timeout = ""
+    [string]$Timeout = "",
+
+    # Namespace prefixes the hot-spot report keeps (case-insensitive). The default reports
+    # Osprey's own code; add e.g. 'Pwiz.' to see ProteoWizard (pwiz-sharp: Pwiz.Analysis,
+    # Pwiz.Data, Pwiz.Vendor) when profiling reading or demultiplexing.
+    [string[]]$ReportPrefixes = @("pwiz.Osprey")
 )
 
 $ErrorActionPreference = "Stop"
@@ -477,7 +482,13 @@ Write-Host "Snapshot: $OutputPath ($($snapshotSize.ToString('F1')) MB)" -Foregro
 # Generate XML report
 if ($reporterExe) {
     $patternFile = Join-Path $aiTmpDir "dottrace-osprey-pattern.xml"
-    if (-not (Test-Path $patternFile)) {
+    $customPrefixes = ($ReportPrefixes.Count -ne 1 -or $ReportPrefixes[0] -ne "pwiz.Osprey")
+    if ($customPrefixes) {
+        $patternFile = Join-Path $aiTmpDir "dottrace-pattern-$((($ReportPrefixes -join '_') -replace '[^A-Za-z0-9_]', '')).xml"
+        $lines = $ReportPrefixes | ForEach-Object { "  <Pattern PrintCallstacks=`"Full`">$([regex]::Escape($_)).*</Pattern>" }
+        (@("<Patterns>") + $lines + @("</Patterns>")) -join "`n" | Out-File -FilePath $patternFile -Encoding UTF8
+    }
+    elseif (-not (Test-Path $patternFile)) {
         @"
 <Patterns>
   <Pattern PrintCallstacks="Full">pwiz\.Osprey\..*</Pattern>
@@ -505,13 +516,13 @@ if ($reporterExe) {
 
             # Top N by OwnTime (where the CPU actually spends time)
             $byOwnTime = $allFunctions |
-                Where-Object { $_.FQN -like "pwiz.Osprey*" } |
+                Where-Object { $fqn = $_.FQN; @($ReportPrefixes | Where-Object { $fqn -like "$_*" }).Count -gt 0 } |
                 Sort-Object { [double]$_.OwnTime } -Descending |
                 Select-Object -First $TopN
 
             if ($byOwnTime) {
                 Write-Host ""
-                Write-Host "Top $TopN Hot Spots by OWN TIME (pwiz.Osprey.*):" -ForegroundColor Yellow
+                Write-Host "Top $TopN Hot Spots by OWN TIME ($($ReportPrefixes -join ', ')):" -ForegroundColor Yellow
                 Write-Host ("{0,-70} {1,10} {2,10}" -f "Method", "Own (ms)", "Total (ms)")
                 Write-Host ("{0,-70} {1,10} {2,10}" -f ("-"*70), ("-"*10), ("-"*10))
                 foreach ($fn in $byOwnTime) {
@@ -525,14 +536,14 @@ if ($reporterExe) {
 
             # Top N by TotalTime (call tree perspective)
             $byTotalTime = $allFunctions |
-                Where-Object { $_.FQN -like "pwiz.Osprey*" } |
+                Where-Object { $fqn = $_.FQN; @($ReportPrefixes | Where-Object { $fqn -like "$_*" }).Count -gt 0 } |
                 Sort-Object { [double]$_.TotalTime } -Descending |
                 Select-Object -First $TopN
 
             if ($byTotalTime) {
                 Write-Host ""
-                Write-Host "Top $TopN Hot Spots by TOTAL TIME (pwiz.Osprey.*):" -ForegroundColor Yellow
-                Write-Host ("{0,-70} {1,10} {2,10}" -f "Method", "Total (ms)", "Own (ms)")
+                Write-Host "Top $TopN Hot Spots by TOTAL TIME ($($ReportPrefixes -join ', ')):" -ForegroundColor Yellow
+                Write-Host ("{0,-70} {1,10} {2,10}" -f "Method", "Own (ms)", "Total (ms)")
                 Write-Host ("{0,-70} {1,10} {2,10}" -f ("-"*70), ("-"*10), ("-"*10))
                 foreach ($fn in $byTotalTime) {
                     $name = $fn.FQN -replace '^pwiz\.Osprey\.', ''
