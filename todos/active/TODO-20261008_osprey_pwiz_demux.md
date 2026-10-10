@@ -39,6 +39,15 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Status 2026-10-10 morning
+
+- **#4815** (PR 3: DetectScheme + MsDataFileImpl demultiplex option + Params record) opened against master,
+  reviewer chambm. Review fixes in 2816679980: cycle inferred from at most 5,000 spectra (DDA no longer
+  sweeps the file), window consistency at start/middle/end, reader errors not swallowed. Analysis 185/185,
+  Skyline TestMsDataFileImplDemultiplex + TestDemux pass, Osprey builds.
+- All pwiz-side PRs now open: #4805 -> #4814, #4806 -> #4813, #4815. Next: the Osprey PR (replacing #4710).
+- Presentation draft: `TODO-20261008_osprey_pwiz_demux/demux-integration.html`.
+
 ## Status 2026-10-09 night (PRs opened)
 
 - **#4813** (PR 2b, parallel solve-ahead) opened 20:15, stacked on #4806, reviewer chambm.
@@ -351,3 +360,6 @@ every golden unchanged.
 - 2026-10-09 night: issue #4812; PRs #4814 (1b) and #4813 (2b) opened; PR 3 prepared locally (a984f2ad1a).
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20261010_pwiz_demux_night.md` before starting work.
+- 2026-10-10 morning: #4815 (PR 3) opened; presentation draft demux-integration.html.
+  **Next session handoff**: For detailed startup protocol, read
+  `ai/.tmp/handoff-20261010_osprey_pwiz_demux.md` before starting work.

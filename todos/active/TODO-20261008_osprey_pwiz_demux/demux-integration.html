@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Osprey Demux via ProteoWizard</title>
+<style>
+:root {
+  --bg: #fbfbf9; --fg: #1d1f21; --muted: #5f6368; --rule: #dcdcd6; --card: #ffffff;
+  --accent: #2f5d8a; --good: #2e7d32; --warn: #a15c00; --bad: #b3261e; --code: #f1f1ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16181b; --fg: #e6e6e3; --muted: #a0a4a8; --rule: #33373c; --card: #1d2024;
+    --accent: #8ab4dc; --good: #81c784; --warn: #f0b35a; --bad: #f28b82; --code: #24282d;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16181b; --fg: #e6e6e3; --muted: #a0a4a8; --rule: #33373c; --card: #1d2024;
+  --accent: #8ab4dc; --good: #81c784; --warn: #f0b35a; --bad: #f28b82; --code: #24282d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 4px; }
+h2 { font-size: 1.3rem; margin: 40px 0 8px; padding-top: 12px; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.05rem; margin: 20px 0 6px; }
+p, li { max-width: 72ch; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
+a { color: var(--accent); }
+.callout { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--accent);
+  border-radius: 6px; padding: 12px 16px; margin: 16px 0; }
+.callout.warn { border-left-color: var(--warn); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: .92rem; background: var(--card); }
+th, td { border: 1px solid var(--rule); padding: 6px 9px; text-align: left; vertical-align: top; }
+th { background: var(--code); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.good { color: var(--good); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+.warn { color: var(--warn); font-weight: 600; } .muted { color: var(--muted); }
+.lineage { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px 0; }
+.node { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; font-size: .9rem; }
+.node b { display: block; font-size: .98rem; margin-bottom: 2px; }
+.node.ours { border-color: var(--accent); border-width: 2px; }
+.tag { display: inline-block; font-size: .75rem; padding: 0 6px; border-radius: 10px; border: 1px solid var(--rule); color: var(--muted); }
+footer { margin-top: 48px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>Osprey demultiplexing through ProteoWizard</h1>
+<p class="sub">The alternative to pwiz PR #4710: one demultiplexer, in ProteoWizard, shared by msconvert, Skyline and Osprey.
+Working draft, 2026-10-10. Sources: <code>TODO-20261008_osprey_pwiz_demux.md</code>, <code>pr4710-comparison.md</code>, <code>pr1b-root-cause.md</code>.</p>
+
+<div class="callout">
+<b>The proposal.</b> #4710 adds staggered-window and MSX demultiplexing to Osprey with a new engine of about 10,000 lines
+(<code>Osprey.Demux</code>, <code>Osprey.DemuxTool</code>). ProteoWizard already has a demultiplexer, the one msconvert users
+rely on. Making it fast, correct and reachable through <code>MsDataFileImpl</code> lets Osprey's <code>--demux auto</code> be about
+560 lines of Osprey code, and every fix lands in one place for every tool. The comparison with #4710 that motivated this
+also found and fixed real defects in ProteoWizard's demultiplexer, including one that has been in msconvert since 2017.
+</div>
+
+<h2>Status of the pwiz-side work</h2>
+<div class="scroll"><table>
+<tr><th>PR</th><th>What it does</th><th>State (2026-10-10)</th></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4805">#4805</a></td><td>NNLS iteration limit keeps the last feasible solution (as C++); bin snapping on the original edges (as C++); Eclipse fixture matched to C++ peak by peak</td><td class="good">green, awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4814">#4814</a> (on #4805)</td><td>Search covers each bin's full tolerance window (restores the original Skyline behaviour); a peak on a snapped shared edge counts once</td><td class="good">green, awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4806">#4806</a></td><td>One metadata sweep; spectrum cache sized from the acquisition cycle (211 s to 165 s single-threaded, output identical)</td><td class="good">green, awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4813">#4813</a> (on #4806)</td><td><code>solveThreads=N</code>: blocks solved ahead in parallel (163 s to 92-95 s at 16 threads on EV13, mzML identical); MSConvertGUI box</td><td class="good">green, awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4815">#4815</a></td><td><code>SpectrumListDemux.DetectScheme</code>; <code>MsDataFileImpl</code> demultiplex option; <code>Params</code> as a record</td><td class="warn">opened 2026-10-10, CI running</td></tr>
+<tr><td>Osprey PR</td><td><code>--demux off|auto</code> through <code>MsDataFileImpl</code> (replaces #4710)</td><td class="muted">after PR 3; code exists on the integration branch</td></tr>
+</table></div>
+<p>Provenance: a local stack of #4805 + #4806 + #4813 + the Osprey integration writes an EV13 <code>.demux.spectra.bin</code>
+byte-identical to the overnight branch that found 38,088 precursors, apart from #4805's snapping fix (5 blocks of 158,700 records),
+and its six-run search reproduces 38,088 exactly with the same peptide set.</p>
+
+<h2>Lineage: one algorithm, five engines</h2>
+<div class="lineage">
+  <div class="node"><b>Skyline</b><span class="tag">reference</span><br>Original published implementation (Amodei, Egertson). Demultiplexes only the document's transitions, for chromatograms. Unmaintained; likely to be removed.</div>
+  <div class="node"><b>msconvert C++</b><span class="tag">2017 port</span><br>Whole spectra to mzML; the lab's working tool for years. Retired with the C# port. Introduced the half-width search start.</div>
+  <div class="node ours"><b>pwiz-sharp C#</b><span class="tag">this work</span><br>Port of C++. Now fixed (NNLS limit, snapping, search span), faster, and reachable from <code>MsDataFileImpl</code>.</div>
+  <div class="node"><b>#4710 msconvert-style</b><span class="tag">Osprey.Demux</span><br>Mike's re-implementation; with its reproduction settings it matches pwiz within 0.2%. Defaults differ (covered bins, makima, apportioned output).</div>
+  <div class="node"><b>#4710 weighted</b><span class="tag">Osprey.Demux default</span><br>A different, per-channel weighted algorithm.</div>
+</div>
+<p class="muted">#4710 also carries a ZT Scan (scanning quadrupole) tool, a different acquisition; it is not wired into <code>--demux</code> and ProteoWizard has no counterpart.</p>
+
+<h2>Behaviour, side by side</h2>
+<div class="scroll"><table>
+<tr><th>Behaviour</th><th>Skyline</th><th>C++ msconvert</th><th>pwiz C# (master)</th><th>#4710</th><th>pwiz after these PRs</th></tr>
+<tr><td>NNLS column at the iteration limit</td><td>returns the passive-set solve (can be negative); MSX skips NNLS (clipped least squares)</td><td>keeps last feasible x</td><td class="bad">zeroed the column (lost peaks up to 5e7)</td><td>keeps last feasible x</td><td class="good">keeps last feasible x (#4805)</td></tr>
+<tr><td>Bin search start</td><td>full width</td><td class="bad">half-width: upper window lost above half the top m/z</td><td class="bad">same as C++</td><td>correct</td><td class="good">full width (#4814)</td></tr>
+<tr><td>Snapping of 3+ overlapping bins</td><td>no snapping</td><td>against the original edges</td><td class="bad">in place (port divergence)</td><td>in place</td><td class="good">original edges (#4805)</td></tr>
+<tr><td>Peak on a snapped shared edge</td><td>both bins</td><td>both bins</td><td>both bins</td><td>one bin</td><td class="good">one bin (#4814, credit #4710)</td></tr>
+<tr><td>Block, interpolation, output</td><td colspan="3">7-window slice; natural cubic spline over 3 points; regularized output</td><td>configurable; defaults covered bins, makima, apportioned</td><td>unchanged (covered windows ported and measured, not adopted)</td></tr>
+<tr><td>Spectrum cache</td><td>NumScansBlock x 1.5</td><td>MRU, 1000 spectra</td><td>LRU, 256 (thrashes on 101 windows)</td><td>whole run resident</td><td>sized from the cycle and the MSX block (#4806, #4813)</td></tr>
+<tr><td>Parallelism</td><td>none</td><td>OpenMP across one block's columns; worker threads off</td><td>across one block's columns</td><td>whole run</td><td>blocks solved ahead in parallel, output identical (#4813)</td></tr>
+</table></div>
+
+<h2>What the comparisons found</h2>
+<h3>1. NNLS iteration limit (C# port bug) - #4805</h3>
+<p>On the Eclipse slice, 17 NNLS columns hit the 50-iteration cap; the C# port zeroed them, dropping 26 real peaks (up to 5.0e7) from 23 spectra.
+Keeping the last feasible solution, as C++ does, makes all 408 spectra match C++ at float32 precision. Six-run search: +5.4% precursors (single seed; see the caveat below).</p>
+<h3>2. Search-span regression from 2017 - #4814</h3>
+<p>C++'s <code>SpectrumPeakExtractor</code> is Skyline's <code>TransitionBinner</code> loop, line for line, but subtracts the largest bin
+<em>half</em>-width where Skyline subtracts the full width. Every bin above half the spectrum's highest m/z therefore accepted only part of its
+window: at the top, -10 to 0 ppm instead of +/-10. Neighbour peaks centre on 0 ppm (median within +/-0.07 ppm), so this discards about half
+the real matching intensity there. Against ground truth (fragments of identified peptides), the fix sends 92% of high-m/z fragment intensity to
+the correct window, against 69% before.</p>
+<h3>3. Why the fix first looked like a loss</h3>
+<div class="callout warn">
+<p><b>The corrected span lost 9.5% +/- 3.3% of precursors over five seeds on six Eclipse runs</b>, although its spectra and its Osprey features
+are as good or better (scored under any common frozen model, within +/-1% on every run). The loss was Osprey's first-pass Percolator
+training at its default 300,000-peak cap, where only about 1,000 positives drive the classifier and near-tied choices (initial feature,
+regularization C) decide it. With five times the training data the corrected span is <b>+1.0%</b> (three seeds), and the seed-to-seed spread
+falls from 6-11% to 1-3%. Filed as <a href="https://github.com/ProteoWizard/pwiz/issues/4812">#4812</a>.</p>
+</div>
+<div class="scroll"><table>
+<tr><th>Six Eclipse runs, q &le; 0.01</th><th class="num">Defect span</th><th class="num">Corrected span</th><th class="num">Difference</th></tr>
+<tr><td>Training cap 300k, 5 seeds (mean)</td><td class="num">37,032</td><td class="num">33,507</td><td class="num bad">-9.5% +/- 3.3%</td></tr>
+<tr><td>Training cap 1.5M, 3 seeds (mean)</td><td class="num">37,185</td><td class="num">37,542</td><td class="num good">+1.0% +/- 3.4%</td></tr>
+</table></div>
+
+<h2>What this means for comparing with #4710</h2>
+<div class="callout warn">
+<p>Every head-to-head number so far (pwiz + NNLS fix 38,088 against #4710 weighted 36,453 and msconvert-style 35,664; covered windows
+-7.8%) is a single seed at the 300k cap, where the seed alone moves an arm 6-11%. They are not yet evidence either way. The comparison to
+present is replicated (three seeds or more) at a training cap where the variance is down, ideally with Mike's EV library.</p>
+</div>
+<div class="scroll"><table>
+<tr><th>Engineering, EV13 (Eclipse, 101 staggered windows)</th><th>#4710</th><th>pwiz path</th></tr>
+<tr><td>Code added to Osprey</td><td>~10,000 lines</td><td>~560 lines (+ ~520 in pwiz, shared by all tools)</td></tr>
+<tr><td>Memory</td><td>whole run resident (est. 13-15 GB for a large Astral file)</td><td>streams: 1.99 GB peak vs 1.95 GB plain read</td></tr>
+<tr><td>Vendor file to demux cache (32 threads)</td><td>weighted 44.0 s; msconvert-style 24.0 s</td><td>40-41 s before #4813 (re-measure with it)</td></tr>
+<tr><td>Multiplexing detection</td><td>coverage-weighted heuristic</td><td>msconvert's own mask codec, checked at start, middle and end of the run</td></tr>
+<tr><td><code>--demux off</code> on a multiplexed run</td><td>refuses (exception)</td><td>warns</td></tr>
+</table></div>
+
+<h2>Open</h2>
+<ul>
+<li>#4815 review, then the Osprey PR on the merged pwiz work.</li>
+<li>Replicated head-to-head against both #4710 engines; if either wins beyond the interval, port it into <code>pwiz/analysis/Demux</code> as a new <code>Optimization</code>.</li>
+<li>For Mike: warn or refuse on <code>--demux off</code>; whether <code>auto</code> becomes the default; MSX untested here (no data); ZT Scan as a separate pwiz filter.</li>
+<li>Osprey: the training cap (#4812).</li>
+</ul>
+<footer>Measurements on BRENDANX-i9; runs and logs under <code>D:\test\osprey-runs\pwiz-demux\</code>. Draft for discussion.</footer>
+</main>
+</body>
+</html>
