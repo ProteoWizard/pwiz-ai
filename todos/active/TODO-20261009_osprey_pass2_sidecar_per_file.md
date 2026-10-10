@@ -110,6 +110,9 @@ run instead of crashing; Rust keeps pass-1 values there. Recorded in DIVERGENCES
   experiment sidecars byte-identical). 650/650 tests, zero inspection warnings.
 - Commits (local, not pushed): ff0b2585df, 4a20e9eb7f, 4a035cf0b2, fb0603b9d3. PR body draft:
   ai/.tmp/sessions/20261009-4665/pr-body.md.
+- regression-parallel.ps1 -Dataset All on HEAD fb0603b9d3: **48 PASS / 0 FAIL / 0 SKIP**, 26 min.
+- Next (needs Brendan): push the branch, open the PR (`osprey:` prefix, labels osprey + performance,
+  Fixes #4665 and #4729), then the TeamCity Perf/Regression gate on pull/<N>.
 
 ## Regression Test
 
