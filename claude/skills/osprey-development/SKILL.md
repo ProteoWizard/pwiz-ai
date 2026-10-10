@@ -263,9 +263,14 @@ and `README.md` are the authoritative gate references.
 ## TeamCity Perf/Regression gate (manual - ask, then trigger)
 
 The **Osprey Windows .NET Perf/Regression Tests** config runs `tctest.bat`, i.e.
-`regression.ps1 -TeamCity -Dataset All`, plus a perf leg (~1 hour). It is manual
-and does NOT start on PR open or push, but it must run before human review /
-merge.
+`regression.ps1 -TeamCity -Dataset All`, plus a perf leg. **About 40 minutes** on
+MacCoss TeamCity Agent 1 (48 legs; builds #298-300, 2026-10: 38:38-41:35 regression wall),
+against ~26 minutes for `regression-parallel.ps1 -Dataset All` on a quiet 32-thread dev box.
+Before quoting a duration, read the regression wall from a RECENT build - search with
+`branch='default:any'`, since the default search returns only master builds, and the last
+master build can be weeks old with a different leg count. It is manual and does NOT start
+on PR open or push - not on master either, so a master run to compare a PR against has to
+be queued by hand (omit `branch`) - but it must run before human review / merge.
 
 **It runs ALL FOUR datasets with no `-Skip*` switch**, so whatever `regression.ps1`
 gains, this config runs - but NOT every mode on every dataset: each dataset's

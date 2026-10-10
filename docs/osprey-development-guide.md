@@ -2139,12 +2139,12 @@ other developers on the team complained about the wait. One asked-for run on a
 ready candidate is the entire budget.
 
 If you find yourself wanting a second run because the branch moved, the answer is
-almost always another local `-Dataset All`, not another hour of the shared agent.
+almost always another local `-Dataset All`, not another ~40 minutes of the shared agent.
 
 Judgment about whether the run is warranted at all still applies: a small
 identity-only follow-up to an already-green PR can reasonably merge on local
-gates. Weigh what the CI run uniquely buys (below) against an hour of a shared,
-contended agent.
+gates. Weigh what the CI run uniquely buys (below) against ~40 minutes of a shared,
+contended agent (48 legs, builds #298-300, 2026-10; check a recent build before quoting it).
 
 ### Check whether you can actually trigger it
 

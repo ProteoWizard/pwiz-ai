@@ -439,7 +439,8 @@ def register_tools(mcp):
         - bt83: Core Windows x86_64
         - ProteoWizard_OspreyWindowsNet: Osprey Windows .NET unit build
         - ProteoWizard_OspreyWindowsNetPerfRegressionTests: Osprey Perf/Regression
-          (Stellar+Astral, ~1hr, manual/overnight; use branch='pull/<N>')
+          (all four datasets, ~40 min as of 2026-10, manual only - master too;
+          use branch='pull/<N>', or omit branch for master)
 
         Args:
             build_type_id: Build configuration ID (e.g., 'bt209')
