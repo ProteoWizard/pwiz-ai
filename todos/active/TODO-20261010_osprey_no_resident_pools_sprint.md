@@ -31,7 +31,8 @@ this file is the plan for the memory rows of it. Inventory re-checked 2026-10-10
 
 1. **Bank a final A/B before deleting each switch** - one `regression-parallel.ps1 -Dataset All`
    (or `regression.ps1 -Dataset All`) with the switch off, against the golden, recorded here, as
-   was done for `OSPREY_STAGE7_STREAM`.
+   was done for `OSPREY_STAGE7_STREAM`. **SUPERSEDED 2026-10-10**: both remaining resident arms
+   abort in Stage 7, so neither A/B can run; Brendan chose deletion with the golden as oracle.
 2. **`OSPREY_DUMP_PERCOLATOR`: drop it.** No bisection is active; a corrected version on the
    streamed first pass can be written when next needed. Remove the "re-run with projection-off"
    messages (FirstPassFdrTask ~1669-1698) with it.
@@ -45,26 +46,73 @@ this file is the plan for the memory rows of it. Inventory re-checked 2026-10-10
 
 ## PR 1 - retire `compacted-entries-buffer` (`OSPREY_STAGE6_STREAM_SURVIVORS=0`, catalogue A2)
 
-~170 prod + ~70 test lines, no blockers.
-- [ ] Bank the A/B with `OSPREY_STAGE6_STREAM_SURVIVORS=0 OSPREY_ALLOW_UNFIXED_RESIDENT=compacted-entries-buffer`
-- [ ] Delete `PerFileScoringTask.Stage6ResidentHandoffGuardError` (~2420-2468) and its calls
-- [ ] FirstPassFdrTask: guard calls + conditional releases (~852-874, ~1080-1104) -> unconditional;
-      `ReloadFirstPassSurvivors` (~3980-4044) + 2 resx strings
-- [ ] Fold `StreamedSurvivorLoader` into `PublishedSurvivorLoader` (PerFileRescoreTask ~2884-2896)
-- [ ] Remove `Stage6StreamSurvivors` + `Stage6StreamSurvivorsValidityKeySuffix` (OspreyEnvironment
-      ~342, ~404-419) and its PerFileRescoreTask validity-key term (~293)
-- [ ] `MaterializeResumedFile` overlay arm (PerFileRescoreTask ~3293) - reached only under the switch
-- [ ] Startup refusal for the retired variable (precedent `Stage7StreamRetiredSet`, Program.cs ~590)
-- [ ] Remove `COMPACTED_ENTRIES_BUFFER` from `ResidentPaths.KNOWN_UNFIXED`; ResidentPoolGuardTest
-      `AssertStage6HandoffGuard` (~384-449); TaskValidityKeyTest:671; regression.ps1 416/2203
-- [ ] #4544 finding 3: assert the streamed rebuild's survivor count matches what compaction retained
+~170 prod + ~70 test lines.
+- [x] ~~Bank the A/B~~ - NOT BANKABLE: the resident arm aborts on master (see "A/B finding").
+      **Brendan, 2026-10-10: delete anyway, the committed golden is the oracle; same disposition
+      for PR 2's projection-off A/B.** Code comments and docs/00 say no A/B was banked, and why.
+- [x] Delete `PerFileScoringTask.Stage6ResidentHandoffGuardError` and its calls
+- [x] FirstPassFdrTask: guard calls removed, releases unconditional on the switch (still gated on
+      `_survivorLoader != null`, which projection-off lacks until PR 2); `ReloadFirstPassSurvivors`
+      + 2 resx strings (3 resx + Designer)
+- [x] Fold `StreamedSurvivorLoader` into `PublishedSurvivorLoader`
+- [x] Remove `Stage6StreamSurvivors` + `Stage6StreamSurvivorsValidityKeySuffix` and the
+      PerFileRescoreTask validity-key term (suffix was empty on the default, so no key changes)
+- [ ] `MaterializeResumedFile` overlay arm - **NOT switch-only, moved to PR 2**: a null loader also
+      happens under projection-off (FirstPassFDR Run's legacy arm never sets `_survivorLoader`, and
+      PerFileRescore.Rehydrate passes `PublishedSurvivorLoader`). Comments updated to name projection-off
+- [x] Startup refusal: `OspreyEnvironment.Stage6StreamSurvivorsRetiredSet`, Program.cs, and a
+      CommandLineErrorTest case beside the OSPREY_STAGE7_STREAM one
+- [x] `COMPACTED_ENTRIES_BUFFER` out of `KNOWN_UNFIXED` (now `projection-off` only);
+      ResidentPoolGuardTest `AssertStage6HandoffGuard` replaced by `AssertTokenLists` (keeps the
+      list-parsing coverage on `ResidentPoolGuardError`); TaskValidityKeyTest; regression.ps1
+      `$abSwitchSet` / `$cannotStreamJoin` + comments; docs/00 item 4 marked DONE
+- [x] #4544 finding 3: moved into `FirstPassSurvivorLoader.CheckSurvivorCount` - each run's first
+      Stage-4 load is recorded (one int per run), a reload must match it, and once every run has
+      loaded the sum must equal `ExpectedSurvivorCount` (set by `CompactFromSidecars` from the
+      compaction's `afterCount`, only when stems are unique - #4544 finding 1). Reconciled-parquet
+      loads are excluded (they add gap-fill rows). Per-run EXPECTED counts were rejected: keeping
+      per-file rows-per-base_id is itself O(files x entries). VERIFIED it fires: with the
+      comparison temporarily off by one, TestSubsetStraightThroughAndReruns failed with
+      "counted 1607 ... produced 1607" (reverted; log `ai/.tmp/sessions/20261010-nores/sabotage.log`)
 - [ ] Update #4601 and #4577 text that cites `OSPREY_STAGE6_STREAM_SURVIVORS`
+- [ ] `ai/docs/osprey-development-guide.md` cites the switch - update with the PR
+- Gate so far: `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` green, 649/649
+
+### A/B finding (2026-10-10)
+
+The `OSPREY_STAGE6_STREAM_SURVIVORS=0` arm ABORTS in Stage 7 on every dataset, so there is no
+output to compare:
+
+    Experiment-fold scope violation in 'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20': base_id 0 takes
+    its best target observation from entry_id 0, which is not one of this file's survivors
+    at StreamingFdr.CompeteOneFile <- ComputeFullPopulationPrecursorFdrStreaming (verify recompute)
+    <- Pass2FdrSidecar.ComputePass2TransferCompeteFull <- SecondPassFdrTask.Run
+
+- master 5a1cd82efc (#4816), `regression-parallel -Dataset All`: Stellar and StellarGenDecoyEntrap
+  both aborted on the straight-through leg; run stopped. Logs:
+  `pwiz_tools/Osprey/TestResults/regression-lane-*-20261010_150639.log`,
+  `pwiz_tools/Osprey/TestResults/regression-20261010_150640_35964/Stellar/straight/straight.log`
+- pwiz-perfbase af30974a4a (#4809, the commit BEFORE #4816), `-Dataset Stellar`: SAME abort, so
+  #4816 did not cause it. Log: `ai/.tmp/sessions/20261010-nores/ab-stage6-off-perfbase.log`,
+  `C:\proj\pwiz-perfbase\pwiz_tools\Osprey\TestResults\regression-20261010_151409_54152\Stellar\straight\straight.log`
+- Unconfirmed hypothesis: on a non-streamed source `Pass2FdrSidecar.LoadOneFile` returns
+  `new List<FdrEntry>()` when `residentByFile` lacks the run (or its list was cleared earlier), so
+  `ownSurvivorIds` is empty and every best target fails the scope check. regression.ps1 sets
+  `OSPREY_PASS2_VERIFY_WORKER=1`, which is what runs that recompute.
+- `OSPREY_FDR_PROJECTION=0` (PR 2's oracle) on master 5a1cd82efc, `-Dataset Stellar`: the SAME
+  abort. So both remaining A/B oracles share one broken resident Stage 7 path, and PR 2's banked
+  A/B is blocked by the same thing. Log: `ai/.tmp/sessions/20261010-nores/ab-projoff-master.log`,
+  `pwiz_tools/Osprey/TestResults/regression-20261010_151810_66852/Stellar/straight/straight.log`
+- No gate runs either arm, which is how it broke unnoticed - the argument decision 1 was written for.
 
 ## PR 2 - retire `projection-off` (`OSPREY_FDR_PROJECTION=0`, catalogue A1)
 
 ~1,050 prod lines. Note projection-off ALSO takes the resident Stage 6 handoff and resident
 Stage 7 (its survivor loader is null), so those arms stay live until PR 3.
-- [ ] Bank the A/B with `OSPREY_FDR_PROJECTION=0 OSPREY_ALLOW_UNFIXED_RESIDENT=projection-off`
+- [x] ~~Bank the A/B with `OSPREY_FDR_PROJECTION=0 OSPREY_ALLOW_UNFIXED_RESIDENT=projection-off`~~
+      - aborts on master like the Stage 6 arm (PR 1's "A/B finding"); golden is the oracle
+- [ ] `MaterializeResumedFile` overlay arm + `MaterializeAllResumedFiles` null-loader path (moved
+      here from PR 1: projection-off is what still reaches them)
 - [ ] Coordinate #4511 first: its streaming-vs-resident parity check uses this path - do it now or
       rewrite it against the golden
 - [ ] PerFileScoringTask: `NeedsResidentPool`, `GuardResidentPool`, `ResidentPoolGuardError`,
