@@ -1,5 +1,16 @@
 # Sprint: remove every O(files x entries) data structure from Osprey
 
+## Branch Information
+- **Branch**: `Skyline/work/20261010_osprey_retire_compacted_buffer` (PR 1; later PRs get their own
+  branches off master, listed here as they start)
+- **Base**: `master`
+- **Created**: 2026-10-10
+- **Status**: In Progress - PR 1 started. Precondition met: #4816 merged 2026-10-10 as 5a1cd82efc
+- **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
+- **Module**: `osprey`
+- **PR**: (pending)
+- **Checkout**: `C:\proj\pwiz`
+
 ## Goal
 
 No Osprey code path holds every run's precursor candidates or survivors at once - tokened,
