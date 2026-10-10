@@ -33,6 +33,7 @@ a { color: var(--accent); }
 .callout { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--accent);
   border-radius: 6px; padding: 12px 16px; margin: 16px 0; }
 .callout.warn { border-left-color: var(--warn); }
+.callout.good { border-left-color: var(--good); }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: .92rem; background: var(--card); }
 th, td { border: 1px solid var(--rule); padding: 6px 9px; text-align: left; vertical-align: top; }
@@ -52,29 +53,65 @@ footer { margin-top: 48px; color: var(--muted); font-size: .85rem; }
 <main>
 <h1>Osprey demultiplexing through ProteoWizard</h1>
 <p class="sub">The alternative to pwiz PR #4710: one demultiplexer, in ProteoWizard, shared by msconvert, Skyline and Osprey.
-Working draft, 2026-10-10. Sources: <code>TODO-20261008_osprey_pwiz_demux.md</code>, <code>pr4710-comparison.md</code>, <code>pr1b-root-cause.md</code>.</p>
+Updated 2026-10-10 with replicated searches and speed measured on the final code. Sources: <code>TODO-20261008_osprey_pwiz_demux.md</code>,
+<code>pr4710-comparison.md</code>, <code>pr1b-root-cause.md</code> in pwiz-ai.</p>
 
 <div class="callout">
-<b>The proposal.</b> #4710 adds staggered-window and MSX demultiplexing to Osprey with a new engine of about 10,000 lines
-(<code>Osprey.Demux</code>, <code>Osprey.DemuxTool</code>). ProteoWizard already has a demultiplexer, the one msconvert users
-rely on. Making it fast, correct and reachable through <code>MsDataFileImpl</code> lets Osprey's <code>--demux auto</code> be about
-560 lines of Osprey code, and every fix lands in one place for every tool. The comparison with #4710 that motivated this
-also found and fixed real defects in ProteoWizard's demultiplexer, including one that has been in msconvert since 2017.
+<b>The proposal.</b> #4710 adds staggered-window and MSX demultiplexing to Osprey with its own engine
+(<code>Osprey.Demux</code>, <code>Osprey.DemuxTool</code>; about 9,600 added lines of product code). ProteoWizard already has a
+demultiplexer, the one msconvert users rely on. Making it correct, fast and reachable through <code>MsDataFileImpl</code> lets
+Osprey's <code>--demux auto</code> be 559 added lines of Osprey product code (plus 546 in pwiz, shared by every tool).
+Measured on six Eclipse runs it identifies as many precursors as either #4710 engine, and it reads a run as fast as #4710's
+fastest engine.
 </div>
 
-<h2>Status of the pwiz-side work</h2>
+<h2>Results on the final code</h2>
+<h3>Identifications: equivalent, replicated</h3>
+<p>Six Orbitrap Eclipse staggered-window runs (EV13-15, Total01-03), one human Carafe library with 1:1 entrapment, Mike's search flags,
+experiment level at q &le; 0.01. Each demultiplexer searched with three Percolator seeds at a 1.5M-row training cap (the default
+300k cap moves a single search by 6-11% with the seed alone, <a href="https://github.com/ProteoWizard/pwiz/issues/4812">#4812</a>).
+Both #4710 engines run from #4710 merged with current master, so the rest of Osprey is the same code in every arm.</p>
+<div class="scroll"><table>
+<tr><th>Demultiplexer</th><th class="num">Seed 42</th><th class="num">Seed 1</th><th class="num">Seed 2</th><th class="num">Mean precursors</th><th class="num">Mean peptides</th><th class="num">Entrapment FDP</th></tr>
+<tr><td><b>ProteoWizard</b> (this work)</td><td class="num">37,436</td><td class="num">37,928</td><td class="num">37,468</td><td class="num"><b>37,611</b></td><td class="num">32,921</td><td class="num">0.47-0.52%</td></tr>
+<tr><td>#4710 weighted (its default)</td><td class="num">38,513</td><td class="num">36,478</td><td class="num">36,523</td><td class="num">37,171</td><td class="num">32,719</td><td class="num">0.47-0.57%</td></tr>
+<tr><td>#4710 msconvert-style</td><td class="num">37,318</td><td class="num">37,355</td><td class="num">37,178</td><td class="num">37,284</td><td class="num">32,837</td><td class="num">0.43-0.48%</td></tr>
+</table></div>
+<p>The three are equivalent within the seed spread (ProteoWizard +1.2% and +0.9% nominal). Neither #4710 engine wins beyond the
+interval, so there is no algorithm to port into <code>pwiz/analysis/Demux</code> on this evidence. Caveat: one library, not Mike's
+EV library, and FDP is entrapment-estimated.</p>
+
+<h3>Speed: as fast as #4710's fastest engine</h3>
+<p>EV13 (1.2 GB <code>.raw</code>, 101 staggered windows, 158,700 demultiplexed MS2), vendor file to demultiplexed cache
+(<code>--task SpectraCache --demux auto</code>), 32 threads, idle machine, arms interleaved with a fresh cache each run.</p>
+<div class="scroll"><table>
+<tr><th>Demultiplexer</th><th class="num">Wall (s)</th><th class="num">Peak working set</th><th>How</th></tr>
+<tr><td><b>ProteoWizard</b>, with <a href="https://github.com/ProteoWizard/pwiz/pull/4817">#4817</a></td><td class="num"><b>24.0 / 23.9 / 23.9</b></td><td class="num">4.4 GB</td><td>streams the run; blocks solved ahead on worker threads</td></tr>
+<tr><td>ProteoWizard, before #4817</td><td class="num">39.1 / 40.1 / 40.9</td><td class="num">4.4 GB</td><td>same output, byte for byte</td></tr>
+<tr><td>#4710 weighted</td><td class="num">42.8 / 41.4 / 45.2</td><td class="num">9.4 GB</td><td>whole run resident</td></tr>
+<tr><td>#4710 msconvert-style</td><td class="num">21.9 / 22.9 / 23.1</td><td class="num">3.0 GB</td><td>plain parse (11.6 s), then 6.6 s in memory</td></tr>
+</table></div>
+<p><b>How the gap closed.</b> A dotTrace profile showed the solve parallelized well (about 380 s of CPU across 32 threads) while the
+wall time was set by the serial read. In it, the Thermo reader's precursor lookup took 22 s by itself: every DIA scan carries
+<code>"Master Scan Number: 0"</code>, which matches no scan, and the lookup walked back to the first scan of the run for every
+spectrum to find that out. #4817 returns at once. It speeds up every Thermo DIA read, not only demultiplexing: plain msconvert of EV13
+goes from 29.4 s to 21.9 s with identical mzML. What remains is the solve, nearly half of it MathNet natural-spline construction;
+a closed form would cut it further but changes low-order bits, so it would be a separate, gated change.</p>
+
+<h2>The pwiz-side work</h2>
 <div class="scroll"><table>
 <tr><th>PR</th><th>What it does</th><th>State (2026-10-10)</th></tr>
-<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4805">#4805</a></td><td>NNLS iteration limit keeps the last feasible solution (as C++); bin snapping on the original edges (as C++); Eclipse fixture matched to C++ peak by peak</td><td class="good">green, awaiting review</td></tr>
-<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4814">#4814</a> (on #4805)</td><td>Search covers each bin's full tolerance window (restores the original Skyline behaviour); a peak on a snapped shared edge counts once</td><td class="good">green, awaiting review</td></tr>
-<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4806">#4806</a></td><td>One metadata sweep; spectrum cache sized from the acquisition cycle (211 s to 165 s single-threaded, output identical)</td><td class="good">green, awaiting review</td></tr>
-<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4813">#4813</a> (on #4806)</td><td><code>solveThreads=N</code>: blocks solved ahead in parallel (163 s to 92-95 s at 16 threads on EV13, mzML identical); MSConvertGUI box</td><td class="good">green, awaiting review</td></tr>
-<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4815">#4815</a></td><td><code>SpectrumListDemux.DetectScheme</code>; <code>MsDataFileImpl</code> demultiplex option; <code>Params</code> as a record</td><td class="warn">opened 2026-10-10, CI running</td></tr>
-<tr><td>Osprey PR</td><td><code>--demux off|auto</code> through <code>MsDataFileImpl</code> (replaces #4710)</td><td class="muted">after PR 3; code exists on the integration branch</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4805">#4805</a></td><td>NNLS iteration limit keeps the last feasible solution (as C++); bin snapping on the original edges (as C++); Eclipse fixture matched to C++ peak by peak</td><td>awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4814">#4814</a> (on #4805)</td><td>Search covers each bin's full tolerance window (restores the original Skyline behaviour); a peak on a snapped shared edge counts once</td><td>awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4806">#4806</a></td><td>One metadata sweep; spectrum cache sized from the acquisition cycle (211 s to 165 s single-threaded msconvert, output identical)</td><td>awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4813">#4813</a> (on #4806)</td><td><code>solveThreads=N</code>: blocks solved ahead in parallel, output identical at any N; MSConvertGUI box</td><td>awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4815">#4815</a></td><td><code>SpectrumListDemux.DetectScheme</code>; <code>MsDataFileImpl</code> demultiplex option; <code>Params</code> as a record</td><td>awaiting review</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4817">#4817</a></td><td>Thermo precursor lookup no longer walks the whole run for master scan 0</td><td>opened 2026-10-10</td></tr>
+<tr><td>Osprey PR</td><td><code>--demux off|auto</code> through <code>MsDataFileImpl</code> (replaces #4710)</td><td>opened on top of all six</td></tr>
 </table></div>
-<p>Provenance: a local stack of #4805 + #4806 + #4813 + the Osprey integration writes an EV13 <code>.demux.spectra.bin</code>
-byte-identical to the overnight branch that found 38,088 precursors, apart from #4805's snapping fix (5 blocks of 158,700 records),
-and its six-run search reproduces 38,088 exactly with the same peptide set.</p>
+<p>#4805 and #4814 each moved Skyline's EncyclopeDIA tutorial test (targets 362/684/4786 transitions before; 369/714/5013 with #4805;
+366/698/4907 with #4814), re-baselined on each branch. Provenance: the Osprey branch's EV13 cache equals the measured
+corrected-span arm's apart from #4805's snapping fix (24 bytes; every spectrum cosine 1.0000).</p>
 
 <h2>Lineage: one algorithm, five engines</h2>
 <div class="lineage">
@@ -93,7 +130,7 @@ and its six-run search reproduces 38,088 exactly with the same peptide set.</p>
 <tr><td>Bin search start</td><td>full width</td><td class="bad">half-width: upper window lost above half the top m/z</td><td class="bad">same as C++</td><td>correct</td><td class="good">full width (#4814)</td></tr>
 <tr><td>Snapping of 3+ overlapping bins</td><td>no snapping</td><td>against the original edges</td><td class="bad">in place (port divergence)</td><td>in place</td><td class="good">original edges (#4805)</td></tr>
 <tr><td>Peak on a snapped shared edge</td><td>both bins</td><td>both bins</td><td>both bins</td><td>one bin</td><td class="good">one bin (#4814, credit #4710)</td></tr>
-<tr><td>Block, interpolation, output</td><td colspan="3">7-window slice; natural cubic spline over 3 points; regularized output</td><td>configurable; defaults covered bins, makima, apportioned</td><td>unchanged (covered windows ported and measured, not adopted)</td></tr>
+<tr><td>Block, interpolation, output</td><td colspan="3">7-window slice; natural cubic spline over 3 points; regularized output</td><td>configurable; defaults covered bins, makima, apportioned</td><td>unchanged (covered windows ported and measured, -7.8% on six runs, not adopted)</td></tr>
 <tr><td>Spectrum cache</td><td>NumScansBlock x 1.5</td><td>MRU, 1000 spectra</td><td>LRU, 256 (thrashes on 101 windows)</td><td>whole run resident</td><td>sized from the cycle and the MSX block (#4806, #4813)</td></tr>
 <tr><td>Parallelism</td><td>none</td><td>OpenMP across one block's columns; worker threads off</td><td>across one block's columns</td><td>whole run</td><td>blocks solved ahead in parallel, output identical (#4813)</td></tr>
 </table></div>
@@ -101,50 +138,42 @@ and its six-run search reproduces 38,088 exactly with the same peptide set.</p>
 <h2>What the comparisons found</h2>
 <h3>1. NNLS iteration limit (C# port bug) - #4805</h3>
 <p>On the Eclipse slice, 17 NNLS columns hit the 50-iteration cap; the C# port zeroed them, dropping 26 real peaks (up to 5.0e7) from 23 spectra.
-Keeping the last feasible solution, as C++ does, makes all 408 spectra match C++ at float32 precision. Six-run search: +5.4% precursors (single seed; see the caveat below).</p>
+Keeping the last feasible solution, as C++ does, makes all 408 spectra match C++ at float32 precision.</p>
 <h3>2. Search-span regression from 2017 - #4814</h3>
 <p>C++'s <code>SpectrumPeakExtractor</code> is Skyline's <code>TransitionBinner</code> loop, line for line, but subtracts the largest bin
 <em>half</em>-width where Skyline subtracts the full width. Every bin above half the spectrum's highest m/z therefore accepted only part of its
-window: at the top, -10 to 0 ppm instead of +/-10. Neighbour peaks centre on 0 ppm (median within +/-0.07 ppm), so this discards about half
-the real matching intensity there. Against ground truth (fragments of identified peptides), the fix sends 92% of high-m/z fragment intensity to
-the correct window, against 69% before.</p>
-<h3>3. Why the fix first looked like a loss</h3>
+window: at the top, -10 to 0 ppm instead of +/-10. Against ground truth (fragments of identified peptides), the fix sends 92% of high-m/z
+fragment intensity to the correct window, against 69% before.</p>
+<h3>3. Why the search-span fix first looked like a loss</h3>
 <div class="callout warn">
-<p><b>The corrected span lost 9.5% +/- 3.3% of precursors over five seeds on six Eclipse runs</b>, although its spectra and its Osprey features
-are as good or better (scored under any common frozen model, within +/-1% on every run). The loss was Osprey's first-pass Percolator
-training at its default 300,000-peak cap, where only about 1,000 positives drive the classifier and near-tied choices (initial feature,
-regularization C) decide it. With five times the training data the corrected span is <b>+1.0%</b> (three seeds), and the seed-to-seed spread
-falls from 6-11% to 1-3%. Filed as <a href="https://github.com/ProteoWizard/pwiz/issues/4812">#4812</a>.</p>
+<p>At Osprey's default 300,000-row training cap the corrected span lost 9.5% +/- 3.3% of precursors (five seeds), although its spectra and
+features are as good or better. The loss was the first-pass Percolator training, where about 1,000 positives drive the classifier and
+near-tied choices decide it. At 1.5M rows the corrected span is +1.0% and the seed spread falls from 6-11% to 1-3%. Filed as
+<a href="https://github.com/ProteoWizard/pwiz/issues/4812">#4812</a>; it is why every comparison above uses three seeds at 1.5M.</p>
 </div>
-<div class="scroll"><table>
-<tr><th>Six Eclipse runs, q &le; 0.01</th><th class="num">Defect span</th><th class="num">Corrected span</th><th class="num">Difference</th></tr>
-<tr><td>Training cap 300k, 5 seeds (mean)</td><td class="num">37,032</td><td class="num">33,507</td><td class="num bad">-9.5% +/- 3.3%</td></tr>
-<tr><td>Training cap 1.5M, 3 seeds (mean)</td><td class="num">37,185</td><td class="num">37,542</td><td class="num good">+1.0% +/- 3.4%</td></tr>
-</table></div>
+<h3>4. Thermo master-scan lookup - #4817</h3>
+<p>The speed section above: an O(n&sup2;) walk in the Thermo reader, 22 s of a 40 s read, found by profiling.</p>
 
-<h2>What this means for comparing with #4710</h2>
-<div class="callout warn">
-<p>Every head-to-head number so far (pwiz + NNLS fix 38,088 against #4710 weighted 36,453 and msconvert-style 35,664; covered windows
--7.8%) is a single seed at the 300k cap, where the seed alone moves an arm 6-11%. They are not yet evidence either way. The comparison to
-present is replicated (three seeds or more) at a training cap where the variance is down, ideally with Mike's EV library.</p>
-</div>
+<h2>Engineering</h2>
 <div class="scroll"><table>
-<tr><th>Engineering, EV13 (Eclipse, 101 staggered windows)</th><th>#4710</th><th>pwiz path</th></tr>
-<tr><td>Code added to Osprey</td><td>~10,000 lines</td><td>~560 lines (+ ~520 in pwiz, shared by all tools)</td></tr>
-<tr><td>Memory</td><td>whole run resident (est. 13-15 GB for a large Astral file)</td><td>streams: 1.99 GB peak vs 1.95 GB plain read</td></tr>
-<tr><td>Vendor file to demux cache (32 threads)</td><td>weighted 44.0 s; msconvert-style 24.0 s</td><td>40-41 s before #4813 (re-measure with it)</td></tr>
+<tr><th></th><th>#4710</th><th>ProteoWizard path</th></tr>
+<tr><td>Product code added</td><td>~9,600 lines in Osprey</td><td>559 lines in Osprey + 546 in pwiz (shared by msconvert, Skyline, Osprey)</td></tr>
+<tr><td>Memory (EV13)</td><td>weighted 9.4 GB; msconvert-style 3.0 GB; whole run resident</td><td>4.4 GB, streaming</td></tr>
 <tr><td>Multiplexing detection</td><td>coverage-weighted heuristic</td><td>msconvert's own mask codec, checked at start, middle and end of the run</td></tr>
 <tr><td><code>--demux off</code> on a multiplexed run</td><td>refuses (exception)</td><td>warns</td></tr>
 </table></div>
 
-<h2>Open</h2>
+<h2>Open for Mike</h2>
 <ul>
-<li>#4815 review, then the Osprey PR on the merged pwiz work.</li>
-<li>Replicated head-to-head against both #4710 engines; if either wins beyond the interval, port it into <code>pwiz/analysis/Demux</code> as a new <code>Optimization</code>.</li>
-<li>For Mike: warn or refuse on <code>--demux off</code>; whether <code>auto</code> becomes the default; MSX untested here (no data); ZT Scan as a separate pwiz filter.</li>
-<li>Osprey: the training cap (#4812).</li>
+<li>Warn or refuse on <code>--demux off</code> for a multiplexed run.</li>
+<li>Whether <code>auto</code> becomes the default.</li>
+<li>MSX: ProteoWizard demultiplexes it, but there is no MSX data here to test with.</li>
+<li>ZT Scan: no ProteoWizard demultiplexer; if the work continues, as a new spectrum-list filter in <code>pwiz/analysis</code>.</li>
+<li>A rerun with his EV library, if he can share it.</li>
 </ul>
-<footer>Measurements on BRENDANX-i9; runs and logs under <code>D:\test\osprey-runs\pwiz-demux\</code>. Draft for discussion.</footer>
+<footer>Measurements on BRENDANX-i9 (32 logical processors); runs, logs and comparisons under <code>D:\test\osprey-runs\pwiz-demux\</code>
+(<code>h2h\compare-all.txt</code>, <code>speed\speed.tsv</code>, <code>speed-master0\speed.tsv</code>, <code>profile\</code>).
+Runners: <code>ai/scripts/Osprey/Demux/Run-DemuxSearchArms.ps1</code>, <code>Measure-DemuxCacheSpeed.ps1</code>.</footer>
 </main>
 </body>
 </html>
