@@ -19,6 +19,73 @@ C# = pwiz/analysis/Demux on master.
 | RT interpolation | natural cubic spline, 3 points (CSpline) | MathNet natural spline, 3 points | default makima; `natural_three_point` reproduces msconvert | unchanged |
 | Output | regularized: observed intensity split by solution share | same | `apportioned` (default) or `solution` | unchanged |
 
+## Execution model (cache, parallelism) - no effect on output, large effect on time and memory
+
+| Behaviour | C++ msconvert | pwiz C# (master) | #4710 Osprey.Demux | pwiz after our PRs |
+|---|---|---|---|---|
+| Spectrum cache | `SpectrumListCache` MRU, 1000 spectra, metadata and binary (`SpectrumList_Demux.cpp:327`) | `DemuxSpectrumCache` LRU, fixed 256 binary spectra (thrashes on a 101-window run: a block reads ~3 cycles) | whole run resident, input and output | #4806: sized from the cycle (4 cycles x (spectra/cycle + 1)), floor 256. PR 2b: also covers an MSX block (PrecursorsPerSpectrum x OverlapsPerCycle cycles + 1; Copilot on #4806), plus three solve-ahead batches |
+| Metadata sweeps of the run | cache fills as read | two (MS levels for the cache, identities for the index mapper) | one parse of the run | #4806: one |
+| Parallelism | none across blocks: `SpectrumWorkerThreads` turns worker threads OFF for a demultiplexed list (`SpectrumWorkerThreads.cpp:115`); OpenMP across the columns of one block (`DemuxSolver.cpp:34`) | same: one block at a time, `Parallel.For` across columns | whole run in parallel | PR 2b: `solveThreads=N` (default 1) solves batches of blocks ahead in parallel, next batch solved while the reader consumes this one; columns serial inside a worker. Byte-identical at any N |
+| Thread safety of the reader underneath | n/a (serial) | n/a (serial) | own parse | PR 2b: inner reads serialized by one lock (vendor readers are not thread-safe); cache hits lock-free |
+
+## Lineage: Skyline's demultiplexer, the original reference implementation
+
+**Lineage (Brendan, 2026-10-09):** `pwiz_tools/Skyline/Model/Results` (AbstractDemultiplexer,
+OverlapDemultiplexer, MsxDemultiplexer, FastOverlapDemultiplexer, NumericsLsSolver; ~1,700 lines) was
+THE reference implementation while Jarrett Egertson and Dario Amodei were actively developing it and it
+was the only one. It has not been actively maintained since: its primary user, the MacCoss lab, moved
+all attention to the pwiz C++ implementation, using msconvert to produce lasting demultiplexed mzML
+files. The future probably removes demux support from Skyline. So it is NOT a fourth peer to compare
+Osprey against; its value here is as the ancestor: **where C++ differs from it, check whether C++
+introduced a regression.** Order: Skyline (reference) -> C++ msconvert -> pwiz C# port; #4710 is a
+separate line derived from msconvert's behaviour.
+
+Candidate C++ regressions from the reference (to verify by reading both sides):
+- **Peak-binning search span**: Skyline's TransitionBinner starts its search at
+  `query - maxTransitionWidth` (full width, `AbstractDemultiplexer.cs:1113-1127`); C++
+  `SpectrumPeakExtractor` uses the largest HALF-width, which truncates the upper window of every bin
+  above half the spectrum's top m/z. **Verified regression in the port:** C++
+  `SpectrumPeakExtractor.cpp:76-81` is TransitionBinner's loop line for line (`minStart`, forward scan
+  of `binStartIndex` while `ranges[i].first < minStart`) with `_maxDelta` (half-width: ranges are
+  peak +/- delta, `:34-37`) where Skyline subtracts the full width (`_maxTransitionWidth`, set from
+  `windowWidth` at `AbstractDemultiplexer.cs:1070`). Came in with the C++ demultiplexer itself
+  (d24a142315, 2017-01-11, "merged SpectrumList_Demux to trunk"). (Skyline bins target transitions,
+  C++ every peak; the loop is the same.) Note that on the 6 Eclipse runs the
+  defect currently finds MORE IDs than the correct span (38,088 vs 34,718), the PR 1b puzzle.
+- Not regressions (C++ improved on it): at the NNLS iteration cap Skyline returns the passive-set solve
+  `z`, which can be negative, where C++ keeps the last feasible x.
+
+Survey by a subagent; the two decisive claims below re-verified by hand; file:line references relative
+to `pwiz_tools/Skyline/Model/Results` unless given.
+
+- **Chosen by the document isolation scheme** (`SpectraChromDataProvider.cs:1017`): OVERLAP ->
+  OverlapDemultiplexer, MULTIPLEXED -> Msx, OVERLAP_MULTIPLEXED -> MsxOverlap, FAST_OVERLAP -> Fast.
+  **CLI scheme import from data gives OVERLAP_MULTIPLEXED** (`IsolationSchemeReader.cs:44`, verified),
+  while the GUI shows that as "Overlap" (`EditIsolationSchemeDlg.cs:1051`): the same data can go through
+  different algorithms by route. Worth confirming end to end.
+- **What is binned**: only the document's target transitions (product filter width), not every peak.
+  Search span is the full width: the C++ half-width defect is NOT present.
+- **NNLS**: Overlap: QR (Householder) passive set, tolerance 1e-8 on L1-normalized columns, cap 3 x
+  columns (= 21), and at the cap returns the passive-set solve `z`, which can be negative (`NumericsLsSolver.cs:496-503`;
+  negative shares -> negative intensities, inferred). Msx and MsxOverlap: `useFirstGuess: true`
+  (verified, `MsxDemultiplexer.cs:47,72`) = unconstrained least squares clipped at 0, no NNLS iteration.
+- **Block**: Overlap = 7 x 7 slice of the 7 nearest first-cycle windows, like msconvert; Msx = all regions.
+- **RT interpolation**: Overlap = MathNet natural cubic spline, up to 3 points (like msconvert);
+  Msx/MsxOverlap/Fast none.
+- **Output**: regularized like msconvert, but only to chromatograms; peaks outside every target bin
+  split evenly 1/N across sub-spectra.
+- **Execution**: serial (the async spectrum reader is disabled when demultiplexing,
+  `SpectraChromDataProvider.cs:208`); cache = MsDataFileImpl caching NumScansBlock x 1.5 plus a FIFO of
+  binned target sums.
+- **FastOverlap**: a different algorithm (2x overlap assumed, halves each spectrum, 10 ppm hard-coded,
+  file windows not the document's). Reported bug: `Enumerable.Range(1, index-1)` throws for index 0
+  (`FastOverlapDemultiplexer.cs:60`), unverified.
+- **Other reported issues (unverified)**: window centre-of-mass ignores region 0 (`OverlapDemultiplexer.cs:140`);
+  rank-deficient scheme throws InvalidDataException and fails the import.
+
+Implication for the plan: none for the current PRs. If Skyline demux support is removed, PR 3's
+`MsDataFileImpl` option is what a Skyline user would get instead of the msconvert step (out of scope).
+
 ## Identifications (6 Eclipse runs, human Carafe library with 1:1 entrapment, same Osprey flags)
 
 | Arm | Precursors | FDP |

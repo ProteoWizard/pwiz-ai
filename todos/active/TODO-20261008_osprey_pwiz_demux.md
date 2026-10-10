@@ -39,6 +39,62 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Provenance: PR stack vs the overnight result (2026-10-09 afternoon)
+
+Rule (Brendan): every PR must trace back to what the overnight session measured, keep its benefits,
+or prove a difference was a mistake or relied on a bug. Gate = EV13 `.demux.spectra.bin` written by
+`--task SpectraCache --demux auto`, byte-compared with the `pwiz-nnlsfix` arm's cache (the 6-run
+38,088 search). Script: `ai/.tmp/sessions/20261009-pr2b/cache-ev13.sh <name> <Osprey.exe>`; outputs
+`D:\test\osprey-runs\pwiz-demux\provenance\<name>`. Osprey must be built `-VendorReader`.
+
+| Build | EV13 cache vs pwiz-nnlsfix |
+|---|---|
+| integrated head 056016ede5 (`_bin/pwizdemux-integrated-056016e`) | **identical** (41 s) |
+| PR stack: 2b (incl. #4806) + #4805 merged + integrated Osprey/MsDataFileImpl/DetectScheme, local branch `nightlywork/demux-pr-stack` (`_bin/pwizdemux-prstack`) | differs: 24 bytes, 5 blocks (2 adjacent bins each, RT 29.4/30.7/54.5/69.4/86.2), 2 peaks dropped, cosine 1.0000 (`ai/.tmp/sessions/20261009-pr2b/compare-prstack-vs-nnlsfix.txt`) |
+| same stack, #4805's bin-snapping fix reverted (`_bin/pwizdemux-prstack-nosnap`) | **identical** |
+
+So #4806, 2b, #4805's NNLS fix and the Osprey integration reproduce the overnight output exactly; the
+only output change is #4805's C++-parity snapping fix (original edges, matters only where three
+peaks' windows chain-overlap). **Six-run search of `pwiz-prstack` (with the snapping fix): 38,088
+precursors, FDP 0.47%, 33,464 peptides, every per-run count identical to pwiz-nnlsfix and the same
+peptide set (0 unique either side)** (`eclipse-search6\compare-prstack.txt`). #4805 + #4806 + 2b keep
+the overnight result in full.
+
+**PR 1b reframed (discussion with Brendan):** the defect does not just shift the window, it NARROWS
+it: above half the spectrum's top m/z every bin accepts exactly maxDelta Th from its low edge (10 ppm
+wide at the top, 20 below half), so the correction doubles the effective window at the top. The 5 ppm
+arms are not width-matched (5 ppm also halves low-m/z bins the defect leaves at 20 ppm), so they do not
+rule out "a narrower window at high m/z helps". Next: (1) histogram of matched neighbour-peak offsets
+(ppm) by m/z on EV13, no search needed; (2) width-matched symmetric arm (bins above half: +/-
+maxDelta/2 Th around the peak) to separate width from position.
+
+PR 1b has NO code yet that closes its gap: the corrected search span (`pwiz-extractfix`, uncommitted
+in worktree `C:\proj\pwiz-demux-parity`) is 34,718 vs 38,088. It stays on hold until a variant
+beats 38,088 on the 6 runs; the defect being a port regression from Skyline (see comparison log)
+does not change that.
+
+## Status 2026-10-09 ~12:00
+
+- **#4805 / #4806: parked until Matt reviews** (Brendan: Copilot alone is not worth another TeamCity
+  round). Both all-green as of 10:04. Copilot's #4806 MSX cache comment is real but not a regression
+  (capacity floor 256, master has the same gap); fixed in PR 2b, answer the thread with that when Matt
+  reviews.
+- **PR 2b** committed locally, `Skyline/work/20261009_demux_solve_threads` (ed76502729, stacked on #4806),
+  not pushed: `solveThreads=N`, solve-ahead batches, lock-free cache hits, `Prefetch`, MSX-aware cache
+  size, `NnlsSolver(parallelColumns)`, MSConvertGUI "Solve threads" box, two determinism tests. No
+  metadata-only shortcut (dropped in #4806's review). A next-batch read error no longer fails the
+  current batch. EV13 same-session: #4806 162.7 s, 2b 1 thread 154.1 s, 16 threads 91.8 s; mzML identical
+  (`ai/.tmp/sessions/20261009-pr2b/timing.log`). 181/181 Analysis tests. `/code-review medium` running.
+- **PR 3 plan**: from master (not stacked on 2b): DetectScheme + MsDataFileImpl option; make
+  `SpectrumListDemux.Params` a `record` and use `with` in place of `WithOptimization`'s field copy, so
+  merge order with 2b cannot drop `SolveThreads`. Needs a wrapper-side test (the integrated branch only
+  tested it from Osprey).
+- **Skyline's demultiplexer** (`Skyline/Model/Results`) is the ORIGINAL reference implementation
+  (Egertson, Amodei), unmaintained since the MacCoss lab moved to C++ msconvert + demultiplexed mzML;
+  likely to be removed from Skyline. Use it as the ancestor to spot C++ regressions, not as a peer.
+  First candidate: Skyline's binner searches the full width, C++ the half-width (the PR 1b defect).
+  See `pr4710-comparison.md` "Lineage".
+
 ## Status 2026-10-09 ~08:45 (handoff)
 
 - **#4805 open** (PR 1, parity fixes): Matt reviewing; Copilot left 1 comment (rename `Invariant` ->
