@@ -87,6 +87,30 @@ the transfer arm's equivalent was `BuildExperimentScope`, now deleted.
 Semantics change (all-no-work cohort only): protein-compact now competes unchanged peaks per
 run instead of crashing; Rust keeps pass-1 values there. Recorded in DIVERGENCES.md.
 
+### 2026-10-10 00:31 - Validation
+
+- Code review (medium): 9 findings, 7 fixed (4a20e9eb7f), 2 dropped (#4 unresolved feature
+  = defect by construction; #5 unmatched key was already a stop under the default mode).
+- regression-parallel.ps1 -Dataset All on ff0b2585df: **48 PASS / 0 FAIL / 0 SKIP**, 51 min
+  (pwiz_tools/Osprey/TestResults/regression-lane-*-20261009_205621.log).
+- SEA-AD 82-file transfer run (snapshot D:\test\osprey-runs\_bin\pr4665-ff0b2585df), run dir
+  D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-transfer-pr4665-20261009_205031:
+  3:41:06 total; `[PATH] second-pass-join: per-run runs=82`; SecondPassFDR **5:02, managed
+  peak 6.7 GB, private 11.4 GB** (perfviz). Before: the 82-file transfer run of 2026-07-30
+  peaked 49.0 GB private in Stage 7 TransferPerRunQ (~13 GB live). PerFileRescoring 67:39
+  (worker transfer summary: 7,409,137 unchanged / 6,314,227 moved / 511,551 gap-fill).
+  46,728 blib precursors.
+- Test-PerfGate.ps1 -Dataset Stellar vs C:\proj\pwiz-perfbase (new worktree, detached at
+  af30974a4a): **PASSED**, total -0.1% (2:03 -> 2:02), stage6 +3.5% median (+7.0/-1.1/+3.5,
+  noise on 8.6 s), stage7 -3.3% (ai/.tmp/perf-gate/20261010-073217Z/verdict.md).
+- Test-PerfGate.ps1 -Dataset Astral: **PASSED**, total -0.3% (7:31 -> 7:30), stage6 +0.2%
+  (ai/.tmp/perf-gate/20261010-074753Z/verdict.md).
+- New `TestSubsetHpcTaskChainTransfer` (fb0603b9d3): the four-task chain under transfer, phase 4
+  shipped no first-pass file, equals the straight run (blib, both passes' sidecars, both
+  experiment sidecars byte-identical). 650/650 tests, zero inspection warnings.
+- Commits (local, not pushed): ff0b2585df, 4a20e9eb7f, 4a035cf0b2, fb0603b9d3. PR body draft:
+  ai/.tmp/sessions/20261009-4665/pr-body.md.
+
 ## Regression Test
 
 - **Test name**: `SubsetPipelineTest.TestSubsetOptionVariants` (transfer arm: `[PATH]
