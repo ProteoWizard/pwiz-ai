@@ -188,7 +188,8 @@ function Get-SourceOspreyVersion {
 
 .PARAMETER Pass2Mode
     transfer        : frozen first-pass model, TRIC-style q-value fill-in, no retrain.
-                      NOTE: forces the RESIDENT first-pass pool (O(files)) - see README.
+                      Bounded like the default since pwiz #4438 (first pass) and #4665
+                      (Stage 7 join).
     transfer-compete: frozen model, then a fresh target-decoy competition over the full
                       reconciled population (non-depleted null).
     protein-compact : default. Frozen model, competition CONSTRAINED to peptides of proteins
@@ -740,10 +741,6 @@ function Invoke-OspreyDatasetRun {
     # are gone with it; the "pass 2" banner line above already names the selection. An exe
     # older than that fix still has both behaviours; the run dir's bench file set (one .tsv
     # vs .pass1/.pass2) says which you got.
-    if ($Pass2Mode -eq 'transfer') {
-        Write-Host "  WARNING: OSPREY_PASS2_QVALUE=transfer forces the RESIDENT first-pass pool" -ForegroundColor Yellow
-        Write-Host "           (O(files)). The other frozen-model modes do not." -ForegroundColor Yellow
-    }
     if (-not $mdiag) {
         Write-Host "  NOTE: no --model-diagnostics, so this run yields NO pass-1 FDP - and pass 1 is" -ForegroundColor Yellow
         Write-Host "        the number to quote (pass-2 recalibration inflates FDP)." -ForegroundColor Yellow

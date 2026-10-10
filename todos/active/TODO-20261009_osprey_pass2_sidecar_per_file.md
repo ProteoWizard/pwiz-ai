@@ -40,15 +40,7 @@ per-run files.**
 - [ ] `regression.ps1` known-resident table row
 - [ ] `Osprey-workflow.html`: drop the per-run caveat on SecondPassFDR's "out: 4 files" tooltip
 
-## Regression Test
-
-- **Test name**: (filled in once written) - `SubsetPipelineTest` transfer arm: assert PerFileRescoring wrote every run's sidecar (stamp names the producer)
-- **Test project**: Osprey tests
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
-
-Protein-compact no-work case needs a constructed subset where one run gets no
-consensus, reconciliation or gap-fill targets.
+## Notes
 
 At-scale endpoint: a 446-run transfer run (precedent: 82-file SEA-AD transfer arm,
 PR #4508).
@@ -59,3 +51,49 @@ PR #4508).
 
 Starting work on this issue from master af30974a4a. Starting points listed in the
 second issue comment.
+
+### 2026-10-09 night - Implementation
+
+Also fixes **#4729** (SecondPassFDR fails when Stage 6 re-scores nothing): its proposed
+direction - judge currency by stamp, worker writes the answer for no-work runs, Stage 7 writes
+no per-run file - is exactly this rule. The `peptide_fdr_pep` branch overlap was waved off
+by Brendan (not relevant any more).
+
+Done:
+- `Pass2PerFileWorker` has a transfer mode (`TransferAndStamp`: reconciled features by
+  score_index -> `TransferOneFile` -> records; no decoys file). Missing features / unreadable
+  1st-pass sidecar are throws (were warnings in Stage 7).
+- `PerFileRescoreTask`: `CreatePass2Worker` for every mode (throws on unusable model / missing
+  stratum); no-work branch calls `WritePass2Answer`; `IsFileRescored` lost the
+  `osprey.rescored=0` exemption; Outputs declare Pass2Path always, decoys protein-compact only.
+- `Pass2FdrSidecar.ComputeAndPersist`: `RequireWorkerAnswers` (throws, names runs) then
+  competition fold or new `ComputePass2TransferFold`; shared `WalkSurvivors` +
+  `FoldAndPublishExperimentScope`. Deleted: anyRescoreWork/recompute gate, RestorePass1Scalars,
+  ComputePass2Resident, TransferPerRunQ, BuildExperimentScope, WorkerOwnedPass2Sidecars, the
+  resident write block, Pass2SidecarWriter writes/tallies, seeder `Seed`/unreadable list,
+  `RecordsRescoreWork`, `AnyReconciledParquet`, the Stage 7 per-run source's first-pass overlay.
+- `Stage7StreamAdmittedBeforeRescore`: mode term removed - transfer streams.
+- `[PATH] second-pass-fold` is now `verify=on|off runs=N` (was `answered=k/N`); regression.ps1
+  and SubsetPipelineTest updated. regression.ps1 known-resident table now empty.
+- Program.cs refusal of `--training-export` under transfer removed (+ resource, test).
+- Docs: 00, 12, 14, 15, DIVERGENCES (#8: no-work cohort now answered; Rust skips pass 2),
+  Osprey-workflow.html tooltips.
+
+Finding: the issue's "guard's streamingAvailable exemption" is the Stage 6 handoff guard
+(`Stage6ResidentHandoffGuardError`), and it covers projection-off runs, not transfer - left as is.
+Finding: the #4664 "pool fold" no longer exists on master (floors applied at source, #4522);
+the transfer arm's equivalent was `BuildExperimentScope`, now deleted.
+
+Semantics change (all-no-work cohort only): protein-compact now competes unchanged peaks per
+run instead of crashing; Rust keeps pass-1 values there. Recorded in DIVERGENCES.md.
+
+## Regression Test
+
+- **Test name**: `SubsetPipelineTest.TestSubsetOptionVariants` (transfer arm: `[PATH]
+  second-pass-join: per-run` + every 2nd-pass sidecar stamped PerFileRescoring);
+  `TestSubsetTrainingExportSingleRun` (no-work single-run analysis completes under both modes,
+  osprey.rescored=0 asserted, sidecar from PerFileRescoring, export selects pass 2)
+- **Test project**: Osprey.Test
+- **Fails on master**: yes - `missing [PATH] second-pass-join: per-run`
+  (ai/.tmp/sessions/20261009-4665/red-master.log); single-run hit the #4729 error on master
+- **Passes on fix**: yes (tests-1.log 648/649 before the single-run rewrite; tests-2.log)
