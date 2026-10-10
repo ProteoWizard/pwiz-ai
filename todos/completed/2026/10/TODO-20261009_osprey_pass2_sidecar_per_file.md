@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20261009_osprey_pass2_sidecar_per_file`
 - **Base**: `master` (af30974a4a, #4809)
 - **Created**: 2026-10-09
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4665](https://github.com/ProteoWizard/pwiz/issues/4665)
 - **Module**: `osprey`
 - **Other labels**: `performance`
-- **PR**: [#4816](https://github.com/ProteoWizard/pwiz/pull/4816)
+- **PR**: [#4816](https://github.com/ProteoWizard/pwiz/pull/4816) (merged 2026-10-10)
 
 ## Objective
 
@@ -23,22 +23,22 @@ per-run files.**
 ## Tasks
 
 ### transfer
-- [ ] `TryCreatePass2Worker` returns a worker for transfer, not only `Pass2ProteinCompact`
-- [ ] Move `TransferOneFile` (driven from `TransferPerRunQ` in Stage 7) into `Pass2PerFileWorker`
-- [ ] `Stage7StreamAdmittedBeforeRescore` / `CanStreamStage7Join` stop special-casing the pass-2 mode
-- [ ] Remove the resident-pool guard's `streamingAvailable` exemption
-- [ ] Experiment-q floor fold (#4664): fast path covers every mode; delete the pool fold
+- [x] `TryCreatePass2Worker` returns a worker for transfer, not only `Pass2ProteinCompact`
+- [x] Move `TransferOneFile` (driven from `TransferPerRunQ` in Stage 7) into `Pass2PerFileWorker`
+- [x] `Stage7StreamAdmittedBeforeRescore` / `CanStreamStage7Join` stop special-casing the pass-2 mode
+- [x] Remove the resident-pool guard's `streamingAvailable` exemption
+- [x] Experiment-q floor fold (#4664): fast path covers every mode; delete the pool fold
 
 ### protein-compact, runs with no rescore work
-- [ ] `PerFileRescoreTask.RescoreOneFile` `!TryAssembleRescoreTargets` branch calls `CompeteStampAndWrite` after `WriteUnchangedReconciled`
-- [ ] Remove `IsFileRescored`'s `osprey.rescored=0` exemption
+- [x] `PerFileRescoreTask.RescoreOneFile` `!TryAssembleRescoreTargets` branch calls `CompeteStampAndWrite` after `WriteUnchangedReconciled`
+- [x] Remove `IsFileRescored`'s `osprey.rescored=0` exemption
 
 ### Deletions the rule allows
-- [ ] `SecondPassFdrTask.Outputs` / `PerFileRescoreTask.Outputs`: per-run sidecar declared unconditionally on PerFileRescoring
-- [ ] Stage 7's per-file write in `Pass2FdrSidecar` (`workerWroteFiles` / `writer.Write` branch)
-- [ ] Worker-answered vs not split (`WorkerOwnedPass2Sidecars`, `HasWorkerStamp`, `answered=k/N`)
-- [ ] `regression.ps1` known-resident table row
-- [ ] `Osprey-workflow.html`: drop the per-run caveat on SecondPassFDR's "out: 4 files" tooltip
+- [x] `SecondPassFdrTask.Outputs` / `PerFileRescoreTask.Outputs`: per-run sidecar declared unconditionally on PerFileRescoring
+- [x] Stage 7's per-file write in `Pass2FdrSidecar` (`workerWroteFiles` / `writer.Write` branch)
+- [x] Worker-answered vs not split (`WorkerOwnedPass2Sidecars`, `HasWorkerStamp`, `answered=k/N`)
+- [x] `regression.ps1` known-resident table row
+- [x] `Osprey-workflow.html`: drop the per-run caveat on SecondPassFDR's "out: 4 files" tooltip
 
 ## Notes
 
@@ -124,3 +124,15 @@ run instead of crashing; Rust keeps pass-1 values there. Recorded in DIVERGENCES
 - **Fails on master**: yes - `missing [PATH] second-pass-join: per-run`
   (ai/.tmp/sessions/20261009-4665/red-master.log); single-run hit the #4729 error on master
 - **Passes on fix**: yes (tests-1.log 648/649 before the single-run rewrite; tests-2.log)
+
+### 2026-10-10 - Merged
+
+PR #4816 merged as commit 5a1cd82efc (squash, from the GitHub UI). Shipped: PerFileRescoring's
+pass-2 worker writes every run's `.2nd-pass.fdr_scores.bin` in both pass-2 modes (transfer's
+`TransferOneFile` moved into `Pass2PerFileWorker`; no-work runs answered too); SecondPassFDR checks
+and folds the answers and writes no per-run file; transfer streams the Stage 7 join. Fixes #4665
+and #4729; completes section 4 of #4664 (status comment posted; #4664 stays open). TeamCity
+Perf/Regression #301 SUCCESS on pull/4816. Copilot round: 4 threads fixed in 93ffa59a75; 3 left open
+with replies (two internal-invariant literals kept per ai/docs/style-guide.md, and the mixed-cohort
+test deferred - the subset data cannot build one cleanly). Follow-up sprint planned in
+`todos/backlog/TODO-osprey_no_resident_pools_sprint.md`.
