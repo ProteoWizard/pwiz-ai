@@ -5,6 +5,9 @@
 switches we KEEP (for `--help-env`); this file tracks the ones that exist only for parity testing and must
 eventually be REMOVED. `pwiz_tools/Osprey/docs/00-pipeline-architecture.md` holds the memory principles.
 
+The memory rows (A1-A4, A6-A8) are planned as one sprint in
+`TODO-osprey_no_resident_pools_sprint.md` (2026-10-10).
+
 ## Why this exists
 
 The pipeline was rewritten so memory stays bounded as the file count grows. Switches and fallbacks that
@@ -41,7 +44,7 @@ Categories:
 | A1 | `OSPREY_FDR_PROJECTION=0` (resident FdrEntry first pass) | A | **O(files × precursors)**: the whole pre-compaction stub pool, with features (~0.8 GB/file) | PerFileScoringTask, FirstPassFdrTask, Osprey.FDR PercolatorEngine / PercolatorEntryBuilder / PercolatorScorer, ResidentPaths | The Stage-5 Percolator dump (`OSPREY_DUMP_PERCOLATOR`) only works on this arm; 5 FdrTest oracle tests; docs call it "the oracle" | ~1,000 prod + ~500 test |
 | A2 | `OSPREY_STAGE6_STREAM_SURVIVORS=0` (resident post-compaction survivor buffer) | A | **O(files × survivors)**: 28 GB at 163 files, super-linear | FirstPassFdrTask, PerFileRescoreTask, PerFileScoringTask guard, OspreyEnvironment, ResidentPaths | Pin test in ResidentPoolGuardTest; docs only | ~170 + ~70 test |
 | A3 | Resident Stage-7 join (`RescoredEntries.Streams == false`), reached from A1, A2 **and** A4 | A (shared) | **O(files × survivors)**: 4.4 GB + 0.197 GB/file; 91.1 GB measured at 446 runs | Pass2FdrSidecar, SecondPassFdrTask, PerFileRescoreTask, PipelineByproducts | Goes only after A1, A2 **and** A4's per-file half have all moved | ~300 |
-| A4 | `OSPREY_PASS2_QVALUE=transfer`: per-file half computed in Stage 7 over the whole pool (#4665) | A (placement) / C (algorithm) | **O(files × survivors)** via A3 | Pass2FdrSidecar (transfer core ~540, ComputePass2Resident 154), Program.cs | Transfer is the **only** pass-2 mode compatible with `OSPREY_EXPERIMENT_AGG=mean-best-N`; the plan is to MOVE `TransferOneFile` into `Pass2PerFileWorker`, not delete it | ~250 resident glue (the algorithm stays) |
+| A4 | **DONE by PR #4816 (2026-10-10).** `OSPREY_PASS2_QVALUE=transfer`: per-file half computed in Stage 7 over the whole pool (#4665) | A (placement) / C (algorithm) | **O(files × survivors)** via A3 | Pass2FdrSidecar (transfer core ~540, ComputePass2Resident 154), Program.cs | Transfer is the **only** pass-2 mode compatible with `OSPREY_EXPERIMENT_AGG=mean-best-N`; the plan is to MOVE `TransferOneFile` into `Pass2PerFileWorker`, not delete it | ~250 resident glue (the algorithm stays) |
 | A5 | `OSPREY_RELEASE_LIBRARY_FRAGMENTS=0` | A | O(library), not O(files): +10.8 GB at 4 SEA-AD files | LibraryFragmentRelease, OspreyEnvironment, LibraryEntry tripwire text | Two tests to rework; =0 not honoured on the `--task SecondPassFDR` leg (inferred inconsistency) | ~70 + ~60 test |
 | A6 | `OSPREY_ALLOW_UNFIXED_RESIDENT` + `ResidentPaths` + resident-pool guards | A (support) | n/a (it admits A1/A2) | OspreyEnvironment 390-470, ResidentPaths.cs, PerFileScoringTask guards, Program.cs, regression.ps1 | Goes after A1 and A2 | ~350 prod + ~450 test + ~60 ps1 |
 | A7 | Diagnostics that force resident pools: `OSPREY_DUMP_PERCOLATOR`, `DUMP_RESCORED`, `DUMP_MULTICHARGE` / `DUMP_RECONCILIATION`, all enabled by `-d` | B\* | **O(files × precursors)**, warn-only, no guard | PerFileScoringTask.PreCompactionPoolReason, PerFileRescoreTask, Stage6Planner | Rust cross-impl bisection workflow (Test-Snapshot stage5, DIAGNOSTICS.md) | redesign, not delete |
