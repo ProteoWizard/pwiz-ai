@@ -48,6 +48,13 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
   EV13 cache byte-identical to the measured #4817 build. Perf/Regression TeamCity build 4210822
   (pull/4818, MacCoss Agent 1) queued; verify its commit is the PR head.
 - **#4817** (pwiz, reviewer chambm): Thermo master-scan-0 O(n^2) fix.
+- **#4818 base = `Skyline/work/20261010_demux_pwiz_stack`** (Brendan: the Osprey PR shows only the
+  Osprey side): a merge of the six pwiz PR heads (#4815 + #4813 + #4814 + #4817; #4805/#4806 come in
+  through #4814/#4813), identical outside `pwiz_tools/Osprey` to #4818's head, merged into #4818
+  (tree unchanged). #4818 now shows 37 files, all Osprey. **When any pwiz PR gets new commits**
+  (review fixes), merge its head into the stack branch, then the stack branch into #4818. When all
+  six are in master, retarget #4818 to master and delete the stack branch. Perf/Regression build
+  4210822 ran on ec573236b7, whose tree equals the new head.
 - `/code-review medium` on pwiz_tools/Osprey (second pass): fixed 1, 3, 4, 5, 7, 8, 9, 10; documented
   2 (MSX not recognizable from a plain cache); dropped 6 (all-windows list is #4710's deliberate fix,
   goldens unchanged). Details in commit ec573236b7.
