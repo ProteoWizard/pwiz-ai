@@ -8,7 +8,7 @@
 - **GitHub Issue**: [#4665](https://github.com/ProteoWizard/pwiz/issues/4665)
 - **Module**: `osprey`
 - **Other labels**: `performance`
-- **PR**: (pending)
+- **PR**: [#4816](https://github.com/ProteoWizard/pwiz/pull/4816)
 
 ## Objective
 
@@ -111,8 +111,8 @@ run instead of crashing; Rust keeps pass-1 values there. Recorded in DIVERGENCES
 - Commits (local, not pushed): ff0b2585df, 4a20e9eb7f, 4a035cf0b2, fb0603b9d3. PR body draft:
   ai/.tmp/sessions/20261009-4665/pr-body.md.
 - regression-parallel.ps1 -Dataset All on HEAD fb0603b9d3: **48 PASS / 0 FAIL / 0 SKIP**, 26 min.
-- Next (needs Brendan): push the branch, open the PR (`osprey:` prefix, labels osprey + performance,
-  Fixes #4665 and #4729), then the TeamCity Perf/Regression gate on pull/<N>.
+- PR #4816 opened (Fixes #4665, #4729; completes section 4 of #4664, which stays open for its
+  500/1000-file acceptance runs, #4577 and #4663). TeamCity Perf/Regression triggered on pull/4816.
 
 ## Regression Test
 
