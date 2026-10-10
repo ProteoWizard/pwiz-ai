@@ -39,6 +39,21 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Status 2026-10-10 afternoon - Osprey PR open
+
+- **#4818** (Osprey PR, `Skyline/work/20261010_osprey_pwiz_demux`, label osprey, no reviewer yet):
+  stacked on #4805/#4814/#4806/#4813/#4815/#4817 merged in; body links
+  `https://raw.githack.com/ProteoWizard/pwiz-ai/master/todos/active/TODO-20261008_osprey_pwiz_demux/demux-integration.html`.
+  Gates on ec573236b7: 651/651 tests, inspection clean, regression-parallel All 48/0/0 (29:51),
+  EV13 cache byte-identical to the measured #4817 build. Perf/Regression TeamCity build 4210822
+  (pull/4818, MacCoss Agent 1) queued; verify its commit is the PR head.
+- **#4817** (pwiz, reviewer chambm): Thermo master-scan-0 O(n^2) fix.
+- `/code-review medium` on pwiz_tools/Osprey (second pass): fixed 1, 3, 4, 5, 7, 8, 9, 10; documented
+  2 (MSX not recognizable from a plain cache); dropped 6 (all-windows list is #4710's deliberate fix,
+  goldens unchanged). Details in commit ec573236b7.
+- Next: watch CI on all seven PRs; Matt reviews the pwiz ones; then Mike on #4818 (open questions
+  below); after the pwiz PRs merge, merge master into #4818.
+
 ## Status 2026-10-10 (day session)
 
 Plan (Brendan): fix #4814's EncyclopeDIA test; then the replicated head-to-head against #4710 and the
@@ -435,3 +450,5 @@ every golden unchanged.
 - 2026-10-10 morning: #4815 (PR 3) opened; presentation draft demux-integration.html.
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20261010_osprey_pwiz_demux.md` before starting work.
+- 2026-10-10 day: EncyclopeDIA test re-baselined on #4805/#4814; replicated head-to-head (equivalent);
+  profiled, found and fixed the Thermo O(n^2) (#4817); review fixes; #4818 opened; Perf/Regression queued.
