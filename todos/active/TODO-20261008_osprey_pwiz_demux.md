@@ -39,6 +39,20 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Status 2026-10-09 night (PRs opened)
+
+- **#4813** (PR 2b, parallel solve-ahead) opened 20:15, stacked on #4806, reviewer chambm.
+- **#4814** (PR 1b, full search span + shared-edge rule) opened 20:23, stacked on #4805, reviewer
+  chambm; `/code-review medium` triaged (fixed: unshared upper edge stayed closed, docs; kept: C#-generated
+  gold values, M fixture peaks).
+- **#4812** issue: Osprey first-pass training at the 300k cap is underpowered (PR 1b root cause).
+- bt143 "Core Windows x86_64 (no vendor DLLs)" failures were NOT flaky: the branches predated Matt's #4800
+  (master 12:39 Oct 9), so the no-vendor build never compiled the test suites; a fresh agent fails "test
+  source not found", a reused agent passes on STALE test DLLs left in ignored bin/ (git clean -f -d keeps
+  them) - #4805's green this morning was such a run. Fixed 21:44 by merging origin/master into #4805 and
+  #4806, then those into #4814 and #4813 (plain merges, Analysis tests green after each, diffs unchanged).
+- Order to merge: #4805 -> #4814, #4806 -> #4813 (two independent stacks), then PR 3, then the Osprey PR.
+
 ## Provenance: PR stack vs the overnight result (2026-10-09 afternoon)
 
 Rule (Brendan): every PR must trace back to what the overnight session measured, keep its benefits,
@@ -334,3 +348,6 @@ every golden unchanged.
 - 2026-10-09 ~08:50 #4805 and #4806 open (Matt reviewing); 5 ppm arms in flight.
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20261009_pwiz_demux_prs.md` before starting work.
+- 2026-10-09 night: issue #4812; PRs #4814 (1b) and #4813 (2b) opened; PR 3 prepared locally (a984f2ad1a).
+  **Next session handoff**: For detailed startup protocol, read
+  `ai/.tmp/handoff-20261010_pwiz_demux_night.md` before starting work.

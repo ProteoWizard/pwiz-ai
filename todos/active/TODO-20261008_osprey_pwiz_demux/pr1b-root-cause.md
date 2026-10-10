@@ -153,7 +153,11 @@ OSPREY_DEMUX_MASS_ERROR_PPM in DemuxCache.cs. Last night's uncommitted extractor
     1 1 0.1). The defect does not gain from more data (37,627, inside its 300k range). Seeds 1 and 2
     at 1.5M queued (`run-6run-train15m-seeds.sh`) for an interval.
 
-## Root cause (pending the 1.5M seed replicates)
+21. **Confirmed at 1.5M, three seeds** (`eclipse-search6\compare-t15m-seeds.txt`, posted on #4812):
+    defect 37,627 / 37,272 / 36,657 (mean 37,185), corrected 37,436 / 37,722 / 37,468 (mean 37,542);
+    paired +357 (+1.0%), 95% CI ~ +/-3.4%. Seed spread 2.6% / 0.8% (was 6% / 11% at 300k).
+
+## Root cause (confirmed)
 
 PR 1b's identification loss is not a property of demultiplexing. The corrected search span
 demultiplexes better (5), and its features are as good (14, 15). The loss comes from **Osprey's
