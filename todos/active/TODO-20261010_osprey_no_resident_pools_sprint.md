@@ -5,7 +5,8 @@
   branches off master, listed here as they start)
 - **Base**: `master`
 - **Created**: 2026-10-10
-- **Status**: In Progress - PR 1 started. Precondition met: #4816 merged 2026-10-10 as 5a1cd82efc
+- **Status**: In Progress - PR 1 code complete, gated and reviewed; PR not yet opened (awaiting
+  Brendan's go-ahead, with the TeamCity trigger). Precondition met: #4816 merged 2026-10-10 as 5a1cd82efc
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -76,7 +77,21 @@ this file is the plan for the memory rows of it. Inventory re-checked 2026-10-10
       "counted 1607 ... produced 1607" (reverted; log `ai/.tmp/sessions/20261010-nores/sabotage.log`)
 - [ ] Update #4601 and #4577 text that cites `OSPREY_STAGE6_STREAM_SURVIVORS`
 - [ ] `ai/docs/osprey-development-guide.md` cites the switch - update with the PR
-- Gate so far: `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` green, 649/649
+- Gate: `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` green, 649/649;
+  `regression-parallel.ps1 -Dataset All` 48 PASS / 0 FAIL / 0 SKIP in 32:42
+  (`ai/.tmp/sessions/20261010-nores/regression-all.log`); Stellar re-run green after review fixes
+- Commits: c8bdd230d7 (main change), fbc36e017c (review fixes)
+- `/code-review medium` (8 findings), triaged:
+  - FIXED #1: count violation was thrown inside parallel loops (message lost) - now returned through
+    `Load`'s error, which both callers log + exit 1. Re-verified with the off-by-one: `Error: First-pass
+    compaction counted 1607 ...` (`ai/.tmp/sessions/20261010-nores/sabotage2.log`)
+  - FIXED #6 stale "loader holds no per-file state" remark; #8 three unreflowed comment lines
+  - DROPPED #2 (check fires late / not on resume): with reconciliation on (default) Stage 6 planning
+    loads every run at Stage 5, as before; the deleted check never ran on a resume either
+  - DROPPED #3 (silently skipped when maps differ in size): only the #4544 stem-collision case
+  - DROPPED #4 (`=1` refused too): same as the OSPREY_STAGE7_STREAM precedent and its test
+  - DROPPED #5 (regression.ps1 does not pre-detect a stale export): Osprey's startup refusal names it
+  - DROPPED #7 (move check out of Load): design preference; Load is where every count is seen
 
 ### A/B finding (2026-10-10)
 
