@@ -5,14 +5,13 @@
   branches off master, listed here as they start)
 - **Base**: `master`
 - **Created**: 2026-10-10
-- **Status**: In Progress. PR 1 [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) and PR 2
-  [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (stacked on #4820's branch) are both READY
-  TO MERGE - TeamCity Perf/Regression #305 / #306 SUCCESS, regression-parallel All 48/0, reviews
-  triaged. Merge #4820 first. PR 3 waits on Brendan's route decisions (memo below); PR 4's premise
-  measured stale (see PR 4). Precondition met: #4816 merged 2026-10-10 as 5a1cd82efc
+- **Status**: In Progress. PR 1 and PR 2 MERGED 2026-10-11 (#4820 as 3a5a0a5d00, #4821 as
+  a78f88b5a4). PR 3 waits on Brendan's route decisions (memo + experiments below); PR 4's premise
+  measured stale (see PR 4). OPEN follow-up from #4821, now due: pwiz-ai tooling still sets the
+  retired OSPREY_PERCOLATOR_ONLY / OSPREY_DUMP_PERCOLATOR (see "Merged" log entry).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, branch `Skyline/work/20261010_osprey_retire_projection_off`)
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11); PR 3 / PR 4 not started
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -78,8 +77,8 @@ this file is the plan for the memory rows of it. Inventory re-checked 2026-10-10
       per-file rows-per-base_id is itself O(files x entries). VERIFIED it fires: with the
       comparison temporarily off by one, TestSubsetStraightThroughAndReruns failed with
       "counted 1607 ... produced 1607" (reverted; log `ai/.tmp/sessions/20261010-nores/sabotage.log`)
-- [ ] Update #4601 and #4577 text that cites `OSPREY_STAGE6_STREAM_SURVIVORS`
-- [ ] `ai/docs/osprey-development-guide.md` cites the switch - update with the PR
+- [x] Update #4601 and #4577 text that cites `OSPREY_STAGE6_STREAM_SURVIVORS`
+- [ ] `ai/docs/osprey-development-guide.md` cites the switch - DUE NOW (merged); see the Merged log entry
 - Gate: `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` green, 649/649;
   `regression-parallel.ps1 -Dataset All` 48 PASS / 0 FAIL / 0 SKIP in 32:42
   (`ai/.tmp/sessions/20261010-nores/regression-all.log`); Stellar re-run green after review fixes
@@ -129,30 +128,30 @@ output to compare:
 Stage 7 (its survivor loader is null), so those arms stay live until PR 3.
 - [x] ~~Bank the A/B with `OSPREY_FDR_PROJECTION=0 OSPREY_ALLOW_UNFIXED_RESIDENT=projection-off`~~
       - aborts on master like the Stage 6 arm (PR 1's "A/B finding"); golden is the oracle
-- [ ] `MaterializeResumedFile` overlay arm + `MaterializeAllResumedFiles` null-loader path (moved
+- [ ] **(DEFERRED to PR 3 shared tail - PR 2 only reworded their comments)** `MaterializeResumedFile` overlay arm + `MaterializeAllResumedFiles` null-loader path (moved
       here from PR 1: projection-off is what still reaches them)
-- [ ] Coordinate #4511 first: its streaming-vs-resident parity check uses this path - do it now or
+- [x] Coordinate #4511 first: its streaming-vs-resident parity check uses this path - do it now or
       rewrite it against the golden
-- [ ] PerFileScoringTask: `NeedsResidentPool`, `GuardResidentPool`, `ResidentPoolGuardError`,
+- [x] PerFileScoringTask: `NeedsResidentPool`, `GuardResidentPool`, `ResidentPoolGuardError`,
       `ResidentPoolTrigger`, the fat loads in Run / RehydrateFromOwnOutputs / LoadJoinOnlyScores
-- [ ] FirstPassFdrTask: legacy Run branch (~722-820), `RunPercolatorFdr(List)` facade,
+- [x] FirstPassFdrTask: legacy Run branch (~722-820), `RunPercolatorFdr(List)` facade,
       `RunFirstPassProteinFdr`, `WriteFdrScoresSidecars`, resident `WriteFdrBenchPass1IfRequested`,
       `CompactFirstPass` non-bundle branch, the resident refusal and overlay arms
-- [ ] Osprey.FDR: `PercolatorEngine.RunPercolatorFdr(List)`, `DispatchSvm`, `ApplyPercolatorResults`,
+- [x] Osprey.FDR: `PercolatorEngine.RunPercolatorFdr(List)`, `DispatchSvm`, `ApplyPercolatorResults`,
       `RunPercolatorStreaming`; `PercolatorEntryBuilder.cs` (move `BuildBasicFeatures` first - used
       by PercolatorScorer ~1845); `PercolatorScorer.ScorePopulationAndComputeFdr`. CHECK
       `ProteinFdr.RunFirstPassProteinFdr` / `ProteinFdrEngine.RunFirstPass` - also called by
       PerFileRescoreTask ~1046 on the bundle path (PR 3)
-- [ ] Already dead: resident `PercolatorEngine.ClampExperimentQToBestRun` (only FdrTest calls it),
+- [x] Already dead: resident `PercolatorEngine.ClampExperimentQToBestRun` (only FdrTest calls it),
       the uncalled `RunPercolatorFdr(FdrProjectionSet)` facade
-- [ ] Drop `OSPREY_DUMP_PERCOLATOR` / `OSPREY_PERCOLATOR_ONLY` and `WriteStage5PercolatorDump`
+- [x] Drop `OSPREY_DUMP_PERCOLATOR` / `OSPREY_PERCOLATOR_ONLY` and `WriteStage5PercolatorDump`
       (decision 2); update DIAGNOSTICS.md and Test-Snapshot references
-- [ ] `ModelDiagnosticsReport.Write` + batch `ModelDiagnosticsData.Build`: delete, or keep test-only
+- [ ] **(DEFERRED to PR 3 - still live via the R1 batch overlay; also keeps #4542 finding 1 alive)** `ModelDiagnosticsReport.Write` + batch `ModelDiagnosticsData.Build`: delete, or keep test-only
       behind an explicit test flag (decision 5)
-- [ ] Tests: ResidentPoolGuardTest, PercolatorEntryBuilderTest, FdrTest (779, 833, 1165, 1242, 1298,
+- [x] Tests: ResidentPoolGuardTest, PercolatorEntryBuilderTest, FdrTest (779, 833, 1165, 1242, 1298,
       3436), LibraryFragmentReleaseTest 176-232, ModelDiagnosticsDataTest oracle uses
-- [ ] #4463: one of its two wrong emitters goes; finish the experiment-level count or update it
-- [ ] #4542 finding 1 resolved by deletion; update the issue
+- [x] #4463: one of its two wrong emitters goes; finish the experiment-level count or update it
+- [ ] #4542 finding 1 NOT resolved by PR 2 (null accumulator still falls back to the batch Write); commented 2026-10-11 - closes when the batch Write goes in PR 3
 
 ## PR 3 - the untokened resident routes, then the shared tail (catalogue A3, A6, A7, A8)
 
@@ -251,7 +250,7 @@ not affected (their lists are never drained).
 - [ ] R1 `--task FirstPassFDR` re-run over a dir with `.reconciliation.json`: resident stubs load +
       all-runs `HydrateReconciliationOverlay` + `BuildFromEntries` (PerFileScoringTask ~1509-1529,
       ~2088; FirstPassFdrTask ~3191)
-- [ ] R2 `OSPREY_DUMP_PERCOLATOR` - gone with PR 2
+- [x] R2 `OSPREY_DUMP_PERCOLATOR` - gone with PR 2
 - [ ] R3 `--task SecondPassFDR` with `CanStreamStage7Join` false for disk reasons (no current
       summary / stale reconciled parquet): `HydrateCompactedStreaming` all-runs + resident Stage 7
       + `ProteinFdrEngine.RunFirstPass` over the bundle
@@ -314,3 +313,32 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - #4645: its investigation loses the projection-off / compacted-buffer A/Bs
 - #4577 (library retained set, O(entries)) is out of scope but its gate text cites the Stage 6 switch
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
+
+## Progress Log
+
+### 2026-10-11 - Merged PR 1 and PR 2
+
+#4820 merged as 3a5a0a5d00 and #4821 as a78f88b5a4 (squash, `--admin` approved by Brendan; no review
+approval on either).
+- #4820 retired `OSPREY_STAGE6_STREAM_SURVIVORS` and `compacted-entries-buffer`, moved the compaction
+  count check into `SurvivorCountCheck`, and fixed the master flake in `TestSubsetDiagnosticsWithoutReanalysis`.
+- #4821 retired `OSPREY_FDR_PROJECTION=0` (~3,700 lines), `projection-off` (`KNOWN_UNFIXED` is now
+  empty), `OSPREY_DUMP_PERCOLATOR` and `OSPREY_PERCOLATOR_ONLY`.
+- Neither had a banked A/B: both resident oracles already aborted in Stage 7. The golden is the oracle.
+- #4821 was stacked on #4820's branch. After #4820's squash it was retargeted to master, and master was
+  merged in. Every conflict resolved to the branch side; master's Osprey tree equalled #4820's final
+  head, and the merge left #4821's tree byte-identical to the TeamCity-tested head.
+- Issue comments: #4664 (co-assignment measurement), #4542 (finding 1 still live until PR 3), #4463
+  (one emitter left), #4511 (resident 2nd-pass route gone; sections 2-4 unaffected).
+
+**Deferred to PR 3:**
+- `ModelDiagnosticsReport.Write` / batch `ModelDiagnosticsData.Build` (decision 5)
+- `MaterializeResumedFile` overlay arm
+- `HydrateReconciliationOverlay`
+- the allowance plumbing (`OSPREY_ALLOW_UNFIXED_RESIDENT`, `NamesResidentPath`)
+
+**Due now in pwiz-ai** (Osprey refuses these variables at startup):
+- `scripts/Osprey/Test-Snapshot.ps1` stage5 mode and `Profile-Stage5.sh` set `OSPREY_PERCOLATOR_ONLY`.
+  C# needs `--task FirstPassFDR` as the stop point; Rust still honors the variable, so the harness
+  needs a per-tool branch.
+- `DIAGNOSTICS.md` and `docs/osprey-development-guide.md` still document the retired variables.
