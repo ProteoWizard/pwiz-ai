@@ -499,5 +499,10 @@ every golden unchanged.
 - 2026-10-11: #4818 retargeted to the stack branch; Copilot fixes; email to Mike + Matt; issue #4822; Mike's
   library and the Webinar 27 set downloaded and catalogued; on them #4710 weighted leads by 3.1%; makima
   and closed-form spline options built (closed form: same spectra, 23 s -> 14.6 s).
+  Decisions (Brendan, 2026-10-11 evening): #4814 code inspection re-run started by Brendan; archive
+  tag waits until the rest of the demux integration has merged (then #4710 is only a source of things to
+  integrate); reply to Mike held until the numbers are complete and ideally the gap to the weighted engine
+  is understood or closed; closed-form spline vs makima as the new default is undecided (a closed form
+  only matters if the 3-point spline stays the default).
   **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20261011_demux_night.md` before starting work.
