@@ -474,3 +474,6 @@ approval on either).
   - `bash -n` passes; not run.
 - `Measure-Pipeline.ps1` and the `Test-Snapshot` scrub lists only UNSET the variables, which is
   still correct, so they are unchanged.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261011_osprey_no_resident_pools_pr3.md` before starting work.
