@@ -6,7 +6,8 @@
 - **Base**: `master`
 - **Created**: 2026-10-10
 - **Status**: In Progress. PR 1 and PR 2 MERGED 2026-10-11 (#4820 as 3a5a0a5d00, #4821 as
-  a78f88b5a4). PR 3 waits on Brendan's route decisions (memo + experiments below); PR 4's premise
+  a78f88b5a4). PR 3 routes DECIDED 2026-10-11 - see "PR 3 PLAN" (next session starts at its step 1,
+  the cross-impl baseline); PR 4's premise
   measured stale (see PR 4). The pwiz-ai follow-up from #4821 is DONE (2026-10-11).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
@@ -153,6 +154,118 @@ Stage 7 (its survivor loader is null), so those arms stay live until PR 3.
 - [ ] #4542 finding 1 NOT resolved by PR 2 (null accumulator still falls back to the batch Write); commented 2026-10-11 - closes when the batch Write goes in PR 3
 
 ## PR 3 - the untokened resident routes, then the shared tail (catalogue A3, A6, A7, A8)
+
+### PR 3 PLAN - decided with Brendan 2026-10-11 (implement in a FRESH session)
+
+**Decisions (Brendan, 2026-10-11):**
+- **R3/R4:** reject an older-build reconciled parquet at the currency check, then delete the eager
+  all-runs arms. This is the first piece.
+- **R1:** stream. When FirstPassFDR will Run and train, treat `.reconciliation.json` as absent, so it
+  takes the lean load. Then delete the cleanup tail.
+- **R5: DELETE** `OSPREY_DUMP_RESCORED`, `OSPREY_DUMP_MULTICHARGE` and `OSPREY_DUMP_RECONCILIATION`
+  (and their `*_ONLY` gates) from C#. Keep `OSPREY_DUMP_CONSENSUS`, which is O(precursors) and has
+  no plumbing.
+  - Principle (Brendan): diagnostic hooks were kept because they were "free". Once one costs
+    maintenance or complexity, remove it and wait for a need to resurface.
+- **No per-variable refusal for retired env vars.** Replace the per-name refusals with ONE general
+  check: an `OSPREY_*` environment variable Osprey does not recognize is an error, just as an
+  unrecognized CLI argument is. This retires `Stage7StreamRetiredSet`,
+  `Stage6StreamSurvivorsRetiredSet`, `FdrProjectionRetiredSet` and `PercolatorDumpRetiredSet`.
+- **Cross-impl parity must not be broken by accident.** The Rust gate's days are numbered, but
+  breaking it has to be an explicit decision, not something we stumble into the way the A/B oracles
+  were lost. A cross-impl test must PASS at the end of this PR.
+
+**Facts gathered 2026-10-11 (not yet acted on):**
+- **No `OSPREY_*` scan exists today.** There is no `GetEnvironmentVariables()` / prefix check
+  anywhere in `pwiz_tools/Osprey`. Recognition is scattered: about 112 distinct `@"OSPREY_..."`
+  literals across OspreyEnvironment, OspreyFileDiagnostics, OspreyDiagnostics and the tasks.
+- **The cross-impl harness** is `ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1`
+  (README in the same folder; the gate is Stage 7 protein FDR + blib SQL at 1e-9).
+  - For the C# run it sets `OSPREY_DUMP_STAGE7_PROTEIN_FDR` and optionally `OSPREY_SVM_C_TOLERANCE`
+    (~438-451). Both are recognized by C#.
+  - The Rust run sets `OSPREY_DUMP_STAGE7_PROTEIN_FDR` (~406).
+  - It builds NEITHER side: run `Compare/Build-OspreyRust.ps1` and
+    `Build-Osprey.ps1 -Configuration Release` first. It hard-fails on stale binaries.
+- **The unknown-variable check is a risk to cross-impl and harness runs.** A developer shell (or a
+  harness) holding a RUST-ONLY variable would now stop the C# run.
+  - Rust-only names include `OSPREY_DUMP_PERCOLATOR`, `OSPREY_PERCOLATOR_ONLY`,
+    `OSPREY_TRACE_PEPTIDE`, `OSPREY_DUMP_CAL_PREFILTER` and `OSPREY_DIAG_XCORR_SCAN`; see
+    `DIAGNOSTICS.md` / the dev guide's "Rust-only" notes.
+  - Also check which variables `Test-Snapshot.ps1` passes to the C# tool: its stage6 envVars still
+    set the three dumps being deleted.
+
+**Steps, in order:**
+1. **Baseline cross-impl FIRST, on current master, before any change.**
+   - Build Rust (`Build-OspreyRust.ps1`) and C# Release, then run
+     `Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files Single`, then
+     `-Dataset Astral -Files All -Force` (~45 min; detach it).
+   - Record PASS/FAIL here with log paths. #4820 and #4821 were gated only against the C# golden,
+     so whether parity still holds after them is UNKNOWN.
+   - If it FAILS now, stop and bring it to Brendan before PR 3 changes anything. That is the
+     explicit decision point.
+2. **R3/R4.** Find the reconciled-parquet currency predicate: `PerFileResumeDriver.IsCurrent` /
+   `ScoringTaskShared.AllReconciledParquetsCurrent` / `IsCurrentReconciledSurvivorSubset`, and
+   `ParquetScoreCache.IsSubsetWithoutScoreIndex`.
+   - Make an older-build parquet NOT current. Then a resume re-scores that run, and
+     `--task SecondPassFDR` refuses up front with the existing
+     `SecondPassFdrTask_Run__0__of__1__runs_...older_Osprey_build` text instead of a stack trace.
+   - Delete `MaterializeAllResumedFiles` + the eager arm (`PerFileRescoreTask` Rehydrate ~914-940),
+     and refuse up front in `PerFileScoringTask.Rehydrate` when
+     `ExpectReconciledInput && !CanStreamStage7Join`.
+   - Delete the dead tail: `ExecuteRescore` / `BuildRescoredPool` null-loader arms;
+     `Pass2FdrSidecar` `!Streams` branches (`residentByFile`, `LoadOneFile` resident arm,
+     `ReloadPass2Sidecars`, `OverlayPass2OntoResidentPool`); `WarnResidentStage7Join`;
+     `WritePass2AndFinalize(rescored.Value)`; the `RescoredEntries` resident fallbacks;
+     `MaterializeResumedFile`'s overlay arm.
+   - Reproduce the old behavior first, as a SubsetPipelineTest case: an older-build marker parquet
+     (the night's `ai/.tmp/sessions/20261010-nores/routes/restamp_parquet.py` shows how) must now
+     re-score / refuse up front.
+3. **R1.** In `PerFileScoringTask.Rehydrate` (~529/593) treat `hasReconSidecars` as false when
+   FirstPassFDR will Run and train. Factor the "Training the first-pass Percolator model" term out
+   of `PreCompactionPoolReason`.
+   - Then delete: `HydrateReconciliationOverlay` (+ its IOTest oracle tests or port them), the
+     overlay arm of `HydrateRescoreBundleIfPresent` / `LoadOwnReconciliationBundle`,
+     `ModelDiagnosticsReport.Write` + the null-accumulator fallback in
+     `LogFirstPassResultsAndReport` (closes #4542 finding 1), `ProteinFdrEngine.RunFirstPass` at
+     PerFileRescoreTask ~1041, and the stubs-only resident loop + `WarnPreCompactionPool` if nothing
+     else reaches them.
+   - Decision 5: batch `ModelDiagnosticsData.Build` stays only as a test oracle behind an explicit
+     test flag, or goes with its oracle tests (ModelDiagnosticsDataTest uses it ~25x).
+   - Fix the false "every file in memory" warning + `pre-compaction-pool: resident` route line on
+     the shipped HPC SecondPassFDR node (1st-pass sidecars withheld -> `hasReconSidecars` false).
+4. **R5.** Delete the three dumps:
+   - `IOspreyDiagnostics` / `OspreyFileDiagnostics` members and writers;
+   - `Stage6Planner`'s `EntriesForDump` plumbing;
+   - the `PerFileRescoreTask` `DumpRescored` pull (~815);
+   - the three names in `OspreyDiagnostics.s_forcedDumpBundle` (`-d`).
+   - Update `Test-Snapshot.ps1` stage6 (C# envVars + `compareDumps`: keep `consensus`, keep the
+     artifact comparison), `DIAGNOSTICS.md` (mark Rust-only), `Measure-Pipeline.ps1` scrub lists
+     (harmless) and docs 09/10/11/14/15/18 under `pwiz_tools/Osprey/docs`.
+5. **Unknown-`OSPREY_*` check.**
+   - Centralize the recognized names: one registry in `Osprey.Core`, e.g. `OspreyEnvironment`
+     `KnownVariables`, fed by every reader. Prefer making the readers go through it so the list
+     cannot drift.
+   - At startup (Program.cs, beside the current refusals), error on any `OSPREY_*` variable not in
+     it, naming it. Delete the four `*RetiredSet` refusals.
+   - Decide with Brendan how Rust-only names are treated: still an error, since C# does not honor
+     them (consistent and simplest)? Or a recognized-but-ignored list for the cross-impl workflow?
+     Default to ERROR unless he says otherwise. The cross-impl harness and Test-Snapshot must set
+     Rust-only variables ONLY for the Rust process.
+   - Test: CommandLineErrorTest (`STARTUP_VARIABLES` / `Variable(...)` helper) - an unknown
+     `OSPREY_FOO` fails naming it; a known one passes.
+   - A pwiz-ai/CI shell with stale exports will now fail loudly. Check `regression.ps1` /
+     `regression-parallel.ps1`, which set e.g. `OSPREY_PASS2_VERIFY_WORKER`, and TeamCity
+     `tctest.bat` for anything unrecognized.
+6. **Gates at the end:**
+   - unit gate;
+   - `regression-parallel -Dataset All`;
+   - SubsetPipelineTest;
+   - `/code-review medium`;
+   - TeamCity Perf/Regression;
+   - **AND the cross-impl gate re-run** (Stellar Single + Astral All) with the result recorded.
+     If it now fails where step 1 passed, that is a parity break: bisect it and bring it to Brendan
+     as an explicit decision; do not merge past it silently.
+7. Probably two PRs: (a) R3/R4 + R5 + the env-var check, and (b) R1 + its tail. Keep each reviewable.
 
 Each route reviewed with Brendan before implementing (decision 3):
 
