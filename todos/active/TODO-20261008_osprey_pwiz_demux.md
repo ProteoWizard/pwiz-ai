@@ -42,10 +42,10 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
 ## Status 2026-10-11 - Mike's data and library: weighted engine leads
 
 - **Data**: Webinar 27 set (EV13-15 SAXN + Total04-06 HydN, raw + 2022 C++ demuxed mzML) in
-  `D:	est\osprey-runs\eclipse-webinar27`; Mike's library `D:	est\osprey-runs\eclipse-library  carafe_spectral_library+decoy+entrapment.tsv`. Catalogued in `ai/docs/osprey-large-datasets.md` s.5.
+  `D:\test\osprey-runs\eclipse-webinar27`; Mike's library `D:\test\osprey-runs\eclipse-library\carafe_spectral_library+decoy+entrapment.tsv`. Catalogued in `ai/docs/osprey-large-datasets.md` s.5.
   remes-ev Total01-03 are NOT part of Mike's or the webinar data; earlier "six runs" results used them.
 - **Head-to-head, Webinar 27 six, Mike's library, train 1.5M, seeds 42/1/2**
-  (`D:	est\osprey-runs\pwiz-demux\h2h-webinar27\compare-all.txt`): pwiz 42,045/42,369/42,149 (mean
+  (`D:\test\osprey-runs\pwiz-demux\h2h-webinar27\compare-all.txt`): pwiz 42,045/42,369/42,149 (mean
   42,188, FDP 0.32-0.37%); #4710 weighted 43,568/43,670/43,204 (43,481, **+3.1%**, FDP 0.32-0.40%);
   #4710 msconvert-style 43,033/42,759/42,510 (42,767, +1.4%, FDP 0.38-0.41%). Reverses "equivalent";
   Mike was told equivalent - must report. #4818 description numbers need updating.
@@ -54,7 +54,7 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
 - **Interpolation branch** `Skyline/work/20261011_demux_interpolation` (pwiz-work1, local, 3ec5180c22, on
   the stack branch): `DemuxInterpolation` NaturalSpline (default, MathNet) / NaturalThreePoint (closed
   form) / Makima (6 acquisitions), msconvert key `interpolation=`, cache sized for reach. Analysis tests
-  185/185. EV13 caches (`D:	est\osprey-runs\pwiz-demux\interp\`): closed form == spline (cosine
+  185/185. EV13 caches (`D:\test\osprey-runs\pwiz-demux\interp\`): closed form == spline (cosine
   1.0000 on all 158,700); makima median cosine 0.9995. Rough timing under load: spline 54 s, closed
   form 24 s, makima 22 s. Measurement build `_bin\pwizdemux-interp` (nightlywork/demux-interp-measure,
   059b5fef10: PR head + seed knob + OSPREY_DEMUX_INTERPOLATION). Queued: idle speed (5 arms,
