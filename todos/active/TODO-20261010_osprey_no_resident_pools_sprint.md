@@ -196,6 +196,37 @@ Recommendation: **STREAM R1 and R5, REFUSE R3 and R4 early.**
   `OverlayPass2OntoResidentPool`, `WarnResidentStage7Join`, `WritePass2AndFinalize(rescored.Value)`,
   `RescoredEntries` resident fallbacks are kept alive only by R3/R4.
 
+**Routes EXERCISED on Stellar (2026-10-11, snapshot exe of the PR 2 branch; scratch
+`D:\test\osprey-runs\nores-routes-20261011\<exp>\` ~70 GB, scripts + status in
+`ai/.tmp/sessions/20261010-nores/routes*`). No route silently wrote a wrong blib.**
+- **R1 CONFIRMED, worse than the memo** (`r1-firstpass-rerun\r1.log`): summary deleted ->
+  `--task FirstPassFDR` warns "Training the first-pass Percolator model needs ... every file in memory",
+  `[PATH] pre-compaction-pool: resident`, loads every run, builds `all-runs-bundle: built runs=3` -
+  then "first-pass intermediate files for all 3 files are up to date; skipping first-pass scoring" -
+  NO training ran, and planning re-ran from scratch (bundle unused). Outputs byte-identical. Also: a
+  deleted `<stem>.1st-pass.model.json` is NOT regenerated (not a declared output).
+- **R3 PARTIAL.** Summary missing: on an HPC-staged node (1st-pass sidecars withheld, as
+  Invoke-HpcChain stages it) loads all runs (~5 GB warning) THEN errors; on a full dir errors
+  immediately. Missing reconciled parquet / Stage-4 parquet in its place: errors UP FRONT. An
+  OLDER-BUILD reconciled parquet (marker 'true' or no score_index): loads every run, then
+  `InvalidOperationException ... written by an older Osprey build` WITH A STACK TRACE
+  (SecondPassFdrTask.cs:417) - a user-data error surfaced as a defect.
+- **R4 mostly REFUTED:** a deleted or Stage-4 reconciled parquet -> `rescore-resume: adopted=2
+  rescore=1`, only that run re-scored, byte-identical. CONFIRMED only for the older-build parquet:
+  the driver judges it VALID (PerFileRescoring skipped), then SecondPassFDR loads all runs and dies
+  as above (`r4d-resume-oldmarker`).
+- **R5 CONFIRMED:** `OSPREY_DUMP_RESCORED` -> "Rebuilding the kept precursor candidates from 3
+  files..." (whole pool) with NO `[PATH]` line, so route-line gates cannot see it.
+- **Also found:** the SHIPPED HPC SecondPassFDR node (streams correctly) logs a FALSE "Resuming
+  without cross-run reconciliation files needs ... every file in memory" warning and
+  `[PATH] pre-compaction-pool: resident`, because the withheld 1st-pass sidecars make
+  `hasReconSidecars` false. BuildRescoredPool and MaterializeAllResumedFiles share one resource
+  string, so the log cannot tell those routes apart.
+- **Sharpened recommendation:** R1 stream (pure waste today). R3/R4 reduce to ONE defect: an
+  older-build reconciled parquet is accepted as current, then refused after an all-runs load with a
+  stack trace - make the currency check reject it up front (then the eager arms lose their last
+  trigger). R5 stream or refuse as before. Fix the false resident warning/route line on the HPC node.
+
 **Reachability PROBED on the PR 2 branch (2026-10-11 00:30, then reverted):** temporary throws at the
 start of `RescoreHydration.HydrateReconciliationOverlay`, `ModelDiagnosticsReport.Write` and just
 before `PerFileRescoreTask`'s `ProteinFdrEngine.RunFirstPass` call. Unit suite: only the 3 IOTest
