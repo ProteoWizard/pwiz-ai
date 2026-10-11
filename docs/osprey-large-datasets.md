@@ -61,6 +61,7 @@ containers that day).
 | TDP-43 Plasma EV-Quant | **164** | **784 GB** | 4.8 GB | yes | human plasma EVs; exactly 2x SEA-AD in both runs and bytes |
 | AHA Plasma Stroke EV | **200** | **1,167 GB** | 5.8 GB | yes | 2 plates x (96 quant + 4 ChromLib); aortic arch replacement |
 | TEIREX Experiment 2 | 936 | 8,296 GB | 8.9 GB | **no** | 10 x 96-well mouse plates; one plate fits, the set does not |
+| Eclipse staggered (Webinar 27) | 6 | 19.9 GB (6 raw + 6 demuxed mzML) | 1.2 GB raw | yes | **staggered-window DIA**: the demultiplexing test set, with C++ msconvert's demultiplexed mzML beside each run |
 
 ## 1. CHS-SeerData (UW-Floyd Lab) - RECOMMENDED NEXT
 
@@ -148,6 +149,52 @@ SEA-AD's 5.9 GB, so a TEIREX plate is heavier per run as well as more numerous.
 
 Mike's note: this set needs ~500 GB RAM for the DIA-NN neural-net step. That is a DIA-NN
 constraint, not an Osprey one, but it indicates the scale.
+
+## 5. Eclipse staggered DIA (Webinar 27) - the demultiplexing set
+
+* Portal: https://panoramaweb.org/MacCoss/maccoss/2025-Webinar-DIA-BoundaryImputation/project-begin.view
+* WebDAV raw: `https://panoramaweb.org/_webdav/MacCoss/maccoss/2025-Webinar-DIA-BoundaryImputation/%40files/RawFiles/`
+* **Access: OK (207)** for the Agents group, granted 2026-10-11 (Site:Users had read already).
+  MEASURED: **12 files, 19.9 GB**, flat directory: 6 `.raw` (1.0-1.3 GB) and, beside each, the
+  same run as C++ msconvert's demultiplexed `.mzML` (2.2-2.5 GB). A fresh pull with
+  `Get-PanoramaFiles.ps1 -Parallel 1` took 3:21 (101 MB/s) on BRENDANX-i9.
+
+Orbitrap Eclipse, extracellular-vesicle bead runs (sequence 2022-07-05; acquired July 2022), staggered DIA:
+12 Th windows at 2-fold overlap, demultiplexed into 6 Th bins over about 394-1006 m/z. The data
+behind Skyline Webinar 27, "Peak Boundary Imputation for DIA Data" (Mike and Nick, Dec 2025),
+which backs a Skyline tutorial. That tutorial's own zip
+(`https://skyline.ms/tutorials/PeakBoundaryImputation-DIA.zip`) holds only the Skyline document
+(`ExtracellularVesicalMagNet.sky/.skyd/.blib`), not these files.
+
+| run | raw | demultiplexed mzML |
+|---|---|---|
+| `Ecl_2022_0705_Beads_EV13_SAXN_12mz_10` | 1.24 GB | 2.47 GB |
+| `Ecl_2022_0705_Beads_EV14_SAXN_12mz_17` | 1.26 GB | 2.50 GB |
+| `Ecl_2022_0705_Beads_EV15_SAXN_12mz_31` | 1.23 GB | 2.45 GB |
+| `Ecl_2022_0705_Beads_Total04_HydN_12mz_42` | 1.11 GB | 2.30 GB |
+| `Ecl_2022_0705_Beads_Total05_HydN_12mz_38` | 1.13 GB | 2.32 GB |
+| `Ecl_2022_0705_Beads_Total06_HydN_12mz_40` | 1.08 GB | 2.26 GB |
+
+**The demultiplexed mzML** were written by ProteoWizard 3.0.22112 (C++ msconvert, 2022): its
+`dataProcessing` lists peak picking ("local maximum peak picker") then "PRISM Demultiplexing",
+6 Th output windows. That C++ demultiplexer has the half-width peak-search defect fixed in the C#
+port by pwiz #4814, so these files are a reference for what the 2017-2025 msconvert wrote, and
+for showing the defect's effect on real mzML. Apart from that, the C# port with #4805 matched
+C++ msconvert peak for peak on an EV13 slice.
+
+**Library**: Mike's Carafe library for this set,
+`carafe_spectral_library+decoy+entrapment.tsv` (12.7 GB, decoys and 1:1 entrapment), is in his
+share, not in this folder:
+`https://panoramaweb.org/_webdav/MacCoss/maccoss/Shared_w_lab/%40files/RawFiles/Eclipse-staggered/`.
+That share's EV13 and EV14 (`.raw` and `.mzML`) are byte-identical to this folder's (sampled
+SHA-256 at start, middle and end of each file), so #4710's Eclipse results came from this set.
+
+**Not in this folder:** `Ecl_2022_0705_Beads_Total01/02/03_SAXN_12mz_41/39/37.raw`, the
+three "Total" runs the 2026-10 pwiz-vs-#4710 comparisons searched (with EV13-15) from
+`D:	est\osprey-runsemes-ev` on BRENDANX-i9. Same acquisition series (injections 37-42
+alternate SAXN and HydN), but a different suffix from Total04-06; their Panorama source
+is not recorded. Searches of "the six Eclipse runs" before 2026-10-11 mean EV13-15 + Total01-03.
+Workflow, runners and comparison scripts: `ai/scripts/Osprey/Demux/README.md`.
 
 ## Budgeting a download
 
