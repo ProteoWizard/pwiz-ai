@@ -191,7 +191,7 @@ SHA-256 at start, middle and end of each file), so #4710's Eclipse results came 
 
 **Not in this folder:** `Ecl_2022_0705_Beads_Total01/02/03_SAXN_12mz_41/39/37.raw`, the
 three "Total" runs the 2026-10 pwiz-vs-#4710 comparisons searched (with EV13-15) from
-`D:	est\osprey-runsemes-ev` on BRENDANX-i9. Same acquisition series (injections 37-42
+`D:\test\osprey-runs\remes-ev` on BRENDANX-i9. Same acquisition series (injections 37-42
 alternate SAXN and HydN), but a different suffix from Total04-06; their Panorama source
 is not recorded. Searches of "the six Eclipse runs" before 2026-10-11 mean EV13-15 + Total01-03.
 Workflow, runners and comparison scripts: `ai/scripts/Osprey/Demux/README.md`.
