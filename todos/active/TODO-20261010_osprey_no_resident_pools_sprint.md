@@ -193,6 +193,18 @@ Recommendation: **STREAM R1 and R5, REFUSE R3 and R4 early.**
   `OverlayPass2OntoResidentPool`, `WarnResidentStage7Join`, `WritePass2AndFinalize(rescored.Value)`,
   `RescoredEntries` resident fallbacks are kept alive only by R3/R4.
 
+**Reachability PROBED on the PR 2 branch (2026-10-11 00:30, then reverted):** temporary throws at the
+start of `RescoreHydration.HydrateReconciliationOverlay`, `ModelDiagnosticsReport.Write` and just
+before `PerFileRescoreTask`'s `ProteinFdrEngine.RunFirstPass` call. Unit suite: only the 3 IOTest
+tests that call the overlay DIRECTLY as an oracle failed (TestRescoreHydrationRoundTrip,
+...RejectsActionEntryIdNotInStubs, ...StreamingMatchesResidentCompaction) - no pipeline test reaches
+any of the three. `regression-parallel -Dataset All`: 48 PASS / 0 FAIL with all probes armed
+(`ai/.tmp/sessions/20261010-nores/probe-all.log`). So after PR 2 the batch overlay, the batch
+model-diagnostics report and the bundle protein-FDR recompute are reached by NO gated route; R1 (an
+ungated `--task FirstPassFDR` re-run over a dir with `.reconciliation.json`) is the remaining
+candidate trigger. Whichever way R1 is decided, these three go with it - and with them decision 5
+(`ModelDiagnosticsData.Build` test-only behind a flag, or deleted with its oracle tests).
+
 **Root cause of the PR 1 A/B abort (inferred from code, consistent with the "base_id 0 / entry_id 0"
 signature, not reproduced):** under projection-off / Stage6-switch-off, `FirstPassFdrTask.Run`
 never sets `_survivorLoader`, yet `CanHydratePerRun` admits straight-through
