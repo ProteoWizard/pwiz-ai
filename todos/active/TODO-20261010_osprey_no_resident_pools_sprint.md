@@ -5,11 +5,14 @@
   branches off master, listed here as they start)
 - **Base**: `master`
 - **Created**: 2026-10-10
-- **Status**: In Progress - PR 1 code complete, gated and reviewed; PR not yet opened (awaiting
-  Brendan's go-ahead, with the TeamCity trigger). Precondition met: #4816 merged 2026-10-10 as 5a1cd82efc
+- **Status**: In Progress. PR 1 [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) and PR 2
+  [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (stacked on #4820's branch) are both READY
+  TO MERGE - TeamCity Perf/Regression #305 / #306 SUCCESS, regression-parallel All 48/0, reviews
+  triaged. Merge #4820 first. PR 3 waits on Brendan's route decisions (memo below); PR 4's premise
+  measured stale (see PR 4). Precondition met: #4816 merged 2026-10-10 as 5a1cd82efc
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, branch `Skyline/work/20261010_osprey_retire_projection_off`)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
