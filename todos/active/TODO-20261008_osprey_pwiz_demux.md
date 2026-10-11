@@ -496,3 +496,8 @@ every golden unchanged.
   `ai/.tmp/handoff-20261010_osprey_pwiz_demux.md` before starting work.
 - 2026-10-10 day: EncyclopeDIA test re-baselined on #4805/#4814; replicated head-to-head (equivalent);
   profiled, found and fixed the Thermo O(n^2) (#4817); review fixes; #4818 opened; Perf/Regression queued.
+- 2026-10-11: #4818 retargeted to the stack branch; Copilot fixes; email to Mike + Matt; issue #4822; Mike's
+  library and the Webinar 27 set downloaded and catalogued; on them #4710 weighted leads by 3.1%; makima
+  and closed-form spline options built (closed form: same spectra, 23 s -> 14.6 s).
+  **Next session handoff**: For detailed startup protocol, read
+  `ai/.tmp/handoff-20261011_demux_night.md` before starting work.
