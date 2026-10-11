@@ -252,7 +252,18 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
   `LoadFirstPassExperimentRecords` is read twice back to back (~393, ~403; ~400 MB each at 446).
 - Gate gap: `Regression/DiagnosticsGolden.ps1` does NOT pin nShared, betterByTolerance, deltaRt
   histograms or worstOffenders - diff the whole `coAssignment` subtree (`Get-DiagnosticsPayload`).
-- Next: MEASURE on the 446-run CHS bed (not on this machine - `D:\test\osprey-runs` has no chs-seer)
+- **MEASURED on SEA-AD 82 (2026-10-11, snapshot exe of the PR 2 branch, hard-linked copy dir
+  `D:\test\osprey-runs\sea-ad\runs\seaad-82files-mdiag-measure-20261011`, original run untouched -
+  588/588 files unchanged): the join's floor is FLAT.** Post-GC live (dotMemory `--use-api` forces a
+  full GC at the `coassign-join-start/end` snapshots): 5,071 MB -> 5,100 MB across 82 files
+  (+0.35 MB/file; `run-coassign-only-dotmemory.log` lines 135-143). The pre-GC climb (+689 MB, or
+  5904 -> 6592 MB uninstrumented) is per-file LOH garbage: workstation GC + 64 MB gen0 still +628 MB,
+  + 32 MB LOH threshold cut it to +385 MB. `_byPrecursor` holds 81,759 run-scope / 47,495
+  experiment-scope entries at 82 files vs 57,169 / 44,469 at 12 - grows with DISTINCT precursors,
+  not rows x runs; `coassign-detected rows=3,911,721` is the cumulative counter (identical to the
+  original run). Join wall 17 s; whole-run peak WS 11.69 GB. Section 1's premise is stale.
+- Remaining for #4664 acceptance: the 500/1000-file regeneration on a 64 GB box (not this machine).
+- Was next: MEASURE on the 446-run CHS bed (not on this machine - `D:\test\osprey-runs` has no chs-seer)
   with `OSPREY_MDIAG_COASSIGN_ONLY=1 --timestamp --memstamp OSPREY_LOG_MEMORY=1 OSPREY_LOG_COASSIGN_ALLOC=1`;
   if the join floor is flat, close section 1 with the correction.
 
