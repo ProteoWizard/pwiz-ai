@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261008_testnativemessagebox` (`I:\git_i\sky_testnativemessagebox`)
 - **Base**: `master`
 - **Created**: 2026-10-08
-- **Status**: PR open, awaiting TeamCity
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: #4799
+- **PR**: [#4799](https://github.com/ProteoWizard/pwiz/pull/4799) (merged 2026-10-09)
 
 ## Objective
 
@@ -44,9 +44,19 @@ whose shell presumably shows the dialog during the gap sometimes (inferred, not 
 
 - [x] TestNativeMessageBox -Loop 50
 - [x] 24 connector/native-dialog functional tests + TestNativeMessageBox + CodeInspection, -Loop 3
-- [ ] TeamCity
+- [x] TeamCity (all configurations green on 2147b50f32)
 
 ## Progress log
 
 ### 2026-10-08
 - Ported the never-committed redo from sky_fixes onto .NET 10 master; probe evidence above; PR opened
+- /code-review medium: fixed stale docs on the Open, Save and folder browser recognizers, removed a duplicate
+  static HasDescendant, built GetTopLevelWindows on GetTopLevelWindowHandles; dropped 6 findings (pre-existing
+  behavior, or contradicted by the probe data); 27 tests -Loop 3 including TestLibraryBuild passed
+
+### 2026-10-09 - Merged
+
+PR #4799 merged as commit 426785bde1 (admin override: no approval, branch behind master), after every
+TeamCity configuration passed. Shipped the three classification changes above plus the review cleanups.
+Nothing deferred. Whether the flake is gone can only be confirmed by TestNativeMessageBox staying out of
+the TeamCity failures over the coming weeks.
