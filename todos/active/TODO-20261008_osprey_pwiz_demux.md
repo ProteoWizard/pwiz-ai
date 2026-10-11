@@ -48,6 +48,12 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
   EV13 cache byte-identical to the measured #4817 build. Perf/Regression TeamCity build 4210822
   (pull/4818, MacCoss Agent 1) queued; verify its commit is the PR head.
 - **#4817** (pwiz, reviewer chambm): Thermo master-scan-0 O(n^2) fix.
+- **#4822** (issue, pwiz/performance, brendanx67): remaining demux speed-ups from the profile
+  (closed-form spline ~220 of 429 s solve CPU, needs a tolerance gate; SpectrumToIndices cache;
+  BuildDeconvBlock/Extract; per-thread Thermo accessors) and SCIEX ZT Scan performance (Mike).
+- Email to Mike + Matt sent 2026-10-11 (Gmail, claude.c.skyline, cc Brendan): the seven PRs, #4710 as
+  reference, request for `carafe_spectral_library+decoy+entrapment.tsv`. Archive tag + docs pointer
+  proposed, not yet made.
 - **#4818 base = `Skyline/work/20261010_demux_pwiz_stack`** (Brendan: the Osprey PR shows only the
   Osprey side): a merge of the six pwiz PR heads (#4815 + #4813 + #4814 + #4817; #4805/#4806 come in
   through #4814/#4813), identical outside `pwiz_tools/Osprey` to #4818's head, merged into #4818
