@@ -154,6 +154,54 @@ Stage 7 (its survivor loader is null), so those arms stay live until PR 3.
 ## PR 3 - the untokened resident routes, then the shared tail (catalogue A3, A6, A7, A8)
 
 Each route reviewed with Brendan before implementing (decision 3):
+
+**Route memo for that review (night session 2026-10-10, read-only agent, line numbers approximate).**
+Recommendation: **STREAM R1 and R5, REFUSE R3 and R4 early.**
+- **R1** (`--task FirstPassFDR` over a dir with `.reconciliation.json`, outputs not current): takes
+  the resident stubs-only loop (~1.19 GB/file) + all-runs `HydrateReconciliationOverlay` +
+  `BuildFromEntries`, because `hasReconSidecars` forbids the lean load and the "Training the
+  first-pass Percolator model" `PreCompactionPoolReason` forbids streaming. The overlay bundle is
+  PURE WASTE: `FirstPassFdrTask.Run` never reads `RescoreBundle` and PerFileRescore is excluded.
+  Fix: treat `hasReconSidecars` as false when FirstPassFDR will Run and train -> it takes the
+  existing lean counts-only load. ~20-40 lines in PerFileScoringTask + resx + test. Then the
+  Training reason, `HydrateReconciliationOverlay` (~110 lines; IOTest uses it as an oracle),
+  and - once projection-off and DUMP_PERCOLATOR are gone - `ModelDiagnosticsReport.Write` /
+  `ModelDiagnosticsData.Build` (prod) and `ProteinFdrEngine.RunFirstPass` @PerFileRescore ~1041
+  have NO production caller (inferred; verify after PR 2).
+- **R3** (`--task SecondPassFDR`, `CanStreamStage7Join` false for disk reasons): every disk state
+  ALREADY ends in an error (missing summary -> `ReadRetainedBaseIds`; no sidecars ->
+  `ReadRetainedBaseIdsOrFail` in `ReleaseUnscorableLibraryFragments`; stale/missing reconciled
+  parquet -> `SecondPassFdrTask.Run` ~404-421 `UnusableReconciledParquets`) - but only AFTER the
+  all-runs load. Fix: refuse up front in `PerFileScoringTask.Rehydrate` when
+  `ExpectReconciledInput && !CanStreamStage7Join`, naming the missing piece (reuse existing
+  strings). ~40-60 lines; unlocks deleting the stubs-only loop, `PerFileRescoreTask.Rehydrate`'s
+  ExpectReconciledInput arm (~962-1057 incl. RunFirstPass + RescoreCompaction.Apply) and the null
+  branch of `BuildStage7PerRunSource`.
+- **R4** worker: already refused (two different messages). Straight-through resume: a stale summary
+  makes FirstPassFDR Run (not resident); the eager `MaterializeAllResumedFiles` is reached only for
+  stale/missing reconciled parquets (which then throw at SecondPassFdrTask ~414 after loading
+  everything) or an empty join. Fix: turn the null source into the named error up front, delete
+  `MaterializeAllResumedFiles` + the eager arm (~914-940). ~30-50 lines.
+- **R5**: `OSPREY_DUMP_RESCORED` pulls `rescored.Value` (the ONLY whole-pool pull on a
+  PerFileRescoring worker) and `WriteStage6RescoredDump` copies+sorts every row;
+  `OSPREY_DUMP_MULTICHARGE/RECONCILIATION` retain every file's list via `EntriesForDump` just to map
+  index -> entry_id. Stream: resolve per file in the planner callbacks; write the rescored dump per
+  file in ordinal order. ~80-120 lines, 4 files (signature change on IOspreyDiagnostics). Minimum
+  alternative: refuse DUMP_RESCORED on a worker.
+- Shared tail after R1-R5: `ExecuteRescore` loader-null arm and `BuildRescoredPool` early return are
+  dead (empty join only); Pass2FdrSidecar `!Streams` branches, `ReloadPass2Sidecars`,
+  `OverlayPass2OntoResidentPool`, `WarnResidentStage7Join`, `WritePass2AndFinalize(rescored.Value)`,
+  `RescoredEntries` resident fallbacks are kept alive only by R3/R4.
+
+**Root cause of the PR 1 A/B abort (inferred from code, consistent with the "base_id 0 / entry_id 0"
+signature, not reproduced):** under projection-off / Stage6-switch-off, `FirstPassFdrTask.Run`
+never sets `_survivorLoader`, yet `CanHydratePerRun` admits straight-through
+(ScoringTaskShared ~582-603), so `BuildPerRunHydrate` is non-null and `RescoreOneFileStreamed`
+refills, rescores and CLEARS each run's list; `BuildRunPerRunSource` returns null (no loader) and
+`BuildRescoredPool` returns early on `plan.Loader == null` - so Stage 7 folds an EMPTY pool. With
+`OSPREY_PASS2_VERIFY_WORKER=1` (regression.ps1) the scope check fires; without it the run would
+presumably have written a near-empty blib with exit 0. Dies with projection-off (PR 2); R3/R4 are
+not affected (their lists are never drained).
 - [ ] R1 `--task FirstPassFDR` re-run over a dir with `.reconciliation.json`: resident stubs load +
       all-runs `HydrateReconciliationOverlay` + `BuildFromEntries` (PerFileScoringTask ~1509-1529,
       ~2088; FirstPassFdrTask ~3191)
@@ -177,6 +225,24 @@ Then delete the shared tail:
 - [ ] Docs: 00 (~1325), 07 (177, 183), 12 (198), osprey-development-guide 1038-1126
 
 ## PR 4 - the co-assignment panel's O(accepted x runs) rows (#4664 section 1)
+
+**Night-session finding (2026-10-10, read-only design agent - NOT yet measured):** section 1 likely
+describes code #4662 replaced. #4664 was filed 2026-09-13 14:32Z; #4662 ("Added the detection apex
+RT to the per-file FDR sidecar at format v7") landed 2026-09-14. Today:
+- the panel reads NO parquet (only `<stem>.1st-pass.fdr_scores.bin` v7 via `FdrScoresSidecar.ReadRecords`);
+- `_fileRows` / `_fileRowByKey` are ONE file, cleared in `FlushFile` (CoAssignment.cs ~1550, ~1621);
+- `_byPrecursor` is per distinct precursor, not x runs;
+- "13,954,867 rows" is the CUMULATIVE `COUNT_COASSIGN_DETECTED` counter (PeakCoAssignmentSource.cs ~292, ~336).
+The only x-runs structure left is `_admittedRunDecoys` (runs x ~admitted decoys, ~10-30 MB at 1000);
+free `[f]` after each phase-2 flush (~5 lines, byte-identical).
+- Bigger target: the Parquet.Net per-row-group garbage is in `RescoreHydration.FoldPreCompactionPerRun`
+  -> `LoadResumeStubs` ("54 of this task's 63 minutes", FirstPassFdrTask ~370), not the panel;
+  `LoadFirstPassExperimentRecords` is read twice back to back (~393, ~403; ~400 MB each at 446).
+- Gate gap: `Regression/DiagnosticsGolden.ps1` does NOT pin nShared, betterByTolerance, deltaRt
+  histograms or worstOffenders - diff the whole `coAssignment` subtree (`Get-DiagnosticsPayload`).
+- Next: MEASURE on the 446-run CHS bed (not on this machine - `D:\test\osprey-runs` has no chs-seer)
+  with `OSPREY_MDIAG_COASSIGN_ONLY=1 --timestamp --memstamp OSPREY_LOG_MEMORY=1 OSPREY_LOG_COASSIGN_ALLOC=1`;
+  if the join floor is flat, close section 1 with the correction.
 
 - [ ] `_fileRows` / `_byPrecursor` retained for the whole apex-RT join: 13.95 M rows at 446 runs,
       ~31 M at 1000. Bound it (fold per precursor, or a disk-backed join) without changing the panel
