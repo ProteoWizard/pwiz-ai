@@ -59,6 +59,14 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
   form 24 s, makima 22 s. Measurement build `_bin\pwizdemux-interp` (nightlywork/demux-interp-measure,
   059b5fef10: PR head + seed knob + OSPREY_DEMUX_INTERPOLATION). Queued: idle speed (5 arms,
   `speed-interp\speed.tsv`), then makima search arms pwiz-makima-s42/s1/s2 in h2h-webinar27.
+- **Idle speed, EV13 warm reps** (`D:\test\osprey-runs\pwiz-demux\speed-interp\speed.tsv`): MathNet spline
+  23.2/22.6 s; **closed-form natural3 14.8/14.4 s** (same spectra); makima 20.1/18.1 s; #4710 msconvert
+  20.1/22.5 s; #4710 weighted 41.2/41.1 s. Closed form = the speed half of #4822, output-equivalent.
+- **Makima search** (Webinar 27, Mike's lib): 42,784 / 41,598 / 42,767 (mean 42,383, +0.5% vs spline,
+  inside spread). Replicate area CV 0.029 for spline, makima, weighted, msconvert-style alike. Makima
+  does not explain weighted's +3.1%; precision unchanged; accuracy (apex bias) not measured.
+- Next candidates for the weighted gap: fragment channels from the block histogram, Poisson-weighted
+  refit, covered blocks (all in #4710's per-channel engine); attribution arms with #4710 knobs.
 - Mike's reply (2026-10-11): Skyline format (answer: MsDataFileImpl, no new format; Skyline PR to
   adopt) and makima for quant; draft reply edited by Brendan (not yet confirmed sent).
 
