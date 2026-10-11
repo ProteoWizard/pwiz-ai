@@ -26,6 +26,13 @@ its output with DIA-NN, and hold the Python prototypes the C# was built from.
 
   The `.wiff.dia` and `.wiff.dia.quant` files beside the ZT Scan data came from a collaborator and
   are not needed.
+- **Eclipse-staggered source:** Mike's share on panoramaweb.org,
+  `https://panoramaweb.org/_webdav/MacCoss/maccoss/Shared_w_lab/%40files/RawFiles/Eclipse-staggered/`
+  (portal: `https://panoramaweb.org/MacCoss/maccoss/Shared_w_lab/project-begin.view`). It holds
+  EV13 and EV14 (`.raw` and msconvert's demultiplexed `.mzML`) and the Carafe library
+  `carafe_spectral_library+decoy+entrapment.tsv` (12.7 GB), the one #4710's Eclipse results were
+  searched against. Fetch with `ai/scripts/Osprey/Get-PanoramaFiles.ps1 -Url <that URL> -Dest <dir>
+  -Filter '*.tsv' -Parallel 1` (resumable, size-verified).
 - **The tool:** build the branch with the vendor readers,
   `pwsh -File ai/scripts/Osprey/Build-Osprey.ps1 -SourceRoot <checkout> -VendorReader -Configuration Release`,
   and copy `pwiz_tools/Osprey/Osprey.DemuxTool/bin/x64/Release/net10.0` to a snapshot folder
