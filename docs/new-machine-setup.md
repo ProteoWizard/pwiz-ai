@@ -857,21 +857,29 @@ pip install "mcp<2" labkey Pillow
 
 ## Phase 4: Initial Build
 
+> **Master is .NET 10 since 2026-10-08 (PR #4619 merged).** On current master
+> `pwiz_tools\build-apps.bat` no longer exists, so the Boost.Build `b.bat` in 4.2 fails. Build
+> master with the `build.bat` scripts in **4.5**; 4.2-4.4 now apply only to older release
+> branches (e.g. `Skyline/skyline_26_1`). An existing machine's `b.bat`/`bs.bat` are gitignored
+> and nothing replaces them - check for `build-apps.bat` in them and swap in the 4.5 versions.
+> Observed 2026-10-11 on SKYLINE-DEV6.
+
 > **Existing mode**: Check if build artifacts already exist (from your pwiz checkout):
 > ```powershell
-> # master (Boost.Build) - the artifact is Skyline-daily.exe, not Skyline.exe
-> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe"
-> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe"
+> # master (.NET 10) - the artifact is Skyline-daily.exe, not Skyline.exe
+> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\net10.0-windows\Skyline-daily.exe"
 >
-> # .NET 10 port branch (PR #4619) - a different output tree entirely
-> Test-Path "pwiz\pwiz_tools\Skyline\bin\Release\net10.0-windows\Skyline-daily.exe"
+> # Older Boost.Build release branches
+> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe"
 > ```
+> On .NET 10 `TestRunner.exe` is not beside Skyline-daily.exe; tests run from the staging
+> directory (`bin\staging\<Config>`) that `Run-Tests.ps1` sets up.
 > If they exist and the user confirms the build is recent, skip to Phase 5.
 >
-> **Check the branch before the path.** A port-branch checkout builds to
-> `bin\Release\net10.0-windows\`, so the `bin\x64\` probes
-> return False on a perfectly good build - and an `x64` tree that IS present there is stale
-> pre-port output rather than a current build. Observed 2026-09-20: a port-branch checkout
+> **Check the path, not just the folder.** A .NET 10 checkout builds to
+> `bin\x64\Release\net10.0-windows\` (verified 2026-10-11 on master; a 2026-09-20 note here gave
+> `bin\Release\net10.0-windows\`), so a `Skyline-daily.exe` directly in `bin\x64\Release\` is
+> stale pre-port Boost output rather than a current build. Observed 2026-09-20: a port-branch checkout
 > held `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe` dated five months before its
 > actual port-branch binaries, with 888 MB of Boost output behind it.
 
@@ -1212,12 +1220,12 @@ git config --global merge.renormalize  # Should be: true
 # Repository cloned (run from your project root)
 Test-Path pwiz\pwiz_tools\Skyline\Skyline.sln  # Should be: True
 
-# Build artifacts exist (from bs.bat in Phase 4) - master (Boost.Build)
+# Build artifacts exist (from bs.bat in Phase 4) - master (.NET 10, since 2026-10-08)
+Test-Path pwiz\pwiz_tools\Skyline\bin\x64\Release\net10.0-windows\Skyline-daily.exe  # Should be: True
+
+# On an older Boost.Build release branch check these instead
 Test-Path pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe  # Should be: True
 Test-Path pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe  # Should be: True
-
-# On the .NET 10 port branch (PR #4619) check this instead - the x64 tree is not used
-Test-Path pwiz\pwiz_tools\Skyline\bin\Release\net10.0-windows\Skyline-daily.exe  # Should be: True
 ```
 
 ---
@@ -1685,9 +1693,13 @@ Download and extract the nightly test harness:
 # Create the nightly directory (replace <NightlyFolder> with chosen path)
 New-Item -ItemType Directory -Force -Path '<NightlyFolder>'
 
-# Download SkylineNightly.zip from TeamCity (public guest access)
-$url = 'https://teamcity.labkey.org/guestAuth/repository/download/bt209/.lastFinished/SkylineNightly.zip?branch=master'
-Invoke-WebRequest -Uri $url -OutFile '<NightlyFolder>\SkylineNightly.zip'
+# Download SkylineNightly.zip from TeamCity. The old /guestAuth/ path is no longer accepted:
+# a read-only TeamCity token must be in the machine-level TEAMCITY_NIGHTLY_TEST_AUTH_TOKEN
+# variable (the shim also requires it on every run). See
+# https://skyline.ms/home/development/wiki-page.view?name=SkylineNightly for obtaining it.
+$token = [Environment]::GetEnvironmentVariable('TEAMCITY_NIGHTLY_TEST_AUTH_TOKEN','Machine').Trim()
+$url = 'https://teamcity.labkey.org/repository/download/bt209/.lastFinished/SkylineNightly.zip?branch=master'
+Invoke-WebRequest -Uri $url -Headers @{ Authorization = "Bearer $token" } -OutFile '<NightlyFolder>\SkylineNightly.zip'
 
 # Extract the archive
 Expand-Archive -Path '<NightlyFolder>\SkylineNightly.zip' -DestinationPath '<NightlyFolder>' -Force
@@ -1696,7 +1708,9 @@ Expand-Archive -Path '<NightlyFolder>\SkylineNightly.zip' -DestinationPath '<Nig
 Verify the extraction:
 ```powershell
 Get-ChildItem '<NightlyFolder>'
-# Should show: SkylineNightly.exe, SkylineNightlyShim.exe, DotNetZip.dll, etc.
+# Should show: SkylineNightly.exe and SkylineNightlyShim.exe (single-file .NET 10 builds,
+# 8.6 MB and 0.7 MB) with their .pdb files - nothing else (PR #4801, 2026-10-08).
+# They need the .NET 10 Desktop Runtime.
 ```
 
 ### 8.3 Configure Antivirus Exclusions
@@ -1895,12 +1909,12 @@ If the setup was interrupted before `ai/` was cloned, note the improvements need
 The setup is complete when:
 1. `git config --global core.autocrlf` and `git config --global merge.renormalize` both return `true`
 2. `pwiz\pwiz_tools\Skyline\Skyline.sln` exists (relative to your project root)
-3. `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe` exists
+3. `pwiz\pwiz_tools\Skyline\bin\x64\Release\net10.0-windows\Skyline-daily.exe` exists on master
+   (.NET 10 since 2026-10-08; verified path 2026-10-11)
    (the standard build brands the artifact `Skyline-daily.exe`, **not** `Skyline.exe` — checking
-   for `Skyline.exe` reports a false failure on a perfectly good build; `TestRunner.exe` should
-   be there too). **On the .NET 10 port branch the path is
-   `pwiz\pwiz_tools\Skyline\bin\Release\net10.0-windows\Skyline-daily.exe`** - the `x64` tree belongs to
-   the Boost build and is absent, or stale, on that branch.
+   for `Skyline.exe` reports a false failure on a perfectly good build). On an older Boost.Build
+   release branch the path is `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe`, with
+   `TestRunner.exe` beside it; a file at that path on master is stale pre-port output.
 4. Visual Studio can build the solution without errors
 5. A real test passes, run through the AI script rather than `TestRunner.exe` directly:
    ```powershell
