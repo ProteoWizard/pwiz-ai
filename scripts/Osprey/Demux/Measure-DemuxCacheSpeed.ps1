@@ -5,7 +5,8 @@
     demultiplexer arms, interleaved, a fresh cache every repetition.
 
 .DESCRIPTION
-    Each arm is NAME=EXE or NAME=EXE=ENGINE (ENGINE sets OSPREY_DEMUX_ENGINE, #4710 only). Arms run
+    Each arm is NAME=EXE or NAME=EXE=ENGINE (ENGINE sets OSPREY_DEMUX_ENGINE, #4710 only), optionally
+    followed by environment settings for that arm, NAME=EXE;VAR=VALUE;VAR=VALUE. Arms run
     round-robin, so a drift in machine load lands on every arm rather than on one. Run on an idle
     machine: no searches, no builds, no nightly. Results go to <Root>\speed.tsv (one row per run,
     wall seconds and peak working set) and each run's osprey.log beside it.
@@ -15,7 +16,7 @@
         'pwiz=D:\test\osprey-runs\_bin\x\Osprey.exe,pr4710-weighted=D:\...\Osprey.exe=weighted,pr4710-msconvert=D:\...\Osprey.exe=msconvert'
 #>
 param(
-    [Parameter(Mandatory)] [string]$Arms,          # comma-separated NAME=EXE[=ENGINE]
+    [Parameter(Mandatory)] [string]$Arms,          # comma-separated NAME=EXE[=ENGINE][;VAR=VALUE...]
     [int]$Reps = 3,
     [string]$Raw = 'D:\test\osprey-runs\remes-ev\Ecl_2022_0705_Beads_EV13_SAXN_12mz_10.raw',
     [string]$Library = 'D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment\carafe_spectral_library.tsv',
@@ -24,10 +25,16 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $armList = foreach ($a in ($Arms -split ',' | Where-Object { $_ })) {
-    $parts = $a -split '='
-    if ($parts.Count -lt 2) { throw "Arm '$a' is not NAME=EXE[=ENGINE]" }
+    $settings = $a -split ';'
+    $parts = $settings[0] -split '='
+    if ($parts.Count -lt 2) { throw "Arm '$a' is not NAME=EXE[=ENGINE][;VAR=VALUE...]" }
     if (-not (Test-Path $parts[1])) { throw "Osprey.exe not found: $($parts[1])" }
-    [pscustomobject]@{ Name = $parts[0]; Exe = $parts[1]; Engine = $(if ($parts.Count -gt 2) { $parts[2] } else { '' }) }
+    $envs = @{}
+    foreach ($kv in ($settings | Select-Object -Skip 1)) {
+        $k, $v = $kv -split '=', 2
+        $envs[$k] = $v
+    }
+    [pscustomobject]@{ Name = $parts[0]; Exe = $parts[1]; Engine = $(if ($parts.Count -gt 2) { $parts[2] } else { '' }); Env = $envs }
 }
 New-Item -ItemType Directory -Force $Root | Out-Null
 $tsv = Join-Path $Root 'speed.tsv'
@@ -43,6 +50,7 @@ for ($rep = 1; $rep -le $Reps; $rep++) {
             Remove-Item "Env:$v" -ErrorAction SilentlyContinue
         }
         if ($arm.Engine) { $env:OSPREY_DEMUX_ENGINE = $arm.Engine }
+        foreach ($k in $arm.Env.Keys) { Set-Item "Env:$k" $arm.Env[$k] }
         $argList = @('-i', $Raw, '-l', $Library, '-o', (Join-Path $dir 'out\output.blib'), '--resolution', 'hram',
             '--decoys-in-library', '--demux', 'auto', '--task', 'SpectraCache',
             '--cache-dir', (Join-Path $dir 'cache'), '--output-dir', (Join-Path $dir 'out'),
