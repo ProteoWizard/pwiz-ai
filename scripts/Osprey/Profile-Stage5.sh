@@ -42,7 +42,9 @@ fi
 # ---- Phase 2: C# Stage 5 under dottrace ----
 echo "=== C# Stage 5 under dottrace (sampling) ==="
 cd "$CSDIR"
-export OSPREY_PERCOLATOR_ONLY=1
+# C# stops after Stage 5 via --task FirstPassFDR. OSPREY_PERCOLATOR_ONLY is Rust-only now: C#
+# retired it with the resident first pass (#4821) and refuses it at startup, as it does the
+# old --join-at-pass flags.
 CS_DTP=$OUT/csharp-stage5-stellar.dtp
 rm -f "$CS_DTP"
 time "$DOTTRACE" start \
@@ -55,7 +57,7 @@ time "$DOTTRACE" start \
     -- \
     -l "$LIB_NAME" -o /tmp/_prof_cs.blib \
     --resolution unit --threads 16 \
-    --join-at-pass=1 -i "$MZML_NAME" 2>&1 | tail -15
+    --task FirstPassFDR -i "$MZML_NAME" 2>&1 | tail -15
 echo ""
 ls -la "$CS_DTP"
 echo ""
@@ -63,6 +65,7 @@ echo ""
 # ---- Phase 3: Rust Stage 5 under samply ----
 echo "=== Rust Stage 5 under samply ==="
 cd "$RUSTDIR"
+export OSPREY_PERCOLATOR_ONLY=1
 RUST_JSON=$OUT/rust-stage5-stellar.json
 rm -f "$RUST_JSON"
 time "$SAMPLY" record --save-only --no-open -o "$RUST_JSON" \

@@ -7,8 +7,7 @@
 - **Created**: 2026-10-10
 - **Status**: In Progress. PR 1 and PR 2 MERGED 2026-10-11 (#4820 as 3a5a0a5d00, #4821 as
   a78f88b5a4). PR 3 waits on Brendan's route decisions (memo + experiments below); PR 4's premise
-  measured stale (see PR 4). OPEN follow-up from #4821, now due: pwiz-ai tooling still sets the
-  retired OSPREY_PERCOLATOR_ONLY / OSPREY_DUMP_PERCOLATOR (see "Merged" log entry).
+  measured stale (see PR 4). The pwiz-ai follow-up from #4821 is DONE (2026-10-11).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
 - **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11); PR 3 / PR 4 not started
@@ -78,7 +77,7 @@ this file is the plan for the memory rows of it. Inventory re-checked 2026-10-10
       comparison temporarily off by one, TestSubsetStraightThroughAndReruns failed with
       "counted 1607 ... produced 1607" (reverted; log `ai/.tmp/sessions/20261010-nores/sabotage.log`)
 - [x] Update #4601 and #4577 text that cites `OSPREY_STAGE6_STREAM_SURVIVORS`
-- [ ] `ai/docs/osprey-development-guide.md` cites the switch - DUE NOW (merged); see the Merged log entry
+- [x] `ai/docs/osprey-development-guide.md` cites the switch - updated 2026-10-11
 - Gate: `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` green, 649/649;
   `regression-parallel.ps1 -Dataset All` 48 PASS / 0 FAIL / 0 SKIP in 32:42
   (`ai/.tmp/sessions/20261010-nores/regression-all.log`); Stellar re-run green after review fixes
@@ -342,3 +341,23 @@ approval on either).
   C# needs `--task FirstPassFDR` as the stop point; Rust still honors the variable, so the harness
   needs a per-tool branch.
 - `DIAGNOSTICS.md` and `docs/osprey-development-guide.md` still document the retired variables.
+
+### 2026-10-11 - pwiz-ai brought in line with master
+
+- `docs/osprey-development-guide.md`:
+  - "Memory bounding" rewritten as a retired-switch table: all three A/B switches are refused at
+    startup, `KNOWN_UNFIXED` is empty, and the section explains why no final A/B was banked.
+  - Dump table and bisection step 10 mark `OSPREY_DUMP_PERCOLATOR` / `_PERCOLATOR_ONLY` Rust-only.
+  - Stale `PercolatorFdr.cs` citations repointed to `PercolatorEngine` / `PercolatorTrainer` /
+    `PercolatorQValues`.
+- `scripts/Osprey/DIAGNOSTICS.md`: the two percolator variables are marked Rust-only.
+- `scripts/Osprey/Test-Snapshot.ps1` stage5:
+  - C# now stops with `--task FirstPassFDR` and keeps its standardizer/subsample/svm_weights dumps.
+  - The percolator variables and the percolator-dump comparison are Rust-only.
+  - The script parses, but has NOT been run end to end: this machine has no Stellar `_snapshots`.
+- `scripts/Osprey/Profile-Stage5.sh`:
+  - The C# arm used the long-retired `--join-at-pass=1`; it now uses `--task FirstPassFDR`.
+  - `OSPREY_PERCOLATOR_ONLY` is exported for the Rust phase only.
+  - `bash -n` passes; not run.
+- `Measure-Pipeline.ps1` and the `Test-Snapshot` scrub lists only UNSET the variables, which is
+  still correct, so they are unchanged.

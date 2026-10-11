@@ -1027,20 +1027,27 @@ to use instead.
 `OSPREY_EXIT_AFTER_SCORING` (retired 2026-04-19) was replaced by the
 `--no-join` CLI flag; bench/profile scripts have migrated.
 
-### Memory bounding (A/B oracles)
+### Memory bounding (no resident A/B arms remain)
 
-Both of these turn a bounded path back OFF, to prove the bounded path did not change results.
-Both are DEFAULT ON, and both now require naming their `ResidentPaths` token via
-`OSPREY_ALLOW_UNFIXED_RESIDENT` - a resident path you can reach without asking for it is how
-`OSPREY_PASS2_QVALUE=transfer` regressed unnoticed for ten days.
+Every switch that turned a bounded path back OFF as an A/B byte-identity oracle is gone, and
+Osprey REFUSES each name at startup rather than silently ignoring it:
 
-`OSPREY_ALLOW_UNFIXED_RESIDENT` takes a **list**, comma- or semicolon-separated
-(`fdrbench-pass1,compacted-entries-buffer`). A run can legitimately trip more than one
-known-unfixed path at once, and a single-value variable made such a run impossible to perform:
-a `OSPREY_STAGE6_STREAM_SURVIVORS=0` A/B on a configuration that is already resident for its
-own reason needs both tokens, so naming one dropped the other and the run aborted on its own
-guard. Every admitted path is still named individually - that, not the count, is what stops a
-blanket bypass.
+| Retired | When | What it selected |
+|---|---|---|
+| `OSPREY_STAGE7_STREAM=0` | 2026-09-10 | the resident Stage 7 join |
+| `OSPREY_STAGE6_STREAM_SURVIVORS=0` | 2026-10-11 (#4820) | the resident post-compaction Stage 6 handoff (28 GB at 163 files) |
+| `OSPREY_FDR_PROJECTION=0` | 2026-10-11 (#4821) | the legacy resident pre-compaction `FdrEntry` pool for all of Stage 5 |
+
+**The last two could not be banked as a final A/B:** by then both arms aborted in Stage 7 on every
+dataset (an experiment-fold scope violation), a breakage nothing saw because no gate ran them. That
+is the case against keeping an oracle arm alive outside the gate. The committed golden
+(`regression.ps1`, 1e-9) is the oracle for "did streaming change results?" from here on. If you
+add an A/B toggle in future, give it a gate leg or expect it to rot.
+
+`ResidentPaths.KNOWN_UNFIXED` is now EMPTY, so `OSPREY_ALLOW_UNFIXED_RESIDENT` admits nothing; the
+plumbing stays until the remaining untokened routes are retired
+(`ai/todos/active/TODO-20261010_osprey_no_resident_pools_sprint.md`, PR 3). It still takes a
+comma/semicolon list and still warns on unrecognized (now: all) tokens.
 
 ### The rule: token + warning, never warning alone
 
@@ -1097,14 +1104,12 @@ one this section already makes, sharpened: **name the consumer, not a proxy for 
 proxy that is right for every case but one is indistinguishable from a correct test until
 someone measures the case it is wrong about.
 
-**A token admits exactly ONE path - never borrow one.** `compacted-entries-buffer` names
-the same physical buffer as the now-removed `resume-survivor-handoff`, so reusing it for
-#4536 would have been the convenient choice, and would have meant any leg admitting the
-unfixed resume simultaneously admitted an `OSPREY_STAGE6_STREAM_SURVIVORS=0` regression on
-the computed path that #4530 already closed. Borrowing a token silently lowers the
-high-water mark for whatever else that token covers, which is exactly the property the
-named-token system
-replaced the blanket boolean to get.
+**A token admits exactly ONE path - never borrow one.** `compacted-entries-buffer` (retired)
+named the same physical buffer as the earlier-removed `resume-survivor-handoff`, so reusing it for
+#4536 would have been the convenient choice, and would have meant any leg admitting the unfixed
+resume simultaneously admitted a Stage 6 handoff regression on the computed path that #4530 had
+already closed. Borrowing a token silently lowers the high-water mark for whatever else that token
+covers, which is exactly the property the named-token system replaced the blanket boolean to get.
 
 **`regression.ps1` sets this on NO leg.** It used to name `mdiag-full-resume` on mode 2, which
 is gone with the token (#4505): `--model-diagnostics` on a full resume reported off the
@@ -1112,20 +1117,6 @@ RESIDENT pool because FirstPassFDR skipped its score pass, and FirstPassFDR's re
 that report from the per-file load it already performs. An ambient allowance on a standing
 gate can only mask the regression the gate exists to catch, so the whole gate now runs with
 nothing suppressed.
-
-| Name | Purpose |
-|---|---|
-| `OSPREY_FDR_PROJECTION=0` | Force the legacy resident PRE-compaction `FdrEntry` pool for all of Stage 5. Token: `projection-off`. |
-| `OSPREY_STAGE6_STREAM_SURVIVORS=0` | Force the resident POST-compaction handoff: Stage 5's all-files survivor buffer stays live across the whole Stage 6 rescore instead of being refilled one file at a time from each file's `.scores.parquet` + 1st-pass sidecar. Token: `compacted-entries-buffer` (issue #4526). |
-
-The Stage 6 buffer is 88.9 M entries / **28 GB at 163 files**, held for the 5.5 hours of the
-rescore, and it grows super-linearly in file count because the passing base_id set grows with
-the files too (20 -> 163 files is 8.2x the files but 17.2x the entries). Do not run the `=0`
-arm at large file counts expecting it to finish.
-
-`OSPREY_STAGE6_STREAM_SURVIVORS=0` also adds `;stage6stream=0` to the Stage 6 validity key, so
-an A/B run **in place** re-runs Stage 6 for the second arm instead of adopting the first arm's
-reconciled parquets and reporting a match it never computed.
 
 ### Diagnostic dumps (cross-impl bisection)
 
@@ -1144,22 +1135,23 @@ side and `rust_` on the Rust side.
 | `OSPREY_DUMP_STANDARDIZER` + `_STANDARDIZER_ONLY` | `*_stage5_standardizer.tsv` | Per-feature mean/std from `FeatureStandardizer` (Stage 5 boundary) |
 | `OSPREY_DUMP_SUBSAMPLE` + `_SUBSAMPLE_ONLY` | `*_stage5_subsample.tsv` | Stage 5 best-per-precursor subsample membership + fold assignment per entry |
 | `OSPREY_DUMP_SVM_WEIGHTS` + `_SVM_WEIGHTS_ONLY` | `*_stage5_svm_weights.tsv` | Per-fold final SVM weights + bias + iteration count |
-| `OSPREY_DUMP_PERCOLATOR` + `_PERCOLATOR_ONLY` | `*_stage5_percolator.tsv` | End-of-Stage-5 per-FdrEntry dump: score, pep, 4 q-values |
+| `OSPREY_DUMP_PERCOLATOR` + `_PERCOLATOR_ONLY` | `*_stage5_percolator.tsv` | **Rust only.** End-of-Stage-5 per-entry dump: score, pep, 4 q-values. Removed from C# Osprey with the resident first pass (#4821); C# REFUSES both names at startup. To stop C# after Stage 5 use `--task FirstPassFDR` |
 | `OSPREY_DIAG_XIC_ENTRY_ID` + `OSPREY_DIAG_XIC_PASS` | `cs_xic_entry_<ID>.txt` | Per-entry cal XIC (exits after dump) |
 | `OSPREY_DIAG_SEARCH_ENTRY_IDS` | `cs_search_xic_entry_<ID>.txt` | Main-search XIC for specific entries (no exit) |
 | `OSPREY_DIAG_MP_SCAN` | `cs_mp_diag.txt` | Median polish for a specific scan |
 | `OSPREY_DIAG_XCORR_SCAN` | `cs_xcorr_scan.txt` *(Rust-only)* | XCorr detail at a specific scan |
 
-Stage 5 dumps all land via `osprey-fdr/src/percolator.rs` (Rust) and
-`pwiz.Osprey.FDR.PercolatorFdr` (C#); the end-of-stage
-Percolator dump also uses the main-crate `osprey/src/diagnostics.rs`.
+Stage 5 dumps all land via `osprey-fdr/src/percolator.rs` (Rust) and, in C#, the
+`PercolatorTrainer` training path configured by `PercolatorDiagnosticsConfig` (Osprey.FDR);
+the Rust end-of-stage Percolator dump also uses the main-crate `osprey/src/diagnostics.rs`.
 Floats route through `osprey_core::diagnostics::format_f64_roundtrip`
 (normalizes `-0.0` to `0`, stable for `NaN`/`inf`).
 
 The C# side consolidates cal-phase dumps in
-`pwiz.Osprey.OspreyDiagnostics`; Stage 5 dumps are inlined in
-`PercolatorFdr.cs` (the `Osprey.FDR` assembly cannot reference
-main-crate helpers due to a circular-dep risk).
+`pwiz.Osprey.OspreyDiagnostics` / `OspreyFileDiagnostics`; the three surviving Stage 5 dumps
+(standardizer, subsample, SVM weights) are configured through `PercolatorDiagnosticsConfig` and
+written from `PercolatorTrainer` (the `Osprey.FDR` assembly cannot reference main-crate helpers
+due to a circular-dep risk).
 
 ## Cross-impl bisection methodology
 
@@ -1197,12 +1189,12 @@ dumps added by PR #18 (osprey) / the C# Osprey mirror PR:
 9. **Per-fold SVM weights** (`OSPREY_DUMP_SVM_WEIGHTS=1 + OSPREY_SVM_WEIGHTS_ONLY=1`)
    → 21 feature weights + bias per fold, plus iteration count. Isolates
    SVM training drift from Granholm calibration.
-10. **End-of-Stage-5 Percolator** (`OSPREY_DUMP_PERCOLATOR=1 + OSPREY_PERCOLATOR_ONLY=1`)
-    → per-FdrEntry `score, pep, run_precursor_q, run_peptide_q,
-    experiment_precursor_q, experiment_peptide_q`. The acceptance
-    gate. Compared via `ai/scripts/Osprey/Compare-Percolator.ps1`
-    (hash-joins on `(file_name, entry_id)`, sort-order-agnostic —
-    not the row-wise `diff` that `Compare-Diagnostic.ps1` uses).
+10. **End-of-Stage-5 Percolator** - **no C# counterpart since #4821.** The per-entry dump
+    (`OSPREY_DUMP_PERCOLATOR` + `OSPREY_PERCOLATOR_ONLY`, score / pep / 4 q-values) needed the
+    resident first-pass pool, which is gone; C# refuses both names, Rust still writes the dump.
+    A streamed C# version (off the per-file `.1st-pass.fdr_scores.bin` sidecars, which carry
+    the same score and q-values) can be written when a bisection needs it. Until then, compare
+    the sidecars directly or stop at step 9.
 
 Diff the SORTED output at each stage. Look for structural patterns
 (all decoys? all short peptides? all charge-3?), not aggregate stats.
@@ -1310,7 +1302,7 @@ Patterns the pipeline now relies on:
 - **Non-conservative FDR formula `n_decoy / n_target`** for
   internal grid-search counting in
   `count_passing_targets_svm` — matches `compute_qvalues` on the
-  same path and `Osprey.FDR.PercolatorFdr.ComputeQvalues`. The
+  same path and `Osprey.FDR.PercolatorQValues.ComputeQvalues`. The
   conservative `(n_decoy + 1) / n_target` formula is reserved for
   final reported q-values (`ComputeConservativeQvalues`), not for
   hyperparameter-tuning heuristics.
@@ -1915,8 +1907,9 @@ Skyline (a document, a reported q-value) is not covered by this latitude.
   `Run-FdrBench.ps1` (FDRBench entrapment-calibration driver)
 - `pwiz_tools/Osprey/Osprey/OspreyDiagnostics.cs` --
   C# diagnostic constants + cal-phase dump methods
-- `pwiz_tools/Osprey/Osprey.FDR/PercolatorFdr.cs` -- C#
-  Stage 5 implementation with the four inlined dumps
+- `pwiz_tools/Osprey/Osprey.FDR/PercolatorEngine.cs`, `PercolatorTrainer.cs`,
+  `PercolatorQValues.cs` -- C# Stage 5 implementation (the three surviving Stage 5 dumps are
+  in the trainer, configured by `PercolatorDiagnosticsConfig.cs`)
 - `pwiz_tools/Osprey/Osprey.Scoring/XcorrScratchPool.cs`
   -- per-window buffer reuse pattern Batch 2a will mirror
 

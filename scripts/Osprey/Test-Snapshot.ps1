@@ -40,7 +40,8 @@
       Stage      CLI extras                                         Exit hook
       ---------  -------------------------------------------------  -----------------------------
       stage1to4  --task PerFileScoring                              (exits after Stage 4)
-      stage5     -i <stem>.mzML                                     OSPREY_PERCOLATOR_ONLY=1
+      stage5     --task FirstPassFDR -i <stem>.mzML                 (exits after Stage 5)
+                 (Rust: --join-at-pass=1 --input-scores ...         OSPREY_PERCOLATOR_ONLY=1)
       stage6     -i <stem>.mzML                                     OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
       stage7     --task SecondPassFDR -i <stem>.mzML                OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
       blib       --task SecondPassFDR -i <stem>.mzML                (none — Stages 7-8 from reconciled)
@@ -55,7 +56,9 @@
       stage1to4  SHA-256 byte equality on per-file .scores.parquet
                  (vs. inspect_parquet.py 1e-6 in cross-impl mode)
       stage5     SHA-256 byte equality on standardizer/subsample/
-                 svm_weights/percolator dumps
+                 svm_weights dumps, plus the percolator dump for Rust only
+                 (C# Osprey removed OSPREY_DUMP_PERCOLATOR / _PERCOLATOR_ONLY with
+                 the resident first pass, #4821, and refuses both at startup)
       stage6     SHA-256 byte equality on multicharge/consensus/
                  reconciliation/rescored dumps + reconciled parquet
                  + FDR sidecars
@@ -577,7 +580,17 @@ function Invoke-Tool {
 
 $stageConfig = @{
     'stage5' = @{
-        envVars = if ($NoDumps) {
+        # C# stops after Stage 5 via --task FirstPassFDR (added in the run function) and has
+        # no percolator dump: OSPREY_DUMP_PERCOLATOR / OSPREY_PERCOLATOR_ONLY went with the
+        # resident first pass (#4821) and C# REFUSES both at startup. Rust still uses them.
+        envVars = if ($Tool -eq 'CSharp') {
+            if ($NoDumps) { @{} } else {
+                @{
+                    OSPREY_DUMP_STANDARDIZER = '1'; OSPREY_DUMP_SUBSAMPLE = '1'
+                    OSPREY_DUMP_SVM_WEIGHTS  = '1'
+                }
+            }
+        } elseif ($NoDumps) {
             @{ OSPREY_PERCOLATOR_ONLY = '1' }
         } else {
             @{
@@ -751,6 +764,8 @@ function Run-PostStage4 {
     [string[]]$cliArgs = @()
     if ($Tool -eq 'CSharp') {
         if ($useJP2) { $cliArgs += @('--task', 'SecondPassFDR') }
+        # The C# stop point after Stage 5 (OSPREY_PERCOLATOR_ONLY is retired there).
+        elseif ($Stage -eq 'stage5') { $cliArgs += @('--task', 'FirstPassFDR') }
     } else {
         if ($useJP2) { $cliArgs += '--join-at-pass=2' } else { $cliArgs += '--join-at-pass=1' }
     }
@@ -1157,7 +1172,12 @@ for ($i = $startIdx; $i -le $stopIdx; $i++) {
                 # cross-OS via Math.Log/Exp). 1e-6 ceiling matches the
                 # stage1to4 parquet gate, justified at the same place.
                 $dumpCmp = Compare-DumpSha-Snapshot -Stage 'stage5'
-                $percCmp = Compare-Percolator-Snapshot
+                # C# writes no percolator dump since #4821 (see the stage5 stageConfig).
+                $percCmp = if ($Tool -eq 'CSharp') {
+                    [pscustomobject]@{ ok = $true; details = @() }
+                } else {
+                    Compare-Percolator-Snapshot
+                }
                 [pscustomobject]@{
                     ok = ($dumpCmp.ok -and $percCmp.ok)
                     details = @($dumpCmp.details + $percCmp.details)

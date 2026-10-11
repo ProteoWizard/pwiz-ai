@@ -166,13 +166,14 @@ standardization before the SVM trains.
 ### OSPREY_STANDARDIZER_ONLY=1
 Exit after standardizer dump.
 
-### OSPREY_DUMP_PERCOLATOR=1
-Per-entry standardized feature vectors fed into Percolator's SVM
-training, plus labels, sorted by entry_id. The cross-impl input-parity
-check before suspecting the solver itself.
+### OSPREY_DUMP_PERCOLATOR=1 (Rust-only)
+End-of-Stage-5 per-entry Percolator dump (score, pep, q-values). **Removed from C# Osprey
+with the resident first-pass pool (#4821, 2026-10-11); C# refuses the variable at startup.**
+Rust still writes it.
 
-### OSPREY_PERCOLATOR_ONLY=1
-Exit after Percolator input dump.
+### OSPREY_PERCOLATOR_ONLY=1 (Rust-only)
+Exit after the Percolator dump. C# refuses it at startup; to stop C# after Stage 5, run
+`--task FirstPassFDR`.
 
 ### OSPREY_DUMP_PERC_INPUT=1 (C#-only)
 Raw (unstandardized) per-entry feature vectors used for Percolator
