@@ -51,11 +51,9 @@ failures (no-vendor MascotShim CMake, Bruker.Tests, DiaUmpire TTOF, ManagingSear
 pass on MacCoss Agent 1 / master and were not ours. Remote and local work branches deleted.
 
 Pending, Brendan's call:
-- Send the rewritten reply to Mike and Matt (draft in Claude's Gmail).
-- #4710: archive tag `archive/20260923_osprey_demux` (was waiting for this merge), docs pointer, close.
-- Worktrees `C:\proj\pwiz-demux-parity` (holds `Skyline/work/20261010_demux_detect_scheme`) and
-  `C:\proj\pwiz-demux-blocks` from the 10-08 night: remove with `git worktree remove`.
-- `OSPREY_TEST_BASE_DIR` at Windows User level on BRENDANX-i9: refused by Osprey since #4825.
+- Reply to Mike and Matt: sent 2026-10-12.
+- Worktrees pwiz-demux-parity and pwiz-demux-blocks removed; OSPREY_TEST_BASE_DIR deleted (User level).
+- #4710 (waiting): archive tag `archive/20260923_osprey_demux` (was waiting for this merge), docs pointer, close.
 - Follow-ups: `ai/todos/backlog/TODO-demux_msconvert_default_delivery.md`; Skyline's deconvolution
   choices still run its own demultiplexer (route them through MsDataFileImpl, or point to msconvert).
 
