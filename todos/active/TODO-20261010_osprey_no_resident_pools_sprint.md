@@ -11,7 +11,7 @@
   measured stale (see PR 4). The pwiz-ai follow-up from #4821 is DONE (2026-10-11).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b on `Skyline/work/20261012_osprey_firstpass_rerun_stream` (local commits, no PR yet); PR 4 not started
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) on `Skyline/work/20261012_osprey_firstpass_rerun_stream`; PR 4 not started
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -504,7 +504,10 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - Still open: `ParquetScoreCache.LoadFullFdrEntries` and `HasPinFeatureColumns` are production-dead
   (IOTest-only). Gates on 4813bdd5a3: `regression-parallel -Dataset All` 48/48 (`regression-final.log`, 1:19:19 - slow disk again);
   cross-impl PASS at 1e-9, Stellar Single 26,683 and Astral All 117,236 precursors (`xi-stellar-single.log`,
-  `xi-astral-all.log`) - no parity break. Next: push + PR (draft body `ai/.tmp/sessions/20261012-pr3b/pr-body.md`), TeamCity (ask).
+  `xi-astral-all.log`) - no parity break.
+- **PR #4830 opened** (Brendan: push, open, trigger TeamCity). Master had moved 10 commits (incl. #4818 demux,
+  #4810 warnings-as-errors); merged as 460332883a: unit 640/640 + inspection, Release build clean,
+  `regression.ps1 -Dataset Stellar` PASS. TeamCity Perf/Regression build 4213020 on pull/4830 queued.
 
 ### 2026-10-12 - Merged PR 3a
 
