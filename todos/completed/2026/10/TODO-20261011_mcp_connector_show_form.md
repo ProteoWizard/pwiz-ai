@@ -5,9 +5,8 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-11 (SKYLINE-DEV6, checkout `C:\proj\pwiz`)
-- **PR**: [#4824](https://github.com/ProteoWizard/pwiz/pull/4824) (opened 2026-10-11; commits 6a6f7019e8, 0730212d71)
-- **Status**: review fixes applied, local tests green; awaiting TeamCity + human review. Wanted merged before
-  SKYLINE-DEV6's next nightly run.
+- **PR**: [#4824](https://github.com/ProteoWizard/pwiz/pull/4824) (merged 2026-10-11, as 8efe7e08eb)
+- **Status**: Completed
 
 ## Problem
 
@@ -28,16 +27,18 @@ one session: 1, 2, 2, 0 misses (~0.6% per show) - Debug, SKYLINE-DEV6.
 ## Fix
 
 - `McpConnectorTest.ShowMcpConnectorForm<TForm>(Action act, out string formId)`: ShowDialog, then
-  `WaitForMcpConnectorForm<TForm>()`. Replaces every show-then-look-up pair (13 sites, 11 tests), both
-  `ShowDialog` + `GetOpenFormId` and `RunUI(show)` + `WaitForOpenForm` + `GetOpenFormId`.
+  `WaitForMcpConnectorForm` on the shown form's own type. Replaces every ShowDialog + GetOpenFormId pair
+  for a top-level dialog (11 sites, 10 tests); the docked AuditLogForm/DocumentGridForm sites stay as
+  they were (see Code review).
 - PopupPickList (opened by a connector action) uses the existing `WaitForMcpConnectorForm` instead.
 - Left alone: GetOpenFormId for long-open forms (SkylineWindow, SequenceTreeForm, two DocumentGridForm
   lookups after ChooseView - the grid's id carries its title, so it is taken after the view change).
 
 ## Verifier
 
-`TestMcpConnectorShowForm`: a test-only `SlowLoadingForm` sleeps 300 ms in OnLoad (> the 100 ms
-WaitForOpenForm poll). Guard asserts ShowDialog returns while the window is invisible (50/50 loop),
+`TestMcpConnectorShowForm`: a test-only `SlowLoadingForm` holds OnLoad on an event the test releases
+after asserting (a 300 ms timed hold only for the helper check). Guard asserts ShowDialog returns while
+the window is invisible (50/50 loop),
 then `ShowMcpConnectorForm` must return a resolvable id. Old pattern failed 3/3; negative control
 (helper without the wait) fails. Registered as `SlowLoadingForm,*` in TestRunnerFormLookup.csv (no
 L10N test needed - Brendan) and on CodeInspection's test-only exclusion list next to
@@ -54,3 +55,14 @@ hardening (UI round trip at the end of ShowDialog; ~2,000 call sites).
 - `ai/scripts/Skyline/Run-Tests.ps1` names the log after the comma-joined test list; with 13 tests
   TestRunner died at startup (0xE0434352). Batches of 2-3 worked. Not fixed yet.
 - TestRunner `loop=N` stops after the first failure, so a control loop gives one sample.
+
+## Progress Log
+
+### 2026-10-11 - Merged
+
+PR #4824 merged as commit 8efe7e08eb (admin merge at Brendan's request: all 17 checks green, no approving
+review yet) so SKYLINE-DEV6's next nightly run picks it up. Shipped McpConnectorTest.ShowMcpConnectorForm,
+11 call sites in 10 MCP connector tests converted, WaitForMcpConnectorForm failing with the connector's
+form list, and TestMcpConnectorShowForm. Deferred: ShowDialog-level hardening, the Run-Tests.ps1 long
+test-list log name crash, and DiaToSrmTutorialTest's GetOpenFormId after connector actions (out of scope
+in review, unverified).
