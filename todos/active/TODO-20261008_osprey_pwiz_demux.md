@@ -39,6 +39,15 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Future (Brendan, 2026-10-12): .spectra.bin as a ProteoWizard format
+
+Not now. Osprey supports removing raw files once `.spectra.bin` / `.demux.spectra.bin` exist (they
+double the disk otherwise). For Skyline import and other tools to see the same spectra after the raw
+data are gone, ProteoWizard would need a `.spectra.bin` reader (an `ISpectrumList`), as Mike suggested.
+That reader would also allow rebuilding a stale `.demux.spectra.bin` from a `.spectra.bin` without
+the raw file (the cache already holds what the demultiplexer needs). The ideal would be no
+`.spectra.bin` at all, if reading the vendor file directly can be made fast enough.
+
 ## Status 2026-10-12 night - #4710's gain attributed: the Poisson-weighted refit
 
 **2026-10-12 morning: PR [#4827](https://github.com/ProteoWizard/pwiz/pull/4827)** (pwiz, reviewer chambm, base
