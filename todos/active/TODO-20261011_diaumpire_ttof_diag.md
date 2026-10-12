@@ -34,6 +34,23 @@ On TeamCity, TestDiaTtofDiaUmpireTutorial fails at `DiaUmpireTutorialTest.cs:661
 - No DiaUmpireDiag.zip was published: the `=>` in the echoed publishArtifacts message was a cmd
   redirection. Fixed in ecea77372d (escaped as `=^>`, plus a `dir /s` of the diag folder).
 
+## ROOT CAUSE: build 15562 (cloud) vs MACS2 (2026-10-12)
+
+- Cloud agent EC2AMAZ-HH9KVFB: Xeon Platinum 8375C, 8 cores, Windows 10.0.17763 (Server 2019),
+  ucrtbase 10.0.17763.8276. MACS2: Windows 10.0.20348, ucrtbase 10.0.20348.5622.
+- DIA-Umpire output: identical (per-spectrum digests match).
+- Comet (crux.exe) pins differ only in printf rounding of exact binary ties: IonFrac 0.03125 is
+  written 0.0313 on 17763 and 0.0312 on 20348 (also 0.15625, 0.28125, ... and deltCn like
+  0.0703125). About 1,000 rows per file, plus 1 PSM with different lnExpect/lnNumSP.
+  The old UCRT rounds ties up; newer UCRT (Windows 10 2004 / 19041 on) rounds the exact
+  binary value correctly, giving round-half-even on ties. crux uses the OS's ucrtbase.dll.
+- Percolator trains on those features, so every score shifts slightly, and the library gets
+  14105 vs 14118 distinct modified sequences, which gives the test's 14094 vs 14107.
+- MacCoss TeamCity Agent 1 (build on ecea77372d) passed the count check; its diag files were
+  deleted by TestRunner's leftover-temp-files check, because DiaUmpireDiag was under TestResults.
+- Comparison tools: `ai/.tmp/sessions/20261011-avx512/compare_diag.py` and `pin_diff_columns.py`
+  (on MACS2); output in `cmp-cloud15562-vs-macs2.txt` and `pin-diff-columns.txt` there.
+
 ## Diagnostic PR
 
 - `DiaUmpireTutorialTest.cs`: when `SKYLINE_DIAUMPIRE_DIAG_DIR` is set, keeps Comet intermediates
@@ -46,8 +63,8 @@ On TeamCity, TestDiaTtofDiaUmpireTutorial fails at `DiaUmpireTutorialTest.cs:661
 
 ## Next steps
 
-- [ ] Rerun TeamCity on ecea77372d and download DiaUmpireDiag.zip.
-- [ ] Compare digests, then pep.xml/pin, then percolator output, against local-macs2 to find the
-      first diverging stage.
-- [ ] Fix (or make strict/deterministic) the diverging stage on a real branch; close this draft.
-- [ ] Clean up MACS2 worktrees `sky_diaumpire_avx512*` and `E:\Users\nicksh\diaumpire_avx512_*`.
+- [x] Rerun TeamCity on ecea77372d and download DiaUmpireDiag.zip (build 15562).
+- [x] Compare stages against local-macs2: first divergence is Comet's printf tie rounding (UCRT).
+- [ ] Decide the fix (agent OS upgrade, or making the result independent of the UCRT); close this draft.
+- [x] Clean up MACS2 worktrees `sky_diaumpire_avx512*`.
+- [ ] Clean up `E:\Users\nicksh\diaumpire_avx512_*` on MACS2.
