@@ -1,0 +1,17 @@
+diff --git a/pwiz/analysis/Demux/DemuxHelpers.cs b/pwiz/analysis/Demux/DemuxHelpers.cs
+index 2f91d689ab..ae108aad43 100644
+--- a/pwiz/analysis/Demux/DemuxHelpers.cs
++++ b/pwiz/analysis/Demux/DemuxHelpers.cs
+@@ -135,8 +135,12 @@ internal static class DemuxHelpers
+         }
+ 
+         // Hit end of file too — try walking backward from the earliest already-found.
++        // Restart the stride count there (cpp did not, so it could take another window's spectrum).
+         if (afterNeeded > 0 && spectraIndices.Count > 0)
++        {
+             indexLoc = spectraIndices.Min();
++            stepCount = 0;
++        }
+         while (afterNeeded > 0 && indexLoc != 0)
+         {
+             indexLoc--;
