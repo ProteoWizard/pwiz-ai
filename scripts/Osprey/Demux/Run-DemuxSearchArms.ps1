@@ -27,6 +27,8 @@ param(
     [Parameter(Mandatory)] [string]$Exe,           # Osprey.exe snapshot (built -VendorReader)
     [string]$Seeds = '42',                         # comma-separated Percolator seeds
     [string]$Engine = '',                          # #4710 only: OSPREY_DEMUX_ENGINE (weighted | msconvert)
+    [string]$Block = '',                           # #4710 msconvert engine: OSPREY_DEMUX_BLOCK (covered_bins | truncated_slice)
+    [string]$Output = '',                          # #4710 msconvert engine: OSPREY_DEMUX_OUTPUT (apportioned | solution)
     [string]$Interpolation = '',                   # pwiz measurement builds: OSPREY_DEMUX_INTERPOLATION
                                                    # (NaturalSpline | NaturalThreePoint | Makima)
     [int]$MaxTrainSize = 1500000,                  # OSPREY_MAX_TRAIN_SIZE; 0 = Osprey's default
@@ -55,17 +57,19 @@ foreach ($seed in $seedList) {
 
     # Every knob is set explicitly per arm, so nothing leaks from the caller's environment.
     foreach ($v in 'OSPREY_DEMUX_ENGINE', 'OSPREY_DEMUX_BLOCK', 'OSPREY_DEMUX_INTERPOLATION',
-            'OSPREY_DEMUX_MASS_ERROR_PPM', 'OSPREY_DIAG_SEED', 'OSPREY_MAX_TRAIN_SIZE') {
+            'OSPREY_DEMUX_MASS_ERROR_PPM', 'OSPREY_DEMUX_OUTPUT', 'OSPREY_DIAG_SEED', 'OSPREY_MAX_TRAIN_SIZE') {
         Remove-Item "Env:$v" -ErrorAction SilentlyContinue
     }
     if ($Engine) { $env:OSPREY_DEMUX_ENGINE = $Engine }
     if ($Interpolation) { $env:OSPREY_DEMUX_INTERPOLATION = $Interpolation }
+    if ($Block) { $env:OSPREY_DEMUX_BLOCK = $Block }
+    if ($Output) { $env:OSPREY_DEMUX_OUTPUT = $Output }
     if ($seed -ne 42) { $env:OSPREY_DIAG_SEED = "$seed" }
     if ($MaxTrainSize -gt 0) { $env:OSPREY_MAX_TRAIN_SIZE = "$MaxTrainSize" }
 
     $inputs = foreach ($s in $stems) { '-i'; (Join-Path $RawDir "$s.raw") }
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    "[$(Get-Date -Format s)] START $arm exe=$Exe engine=$Engine interpolation=$Interpolation seed=$seed train=$MaxTrainSize runs=$($stems.Count)" |
+    "[$(Get-Date -Format s)] START $arm exe=$Exe engine=$Engine interpolation=$Interpolation block=$Block output=$Output seed=$seed train=$MaxTrainSize runs=$($stems.Count)" |
         Tee-Object -FilePath $summary -Append
     & $Exe @inputs -l $Library -o (Join-Path $out 'output.blib') --resolution hram --fdr-level precursor `
         --protein-fdr 0.01 --decoys-in-library --demux auto `

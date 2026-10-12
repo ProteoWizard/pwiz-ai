@@ -39,6 +39,58 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Status 2026-10-12 night - #4710's gain attributed: the Poisson-weighted refit
+
+**2026-10-12 morning: PR [#4827](https://github.com/ProteoWizard/pwiz/pull/4827)** (pwiz, reviewer chambm, base
+`Skyline/work/20261010_demux_pwiz_stack`, branch `Skyline/work/20261012_demux_poisson_makima`, pwiz-work2, head 202f27cd99):
+opt-in `PoissonWeights` and `Interpolation` (spline | natural3 | makima, makima sampled 3+3 around the target with a
+3-point fallback on short runs); Analysis tests 193/193; defaults unchanged. With Poisson + makima: +3.1% (Webinar 27,
+Mike's lib; = #4710 weighted) and +3.8% (remes-ev, Astral lib; #4710 weighted -1.2%). Idle-machine speed EV13 (median of 5,
+`speed-final\speed.tsv`, `speed-final2\speed.tsv`): spline 23.2 s, natural3 16.4 s, makima 18.2 s, makima+Poisson 19.6 s,
+#4710 weighted 43.7 s / 9.1 GB. HTML summary updated. Next: #4818 turns on Poisson + makima; separate PR for the
+`FindNearbySpectra` end-of-run stride bug (inherited from cpp; patch in `ai/.tmp/sessions/20261011-attrib/stepcount-fix.patch`;
+moves the Eclipse fixture, needs a re-bless); then the reply to Mike and Matt (draft in Claude's Gmail, needs rewriting).
+
+Full write-up with every number and path: `D:\test\osprey-runs\pwiz-demux\attrib\FINDINGS.md`.
+Webinar 27 six runs, Mike's library, train 1.5M, seeds 42/1/2, `D:\test\osprey-runs\pwiz-demux\h2h-attrib`.
+
+| Arm | Precursors mean | vs pwiz |
+|---|---|---|
+| pwiz (current stack) | 42,188 | - |
+| #4710 msconvert engine, msconvert settings (truncated_slice, natural_three_point) | 42,130 | -0.1% (validates harness) |
+| #4710 weighted WITHOUT Poisson weights | 42,260 | +0.2% |
+| **pwiz + Poisson refit** | **43,171** | **+2.3%** (peptides +2.8%) |
+| **pwiz + Poisson refit + makima** | **43,514** | **+3.1%** (peptides 37,378) |
+| #4710 weighted (default) | 43,481 | +3.1% |
+
+- **The weighted engine's whole gain is its Poisson-weighted refit** (row weights 1/max(A x, floor)
+  after the unweighted NNLS). Its block-wide fragment channels, pass-through and block sizes are worth
+  ~0 here. Ported into pwiz the refit recovers 76% of the precursor gap and 92% of the peptide gap;
+  seeds 43,140-43,201; replicate area CV unchanged (0.028 vs 0.029); floor insensitive 50-5000.
+- **Clean opt-in implementation, local only**: `Skyline/work/20261012_demux_poisson_weights` (pwiz-work2,
+  0ddac43071, on the stack branch): `SpectrumListDemux.Params.PoissonWeights` (default false; gold tests
+  unchanged), msconvert `poissonWeights=true`, `Nnls.SolvePoissonWeighted`; Analysis tests 196/196.
+  Verified on EV13: off = byte-identical to pwiz, on = prototype's spectra. Not pushed, no PR; Osprey
+  defaults untouched (enabling it in Osprey is Brendan's call).
+- The library flips the earlier "equivalent" result on byte-identical EV13 spectra; with the human
+  Astral library the weighted engine's seeds scatter (38,513 / 36,478 / 36,523), which hid the gain.
+  **On that set pwiz+Poisson gives +2.4% (38,518 vs 37,611; peptides +3.1%; FDP 0.46-0.50% vs
+  0.47-0.52%) where weighted gave -1.2%** (`h2h\pwiz-poisson-s*`). The refit is +2.3-2.4% on both sets.
+- Makima vs natural spline on real data (leave-out interpolation, EV13): apex bias equal within
+  +/-0.5% of height at the demux geometry; makima ~5-7% lower noise error. pwiz-work1's makima point
+  selection is asymmetric when the nearest scan follows the target (FindNearbySpectra(6) gives
+  c-2..c+3); make it 3+3 if makima ships. So makima's case is noise, not apex bias.
+- Measurement branches (never push): C:\proj\pwiz `nightlywork/pr4710-on-master` 3b988918d0
+  (OSPREY_DEMUX_WEIGHTED); pwiz-work1 `nightlywork/demux-interp-measure` (prototype + mass-error knob),
+  `nightlywork/demux-poisson-verify` 49c6ee3e25, `nightlywork/demux-poisson-covered` 5fb5842136.
+- Speed, idle EV13 (`speed-poisson\speed.tsv`): pwiz 24.7 s, +Poisson 24.5 s, closed-form natural3
+  15.5 s, natural3+Poisson 16.8 s, #4710 weighted 45.1 s (9.5 GB vs 4.4 GB).
+- Closed-form natural3: unit test vs MathNet committed (pwiz-work1 interpolation branch 3ea96b496c);
+  as the default every Analysis gold test passes (max relative difference 1.2e-12).
+- #4710 msconvert-style's +1.4% was seed luck: seeds 3/4/5 give +0.3% at higher FDP (six-seed +0.8%);
+  no single knob moves it. Running at handoff: pwiz+Poisson+makima on the Astral set (`h2h`).
+- #4814: all 5 checks green (code inspection re-run passed).
+
 ## Status 2026-10-11 - Mike's data and library: weighted engine leads
 
 - **Data**: Webinar 27 set (EV13-15 SAXN + Total04-06 HydN, raw + 2022 C++ demuxed mzML) in

@@ -53,61 +53,105 @@ footer { margin-top: 48px; color: var(--muted); font-size: .85rem; }
 <main>
 <h1>Osprey demultiplexing through ProteoWizard</h1>
 <p class="sub">The alternative to pwiz PR #4710: one demultiplexer, in ProteoWizard, shared by msconvert, Skyline and Osprey.
-Updated 2026-10-10 with replicated searches and speed measured on the final code. Sources: <code>TODO-20261008_osprey_pwiz_demux.md</code>,
-<code>pr4710-comparison.md</code>, <code>pr1b-root-cause.md</code> in pwiz-ai.</p>
+Updated 2026-10-12: #4710's gain attributed to its Poisson-weighted refit and ported into ProteoWizard
+(<a href="https://github.com/ProteoWizard/pwiz/pull/4827">#4827</a>) with makima, replicated on Mike's data and library and on a second set,
+and timed on an idle machine. Sources: <code>TODO-20261008_osprey_pwiz_demux.md</code>, <code>pr4710-comparison.md</code>,
+<code>pr1b-root-cause.md</code> in pwiz-ai, and <code>D:\test\osprey-runs\pwiz-demux\attrib\FINDINGS.md</code> on BRENDANX-i9.</p>
 
 <div class="callout">
 <b>The proposal.</b> #4710 adds staggered-window and MSX demultiplexing to Osprey with its own engine
 (<code>Osprey.Demux</code>, <code>Osprey.DemuxTool</code>; about 9,600 added lines of product code). ProteoWizard already has a
 demultiplexer, the one msconvert users rely on. Making it correct, fast and reachable through <code>MsDataFileImpl</code> lets
-Osprey's <code>--demux auto</code> be 559 added lines of Osprey product code (plus 546 in pwiz, shared by every tool).
-Measured on six Eclipse runs it identifies as many precursors as either #4710 engine, and it reads a run as fast as #4710's
-fastest engine.
+Osprey's <code>--demux auto</code> be 559 added lines of Osprey product code (plus the pwiz PRs, shared by every tool).
+Mike's improvements come with it: the Poisson-weighted refit that produces #4710's gain, and makima interpolation, are now
+ProteoWizard options (<a href="https://github.com/ProteoWizard/pwiz/pull/4827">#4827</a>). With both, the integrated path
+identifies as many precursors as #4710 on Mike's data and library and 5% more on a second set, in less than half the time and memory.
 </div>
 
-<h2>Results on the final code</h2>
-<h3>Identifications: equivalent, replicated</h3>
-<p>Six Orbitrap Eclipse staggered-window runs (EV13-15, Total01-03), one human Carafe library with 1:1 entrapment, Mike's search flags,
-experiment level at q &le; 0.01. Each demultiplexer searched with three Percolator seeds at a 1.5M-row training cap (the default
-300k cap moves a single search by 6-11% with the seed alone, <a href="https://github.com/ProteoWizard/pwiz/issues/4812">#4812</a>).
-Both #4710 engines run from #4710 merged with current master, so the rest of Osprey is the same code in every arm.</p>
+<h2>Results</h2>
+<h3>Identifications</h3>
+<p>Six Orbitrap Eclipse staggered-window runs per set, three Percolator seeds per arm at a 1.5M-row training cap (the default
+300k cap moves a single search by 6-11% with the seed alone, <a href="https://github.com/ProteoWizard/pwiz/issues/4812">#4812</a>),
+experiment level at q &le; 0.01, entrapment FDP from 1:1 entrapment. Both #4710 engines run from #4710 merged with current master,
+so the rest of Osprey is the same code in every arm.</p>
+<p><b>Webinar 27 runs (EV13-15, Total04-06) with Mike's library</b> (<code>carafe_spectral_library+decoy+entrapment.tsv</code>):</p>
 <div class="scroll"><table>
 <tr><th>Demultiplexer</th><th class="num">Seed 42</th><th class="num">Seed 1</th><th class="num">Seed 2</th><th class="num">Mean precursors</th><th class="num">Mean peptides</th><th class="num">Entrapment FDP</th></tr>
-<tr><td><b>ProteoWizard</b> (this work)</td><td class="num">37,436</td><td class="num">37,928</td><td class="num">37,468</td><td class="num"><b>37,611</b></td><td class="num">32,921</td><td class="num">0.47-0.52%</td></tr>
-<tr><td>#4710 weighted (its default)</td><td class="num">38,513</td><td class="num">36,478</td><td class="num">36,523</td><td class="num">37,171</td><td class="num">32,719</td><td class="num">0.47-0.57%</td></tr>
-<tr><td>#4710 msconvert-style</td><td class="num">37,318</td><td class="num">37,355</td><td class="num">37,178</td><td class="num">37,284</td><td class="num">32,837</td><td class="num">0.43-0.48%</td></tr>
+<tr><td>ProteoWizard (current stack)</td><td class="num">42,045</td><td class="num">42,369</td><td class="num">42,149</td><td class="num">42,188</td><td class="num">36,072</td><td class="num">0.32-0.37%</td></tr>
+<tr><td>ProteoWizard + Poisson refit</td><td class="num">43,201</td><td class="num">43,140</td><td class="num">43,173</td><td class="num">43,171 (+2.3%)</td><td class="num">37,081</td><td class="num">0.37-0.40%</td></tr>
+<tr><td><b>ProteoWizard + Poisson refit + makima</b> (#4827)</td><td class="num">43,561</td><td class="num">43,389</td><td class="num">43,591</td><td class="num"><b>43,514 (+3.1%)</b></td><td class="num">37,378</td><td class="num">0.38-0.40%</td></tr>
+<tr><td>#4710 weighted (its default)</td><td class="num">43,568</td><td class="num">43,670</td><td class="num">43,204</td><td class="num">43,481 (+3.1%)</td><td class="num">37,190</td><td class="num">0.32-0.40%</td></tr>
+<tr><td>#4710 weighted, Poisson refit switched off</td><td class="num">42,312</td><td class="num">42,324</td><td class="num">42,145</td><td class="num">42,260 (+0.2%)</td><td class="num">36,127</td><td class="num">0.30-0.34%</td></tr>
+<tr><td>#4710 msconvert-style (its default)</td><td class="num">43,033</td><td class="num">42,759</td><td class="num">42,510</td><td class="num">42,767 (+1.4%)</td><td class="num">36,677</td><td class="num">0.38-0.41%</td></tr>
 </table></div>
-<p>The three are equivalent within the seed spread (ProteoWizard +1.2% and +0.9% nominal). Neither #4710 engine wins beyond the
-interval, so there is no algorithm to port into <code>pwiz/analysis/Demux</code> on this evidence. Caveat: one library, not Mike's
-EV library, and FDP is entrapment-estimated.</p>
-
-<h3>Speed: as fast as #4710's fastest engine</h3>
-<p>EV13 (1.2 GB <code>.raw</code>, 101 staggered windows, 158,700 demultiplexed MS2), vendor file to demultiplexed cache
-(<code>--task SpectraCache --demux auto</code>), 32 threads, idle machine, arms interleaved with a fresh cache each run.</p>
+<p><b>remes-ev runs (EV13-15, Total01-03) with a human Carafe library</b> (predicted for Astral):</p>
 <div class="scroll"><table>
-<tr><th>Demultiplexer</th><th class="num">Wall (s)</th><th class="num">Peak working set</th><th>How</th></tr>
-<tr><td><b>ProteoWizard</b>, with <a href="https://github.com/ProteoWizard/pwiz/pull/4817">#4817</a></td><td class="num"><b>24.0 / 23.9 / 23.9</b></td><td class="num">4.4 GB</td><td>streams the run; blocks solved ahead on worker threads</td></tr>
-<tr><td>ProteoWizard, before #4817</td><td class="num">39.1 / 40.1 / 40.9</td><td class="num">4.4 GB</td><td>same output, byte for byte</td></tr>
-<tr><td>#4710 weighted</td><td class="num">42.8 / 41.4 / 45.2</td><td class="num">9.4 GB</td><td>whole run resident</td></tr>
-<tr><td>#4710 msconvert-style</td><td class="num">21.9 / 22.9 / 23.1</td><td class="num">3.0 GB</td><td>plain parse (11.6 s), then 6.6 s in memory</td></tr>
+<tr><th>Demultiplexer</th><th class="num">Seed 42</th><th class="num">Seed 1</th><th class="num">Seed 2</th><th class="num">Mean precursors</th><th class="num">Mean peptides</th><th class="num">Entrapment FDP</th></tr>
+<tr><td>ProteoWizard (current stack)</td><td class="num">37,436</td><td class="num">37,928</td><td class="num">37,468</td><td class="num">37,611</td><td class="num">32,921</td><td class="num">0.47-0.52%</td></tr>
+<tr><td>ProteoWizard + Poisson refit</td><td class="num">38,316</td><td class="num">38,499</td><td class="num">38,738</td><td class="num">38,518 (+2.4%)</td><td class="num">33,945</td><td class="num">0.46-0.50%</td></tr>
+<tr><td><b>ProteoWizard + Poisson refit + makima</b> (#4827)</td><td class="num">38,937</td><td class="num">38,912</td><td class="num">39,250</td><td class="num"><b>39,033 (+3.8%)</b></td><td class="num">34,374</td><td class="num">0.44-0.47%</td></tr>
+<tr><td>#4710 weighted (its default)</td><td class="num">38,513</td><td class="num">36,478</td><td class="num">36,523</td><td class="num">37,171 (-1.2%)</td><td class="num">32,719</td><td class="num">0.47-0.57%</td></tr>
+<tr><td>#4710 msconvert-style (its default)</td><td class="num">37,318</td><td class="num">37,355</td><td class="num">37,178</td><td class="num">37,284 (-0.9%)</td><td class="num">32,837</td><td class="num">0.43-0.48%</td></tr>
 </table></div>
-<p><b>How the gap closed.</b> A dotTrace profile showed the solve parallelized well (about 380 s of CPU across 32 threads) while the
-wall time was set by the serial read. In it, the Thermo reader's precursor lookup took 22 s by itself: every DIA scan carries
-<code>"Master Scan Number: 0"</code>, which matches no scan, and the lookup walked back to the first scan of the run for every
-spectrum to find that out. #4817 returns at once. It speeds up every Thermo DIA read, not only demultiplexing: plain msconvert of EV13
-goes from 29.4 s to 21.9 s with identical mzML. What remains is the solve, nearly half of it MathNet natural-spline construction;
-a closed form would cut it further but changes low-order bits, so it would be a separate, gated change.</p>
+<p>Replicate precision is unchanged: median CV of peak area over EV13-15, on the 27,260 precursors every arm quantified, is
+0.029 for ProteoWizard, 0.028 with the Poisson refit and 0.030 for #4710 weighted, equal by abundance quartile.
+An earlier version of this page called the engines equivalent from the second set alone; there #4710 weighted's seeds scattered
+by 2,000 precursors, which hid its gain. On Mike's library the gain was clear, and that led to the attribution below.</p>
+
+<h3>What produces #4710's gain: its Poisson-weighted refit</h3>
+<p>Each of the weighted engine's options was switched off in turn (a measurement build of #4710 overriding its descriptor
+settings), checked first on the EV13 spectra and then by search where the spectra moved:</p>
+<ul>
+<li><b>Poisson-weighted refit</b> (after the NNLS, a refit with row weights 1 / max(A x, floor)): switched off, the weighted engine
+finds 42,260, ProteoWizard's 42,188 to within 0.2%. <b>It is the whole gain.</b> Ported into ProteoWizard's NNLS it gives +2.3% and
++2.4% on the two sets. The floor does not matter between 50 and 5,000 intensity units (Orbitrap centroids start at about 1,350).</li>
+<li>Fragment channels found across a 20-cycle block, pass-through of weak channels, block and group sizes, and the output
+threshold: no measurable change in the spectra.</li>
+<li>#4710's msconvert-style engine in msconvert's settings matches ProteoWizard (42,130 vs 42,188, three seeds), so the comparison
+itself is sound. No single one of its knobs (covered bins, makima, solution output) moves the count, and its default's +1.4% fell to
++0.3% with three fresh seeds: seed luck.</li>
+<li>Makima alone was +0.5%, inside the seed spread; on top of the Poisson refit it adds +0.8% and +1.3%.</li>
+</ul>
+
+<h3>Makima on real data</h3>
+<p>The case for makima rested on modeled apex error (0.6-1.3% for makima against 1.5-3.2% for a 3-point natural spline). On
+EV13's own fragment chromatograms (33,603 series, each skipped acquisition interpolated from the others at the demux geometry),
+makima and the 3-point spline underestimate the apex equally, by about 9-10% of height at the 2-3 points per peak width these
+runs have, against 11-12% for linear. Makima's real advantage is lower noise: 5-7% lower error over each peak's upper half. That,
+and its identifications with the Poisson refit, are the reasons to use it.</p>
+
+<h3>Speed</h3>
+<p>EV13 (1.2 GB <code>.raw</code>, 101 staggered windows, 158,700 demultiplexed MS2), vendor file to demultiplexed cache
+(<code>--task SpectraCache --demux auto</code>), 32 threads, idle machine, arms interleaved with a fresh cache each run, median of 5.</p>
+<div class="scroll"><table>
+<tr><th>Demultiplexer</th><th class="num">Wall (s)</th><th class="num">Peak working set</th></tr>
+<tr><td>ProteoWizard, natural spline (current default)</td><td class="num">23.2</td><td class="num">4.4 GB</td></tr>
+<tr><td>ProteoWizard, Poisson refit</td><td class="num">24.2</td><td class="num">4.4 GB</td></tr>
+<tr><td>ProteoWizard, closed-form natural spline</td><td class="num">16.4</td><td class="num">4.3 GB</td></tr>
+<tr><td>ProteoWizard, makima</td><td class="num">18.2</td><td class="num">4.7 GB</td></tr>
+<tr><td><b>ProteoWizard, makima + Poisson refit</b> (the configuration above)</td><td class="num"><b>19.6</b></td><td class="num">4.7 GB</td></tr>
+<tr><td>#4710 weighted</td><td class="num">43.7</td><td class="num">9.1 GB</td></tr>
+<tr><td>#4710 msconvert-style (2026-10-10)</td><td class="num">21.9 / 22.9 / 23.1</td><td class="num">3.0 GB</td></tr>
+</table></div>
+<p><b>How the read got fast.</b> A dotTrace profile showed the solve parallelized well while the wall time was set by the serial
+read. In it, the Thermo reader's precursor lookup took 22 s by itself: every DIA scan carries <code>"Master Scan Number: 0"</code>,
+which matches no scan, and the lookup walked back to the first scan of the run for every spectrum to find that out.
+<a href="https://github.com/ProteoWizard/pwiz/pull/4817">#4817</a> returns at once (40 s to 24 s here; plain msconvert of EV13
+29.4 s to 21.9 s, identical mzML). Of the solve that remains, nearly half was MathNet building a general spline for every value; the
+closed form gives the same curve (within 1e-12 relative; every C++-parity gold test passes with it as the default) in two thirds of
+the time, and makima is also faster than MathNet's spline.</p>
 
 <h2>The pwiz-side work</h2>
 <div class="scroll"><table>
-<tr><th>PR</th><th>What it does</th><th>State (2026-10-10)</th></tr>
+<tr><th>PR</th><th>What it does</th><th>State (2026-10-12)</th></tr>
 <tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4805">#4805</a></td><td>NNLS iteration limit keeps the last feasible solution (as C++); bin snapping on the original edges (as C++); Eclipse fixture matched to C++ peak by peak</td><td>awaiting review</td></tr>
 <tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4814">#4814</a> (on #4805)</td><td>Search covers each bin's full tolerance window (restores the original Skyline behaviour); a peak on a snapped shared edge counts once</td><td>awaiting review</td></tr>
 <tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4806">#4806</a></td><td>One metadata sweep; spectrum cache sized from the acquisition cycle (211 s to 165 s single-threaded msconvert, output identical)</td><td>awaiting review</td></tr>
 <tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4813">#4813</a> (on #4806)</td><td><code>solveThreads=N</code>: blocks solved ahead in parallel, output identical at any N; MSConvertGUI box</td><td>awaiting review</td></tr>
 <tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4815">#4815</a></td><td><code>SpectrumListDemux.DetectScheme</code>; <code>MsDataFileImpl</code> demultiplex option; <code>Params</code> as a record</td><td>awaiting review</td></tr>
 <tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4817">#4817</a></td><td>Thermo precursor lookup no longer walks the whole run for master scan 0</td><td>opened 2026-10-10</td></tr>
-<tr><td>Osprey PR</td><td><code>--demux off|auto</code> through <code>MsDataFileImpl</code> (replaces #4710)</td><td>opened on top of all six</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4827">#4827</a> (on the six)</td><td>Mike's improvements as options, defaults unchanged: Poisson-weighted NNLS refit (<code>poissonWeights=true</code>); <code>interpolation=natural3|makima</code> (closed-form spline, makima sampled 3+3 around the target, falling back to the 3-point spline on short runs)</td><td>opened 2026-10-12</td></tr>
+<tr><td><a href="https://github.com/ProteoWizard/pwiz/pull/4818">#4818</a> (Osprey)</td><td><code>--demux off|auto</code> through <code>MsDataFileImpl</code> (replaces #4710); next: turn on the Poisson refit and makima from #4827</td><td>open, on top of the six</td></tr>
 </table></div>
 <p>#4805 and #4814 each moved Skyline's EncyclopeDIA tutorial test (targets 362/684/4786 transitions before; 369/714/5013 with #4805;
 366/698/4907 with #4814), re-baselined on each branch. Provenance: the Osprey branch's EV13 cache equals the measured
@@ -118,8 +162,8 @@ corrected-span arm's apart from #4805's snapping fix (24 bytes; every spectrum c
   <div class="node"><b>Skyline</b><span class="tag">reference</span><br>Original published implementation (Amodei, Egertson). Demultiplexes only the document's transitions, for chromatograms. Unmaintained; likely to be removed.</div>
   <div class="node"><b>msconvert C++</b><span class="tag">2017 port</span><br>Whole spectra to mzML; the lab's working tool for years. Retired with the C# port. Introduced the half-width search start.</div>
   <div class="node ours"><b>pwiz-sharp C#</b><span class="tag">this work</span><br>Port of C++. Now fixed (NNLS limit, snapping, search span), faster, and reachable from <code>MsDataFileImpl</code>.</div>
-  <div class="node"><b>#4710 msconvert-style</b><span class="tag">Osprey.Demux</span><br>Mike's re-implementation; with its reproduction settings it matches pwiz within 0.2%. Defaults differ (covered bins, makima, apportioned output).</div>
-  <div class="node"><b>#4710 weighted</b><span class="tag">Osprey.Demux default</span><br>A different, per-channel weighted algorithm.</div>
+  <div class="node"><b>#4710 msconvert-style</b><span class="tag">Osprey.Demux</span><br>Mike's re-implementation; in msconvert's settings it matches pwiz (42,130 vs 42,188). Its defaults (covered bins, makima) do not change identifications measurably.</div>
+  <div class="node"><b>#4710 weighted</b><span class="tag">Osprey.Demux default</span><br>The same overlap model solved per fragment channel, plus a Poisson-weighted refit. The refit is the whole of its gain, and is now in pwiz (#4827).</div>
 </div>
 <p class="muted">#4710 also carries a ZT Scan (scanning quadrupole) tool, a different acquisition; it is not wired into <code>--demux</code> and ProteoWizard has no counterpart.</p>
 
@@ -130,7 +174,8 @@ corrected-span arm's apart from #4805's snapping fix (24 bytes; every spectrum c
 <tr><td>Bin search start</td><td>full width</td><td class="bad">half-width: upper window lost above half the top m/z</td><td class="bad">same as C++</td><td>correct</td><td class="good">full width (#4814)</td></tr>
 <tr><td>Snapping of 3+ overlapping bins</td><td>no snapping</td><td>against the original edges</td><td class="bad">in place (port divergence)</td><td>in place</td><td class="good">original edges (#4805)</td></tr>
 <tr><td>Peak on a snapped shared edge</td><td>both bins</td><td>both bins</td><td>both bins</td><td>one bin</td><td class="good">one bin (#4814, credit #4710)</td></tr>
-<tr><td>Block, interpolation, output</td><td colspan="3">7-window slice; natural cubic spline over 3 points; regularized output</td><td>configurable; defaults covered bins, makima, apportioned</td><td>unchanged (covered windows ported and measured, -7.8% on six runs, not adopted)</td></tr>
+<tr><td>Block, interpolation, output</td><td colspan="3">7-window slice; natural cubic spline over 3 points; regularized output</td><td>configurable; defaults covered bins, makima, apportioned</td><td>7-window slice (covered windows ported and measured, no gain); interpolation spline (default), closed-form spline or makima (#4827)</td></tr>
+<tr><td>Poisson-weighted refit</td><td colspan="3">none (unweighted NNLS)</td><td>weighted engine: yes (its whole identification gain)</td><td class="good">option, default off (#4827): +2.3-2.4% alone, +3.1-3.8% with makima</td></tr>
 <tr><td>Spectrum cache</td><td>NumScansBlock x 1.5</td><td>MRU, 1000 spectra</td><td>LRU, 256 (thrashes on 101 windows)</td><td>whole run resident</td><td>sized from the cycle and the MSX block (#4806, #4813)</td></tr>
 <tr><td>Parallelism</td><td>none</td><td>OpenMP across one block's columns; worker threads off</td><td>across one block's columns</td><td>whole run</td><td>blocks solved ahead in parallel, output identical (#4813)</td></tr>
 </table></div>
@@ -157,8 +202,8 @@ near-tied choices decide it. At 1.5M rows the corrected span is +1.0% and the se
 <h2>Engineering</h2>
 <div class="scroll"><table>
 <tr><th></th><th>#4710</th><th>ProteoWizard path</th></tr>
-<tr><td>Product code added</td><td>~9,600 lines in Osprey</td><td>559 lines in Osprey + 546 in pwiz (shared by msconvert, Skyline, Osprey)</td></tr>
-<tr><td>Memory (EV13)</td><td>weighted 9.4 GB; msconvert-style 3.0 GB; whole run resident</td><td>4.4 GB, streaming</td></tr>
+<tr><td>Product code added</td><td>~9,600 lines in Osprey</td><td>559 lines in Osprey + 546 in pwiz + 358 for #4827 (shared by msconvert, Skyline, Osprey)</td></tr>
+<tr><td>Memory (EV13)</td><td>weighted 9.1 GB; msconvert-style 3.0 GB; whole run resident</td><td>4.4-4.7 GB, streaming</td></tr>
 <tr><td>Multiplexing detection</td><td>coverage-weighted heuristic</td><td>msconvert's own mask codec, checked at start, middle and end of the run</td></tr>
 <tr><td><code>--demux off</code> on a multiplexed run</td><td>refuses (exception)</td><td>warns</td></tr>
 </table></div>
@@ -169,10 +214,12 @@ near-tied choices decide it. At 1.5M rows the corrected span is +1.0% and the se
 <li>Whether <code>auto</code> becomes the default.</li>
 <li>MSX: ProteoWizard demultiplexes it, but there is no MSX data here to test with.</li>
 <li>ZT Scan: no ProteoWizard demultiplexer; if the work continues, as a new spectrum-list filter in <code>pwiz/analysis</code>.</li>
-<li>A rerun with his EV library, if he can share it.</li>
+<li>Osprey's default: Poisson refit + makima (the configuration measured above) for <code>--demux auto</code> in #4818.</li>
+<li>Whether pwiz's own default should change later (closed-form spline is output-equivalent and faster; makima and the refit change output).</li>
+<li>Separate fix: <code>FindNearbySpectra</code>'s end-of-run walk keeps the forward walk's stride count (as C++ did), so a run's last cycles can interpolate from another window. Fixing it moves default output at run edges, so it comes as its own PR.</li>
 </ul>
 <footer>Measurements on BRENDANX-i9 (32 logical processors); runs, logs and comparisons under <code>D:\test\osprey-runs\pwiz-demux\</code>
-(<code>h2h\compare-all.txt</code>, <code>speed\speed.tsv</code>, <code>speed-master0\speed.tsv</code>, <code>profile\</code>).
+(<code>h2h\compare-all.txt</code>, <code>h2h-webinar27\compare-all.txt</code>, <code>h2h-attrib\</code>, <code>attrib\FINDINGS.md</code> and its <code>compare-*.txt</code>, <code>speed-final\speed.tsv</code>, <code>speed-final2\speed.tsv</code>, <code>speed-master0\speed.tsv</code>, <code>profile\</code>).
 Runners: <code>ai/scripts/Osprey/Demux/Run-DemuxSearchArms.ps1</code>, <code>Measure-DemuxCacheSpeed.ps1</code>.</footer>
 </main>
 </body>
