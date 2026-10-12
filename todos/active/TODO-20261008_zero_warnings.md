@@ -61,7 +61,11 @@ PRs, x86_64) had 42 in its pre-build step. Fix every warning, then make the buil
   static readonly). Both threads replied to and resolved
 - [x] AutoQC.sln (Debug) builds clean. SkylineBatch.sln failed: 36 MSB3568 in
   `SkylineBatchConfigForm.resx` (9 control metadata groups duplicated, identical values), invisible
-  as warnings on master. Removed the later copies (`5dc457915a`); now builds clean. SkylineBatch
+  as warnings on master. All 36 came from one commit, `cede8b4e70` (#1837, 2021) - looks like a
+  merge resolved by keeping both sides: metadata-only copies in the tab sections plus complete
+  property+metadata groups further down. Kept the complete groups and removed the metadata-only
+  copies (`102297a709`, replacing `5dc457915a`'s opposite choice) so the layout matches what the
+  designer writes and the next designer save churns less. Builds clean. SkylineBatch
   tests 37/39 - `TestRunFromRScripts` and `TestMultipleLogs` fail because R is not installed on
   this machine (both run R_SCRIPTS); `ConfigFormTest` passes
 
