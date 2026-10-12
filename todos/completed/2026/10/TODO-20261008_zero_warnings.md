@@ -5,9 +5,9 @@
 - **Checkout**: `C:\Dev\NoWarn` (exact case - see below)
 - **Module**: `pwiz`
 - **Base**: `origin/master` @ `93c1b9a5b8`
-- **Status**: PR open; awaiting TeamCity and review.
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: [#4810](https://github.com/ProteoWizard/pwiz/pull/4810)
+- **PR**: [#4810](https://github.com/ProteoWizard/pwiz/pull/4810) (merged 2026-10-12)
 
 ## Objective
 
@@ -23,7 +23,7 @@ PRs, x86_64) had 42 in its pre-build step. Fix every warning, then make the buil
    `pwiz_tools/Shared/Common/DataBinding/Controls/Editor/ViewEditor.resx`) passed through.
 4. Skyline-side projects (`pwiz_tools/Directory.Build.props`) do not set TreatWarningsAsErrors at all.
 
-## Done (uncommitted on the branch)
+## Done
 
 - [x] Removed `WarningsNotAsErrors`; added `MSBuildTreatWarningsAsErrors` to root props
 - [x] Removed the three MSConvertGUI `TreatWarningsAsErrors=false` opt-outs
@@ -101,3 +101,16 @@ PRs, x86_64) had 42 in its pre-build step. Fix every warning, then make the buil
   not recompile them: BiblioSpec `*_Prg2012_Wiff` tests then fail with "Sciex WIFF reading requires
   the vendor SDK". A vendor-on `-Rebuild` restores them.
 - Incremental builds do not re-report warnings of up-to-date projects; verify with `-Rebuild`.
+
+## Progress Log
+
+### 2026-10-12 - Merged
+
+PR #4810 merged as commit a4e036a7f1. Shipped: every warning in the local and TeamCity builds
+fixed (CS1591, CA1859, MSB3568 in ViewEditor.resx and SkylineBatchConfigForm.resx, the
+RemoteAccountTest warnings); the CS1591/CA1859 exemption and all project-level
+`TreatWarningsAsErrors=false` opt-outs removed; `TreatWarningsAsErrors` extended to the Skyline
+side; and MSB3568/MSB3277/MSB3245 promoted to errors through `MSBuildWarningsAsErrors`. Not done,
+left for the next warning to surface: the TeamCity Debug configuration and the separately built
+pwiz_tools solutions beyond AutoQC and SkylineBatch (SkyGadget, TestInteractiveTool, ...) were not
+checked. No follow-up issues filed.
