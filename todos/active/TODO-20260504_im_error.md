@@ -2,17 +2,18 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261006_im_error_net10` (was `Skyline/work/20260504_im_error`)
-- **Base**: `Skyline/work/20260612_net8_port` (the .NET 10 port branch; was `master`)
+- **Base**: `master` (the .NET 10 port branch `Skyline/work/20260612_net8_port` merged into
+  master and is defunct; master merged in and PR retargeted 2026-10-12)
 - **Created**: 2026-05-04
 - **Module**: `skyline`
-- **Status**: PR #4787 open against the port branch; awaiting TeamCity, then human re-review
+- **Status**: PR #4787 open against master; awaiting TeamCity, then human re-review
 - **GitHub Issue**: [#4183](https://github.com/ProteoWizard/pwiz/issues/4183)
 - **Source Issue**: [skyline.ms #774](https://skyline.ms/home/issues/issues-details.view?issueId=774)
-- **PR**: [#4787](https://github.com/ProteoWizard/pwiz/pull/4787) (opened 2026-10-06, base
-  `Skyline/work/20260612_net8_port`). Supersedes
+- **PR**: [#4787](https://github.com/ProteoWizard/pwiz/pull/4787) (opened 2026-10-06 with base
+  `Skyline/work/20260612_net8_port`; retargeted to `master` 2026-10-12). Supersedes
   [#4301](https://github.com/ProteoWizard/pwiz/pull/4301) (base master, closed 2026-10-06; its
   review history stays there)
-- **HEAD (current)**: `c166f4f09a` (42 commits rebased onto the port branch 2026-10-06)
+- **HEAD (current)**: `753378df26` (origin/master merged in 2026-10-12; build green)
 - **HEAD (old branch, #4301)**: `03185408f4` (master merge 2026-10-01, on top of `7e3163eecb`)
 - **HEAD (historical, 2026-06-13)**: `35447af24` (2nd master sync, 0 behind origin/master as of 2026-06-13). Commits
   since 1st merge: `3754a390b` (apex-of-valid + scale source + decode guard), `07f4ea1ef`
