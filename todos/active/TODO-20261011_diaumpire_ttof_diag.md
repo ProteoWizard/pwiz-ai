@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20261011_diaumpire_ttof_diag` (DRAFT, not for merge)
 - **Base**: `master`
 - **Created**: 2026-10-11
-- **Status**: In Progress. Draft PR opened to collect intermediates from the failing TeamCity agent.
+- **Status**: Draft PR closed 2026-10-12 after finding the root cause; awaiting a decision on #4828 (discussed by email).
 - **Module**: `skyline`
-- **PR**: [#4826](https://github.com/ProteoWizard/pwiz/pull/4826) (draft)
+- **PR**: [#4826](https://github.com/ProteoWizard/pwiz/pull/4826) (draft, closed unmerged)
+- **GitHub Issue**: [#4828](https://github.com/ProteoWizard/pwiz/issues/4828)
 - **Checkout**: `E:\Users\nicksh\git_e\sky_TestDiaTtofDiaUmpireTutorial` (MACS2)
 
 ## Problem
@@ -65,6 +66,6 @@ On TeamCity, TestDiaTtofDiaUmpireTutorial fails at `DiaUmpireTutorialTest.cs:661
 
 - [x] Rerun TeamCity on ecea77372d and download DiaUmpireDiag.zip (build 15562).
 - [x] Compare stages against local-macs2: first divergence is Comet's printf tie rounding (UCRT).
-- [ ] Decide the fix (agent OS upgrade, or making the result independent of the UCRT); close this draft.
+- [ ] Decide the fix in #4828 (agent OS upgrade, test accepting both counts, or static-UCRT crux).
 - [x] Clean up MACS2 worktrees `sky_diaumpire_avx512*`.
 - [ ] Clean up `E:\Users\nicksh\diaumpire_avx512_*` on MACS2.
