@@ -26,6 +26,14 @@ On TeamCity, TestDiaTtofDiaUmpireTutorial fails at `DiaUmpireTutorialTest.cs:661
 - Running three copies of this test at once on MACS2 (separate SKYLINE_DOWNLOAD_PATH each)
   stretched a ~40 minute run to ~3.5 hours. It looked hung at "[step 7 of 7]", but it was only slow.
 
+## TeamCity results, builds 15555 and 15556 (2026-10-11)
+
+- Agents pwiz-windows-i-0119f642b1075180f and pwiz-windows-i-02052ef86cb16ed5e (cloud).
+- Both agents got 14094 in BOTH runs: as-is and with DOTNET_EnableAVX512=0. So .NET's AVX-512
+  code paths are ruled out, and the result is repeatable on those agents.
+- No DiaUmpireDiag.zip was published: the `=>` in the echoed publishArtifacts message was a cmd
+  redirection. Fixed in ecea77372d (escaped as `=^>`, plus a `dir /s` of the diag folder).
+
 ## Diagnostic PR
 
 - `DiaUmpireTutorialTest.cs`: when `SKYLINE_DIAUMPIRE_DIAG_DIR` is set, keeps Comet intermediates
@@ -38,7 +46,7 @@ On TeamCity, TestDiaTtofDiaUmpireTutorial fails at `DiaUmpireTutorialTest.cs:661
 
 ## Next steps
 
-- [ ] Download DiaUmpireDiag.zip from the TeamCity run.
+- [ ] Rerun TeamCity on ecea77372d and download DiaUmpireDiag.zip.
 - [ ] Compare digests, then pep.xml/pin, then percolator output, against local-macs2 to find the
       first diverging stage.
 - [ ] Fix (or make strict/deterministic) the diverging stage on a real branch; close this draft.
