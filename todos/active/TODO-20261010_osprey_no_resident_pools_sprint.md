@@ -60,7 +60,7 @@ this file is the plan for the memory rows of it. Inventory re-checked 2026-10-10
 - [x] Fold `StreamedSurvivorLoader` into `PublishedSurvivorLoader`
 - [x] Remove `Stage6StreamSurvivors` + `Stage6StreamSurvivorsValidityKeySuffix` and the
       PerFileRescoreTask validity-key term (suffix was empty on the default, so no key changes)
-- [ ] `MaterializeResumedFile` overlay arm - **NOT switch-only, moved to PR 2**: a null loader also
+- [x] **(#4825)** `MaterializeResumedFile` overlay arm - **NOT switch-only, moved to PR 2**: a null loader also
       happens under projection-off (FirstPassFDR Run's legacy arm never sets `_survivorLoader`, and
       PerFileRescore.Rehydrate passes `PublishedSurvivorLoader`). Comments updated to name projection-off
 - [x] Startup refusal: `OspreyEnvironment.Stage6StreamSurvivorsRetiredSet`, Program.cs, and a
@@ -128,7 +128,7 @@ output to compare:
 Stage 7 (its survivor loader is null), so those arms stay live until PR 3.
 - [x] ~~Bank the A/B with `OSPREY_FDR_PROJECTION=0 OSPREY_ALLOW_UNFIXED_RESIDENT=projection-off`~~
       - aborts on master like the Stage 6 arm (PR 1's "A/B finding"); golden is the oracle
-- [ ] **(DEFERRED to PR 3 shared tail - PR 2 only reworded their comments)** `MaterializeResumedFile` overlay arm + `MaterializeAllResumedFiles` null-loader path (moved
+- [x] **(#4825)** **(DEFERRED to PR 3 shared tail - PR 2 only reworded their comments)** `MaterializeResumedFile` overlay arm + `MaterializeAllResumedFiles` null-loader path (moved
       here from PR 1: projection-off is what still reaches them)
 - [x] Coordinate #4511 first: its streaming-vs-resident parity check uses this path - do it now or
       rewrite it against the golden
@@ -380,16 +380,16 @@ not affected (their lists are never drained).
       all-runs `HydrateReconciliationOverlay` + `BuildFromEntries` (PerFileScoringTask ~1509-1529,
       ~2088; FirstPassFdrTask ~3191)
 - [x] R2 `OSPREY_DUMP_PERCOLATOR` - gone with PR 2
-- [ ] R3 `--task SecondPassFDR` with `CanStreamStage7Join` false for disk reasons (no current
+- [x] **(#4825)** R3 `--task SecondPassFDR` with `CanStreamStage7Join` false for disk reasons (no current
       summary / stale reconciled parquet): `HydrateCompactedStreaming` all-runs + resident Stage 7
       + `ProteinFdrEngine.RunFirstPass` over the bundle
-- [ ] R4 straight-through resume or PerFileRescoring worker with no current summary: all-runs
+- [x] **(#4825)** R4 straight-through resume or PerFileRescoring worker with no current summary: all-runs
       bundle (`AllRunsBundleGuardError` returns null by design) + eager `MaterializeAllResumedFiles`
-- [ ] R5 `OSPREY_DUMP_RESCORED` reads `rescored.Value`; also `DUMP_MULTICHARGE` / `DUMP_RECONCILIATION`
+- [x] **(#4825)** R5 `OSPREY_DUMP_RESCORED` reads `rescored.Value`; also `DUMP_MULTICHARGE` / `DUMP_RECONCILIATION`
 Then delete the shared tail:
 - [ ] Stage 6 non-streamed arms (`PlanStage6` `_survivorsStreamed` false, `Stage6Planner.Plan(List)`,
       `ExecuteRescore` loader-null, `BuildRescoredPool` early return)
-- [ ] Stage 7 resident join: `!rescored.Streams` branches in Pass2FdrSidecar (reload, residentByFile,
+- [x] **(#4825)** except the `RescoredEntries` resident fallbacks (deferred to PR 3b, needs a `Files()` probe); Stage 7 resident join: `!rescored.Streams` branches in Pass2FdrSidecar (reload, residentByFile,
       LoadOneFile resident arm), `OverlayPass2OntoResidentPool`, `ReloadPass2Sidecars`,
       `WarnResidentStage7Join`, `WritePass2AndFinalize(rescored.Value)` + batch pass-2 builders,
       `RescoredEntries` resident fallbacks (`Files()`, no-op Drop/Materialize)
@@ -429,7 +429,7 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
   with `OSPREY_MDIAG_COASSIGN_ONLY=1 --timestamp --memstamp OSPREY_LOG_MEMORY=1 OSPREY_LOG_COASSIGN_ALLOC=1`;
   if the join floor is flat, close section 1 with the correction.
 
-- [ ] `_fileRows` / `_byPrecursor` retained for the whole apex-RT join: 13.95 M rows at 446 runs,
+- [ ] **(premise MEASURED stale 2026-10-11, see above - close with the correction)** `_fileRows` / `_byPrecursor` retained for the whole apex-RT join: 13.95 M rows at 446 runs,
       ~31 M at 1000. Bound it (fold per precursor, or a disk-backed join) without changing the panel
 - [ ] Parquet.Net per-row-group arrays under it (hand the caller one row group at a time, the
       `ReadFdrStubScalars` shape)
@@ -454,6 +454,9 @@ Stage 7 resident branch, R5, and the unknown-`OSPREY_*` startup check (`KnownVar
 tooling variables moved to `OSPREYDEV_*`. TeamCity #307 ran on bd9338cf1c (48/48); the last commit
 5267ef9236 was doc-only. **This TODO stays active:** next is PR 3b (R1 + the deferred whole-pool
 builders, `ExecuteRescore` null-loader arm, decision 5), then PR 4.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261012_osprey_no_resident_pools_pr3b.md` before starting work.
 
 ### 2026-10-11 (afternoon) - PR 3a on `Skyline/work/20261011_osprey_resident_routes` (uncommitted)
 
