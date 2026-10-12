@@ -11,7 +11,7 @@
   measured stale (see PR 4). The pwiz-ai follow-up from #4821 is DONE (2026-10-11).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, open); PR 3b / PR 4 not started
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b / PR 4 not started
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -444,6 +444,16 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-12 - Merged PR 3a
+
+PR #4825 merged as 6ce733caba (squash, `--admin` approved by Brendan; no review approval).
+Shipped: R3/R4 (older-build reconciled parquet rejected at the stamp read; `--task SecondPassFDR`
+refused up front), deletion of the eager resume arm, the resident SecondPassFDR rehydrate and every
+Stage 7 resident branch, R5, and the unknown-`OSPREY_*` startup check (`KnownVariables`), with
+tooling variables moved to `OSPREYDEV_*`. TeamCity #307 ran on bd9338cf1c (48/48); the last commit
+5267ef9236 was doc-only. **This TODO stays active:** next is PR 3b (R1 + the deferred whole-pool
+builders, `ExecuteRescore` null-loader arm, decision 5), then PR 4.
 
 ### 2026-10-11 (afternoon) - PR 3a on `Skyline/work/20261011_osprey_resident_routes` (uncommitted)
 
