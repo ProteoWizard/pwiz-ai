@@ -6,7 +6,7 @@
 - **Created**: 2026-10-11
 - **Status**: In Progress. Draft PR opened to collect intermediates from the failing TeamCity agent.
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4826](https://github.com/ProteoWizard/pwiz/pull/4826) (draft)
 - **Checkout**: `E:\Users\nicksh\git_e\sky_TestDiaTtofDiaUmpireTutorial` (MACS2)
 
 ## Problem
