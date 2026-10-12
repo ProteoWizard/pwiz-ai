@@ -502,7 +502,9 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
   by PerFileRescore's Consume, pinned through Stage 7 on the RefillOnly/DiagnosticsOnly arm) - planner
   surgery, candidate for PR 4 or a 3c. Unit 638/638 + inspection (`unit-gate-r.log`).
 - Still open: `ParquetScoreCache.LoadFullFdrEntries` and `HasPinFeatureColumns` are production-dead
-  (IOTest-only). Gates left: regression on 4813bdd5a3 (`regression-final.log`), cross-impl, PR.
+  (IOTest-only). Gates on 4813bdd5a3: `regression-parallel -Dataset All` 48/48 (`regression-final.log`, 1:19:19 - slow disk again);
+  cross-impl PASS at 1e-9, Stellar Single 26,683 and Astral All 117,236 precursors (`xi-stellar-single.log`,
+  `xi-astral-all.log`) - no parity break. Next: push + PR (draft body `ai/.tmp/sessions/20261012-pr3b/pr-body.md`), TeamCity (ask).
 
 ### 2026-10-12 - Merged PR 3a
 
