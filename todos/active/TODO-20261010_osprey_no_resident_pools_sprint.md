@@ -489,9 +489,20 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
   wall was disk, not code: the straight-through mzML parse ran at 7 MB/s. Same-session A/B on Stellar:
   master worktree 308 s, then the branch 152 s with mzML at 175-234 MB/s
   (`regression-stellar-master.log`, `regression-stellar-branch2.log`).
-- Still open in 3b: `ParquetScoreCache.LoadFullFdrEntries` and `HasPinFeatureColumns` are production-dead
-  (IOTest-only); FirstPassFDR still publishes the planning byproducts PerFileRescore now only consumes
-  to release. Gates left: regression on the guard commit, `/code-review medium`, cross-impl, PR.
+- `/code-review medium` (9 findings), triaged. FIXED in 4813bdd5a3: the dead all-runs gap-fill /
+  refined-calibration envelope reader (and `RescoreHydration.ReadGapFillAndCalibrations`; both byproducts
+  are plain holders now); the 30.8 M-tuple grouping built only for an action count; a double probe in
+  FirstPassFDR's refusal; stale comments (CanHydratePerRun "KNOWN WART", SecondPassFDR ".Value BUILDS the
+  pool", probe-the-disk bundle, LoadOwn/StreamOwn). DROPPED: regression.ps1 no longer clearing an inherited
+  OSPREY_ALLOW_UNFIXED_RESIDENT (loud failure is the rule since #4825; tctest.bat does not set it); the
+  BuildPerRunHydrate "uncaught exception" (DescribeFailure reports an InvalidDataException as its message +
+  exit 1); the routing-defect throw (InvalidOperationException is right for a defect); JoinFileStems
+  (pre-existing, recorded above). DEFERRED for Brendan: FirstPassFDR's planner still BUILDS the
+  whole-experiment consensus-target / refined-calibration / gap-fill maps (order 13 GB at 446 runs, released
+  by PerFileRescore's Consume, pinned through Stage 7 on the RefillOnly/DiagnosticsOnly arm) - planner
+  surgery, candidate for PR 4 or a 3c. Unit 638/638 + inspection (`unit-gate-r.log`).
+- Still open: `ParquetScoreCache.LoadFullFdrEntries` and `HasPinFeatureColumns` are production-dead
+  (IOTest-only). Gates left: regression on 4813bdd5a3 (`regression-final.log`), cross-impl, PR.
 
 ### 2026-10-12 - Merged PR 3a
 
