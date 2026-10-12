@@ -56,9 +56,19 @@ PRs, x86_64) had 42 in its pre-build step. Fix every warning, then make the buil
   22 suites pass. An earlier `build64.log` had an Analysis.Tests failure from two overlapping
   builds writing the same log; the single-run rerun is clean
 
+- [x] 2026-10-12: Copilot review - fixed `ReaderList.Default` summary (`3f6cdf9682`); declined
+  `_camelCase` rename of the SpectrumListWrapperTests delegate fields (pwiz tests use PascalCase
+  static readonly). Both threads replied to and resolved
+- [x] AutoQC.sln (Debug) builds clean. SkylineBatch.sln failed: 36 MSB3568 in
+  `SkylineBatchConfigForm.resx` (9 control metadata groups duplicated, identical values), invisible
+  as warnings on master. Removed the later copies (`5dc457915a`); now builds clean. SkylineBatch
+  tests 37/39 - `TestRunFromRScripts` and `TestMultipleLogs` fail because R is not installed on
+  this machine (both run R_SCRIPTS); `ConfigFormTest` passes
+
 ## Remaining
 
-- [ ] TeamCity: Debug configuration, and AutoQC/SkylineBatch (now inherit `TreatWarningsAsErrors`)
+- [ ] TeamCity: Debug configuration
+- [ ] Other separately built solutions under pwiz_tools (SkyGadget, TestInteractiveTool, ...) not built
 
 ## Decisions
 
