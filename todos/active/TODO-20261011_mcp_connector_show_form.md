@@ -5,7 +5,8 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-11 (SKYLINE-DEV6, checkout `C:\proj\pwiz`)
-- **Status**: fix + reproducer complete, local tests green; `/code-review`, then PR. Wanted merged before
+- **PR**: [#4824](https://github.com/ProteoWizard/pwiz/pull/4824) (opened 2026-10-11; commits 6a6f7019e8, 0730212d71)
+- **Status**: review fixes applied, local tests green; awaiting TeamCity + human review. Wanted merged before
   SKYLINE-DEV6's next nightly run.
 
 ## Problem
@@ -41,6 +42,13 @@ then `ShowMcpConnectorForm` must return a resolvable id. Old pattern failed 3/3;
 (helper without the wait) fails. Registered as `SlowLoadingForm,*` in TestRunnerFormLookup.csv (no
 L10N test needed - Brendan) and on CodeInspection's test-only exclusion list next to
 BackgroundEventThreadsTestForm.
+
+## Code review (/code-review max, 9 findings)
+Fixed: OnLoad gated on an event (guard no longer races the 100 ms poll; hold now 300 ms only in the
+helper check), id looked up by form.GetType().Name, WaitForMcpConnectorForm falls back to GetOpenFormId's
+message on timeout, reverted docked AuditLogForm/DocumentGridForm sites (listed by DockState; converting
+risked a stale grid-title id), AssertEx, docs scoped to top-level dialogs. Deferred: ShowDialog-level
+hardening (UI round trip at the end of ShowDialog; ~2,000 call sites).
 
 ## Side findings
 - `ai/scripts/Skyline/Run-Tests.ps1` names the log after the comma-joined test list; with 13 tests
