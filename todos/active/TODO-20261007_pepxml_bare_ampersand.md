@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261007_pepxml_bare_ampersand`
-- **Base**: `Skyline/work/20260612_net8_port`
+- **Base**: `master` (retargeted 2026-10-12 from `Skyline/work/20260612_net8_port`, which merged into master)
 - **Created**: 2026-10-07
 - **Status**: In Progress
 - **GitHub Issue**: (none)
