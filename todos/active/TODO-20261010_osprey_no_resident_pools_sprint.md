@@ -11,7 +11,7 @@
   measured stale (see PR 4). The pwiz-ai follow-up from #4821 is DONE (2026-10-11).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b / PR 4 not started
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b on `Skyline/work/20261012_osprey_firstpass_rerun_stream` (local commits, no PR yet); PR 4 not started
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -376,7 +376,7 @@ refills, rescores and CLEARS each run's list; `BuildRunPerRunSource` returns nul
 `OSPREY_PASS2_VERIFY_WORKER=1` (regression.ps1) the scope check fires; without it the run would
 presumably have written a near-empty blib with exit 0. Dies with projection-off (PR 2); R3/R4 are
 not affected (their lists are never drained).
-- [ ] R1 `--task FirstPassFDR` re-run over a dir with `.reconciliation.json`: resident stubs load +
+- [x] **(PR 3b)** R1 `--task FirstPassFDR` re-run over a dir with `.reconciliation.json`: resident stubs load +
       all-runs `HydrateReconciliationOverlay` + `BuildFromEntries` (PerFileScoringTask ~1509-1529,
       ~2088; FirstPassFdrTask ~3191)
 - [x] R2 `OSPREY_DUMP_PERCOLATOR` - gone with PR 2
@@ -387,7 +387,7 @@ not affected (their lists are never drained).
       bundle (`AllRunsBundleGuardError` returns null by design) + eager `MaterializeAllResumedFiles`
 - [x] **(#4825)** R5 `OSPREY_DUMP_RESCORED` reads `rescored.Value`; also `DUMP_MULTICHARGE` / `DUMP_RECONCILIATION`
 Then delete the shared tail:
-- [ ] Stage 6 non-streamed arms (`PlanStage6` `_survivorsStreamed` false, `Stage6Planner.Plan(List)`,
+- [x] **(PR 3b)** Stage 6 non-streamed arms (`PlanStage6` `_survivorsStreamed` false, `Stage6Planner.Plan(List)`,
       `ExecuteRescore` loader-null, `BuildRescoredPool` early return)
 - [x] **(#4825)** except the `RescoredEntries` resident fallbacks (deferred to PR 3b, needs a `Files()` probe); Stage 7 resident join: `!rescored.Streams` branches in Pass2FdrSidecar (reload, residentByFile,
       LoadOneFile resident arm), `OverlayPass2OntoResidentPool`, `ReloadPass2Sidecars`,
@@ -444,6 +444,42 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-12 (afternoon) - PR 3b on `Skyline/work/20261012_osprey_firstpass_rerun_stream` (4 local commits)
+
+- **R1 fixed** (c45751d143): `PerFileScoringTask.Rehydrate` adopts no bundle when FirstPassFDR is in the
+  pipeline, so `--task FirstPassFDR` over a finished dir takes the lean load. Repro added to
+  `TestSubsetStraightThroughAndReruns` (summary deleted, re-run, summary byte-identical); it failed on
+  master with `pre-compaction-pool: resident` + `all-runs-bundle: built runs=3`
+  (`ai/.tmp/sessions/20261012-pr3b/repro-before.log`). Same commit: resident stubs loop,
+  `HydrateReconciliationOverlay`, batch `ModelDiagnosticsReport.Write` (closes #4542 finding 1),
+  `.gitignore` `/b.bat`, `/b[os].bat`, `/b[os]?.bat`.
+- **Decision 5 (Brendan, 2026-10-12):** batch `ModelDiagnosticsData.Build` / `BuildPass2` made `internal`
+  test oracles (Osprey.FDR exposes internals only to Osprey.Test). Same treatment for group C.
+- **Reachability probes** (temporary throws, `PROBE-3B`): unit suite + `regression-parallel -Dataset All`
+  48/48 twice (31:29, 54:52) with no probe hit (`probe-regression.log`, `probe2-regression.log`):
+  join-only bundle hydrate, adopted bundle, FirstPassFDR bundle route, resident projection,
+  BuildRescoredPool, MaterializeAllFromSource, both non-hydrate rescore arms. Only direct
+  `RescoredEntries` unit tests reached the source-less ctor / `Files()`. Deletion map:
+  `ai/.tmp/sessions/20261012-pr3b/deletion-map.md`.
+- **Brendan approved deleting A and B in 3b; C = delete arm, keep oracle internal.**
+  - A (abfe879ce1): all-runs reconciliation bundle route - RescoreBundle, RescoreInputs,
+    HydrateCompactedStreaming, RescoreCompaction, AllRunsBundleGuardError, TallyPreCompaction; a run with
+    no per-run route is refused before loading, naming the missing summary.
+  - B (6c312b9a63): `RescoredEntries` is per-file only (`Value` throws); BuildRescoredPool,
+    MaterializeAllFromSource, non-hydrate rescore arms, join-wide rescore dictionaries,
+    OverlayReconciledIntoBuffer/File; LogKeys `all-runs-bundle` and `survivor-pool` and their absence checks
+    (SubsetPipelineTest, regression.ps1).
+  - C (39a9a87e58): FirstPassFDR's resident projection arm and `ReadApexRtsByParquetIndex`;
+    `RunPercolatorFdr`, `BuildFromEntries`, `Builder` internal.
+- Unit gate 638/638 + inspection clean after each group (`unit-gate-{a,b2,c}.log`).
+- **Found, not fixed (pre-existing):** `RunRescoreInputs.JoinFileStems` is set from each run's envelope but
+  never read, so a single-run PerFileRescoring worker stamps its reconciled parquet with the single-file
+  hash; `ReconciledParquetWriter` docs say SecondPassFDR rejects that, yet the HPC-chain legs pass. Check
+  which is stale.
+- Still open in 3b: `ParquetScoreCache.LoadFullFdrEntries` and `HasPinFeatureColumns` are production-dead
+  (IOTest-only); FirstPassFDR still publishes the planning byproducts PerFileRescore now only consumes
+  to release; the guard machinery step (ResidentPaths etc.); docs 00/07/12; gates.
 
 ### 2026-10-12 - Merged PR 3a
 

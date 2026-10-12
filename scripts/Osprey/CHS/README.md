@@ -281,9 +281,10 @@ is the precondition, and a non-zero count means the bed does not cover this coho
 [PATH] second-pass-join: per-run runs=446
 ```
 
-and a resident one logs `[PATH] survivor-pool: materialized runs=446`. The output is IDENTICAL
-either way - that is the whole design - so the log line is the only evidence, exactly as it is
-for the P16 folds above. `regression.ps1` asserts the same `[PATH]` keys per leg at Stellar
+and its absence means no per-run source was published, which is now an error at the top of
+Stage 7: the resident join and its `[PATH] survivor-pool: materialized` line were removed in
+PR 3b of the no-resident-pools sprint (2026-10-12). Logs from before then may carry it. The
+log line is the evidence, exactly as it is for the P16 folds above. `regression.ps1` asserts the same `[PATH]` keys per leg at Stellar
 scale. (Before 2026-09-25 these were prose lines, "Second-pass join: folding over N run(s)"
 and "Materializing survivors"; logs from then carry only those.)
 
