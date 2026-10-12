@@ -11,7 +11,7 @@
   measured stale (see PR 4). The pwiz-ai follow-up from #4821 is DONE (2026-10-11).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11); PR 3 / PR 4 not started
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, open); PR 3b / PR 4 not started
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -497,7 +497,12 @@ PLAN step 1. Then, on the branch (`C:\proj\pwiz`, nothing committed yet):
 - Cross-impl re-run on the branch: Stellar Single **PASS**, Astral All **PASS** (1e-9; 117,236 precursors;
   Rust 18:50, C# 6:32) - matches the step 1 baseline, no parity break
   (`ai/.tmp/sessions/20261011-pr3/xi-*-branch.log`).
-- NOT done yet: commits, TeamCity (ask), PR.
+- Committed bd9338cf1c (rebased on master cc074faf83; unit 646/646 re-run), pwiz-ai fe87c719.
+  **PR [#4825](https://github.com/ProteoWizard/pwiz/pull/4825)** opened 2026-10-11 ~19:50. TeamCity
+  Perf/Regression build 4212056 (`pull/4825`, Agent 1) triggered at Brendan's request (night session).
+- Demux conflict on push: another session's unmerged demux branches read OSPREY_DEMUX_* in C#, so my
+  Demux-script refusals were dropped (upstream versions kept). Those branches must add their names
+  to `KnownVariables` - `TestOspreyVariablesAreRegistered` will say so.
 - Deferred to PR 3b (R1): the whole-pool builders `BuildRescoredPool` / `MaterializeAllFromSource`
   now have no production `.Value` reader; turning them into a refusal needs a probe of the
   worker's `Files()` paths first. Also `ExecuteRescore`'s null-loader arm.
