@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261012_continueonerror_all_writers` (created 2026-10-12, C# port)
-- **Checkout**: `C:\Dev\master_clean`
+- **Checkout**: `C:\Dev\mz5` (moved from `C:\Dev\master_clean` 2026-10-12)
 - **Module**: `pwiz`
 - **Base**: `origin/master`
 - **Status**: In progress. C# port committed locally, not pushed; MsData.Tests (89) and
