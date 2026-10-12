@@ -39,6 +39,26 @@ master-only (release 26.1 ships the C++ demultiplexer), so no cherry-picks. #471
    `WithOptimization` copy-every-field lesson from the covered-bins branch.
 5. Then the Osprey PR (replacement for #4710) on top of PR 3, with its own test data.
 
+## Status 2026-10-12 afternoon - the whole stack is on master
+
+Squash-merged (admin, Mike and Matt agreed the stack is a good checkpoint), one commit per PR:
+#4805 7647a54731, #4814 a9dd0effc4, #4806 8a6858049e, #4813 5ce7256a61, #4815 5c9cf4237b,
+#4817 ef1b812869, #4827 63416b3d18, #4818 5b69ce084c. Each child got `git merge origin/master`
+(no rebase, no force-push) and its diff checked equal to its own change before squashing; master's
+tree equals #4818's final head f3a4aa6102, which passed Osprey Perf/Regression (TeamCity 4212536,
+MacCoss Agent 1) and the local Osprey gate (648 tests, inspection clean). Non-required AWS-agent
+failures (no-vendor MascotShim CMake, Bruker.Tests, DiaUmpire TTOF, ManagingSearchTools file lock)
+pass on MacCoss Agent 1 / master and were not ours. Remote and local work branches deleted.
+
+Pending, Brendan's call:
+- Send the rewritten reply to Mike and Matt (draft in Claude's Gmail).
+- #4710: archive tag `archive/20260923_osprey_demux` (was waiting for this merge), docs pointer, close.
+- Worktrees `C:\proj\pwiz-demux-parity` (holds `Skyline/work/20261010_demux_detect_scheme`) and
+  `C:\proj\pwiz-demux-blocks` from the 10-08 night: remove with `git worktree remove`.
+- `OSPREY_TEST_BASE_DIR` at Windows User level on BRENDANX-i9: refused by Osprey since #4825.
+- Follow-ups: `ai/todos/backlog/TODO-demux_msconvert_default_delivery.md`; Skyline's deconvolution
+  choices still run its own demultiplexer (route them through MsDataFileImpl, or point to msconvert).
+
 ## Future (Brendan, 2026-10-12): .spectra.bin as a ProteoWizard format
 
 Not now. Osprey supports removing raw files once `.spectra.bin` / `.demux.spectra.bin` exist (they
