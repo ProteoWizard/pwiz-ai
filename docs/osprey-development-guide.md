@@ -1046,79 +1046,31 @@ is the case against keeping an oracle arm alive outside the gate. The committed 
 (`regression.ps1`, 1e-9) is the oracle for "did streaming change results?" from here on. If you
 add an A/B toggle in future, give it a gate leg or expect it to rot.
 
-`ResidentPaths.KNOWN_UNFIXED` is now EMPTY, so `OSPREY_ALLOW_UNFIXED_RESIDENT` admits nothing; the
-plumbing stays until the remaining untokened routes are retired
-(`ai/todos/active/TODO-20261010_osprey_no_resident_pools_sprint.md`, PR 3). It still takes a
-comma/semicolon list and still warns on unrecognized (now: all) tokens.
+### No resident routes, and no allowance
 
-### The rule: token + warning, never warning alone
+The named-token ratchet (`ResidentPaths.KNOWN_UNFIXED` + `OSPREY_ALLOW_UNFIXED_RESIDENT`, which
+had replaced the blanket `OSPREY_ALLOW_UNBOUNDED_MEMORY=1` after that let a
+`OSPREY_PASS2_QVALUE=transfer` regression ride along for ten days) shrank from five tokens to
+none and was removed on 2026-10-12 with the last resident routes (PR 3b of
+`TODO-20261010_osprey_no_resident_pools_sprint.md`): the all-runs reconciliation bundle, the
+whole-run survivor builds behind `RescoredEntries.Value` (which now throws) and the resident
+first-pass projection. Osprey refuses the variable at startup like any other unknown `OSPREY_*`
+name.
 
-A resident O(files) path is acceptable ONLY where the operator asked for it.
+The rule the ratchet enforced still holds for new code: **no route may hold every run's
+precursor candidates or survivors at once** - tokened, untokened, diagnostic or default. A new
+O(files x entries) structure is a design question for review, not something an environment
+variable can admit. Two lessons from getting here are worth keeping:
 
-| Situation | Verdict |
-|---|---|
-| Token required + warning emitted | **Good.** The token is the explicit request; the warning explains what was granted. |
-| Warning alone, on a default path with no token | **Insufficient.** There is no request to explain, so the warning annotates a defect instead of mitigating one - and it reads as normal within a week. |
-| Neither | The failure mode the ratchet exists to prevent. |
-
-A warning on an untokened default path is **not** an acceptable resting state. Require the
-token: omitting it fails loudly with an actionable message, naming it proceeds with the
-warning. That does mean an ordinary run on such a path fails until the operator sets a
-variable - deliberately. A loud, actionable refusal beats an OOM five hours into Stage 6,
-and it puts real pressure on the fix. Exempt only runs that ALREADY had to name a token for
-another reason, so one decision never costs two variables.
-
-Then fix the path, and delete the token together with the issue.
-
-**Any token required by `regression.ps1` must have an open issue to fix it and remove the
-token from the gate.** The script CLEARS an inherited `OSPREY_ALLOW_UNFIXED_RESIDENT` at
-startup so an ambient value cannot defeat the property, then names what it needs per leg.
-
-Currently required: **none**. Mode 2's `mdiag-full-resume` went with #4505 and mode 5's
-`resume-survivor-handoff` went with #4536, which gave the rehydrate its own per-file
-survivor loader. Zero is the invariant now, not a target: a token reappearing in the gate is
-a regression to justify in review, and it must arrive with an open issue to remove it again.
-
-**Zero tokens is not zero O(files) paths.** A token is only required where a guard demands
-one, so a resident path no guard covers is invisible to a token audit. The standing example
-is #4486: Stage 6 rebuilds the whole-run survivor buffer at the end of its loop because
-`SecondPassFDR` reads it, so that buffer is resident from there to the end of Stage 7 on
-every path. No guard covers it, because it is Stage 7's input rather than a mode or a
-resume. Read the gate's `Known O(files) resident paths` table as "no leg needs a token", not
-as "no leg is O(files)".
-
-That buffer has since been MEASURED, and the measurement moved the target - worth knowing
-before planning against the paragraph above. Post-GC probes in `SecondPassFdrTask` (#4486)
-put Stage 7's live set at a fixed ~4.4 GB library plus **0.196 GB/file** of survivors, flat
-across every substep of the stage: the fragment release FREES 2.5 GB and pass-2 scoring,
-protein FDR and the blib write add nothing. `--memstamp` overstated it 5.3x at 16 files
-(40.17 GB vs 7.53 GB live), and the overstatement GROWS with file count, so every figure
-taken from a memstamp trace reads as a much worse problem than the live one.
-
-What actually did not scale was a different structure with a similar name: the
-`--task SecondPassFDR` node's reload of every input's **pre-compaction** stub list, at
-**2.07 GB/file** (~186 GB projected at 82 files, hopeless at 500). It had a token
-(`hpc-merge`) and a bounded streaming hydrate already existed for every other
-reconciled-bundle path; the node was excluded from it by a `!NoJoin` test standing in for
-"will `FirstPassFdrTask` run here?", which is false on exactly that task. #4486 replaced the
-proxy with `FirstPassFdrTask.IsIncludedFor` and retired the token. The general lesson is the
-one this section already makes, sharpened: **name the consumer, not a proxy for it** - a
-proxy that is right for every case but one is indistinguishable from a correct test until
-someone measures the case it is wrong about.
-
-**A token admits exactly ONE path - never borrow one.** `compacted-entries-buffer` (retired)
-named the same physical buffer as the earlier-removed `resume-survivor-handoff`, so reusing it for
-#4536 would have been the convenient choice, and would have meant any leg admitting the unfixed
-resume simultaneously admitted a Stage 6 handoff regression on the computed path that #4530 had
-already closed. Borrowing a token silently lowers the high-water mark for whatever else that token
-covers, which is exactly the property the named-token system replaced the blanket boolean to get.
-
-**`regression.ps1` sets this on NO leg.** It used to name `mdiag-full-resume` on mode 2, which
-is gone with the token (#4505): `--model-diagnostics` on a full resume reported off the
-RESIDENT pool because FirstPassFDR skipped its score pass, and FirstPassFDR's rehydrate now streams
-that report from the per-file load it already performs. An ambient allowance on a standing
-gate can only mask the regression the gate exists to catch, so the whole gate now runs with
-nothing suppressed.
+- **Measure before planning against a resident path.** Post-GC probes in `SecondPassFdrTask`
+  (#4486) put Stage 7's live set at a fixed ~4.4 GB library plus **0.196 GB/file** of
+  survivors, while `--memstamp` overstated it 5.3x at 16 files (40.17 GB vs 7.53 GB live) - and
+  the overstatement GROWS with file count. What actually did not scale was the
+  `--task SecondPassFDR` node's reload of every input's pre-compaction stubs at 2.07 GB/file.
+- **Name the consumer, not a proxy for it.** That reload was forced by a `!NoJoin` test standing
+  in for "will `FirstPassFdrTask` run here?", which is false on exactly that task. A proxy that
+  is right for every case but one is indistinguishable from a correct test until someone
+  measures the case it is wrong about.
 
 ### Diagnostic dumps (cross-impl bisection)
 

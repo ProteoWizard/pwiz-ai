@@ -56,9 +56,10 @@
     4. STAGE 7 WAS A REFUSED RESIDENT PATH BEFORE #4486. --task SecondPassFDR sets
        ExpectReconciledInput, which ResidentPoolTrigger used to map to the 'hpc-merge' token,
        so a pre-#4486 binary ABORTS unless OSPREY_ALLOW_UNFIXED_RESIDENT names it. #4486
-       streamed that load and retired the token, so a current binary needs no allowance at
-       all. The Stage-7 leg still passes the token because the A/B needs BOTH arms; it is
-       set for that leg only, never for the Stage-6 leg (which must stream).
+       streamed that load and retired the token, and the variable itself was removed on
+       2026-10-12, so a current binary REFUSES to start with it set. Pass
+       -LegacyAllowResident only for a pre-#4486 -Exe; it is set for the Stage-7 leg only,
+       never for the Stage-6 leg (which must stream).
     5. STAGE 7 READS THE RECONCILED PARQUETS - decided by the TASK, not by the file list.
        It hard-fails on a raw Stage-4 parquet, which reads like a harness bug and is not.
 
@@ -91,6 +92,11 @@
     rather than running the sweep. Use when the slope is confirmed and you need to see
     WHICH objects are retained.
 
+.PARAMETER LegacyAllowResident
+    Set OSPREY_ALLOW_UNFIXED_RESIDENT=hpc-merge on the Stage-7 leg, for an -Exe built before
+    #4486, which refuses --task SecondPassFDR without it. A build from 2026-10-12 on refuses the
+    variable itself at startup (it is no longer an OSPREY_* name Osprey reads), so leave this
+    off for any current binary.
 .PARAMETER WhatIf
     Resolve everything, print the plan and the exact command lines, then stop.
 
@@ -152,6 +158,7 @@ param(
     # once with today's binary, then measure repeatedly with a modified one.
     [switch]$PrepareOnly,
     [switch]$MemoryProfile,
+    [switch]$LegacyAllowResident,
     [switch]$WhatIf
 )
 
@@ -298,18 +305,21 @@ foreach ($p in @($libPath, ($libPath + '.libcache'), $manifestPath)) {
 }
 
 function Invoke-OspreyTask {
-    # -AllowResident names a ResidentPaths token for the ONE leg that needs it. Scoped to a
-    # single call rather than exported once at the top, so a Stage-6 leg can never inherit
-    # it: Stage 6 must stream, and a blanket token would let a regression back onto the
-    # resident handoff pass green. Same argument regression.ps1 makes for stripping an
-    # ambient token from every leg of the gate.
+    # -AllowResident names a resident-path token for the ONE leg that needs it, and only a
+    # pre-#4486 binary does (-LegacyAllowResident). Scoped to a single call rather than
+    # exported once at the top, so a Stage-6 leg can never inherit it. Empty leaves the
+    # variable UNSET: a current binary refuses to start with it set at all.
     param([string[]]$CliArgs, [string]$LogName, [switch]$LogMemory, [string]$AllowResident)
     $prev = $env:OSPREY_LOG_MEMORY
     $prevVer = $env:OSPREY_VERSION_OVERRIDE
     $prevResident = $env:OSPREY_ALLOW_UNFIXED_RESIDENT
     if ($LogMemory) { $env:OSPREY_LOG_MEMORY = '1' }
     if ($script:versionPin) { $env:OSPREY_VERSION_OVERRIDE = $script:versionPin }
-    $env:OSPREY_ALLOW_UNFIXED_RESIDENT = $AllowResident
+    if ($AllowResident) {
+        $env:OSPREY_ALLOW_UNFIXED_RESIDENT = $AllowResident
+    } else {
+        Remove-Item Env:OSPREY_ALLOW_UNFIXED_RESIDENT -ErrorAction SilentlyContinue
+    }
     Push-Location $phaseDir
     try {
         $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -320,7 +330,11 @@ function Invoke-OspreyTask {
         Pop-Location
         $env:OSPREY_LOG_MEMORY = $prev
         $env:OSPREY_VERSION_OVERRIDE = $prevVer
-        $env:OSPREY_ALLOW_UNFIXED_RESIDENT = $prevResident
+        if ($prevResident) {
+            $env:OSPREY_ALLOW_UNFIXED_RESIDENT = $prevResident
+        } else {
+            Remove-Item Env:OSPREY_ALLOW_UNFIXED_RESIDENT -ErrorAction SilentlyContinue
+        }
     }
     if ($exit -ne 0) { throw "Osprey $($CliArgs[1]) exited $exit (see $(Join-Path $phaseDir $LogName))" }
     return $sw.Elapsed
@@ -478,13 +492,11 @@ foreach ($n in $counts) {
         '--decoys-in-library', '--decoy-pairing-manifest', (Split-Path $manifestPath -Leaf),
         '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
         '--timestamp', '--memstamp', '--perf-stats', '--log-file', $log7)
-    # 'hpc-merge' was the ResidentPaths token for ExpectReconciledInput. #4486 streamed that
-    # load and RETIRED the token, so against a current binary this is an unrecognized value
-    # that admits nothing and is simply ignored - the run needs no allowance at all. It stays
-    # because the A/B this harness exists to run needs the OTHER arm too: a pre-#4486 binary
-    # refuses --task SecondPassFDR outright without it. Granted on this leg and nowhere else
-    # (see Invoke-OspreyTask), so a Stage-6 leg can never inherit it.
-    $wall7 = Invoke-OspreyTask -CliArgs $a7 -LogName $log7 -LogMemory -AllowResident 'hpc-merge'
+    # 'hpc-merge' was the resident-path token for ExpectReconciledInput. #4486 streamed that
+    # load and RETIRED the token, and a current binary refuses the variable outright, so it is
+    # passed only with -LegacyAllowResident, for the pre-#4486 arm of an A/B. Granted on this
+    # leg and nowhere else (see Invoke-OspreyTask), so a Stage-6 leg can never inherit it.
+    $wall7 = Invoke-OspreyTask -CliArgs $a7 -LogName $log7 -LogMemory -AllowResident $(if ($LegacyAllowResident) { 'hpc-merge' } else { '' })
 
     $lines7 = Get-Content (Join-Path $phaseDir $log7)
     # Guard against a silent no-op the same way the Stage-6 point does: a real Stage 7

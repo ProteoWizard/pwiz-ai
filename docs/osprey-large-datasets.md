@@ -43,8 +43,9 @@ a mistake costs a day, not a coffee break:
   reclaimable garbage, and a high PRIVATE level is often Server-GC committed-but-free rather
   than live - the post-GC probe is what separates them, so quote the SUSTAINED level, not the
   peak.
-* Which resident paths are still O(files), and so will refuse to run at scale without naming a
-  token: `OSPREY_ALLOW_UNFIXED_RESIDENT` and `ResidentPaths.KNOWN_UNFIXED` in the code.
+* Which paths are O(files): none should be. The resident routes and their
+  `OSPREY_ALLOW_UNFIXED_RESIDENT` allowance were removed on 2026-10-12; a run that cannot go
+  per-run is refused rather than loaded whole.
 
 **Every count and size below was MEASURED with a WebDAV PROPFIND**, not estimated from a
 portal page. Verified 2026-07-28 from BRENDANX-UW8.

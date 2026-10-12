@@ -393,10 +393,10 @@ Then delete the shared tail:
       LoadOneFile resident arm), `OverlayPass2OntoResidentPool`, `ReloadPass2Sidecars`,
       `WarnResidentStage7Join`, `WritePass2AndFinalize(rescored.Value)` + batch pass-2 builders,
       `RescoredEntries` resident fallbacks (`Files()`, no-op Drop/Materialize)
-- [ ] Guard machinery: `ResidentPaths.cs`, `AllowUnfixedResident` / `NamesResidentPath`, Program.cs
+- [x] **(PR 3b, e682111708)** Guard machinery: `ResidentPaths.cs`, `AllowUnfixedResident` / `NamesResidentPath`, Program.cs
       unknown-token warning (keep a retired-variable refusal), regression.ps1 known-gaps block,
       `$cannotStreamJoin`, the `finally` restore; CommandLineErrorTest, SubsetPipelineTest ~1179
-- [ ] Docs: 00 (~1325), 07 (177, 183), 12 (198), osprey-development-guide 1038-1126
+- [x] **(PR 3b)** Docs: 00, 07, 11, 15, Regression/README, osprey-development-guide, osprey-large-datasets, CHS README
 
 ## PR 4 - the co-assignment panel's O(accepted x runs) rows (#4664 section 1)
 
@@ -477,9 +477,21 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
   never read, so a single-run PerFileRescoring worker stamps its reconciled parquet with the single-file
   hash; `ReconciledParquetWriter` docs say SecondPassFDR rejects that, yet the HPC-chain legs pass. Check
   which is stale.
+- Docs commit 0280052aad (00, 07, 11, 15). Doc 07 had claimed both passes share `RunPercolatorFdr`;
+  the second pass re-scores with the frozen first-pass model and trains nothing.
+- **Brendan: fold the guard machinery into 3b** (not a separate 3c). e682111708: `ResidentPaths`,
+  `OSPREY_ALLOW_UNFIXED_RESIDENT` (now refused as an unknown variable), the Program.cs warning,
+  regression.ps1's allowance clearing and known-gaps table, `ResidentPoolGuardTest` ->
+  `PerRunRoutingTest`. pwiz-ai: dev guide section rewritten, datasets doc,
+  `SEA-AD/Measure-Stage6Rescore.ps1` passes `hpc-merge` only with the new `-LegacyAllowResident`
+  (a current binary refuses the variable). Unit 638/638 + inspection clean (`unit-gate-g.log`).
+- `regression-parallel -Dataset All` on A/B/C: **48/48** (`regression-abc.log`), 1:20:50 wall. The slow
+  wall was disk, not code: the straight-through mzML parse ran at 7 MB/s. Same-session A/B on Stellar:
+  master worktree 308 s, then the branch 152 s with mzML at 175-234 MB/s
+  (`regression-stellar-master.log`, `regression-stellar-branch2.log`).
 - Still open in 3b: `ParquetScoreCache.LoadFullFdrEntries` and `HasPinFeatureColumns` are production-dead
   (IOTest-only); FirstPassFDR still publishes the planning byproducts PerFileRescore now only consumes
-  to release; the guard machinery step (ResidentPaths etc.); docs 00/07/12; gates.
+  to release. Gates left: regression on the guard commit, `/code-review medium`, cross-impl, PR.
 
 ### 2026-10-12 - Merged PR 3a
 
