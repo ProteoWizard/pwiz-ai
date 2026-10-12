@@ -500,6 +500,9 @@ PLAN step 1. Then, on the branch (`C:\proj\pwiz`, nothing committed yet):
 - Committed bd9338cf1c (rebased on master cc074faf83; unit 646/646 re-run), pwiz-ai fe87c719.
   **PR [#4825](https://github.com/ProteoWizard/pwiz/pull/4825)** opened 2026-10-11 ~19:50. TeamCity
   Perf/Regression build 4212056 (`pull/4825`, Agent 1) triggered at Brendan's request (night session).
+  **TeamCity PASSED** - build #307 on bd9338cf1c: 48 PASS / 0 FAIL / 0 SKIP in 40:04. Copilot: 5
+  comments, 1 fixed (5267ef9236, docs/14 count, doc-only), 4 declined with replies; all resolved.
+  All 13 PR checks green, MERGEABLE. **Ready to merge** (needs `--admin`; ask Brendan).
 - Demux conflict on push: another session's unmerged demux branches read OSPREY_DEMUX_* in C#, so my
   Demux-script refusals were dropped (upstream versions kept). Those branches must add their names
   to `KnownVariables` - `TestOspreyVariablesAreRegistered` will say so.
