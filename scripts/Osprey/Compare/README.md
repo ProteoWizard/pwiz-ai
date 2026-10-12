@@ -17,7 +17,7 @@ LOESS, KDE, the SVM kernel, FDR thresholds, or the blib write path.
 
 A Rust osprey checkout must be present (default: sibling of the
 pwiz checkout under `<project root>/osprey`).  Override location
-via `$env:OSPREY_ROOT` or the `-OspreyRoot` parameter on
+via `$env:OSPREYDEV_ROOT` or the `-OspreyRoot` parameter on
 `Build-OspreyRust.ps1`.
 
 ## BUILD BOTH SIDES FIRST -- the gate builds neither

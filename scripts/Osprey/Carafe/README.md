@@ -95,15 +95,15 @@ conventional locations. `-Preflight` prints what resolved.
 
 | Variable | Meaning | Default searched |
 |---|---|---|
-| `OSPREY_CARAFE_JAVA` | JDK 21+ `java` | `JAVA_HOME`, PATH, bundled JetBrains JBR |
-| `OSPREY_CARAFE_JAR` | Built `carafe.jar` | `<root>/Carafe-mm/target/carafe-*/carafe-*.jar` |
-| `OSPREY_CARAFE_VENV_PYTHON` | AlphaPeptDeep venv python | `~/.carafe/.venv/...` |
-| `OSPREY_CARAFE_ROOT` | Carafe checkout | `<project root>/Carafe-mm` |
-| `OSPREY_CARAFE_WORKDIR` | Output root | `D:\test\carafe-repro` |
-| `OSPREY_TESTFILES_DIR` | Read-only mzML/FASTA drop | `D:\test\osprey-testfiles-mzML` |
+| `OSPREYDEV_CARAFE_JAVA` | JDK 21+ `java` | `JAVA_HOME`, PATH, bundled JetBrains JBR |
+| `OSPREYDEV_CARAFE_JAR` | Built `carafe.jar` | `<root>/Carafe-mm/target/carafe-*/carafe-*.jar` |
+| `OSPREYDEV_CARAFE_VENV_PYTHON` | AlphaPeptDeep venv python | `~/.carafe/.venv/...` |
+| `OSPREYDEV_CARAFE_ROOT` | Carafe checkout | `<project root>/Carafe-mm` |
+| `OSPREYDEV_CARAFE_WORKDIR` | Output root | `D:\test\carafe-repro` |
+| `OSPREYDEV_TESTFILES_DIR` | Read-only mzML/FASTA drop | `D:\test\osprey-testfiles-mzML` |
 
 Osprey itself resolves through `Dataset-Config.ps1` (`Get-OspreyExe`), so
-`PWIZ_ROOT` / `OSPREY_PROJECT_ROOT` work here as they do elsewhere.
+`PWIZ_ROOT` / `OSPREYDEV_PROJECT_ROOT` work here as they do elsewhere.
 
 ## Related
 

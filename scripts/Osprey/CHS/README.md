@@ -11,14 +11,14 @@ Seer dataset: ~200 samples, each run twice with a different bead, annotated by p
 ## Quick start
 
 ```powershell
-setx OSPREY_CHS_DIR "D:\test\osprey-runs\chs-seer\raw"
-setx OSPREY_CHS_LIB "D:\test\osprey-runs\sea-ad\lib"
+setx OSPREYDEV_CHS_DIR "D:\test\osprey-runs\chs-seer\raw"
+setx OSPREYDEV_CHS_LIB "D:\test\osprey-runs\sea-ad\lib"
 # new shell, then prove the wiring before committing to hours
 .\Run-Chs.ps1 -Plates 0059 -NumFiles 2 -WhatIf
 .\Run-Chs.ps1 -Plates 0059,0060,0061 -Pass2Mode protein-compact
 ```
 
-`OSPREY_CHS_LIB` points at the SEA-AD library root on purpose: this dataset ships no library
+`OSPREYDEV_CHS_LIB` points at the SEA-AD library root on purpose: this dataset ships no library
 of its own, exactly as TDP-43 does not.
 
 ## The plate is in the FILENAME, not the layout
@@ -204,7 +204,7 @@ the only work that happens is producing the diagnostics artifacts. That is princ
 `pwiz_tools/Osprey/docs/00-pipeline-architecture.md`, and the recipe is:
 
 ```powershell
-$env:OSPREY_CHS_LIB = 'D:\test\osprey-runs\sea-ad\lib'
+$env:OSPREYDEV_CHS_LIB = 'D:\test\osprey-runs\sea-ad\lib'
 .\Run-Chs.ps1 -Task ModelDiagnostics -LinkThroughTask `
     -LinkFrom '<the completed run>;<the run that produced its first pass>' `
     -Exe D:\test\osprey-runs\_bin\<tag>\Osprey.exe -Tag '-p16proof' -WhatIf

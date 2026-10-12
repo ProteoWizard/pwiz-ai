@@ -104,7 +104,7 @@ $guide = 'pwiz_tools/CarafeSharp/docs/02-masking.md'
 # ---------------------------------------------------------------------------
 # Dataset presets (as Run-CarafeOspreyWorkflow.ps1)
 # ---------------------------------------------------------------------------
-$testFilesRoot = if ($env:OSPREY_TESTFILES_DIR) { $env:OSPREY_TESTFILES_DIR }
+$testFilesRoot = if ($env:OSPREYDEV_TESTFILES_DIR) { $env:OSPREYDEV_TESTFILES_DIR }
                  elseif ($IsLinux) { '/mnt/d/test/osprey-testfiles-mzML' }
                  else { 'D:\test\osprey-testfiles-mzML' }
 
@@ -204,9 +204,9 @@ if (-not (Test-Path $CarafeSharpExe)) {
     throw ("CarafeSharp not found at '$CarafeSharpExe'. Build it: " +
            'pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 (add -Torch cuda for the GPU), or pass -CarafeSharpExe')
 }
-if (-not $OspreyExe) { $OspreyExe = if ($env:OSPREY_EXE) { $env:OSPREY_EXE } else { Get-OspreyExe } }
+if (-not $OspreyExe) { $OspreyExe = if ($env:OSPREYDEV_EXE) { $env:OSPREYDEV_EXE } else { Get-OspreyExe } }
 if (-not (Test-Path $OspreyExe)) {
-    throw "Osprey.exe not found at '$OspreyExe'. Pass -OspreyExe or set `$env:OSPREY_EXE."
+    throw "Osprey.exe not found at '$OspreyExe'. Pass -OspreyExe or set `$env:OSPREYDEV_EXE."
 }
 $ospreyHelp = (& $OspreyExe --help 2>&1) -join "`n"
 if ($ospreyHelp -notmatch '--training-export') {

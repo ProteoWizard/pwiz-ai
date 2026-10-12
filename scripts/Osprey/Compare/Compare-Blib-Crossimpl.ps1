@@ -418,13 +418,18 @@ $allPass = (Compare-Table `
     -NumericCols @('RT', 'Coefficient')
 ) -and $allPass
 
-# OspreyMetadata — exact key + value match, EXCLUDING osprey_version:
+# OspreyMetadata — exact key + value match, EXCLUDING osprey_version and osprey.validity:
 # Osprey is intentionally on the Skyline version scheme (e.g. 26.1.1.x)
 # while Rust osprey uses its own (e.g. 26.6.1), so that one key is an expected
-# cross-impl difference, not a divergence. All other metadata must still match.
+# cross-impl difference, not a divergence. osprey.validity is the C#-only
+# artifact stamp (task, build version, validity key) that #4809 (2026-10-09)
+# embedded in every artifact, the blib included; Rust has no counterpart, and
+# it records which build wrote the file, not what the file says. Missing this
+# exclusion turned the gate red on every dataset from #4809 on, with every
+# result column identical. All other metadata must still match.
 $allPass = (Compare-Table `
     -TableName 'OspreyMetadata' `
-    -Sql "SELECT Key, Value FROM OspreyMetadata WHERE Key <> 'osprey_version'" `
+    -Sql "SELECT Key, Value FROM OspreyMetadata WHERE Key NOT IN ('osprey_version', 'osprey.validity')" `
     -KeyCols @('Key') `
     -ExactCols @('Value')
 ) -and $allPass

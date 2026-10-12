@@ -24,10 +24,10 @@ import sys
 
 # Where the Osprey run directories live, and where analysis products go. Both are overridable
 # so this works on another machine (same convention as the other Osprey scripts, e.g.
-# OSPREY_EXE / OSPREY_TESTDIR). Outputs default to ai/.tmp - never into the repo.
-RUNS = os.environ.get('OSPREY_RUNS_DIR', 'D:/test/osprey-runs/sea-ad/runs')
+# OSPREYDEV_EXE / OSPREYDEV_TESTDIR). Outputs default to ai/.tmp - never into the repo.
+RUNS = os.environ.get('OSPREYDEV_RUNS_DIR', 'D:/test/osprey-runs/sea-ad/runs')
 OUT = os.environ.get(
-    'OSPREY_ANALYSIS_OUT',
+    'OSPREYDEV_ANALYSIS_OUT',
     os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                  '..', '..', '..', '.tmp')))
 

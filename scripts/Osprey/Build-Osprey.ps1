@@ -57,7 +57,7 @@
 
 .PARAMETER Culture
     Run the unit tests under this culture (e.g. ja-JP, fr-FR) by setting
-    OSPREY_TEST_CULTURE for the test process; Osprey.Test applies it in its
+    OSPREYDEV_TEST_CULTURE for the test process; Osprey.Test applies it in its
     AssemblyInitialize. ja-JP catches an assertion on English text instead of a
     resource; fr-FR catches a number written for a program in the current
     culture. Omitted, the variable is cleared and the tests run under the OS
@@ -674,10 +674,10 @@ try {
         }
 
         if ($Culture) {
-            $env:OSPREY_TEST_CULTURE = $Culture
-            Write-Host "Test culture: $Culture (OSPREY_TEST_CULTURE)" -ForegroundColor Cyan
+            $env:OSPREYDEV_TEST_CULTURE = $Culture
+            Write-Host "Test culture: $Culture (OSPREYDEV_TEST_CULTURE)" -ForegroundColor Cyan
         } else {
-            Remove-Item Env:OSPREY_TEST_CULTURE -ErrorAction SilentlyContinue
+            Remove-Item Env:OSPREYDEV_TEST_CULTURE -ErrorAction SilentlyContinue
         }
         $testStart = Get-Date
         if ($Coverage) {

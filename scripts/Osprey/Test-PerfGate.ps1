@@ -194,7 +194,7 @@ if ([string]::IsNullOrEmpty($TestBaseDir)) {
 # Per-run scratch root for the multi-GB workdir caches: off the read-only data
 # tree, on the same disk the historical numbers were measured on. A leading
 # underscore marks "not a dataset" (run-layout convention, like _bin).
-$scratchBase = if ($env:OSPREY_TEST_BASE_DIR) { $env:OSPREY_TEST_BASE_DIR }
+$scratchBase = if ($env:OSPREYDEV_TEST_BASE_DIR) { $env:OSPREYDEV_TEST_BASE_DIR }
                elseif ($IsLinux) { '/mnt/d/test/osprey-runs' }
                else { 'D:\test\osprey-runs' }
 $perfScratchRoot = Join-Path $scratchBase '_perfgate'

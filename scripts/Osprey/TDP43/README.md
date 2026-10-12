@@ -13,15 +13,15 @@ and are documented there rather than duplicated here.
 ## Quick start
 
 ```powershell
-setx OSPREY_TDP43_DIR "D:\test\osprey-runs\tdp43-plasma-ev\raw"
-setx OSPREY_TDP43_LIB "D:\test\osprey-runs\sea-ad\lib"
+setx OSPREYDEV_TDP43_DIR "D:\test\osprey-runs\tdp43-plasma-ev\raw"
+setx OSPREYDEV_TDP43_LIB "D:\test\osprey-runs\sea-ad\lib"
 # new shell, then prove the wiring before committing to hours
 .\Run-Tdp43.ps1 -NumFiles 10 -WhatIf
 .\Run-Tdp43.ps1 -Pass2Mode protein-compact -NumFiles 10           # ~1 h, real run
 .\Run-Tdp43.ps1 -Pass2Mode protein-compact                        # the full 163
 ```
 
-`OSPREY_TDP43_LIB` points at the **SEA-AD** library root on purpose: this dataset has no
+`OSPREYDEV_TDP43_LIB` points at the **SEA-AD** library root on purpose: this dataset has no
 library of its own, and the SEA-AD regression library carries the entrapment + pairing
 manifest that make FDP measurable. See "The library" below.
 

@@ -38,7 +38,7 @@
     Stellar (default) or Astral.
 
 .PARAMETER TestBaseDir
-    Override dataset root (defaults to OSPREY_TEST_BASE_DIR or
+    Override dataset root (defaults to OSPREYDEV_TEST_BASE_DIR or
     D:\test\osprey-runs).
 
 .PARAMETER Force

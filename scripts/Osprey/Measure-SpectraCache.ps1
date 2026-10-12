@@ -45,7 +45,7 @@
     Measure the binaries already built under each configuration.
 
 .PARAMETER TestBaseDir
-    Override the dataset root (else OSPREY_TEST_BASE_DIR, else D:\test\osprey-runs).
+    Override the dataset root (else OSPREYDEV_TEST_BASE_DIR, else D:\test\osprey-runs).
 
 .PARAMETER OutputDir
     Per-run logs and the markdown report. Default ai\.tmp\spectra-cache\<UTC stamp>\.
@@ -118,7 +118,7 @@ if ([string]::IsNullOrEmpty($TestBaseDir)) {
 
 # Per-run scratch off the read-only data tree, mirroring Test-PerfGate.ps1's convention
 # (leading underscore = "not a dataset").
-$scratchBase = if ($env:OSPREY_TEST_BASE_DIR) { $env:OSPREY_TEST_BASE_DIR }
+$scratchBase = if ($env:OSPREYDEV_TEST_BASE_DIR) { $env:OSPREYDEV_TEST_BASE_DIR }
                elseif ($IsLinux) { '/mnt/d/test/osprey-runs' }
                else { 'D:\test\osprey-runs' }
 $ScratchRoot = Join-Path $scratchBase '_spectracache'

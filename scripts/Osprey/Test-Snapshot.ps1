@@ -59,9 +59,9 @@
                  svm_weights dumps, plus the percolator dump for Rust only
                  (C# Osprey removed OSPREY_DUMP_PERCOLATOR / _PERCOLATOR_ONLY with
                  the resident first pass, #4821, and refuses both at startup)
-      stage6     SHA-256 byte equality on multicharge/consensus/
-                 reconciliation/rescored dumps + reconciled parquet
-                 + FDR sidecars
+      stage6     SHA-256 byte equality on the consensus dump
+                 (Rust also multicharge/reconciliation/rescored; C# removed
+                 those dumps 2026-10-11) + reconciled parquet + FDR sidecars
       stage7     Compare-Stage7-Crossimpl.ps1 (column-tolerance,
                  reused with snapshot path passed as -RustTsv)
       blib       Compare-Blib-Crossimpl.ps1 (per-table tolerance,
@@ -608,14 +608,27 @@ $stageConfig = @{
         compareDumps = @('standardizer','subsample','svm_weights')
     }
     'stage6' = @{
-        envVars = @{
-            OSPREY_DUMP_MULTICHARGE        = '1'
-            OSPREY_DUMP_CONSENSUS          = '1'
-            OSPREY_DUMP_RECONCILIATION     = '1'
-            OSPREY_DUMP_RESCORED           = '1'
-            OSPREY_STAGE7_PROTEIN_FDR_ONLY = '1'
+        # C# Osprey removed the multicharge / reconciliation / rescored dumps (and their
+        # _ONLY gates) on 2026-10-11: each held or pulled every run's entries at once only
+        # to serve a diagnostic. They are Rust-only now, so only the Rust process gets them;
+        # C# compares the consensus dump plus the Stage 6 artifacts.
+        envVars = if ($Tool -eq 'CSharp') {
+            @{
+                OSPREY_DUMP_CONSENSUS          = '1'
+                OSPREY_STAGE7_PROTEIN_FDR_ONLY = '1'
+            }
+        } else {
+            @{
+                OSPREY_DUMP_MULTICHARGE        = '1'
+                OSPREY_DUMP_CONSENSUS          = '1'
+                OSPREY_DUMP_RECONCILIATION     = '1'
+                OSPREY_DUMP_RESCORED           = '1'
+                OSPREY_STAGE7_PROTEIN_FDR_ONLY = '1'
+            }
         }
-        compareDumps = @('multicharge','consensus','reconciliation','rescored')
+        compareDumps = if ($Tool -eq 'CSharp') { @('consensus') } else {
+            @('multicharge','consensus','reconciliation','rescored')
+        }
     }
     'stage7' = @{
         envVars = @{

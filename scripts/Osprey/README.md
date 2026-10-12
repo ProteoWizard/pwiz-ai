@@ -71,7 +71,7 @@ pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests
 # ai/.tmp/OspreyInspect-<checkout>.net10.0.xml, one file per checkout.
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunInspection
 
-# Unit tests under another culture (OSPREY_TEST_CULTURE): ja-JP proves assertions read
+# Unit tests under another culture (OSPREYDEV_TEST_CULTURE): ja-JP proves assertions read
 # resources, fr-FR proves program-read numbers are invariant
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests -Culture fr-FR
 
@@ -238,7 +238,7 @@ For unit tests, `Osprey.Test/TestData` holds `StellarSubset.zip` and `AstralSubs
 isolation window x a few minutes of these runs, which `SubsetPipelineTest` runs through the whole
 pipeline in-process in seconds. `SubsetData/build_subset.py` regenerates them.
 
-Override the base via `-TestBaseDir`, `$env:OSPREY_TEST_BASE_DIR`,
+Override the base via `-TestBaseDir`, `$env:OSPREYDEV_TEST_BASE_DIR`,
 or rely on the default.  Stellar requires `--resolution unit`;
 Astral requires `--resolution hram` --- all scripts forward this
 automatically via Dataset-Config.

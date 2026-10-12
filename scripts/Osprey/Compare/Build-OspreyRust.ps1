@@ -80,7 +80,7 @@ param(
 )
 
 # Default OspreyRoot is resolved via the shared config (honors
-# $env:OSPREY_ROOT and the sibling-checkout convention) so this
+# $env:OSPREYDEV_ROOT and the sibling-checkout convention) so this
 # script works on machines that aren't laid out under C:\proj.
 $configCandidates = @(
     (Join-Path $PSScriptRoot 'Dataset-Config.ps1'),

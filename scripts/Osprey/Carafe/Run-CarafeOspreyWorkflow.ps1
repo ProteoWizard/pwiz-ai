@@ -127,8 +127,8 @@ $guide = 'ai/docs/osprey-library-generation-guide.md'
 # Dataset presets
 # ---------------------------------------------------------------------------
 # TestFiles is the read-only mzML/FASTA drop; override with -MzmlSourceDir or
-# $env:OSPREY_TESTFILES_DIR when a machine stores it elsewhere.
-$testFilesRoot = if ($env:OSPREY_TESTFILES_DIR) { $env:OSPREY_TESTFILES_DIR }
+# $env:OSPREYDEV_TESTFILES_DIR when a machine stores it elsewhere.
+$testFilesRoot = if ($env:OSPREYDEV_TESTFILES_DIR) { $env:OSPREYDEV_TESTFILES_DIR }
                  elseif ($IsLinux) { '/mnt/d/test/osprey-testfiles-mzML' }
                  else { 'D:\test\osprey-testfiles-mzML' }
 
@@ -178,7 +178,7 @@ if (-not $MzmlSourceDir) { $MzmlSourceDir = $preset.SourceDir }
 if (-not $MzmlNames)     { $MzmlNames = $preset.Files }
 if ($TrainFileIndex -lt 0) { $TrainFileIndex = $preset.TrainIndex }
 if (-not $WorkDir) {
-    $base = if ($env:OSPREY_CARAFE_WORKDIR) { $env:OSPREY_CARAFE_WORKDIR }
+    $base = if ($env:OSPREYDEV_CARAFE_WORKDIR) { $env:OSPREYDEV_CARAFE_WORKDIR }
             elseif ($IsLinux) { '/mnt/d/test/carafe-repro' }
             else { 'D:\test\carafe-repro' }
     $WorkDir = Join-Path $base $Dataset.ToLowerInvariant()
@@ -219,7 +219,7 @@ function Resolve-Tool {
 }
 
 $projectRoot = Get-ProjectRoot
-$carafeRoot = if ($env:OSPREY_CARAFE_ROOT) { $env:OSPREY_CARAFE_ROOT }
+$carafeRoot = if ($env:OSPREYDEV_CARAFE_ROOT) { $env:OSPREYDEV_CARAFE_ROOT }
               else { Join-Path $projectRoot 'Carafe-mm' }
 
 function Get-JavaMajorVersion {
@@ -250,9 +250,9 @@ function Resolve-Java {
 
     $explicitSource = $null
     if ($Explicit) { $explicitSource = "-Java '$Explicit'" }
-    elseif ($env:OSPREY_CARAFE_JAVA) {
-        $Explicit = $env:OSPREY_CARAFE_JAVA
-        $explicitSource = "`$env:OSPREY_CARAFE_JAVA = '$Explicit'"
+    elseif ($env:OSPREYDEV_CARAFE_JAVA) {
+        $Explicit = $env:OSPREYDEV_CARAFE_JAVA
+        $explicitSource = "`$env:OSPREYDEV_CARAFE_JAVA = '$Explicit'"
     }
     if ($Explicit) {
         if (-not (Test-Path $Explicit)) { throw "Java not found at $explicitSource." }
@@ -283,18 +283,18 @@ function Resolve-Java {
         }
     }
     $detail = if ($rejected) { " Found but too old: $($rejected -join '; ')." } else { '' }
-    throw ("No Java $MinVersion or newer found.$detail Set `$env:OSPREY_CARAFE_JAVA " +
+    throw ("No Java $MinVersion or newer found.$detail Set `$env:OSPREYDEV_CARAFE_JAVA " +
            "or pass -Java. A JetBrains-bundled JBR 21+ works. See $guide.")
 }
 
 $Java = Resolve-Java -Explicit $Java
 
-$CarafeJar = Resolve-Tool -Name 'CarafeJar' -Explicit $CarafeJar -EnvVar 'OSPREY_CARAFE_JAR' -Candidates @(
+$CarafeJar = Resolve-Tool -Name 'CarafeJar' -Explicit $CarafeJar -EnvVar 'OSPREYDEV_CARAFE_JAR' -Candidates @(
     (Join-Path $carafeRoot 'target\carafe-*\carafe-*.jar'),
     (Join-Path $carafeRoot 'target/carafe-*/carafe-*.jar')
 ) -Hint "Build it: mvn -f $carafeRoot package."
 
-$VenvPython = Resolve-Tool -Name 'VenvPython' -Explicit $VenvPython -EnvVar 'OSPREY_CARAFE_VENV_PYTHON' -Candidates @(
+$VenvPython = Resolve-Tool -Name 'VenvPython' -Explicit $VenvPython -EnvVar 'OSPREYDEV_CARAFE_VENV_PYTHON' -Candidates @(
     (Join-Path $HOME '.carafe\.venv\Scripts\python.exe'),
     (Join-Path $HOME '.carafe/.venv/bin/python')
 ) -Hint 'This is the AlphaPeptDeep (peptdeep) venv Carafe bootstraps on first run.'

@@ -33,7 +33,7 @@
     gendecoy : additionally strip the decoy rows so Osprey generates its own.
 
 .PARAMETER LibraryRoot
-    Directory holding the variants. Defaults to $env:OSPREY_SEAAD_LIB.
+    Directory holding the variants. Defaults to $env:OSPREYDEV_SEAAD_LIB.
 
 .PARAMETER Build
     Which delivered r=1.0 set to derive from: empty is 'target+decoy+entrapment', and a
@@ -89,10 +89,10 @@ if ($Ratio -eq '1.0' -and $Salt) {
     $Salt = ''
 }
 
-if (-not $LibraryRoot) { $LibraryRoot = [Environment]::GetEnvironmentVariable('OSPREY_SEAAD_LIB') }
+if (-not $LibraryRoot) { $LibraryRoot = [Environment]::GetEnvironmentVariable('OSPREYDEV_SEAAD_LIB') }
 if (-not $LibraryRoot -or -not (Test-Path $LibraryRoot)) {
     throw ("Could not locate the SEA-AD library root. Pass -LibraryRoot, or set " +
-           "`$env:OSPREY_SEAAD_LIB. See $readme.")
+           "`$env:OSPREYDEV_SEAAD_LIB. See $readme.")
 }
 $LibraryRoot = (Resolve-Path $LibraryRoot).Path
 

@@ -116,8 +116,8 @@ $dataset = @{
     Name                  = 'TDP-43 Plasma EV-Quant'
     Extension             = 'raw'
     InputLabel            = 'raw dir'
-    EnvDataVar            = 'OSPREY_TDP43_DIR'
-    EnvLibVar             = 'OSPREY_TDP43_LIB'
+    EnvDataVar            = 'OSPREYDEV_TDP43_DIR'
+    EnvLibVar             = 'OSPREYDEV_TDP43_LIB'
     DefaultNumFiles       = 163
     DefaultExcludePattern = '-bad\.raw$'
     # The FDRBench oracle is deliberately off for the baseline at this scale; see the

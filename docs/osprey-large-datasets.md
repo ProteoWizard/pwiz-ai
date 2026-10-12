@@ -49,6 +49,24 @@ a mistake costs a day, not a coffee break:
 **Every count and size below was MEASURED with a WebDAV PROPFIND**, not estimated from a
 portal page. Verified 2026-07-28 from BRENDANX-UW8.
 
+## Dataset location variables are OSPREYDEV_*
+
+The runners find each dataset through per-machine environment variables, usually set once with
+`setx`: `OSPREYDEV_SEAAD_DIR` / `OSPREYDEV_SEAAD_LIB` / `OSPREYDEV_SEAAD_ROOT`,
+`OSPREYDEV_TDP43_DIR` / `OSPREYDEV_TDP43_LIB`, `OSPREYDEV_CHS_DIR` / `OSPREYDEV_CHS_LIB`,
+`OSPREYDEV_ASTRAL3_DIR`, plus the shared `OSPREYDEV_TEST_BASE_DIR`, `OSPREYDEV_EXE`,
+`OSPREYDEV_PROJECT_ROOT`, `OSPREYDEV_ROOT` and `OSPREYDEV_MM_ROOT`. Each dataset README
+(`ai/scripts/Osprey/<DATASET>/README.md`) lists its own.
+
+They are `OSPREYDEV_*`, not `OSPREY_*`, because **Osprey refuses to start when an `OSPREY_*`
+variable it does not read is set**, as it refuses an unknown argument. A machine that still has
+the old `OSPREY_*` names in its User environment fails every run until they are renamed -
+for each one, copy the value to the new name and remove the old (then open a new shell):
+
+```powershell
+[Environment]::SetEnvironmentVariable('OSPREYDEV_SEAAD_DIR', [Environment]::GetEnvironmentVariable('OSPREY_SEAAD_DIR','User'), 'User'); [Environment]::SetEnvironmentVariable('OSPREY_SEAAD_DIR', $null, 'User')
+```
+
 ## Quick comparison
 
 All four MEASURED 2026-07-28 (Agents group granted read on the three collaboration

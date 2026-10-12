@@ -180,9 +180,9 @@ function Resolve-Location {
 }
 
 if ($SourceRoot) { $Exe = Join-Path $SourceRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0\Osprey.exe' }
-$ospreyExe = Resolve-Location -Explicit $Exe -EnvName 'OSPREY_EXE' -Fallbacks @($REPO_EXE) -What 'Osprey.exe'
-$dataDir   = Resolve-Location -Explicit $DataDir -EnvName 'OSPREY_SEAAD_DIR' -Fallbacks @($LAB_SHARE_MZML) -What 'mzML directory'
-$libRoot   = Resolve-Location -Explicit $LibraryDir -EnvName 'OSPREY_SEAAD_LIB' -Fallbacks @() -What 'library directory'
+$ospreyExe = Resolve-Location -Explicit $Exe -EnvName 'OSPREYDEV_EXE' -Fallbacks @($REPO_EXE) -What 'Osprey.exe'
+$dataDir   = Resolve-Location -Explicit $DataDir -EnvName 'OSPREYDEV_SEAAD_DIR' -Fallbacks @($LAB_SHARE_MZML) -What 'mzML directory'
+$libRoot   = Resolve-Location -Explicit $LibraryDir -EnvName 'OSPREYDEV_SEAAD_LIB' -Fallbacks @() -What 'library directory'
 
 $variant = if ($Ratio -eq '1.0') { 'target+decoy+entrapment' } else { "target+decoy+entrapment-r$Ratio" }
 $libDir  = Join-Path $libRoot $variant

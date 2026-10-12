@@ -8,7 +8,7 @@
     produced by Run-Osprey.ps1 / Compare-Diagnostic.ps1.
 
     The target directory is resolved via Dataset-Config.ps1 by default,
-    which honors $env:OSPREY_TEST_BASE_DIR. Pass -TestDataDir to override.
+    which honors $env:OSPREYDEV_TEST_BASE_DIR. Pass -TestDataDir to override.
 
 .PARAMETER Dataset
     Stellar or Astral (default: Stellar). Selects the TestDir from
@@ -19,7 +19,7 @@
 
 .PARAMETER TestBaseDir
     Override the Dataset-Config.ps1 base directory. Honors
-    $env:OSPREY_TEST_BASE_DIR if not passed. Ignored when -TestDataDir
+    $env:OSPREYDEV_TEST_BASE_DIR if not passed. Ignored when -TestDataDir
     is set.
 
 .PARAMETER DiagOnly
@@ -57,7 +57,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Resolve target directory. Explicit TestDataDir wins; otherwise use
-# Dataset-Config.ps1, which honors OSPREY_TEST_BASE_DIR.
+# Dataset-Config.ps1, which honors OSPREYDEV_TEST_BASE_DIR.
 if ([string]::IsNullOrEmpty($TestDataDir)) {
     . "$PSScriptRoot\Dataset-Config.ps1"
     $TestDataDir = (Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir).TestDir

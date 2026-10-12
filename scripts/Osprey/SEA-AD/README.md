@@ -11,13 +11,17 @@ that says where the data actually lives, and scripts that resolve it rather than
 ## Quick start on a new machine
 
 ```powershell
-setx OSPREY_SEAAD_DIR  "M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml"
-setx OSPREY_SEAAD_LIB  "D:\test\osprey-runs\sea-ad\lib"
+setx OSPREYDEV_SEAAD_DIR  "M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml"
+setx OSPREYDEV_SEAAD_LIB  "D:\test\osprey-runs\sea-ad\lib"
 # new shell, then prove the wiring before committing to a multi-hour run
 .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2 -WhatIf
 .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2          # ~minutes, real run
 .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0                      # the real thing, ~8.5 h
 ```
+
+The variables are `OSPREYDEV_*`, not `OSPREY_*`: Osprey refuses to start when an `OSPREY_*`
+variable it does not read is set. A machine with the old names must rename them - see
+"Dataset location variables are OSPREYDEV_*" in `ai/docs/osprey-large-datasets.md`.
 
 `-WhatIf` prints the resolved exe, mzML directory, library variant, output directory and
 the exact command line. Read it. Every trap in this folder is a path resolving to
@@ -53,14 +57,14 @@ share is fine for a one-off.
 In precedence order - first one that resolves wins:
 
 1. `-DataDir` / `-LibraryDir` / `-Exe` parameters
-2. `$env:OSPREY_SEAAD_DIR` / `$env:OSPREY_SEAAD_LIB` / `$env:OSPREY_EXE`
+2. `$env:OSPREYDEV_SEAAD_DIR` / `$env:OSPREYDEV_SEAAD_LIB` / `$env:OSPREYDEV_EXE`
 3. The lab share (mzML) and the sibling pwiz checkout's Release build (exe)
 
-A location you NAME must exist. An explicit `-DataDir` or `$env:OSPREY_SEAAD_DIR` that
+A location you NAME must exist. An explicit `-DataDir` or `$env:OSPREYDEV_SEAAD_DIR` that
 does not resolve is an error, not a quiet fall-through to the next candidate - a typo
 there would otherwise spend 8.5 h searching the wrong data and still report success.
 
-`$env:OSPREY_SEAAD_LIB` points at the directory that HOLDS the library variants, not at
+`$env:OSPREYDEV_SEAAD_LIB` points at the directory that HOLDS the library variants, not at
 one library. The runner picks the variant from `-DecoyMode` and `-Ratio`.
 
 ## The library variants
@@ -165,7 +169,7 @@ The dataset root is the data directory's **parent**, and the runner now derives 
 `-RunsRoot` to override.)
 
 ```
-<dataset root>\                       # $env:OSPREY_SEAAD_DIR's parent
+<dataset root>\                       # $env:OSPREYDEV_SEAAD_DIR's parent
   mzml\                               # the 82 .mzML + their .spectra.bin caches
   lib\<variant>\                      # library variants, see "The library variants"
   runs\<run name>\                    # ALL run output and logs
@@ -178,7 +182,7 @@ A related SET of runs gets a grouping subfolder INSIDE `runs\` - never a new sib
 finds every run under `runs\` without having to know which experiment invented which
 top-level directory name.
 
-**The lab share is the FALLBACK when `$env:OSPREY_SEAAD_DIR` is unset**, so a machine with no
+**The lab share is the FALLBACK when `$env:OSPREYDEV_SEAAD_DIR` is unset**, so a machine with no
 env var reads every spectrum over SMB - correct, but I/O-bound on the network and markedly
 slower than local disk, with nothing in the output saying so. `Run-SeaAd.ps1` now warns when
 the resolved data directory is a network path. Set the env var to a local copy for real work.

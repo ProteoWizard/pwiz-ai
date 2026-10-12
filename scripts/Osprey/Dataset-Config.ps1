@@ -29,17 +29,17 @@
 
     The test data root is resolved in this order:
       1. -TestBaseDir parameter (explicit, highest priority)
-      2. $env:OSPREY_TEST_BASE_DIR (persistent per-machine config)
+      2. $env:OSPREYDEV_TEST_BASE_DIR (persistent per-machine config)
       3. "D:\test\osprey-runs" (hardcoded fallback)
 
     Project root (the dir holding ai/, pwiz/, osprey/ siblings) is resolved
     in this order:
-      1. $env:OSPREY_PROJECT_ROOT (explicit per-machine override)
+      1. $env:OSPREYDEV_PROJECT_ROOT (explicit per-machine override)
       2. Walk up three levels from THIS file's $PSScriptRoot
          (.../ai/scripts/Osprey -> .../ai -> .../ -> project root)
       3. C:\proj (legacy hard fallback)
     Sibling repo paths can also be overridden directly via
-    $env:PWIZ_ROOT, $env:OSPREY_ROOT, $env:OSPREY_MM_ROOT for developers
+    $env:PWIZ_ROOT, $env:OSPREYDEV_ROOT, $env:OSPREYDEV_MM_ROOT for developers
     whose layouts don't match the convention.
 
 .EXAMPLE
@@ -77,11 +77,11 @@ function Get-OspreyTargetFramework {
 function Get-ProjectRoot {
     <#
     Returns the directory that contains the ai/, pwiz/, osprey/ sibling
-    checkouts.  Honors $env:OSPREY_PROJECT_ROOT first, then walks up
+    checkouts.  Honors $env:OSPREYDEV_PROJECT_ROOT first, then walks up
     from this script's own directory, then falls back to C:\proj.
     #>
-    if ($env:OSPREY_PROJECT_ROOT) {
-        return $env:OSPREY_PROJECT_ROOT
+    if ($env:OSPREYDEV_PROJECT_ROOT) {
+        return $env:OSPREYDEV_PROJECT_ROOT
     }
     # .../ai/scripts/Osprey -> .../ai -> .../ -> root
     $candidate = Resolve-Path (Join-Path $script:Osprey_DatasetConfigDir '..\..\..') -ErrorAction SilentlyContinue
@@ -99,9 +99,9 @@ function Get-PwizRoot {
 function Get-OspreyRoot {
     <#
     Primary osprey checkout (the one the developer is iterating on).
-    Override via $env:OSPREY_ROOT.
+    Override via $env:OSPREYDEV_ROOT.
     #>
-    if ($env:OSPREY_ROOT) { return $env:OSPREY_ROOT }
+    if ($env:OSPREYDEV_ROOT) { return $env:OSPREYDEV_ROOT }
     return Join-Path (Get-ProjectRoot) 'osprey'
 }
 
@@ -109,9 +109,9 @@ function Get-OspreyUpstreamRoot {
     <#
     maccoss/osprey reference clone, used by cross-impl baseline
     comparisons.  Default sibling is osprey-mm; override via
-    $env:OSPREY_MM_ROOT.
+    $env:OSPREYDEV_MM_ROOT.
     #>
-    if ($env:OSPREY_MM_ROOT) { return $env:OSPREY_MM_ROOT }
+    if ($env:OSPREYDEV_MM_ROOT) { return $env:OSPREYDEV_MM_ROOT }
     return Join-Path (Get-ProjectRoot) 'osprey-mm'
 }
 
@@ -141,11 +141,39 @@ function Get-OspreyRustExe {
     Get-OspreyExe, so the Rust one silently shadowed the C# one and
     every "-Framework" call returned the Rust exe). Keep the names
     distinct.
+
+    Also puts the vcpkg runtime DLL folder on this process's PATH (see
+    Add-VcpkgRuntimeToPath), because every script that runs the Rust exe
+    gets its path from here.
     #>
     param([switch]$Upstream)
     $exeSuffix = if ($IsWindows -or $null -eq $IsWindows) { '.exe' } else { '' }
     $base = if ($Upstream) { Get-OspreyUpstreamRoot } else { Get-OspreyRoot }
+    Add-VcpkgRuntimeToPath
     return Join-Path $base "target/release/osprey$exeSuffix"
+}
+
+function Add-VcpkgRuntimeToPath {
+    <#
+    The Rust osprey.exe links OpenBLAS dynamically, so openblas.dll must be
+    on PATH when it RUNS, not only when it builds (VCPKG_ROOT fixes only the
+    build). Without it the exe dies before main with 0xC0000135
+    (STATUS_DLL_NOT_FOUND), which a wrapper reports only as
+    "Tool exited -1073741515" - documented in the dev guide and still cost
+    two sessions to diagnose. Prepends <vcpkg>\installed\x64-windows\bin to
+    this process's PATH (children inherit it), once. No-op off Windows or
+    when no vcpkg install is found.
+    #>
+    if (-not ($IsWindows -or $null -eq $IsWindows)) { return }
+    $roots = @($env:VCPKG_ROOT, $env:VCPKG_INSTALLATION_ROOT, 'C:\vcpkg',
+               (Join-Path $env:USERPROFILE 'vcpkg')) | Where-Object { $_ }
+    foreach ($root in $roots) {
+        $bin = Join-Path $root 'installed\x64-windows\bin'
+        if (-not (Test-Path (Join-Path $bin 'openblas.dll'))) { continue }
+        $parts = $env:PATH -split ';'
+        if ($parts -notcontains $bin) { $env:PATH = "$bin;$env:PATH" }
+        return
+    }
 }
 
 function Get-OspreyScriptDir {
@@ -214,8 +242,8 @@ function Get-DatasetConfig {
     # Linux/WSL default maps Windows D:\ to the drvfs mount /mnt/d so the
     # same Osprey test data layout works on either host.
     if ([string]::IsNullOrEmpty($TestBaseDir)) {
-        if ($env:OSPREY_TEST_BASE_DIR) {
-            $baseDir = $env:OSPREY_TEST_BASE_DIR
+        if ($env:OSPREYDEV_TEST_BASE_DIR) {
+            $baseDir = $env:OSPREYDEV_TEST_BASE_DIR
         } elseif ($IsLinux) {
             $baseDir = "/mnt/d/test/osprey-runs"
         } else {

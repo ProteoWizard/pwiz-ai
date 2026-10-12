@@ -48,7 +48,7 @@
     Stellar (default; Astral on demand once Stellar localizes the bug).
 
 .PARAMETER TestBaseDir
-    Override dataset root (defaults to $env:OSPREY_TEST_BASE_DIR or
+    Override dataset root (defaults to $env:OSPREYDEV_TEST_BASE_DIR or
     D:\test\osprey-runs).
 
 .PARAMETER Force

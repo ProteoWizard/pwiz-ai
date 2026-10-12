@@ -36,8 +36,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $readme = Join-Path $PSScriptRoot 'README.md'
 if (-not $MzmlDir) {
-    $MzmlDir = [Environment]::GetEnvironmentVariable('OSPREY_SEAAD_DIR')
-    if (-not $MzmlDir) { throw "Set `$env:OSPREY_SEAAD_DIR or pass -MzmlDir; see $readme." }
+    $MzmlDir = [Environment]::GetEnvironmentVariable('OSPREYDEV_SEAAD_DIR')
+    if (-not $MzmlDir) { throw "Set `$env:OSPREYDEV_SEAAD_DIR or pass -MzmlDir; see $readme." }
 }
 if (-not $CacheDir) { $CacheDir = $MzmlDir }
 foreach ($d in @($CacheDir, $MzmlDir)) {

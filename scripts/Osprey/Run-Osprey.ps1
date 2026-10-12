@@ -103,7 +103,7 @@
 
 .PARAMETER TestBaseDir
     Override the test data base directory. Defaults to
-    $env:OSPREY_TEST_BASE_DIR if set, otherwise "D:\test\osprey-runs".
+    $env:OSPREYDEV_TEST_BASE_DIR if set, otherwise "D:\test\osprey-runs".
 
 .EXAMPLE
     .\Run-Osprey.ps1
@@ -332,6 +332,11 @@ try {
     if ($DiagCalWindowsOnly) {
         $env:OSPREY_CAL_WINDOWS_ONLY = "1"
         $envVarsSet += "OSPREY_CAL_WINDOWS_ONLY=1"
+    }
+    # Rust-only: C# Osprey has no calibration-prefilter dump and refuses an OSPREY_* variable it
+    # does not read, so asking for one on a C# run is an error here rather than at its startup.
+    if (($DiagCalPrefilter -or $DiagCalPrefilterOnly) -and $Tool -eq "CSharp") {
+        throw "-DiagCalPrefilter / -DiagCalPrefilterOnly are Rust-only; use -Tool Rust."
     }
     if ($DiagCalPrefilter) {
         $env:OSPREY_DUMP_CAL_PREFILTER = "1"

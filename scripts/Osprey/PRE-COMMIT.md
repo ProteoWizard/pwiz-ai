@@ -133,7 +133,7 @@ pwsh -File ./ai/scripts/Osprey/Test-Full-Regression.ps1 -Quick
 
 Only relevant when you also need to confirm Osprey hasn't
 drifted from Rust osprey at the 1e-9 gate.  Requires a Rust checkout
-(`<project root>/osprey` by default, override via `$env:OSPREY_ROOT`).
+(`<project root>/osprey` by default, override via `$env:OSPREYDEV_ROOT`).
 
 > Note: `Compare-EndToEnd-Crossimpl.ps1 -SkipRust` used to be the routine
 > C#-refactor gate (it borrowed a cached Rust blib as the "expected").
@@ -170,12 +170,12 @@ The script errors with the install hint if `jb` isn't on PATH.
 Helper functions in `Dataset-Config.ps1` resolve sibling repos
 (`pwiz`, `osprey`) via:
 
-1. `$env:OSPREY_PROJECT_ROOT` if set
+1. `$env:OSPREYDEV_PROJECT_ROOT` if set
 2. Walking up from Dataset-Config's own location
 3. `C:\proj` as a final fallback
 
-Override per-repo paths via `$env:PWIZ_ROOT`, `$env:OSPREY_ROOT`,
-`$env:OSPREY_MM_ROOT` if your checkouts don't share a single parent.
+Override per-repo paths via `$env:PWIZ_ROOT`, `$env:OSPREYDEV_ROOT`,
+`$env:OSPREYDEV_MM_ROOT` if your checkouts don't share a single parent.
 
 ## Common Pitfalls
 

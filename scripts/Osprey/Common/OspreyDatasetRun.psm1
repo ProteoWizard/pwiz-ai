@@ -398,7 +398,7 @@ function Invoke-OspreyDatasetRun {
         }
     }
     $repoExe = Join-Path $PSScriptRoot "..\..\..\..\pwiz\$EXE_UNDER_ROOT"
-    $ospreyExe = Resolve-DatasetLocation -Explicit $Exe -EnvName 'OSPREY_EXE' `
+    $ospreyExe = Resolve-DatasetLocation -Explicit $Exe -EnvName 'OSPREYDEV_EXE' `
         -Fallbacks @($repoExe) -What 'Osprey.exe (build Release/net10.0 first)' `
         -DatasetName $dsName -Readme $readme
 
@@ -411,9 +411,9 @@ function Invoke-OspreyDatasetRun {
     # binary reuse one directory rather than littering. Reading a running exe is permitted on
     # Windows, so this is safe even when another run already holds the build tree.
     #
-    # -NoSnapshotExe opts out; an explicit -Exe / OSPREY_EXE is already a deliberate choice of
+    # -NoSnapshotExe opts out; an explicit -Exe / OSPREYDEV_EXE is already a deliberate choice of
     # binary and is left alone.
-    if (-not $NoSnapshotExe -and -not $Exe -and -not $env:OSPREY_EXE) {
+    if (-not $NoSnapshotExe -and -not $Exe -and -not $env:OSPREYDEV_EXE) {
         $exeItem = Get-Item $ospreyExe
         $ver = $exeItem.VersionInfo.FileVersion
         if (-not $ver) { $ver = 'unknown' }
@@ -1058,13 +1058,16 @@ function Invoke-OspreyDatasetRun {
     $env:OSPREY_PICK_LDA = if ($PickProduct) { '0' } else { '1' }
     $env:OSPREY_LOG_MEMORY = if ($LogMemory) { '1' } else { '0' }
     if ($ExperimentAgg) { $env:OSPREY_EXPERIMENT_AGG = $ExperimentAgg }
-    # Unconditionally, in both directions, for the reason above: Osprey's own default is 'run',
-    # so an arm that exported only its ON value would leave the OFF arm running on whatever the
-    # shell happened to hold.
-    $env:OSPREY_PROTEIN_COMPACT_QUALIFY = $QualifyBy
+    # OSPREY_PROTEIN_COMPACT_QUALIFY and OSPREY_SVM_C_VALUES are read by no Osprey build (C# or
+    # Rust) any more, so -QualifyBy experiment and -SvmCValues ran the default arm while naming
+    # the directory after the other one. C# Osprey refuses an OSPREY_* variable it does not
+    # read (2026-10-11), so they are no longer exported, and asking for either arm is refused
+    # here rather than filed under a name it did not run.
+    if ($QualifyBy -ne 'run' -or $SvmCValues) {
+        throw "-QualifyBy experiment and -SvmCValues select arms no Osprey build implements any more (their variables are read by neither C# nor Rust). Omit them."
+    }
     # Only when given: unset is Osprey's own default, and the variable was stripped above.
     if ($SvmCTolerance) { $env:OSPREY_SVM_C_TOLERANCE = $SvmCTolerance }
-    if ($SvmCValues) { $env:OSPREY_SVM_C_VALUES = $SvmCValues }
     if ($FdrFileLanes -gt 0) { $env:OSPREY_FDR_FILE_LANES = "$FdrFileLanes" }
 
     $log = Join-Path $OutDir 'run.log'

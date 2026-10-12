@@ -17,8 +17,8 @@
     translation to PowerShell.
 
 .PARAMETER Root
-    Dataset root holding Astral-DIA\. Defaults to $env:OSPREY_SEAAD_ROOT, else the parent
-    of $env:OSPREY_SEAAD_DIR.
+    Dataset root holding Astral-DIA\. Defaults to $env:OSPREYDEV_SEAAD_ROOT, else the parent
+    of $env:OSPREYDEV_SEAAD_DIR.
 
 .PARAMETER MsConvert
     Full path to msconvert.exe. Defaults to $env:MSCONVERT, else PATH, else the newest
@@ -42,14 +42,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $readme = Join-Path $PSScriptRoot 'README.md'
 
-if (-not $Root) { $Root = [Environment]::GetEnvironmentVariable('OSPREY_SEAAD_ROOT') }
+if (-not $Root) { $Root = [Environment]::GetEnvironmentVariable('OSPREYDEV_SEAAD_ROOT') }
 if (-not $Root) {
-    $mzml = [Environment]::GetEnvironmentVariable('OSPREY_SEAAD_DIR')
-    # $env:OSPREY_SEAAD_DIR points at <root>\Astral-DIA\mzml, so the root is two up.
+    $mzml = [Environment]::GetEnvironmentVariable('OSPREYDEV_SEAAD_DIR')
+    # $env:OSPREYDEV_SEAAD_DIR points at <root>\Astral-DIA\mzml, so the root is two up.
     if ($mzml -and (Test-Path $mzml)) { $Root = Split-Path (Split-Path $mzml -Parent) -Parent }
 }
 if (-not $Root -or -not (Test-Path $Root)) {
-    throw "Could not locate the SEA-AD dataset root. Pass -Root, or set `$env:OSPREY_SEAAD_ROOT. See $readme."
+    throw "Could not locate the SEA-AD dataset root. Pass -Root, or set `$env:OSPREYDEV_SEAAD_ROOT. See $readme."
 }
 $Root = (Resolve-Path $Root).Path
 

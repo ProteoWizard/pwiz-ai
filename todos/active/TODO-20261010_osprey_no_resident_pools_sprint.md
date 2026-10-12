@@ -203,6 +203,23 @@ Stage 7 (its survivor loader is null), so those arms stay live until PR 3.
      so whether parity still holds after them is UNKNOWN.
    - If it FAILS now, stop and bring it to Brendan before PR 3 changes anything. That is the
      explicit decision point.
+   - **RESULT (2026-10-11, master a78f88b5a4, Rust maccoss/osprey d19be4c):**
+     - Stellar Single first FAILED on two HARNESS defects, neither a parity break:
+       1. Rust exe exit `-1073741515` (0xC0000135, `openblas.dll` not on PATH at run time). Fixed in
+          pwiz-ai: `Add-VcpkgRuntimeToPath`, called from `Get-OspreyRustExe` (`Dataset-Config.ps1`).
+       2. Blib gate FAIL with EVERY result column identical (0 divergent rows in every table): the
+          only difference is a C#-only `osprey.validity` row in `OspreyMetadata` - the artifact
+          stamp #4809 (2026-10-09) embedded in the blib. The harness excluded `osprey_version` but
+          not this key, so the gate has been red on every dataset since #4809. Fixed in
+          `Compare-Blib-Crossimpl.ps1` (key excluded, with the reason).
+     - After both fixes, Stellar Single **PASS** (Stage 7 protein FDR, blib SQL, FDR sidecars at
+       1e-9): `ai/.tmp/sessions/20261011-pr3/xi-stellar-single-baseline.log`, blib re-compare run
+       by hand on `pwiz_tools/Osprey/TestResults/crossimpl-stellar/{rust,cs}/output.blib`.
+     - Astral All (`-Force`): **PASS** - Stage 7 protein FDR, blib SQL and FDR sidecars at 1e-9,
+       117,236 precursors both sides; Rust 23:44, C# 8:27
+       (`ai/.tmp/sessions/20261011-pr3/xi-astral-all-baseline.log`,
+       `pwiz_tools/Osprey/TestResults/crossimpl-astral/*_compare.log`). Parity holds on master after
+       #4820/#4821; this is the baseline step 6 compares against.
 2. **R3/R4.** Find the reconciled-parquet currency predicate: `PerFileResumeDriver.IsCurrent` /
    `ScoringTaskShared.AllReconciledParquetsCurrent` / `IsCurrentReconciledSurvivorSubset`, and
    `ParquetScoreCache.IsSubsetWithoutScoreIndex`.
@@ -427,6 +444,63 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-11 (afternoon) - PR 3a on `Skyline/work/20261011_osprey_resident_routes` (uncommitted)
+
+Cross-impl baseline PASS on master (Stellar Single, Astral All) after two harness fixes - see PR 3
+PLAN step 1. Then, on the branch (`C:\proj\pwiz`, nothing committed yet):
+- **R3/R4 (one defect):** `ParquetScoreCache.ReadStamp` returns null for a `.scores-reconciled.parquet`
+  not in the current survivor shape (same open as the stamp), so every currency check rejects an
+  older-build parquet: a resume re-scores that run; `--task SecondPassFDR` refuses UP FRONT in
+  `PerFileScoringTask.LoadJoinOnlyScores` (`ScoringTaskShared.UnstreamableJoinError`, reusing the
+  existing summary / reconciled-parquet messages via `SecondPassFdrTask.UnusableReconciledParquetsError`).
+  Repro added to `TestSubsetRescoreResume` (forged pre-#4486 parquet keeping the current stamp); it
+  failed on master with `all-runs-bundle: built runs=3` + stack trace, passes now
+  (`ai/.tmp/sessions/20261011-pr3/repro-before.log`, `repro-after4.log`).
+- `AnalysisPipeline` no longer adds a second "could not reload its results" error after a task's
+  own rehydrate refusal (`RehydrateFailedException` -> return its exit code; Program's exit
+  reconciliation still catches a silent one).
+- **Deleted:** `MaterializeAllResumedFiles` + the eager resume arm (now a named refusal),
+  `MaterializeResumedFile`'s overlay arm, the `--task SecondPassFDR` resident Rehydrate arm
+  (bundle `ProteinFdrEngine.RunFirstPass` + `RescoreCompaction.Apply`), every Stage 7 `!Streams`
+  branch (`WarnResidentStage7Join` -> `RequireStreamedJoin` throws; `OverlayPass2OntoResidentPool`,
+  `ReloadPass2Sidecars`, `residentByFile`/`LoadOneFile` resident arm, batch
+  `ModelDiagnosticsReport.WritePass2AndFinalize`), 8 resx strings.
+- **R5:** deleted OSPREY_DUMP_RESCORED / _MULTICHARGE / _RECONCILIATION + `*_ONLY` (interface,
+  writers, `EntriesForDump`, `-d` bundle). Docs 05/09/10/11/14/15/18, `Test-Snapshot.ps1` stage6
+  (C# gets only consensus), `DIAGNOSTICS.md` updated.
+- **Unknown `OSPREY_*` check:** `OspreyEnvironment.KnownVariables` (98 names) +
+  `UnrecognizedVariables()`; Program.cs refuses any other set OSPREY_* name (replaces the four
+  `*RetiredSet` refusals). `CodeInspectionTest.TestOspreyVariablesAreRegistered` keeps the list and
+  the readers in step both ways; CommandLineErrorTest covers retired, Rust-only and misspelled names.
+  - Found on first run: pwiz-ai tooling uses the OSPREY_ prefix for its own config (dataset dirs,
+    roots, exe paths), 4 of them in Brendan's User env. **Brendan: rename them** -> `OSPREYDEV_*`.
+    User env renamed on this machine (OSPREYDEV_SEAAD_DIR/LIB, OSPREYDEV_TDP43_DIR/LIB); scripts
+    + docs renamed (33 files). `OSPREY_SIGN*` (pwiz `package.ps1`, `README.md`) -> `OSPREYDEV_SIGN*`
+    too: Brendan confirmed TeamCity code signing is not implemented and nothing sets them.
+- Rename fallout fixed in pwiz-ai: `OspreyDatasetRun.psm1` exported OSPREY_PROTEIN_COMPACT_QUALIFY and
+  OSPREY_SVM_C_VALUES, which NO build reads (so `-QualifyBy experiment` / `-SvmCValues` silently ran
+  the default arm under another directory name) - now refused; same for the Demux scripts'
+  OSPREY_DEMUX_ENGINE / OSPREY_DIAG_SEED; `Run-Osprey.ps1 -DiagCalPrefilter*` refuses `-Tool CSharp`;
+  OSPREY_TEST_CULTURE and OSPREY_PARQUET_STRESS_ITERS -> OSPREYDEV_*.
+- `/code-review medium`: 10 findings. FIXED: pre-compaction warning moved below the per-run arms (also
+  removes the false "every file in memory" line on the HPC SecondPassFDR node), platform-correct
+  name comparison, stress-test var rename, stale references. DROPPED: env-var breakage (reviewed
+  before the rename), loader-null resume (only with zero files), silent rehydrate failure (exit
+  reconciliation logs), retained-summary read (reader already format-checks), stamp-vs-validity-key
+  altitude (a key bump would re-score every user's parquets), Run-arm non-streamed milestone
+  (no gated route reaches it - regression 48/48 with RequireStreamedJoin armed).
+- Gates: unit 646/646 + inspection (`unit-gate-6.log`); `regression-parallel -Dataset All` 48 PASS /
+  0 FAIL / 0 SKIP in 29:58 (`regression-all.log`, build before the review fixes); `regression.ps1
+  -Dataset Stellar` PASS on the final build (`regression-stellar-final.log`). Logs in
+  `ai/.tmp/sessions/20261011-pr3/`.
+- Cross-impl re-run on the branch: Stellar Single **PASS**, Astral All **PASS** (1e-9; 117,236 precursors;
+  Rust 18:50, C# 6:32) - matches the step 1 baseline, no parity break
+  (`ai/.tmp/sessions/20261011-pr3/xi-*-branch.log`).
+- NOT done yet: commits, TeamCity (ask), PR.
+- Deferred to PR 3b (R1): the whole-pool builders `BuildRescoredPool` / `MaterializeAllFromSource`
+  now have no production `.Value` reader; turning them into a refusal needs a probe of the
+  worker's `Files()` paths first. Also `ExecuteRescore`'s null-loader arm.
 
 ### 2026-10-11 - Merged PR 1 and PR 2
 

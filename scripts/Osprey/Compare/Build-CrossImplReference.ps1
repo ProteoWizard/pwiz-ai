@@ -30,7 +30,7 @@
     (like stage to like stage), not to the reconciled .scores.parquet.
 
 .PARAMETER Dataset      Stellar (default) or Astral.
-.PARAMETER TestBaseDir  Override dataset root (defaults to OSPREY_TEST_BASE_DIR).
+.PARAMETER TestBaseDir  Override dataset root (defaults to OSPREYDEV_TEST_BASE_DIR).
 .PARAMETER Force        Wipe an existing reference set before regenerating.
 .PARAMETER Threads      --threads (default 16).
 #>

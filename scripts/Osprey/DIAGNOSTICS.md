@@ -201,13 +201,15 @@ Exit after SVM weights dump.
 
 ## Stage 6 — Reconciliation, multi-charge consensus, refit
 
-### OSPREY_DUMP_RESCORED=1
+### OSPREY_DUMP_RESCORED=1 (Rust-only)
 Per-file post-rescore FdrEntry stubs after the Stage 6 reconciliation-
-aware re-scoring pass. The boundary check between Stage 5 and Stage 7
-for 3-file mode.
+aware re-scoring pass. **Removed from C# Osprey on 2026-10-11**: it pulled
+every run's rescored entries at once (O(files x entries)) only to serve a
+diagnostic. Rust still writes it; a harness must set it only for the Rust
+process.
 
-### OSPREY_RESCORED_ONLY=1
-Exit after rescored dump.
+### OSPREY_RESCORED_ONLY=1 (Rust-only)
+Exit after rescored dump. Removed from C# with the dump.
 
 ### OSPREY_DUMP_CONSENSUS=1
 Per-peptide consensus RT computation (`PeptideConsensusRT`): contributing
@@ -217,19 +219,23 @@ check for `consensus_rt`.
 ### OSPREY_CONSENSUS_ONLY=1
 Exit after consensus dump.
 
-### OSPREY_DUMP_MULTICHARGE=1
+### OSPREY_DUMP_MULTICHARGE=1 (Rust-only)
 Multi-charge consensus selection per peptide group — the SVM-score-based
-picking among charge states.
+picking among charge states. **Removed from C# Osprey on 2026-10-11**: it
+held every run's entries at once (O(files x entries)) only to serve a
+diagnostic. Rust still writes it; set it only for the Rust process.
 
-### OSPREY_MULTICHARGE_ONLY=1
-Exit after multicharge dump.
+### OSPREY_MULTICHARGE_ONLY=1 (Rust-only)
+Exit after multicharge dump. Removed from C# with the dump.
 
-### OSPREY_DUMP_RECONCILIATION=1
+### OSPREY_DUMP_RECONCILIATION=1 (Rust-only)
 Stage 6 reconciliation planner output: per-file `(entry_id, action,
 new_apex_rt)` tuples telling the rescore loop what to do per stub.
+**Removed from C# Osprey on 2026-10-11** for the same reason as
+MULTICHARGE. Rust still writes it; set it only for the Rust process.
 
-### OSPREY_RECONCILIATION_ONLY=1
-Exit after reconciliation dump.
+### OSPREY_RECONCILIATION_ONLY=1 (Rust-only)
+Exit after reconciliation dump. Removed from C# with the dump.
 
 ### OSPREY_DUMP_REFIT=1
 Refined per-file RT calibration after consensus rescoring —

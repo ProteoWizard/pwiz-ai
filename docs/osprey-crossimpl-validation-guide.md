@@ -74,7 +74,7 @@ The Osprey script directory has three flavors of tool:
 
 | Script | What it gates | Pass criterion |
 |--------|---------------|----------------|
-| `Compare-Stage6-Planning.ps1` | Stage 6 planning-checkpoint dumps (`OSPREY_DUMP_CONSENSUS`, `OSPREY_DUMP_MULTICHARGE`, `OSPREY_DUMP_REFIT`) | SHA-256 equality of all three dump pairs. |
+| `Compare-Stage6-Planning.ps1` | Stage 6 planning-checkpoint dumps (`OSPREY_DUMP_CONSENSUS`, `OSPREY_DUMP_MULTICHARGE`, `OSPREY_DUMP_REFIT`) | SHA-256 equality of all three dump pairs. Archived (`Compare/archive/`); C# removed `OSPREY_DUMP_MULTICHARGE` on 2026-10-11 (Rust-only now), so the multicharge pair no longer exists cross-impl. |
 | `Compare-Stage6-Crossimpl.ps1` | Per-iteration Stage 6 worker (`--join-at-pass=1 --no-join`) from a frozen Stage 4 + Stage 5 fixture | `Compare-Percolator.ps1` threshold + post-hydration q-value row-set match. |
 | `Compare-Stage6-Worker.ps1` | Worker portability — in-process Stage 6 output vs rehydrated output from renamed working directory | SHA-256 equality of reconciled `.scores.parquet` between Phase A baseline and Phase C renamed-folder run. |
 

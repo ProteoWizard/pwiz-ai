@@ -15,7 +15,7 @@ Convenience wrappers for generating and validating the Osprey
   include `--protein-fdr 0.01` (into a separate `-pfdr` output dir); post-#4395
   that only sets the protein-q threshold (re-measure any residual effect on the
   reported ID count via #4390's q-clamp). Override the binary with
-  `OSPREY_EXE=...`, data root with `OSPREY_TESTDIR=...`.
+  `OSPREYDEV_EXE=...`, data root with `OSPREYDEV_TESTDIR=...`.
 
 - **`Shot-ModelDiagnostics.py <html> <outdir> <stem>`** — headless-Chrome
   screenshots of the report's tabs/views (the browser extension can't

@@ -15,8 +15,8 @@ here is specific to mean(best-N) except the default arm-name patterns.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OSPREY_RUNS_DIR` | `D:/test/osprey-runs/sea-ad/runs` | where the run directories live |
-| `OSPREY_ANALYSIS_OUT` | `ai/.tmp` | where CSV / PNG / HTML products are written |
+| `OSPREYDEV_RUNS_DIR` | `D:/test/osprey-runs/sea-ad/runs` | where the run directories live |
+| `OSPREYDEV_ANALYSIS_OUT` | `ai/.tmp` | where CSV / PNG / HTML products are written |
 
 Products never land in the repo. An arm is read from its
 `out.model-diagnostics.data.json` (or the JSON embedded in `out.model-diagnostics.html`), so a run

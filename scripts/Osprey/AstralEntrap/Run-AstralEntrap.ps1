@@ -15,13 +15,13 @@
     is the shared runner (../Common/OspreyDatasetRun.psm1), same parameters as Run-SeaAd.ps1.
 
     Resolution, first hit wins:
-      data    : -DataDir, $env:OSPREY_ASTRAL3_DIR, <Downloads>\Perftests\osprey-testfiles-mzML-v2\astral
+      data    : -DataDir, $env:OSPREYDEV_ASTRAL3_DIR, <Downloads>\Perftests\osprey-testfiles-mzML-v2\astral
                 (where regression.ps1 extracts it; SKYLINE_DOWNLOAD_PATH honored)
-      library : -LibraryDir, $env:OSPREY_SEAAD_LIB
+      library : -LibraryDir, $env:OSPREYDEV_SEAAD_LIB
       runs    : -RunsRoot, else <test base>\astral-entrap-3file\runs
       caches  : -CacheDir, else <test base>\astral-entrap-3file\cache, so the .spectra.bin files
                 are not written into the regression download
-    <test base> is $env:OSPREY_TEST_BASE_DIR or D:\test\osprey-runs.
+    <test base> is $env:OSPREYDEV_TEST_BASE_DIR or D:\test\osprey-runs.
 
 .EXAMPLE
     .\Run-AstralEntrap.ps1 -DecoyMode libdecoy -WhatIf
@@ -68,7 +68,7 @@ if (-not $downloads) {
     } catch { }
 }
 if (-not $downloads) { $downloads = Join-Path $env:USERPROFILE 'Downloads' }
-$testBase = if ($env:OSPREY_TEST_BASE_DIR) { $env:OSPREY_TEST_BASE_DIR } else { 'D:\test\osprey-runs' }
+$testBase = if ($env:OSPREYDEV_TEST_BASE_DIR) { $env:OSPREYDEV_TEST_BASE_DIR } else { 'D:\test\osprey-runs' }
 $areaRoot = Join-Path $testBase 'astral-entrap-3file'
 
 $dataset = @{
@@ -76,8 +76,8 @@ $dataset = @{
     Name             = 'Astral regression HeLa x SEA-AD entrapment library'
     Extension        = 'mzML'
     InputLabel       = 'mzML dir'
-    EnvDataVar       = 'OSPREY_ASTRAL3_DIR'
-    EnvLibVar        = 'OSPREY_SEAAD_LIB'
+    EnvDataVar       = 'OSPREYDEV_ASTRAL3_DIR'
+    EnvLibVar        = 'OSPREYDEV_SEAAD_LIB'
     DataFallbacks    = @(Join-Path $downloads 'Perftests\osprey-testfiles-mzML-v2\astral')
     DefaultNumFiles  = 3
     MissingCacheNote = 'Osprey builds the 3 caches on the first run (a few minutes).'

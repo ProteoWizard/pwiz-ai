@@ -342,7 +342,9 @@ has to run `vcpkg install openblas:x64-windows openssl:x64-windows`.
 wrapper launched the binary - `Compare-EndToEnd-Crossimpl.ps1` reports only
 `Tool exited -1073741515` - so it reads like a crash inside the run rather than a
 missing prerequisite. Prepend the vcpkg bin directory whenever you RUN the Rust
-binary, not just when you build it:
+binary, not just when you build it. The scripts under `ai/scripts/Osprey` now
+do this themselves (`Add-VcpkgRuntimeToPath`, called from `Get-OspreyRustExe`
+in `Dataset-Config.ps1`, since 2026-10-11); a hand-run exe still needs:
 
 ```powershell
 $env:PATH = "C:\vcpkg\installed\x64-windows\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
@@ -374,7 +376,7 @@ residual parameterization from the dual-tree era:
 |---|---|---|
 | `Build-OspreyRust.ps1` | `-OspreyRoot` param, default `C:\proj\osprey` | Works on any tree |
 | `Bench-Scoring.ps1` | Hardcoded two-tree comparison (historical) | May need updating once the legacy fork references are swept out |
-| `Run-Osprey.ps1` | Check before invoking on a non-default tree | Older script; may still hardcode a path. **Runs in place**: the exe writes its per-file outputs (`.scores.parquet`, `.spectra.bin`, `.calibration.json`, `.osprey.task`) next to each input mzML, so never point `-TestBaseDir` at a read-only source such as the Perftests fixture - copy the mzML + library into a scratch base (`D:\test\osprey-runs\<dataset>`, the `OSPREY_TEST_BASE_DIR` default) first. `regression.ps1` copies for you; this script does not. |
+| `Run-Osprey.ps1` | Check before invoking on a non-default tree | Older script; may still hardcode a path. **Runs in place**: the exe writes its per-file outputs (`.scores.parquet`, `.spectra.bin`, `.calibration.json`, `.osprey.task`) next to each input mzML, so never point `-TestBaseDir` at a read-only source such as the Perftests fixture - copy the mzML + library into a scratch base (`D:\test\osprey-runs\<dataset>`, the `OSPREYDEV_TEST_BASE_DIR` default) first. `regression.ps1` copies for you; this script does not. |
 | `Test-Features.ps1` | `-CsharpRoot` param with auto-detect across `pwiz-work1` / `pwiz` / `pwiz-work2` | The Rust side always uses `C:\proj\osprey` |
 
 When extending these scripts, the canonical Rust root is
@@ -550,7 +552,7 @@ and gets it run on TeamCity.
 **Run `-WhatIf` first.** It prints the resolved exe, data dir, library, cache count and the full
 command line without starting anything - the cheap way to confirm a multi-hour run is pointed at
 what you think it is. Paths resolve from parameter, then environment variable
-(`OSPREY_SEAAD_DIR` / `OSPREY_SEAAD_LIB`, `OSPREY_TDP43_DIR` / `OSPREY_TDP43_LIB`), then a known
+(`OSPREYDEV_SEAAD_DIR` / `OSPREYDEV_SEAAD_LIB`, `OSPREYDEV_TDP43_DIR` / `OSPREYDEV_TDP43_LIB`), then a known
 fallback, and hard-fail with a README pointer rather than searching an empty directory for hours.
 
 Also in `ai/scripts/Osprey/SEA-AD/`: `Convert-SeaAdRaw.ps1` (raw -> mzML),

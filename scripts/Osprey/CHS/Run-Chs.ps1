@@ -132,8 +132,8 @@ $dataset = @{
     Name                = 'CHS-SeerData (UW-Floyd)'
     Extension           = 'raw'
     InputLabel          = 'raw dir'
-    EnvDataVar          = 'OSPREY_CHS_DIR'
-    EnvLibVar           = 'OSPREY_CHS_LIB'
+    EnvDataVar          = 'OSPREYDEV_CHS_DIR'
+    EnvLibVar           = 'OSPREYDEV_CHS_LIB'
     DataFallbacks       = @('D:\test\osprey-runs\chs-seer\raw')
     # No default cohort size: the plate selection is the cohort here, and a silent default
     # would make -Plates look like it had no effect.
