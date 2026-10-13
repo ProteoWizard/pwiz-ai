@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260922_ExportReportPerf`
 - **Base**: `master`
 - **Created**: 2026-09-22
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#4832](https://github.com/ProteoWizard/pwiz/pull/4832) (from `Skyline/work/20260923_ParquetPerfNet8`)
+- **PR**: [#4832](https://github.com/ProteoWizard/pwiz/pull/4832) (merged 2026-10-13, from `Skyline/work/20260923_ParquetPerfNet8`)
 
 ## Objective
 
@@ -61,9 +61,9 @@ Key files:
 - [x] Nick's 3-stage pipeline (reader thread, populate, writer thread; e9883b7e3f) - measured slightly slower on its own because per-chunk LOH churn made the stages pause each other
 - [x] Typed `ColumnBuffer<T>` with definition levels, 3 buffer sets recycled through the pipeline, and the fork's `WriteColumnsAsync` for concurrent column compression (970f344861): export 236s -> 132s
 - [x] .NET 10: `ServerGarbageCollection` in Skyline.csproj and SkylineCmd.csproj (app.config's gcServer is ignored on .NET Core; the workstation GC stalled the workers, 237s of String.Ctor), SkylineCmd deploy targets fixed to the platform folder, dictionary hints for string columns (Parquet.Net 6 makes dictionary encoding opt-in per field via `ColumnEncodingHints`; the `ClrType` of a string field is `ReadOnlyMemory<char>`) (15dc5be3b7)
-- [ ] Hash on the read-ahead thread: HashingStream now wraps the FileStream under SequentialReadStream in SkylineFiles.OpenFile and CommandLine.OpenSkyFile (uncommitted in sky_parquetnet8perf; AuditLogSavingTest passes)
-- [ ] Fork 6.1 `-osprey2`: `DataColumnWriter.PrepareAsync`/`EmitAsync` split and `ParquetRowGroupWriter.PrepareColumnAsync<T>`/`WritePreparedColumnAsync`; the library starts no threads, Skyline prepares a row group's columns on ParallelEx workers and emits in order. Byte-identical output verified; 73 fork writer tests pass. (uncommitted in the fork and in sky_parquetnet8perf)
-- [ ] Build gotcha: Skyline's compile resolves `Parquet` from BlibBuild's AnyCPU output (pwiz-sharp/Tools/BiblioSpec/src/BlibBuild/bin/Release/net10.0/Parquet.dll), not from the ParquetNet.dll HintPath, so a new fork API is invisible until that copy is refreshed (a full build's OverridePatchedParquetNet does it; otherwise copy by hand)
+- [x] Hash on the read-ahead thread: HashingStream now wraps the FileStream under SequentialReadStream in SkylineFiles.OpenFile and CommandLine.OpenSkyFile
+- [x] Fork 6.1 `-osprey2`: `DataColumnWriter.PrepareAsync`/`EmitAsync` split and `ParquetRowGroupWriter.PrepareColumnAsync<T>`/`WritePreparedColumnAsync`; the library starts no threads, Skyline prepares a row group's columns on ParallelEx workers and emits in order. Byte-identical output verified; 73 fork writer tests pass.
+- Build gotcha: Skyline's compile resolves `Parquet` from BlibBuild's AnyCPU output (pwiz-sharp/Tools/BiblioSpec/src/BlibBuild/bin/Release/net10.0/Parquet.dll), not from the ParquetNet.dll HintPath, so a new fork API is invisible until that copy is refreshed (a full build's OverridePatchedParquetNet does it; otherwise copy by hand)
 - [ ] Document open is 74% of the run now: read-ahead thread 97s inside the U: read (the floor), load thread 42s XML parse + 21s hash + 52s waiting for data + 29s waiting for peptide workers; WaitForDocumentLoaded 44s reading .skyd headers serially afterwards. Next: overlap the chromatogram cache header load with the XML parse
 - [ ] Reader thread: pre-size the chunk list to RowsPerGroup (12s of List growth); not the bottleneck
 - [ ] Result columns still ~55% of worker CPU (CachedValue GetValue ~216s own): fold CachedValues fields into TransitionResult, or fetch ChromInfo once per row for all six columns
@@ -117,3 +117,20 @@ Reporter.exe's XML `Samples` attribute is stack samples, not call counts (Progra
 - **Test name**: n/a (performance work; correctness covered by the existing report and audit log tests above)
 - **Test project**: TestFunctional / TestData
 - **Fails on master**: n/a
+
+## Progress Log
+
+### 2026-10-13 - Merged
+
+PR #4832 merged as commit 7a8221ef5d (admin override: TeamCity bt209 failed only on the known
+TestTicChromatogram pass-1 heap false positive that PR #4835 addresses; the Wine build failed as its
+dependent). Shipped the pipelined Parquet export (reader thread, ParallelEx populate, parallel column
+prepare and in-order emit through the Parquet.Net 6.1 fork), typed recycled buffers, DependsOnlyOnRowValue
+and shared-parent evaluation, compiled getters for plain reflected properties, server GC for Skyline and
+SkylineCmd, the RowItemEnumerator progress fix, and the read-ahead document stream with hashing on the
+read-ahead thread. PRISM export went from 506 s to 74 s. Before merging, the pass-1 leak check ran clean
+in Debug and Release on TestExportHugeParquetReport, TestDocumentGridExport, TestDocumentGrid,
+TestDocumentReports, TestCancelExportReport, TestLiveReportsFilter and the three Parquet unit tests.
+Deferred (unchecked above): overlapping the .skyd header load with the XML parse, the peptide-worker
+tail, chunk-list pre-sizing, folding CachedValues into TransitionResult, overlapping enumeration with
+population, and boxing in ColumnData.StoreValue. No follow-up issues were filed.
