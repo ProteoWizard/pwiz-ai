@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4832](https://github.com/ProteoWizard/pwiz/pull/4832) (from `Skyline/work/20260923_ParquetPerfNet8`)
 
 ## Objective
 
