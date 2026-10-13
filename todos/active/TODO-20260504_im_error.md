@@ -386,6 +386,56 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
   (mis-cased `observedim` session path caused WFO1000) and `i-agree-to-the-vendor-licenses.bat`
   (msparser extraction for MascotShim).
 
+## Retargeted to master (2026-10-12)
+- The port branch merged into master and is defunct. Merged origin/master (`753378df26`),
+  retargeted #4787 to master; the PR diff is the branch's own 66 files.
+- Inspection: CodeInspectionTest green. Full ReSharper found 1 branch issue (unused using in
+  IonMobilityTest, fixed `1c8dd32d60`); the other 474 are in files the branch does not touch
+  (mostly unresolved-symbol errors in ProteowizardWrapper/SkylineTester/CommonUtil - local
+  reference resolution, not verified against master's TeamCity inspection).
+
+## Nick's review round 2 (2026-10-13) - six inline comments
+1. `CachedChromatogramDataProvider.cs:75` - Rescore must not read anything not in the .skyd.
+   `RawFileCcsConverter` reopens the raw file for CCS of re-picked peaks.
+2. `TimeIntensitiesGroup.cs:206` - InterpolatedTimeIntensities (legacy format) should never
+   carry ObservedIonMobilities.
+3. `ChromCacheBuilder.cs:1408` - is `MissingObservedIonMobility` per transition ever real?
+4. `IntensityAccumulator.cs:42` - separate IM-bearing intensity denominator vs `TotalIntensity`.
+5. `GraphFullScan.cs:4507` - one-method `ObservedValueFormatter` class; move onto GraphFullScan.
+6. `PrecursorResult.cs:121` - skip `_cachedValues` for ObservedImValues. Caveat: the calculation
+   calls `GetPrecursorHighEnergyOffset`, which can do a spectral library IM lookup; measure
+   before dropping the cache.
+
+## Cache format restructure (in progress, 2026-10-13)
+Goals: Rescore/manual re-integration get exact vendor CCS for ANY re-picked apex from the .skyd
+alone; non-IM users pay nothing in memory or on disk; IM<->CCS stays with the vendor APIs.
+
+Costs found in the current branch (every user pays):
+- `TransitionChromInfo` +8 bytes (`_observedIonMobility`, `_observedCcs`) per chrom info, in
+  memory - the big one for large documents.
+- `ChromPeak` 52 -> 60 bytes on disk for every new .skyd (format v20).
+
+Measured vendor IM->CCS conversion (2026-10-13, Debug, single thread, 100k calls, varying
+IM/m/z/charge): Waters `HDMSe_Short_noLM.raw` 0.079 us/call (first call 0.56 ms), Bruker
+`diaPASEF.d` 0.077 us/call (first call 0.18 ms). Both run in managed code in the .NET readers.
+Per-point conversion at import is negligible (~30M calls ~ 2.4 s CPU per large file).
+
+Plan:
+- [ ] A. Per-point observed CCS alongside per-point observed IM, converted with the vendor API at
+      import, stored only in the protobuf (raw-times) .skyd and only for precursor chromatograms
+      with tracked IM. A peak's CCS is read at its apex point, like its IM. Removes
+      `RawFileCcsConverter`, `openRawFile`, `GetPreviousObservedCcs`,
+      `GetObservedCcsForUnchangedIonMobility` (answers Nick #1).
+- [ ] B. Drop the observed-IM section from InterpolatedTimeIntensities (legacy layout) and, if
+      nothing else needs it, `MissingObservedIonMobility` (Nick #2, #3). Keep the Skyline 3.6
+      mass-error slot fix.
+- [ ] C. Per-peak observed IM/CCS out of the fixed-size `ChromPeak` struct into an IM-only
+      per-group block (like peak scores); ChromPeak back to 52 bytes.
+- [ ] D. `TransitionChromInfo` observed IM/CCS behind the existing `IonMobility` reference so
+      non-IM chrom infos carry nothing extra.
+- [ ] E. Nick #4, #5, #6 (measure #6 first).
+- [ ] Reply to Nick's six threads (draft for Brian's approval before posting).
+
 ## Remaining before merge
 - [x] Push branch; open PR #4301; Copilot rounds + `/pw-respond`; Nick's review addressed
 - [x] `/code-review max` on the branch (2026-09-24/25, fixes in `f1f68ea37c`, `7e3163eecb`)
@@ -407,6 +457,9 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
 - **2026-05-08**: **Pivoted** to absolute observed IM/CCS storage; error % derived at report
   time. Per-scan COG over linear bin index (not raw IM average) to avoid non-linear-IM
   (1/K0) averaging. Target CCS from active reader's converter. (commit `d20822236`)
+- **2026-10-13**: Rescore never opens the raw file (Nick). Per-point vendor CCS stored at import
+  instead of our own IM->CCS curve (IM<->CCS stays with vendor APIs). All observed IM/CCS
+  storage IM-only so non-IM users pay nothing. Supersedes the 2026-09 "rescore CCS loss" drop.
 
 ## Notes
 - Long-standing request (skyline.ms #774, opened 2021-03-04 by Brian Pratt).
