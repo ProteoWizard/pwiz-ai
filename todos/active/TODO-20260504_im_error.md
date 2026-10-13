@@ -408,7 +408,7 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
    Dropped the cache and made the offset lookup lazy: fetched only when there are no MS1
    channels or no MS1 target. Brian replied on the thread.
 
-## Cache format restructure (in progress, 2026-10-13)
+## Cache format restructure (2026-10-13, A/B/D done in b553531ef2)
 Goals: Rescore/manual re-integration get exact vendor CCS for ANY re-picked apex from the .skyd
 alone; non-IM users pay nothing in memory or on disk; IM<->CCS stays with the vendor APIs.
 
@@ -423,18 +423,25 @@ IM/m/z/charge): Waters `HDMSe_Short_noLM.raw` 0.079 us/call (first call 0.56 ms)
 Per-point conversion at import is negligible (~30M calls ~ 2.4 s CPU per large file).
 
 Plan:
-- [ ] A. Per-point observed CCS alongside per-point observed IM, converted with the vendor API at
+- [x] A. Per-point observed CCS alongside per-point observed IM, converted with the vendor API at
       import, stored only in the protobuf (raw-times) .skyd and only for precursor chromatograms
       with tracked IM. A peak's CCS is read at its apex point, like its IM. Removes
       `RawFileCcsConverter`, `openRawFile`, `GetPreviousObservedCcs`,
-      `GetObservedCcsForUnchangedIonMobility` (answers Nick #1).
-- [ ] B. Drop the observed-IM section from InterpolatedTimeIntensities (legacy layout) and, if
+      `GetObservedCcsForUnchangedIonMobility` (answers Nick #1). Done: converted in
+      `ChromDataSet.Load` (read thread, file open); protobuf `observedCcs100X = 7`; `ChromPeak`
+      reads IM and CCS at the same apex point. PerfImportPrmPasefTest rescores with the raw file
+      hidden; CCS may move by <= 0.005 (stored rounding).
+- [x] B. Drop the observed-IM section from InterpolatedTimeIntensities (legacy layout) and, if
       nothing else needs it, `MissingObservedIonMobility` (Nick #2, #3). Keep the Skyline 3.6
-      mass-error slot fix.
+      mass-error slot fix. Done: also removed `has_observed_ion_mobilities` group flag and
+      `RemoveObservedIonMobilities` (minimizer change now identical to master).
 - [ ] C. Per-peak observed IM/CCS out of the fixed-size `ChromPeak` struct into an IM-only
-      per-group block (like peak scores); ChromPeak back to 52 bytes.
-- [ ] D. `TransitionChromInfo` observed IM/CCS behind the existing `IonMobility` reference so
-      non-IM chrom infos carry nothing extra.
+      per-group block (like peak scores); ChromPeak back to 52 bytes. SKIPPED for now (Brian,
+      2026-10-13): builder/reader/joiner/minimizer/score-dedupe changes for a disk-only cost of
+      ~3.4-3.9% of .skyd (measured on MOBIE Quant 15 MB, Rat_plasma 1 MB). Mention in PR for Nick.
+- [x] D. `TransitionChromInfo` observed IM/CCS behind the existing `IonMobility` reference so
+      non-IM chrom infos carry nothing extra. Done: one `object _ionMobility` field holds the
+      filter or an `IonMobilityWithObserved` wrapper; non-IM size identical to master.
 - [ ] E. Nick #4, #5 (#6 done in 7d827f1a2f).
 - [x] Reply to Nick's six threads (Brian replied to all six, 2026-10-13).
 
