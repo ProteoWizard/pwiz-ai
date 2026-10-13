@@ -6,7 +6,7 @@
 - **Created**: 2026-10-13
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4839](https://github.com/ProteoWizard/pwiz/pull/4839)
 
 ## Objective
 
@@ -46,7 +46,7 @@ larger bitmaps to extract. Every icon also has a compiled XAML vector image
 
 ## Remaining
 
-- [ ] Push branch, open PR with `skyline:` prefix and label
+- [x] Push branch, open PR with `skyline:` prefix and label (#4839, 2026-10-13)
 - [ ] Address Copilot review if any
 
 ## Notes
