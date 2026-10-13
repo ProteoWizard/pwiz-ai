@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4828](https://github.com/ProteoWizard/pwiz/issues/4828)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4834](https://github.com/ProteoWizard/pwiz/pull/4834)
 - **Test Name**: TestDiaTtofDiaUmpireTutorial
 - **Fix Type**: failure
 
