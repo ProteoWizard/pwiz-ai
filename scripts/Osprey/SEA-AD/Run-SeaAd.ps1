@@ -180,7 +180,7 @@ param(
     [int]$ParallelFilesScoring = 0,
     [int]$ParallelFilesRescoring = 0,
     [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring',
-                 'CompactPerFileRescoring','SecondPassFDR','TrainingExport')]
+                 'CompactPerFileRescoring','SecondPassFDR','ModelDiagnostics','TrainingExport')]
     [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',

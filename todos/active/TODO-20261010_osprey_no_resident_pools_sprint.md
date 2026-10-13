@@ -11,7 +11,7 @@
   the 2026-10-12 Merged entry).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 not started
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 in progress on `Skyline/work/20261012_osprey_mdiag_regeneration_bounds` (targets issue #4664)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -444,6 +444,55 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-12 (late) - PR 4 started on `Skyline/work/20261012_osprey_mdiag_regeneration_bounds` (uncommitted)
+
+Naming: issue #4664 is the ISSUE ("bound --task ModelDiagnostics memory for a 500-1000 file
+regeneration on 64 GB"); "PR 4" is this sprint's fourth PR, not yet opened.
+
+Survey of issue #4664 against master d2b56e0a51 (read-only agent): the co-assignment `Key` string is
+gone (`PrecursorKey` reuses library strings); the panel reads no parquet; `_fileRows` are per file.
+Left: `_admittedRunDecoys` never freed (runs x admitted decoys); the diagnostics-only fold loads each
+run's WHOLE parquet into a `List<FdrEntry>` via `LoadFdrStubsFromParquet` (11 columns per row group;
+the fold needs only entry_id/charge/is_decoy/modseq from the parquet - score and 5 q-values come from
+the 1st-pass sidecar); `LoadFirstPassExperimentRecords` read twice back to back; the planner
+accumulates the whole-experiment action map / consensus targets / gap-fill (order 13 GB at 446);
+Stage 7 `WalkSurvivors` decodes modseq strings per row per run (time/garbage, not a pool - measure
+first). `ReclampExperimentQToBestRun` is gone (Stage 7 uses `ExperimentQFloors`).
+
+**Brendan chose scope: diagnostics fold + planner maps.** Done in the working tree (NOT committed):
+- `_admittedRunDecoys`: builder `FlushFile(int fileIdx)` removes that run's set (both callers:
+  PeakCoAssignmentSource and the batch oracle in CoAssignment.cs).
+- `FoldDiagnosticsOnly`: experiment records read ONCE, shared by the fold and the panel (both read-only).
+- Planner maps: `Stage6Plan` returns `int? ActionCount` (distinct (file,index) per file, same as the
+  old map's Count); `ScanResult.PerFileConsensusTargets` gone (count kept); FirstPassFDR's
+  `gapFillByFile` copy and four map fields gone; byproducts `PerFileConsensusTargets`,
+  `ReconciliationActions`, `RefinedCalibrations`, `PerFileGapFillForRescore` replaced by
+  `PlannedActionCount`; `ExecuteRescore` takes `int totalReconciliation`; library release passes a
+  null gap-fill term (it already received null - `_perFileGapFillForRescore` was nulled one line
+  before the release; regression mode 6 passes that way).
+- Unit gate: compiles; 2 inspection warnings left (a redundant `using pwiz.Osprey.FDR.Reconciliation;`
+  at PipelineByproducts.cs:30 and a redundant `(int?)` cast at Stage6Planner.cs:472) - fix interrupted.
+  Tests have not yet run on this state.
+- pwiz-ai: `SEA-AD/Run-SeaAd.ps1` and `TDP43/Run-Tdp43.ps1` now admit `-Task ModelDiagnostics` (the
+  shared module already handled it).
+- Baseline measurement LAUNCHED (background, may have finished): `Run-SeaAd.ps1 -Task ModelDiagnostics
+  -Pass2Mode transfer -LinkFrom ...seaad-82files-libdecoy-r1.0-transfer-pr4665-20261009_205031 -Exe
+  D:\test\osprey-runs\_bin\pr4-baseline-d2b56e0\Osprey.exe -Tag pr4base -Fresh` (snapshot of the master
+  Release build); launcher log `ai/.tmp/sessions/20261012-pr4/mdiag-baseline-launch.log`.
+
+Still to do in PR 4: the diagnostics fold stream (avoid the 11-column stub list: read only the needed
+scalars with `ReadFdrStubScalars`-style streaming joined to the sidecar records, or at least trim the
+loader's columns - preserve `FdrScoresSidecar.TryRead` overlay semantics exactly; the diagnostics
+golden is the oracle); re-measure on SEA-AD 82 vs the baseline; regression, code review, cross-impl.
+Acceptance for issue #4664 (500/1000 files on a 64 GB box) cannot run on this machine.
+
+**Pending request from Brendan (not started):** clean up `D:\test\osprey-runs` and add a `chs-seer`
+subfolder as `ai/docs/osprey-large-datasets.md` describes, copying the `.spectra.bin` files into its
+raw folder from `M:\home\brendanx\data\MacCoss\Osprey\chs-seer\raw`.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261012_osprey_mdiag_regeneration_bounds.md` before starting work.
 
 ### 2026-10-12 (evening) - Merged PR 3b
 
