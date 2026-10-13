@@ -436,6 +436,52 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - [ ] #4664 acceptance: 500-file and 1000-file `--task ModelDiagnostics` regeneration on a 64 GB box,
       products unchanged, per-phase peaks from perfviz.py; then close #4664 (with #4577's status noted)
 
+## Acceptance runs - SEA-AD 82 and CHS-SEER 446 on three machines (after PR 4 merges)
+
+Brendan's plan (2026-10-13), replacing issue #4664's 500/1000-file acceptance: every machine runs
+both cohorts, straight through, cold from the `.spectra.bin` caches, on ONE binary built from the
+sprint's final master commit. Night sessions on each machine run their own leg; this section is the
+shared contract, so read it before launching and record results under it.
+
+| machine | CPU | RAM | SEA-AD before | CHS before |
+|---|---|---|---|---|
+| BRENDANX-UW8 | i9-14900, 32 logical | 128 GB | yes (4 h 12 m, 10-06 race) | **no** - caches staged 2026-10-13 at `D:\test\osprey-runs\chs-seer\raw` |
+| BRENDANX-UW25 | i9-14900, 32 logical | 64 GB | yes (4 h 02 m, 10-07) | yes |
+| MACS2 | PowerEdge, Xeon Gold 6354, 2 sockets | > 500 GB | yes (4 h 19 m defaults) | yes (9 h 34 m tuned, 10-08) |
+
+**The binary** - one snapshot for all three: `Build-Osprey.ps1 -Configuration Release` at the merge
+commit, copied to `_bin\sprint-final-<sha>` on each machine (UW8 also publishes it to the share; path
+recorded below once it exists). Never rebuild per machine: a different day stamps a different
+`osprey.version`, and the two compiler paths can differ. Record the exe path and `ospreyVersion` per run.
+
+**Identical arguments** - runner defaults (libdecoy, r1.0, protein-compact, `--threads 30`, files
+sequential, model diagnostics on, FdrLaneResolver picks the lanes), plus:
+- SEA-AD: `Run-SeaAd.ps1 -Exe <snapshot>\Osprey.exe -Tag sprintfinal` (defaults to library
+  `target+decoy+entrapment-20260817`).
+- CHS: `Run-Chs.ps1 -Exe <snapshot>\Osprey.exe -Tag sprintfinal -LibraryDir <lib root>\target+decoy+entrapment-20260817`
+  plus `-DataDir <caches>` where `OSPREYDEV_CHS_DIR` is unset. **Pin `-LibraryDir`**: `Run-Chs.ps1` has no
+  `-LibraryBuild`, and without it resolves the older `target+decoy+entrapment` (07-27) set - same file
+  name, different `search_hash`, so CHS would not be comparable with SEA-AD or across machines.
+- No tuning switches (`-ParallelFiles*`, thread overrides, GC env vars): this measures the defaults.
+  `--threads 30` on MACS2 is deliberate - same argument everywhere; its tuned numbers are in
+  `TODO-20261006_osprey_seaad_benchmark_port.md`.
+- Run `-WhatIf` first and check: exe, `files: 82` / `files: 446` with every input cached (CHS on UW8
+  prints `CACHE-ONLY: 446 of 446`), library path ending `-20260817`.
+
+**Before launching** on each machine: check the Dell agent's memory (it reached ~87 GB on UW8 and got
+overnight runs reaped); make sure SkylineNightly will not share the input disk mid-run (it made a CHS
+run 24% slower on UW25); one cohort at a time per machine. Expected walls at defaults: SEA-AD ~4-5 h;
+CHS 446 straight through on an i9 has never been measured at defaults (257 files took 615 min on
+2026-08-24), so budget 12-18 h and do not read a long quiet phase as a hang without `perfviz.py`.
+
+**What to record** per run, under this section: machine, exe/version, wall, per-task seconds
+(`[TIMING]` lines), `perfviz.py <run.log> --files N` (peak private and managed, floor drift, gaps >= 30 s),
+exit code, and the pass counts (protein groups and precursors at 1%) so results can be compared
+across machines. One binary on identical inputs is expected to give identical numbers even though
+the lane counts differ per machine; this run doubles as the still-open cross-machine identity check
+in `TODO-20261006_osprey_seaad_benchmark_port.md`, so diff `out.blib` across machines rather than
+assuming it. UW25 CHS is the headline: 446 files on 64 GB without paging past the box.
+
 ## Coordination
 
 - #4710 (maccoss demux, port base) touches OspreyEnvironment, PerFileRescoreTask, ScoringTaskShared
