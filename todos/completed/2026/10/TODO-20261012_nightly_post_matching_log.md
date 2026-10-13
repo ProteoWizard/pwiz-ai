@@ -5,8 +5,8 @@
 - **Base**: `master` (6ce733caba)
 - **Module**: `skyline`
 - **Created**: 2026-10-12 (SKYLINE-DEV6, checkout `C:\proj\pwiz`)
-- **PR**: [#4829](https://github.com/ProteoWizard/pwiz/pull/4829) (opened 2026-10-12; commits 9b282101f7, cfa6683440)
-- **Status**: verified, reviewed, PR open; awaiting TeamCity + review
+- **PR**: [#4829](https://github.com/ProteoWizard/pwiz/pull/4829) (merged 2026-10-13, as daeed6d5f9)
+- **Status**: Completed
 
 ## Problem
 
@@ -39,4 +39,18 @@ xmlFile is already the latest log's `.xml`, so the end-of-run post is unchanged.
   read (a still-running older run writing its log later could mismatch them); `post` with no argument
   throws if the latest log has no XML.
 - [x] PR #4829 opened
-- [ ] Merge
+- [x] Merge
+
+## Progress Log
+
+### 2026-10-13 - Merged
+
+PR #4829 merged as commit daeed6d5f9 (admin merge at Brendan's request). Checks: code inspection
+first failed with `inspectcode exited with code 4` (no issues reported; master and other PRs passed the
+same day), then passed on re-run (bt209 build 4213636). The only remaining failure was
+TestDiaTtofDiaUmpireTutorial in the PR Perf and Tutorial build (14,094 vs 14,107) - unrelated (this PR
+changes only SkylineNightly) and the same test that fails on other machines. Shipped: Nightly.Post attaches
+the log beside the posted XML and logs when there is none. Deferred (existing behavior): the end-of-run
+post re-derives the log with GetLatestLog() rather than the log Parse() read; `post` with no argument
+throws when the latest log has no XML. The fixed build reaches nightly machines through the shim on
+their next run.
