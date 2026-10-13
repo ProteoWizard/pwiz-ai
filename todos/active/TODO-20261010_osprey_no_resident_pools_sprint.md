@@ -5,13 +5,13 @@
   branches off master, listed here as they start)
 - **Base**: `master`
 - **Created**: 2026-10-10
-- **Status**: In Progress. PR 1 and PR 2 MERGED 2026-10-11 (#4820 as 3a5a0a5d00, #4821 as
-  a78f88b5a4). PR 3 routes DECIDED 2026-10-11 - see "PR 3 PLAN" (next session starts at its step 1,
-  the cross-impl baseline); PR 4's premise
-  measured stale (see PR 4). The pwiz-ai follow-up from #4821 is DONE (2026-10-11).
+- **Status**: In Progress. PR 1, PR 2, PR 3a and PR 3b MERGED (#4820, #4821, #4825, #4830 as
+  d2b56e0a51 on 2026-10-12). No resident route and no allowance is left in the code. Remaining:
+  PR 4 (#4664; its section 1 premise measured stale, see PR 4) and the deferred planner maps (see
+  the 2026-10-12 Merged entry).
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) on `Skyline/work/20261012_osprey_firstpass_rerun_stream`; PR 4 not started
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 not started
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -444,6 +444,22 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-12 (evening) - Merged PR 3b
+
+PR #4830 merged as d2b56e0a51 (squash, `--admin`, approved by Brendan; no review approval). Shipped:
+the R1 fix, deletion of the all-runs reconciliation bundle, the whole-run survivor builds behind
+`RescoredEntries.Value` (now throws), FirstPassFDR's resident projection arm, and the resident-pool
+allowance (`ResidentPaths`, `OSPREY_ALLOW_UNFIXED_RESIDENT`, now refused as an unknown variable);
+batch diagnostics and projection builders kept as internal test oracles. Gates on the merge candidate
+460332883a: TeamCity Perf/Regression #309 SUCCESS; before the master merge, `regression-parallel -Dataset
+All` 48/48 and cross-impl PASS (Stellar Single, Astral All). Copilot left a summary review with no
+inline comments. **This TODO stays active.** Deferred, not shipped:
+- FirstPassFDR's planner still builds the whole-experiment consensus-target / refined-calibration /
+  gap-fill maps (order 13 GB at 446 runs), released by PerFileRescore's Consume - candidate for PR 4.
+- `RunRescoreInputs.JoinFileStems` is read nowhere (pre-existing; see the afternoon entry).
+- `ParquetScoreCache.LoadFullFdrEntries` / `HasPinFeatureColumns` are production-dead, IOTest-only.
+- Next: PR 4 (#4664).
 
 ### 2026-10-12 (afternoon) - PR 3b on `Skyline/work/20261012_osprey_firstpass_rerun_stream` (4 local commits)
 
