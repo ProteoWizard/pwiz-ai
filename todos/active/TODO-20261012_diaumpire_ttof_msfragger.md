@@ -35,7 +35,7 @@ Comet stays covered by TestFunctional/DdaSearchTest.
 - [x] Re-record audit logs for TTOF and QE Extra in en, fr, ja, tr, zh (via new -RecordAuditLogs)
 - [x] Verify runtime/memory is acceptable
 - [x] Run test repeatedly locally to confirm stable counts (5 languages, fresh search each)
-- [ ] CodeInspection + /code-review before PR
+- [x] CodeInspection + /code-review before PR
 
 ## Regression Test
 
@@ -79,3 +79,8 @@ Created branch from master 5ce7256a61. Starting on the MSFragger switch.
   QE ~1560-1650 s); counts identical across languages. fr/ja/tr/zh audit logs recorded
   with the same changes as en. JSONs byte-identical to phase 1.
 * Solution build clean; CodeInspection passed. Committed 2ed76834b8.
+* /code-review medium: fixed one real leak - MSFragger writes decoy_*.fasta + .pepindex into
+  the persistent DDA_search dir (missed locally because record mode created them before the
+  snapshot; a fresh nightly download would fail). Cleanup now clears them; both tests pass
+  from a clean dir and leave it clean (f2113f451d). Dropped the other 6 findings (old Comet
+  globs, download gating, helper duplication, topN default already 1, record-mode order, comment).
