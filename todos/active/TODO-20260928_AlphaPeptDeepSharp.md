@@ -47,7 +47,23 @@ Installer size is not a concern on this branch; on-demand CUDA download is defer
       .bat templates, `PythonEmbeddable*` settings, their resources, `InstallNvidiaTest`,
       `PythonBootstrapTimeoutTest`, SkylineNightly LongPathsEnabled. Keep `PythonInstallerLegacyDlg`
       (Tool Store) and the `PythonInstallerUtil` path helpers the Java Carafe builder uses.
-- [ ] On-demand CUDA download (deferred).
+- [ ] On-demand CUDA download (in progress 2026-10-13, uncommitted):
+      * CarafeSharp.Models: `LibTorchRuntime` (preloads a libtorch folder by full path before TorchSharp
+        loads by name; refuses a second libtorch, and stale libtorch beside TorchSharp.dll),
+        `LibTorchPackageSet` + `LibTorchPackageSet.targets` (build writes the libtorch-cuda part package
+        list with SHA-512 + size from the NuGet cache), `LibTorchRuntimeInstaller` (verify, unpack,
+        restitch fragments + SHA-256, staging folder renamed on completion), `CudaDriver` (nvcuda:
+        driver >= 12.8, compute >= 7.0). Unit test `LibTorchRuntimeInstallerTest`.
+      * Skyline: CPU libtorch in `torch\cpu` (not beside the exe), CUDA package restored with
+        ExcludeAssets=all only for the list; `TorchRuntimes` picks/loads the runtime, downloads into
+        %LOCALAPPDATA%\Skyline\libtorch\<set>. BuildLibraryDlg AlphaPeptDeep page has a "Use GPU" checkbox
+        (Nick's design): enabled when the GPU qualifies and no libtorch is loaded yet; checking it with
+        the runtime missing confirms the size and downloads; choice saved in `AlphaPeptDeepUseGpu`.
+        Tests predict on the CPU unless they set `TorchRuntimes.CudaDriver`.
+      * Verified 2026-10-13 on RTX 4090 / driver 610.60: real nuget.org download (16 packages, ~6 min,
+        4.1 GB installed) and GPU prediction, via a temporary uncommitted TestPerf test.
+      * Dev gotcha: `Stage-Tests.ps1` robocopies without /MIR, so old CUDA builds leave libtorch in
+        `bin\staging\<Config>\runtimes\win-x64\native`; `LibTorchRuntime.Load` now says so.
 - [ ] CCS model port (someone else).
 - [ ] Fine-tuning through CarafeSharp (the Python path never had it wired).
 
