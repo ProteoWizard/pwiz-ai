@@ -402,9 +402,11 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
 3. `ChromCacheBuilder.cs:1408` - is `MissingObservedIonMobility` per transition ever real?
 4. `IntensityAccumulator.cs:42` - separate IM-bearing intensity denominator vs `TotalIntensity`.
 5. `GraphFullScan.cs:4507` - one-method `ObservedValueFormatter` class; move onto GraphFullScan.
-6. `PrecursorResult.cs:121` - skip `_cachedValues` for ObservedImValues. Caveat: the calculation
-   calls `GetPrecursorHighEnergyOffset`, which can do a spectral library IM lookup; measure
-   before dropping the cache.
+6. `PrecursorResult.cs:121` - skip `_cachedValues` for ObservedImValues. DONE (7d827f1a2f):
+   measured on WatersImsMse (Debug) - Calculate ~5 us/row, but `GetPrecursorHighEnergyOffset`
+   ~42 us/22 KB (32 us of it `settings.GetIonMobilities`), paid even when the offset is 0.
+   Dropped the cache and made the offset lookup lazy: fetched only when there are no MS1
+   channels or no MS1 target. Brian replied on the thread.
 
 ## Cache format restructure (in progress, 2026-10-13)
 Goals: Rescore/manual re-integration get exact vendor CCS for ANY re-picked apex from the .skyd
@@ -433,8 +435,8 @@ Plan:
       per-group block (like peak scores); ChromPeak back to 52 bytes.
 - [ ] D. `TransitionChromInfo` observed IM/CCS behind the existing `IonMobility` reference so
       non-IM chrom infos carry nothing extra.
-- [ ] E. Nick #4, #5, #6 (measure #6 first).
-- [ ] Reply to Nick's six threads (draft for Brian's approval before posting).
+- [ ] E. Nick #4, #5 (#6 done in 7d827f1a2f).
+- [x] Reply to Nick's six threads (Brian replied to all six, 2026-10-13).
 
 ## Remaining before merge
 - [x] Push branch; open PR #4301; Copilot rounds + `/pw-respond`; Nick's review addressed
