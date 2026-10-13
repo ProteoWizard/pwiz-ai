@@ -6,9 +6,9 @@
 - **Base**: `master`
 - **Created**: 2026-10-10
 - **Status**: In Progress. PR 1, PR 2, PR 3a and PR 3b MERGED (#4820, #4821, #4825, #4830 as
-  d2b56e0a51 on 2026-10-12). No resident route and no allowance is left in the code. Remaining:
-  PR 4 (#4664; its section 1 premise measured stale, see PR 4) and the deferred planner maps (see
-  the 2026-10-12 Merged entry).
+  d2b56e0a51 on 2026-10-12). No resident route and no allowance is left in the code. PR 4 (issue
+  #4664 + planner maps) is code complete with all local gates green, 4 local commits, not yet
+  pushed (2026-10-13 entry). After it merges: the three-machine SEA-AD + CHS-SEER acceptance runs.
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
 - **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 in progress on `Skyline/work/20261012_osprey_mdiag_regeneration_bounds` (targets issue #4664)
@@ -444,6 +444,56 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-13 - PR 4 code complete (4 local commits), all local gates green
+
+Commits on `Skyline/work/20261012_osprey_mdiag_regeneration_bounds` (not pushed, no PR yet):
+`2e1b36a6a0` (admitted-decoy sets freed per run; experiment records read once), `e03a84f8b6`
+(planner whole-experiment maps removed), `3295597cfb` (diagnostics fold streams four columns),
+`dc02532231` (`/code-review medium` fixes: shared `FdrScoresSidecar.TryJoinRows` walk used by
+`TryRead` and the fold rows; planner counts refits and keeps them only for the opt-in dumps;
+`LibraryStringInterner.Canonicalize`; geometric buffer growth; dead `Stage6Plan.Consensus`;
+stale byproduct docs). Review's top finding (fragment release lost its gap-fill term) was not a
+behavior change - the in-process path already passed null; docs corrected. Unit gate 640/640,
+inspection clean, on each.
+
+Gates on `dc02532231`: `regression-parallel -Dataset All` 48 PASS / 0 FAIL in 29m36s; cross-impl
+Stellar Single and Astral All PASS at 1e-9. The SEA-AD numbers below were measured on `3295597cfb`
+(before the review fixes changed the join path) and not re-measured.
+
+- **Fold stream**: new `Osprey.Tasks/FirstPassFoldRows.cs` - per-run buffers REUSED across runs
+  holding only entry_id/charge/is_decoy/modseq (via `ReadFdrStubScalars`, `SkipCoelutionSum`)
+  plus score and run/experiment precursor+peptide q joined from `FdrScoresSidecar.ReadRecords`
+  with `TryRead`'s rules (last row per entry_id wins; unmatched rows keep Score 0 / q 1; experiment
+  q only on matched rows; unaccounted record fails unless `expectedAbsent`). PEP fed as 1.0, which
+  is what every stub carried (sidecar has no PEP). `FoldPreCompactionPerRun` now takes the
+  sequence pool and an `Action<int, string, FirstPassFoldRows>`; `LoadResumeStubs` moved into
+  `RescoreHydration.LoadFoldRows`. Oracle: SubsetPipelineTest mode 11 (`AssertSameFirstPassProduct`).
+- **SEA-AD 82 measurement** (same runner command, `-Tag pr4fold`, snapshot
+  `_bin\pr4-foldstream-3295597`) vs `pr4base` (`_bin\pr4-baseline-d2b56e0`):
+
+  | | pr4base (master) | pr4fold |
+  |---|---|---|
+  | total | 14m45s | **8m12s** |
+  | pass-1 fold | 12m13s | **6m07s** |
+  | managed peak | 12.7 GB | 11.9 GB |
+  | private peak | 20.1 GB | 18.6 GB |
+
+  Products: 2nd-pass JSON byte-identical; 1st-pass JSON and HTML identical except `generatedUtc`.
+  Run dirs `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-transferpr4{base-20261012_180149,fold-20261013_125127}`.
+  The floor was already flat per run on master; the win is time (half the fold) and ~1 GB of peak.
+- **Brendan's request done**: deleted 49 dirs under `D:\test\osprey-runs` (nores-routes, astral-*
+  A/B, sea-ad 12/4-file drills, two older 82-file runs), freeing 616.6 GB. CHS caches copied to
+  `D:\test\osprey-runs\chs-seer\raw` (446 `.spectra.bin` + carafe `.libcache`, 1,143 GB, robocopy
+  0 failed); `Test-SpectraCaches.ps1` PASSED structurally (sources gone). `OSPREYDEV_CHS_DIR` is NOT
+  set yet (README's `setx`).
+- **Next**: push the branch and open PR 4 (ask Brendan first), TeamCity when asked, merge with `--admin`.
+- **Acceptance deferred (Brendan, 2026-10-13)**: instead of issue #4664's 500/1000-file test, after
+  the sprint's final PR merges, run SEA-AD and CHS-SEER on all three test machines (BRENDANX-UW8
+  i9-14900/128 GB, BRENDANX-UW25 i9-14900/64 GB, MACS2 PowerEdge Xeon Gold 6354) against the final
+  code. One snapshot exe copied to every machine, identical runner args with `-LibraryDir` pinned,
+  cold runs from the caches, Dell agent checked first; compare with `perfviz.py`. UW8 has not run
+  CHS before (caches staged 2026-10-13); the other two have.
 
 ### 2026-10-12 (late) - PR 4 started on `Skyline/work/20261012_osprey_mdiag_regeneration_bounds` (uncommitted)
 
