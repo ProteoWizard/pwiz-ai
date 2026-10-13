@@ -66,6 +66,17 @@ This directory contains PowerShell scripts for maintaining code quality, automat
 
 See [Skyline/README.md](Skyline/README.md) for detailed Skyline build/test documentation.
 
+### CarafeSharp/
+
+| Script | Description |
+|--------|-------------|
+| `CarafeSharp/Build-CarafeSharp.ps1` | Build and test `pwiz_tools/CarafeSharp` (wraps its `build.ps1`), with ReSharper inspection |
+| `CarafeSharp/Run-CarafeSharpWorkflow.ps1` | The CarafeSharp/Osprey workflow: library, search, fine-tune, search |
+| `CarafeSharp/New-CarafeSharpTestData.ps1` | Build the test data package zips listed in `testdata.json` |
+| `CarafeSharp/SubsetData/*.py` | Cut the committed test data subsets (`CarafeSharp.Test/TestData/*.zip`); see its README |
+| `CarafeSharp/Measure-CumulativeCoverage.ps1` | dotCover coverage of the unit tests plus `regression.ps1`, merged |
+| `CarafeSharp/Audit-Loc.ps1` | cloc audit of CarafeSharp against its Carafe (Java + Python) reference |
+
 ### AutoQC/ and SkylineBatch/
 
 | Script | Description |

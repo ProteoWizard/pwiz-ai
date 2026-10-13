@@ -77,7 +77,9 @@ param(
     [switch]$SkipUnit,
     [switch]$SkipResume,
     [switch]$SkipHpcChain,
-    [string]$OutDir
+    [string]$OutDir,
+    # The pwiz checkout to measure (default <project root>\pwiz).
+    [string]$SourceRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -85,7 +87,7 @@ $ErrorActionPreference = 'Stop'
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $projectRoot = (Resolve-Path (Join-Path $scriptDir '..\..\..')).Path   # ai/scripts/Osprey -> root
-$pwizRoot = Join-Path $projectRoot 'pwiz'
+$pwizRoot = if ($SourceRoot) { (Resolve-Path $SourceRoot).Path } else { Join-Path $projectRoot 'pwiz' }
 $ospreyBinDir = Join-Path $pwizRoot 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net10.0'
 $ospreyExe = Join-Path $ospreyBinDir 'Osprey.exe'
 $buildScript = Join-Path $scriptDir 'Build-Osprey.ps1'
@@ -144,7 +146,7 @@ if (-not $SkipUnit) {
     $unitJson = Join-Path $OutDir 'unit.json'
     # Match the net10.0 Release binaries the regression leg runs, so the merged
     # snapshot is one coherent build.
-    & $buildScript -Coverage -Configuration Release -TargetFramework net10.0 -CoverageOutputPath $unitJson | Out-Host
+    & $buildScript -SourceRoot $pwizRoot -Coverage -Configuration Release -TargetFramework net10.0 -CoverageOutputPath $unitJson | Out-Host
     $unitSnap = Join-Path $OutDir 'unit.dcvr'
     if (-not (Test-Path $unitSnap)) { throw "Unit coverage snapshot not found at $unitSnap" }
     $snapshots.Add($unitSnap)
@@ -188,7 +190,7 @@ $env:OSPREY_MAX_PARALLEL_FILES = '1'
 # phases of the HPC chain that no straight-through run can reach. Verified: a
 # single covered Stellar mode-1 run reported Osprey.Scoring 69%, Osprey.FDR 43%,
 # Osprey.Tasks 50% etc., and dotCover logged "Merging snapshots" (>1 process).
-$regressionPs1 = Join-Path $projectRoot (Join-Path "pwiz" (Join-Path "pwiz_tools" (Join-Path "Osprey" "regression.ps1")))
+$regressionPs1 = Join-Path $pwizRoot (Join-Path "pwiz_tools" (Join-Path "Osprey" "regression.ps1"))
 if (-not (Test-Path $regressionPs1)) { throw "regression.ps1 not found at $regressionPs1" }
 $pwshExe = (Get-Command pwsh).Source
 
