@@ -35,6 +35,13 @@
 .PARAMETER Configuration
     Debug or Release (default: Debug)
 
+.PARAMETER RecordAuditLogs
+    Replace or create the tutorial audit logs (TestTutorial\TutorialAuditLogs\<lang>\<test>.log)
+    with what each tutorial test records, instead of comparing against them. Combine with
+    -Language all to re-record every language. A test in IsRecordMode fails on purpose and
+    is then not run in further languages, so record its expected values in English first;
+    see "Re-recording tutorial audit logs" in ai/docs/build-and-test-guide.md.
+
 .PARAMETER NoVendorReaders
     Run with vendor readers disabled (vendors=off), so tests take the same mzML/mzXML
     path they take in pass 0. Combine with -Loop and -Language fr to soak a pass-0-only
@@ -114,6 +121,11 @@ param(
                                         # instead of vendor readers, as pass 0 does. Pass 0 itself
                                         # runs each test exactly once, so this is how a pass-0
                                         # condition gets looped (-Loop N) to measure a failure rate.
+
+    [Parameter(Mandatory=$false)]
+    [switch]$RecordAuditLogs = $false,  # recordauditlogs=on: replace or create the tutorial audit logs
+                                        # (TestTutorial\TutorialAuditLogs\<lang>) with what each test records,
+                                        # as SkylineTester's "Record audit logs" box does
 
     [Parameter(Mandatory=$false)]
     [switch]$TeamCityCleanup = $false,  # Use TeamCity-style cleanup (DesiredCleanupLevel=all) for local testing/debugging
@@ -898,7 +910,11 @@ try {
         if ($NoVendorReaders) {
             $runnerArgs += "vendors=off"
         }
-        
+
+        if ($RecordAuditLogs) {
+            $runnerArgs += "recordauditlogs=on"
+        }
+
         if ($ReportHandles) {
             $runnerArgs += "reporthandles=on"
         }

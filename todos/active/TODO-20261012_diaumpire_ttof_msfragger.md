@@ -26,14 +26,15 @@ Comet stays covered by TestFunctional/DdaSearchTest.
 
 ## Tasks
 
-- [ ] Switch DiaUmpireTutorialTest search engine from Comet to MSFragger
+- [x] Switch DiaUmpireTutorialTest search engine from Comet to MSFragger
       (handle MsFraggerDownloadDlg like DdaTutorialTest/DiaSearchTutorialTest)
-- [ ] Rewrite the Comet-rationale comment for MSFragger
-- [ ] Adjust/remove Comet-specific settings (Ms2Analyzer, num_output_lines,
+- [x] Rewrite the Comet-rationale comment for MSFragger
+- [x] Adjust/remove Comet-specific settings (Ms2Analyzer, num_output_lines,
       intermediate-file globs) and set an MSFragger fragment tolerance
-- [ ] Re-baseline expected values (record mode) for the TTOF variants
-- [ ] Verify runtime/memory is acceptable
-- [ ] Run test twice locally to confirm stable counts
+- [x] Re-baseline expected values (record mode): TTOF, QE Extra, and both FullFileset JSONs
+- [x] Re-record audit logs for TTOF and QE Extra in en, fr, ja, tr, zh (via new -RecordAuditLogs)
+- [x] Verify runtime/memory is acceptable
+- [x] Run test repeatedly locally to confirm stable counts (5 languages, fresh search each)
 - [ ] CodeInspection + /code-review before PR
 
 ## Regression Test
@@ -48,3 +49,33 @@ Comet stays covered by TestFunctional/DdaSearchTest.
 ### 2026-10-12 - Session Start
 
 Created branch from master 5ce7256a61. Starting on the MSFragger switch.
+
+* Switched the search to MSFragger; restored pre-Comet fragment tolerances
+  (TTOF 40 ppm, QE 20 ppm); added MsFraggerDownloadDlg handling; cleanup now
+  targets MSFragger/Percolator leftovers.
+* Tutorial HTML still says MS Amanda - pre-existing mismatch (test already used Comet); left alone.
+* Developer confirmed the FullFileset baselines are to be re-recorded on this branch too.
+* Developer posted the start-of-work comment on #4828.
+* TTOF recorded (en, 14 min): LibraryPeptideCount 14107 -> 17132; final targets
+  11/213/283/1697 -> 11/217/289/1733; iRT 2.995/-66.861 -> 2.997/-66.935.
+* Audit logs CANNOT be recorded in record mode: CheckRecordMode() throws right after
+  DoTest(), before EndAuditLogging(). So: phase 1 = record JSONs with IsRecordMode=true;
+  phase 2 = IsRecordMode=false + TestRunner.exe directly with recordauditlogs=on,
+  language=en-US,fr-FR,ja-JP,tr-TR,zh-CHS loop=1 (also verifies the new JSONs).
+* Fixed: moved CheckRecordMode() out of RunTest() to after EndAuditLogging() in
+  TestFunctional; added -RecordAuditLogs to Run-Tests.ps1 (pwiz-ai, uncommitted until verified).
+  Record mode + -RecordAuditLogs then recorded the en logs in one run (verified).
+* Record mode still cannot cover other languages: TestRunner skips remaining languages
+  after a failure (Program.cs ~2735), and record mode always fails. Doc says two runs.
+* Phase 1 JSONs (en, record mode): QE Extra 8742 -> 10087; TTOF FullFileset 21316 -> 25615
+  (28 min); QE FullFileset 12928 -> 15222 (68 min). (The record-mode rerun matched TTOF, but it reused the kept search outputs, so it is not a determinism check.)
+* en audit-log diffs reviewed: engine, fragment tol 40 ppm, MS2 analyzer line gone,
+  Peptides mapped/targets 100/101 -> 102/103 (TTOF).
+* First all-language run: en passed its asserts for both tests (fresh search: TTOF 432 s,
+  QE 882 s) but failed at cleanup with "PersistentFilesDir has been modified" - the
+  record-mode runs had left -diaumpire outputs there (this test keeps them in record mode)
+  and the normal cleanup deleted them. One-time artifact; rerunning.
+* Rerun: all 10 test/language runs passed (fresh search each run; TTOF ~800-960 s,
+  QE ~1560-1650 s); counts identical across languages. fr/ja/tr/zh audit logs recorded
+  with the same changes as en. JSONs byte-identical to phase 1.
+* Solution build clean; CodeInspection passed. Committed 2ed76834b8.

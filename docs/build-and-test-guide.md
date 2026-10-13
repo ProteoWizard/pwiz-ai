@@ -297,6 +297,26 @@ ai/scripts/Skyline/Run-Tests.ps1 `
 
 > ℹ️ **Tip:** Pass `-Language` to exercise multiple UI languages; omit it for the default English run.
 
+### Re-recording tutorial audit logs
+
+A change that alters what a tutorial test does (settings, search engine, result counts)
+changes its audit logs in every language. `-RecordAuditLogs` passes `recordauditlogs=on`,
+which overwrites `TestTutorial\TutorialAuditLogs\<lang>\<test>.log` instead of comparing:
+
+```powershell
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestA,TestB -Language all -RecordAuditLogs
+```
+
+When a test's own expected values change too (`IsRecordMode`), do it in two runs:
+
+1. `IsRecordMode = true`, English only, `-RecordAuditLogs`: records the expected values and the
+   English audit log. The test fails on purpose at the end ("Set IsRecordMode to false"), and
+   TestRunner does not run a failed test in further languages - so record mode cannot reach them.
+2. `IsRecordMode = false`, `-Language all -RecordAuditLogs`: checks the new expected values in
+   every language and records the remaining audit logs.
+
+Review the log diffs before committing.
+
 ## AI/SkylineTester Integration
 
 Run-Tests.ps1 and SkylineTester share a test list file (`SkylineTester test list.txt`) for bidirectional workflow. This enables seamless handoff between human-driven and LLM-driven test execution.
