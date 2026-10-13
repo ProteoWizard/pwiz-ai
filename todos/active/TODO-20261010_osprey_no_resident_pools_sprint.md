@@ -7,11 +7,11 @@
 - **Created**: 2026-10-10
 - **Status**: In Progress. PR 1, PR 2, PR 3a and PR 3b MERGED (#4820, #4821, #4825, #4830 as
   d2b56e0a51 on 2026-10-12). No resident route and no allowance is left in the code. PR 4 (issue
-  #4664 + planner maps) is code complete with all local gates green, 4 local commits, not yet
-  pushed (2026-10-13 entry). After it merges: the three-machine SEA-AD + CHS-SEER acceptance runs.
+  #4664 + planner maps) is code complete with all local gates green, opened as #4838
+  (2026-10-13 entry). After it merges: the three-machine SEA-AD + CHS-SEER acceptance runs.
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 in progress on `Skyline/work/20261012_osprey_mdiag_regeneration_bounds` (targets issue #4664)
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 [#4838](https://github.com/ProteoWizard/pwiz/pull/4838) (opened 2026-10-13, part of issue #4664)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
