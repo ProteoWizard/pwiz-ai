@@ -42,7 +42,9 @@ Comet stays covered by TestFunctional/DdaSearchTest.
 - **Test name**: TestDiaTtofDiaUmpireTutorial (the failing test itself)
 - **Test project**: TestPerf
 - **Fails on master**: yes, on Server 2019 cloud agents only (TeamCity builds 15555, 15556, 15562)
-- **Passes on fix**: (pending - needs a TeamCity cloud-agent run)
+- **Passes on fix**: yes - TeamCity PR perf build 4214145 (#15581, 6f3aac2942) on a Windows 10.0.17763
+  (Server 2019) cloud agent: TestDiaTtofDiaUmpireTutorial-en 0 failures, 1025 s, fresh MSFragger
+  4.1 + JRE 17 + crux 4.3 tools. LibraryPeptideCount assert (17132) held. QE Extra is not in that config.
 
 ## Progress Log
 
