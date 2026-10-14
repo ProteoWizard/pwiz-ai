@@ -436,51 +436,58 @@ free `[f]` after each phase-2 flush (~5 lines, byte-identical).
 - [ ] #4664 acceptance: 500-file and 1000-file `--task ModelDiagnostics` regeneration on a 64 GB box,
       products unchanged, per-phase peaks from perfviz.py; then close #4664 (with #4577's status noted)
 
-## Acceptance runs - SEA-AD 82 and CHS-SEER 446 on three machines (after PR 4 merges)
+## Acceptance runs - three machines
 
-Brendan's plan (2026-10-13), replacing issue #4664's 500/1000-file acceptance: every machine runs
-both cohorts, straight through, cold from the `.spectra.bin` caches, on ONE binary built from the
-sprint's final master commit. Night sessions on each machine run their own leg; this section is the
-shared contract, so read it before launching and record results under it.
+Test design (Brendan, 2026-10-13), replacing issue #4664's 500/1000-file acceptance. The procedure a
+session on each machine follows, the shared binary and the results folders are on the share:
+**`M:\home\brendanx\data\MacCoss\Osprey\acceptance-20261013\`** (`README.md`). This section is the
+contract that README implements.
+
+**Question.** With every O(files x entries) structure gone (PRs 1-4), does the final code run both
+large cohorts straight through at default settings on all three test machines - in particular CHS-SEER
+446 on a 64 GB box - and do the three machines agree on the answer?
+
+**Matrix.** 3 machines x 2 cohorts = 6 runs, one cohort at a time per machine, SEA-AD then CHS.
 
 | machine | CPU | RAM | SEA-AD before | CHS before |
 |---|---|---|---|---|
-| BRENDANX-UW8 | i9-14900, 32 logical | 128 GB | yes (4 h 12 m, 10-06 race) | **no** - caches staged 2026-10-13 at `D:\test\osprey-runs\chs-seer\raw` |
-| BRENDANX-UW25 | i9-14900, 32 logical | 64 GB | yes (4 h 02 m, 10-07) | yes |
-| MACS2 | PowerEdge, Xeon Gold 6354, 2 sockets | > 500 GB | yes (4 h 19 m defaults) | yes (9 h 34 m tuned, 10-08) |
+| BRENDANX-UW8 | i9-14900, 32 logical | 128 GB | 4 h 12 m (10-06 race) | **never** - caches staged 2026-10-13 |
+| BRENDANX-UW25 | i9-14900, 32 logical | 64 GB | 4 h 02 m (10-07) | yes |
+| MACS2 | PowerEdge, Xeon Gold 6354, 2 sockets | > 500 GB | 4 h 19 m (defaults) | 9 h 34 m (tuned, 10-08) |
 
-**The binary** - one snapshot for all three: `Build-Osprey.ps1 -Configuration Release` at the merge
-commit, copied to `_bin\sprint-final-<sha>` on each machine (UW8 also publishes it to the share; path
-recorded below once it exists). Never rebuild per machine: a different day stamps a different
-`osprey.version`, and the two compiler paths can differ. Record the exe path and `ospreyVersion` per run.
+**Fixed across all six runs.**
+- One binary: the Release build of the PR 4 merge commit, published once to the share's `bin\`
+  (`READY.txt` names it) and copied locally on each machine. Never rebuilt per machine (a different
+  day stamps a different `osprey.version`; the two compiler paths can differ).
+- Runner defaults: libdecoy, r1.0, protein-compact, `--threads 30` (also on MACS2, deliberately),
+  files sequential, model diagnostics on, FdrLaneResolver chooses lanes, tag `sprintfinal`. No tuning
+  switches or environment variables.
+- Library `target+decoy+entrapment-20260817` for both cohorts. `Run-Chs.ps1` has no `-LibraryBuild`
+  and otherwise resolves the 07-27 set (different `search_hash`), so CHS passes `-LibraryDir`.
+- Cold from the `.spectra.bin` caches; no `-LinkFrom`.
 
-**Identical arguments** - runner defaults (libdecoy, r1.0, protein-compact, `--threads 30`, files
-sequential, model diagnostics on, FdrLaneResolver picks the lanes), plus:
-- SEA-AD: `Run-SeaAd.ps1 -Exe <snapshot>\Osprey.exe -Tag sprintfinal` (defaults to library
-  `target+decoy+entrapment-20260817`).
-- CHS: `Run-Chs.ps1 -Exe <snapshot>\Osprey.exe -Tag sprintfinal -LibraryDir <lib root>\target+decoy+entrapment-20260817`
-  plus `-DataDir <caches>` where `OSPREYDEV_CHS_DIR` is unset. **Pin `-LibraryDir`**: `Run-Chs.ps1` has no
-  `-LibraryBuild`, and without it resolves the older `target+decoy+entrapment` (07-27) set - same file
-  name, different `search_hash`, so CHS would not be comparable with SEA-AD or across machines.
-- No tuning switches (`-ParallelFiles*`, thread overrides, GC env vars): this measures the defaults.
-  `--threads 30` on MACS2 is deliberate - same argument everywhere; its tuned numbers are in
-  `TODO-20261006_osprey_seaad_benchmark_port.md`.
-- Run `-WhatIf` first and check: exe, `files: 82` / `files: 446` with every input cached (CHS on UW8
-  prints `CACHE-ONLY: 446 of 446`), library path ending `-20260817`.
+**Varies, by design.** The machine: cores, RAM, disks - and therefore the FirstPassFDR lane count
+the resolver picks from free memory. Record it; it is an output, not a setting.
 
-**Before launching** on each machine: check the Dell agent's memory (it reached ~87 GB on UW8 and got
-overnight runs reaped); make sure SkylineNightly will not share the input disk mid-run (it made a CHS
-run 24% slower on UW25); one cohort at a time per machine. Expected walls at defaults: SEA-AD ~4-5 h;
-CHS 446 straight through on an i9 has never been measured at defaults (257 files took 615 min on
-2026-08-24), so budget 12-18 h and do not read a long quiet phase as a hang without `perfviz.py`.
+**Measured per run.** Wall and per-task `[TIMING]` seconds; `perfviz.py` peak private and managed,
+floor drift, reporting gaps >= 30 s; the lane line; exit code; protein groups at 1%; library
+spectra written; and the products `out.stats.tsv`, `out.protein_groups.tsv`, `out.blib`, report HTML.
 
-**What to record** per run, under this section: machine, exe/version, wall, per-task seconds
-(`[TIMING]` lines), `perfviz.py <run.log> --files N` (peak private and managed, floor drift, gaps >= 30 s),
-exit code, and the pass counts (protein groups and precursors at 1%) so results can be compared
-across machines. One binary on identical inputs is expected to give identical numbers even though
-the lane counts differ per machine; this run doubles as the still-open cross-machine identity check
-in `TODO-20261006_osprey_seaad_benchmark_port.md`, so diff `out.blib` across machines rather than
-assuming it. UW25 CHS is the headline: 446 files on 64 GB without paging past the box.
+**Pass criteria.**
+1. All six runs exit 0.
+2. **UW25 CHS 446 completes** within 64 GB: peak private at or under physical RAM, floors flat or
+   falling (no O(files) drift), no reporting gap that is a stall rather than known Percolator
+   granularity (MACS2's 10-08 run had 30-58 s gaps there).
+3. Same answer everywhere: per cohort, `out.stats.tsv` and `out.protein_groups.tsv` identical across
+   machines, and `out.blib` equal under `Compare/Compare-Blib-Crossimpl.ps1` (two C# blibs work; the
+   parameter names say Rust/C#). Lane counts differ per machine, so this also settles the cross-machine
+   identity check left open in `TODO-20261006_osprey_seaad_benchmark_port.md`. A difference is a
+   finding to bisect, not noise to tolerate.
+4. No regression in wall time against each machine's earlier SEA-AD default run (table above),
+   allowing for disk state (wall swings 31 -> 80 min on the regression gate here with disk state alone).
+
+**Comparison.** UW8's session (or Brendan) compares once all `results\<machine>\RESULTS.md` files are
+complete, and records the outcome below this section.
 
 ## Coordination
 
