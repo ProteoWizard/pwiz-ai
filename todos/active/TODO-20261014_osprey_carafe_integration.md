@@ -3,6 +3,9 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20261014_osprey_carafe_shared_toolkit` (PR 1). Later PRs get their
   own `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start.
+- **PR 2**: [#4846](https://github.com/ProteoWizard/pwiz/pull/4846) (part D plus the review
+  fixes, opened 2026-10-14; Perf/Regression not yet run - ask before triggering on `pull/4846`,
+  after #4845's run; no TeamCity MCP in this session, so Brendan triggers).
 - **PR 2 branch**: `Skyline/work/20261014_one_command_line_tokenizer` (off master 2026-10-14, in
   `C:\proj\pwiz`; PR 1's branch is pushed and only waits on TeamCity). After #4845 merges, this
   branch needs `git merge origin/master`: PR 1 also edits `CarafeCommandLine.cs` (the
@@ -329,6 +332,36 @@ CommonTest `TestCommandLineParserGrammars`; Skyline `CommandLineTest` and `Comma
       with a terse provider, so each message is pinned to the call that built it.
 - [x] Extra gate for PR 2: Skyline's `CommandLineTest` and `CommandLineRefineTest` (TestData),
       since the tokenizer now serves `CommandArgs`.
+
+### PR 2 - `/code-review medium` triage (2026-10-14)
+
+Ten findings on the branch before the PR; six fixed in the second commit, four dropped.
+
+Fixed:
+- A `Variadic` argument consumed following tokens under a grammar whose values never follow
+  (`STRICT`); the loop is now guarded by `ValueMayFollow`, and `CommandLineParserTest` pins it.
+- `CommandLineGrammar.LongPrefixes` rebuilt and sorted its list on every token; cached once.
+- The provider's `--task` missing-value special case compared typed text to one argument's
+  spelling; replaced by `ArgumentBase.MissingValueMessage`, set on `ARG_TASK` where it belongs.
+- The parser snapshotted `ArgUsage.Grammar` at construction while `ArgumentText` read it live;
+  the parser reads it live too, so tokens and text can never come from two grammars.
+- `ValueInvalidException` spelled the argument with `ArgumentText` while the other parser errors
+  used the token as typed; `Bind` now passes the typed text through.
+- The variadic inline value had its own empty-value rule (`RequireValue`); it goes through
+  `ReadValue` like every value.
+
+Dropped:
+- `--parallel-files=` (an empty inline value on an optional-value argument) is "no value" rather
+  than the old Osprey error: that is Skyline's rule for `--name=` on an optional value
+  (`IsMatch` treats it as name-only), and the one grammar follows Skyline's contract.
+- `-fast=` (an empty inline value on a flag) is the flag rather than Carafe's "unrecognized
+  option": the same Skyline rule (`--flag=` was always name-only there).
+- A lone `-` is an unknown option under a grammar whose short prefix is `-` (Carafe's old parser
+  skipped it): a dash is not a word a Carafe command line records, and as a value (`-mode -`) it
+  still parses.
+- CarafeSharp's new user-facing literals (`UsageHint`, the provider's messages) are not in a
+  resx: decision 5 defers CarafeSharp's resx extraction to its own PR; the strings are a handful
+  among its 185 literal sites and move with them.
 
 ### PR 1, part E - the task contract in Shared, CarafeSharp's stages on it
 
