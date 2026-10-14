@@ -2,12 +2,12 @@
 
 ## Branch Information
 - **Repository**: `uw-maccosslab/maccosslab-agents` (local checkout `~/dev/ai-dev/maccosslab-agents`)
-- **Branch**: `work/20261012_access_log_chat`
+- **Branch**: none (merged to `main`; was `work/20261012_access_log_chat`)
 - **Base**: `main`
 - **Created**: 2026-10-12 (started 2026-10-12)
-- **Status**: In Review
-- **PR**: [#4](https://github.com/uw-maccosslab/maccosslab-agents/pull/4) (opened 2026-10-14;
-  pre-PR `/code-review` skipped at the developer's request)
+- **Status**: Completed
+- **PR**: [#4](https://github.com/uw-maccosslab/maccosslab-agents/pull/4) (merged 2026-10-14,
+  `34cf88b`; pre-PR `/code-review` skipped at the developer's request)
 - **Objective**: Add an interactive chat mode to the access log review agent: start it on a
   log window, then ask it free-form questions about the panoramaweb.org access logs. It
   answers using the existing read-only tools and the `access_log_review` MCP server.
@@ -66,7 +66,7 @@ runner, for machines without Claude Code. Decide in Open Questions whether it's 
       **No cache yet.** Measured on real logs: about 40 s for a 2-hour window (whole files
       are read regardless of window size) and 175 s for 2026-10-10 (1.74M Apache / 1.58M
       Tomcat requests). Add a cache if switching back and forth turns out to be common.
-- [ ] **Tool coverage for questions the review doesn't need.** Collect real questions while
+- [ ] **(Deferred)** **Tool coverage for questions the review doesn't need.** Collect real questions while
       testing and see which ones the current tools can't answer (e.g. requests to one
       path in a time range, status-code breakdown for a client, top referrers). Add
       read-only tools in `tools.py` and mirror them in `mcp_server.py`. Keep every result
@@ -81,17 +81,30 @@ runner, for machines without Claude Code. Decide in Open Questions whether it's 
 - [x] **Interactive try-out.** The developer tested `claude --agent access-log-chat` on
       2026-10-14: "looks good". Collecting questions the tools can't answer (the
       tool-coverage task above) is still open.
-- [ ] (If billed path is wanted) `chat` subcommand in `cli.py`: loop over `input()`, keep
+- [ ] **(Deferred, not requested)** (If billed path is wanted) `chat` subcommand in `cli.py`: loop over `input()`, keep
       the message history, run the tool runner per turn with `CHAT_PROMPT`, print usage
       per turn and in total. Same model/effort/fallback settings as `run_review`.
-- [ ] Tests: loader returns no review instructions in chat mode, writes no summary, and
+- [x] Tests: loader returns no review instructions in chat mode, writes no summary, and
       rejects an empty window; window switch replaces state; chat report doesn't replace
       the review report; review isn't granted `load_window`; prompts share sections
-      (done: 8 new, 149 total pass). Still to do: new tools never emit LabKey usernames,
-      and the billed REPL against a fake client, if either is built.
+      (8 new, 149 total pass). Tests for new tools (no LabKey usernames) and the billed
+      REPL (fake client) go with those deferred items.
 - [x] Update `maccosslab-agents/CLAUDE.md` and `README.md` (how to start the chat, module map).
 
 ## Progress
+
+### 2026-10-14 - Merged
+
+PR #4 merged as commit `34cf88b`. What shipped: the `access-log-chat` agent
+(`claude --agent access-log-chat`) and the `/access-log-chat` command. Also the
+`load_window` MCP tool, which returns `CHAT_PROMPT`, writes no summary file, and replaces
+the window when called again. `SYSTEM_PROMPT` was split into shared sections
+(byte-identical review prompt). Chat reports get their own name, so they can't replace
+the daily report, and the pipeline doesn't grant the review `load_window`. Deferred:
+new read-only tools for questions the current tools can't answer (waiting on real
+questions from use), a window cache (load takes 40-175 s), and the billed
+`access-log-review chat` REPL (not requested). The open questions below are still open.
+No follow-up issues filed.
 
 - 2026-10-14: Developer tried `claude --agent access-log-chat` interactively and confirmed
   it works. Committed as `3de2ef3` and pushed `work/20261012_access_log_chat`.
