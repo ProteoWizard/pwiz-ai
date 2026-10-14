@@ -51,38 +51,53 @@ runner, for machines without Claude Code. Decide in Open Questions whether it's 
 
 ## Tasks
 
-- [ ] **Loader without the review instructions.** `start_review` returns
-      `agent.SYSTEM_PROMPT`, which tells the model to read every section and write a
-      report. Add a chat-oriented loader (e.g. `load_window`, or a `mode` parameter on
-      `start_review`) that shares the aggregate-building code and returns the overview
-      and section index, plus the chat instructions or nothing. Keep one source for the
-      shared rules (`rules.py` and the data-handling part of `SYSTEM_PROMPT`). Don't fork
-      that text.
-- [ ] **Chat instructions.** Write a `CHAT_PROMPT` (in `agent.py` beside `SYSTEM_PROMPT`)
-      that keeps the rules and confidence definitions but drops the required report
-      structure. Have it answer the question asked and read sections lazily, not all up
-      front.
-- [ ] **Window switching.** Confirm re-calling the loader cleanly replaces `_state`
-      (aggregate, tools, reports_dir). Loading takes 30-50 s, so cache the last few windows
-      by `(start, end, dirs)` if switching back and forth turns out to be common.
+- [x] **Loader without the review instructions.** New MCP tool `load_window` (fractional
+      `hours` allowed, `hours <= 0` rejected). It shares `_load` with `start_review`,
+      returns `agent.CHAT_PROMPT` + overview + section index, and writes **no** summary
+      JSON, so chat windows never show up in `previous_summaries`.
+- [x] **Chat instructions.** `SYSTEM_PROMPT` was split into `SITE_SETUP`,
+      `CONFIDENCE_LEVELS`, and `SHARED_RULES`. `SYSTEM_PROMPT` is rebuilt from them and is
+      byte-identical to before (checked against a snapshot). `CHAT_PROMPT` uses the same
+      three sections plus "How to answer": answer the question, read sections lazily,
+      reload on a new time span, report only on request.
+- [x] **Window switching.** Re-calling `load_window` replaces all of `_state` (tested).
+      **No cache yet.** Measured on real logs: about 40 s for a 2-hour window (whole files
+      are read regardless of window size) and 175 s for 2026-10-10 (1.74M Apache / 1.58M
+      Tomcat requests). Add a cache if switching back and forth turns out to be common.
 - [ ] **Tool coverage for questions the review doesn't need.** Collect real questions while
       testing and see which ones the current tools can't answer (e.g. requests to one
       path in a time range, status-code breakdown for a client, top referrers). Add
       read-only tools in `tools.py` and mirror them in `mcp_server.py`. Keep every result
       under `MAX_RESULT_CHARS` and page lists like `summary_section` does.
-- [ ] **Agent + command.** `.claude/agents/access-log-chat.md` (`mcpServers:
-      [access_log_review]`, `tools: mcp__access_log_review`, no shell or filesystem) and
-      `.claude/commands/access-log-chat.md`. Note: a subagent launched via the Agent tool
-      is not interactive. The chat has to be the main session (`claude --agent
-      access-log-chat`), or the command runs in the main session with the MCP tools.
-      Choose one and document it.
+- [x] **Agent + command.** Both are provided. `claude --agent access-log-chat` is the
+      restricted main session: its tools are listed one by one, with no `start_review`
+      and no shell or filesystem. `/access-log-chat` runs the chat inside an already-open
+      session. A chat's `write_report` writes
+      `access-log-chat-report-<end>-<time written>`, so it can't replace the daily
+      report. The pipeline leaves `CHAT_ONLY_TOOLS` (`load_window`) out of the review's
+      `--allowedTools`.
+- [x] **Interactive try-out.** The developer tested `claude --agent access-log-chat` on
+      2026-10-14: "looks good". Collecting questions the tools can't answer (the
+      tool-coverage task above) is still open.
 - [ ] (If billed path is wanted) `chat` subcommand in `cli.py`: loop over `input()`, keep
       the message history, run the tool runner per turn with `CHAT_PROMPT`, print usage
       per turn and in total. Same model/effort/fallback settings as `run_review`.
-- [ ] Tests: loader returns no review instructions in chat mode; window switch replaces
-      state; new tools never emit LabKey usernames; the billed REPL runs against a fake
-      client. No test starts a real session or calls the API.
-- [ ] Update `maccosslab-agents/CLAUDE.md` and `README.md` (how to start the chat, module map).
+- [ ] Tests: loader returns no review instructions in chat mode, writes no summary, and
+      rejects an empty window; window switch replaces state; chat report doesn't replace
+      the review report; review isn't granted `load_window`; prompts share sections
+      (done: 8 new, 149 total pass). Still to do: new tools never emit LabKey usernames,
+      and the billed REPL against a fake client, if either is built.
+- [x] Update `maccosslab-agents/CLAUDE.md` and `README.md` (how to start the chat, module map).
+
+## Progress
+
+- 2026-10-14: Developer tried `claude --agent access-log-chat` interactively and confirmed
+  it works. Committed as `3de2ef3` and pushed `work/20261012_access_log_chat`.
+- 2026-10-12: Loader, chat prompt, agent + command, report naming, pipeline tool
+  exclusion, docs, and tests are done on `work/20261012_access_log_chat`. The `load_window` smoke check on real logs passed: result 7.5K chars,
+  sections page under the 20K cap, no summary file written. Checked that
+  `_analyze_prolonged_floods`' `print` doesn't corrupt the MCP stream: the SDK's
+  `stdio_server` points fd 1 at stderr while it serves.
 
 ## Open Questions
 
