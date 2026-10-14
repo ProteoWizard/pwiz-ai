@@ -1,12 +1,12 @@
 # Sprint: one shared toolkit under Osprey and CarafeSharp, then one pipeline
 
 ## Branch Information
-- **Branch**: not yet created. Each PR gets its own `Skyline/work/YYYYMMDD_...` branch off
-  `master`, listed under its PR section as it starts. The TODO moves to `active/` with PR 1.
+- **Branch**: `Skyline/work/20261014_osprey_carafe_shared_toolkit` (PR 1). Later PRs get their
+  own `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start.
 - **Base**: `master`
-- **Created**: 2026-10-13 (as a vision note); restructured into a staged sprint 2026-10-14
-- **Status**: Planning. Phase 1 agreed with Brendan 2026-10-14 (see Decisions); Mike's agreement
-  to the CommonUtil dependency is assumed pending his return from vacation.
+- **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
+- **Status**: In Progress - PR 1, part A (FileSaver) started 2026-10-14. Mike's agreement to the
+  CommonUtil dependency is assumed pending his return from vacation.
 - **GitHub Issue**: (none yet; PR #4717 closed #4707)
 - **Module**: `osprey`
 - **PR**: (pending)
