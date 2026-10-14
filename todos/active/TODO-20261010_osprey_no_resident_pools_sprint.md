@@ -453,21 +453,27 @@ large cohorts straight through at default settings on all three test machines - 
 |---|---|---|---|---|
 | BRENDANX-UW8 | i9-14900, 32 logical | 128 GB | 4 h 12 m (10-06 race) | **never** - caches staged 2026-10-13 |
 | BRENDANX-UW25 | i9-14900, 32 logical | 64 GB | 4 h 02 m (10-07) | yes |
-| MACS2 | PowerEdge, Xeon Gold 6354, 2 sockets | > 500 GB | 4 h 19 m (defaults) | 9 h 34 m (tuned, 10-08) |
+| MACS2 | PowerEdge, Xeon Gold 6354, 2 sockets, 72 logical | > 500 GB | 4 h 19 m defaults, **2 h 09 m fast1** | 9 h 34 m (tuned, 10-08) |
 
 **Fixed across all six runs.**
 - One binary: the Release build of the PR 4 merge commit, published once to the share's `bin\`
   (`READY.txt` names it) and copied locally on each machine. Never rebuilt per machine (a different
   day stamps a different `osprey.version`; the two compiler paths can differ).
-- Runner defaults: libdecoy, r1.0, protein-compact, `--threads 30` (also on MACS2, deliberately),
-  files sequential, model diagnostics on, FdrLaneResolver chooses lanes, tag `sprintfinal`. No tuning
-  switches or environment variables.
+- Runner defaults: libdecoy, r1.0, protein-compact, model diagnostics on, FdrLaneResolver chooses
+  lanes, tag `sprintfinal`. The i9s run `--threads 30`, files sequential, no tuning switches or
+  environment variables.
+- **MACS2 runs its optimal settings** (Brendan, 2026-10-13): `-Threads 72 -ParallelFilesScoring 4
+  -ParallelFilesRescoring 8`, the "fast1" configuration from `TODO-20261006_osprey_seaad_benchmark_port.md`
+  (SEA-AD 2 h 09 m vs 4 h 19 m at defaults). ~2x the i9s is expected and desirable. Not the 16 FDR lanes
+  or 36 GC heaps: neither was shown to improve the total, and `Run-Chs.ps1` clears `OSPREY_FDR_FILE_LANES`.
 - Library `target+decoy+entrapment-20260817` for both cohorts. `Run-Chs.ps1` has no `-LibraryBuild`
   and otherwise resolves the 07-27 set (different `search_hash`), so CHS passes `-LibraryDir`.
 - Cold from the `.spectra.bin` caches; no `-LinkFrom`.
 
 **Varies, by design.** The machine: cores, RAM, disks - and therefore the FirstPassFDR lane count
-the resolver picks from free memory. Record it; it is an output, not a setting.
+the resolver picks from free memory (an output, not a setting; record it). On MACS2 also the thread
+count and per-stage file parallelism, which makes criterion 3 a check that parallel files give the
+same answer as sequential.
 
 **Measured per run.** Wall and per-task `[TIMING]` seconds; `perfviz.py` peak private and managed,
 floor drift, reporting gaps >= 30 s; the lane line; exit code; protein groups at 1%; library
@@ -483,7 +489,8 @@ spectra written; and the products `out.stats.tsv`, `out.protein_groups.tsv`, `ou
    parameter names say Rust/C#). Lane counts differ per machine, so this also settles the cross-machine
    identity check left open in `TODO-20261006_osprey_seaad_benchmark_port.md`. A difference is a
    finding to bisect, not noise to tolerate.
-4. No regression in wall time against each machine's earlier SEA-AD default run (table above),
+4. No regression in wall time against each machine's earlier SEA-AD run in the same configuration
+   (i9s: default runs; MACS2: fast1, 2 h 09 m),
    allowing for disk state (wall swings 31 -> 80 min on the regression gate here with disk state alone).
 
 **Comparison.** UW8's session (or Brendan) compares once all `results\<machine>\RESULTS.md` files are
