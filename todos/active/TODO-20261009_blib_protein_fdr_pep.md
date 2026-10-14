@@ -147,6 +147,18 @@ failed PD's protein FDR has no master protein, so no `Proteins` row.
       exactly; protein 0.01 = 1016 groups, no precursor under a failing group. PD 3.x inventory
       on PanoramaWeb in `ai/.tmp/sessions/20261014-76d46ce6/pd-panoramaweb-inventory.md` (no
       public PD 3.2 file has its .pdResultDetails; one 3.2 file, 7.8 GB, not yet checked).
+- [x] `/code-review medium` (2026-10-14), fixes in fc0a36dfb7: DIA-NN blank/null
+      Global.PG.Q.Value no longer stored as 0; the Import FASTA filter no longer keeps a failing
+      peptide's heavy (not-in-library) precursors; library minimizing keeps the global columns and
+      library protein groups (Nick); BlibBuild writes no global columns with >1 input and drops
+      them on append (Nick; `BlibBuilder.AllowsOptionalColumns`). Dropped: no-FASTA filter
+      (by design), re-picking failing charges (nodes are not auto-managed), library not loaded on
+      the FASTA page (loaded synchronously), PSM in two PD peptide groups (0 of 275,821). Left for
+      PR #4823 (ProteinFdrEngine.cs is identical there): `CountPassingProteinGroups` still uses the
+      old competition; unused best-score map in `RunSecondPass`.
+- [ ] Not this branch: NuGet now flags `System.Security.Cryptography.Xml` 8.0.4 (Sciex reader) as
+      high severity and NU1903 is an error, so BlibBuild and a `-VendorLicenses` Skyline build fail
+      to restore (2026-10-14). Built locally with `NuGetAudit=false`. Needs a package bump on master.
 - [ ] Follow-ups found 2026-10-14 (not on this branch unless Nick says so):
   - Library Explorer's cutoff textbox has no label of its own; the AI connector cannot address it
     by label (the "Global cutoff" label belongs to the dropdown).
