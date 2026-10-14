@@ -57,7 +57,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Solution", "Skyline", "SkylineTester", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "Clean", "Rebuild")]
+    [ValidateSet("Solution", "Skyline", "SkylineTester", "CommonTest", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "Clean", "Rebuild")]
     [string]$Target = "Solution",
 
     [Parameter(Mandatory=$false)]
