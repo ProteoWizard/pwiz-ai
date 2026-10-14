@@ -1,13 +1,14 @@
 # TODO-20261013_testddasearch_skyline_dev6.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261013_msamanda_lost_hits` (MSAmanda priority mitigation)
+- **Branch**: `Skyline/work/20261013_msamanda_lost_hits`
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4840
 - **Module**: `skyline`
 - **Created**: 2026-10-13 (SKYLINE-DEV6, checkout `C:\proj\pwiz`)
 - **Machine**: SKYLINE-DEV6 (Dell Precision 3680, 88DXT64), i9-14900 CPU #3 (replaced 2026-10-07),
   BIOS 1.29.0 / microcode 0x133, Turbo + SpeedStep on (~5.5 GHz, 24C/32T). Case history:
   `M:\home\brendanx\docs\Machines\SKYLINE-DEV6\cpu-health-analysis.md`
-- **Status**: root cause found (MSAmanda lazy-init race); mitigation soaking
+- **Status**: PR #4840 open (Percolator deadlock fix + TestDdaSearch search retry); upstream MSAmanda#9 filed
 
 ## Question
 
@@ -154,3 +155,12 @@ dump showed `ReadToEnd`. Touching the file fixed it.)
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261013_testddasearch_skyline_dev6.md` before starting work.
+
+### 2026-10-13 (evening) - PR opened
+
+`/code-review medium`: 9 findings; fixed 6 (first search retried on failure, failed attempt's log printed,
+timing bound on the Percolator diagnosis, record mode prints ExpectedScoredHits, AssertEx, constant moved
+to the fields). Dropped 3: product-side mitigation (no lever - priority did not hold in the test, MSAmanda has
+no thread setting; upstream #9), 30 s cancel wait (pre-existing bound), log de-dup merging identical
+"Scored" lines (our two differ; a merged list only causes a harmless retry). Post-review soak 60 executions,
+0 failures, 2 repeats; CodeInspection + other DDA tests pass. PR https://github.com/ProteoWizard/pwiz/pull/4840.
