@@ -11,7 +11,7 @@
   pending his return from vacation.
 - **GitHub Issue**: (none yet; PR #4717 closed #4707)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes, opened 2026-10-14; TeamCity Perf/Regression not yet run)
 - **Checkout**: `C:\proj\pwiz`
 - **Depends on**: CarafeSharp in `pwiz_tools/CarafeSharp` (PR #4717, merged 2026-10-14)
 - **Related**: `TODO-carafe_osprey_library_contract.md` (the library Carafe writes and Osprey
