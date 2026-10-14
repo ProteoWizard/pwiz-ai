@@ -335,6 +335,27 @@ Stellar PASSED; chained leg PASSED.
       that TODO: the printer is now writable against the shared contract but was not written
       here. Item 3 (harness staging) is PR 4, part I.
 
+### PR 1 - `/code-review medium` triage (2026-10-14)
+
+Ten findings; eight fixed in one commit, two dropped:
+- Fixed: a `blib,DIA-NN` prediction declared only the blib, so a run that committed the blib and
+  failed on the TSV would be skipped (now a format that writes a TSV declares no output); the
+  stamp version was the constant assembly version (now the informational version with the
+  commit); `TrainTask` ran the export locator per enumeration (cached); SkylineBatch's download
+  dialog stayed open when the shared `Commit` threw where SharedBatch's swallowed (Commit's
+  failure is caught there, the dialog closes as before); a folder's identity included the run's
+  own outputs, so `-o` at `-model_dir` could never skip (own outputs excluded); the blib stamp
+  slot was defined three times (now `ArtifactStamp.BLIB_*` constants used by Osprey's and
+  CarafeSharp's writers and readers); a dead null guard from the Win32 port in
+  `SimpleFileSaver`; `DescribeFailure` treated every `ArgumentException` subtype as a user error
+  (exact type now).
+- Dropped: "route Osprey's per-file `IsCurrent` checks and `OspreyVersion.Stamp` through
+  `ctx.IsCurrent` / `ctx.Stamp`" - a wider refactor of static writer helpers that have no
+  context; both sources are `OspreyVersion.Current` today. Revisit when a host pins
+  `TaskContext.Version` differently. "Sweep stale `~SK*` temps at writer start as `PartialFile`
+  did for its fixed name" - a sweep would delete another process's live temp in a shared output
+  folder, the hazard the random names exist to avoid; Osprey has the same property by design.
+
 ## Phase 2 - integration
 
 The design below is unchanged from 2026-10-13. Phase 2 starts after PR 1 (PR 2 may run in parallel).
