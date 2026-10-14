@@ -151,8 +151,13 @@ failed PD's protein FDR has no master protein, so no `Proteins` row.
   - Library Explorer's cutoff textbox has no label of its own; the AI connector cannot address it
     by label (the "Global cutoff" label belongs to the dropdown).
   - PD reader stores score 0 for confidence-filtered PSMs (cpp parity, `MSFReader.cs` ~503).
-- [ ] Refresh the Osprey regression goldens before the PR: the blib golden tables predate this
-      branch (no PrecursorQValue/PrecursorPep/PeptideQValue, Proteins rows are now groups)
+- [x] Refreshed the Osprey regression goldens (2026-10-14, ffcf30eba9; `-Dataset All
+      -CreateGolden`, 41 min, FDRBench leg PASS): RefSpectra rows unchanged, 4 new columns,
+      Proteins rows are groups (Stellar 5196 -> 4448). Same commit fixed the Osprey build, broken
+      by the master merge c1e827e2ee (new first-pass `FeedModelDiagnostics` overload missed the
+      `experimentPeptidePep` argument). PR #4823 (open) also changes 4 golden files: after it
+      merges, `git merge origin/master` conflicts there - keep this branch's goldens (a superset
+      of #4823) or regenerate.
 - [x] Committed: BiblioSpec f4cb39b1ea, Skyline a42054cda8, Osprey e5f01ecc0b (2026-10-10, not pushed)
 
 ## Real-data validation (2026-10-10, overnight; details in D:\GlobalQValueDemo\Entrapment\RESULTS.md)
