@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Checkout**: `I:\git_i\sky_net10_alphapeptdeep`
-- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (548d8bebc5 pushed; 0d81b7d843 local)
+- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (pushed through e62d5693d2)
 - **Base**: `master` (#4717 CarafeSharp squash-merged 2026-10-13 as 28c7b7ff03 and merged into this branch)
 - **Created**: 2026-09-28
 - **Status**: In Progress
@@ -13,8 +13,8 @@
 
 Replace the Python AlphaPeptDeep (peptdeep 1.5.0 in an embedded Python that Skyline downloads and
 installs) with CarafeSharp's C# TorchSharp port, shipped inside Skyline. Must work with and without an
-NVIDIA GPU (CPU libtorch ships; the CUDA runtime downloads on demand). CCS prediction is dropped for now;
-CarafeSharp has since ported the CCS model (see Remaining).
+NVIDIA GPU (CPU libtorch ships; the CUDA runtime downloads on demand). CCS is predicted with CarafeSharp's
+port of the CCS model.
 
 ## Done
 
@@ -66,8 +66,16 @@ CarafeSharp has since ported the CCS model (see Remaining).
 - [ ] Verify on a machine without an NVIDIA GPU: "Use GPU" disabled, CPU prediction works.
 - [ ] Move `CarafeModelBuildLibraryTest.zip` to a server before the PR (developer's task).
 - [ ] `/code-review high`, full build + TestPerf, then open the PR (`skyline:`).
-- [ ] Ion mobility: the CCS model is ported in CarafeSharp (#4717, `-ccs`); Skyline's AlphaPeptDeep libraries
-      could write 1/K0 again. The class doc comment saying CarafeSharp has no CCS port is stale.
+- [x] Ion mobility (e62d5693d2): the builder predicts CCS with CarafeSharp's pretrained `CcsModel` (a
+      .carafemodel holds none) and writes a `CCS` column, which the transform keeps as
+      `CollisionalCrossSection` (0 for Phospho/GlyGly peptides), as the Python path did; Skyline converts CCS
+      with each data file's calibration. peptdeep's `IonMobility` (1/K0) column, which the transform always
+      dropped, is no longer written. CCS matches peptdeep 1.5.0's baselines within 6.1e-5 A^2 (one float32
+      step) on all 209/78 rows; TestAlphaPeptDeepBuildLibrary baselines re-recorded (13 columns again), the
+      unit test's `Test/predict.speclib.tsv` resource lost its IonMobility column. Built blib: 6/7 spectra
+      with CCS (the 7th is the phosphopeptide).
+- [ ] Later: check an AlphaPeptDeep library's CCS against a real timsTOF run in Skyline (never done for the
+      Python path either).
 - [x] On-demand CUDA download (committed 548d8bebc5, pushed 2026-10-13):
       * CarafeSharp.Models: `LibTorchRuntime` (preloads a libtorch folder by full path before TorchSharp
         loads by name; refuses a second libtorch, and stale libtorch beside TorchSharp.dll),
