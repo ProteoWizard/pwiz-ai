@@ -164,17 +164,25 @@ search_builds(build_type_id="ProteoWizard_ProteoWizardAndSkylineReleaseBranchDoc
 
 ## Build Configuration Settings Live in pwiz `.teamcity/`
 
-**Every build config is versioned in the pwiz repo, not edited in the TeamCity UI.** Each one
-is an XML file at `.teamcity/ProteoWizard/buildTypes/<config id>.xml` (e.g. `bt83.xml`,
-`bt209.xml`); project-level parameters such as `GitHubAuthToken` are in
-`.teamcity/ProteoWizard/project-config.xml` and inherited by every config. Never tell the
-developer to "add this in the TeamCity UI" - change the XML in the pwiz PR that needs it. The
-header comment in `.teamcity/settings.kts` saying only the VersionedConfigs subproject is
-versioned is out of date.
+**Every build config is versioned in the pwiz repo, not edited in the TeamCity UI.** Never
+tell the developer to "add this in the TeamCity UI" - change the file in the pwiz PR that needs
+it. `.teamcity/` holds two independent sets of settings; find which one a config is in first:
+
+| Configs | Format | Where |
+|---|---|---|
+| The parent `ProteoWizard` project: `bt83`, `bt209`, `bt143` and the rest of `scripts/misc/vcs_trigger_and_paths_config.py` | XML | `.teamcity/ProteoWizard/buildTypes/<config id>.xml`; project-level parameters such as `GitHubAuthToken`, inherited by every config, in `.teamcity/ProteoWizard/project-config.xml` |
+| The `VersionedConfigs` subproject (`ProteoWizard_VersionedConfigs`): `ProteoWizard_CoreWindowsNet`, `ProteoWizard_SkylineWindowsNet`, `..._NativeShimsWindows`, `..._OspreyLinuxNet` and others | Kotlin DSL | `.teamcity/settings.kts` + `.teamcity/buildTypes/*.kt`, or a TeamCity-generated `.teamcity/patches/buildTypes/Absolute-<config id>.kts` |
+
+The two sets overlap in name, not in config: "Core Windows x86_64" (`bt83`) and "Core Windows
+.NET" (`ProteoWizard_CoreWindowsNet`) are different configs, as are `bt209` and
+`ProteoWizard_SkylineWindowsNet`. The config a PR check came from is the build's
+`buildTypeId`. The live subproject list is
+`https://teamcity.labkey.org/guestAuth/app/rest/projects/ProteoWizard_VersionedConfigs`.
 
 **PR builds run with the settings from the PR branch.** A `.teamcity/` change in a PR is
 exercised by that PR's own builds, so it is tested before merge; nothing has to land on master
-first.
+first. (The parent's versioned settings are `buildSettings` = `PREFER_VCS` in
+`project-config.xml`.)
 
 **A `##teamcity[buildProblem ...]` fails the step that reports it, even when that step exits 0.**
 TeamCity then skips every later step whose execution policy is the default "If all previous
