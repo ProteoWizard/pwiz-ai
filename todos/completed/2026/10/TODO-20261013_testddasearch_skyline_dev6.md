@@ -2,13 +2,13 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261013_msamanda_lost_hits`
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4840
+- **PR**: [#4840](https://github.com/ProteoWizard/pwiz/pull/4840) (merged 2026-10-13)
 - **Module**: `skyline`
 - **Created**: 2026-10-13 (SKYLINE-DEV6, checkout `C:\proj\pwiz`)
 - **Machine**: SKYLINE-DEV6 (Dell Precision 3680, 88DXT64), i9-14900 CPU #3 (replaced 2026-10-07),
   BIOS 1.29.0 / microcode 0x133, Turbo + SpeedStep on (~5.5 GHz, 24C/32T). Case history:
   `M:\home\brendanx\docs\Machines\SKYLINE-DEV6\cpu-health-analysis.md`
-- **Status**: PR #4840 open (Percolator deadlock fix + TestDdaSearch search retry); upstream MSAmanda#9 filed
+- **Status**: Completed (PR #4840 merged as 8b23cb66; upstream MSAmanda#9 filed, workaround removal pending its fix)
 
 ## Question
 
@@ -43,11 +43,11 @@ sign that CPU #3 computes wrong, as CPU #2 did in its last week?
 - CPU #3 otherwise clean: no WHEA 19, no crash, no reboot since 2026-10-07 15:36, ~143k tests.
 
 ## Plan
-- [ ] Measure the rate in a soak on this machine (Release, like nightly), time-to-failure not per-hour
-- [ ] On a failure, keep the MSAmanda output and Skyline's import result; diff a failing vs a passing
+- [x] Measure the rate in a soak on this machine (Release, like nightly), time-to-failure not per-hour
+- [x] On a failure, keep the MSAmanda output and Skyline's import result; diff a failing vs a passing
   execution: is MSAmanda's own output different run to run (search nondeterminism or bad arithmetic), or
   is it identical and the difference arises later in Skyline (protein association / threading)?
-- [ ] If MSAmanda output varies: does it vary with thread count / CPU affinity, or with Turbo off?
+- [x] If MSAmanda output varies: does it vary with thread count / CPU affinity, or with Turbo off?
   Deterministic variation tied to threading = software; random variation only at turbo = hardware suspect
 - [ ] Compare on another machine (UW25 twin ideally) with the same soak
 - [ ] Conclude; record in this TODO and in cpu-health-analysis.md (and the Dell thread only if hardware)
@@ -164,3 +164,20 @@ to the fields). Dropped 3: product-side mitigation (no lever - priority did not 
 no thread setting; upstream #9), 30 s cancel wait (pre-existing bound), log de-dup merging identical
 "Scored" lines (our two differ; a merged list only causes a harmless retry). Post-review soak 60 executions,
 0 failures, 2 repeats; CodeInspection + other DDA tests pass. PR https://github.com/ProteoWizard/pwiz/pull/4840.
+
+### 2026-10-13 - Merged
+
+PR #4840 merged as commit 8b23cb66. Shipped: the `DiagnosePercolator` deadlock fix (`ProcessStreamReader`
+drains stdout and stderr together) and the TestDdaSearch search retry keyed on MS Amanda's "Scored N peptide
+hits" counts, with the exact final-count assertions restored. Deferred: the UW25 twin comparison (not needed
+once the race was proven in the decompiled MSAmanda source and by the pre-init harness) and recording the
+conclusion in `cpu-health-analysis.md` on the M: share, which still only covers TestDdaSearchTide. Follow-up:
+when MSAmanda ships a fix for hgb-bin-proteomics/MSAmanda#9, bump the download pin, remove `ExpectedScoredHits`
+and `RetrySearchWhileScoredHitsDiffer` from TestDdaSearch, and soak to confirm exact counts.
+
+Merge note: `gh pr merge --squash` was refused ("the base branch policy prohibits the merge") although all 17
+checks were green and the PR was MERGEABLE. The "Require status checks" ruleset on master (updated 2026-10-08)
+now carries a pull_request rule with `require_extra_approval_for_unattributed_changes: true`, which blocks any
+PR whose commits co-author `claude`; `gh` reports `viewerCanMergeAsAdmin: false`, and every master push since
+then shows `result: bypass` in the repo's rule-suite log. Brendan merged from the GitHub UI with the same
+subject and body.
