@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: not yet created. Each PR gets its own `Skyline/work/YYYYMMDD_...` branch off
-  `master`, listed under its PR section as it starts. The TODO moves to `active/` with PR A.
+  `master`, listed under its PR section as it starts. The TODO moves to `active/` with PR 1.
 - **Base**: `master`
 - **Created**: 2026-10-13 (as a vision note); restructured into a staged sprint 2026-10-14
 - **Status**: Planning. Phase 1 agreed with Brendan 2026-10-14 (see Decisions); Mike's agreement
@@ -121,7 +121,7 @@ Facts the plan turns on:
    configuration: Skyline's strict `--name=value` for every tool that drives SkylineCmd today,
    and Carafe's single-dash grammar because CarafeSharp is a cross-impl parity option for
    Noble-Lab/Carafe (the maccoss/Carafe fork) and must accept Carafe's exact command lines.
-   Do it in PR D rather than a two-tokenizer interim. (Brendan, 2026-10-14: "one class with
+   Do it in PR 2 rather than a two-tokenizer interim. (Brendan, 2026-10-14: "one class with
    tokenizing options is the route we want to take.")
 4. **The task contract is extracted to Shared.** CarafeSharp.exe keeps no Osprey dependency;
    Osprey.exe links CarafeSharp's DLLs directly and runs its tasks in-process, never the
@@ -129,14 +129,31 @@ Facts the plan turns on:
 5. **Resx extraction for CarafeSharp is deferred.** Osprey got its resx only recently after months
    of development; CarafeSharp's 185 literal sites are a later PR of their own.
 
+## PR plan (compressed 2026-10-14)
+
+Four PRs in all. Brendan (2026-10-14): the PR process itself adds cost; CarafeSharp is early and
+Osprey unreleased, so move quickly with multiple commits and TeamCity iterations inside a PR
+rather than a PR per topic. The lettered sections below are the checklists; they are grouped by
+what the change touches, not by topic:
+
+| PR | Holds | Touches |
+|---|---|---|
+| **PR 1** | A, B, C, E: FileSaver, output and errors, progress, the task contract | Osprey, CarafeSharp, SharedBatch, CommonUtil |
+| **PR 2** | D: one tokenizer | CommonUtil, **Skyline `CommandArgs`**, Osprey, CarafeSharp |
+| **PR 3** | F, G: training records, pairing manifest, library contract, one blib writer | Osprey, CarafeSharp |
+| **PR 4** | H, I, J: one command, HPC tasks, packaging | Osprey, CarafeSharp, installers |
+
+PR 2 stays separate only because it is the one change that reaches SkylineCmd, the released
+product; a reviewer sees it without the Osprey and CarafeSharp moves around it. Phase 1 may
+collapse to one PR if that stops mattering. Measurement follows PR 4 with no PR of its own.
+
 ## Phase 1 - shared code and normalized architecture (no behavior change)
 
 Every Phase 1 PR passes the same gates (section "Gates"), the first of which is byte-identical
-output on both tools. Order matters only where stated: A first (it adds the references the rest
-build on); B, C, D are independent of each other; E after C (the task driver logs and reports
-progress through the shared pieces).
+output on both tools. Inside PR 1, commit order: A first (it adds the references the rest build
+on), then B and C, then E (the task driver logs and reports progress through the shared pieces).
 
-### PR A - one atomic file writer in CommonUtil
+### PR 1, part A - one atomic file writer in CommonUtil
 
 - [ ] Add `pwiz_tools/Shared/CommonUtil/SystemUtil/FileSaver.cs` from Osprey's (cross-platform
       temp allocation, overwrite on commit, temp cleaned on dispose). Resource strings move to
@@ -160,9 +177,9 @@ progress through the shared pieces).
       replace for these callers: check each site wants that (a download to a fresh name does).
 - [ ] `Osprey.Test/FileSaverTest.cs` moves to `Skyline/CommonTest` (translation-proof per
       `ai/TESTING.md`); add the `CommitAs` fallback and the keep-failed-writes case.
-- [ ] Extra gate: `SkylineBatchTest` and the AutoQC build, since SharedBatch changes.
+- [ ] Extra gate for PR 1: `SkylineBatchTest` and the AutoQC build, since SharedBatch changes.
 
-### PR B - CarafeSharp output and errors through CommonUtil
+### PR 1, part B - CarafeSharp output and errors through CommonUtil
 
 - [ ] `CarafeSharp/Program.cs`: the log writer is a `CommandStatusWriter` over stderr (as Osprey's
       `Program._out`), so `--timestamp`, `--memstamp` and `--log-file` are available to CarafeSharp
@@ -176,7 +193,7 @@ progress through the shared pieces).
 - [ ] Usage errors keep their one-line form (the parser's `ArgumentException`, as today).
 - [ ] `CommandLineErrorTest` asserts the exit codes and that a synthetic defect prints its type.
 
-### PR C - one progress reporter in CommonUtil
+### PR 1, part C - one progress reporter in CommonUtil
 
 - [ ] Move `ProgressReporter`, `MultiProgressReporter` (with `IProgressSink`, `FileScope`),
       Osprey's `ProgressStream` and the `OspreyOutput` seam to `CommonUtil/SystemUtil` under
@@ -196,7 +213,7 @@ progress through the shared pieces).
 - [ ] `Osprey.Core` keeps `OspreyOutput` only as a thin alias if the rename would touch too many
       files in one PR; otherwise delete it.
 
-### PR D - one command-line grammar in CommonUtil, CarafeSharp declared on Argument
+### PR 2, part D - one command-line grammar in CommonUtil, CarafeSharp declared on Argument
 
 - [ ] Generalize Osprey's `TokenizeAndDispatch` / `MatchToken` into CommonUtil as the one
       tokenizer, configured by the host: long prefix(es) (`--` for Skyline and Osprey, `-` for
@@ -226,10 +243,10 @@ progress through the shared pieces).
       in `CarafeSharp/docs`.
 - [ ] A `CarafeArgNames` class (or shared constants) replaces the `TRAINING_EXPORT_SUFFIX`
       duplicate between `CarafeCommandLine` and `OspreyTrainingExport`.
-- [ ] Extra gate: `Skyline/Test` command-line tests (`CommandLineTest`, `CommandLineUsageTest` or
+- [ ] Extra gate for PR 2: `Skyline/Test` command-line tests (`CommandLineTest`, `CommandLineUsageTest` or
       equivalents) since the tokenizer now serves `CommandArgs`.
 
-### PR E - the task contract in Shared, CarafeSharp's stages on it
+### PR 1, part E - the task contract in Shared, CarafeSharp's stages on it
 
 - [ ] Extract the generic part of `OspreyTask` + `AnalysisPipeline`'s driver loop to Shared
       (namespace `pwiz.Common.Pipeline` inside CommonUtil unless it needs its own assembly; decide
@@ -253,12 +270,11 @@ progress through the shared pieces).
       excluded from the compared content, as Osprey's goldens exclude it).
 - [ ] `TODO-task_file_contract_from_declarations.md` item 1 (`IsPerFile` on the task) and 2
       (`--help-files` derived from the declarations) are done here for both tools, since the
-      printer is generic once the declarations are shared. Item 3 (harness staging) stays in that
-      TODO.
+      printer is generic once the declarations are shared. Item 3 (harness staging) is PR 4, part I.
 
 ## Phase 2 - integration
 
-The design below is unchanged from 2026-10-13; the PR split is new. Phase 2 starts after E.
+The design below is unchanged from 2026-10-13. Phase 2 starts after PR 1 (PR 2 may run in parallel).
 
 ### Design
 
@@ -305,8 +321,8 @@ compatibility between tools.
 | Predict the final library | `.blib` |
 | Search all runs | Osprey's existing stage files |
 
-Each stage is a task on the shared base (PR E), selectable with `--task` for the HPC chain, with its
-file contract declared.
+Each stage is a task on the shared base (PR 1, part E), selectable with `--task` for the HPC chain,
+with its file contract declared.
 
 #### 3. Keep libtorch out of Osprey's core
 
@@ -331,26 +347,32 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
   ("search the middle file"); a default of "every search run" trains on all of them. Brendan's concern:
   training on the runs then searched risks overtraining, which the entrapment FDR should measure.
 - `CarafeSharp.exe` stays as a thin front end for library-only use and Carafe command-line
-  compatibility, declared on the shared grammar (PR D).
+  compatibility, declared on the shared grammar (PR 2).
 
-### PRs
+### PR 3 - contracts
 
-- **PR F - training-record assembly.** Extract it; move Osprey's writer and CarafeSharp's reader onto
-  it; delete the duplicates. Gate: Osprey and CarafeSharp regressions unchanged byte for byte, and the
-  chained leg.
-- **PR G - contracts.** Fold the pairing manifest schema into the same assembly and land the library
-  contract validator from `TODO-carafe_osprey_library_contract.md` (CarafeSharp refuses to write a
-  violating library; Osprey fails at load, every violation listed by class). Also the one library blib
-  writer: `CarafeSharp.IO/BlibLibraryWriter` and `Osprey.IO/LibraryBlibWriter` become one, in the
-  contracts assembly or CommonUtil, with `LibrarySpectrum`/`LibraryEntry` reconciled.
-- **PR H - one command.** Osprey runs the stages in-process with checkpoints and resume;
+- **Part F - training-record assembly.** Extract it; move Osprey's writer and CarafeSharp's reader
+  onto it; delete the duplicates. Gate: Osprey and CarafeSharp regressions unchanged byte for byte,
+  and the chained leg.
+- **Part G - contracts.** Fold the pairing manifest schema into the same assembly and land the
+  library contract validator from `TODO-carafe_osprey_library_contract.md` (CarafeSharp refuses to
+  write a violating library; Osprey fails at load, every violation listed by class). Also the one
+  library blib writer: `CarafeSharp.IO/BlibLibraryWriter` and `Osprey.IO/LibraryBlibWriter` become
+  one, in the contracts assembly or CommonUtil, with `LibrarySpectrum`/`LibraryEntry` reconciled.
+
+### PR 4 - one command
+
+- **Part H - one command.** Osprey runs the stages in-process with checkpoints and resume;
   `Run-CarafeSharpWorkflow.ps1` reduces to one Osprey invocation per dataset (kept as the harness
   that names the dataset presets).
-- **PR I - HPC tasks** for the new stages with declared file contracts; harness staging from the
+- **Part I - HPC tasks** for the new stages with declared file contracts; harness staging from the
   declarations (`TODO-task_file_contract_from_declarations.md` item 3).
-- **PR J - packaging.** libtorch CPU in Osprey's Windows and Linux packages; CUDA as an optional
+- **Part J - packaging.** libtorch CPU in Osprey's Windows and Linux packages; CUDA as an optional
   download; `OSPREY_VERSION_OVERRIDE` and the daily stamp cover the model file too.
-- **Measurement (no PR).** One-command Stellar / Astral / ZT Scan runs against today's four-step
+
+### Measurement (no PR)
+
+- **After PR 4.** One-command Stellar / Astral / ZT Scan runs against today's four-step
   workflow: IDs at matched entrapment FDP and wall time; training on searched vs held-out runs (the
   overtraining question) recorded here with the run folders.
 
@@ -362,19 +384,21 @@ Every PR, before `gh pr create` (then `/code-review medium` on the branch):
   golden at 1e-9; Phase 1 is pure code motion, so any diff is a defect.
 - `pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests -RunInspection`
 - `pwsh -File ./pwiz_tools/CarafeSharp/regression.ps1 -Leg Chained` (about two minutes, no data)
-- Before merge of any PR touching Osprey's output or task paths (C, E, F, H, I): the TeamCity
+- Before merge of every PR (all four touch Osprey's output or task paths): the TeamCity
   Perf/Regression config on `pull/<N>` (ask first) and `regression-parallel.ps1 -Dataset All` locally.
-- PR A additionally: SkylineBatch tests and the AutoQC build. PR D additionally: Skyline's
-  command-line tests. CarafeSharp's golden regression (`regression.ps1`, CPU, 12-38 min) for any PR
-  that touches training or library writing (A for the writers, C for nothing, E for the stamp, F, G).
+  Run them once per merge candidate, not per commit; the local Stellar gate covers the commits.
+- PR 1 additionally: SkylineBatch tests and the AutoQC build. PR 2 additionally: Skyline's
+  command-line tests. CarafeSharp's golden regression (`regression.ps1`, CPU, 12-38 min) for PRs 1,
+  3 and 4 (the writers and the stamp in 1; records, contracts and the library writer in 3; the
+  in-process stages in 4).
 
 ## Open questions
 
 - Mike's position on the CommonUtil dependency (decision 1 assumes yes).
 - Default `--training-input` (design 4), with Mike.
 - Whether the shared pipeline base is a namespace in CommonUtil or its own `Shared/` project
-  (PR E decides; a separate project only if Skyline must not see it).
+  (PR 1 decides; a separate project only if Skyline must not see it).
 - Where the Phase 2 contracts assembly lives so CarafeSharp references it without the Osprey search
-  stack (the library contract TODO's open question; PR F/G decide).
+  stack (the library contract TODO's open question; PR 3 decides).
 - The `MultiProgressReporter` scoped-output seam depends on `AsyncLocal` flow into `Parallel.For`;
-  confirm CarafeSharp's writer thread (`LibraryChunkWriter`) attributes its lines correctly after PR C.
+  confirm CarafeSharp's writer thread (`LibraryChunkWriter`) attributes its lines correctly after PR 1.
