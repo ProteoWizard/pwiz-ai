@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261012_diaumpire_ttof_msfragger`
 - **Base**: `master`
 - **Created**: 2026-10-12
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4828](https://github.com/ProteoWizard/pwiz/issues/4828)
 - **Module**: `skyline`
-- **PR**: [#4834](https://github.com/ProteoWizard/pwiz/pull/4834)
+- **PR**: [#4834](https://github.com/ProteoWizard/pwiz/pull/4834) (merged 2026-10-14)
 - **Test Name**: TestDiaTtofDiaUmpireTutorial
 - **Fix Type**: failure
 
@@ -86,3 +86,13 @@ Created branch from master 5ce7256a61. Starting on the MSFragger switch.
   snapshot; a fresh nightly download would fail). Cleanup now clears them; both tests pass
   from a clean dir and leave it clean (f2113f451d). Dropped the other 6 findings (old Comet
   globs, download gating, helper duplication, topN default already 1, record-mode order, comment).
+
+### 2026-10-14 - Merged
+
+PR #4834 merged as commit 22206b9452. The DIA-Umpire tutorial tests now search with
+MSFragger instead of Comet, so the PIN features no longer pass through the OS C runtime's
+printf; re-recorded expected values for all four tests and the en/fr/ja/tr/zh audit logs;
+the cleanup also removes MSFragger's decoy database from DDA_search. TestFunctional now
+runs CheckRecordMode() after EndAuditLogging(), and Run-Tests.ps1 gained -RecordAuditLogs.
+Verified on a Server 2019 agent for TTOF; QE Extra and FullFileset get nightly coverage.
+record_test_fix not yet run: the LabKey MCP server was disconnected at completion time.
