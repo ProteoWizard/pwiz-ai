@@ -162,12 +162,36 @@ Before publishing, verify the release branch Docker container build succeeded:
 search_builds(build_type_id="ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664", count=3)
 ```
 
+## Build Configuration Settings Live in pwiz `.teamcity/`
+
+**Every build config is versioned in the pwiz repo, not edited in the TeamCity UI.** Each one
+is an XML file at `.teamcity/ProteoWizard/buildTypes/<config id>.xml` (e.g. `bt83.xml`,
+`bt209.xml`); project-level parameters such as `GitHubAuthToken` are in
+`.teamcity/ProteoWizard/project-config.xml` and inherited by every config. Never tell the
+developer to "add this in the TeamCity UI" - change the XML in the pwiz PR that needs it. The
+header comment in `.teamcity/settings.kts` saying only the VersionedConfigs subproject is
+versioned is out of date.
+
+**PR builds run with the settings from the PR branch.** A `.teamcity/` change in a PR is
+exercised by that PR's own builds, so it is tested before merge; nothing has to land on master
+first.
+
+**A `##teamcity[buildProblem ...]` fails the step that reports it, even when that step exits 0.**
+TeamCity then skips every later step whose execution policy is the default "If all previous
+steps finished successfully" - observed on bt209, where a buildProblem in the
+`Skyline code inspection` step skipped the `tcbuild.bat` step and every test (PR #4844). Inside
+one step it does not stop anything: the step keeps running and the build ends red. To report a
+failure without failing the build, post a separate GitHub commit status instead, as
+`tcinspect.ps1` does (env `GITHUB_STATUS_TOKEN` = `%GitHubAuthToken%` on the config), and list
+the context under `extraStatuses` in `scripts/misc/vcs_trigger_and_paths_config.py` so a build
+the smart trigger skips still reports it.
+
 ## Build Chain Dependencies
 
 The Skyline PR build is part of a chain:
-1. **Skyline Code Inspection** (ReSharper) - triggers first
-2. **Skyline master and PRs (bt209)** - snapshot dependency on #1
-3. **Docker container (Wine x86_64)** - snapshot dependency on bt209
+1. **Skyline master and PRs (bt209)** - runs the ReSharper inspection itself, as its
+   `Skyline code inspection` step (`pwiz_tools/Skyline/tcinspect.ps1`) before `tcbuild.bat`
+2. **Docker container (Wine x86_64)** - snapshot dependency on bt209
 
 This is why the Docker build shows "Expected - Waiting for status" on GitHub while bt209 runs.
 
