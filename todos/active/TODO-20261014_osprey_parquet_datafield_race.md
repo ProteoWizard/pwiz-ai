@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none - found by the 2026-10-13 sprint acceptance run)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4842](https://github.com/ProteoWizard/pwiz/pull/4842)
 
 ## Objective
 
