@@ -401,7 +401,7 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
    carry ObservedIonMobilities.
 3. `ChromCacheBuilder.cs:1408` - is `MissingObservedIonMobility` per transition ever real?
 4. `IntensityAccumulator.cs:42` - separate IM-bearing intensity denominator vs `TotalIntensity`.
-5. `GraphFullScan.cs:4507` - one-method `ObservedValueFormatter` class; move onto GraphFullScan.
+5. `GraphFullScan.cs:4507` - one-method `ObservedValueFormatter` class; move onto GraphFullScan. DONE in e9e34436c8 (formatter asserts moved to TestFullScanGraph: Test.csproj cannot reference DockableForm).
 6. `PrecursorResult.cs:121` - skip `_cachedValues` for ObservedImValues. DONE (7d827f1a2f):
    measured on WatersImsMse (Debug) - Calculate ~5 us/row, but `GetPrecursorHighEnergyOffset`
    ~42 us/22 KB (32 us of it `settings.GetIonMobilities`), paid even when the offset is 0.
@@ -442,7 +442,7 @@ Plan:
 - [x] D. `TransitionChromInfo` observed IM/CCS behind the existing `IonMobility` reference so
       non-IM chrom infos carry nothing extra. Done: one `object _ionMobility` field holds the
       filter or an `IonMobilityWithObserved` wrapper; non-IM size identical to master.
-- [ ] E. Nick #4, #5 (#6 done in 7d827f1a2f).
+- [ ] E. Nick #4 (#5 done in e9e34436c8, #6 done in 7d827f1a2f).
 - [x] Reply to Nick's six threads (Brian replied to all six, 2026-10-13).
 
 ## Remaining before merge
