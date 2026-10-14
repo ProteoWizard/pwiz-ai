@@ -168,8 +168,9 @@ All user-visible output goes through **one `CommandStatusWriter`**
 (`pwiz.Common.SystemUtil`, PortableUtil), held by the exe as `Program._out`, so
 `--timestamp` / `--memstamp` prefixing and `--log-file` redirection apply to
 every line uniformly - that uniform stamping is what `perfviz` and the memory-band
-analysis read. Below the exe, code writes through the Core seam
-`OspreyOutput.Out` (`Osprey.Core`), which `Program` points at `_out`. Only
+analysis read. Below the exe, code writes through the shared seam
+`CommandOutput.Out` (`pwiz.Common.SystemUtil`), which `Program` points at `_out`;
+Osprey's `--perf-stats` and `--verbose` gates stay on `OspreyOutput`. Only
 `--version` / `--help` write to stdout; everything else is stderr-by-default
 through the seam. Do not call `Console.Write*` / `Console.Error` directly
 anywhere, and do not add a second writer.
@@ -180,9 +181,9 @@ output path**: routing a mainline `[TIMING]` / `[COUNT]` line through
 `FDR -> Diagnostics` reference, a cycle, since Diagnostics already references
 FDR). The contract is "`-d` turns it on, otherwise silent": a task may call the
 diagnostics seam to emit a `-d` dump, but no mainline line is produced by it.
-New long-running operations should lean
-toward posting `ProgressStatus` to an `IProgressMonitor` rather than writing
-lines directly; fully plumbing that is not a current goal.
+A new long-running loop reports through the shared `ProgressReporter`
+(`pwiz.Common.SystemUtil`, moved from Osprey.Core); Skyline's `ProgressStatus` /
+`IProgressMonitor` route is not pursued for the command-line tools (Brendan, 2026-10-14).
 
 ### Atomic file writes: SimpleFileSaver (never a cross-volume temp + move)
 
