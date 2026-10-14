@@ -518,6 +518,9 @@ SEA-AD 82 regeneration 14m45s -> 8m12s (measured on `3295597cfb`). Issue #4664 s
 500/1000-file acceptance is replaced by the three-machine runs (procedure and results on
 `M:\home\brendanx\data\MacCoss\Osprey\acceptance-20261013`, `U:\data\...` on MACS2).
 
+**Next session handoff**: UW8 night session for its acceptance leg - read
+`ai/.tmp/handoff-20261013_uw8_acceptance_night.md` before starting work.
+
 ### 2026-10-13 - PR 4 code complete (4 local commits), all local gates green
 
 Commits on `Skyline/work/20261012_osprey_mdiag_regeneration_bounds` (not pushed, no PR yet):
