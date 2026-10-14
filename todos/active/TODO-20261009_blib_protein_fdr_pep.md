@@ -156,12 +156,18 @@ failed PD's protein FDR has no master protein, so no `Proteins` row.
       the FASTA page (loaded synchronously), PSM in two PD peptide groups (0 of 275,821). Left for
       PR #4823 (ProteinFdrEngine.cs is identical there): `CountPassingProteinGroups` still uses the
       old competition; unused best-score map in `RunSecondPass`.
+- [x] `TestDiannGlobalQValueFilterDocument` (58e2fd0190): `GlobalQValueFilter.FilterDocument`, the
+      Import FASTA filter, on a FASTA built from the DIA-NN library's groups with heavy K/R labels;
+      covers the heavy-precursor fix. Calls the filter directly: the wizard needs raw files the repo
+      does not have for this library. `ImportFasta(..., keepEmptyProteins: false)` avoids the
+      empty-proteins prompt that hung the first run.
 - [ ] Not this branch: NuGet now flags `System.Security.Cryptography.Xml` 8.0.4 (Sciex reader) as
       high severity and NU1903 is an error, so BlibBuild and a `-VendorLicenses` Skyline build fail
       to restore (2026-10-14). Built locally with `NuGetAudit=false`. Needs a package bump on master.
 - [ ] Follow-ups found 2026-10-14 (not on this branch unless Nick says so):
   - Library Explorer's cutoff textbox has no label of its own; the AI connector cannot address it
-    by label (the "Global cutoff" label belongs to the dropdown).
+    by label (the "Global cutoff" label belongs to the dropdown). Nick (2026-10-14): leave the UI
+    as it is; the connector reaches it by element path.
   - PD reader stores score 0 for confidence-filtered PSMs (cpp parity, `MSFReader.cs` ~503).
 - [x] Refreshed the Osprey regression goldens (2026-10-14, ffcf30eba9; `-Dataset All
       -CreateGolden`, 41 min, FDRBench leg PASS): RefSpectra rows unchanged, 4 new columns,
