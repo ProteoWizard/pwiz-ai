@@ -3,12 +3,20 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20261014_osprey_carafe_shared_toolkit` (PR 1). Later PRs get their
   own `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start.
+- **PR 2 branch**: `Skyline/work/20261014_one_command_line_tokenizer` (off master 2026-10-14, in
+  `C:\proj\pwiz`; PR 1's branch is pushed and only waits on TeamCity). After #4845 merges, this
+  branch needs `git merge origin/master`: PR 1 also edits `CarafeCommandLine.cs` (the
+  `-log_file` / `-timestamp` / `-memstamp` options and the hand-written usage) and
+  `CarafeSharp.Core.csproj` (the same CommonUtil reference), so the merge re-adds those three
+  options as declarations.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
 - **Status**: In Progress - PR 1 (parts A, B, C, E) coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
-  pending his return from vacation.
+  pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
+  (see the PR 2 branch line and the part D section); next its `/code-review`, PR and, after
+  #4845 merges, `git merge origin/master`.
 - **GitHub Issue**: (none yet; PR #4717 closed #4707)
 - **Module**: `osprey`
 - **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes, opened 2026-10-14; TeamCity Perf/Regression not yet run - Agent 1 busy with a Skyline build and then PR #4842's run, which carries Brendan's fix for a Perf/Regression breakage from two colliding PRs; ask before triggering on `pull/4845`)
@@ -264,36 +272,63 @@ chained leg PASSED.
 
 ### PR 2, part D - one command-line grammar in CommonUtil, CarafeSharp declared on Argument
 
-- [ ] Generalize Osprey's `TokenizeAndDispatch` / `MatchToken` into CommonUtil as the one
-      tokenizer, configured by the host: long prefix(es) (`--` for Skyline and Osprey, `-` for
-      Carafe), short aliases, whether a value may follow as the next token, `=value` acceptance,
-      variadic arguments, optional-count arguments, positional fallback, duplicate policy (last
-      wins vs first wins), unknown-token policy (error vs warning vs ignore). Skyline's strict
-      grammar is the default configuration, so `CommandArgs` and its tests are unchanged.
-- [ ] `OspreyCommandArgs` declares its grammar and drops the private tokenizer; `ArgTokens`,
-      `CommandLineErrorTest` and `OspreyConfig` round-trips lock the parsed config byte for byte.
-- [ ] `CarafeCommandLine` becomes a set of `Argument<CarafeCommandLine>` declarations with the
-      Carafe configuration (single dash, first value wins, unknown is an error, stray tokens
-      ignored, every Carafe 2.2.0 option declared, the unused ones marked as accepted-and-ignored).
-      Its `Settings` building (`LibrarySettings`, `TrainingSettings`, `EntrapmentFastaSettings`)
-      is untouched. `CarafeSharp.Test/CommandLineErrorTest` and `LibraryCommandLineTest` lock
-      every parse result and error message, and the parity tests keep feeding Carafe's own
-      command lines (`CarafeReferenceRun`), which is the reason the grammar is kept at all.
-- [ ] Standard first, compatibility second: one declaration can be reachable under more than one
-      grammar, so CarafeSharp can accept the standard `--name value` form alongside Carafe's
-      `-name value` without a second declaration, and a grammar is a configuration object the
-      host picks, never a subclass per tool. Decide in the PR whether CarafeSharp's generated
-      help shows the standard form, the Carafe form, or both; the Carafe form is what the
-      maccoss/Carafe users and the workflow scripts type today.
-- [ ] `--help` and `--help html` for CarafeSharp are generated from the declarations (the
-      `ArgUsage.Provider` descriptions come from a resx of argument text only, as
-      `OspreyCommandArgUsage.resx` does; this is not the deferred general resx extraction).
-      The hand-written `Usage` block is deleted. Osprey's `docs/20-command-line.md` gets a sibling
-      in `CarafeSharp/docs`.
-- [ ] A `CarafeArgNames` class (or shared constants) replaces the `TRAINING_EXPORT_SUFFIX`
-      duplicate between `CarafeCommandLine` and `OspreyTrainingExport`.
-- [ ] Extra gate for PR 2: `Skyline/Test` command-line tests (`CommandLineTest`, `CommandLineUsageTest` or
-      equivalents) since the tokenizer now serves `CommandArgs`.
+Coded 2026-10-14 on `Skyline/work/20261014_one_command_line_tokenizer`. Gates run: Osprey build +
+640 tests + zero-warning inspection; CarafeSharp build + 109 tests + zero-warning inspection;
+CommonTest `TestCommandLineParserGrammars`; Skyline `CommandLineTest` and `CommandLineRefineTest`
+(the progress log has the rest).
+
+- [x] `CommandLineGrammar` (the configuration object: `Prefix`, `AcceptedPrefixes`,
+      `ShortPrefix`, `ValueMayFollow`, `PrefixedTokenEndsValue`, `FirstValueWins`,
+      `ValidatesListedValues`, `StrayTokens`; `STRICT` is Skyline's and the default) and
+      `CommandLineParser<TContext>` (`Parse`, `FindValue`, `SeenArguments`, `PositionalHandler`)
+      in `CommonUtil/CommandLine`. The grammar is process-wide on `ArgUsage.Grammar`, like
+      `Provider` and `ArgumentValueSeparator`, because `ArgumentText` is spelled with its prefix.
+      `ArgumentBase` gained `Variadic`, `OptionalValueFilter` and `TakesValue`; `NameValuePair.Bind`
+      is the parser's binding (`IsMatch` stays for Skyline's `CommandLineRefineTest`); every usage
+      error is a `UsageException` with `Argument`, plus the new `UnknownArgumentException`, and
+      `IArgUsageProvider.UnknownArgumentMessage`. Inline `=value` is accepted by every grammar.
+- [x] Skyline's `CommandArgs.ParseArgsInternal` parses with it under the default grammar;
+      `ProcessArgument` is gone. The unexpected-argument text moved from the parse loop to the
+      provider: resource `CommandArgs_UnknownArgumentMessage_Unexpected_argument__0_` ("Unexpected
+      argument {0}", the token as typed) replaces the old one that carried "Error: " itself, so
+      the output line is unchanged in English and the ja/zh lines lose a doubled prefix.
+- [x] `OspreyCommandArgs` installs its grammar (`ShortPrefix "-"`, `ValueMayFollow`, listed
+      values left to the handlers); the 110-line tokenizer, `FindByToken`, `TakeValue`,
+      `RequireInlineValue`, `ValueMissingMessage` and `OPTIONAL_COUNT_ARGS` are gone: `-i` is
+      `Variadic`, the four `--parallel-files*` are `OptionalValue` with the digits-only filter,
+      `--help` / `--version` do their terminal work in their handlers, the positional-file
+      fallback is the parser's `PositionalHandler`, and the `--task` missing-value text is the
+      provider's one special case. Behavior changes, all benign: `--verbose=1` is "does not take
+      a value" rather than "unknown argument"; `-o=x` is accepted; `--parallel-files=` is auto
+      rather than an error. The Osprey tests that pinned `ArgumentException` for parser errors
+      now pin the specific `UnknownArgumentException` / `ValueMissingException` (MSTest matches
+      the exact type); the handlers' own errors stay `ArgumentException`.
+- [x] `CarafeCommandLine`: 100 declarations in seven groups (`Value` / `Choice` / `Flag`
+      factories, each recording into the same `_values` / `_flags` that `Interpret` reads, which
+      is untouched), under Carafe's grammar (`Prefix "-"`, `--` accepted, `PrefixedTokenEndsValue
+      false` so `-seed -5` and `-mode -` are values, `FirstValueWins`). The option table,
+      `TryGetOptionName` and the hand-written `Usage` are gone. `-h` is `help` with `ShortName h`
+      (`-help` / `--help` are the same declaration); its optional value picks the help form.
+- [x] Help: generated like Osprey's (`BuildUsage` unicode / ascii / sections / section filter,
+      `GenerateUsageHtml`, `PrintUsage`), descriptions in `CarafeCommandArgUsage.resx` (English;
+      a compatibility option without an entry gets one shared line from the provider). Decision (Brendan, 2026-10-14): cross-tool consistency inside pwiz_tools wins over
+      Carafe's spelling, so the help renders `--db` and is laid out as Osprey's, and BOTH helps end
+      with an "OTHER FORMS ACCEPTED" paragraph (Osprey: `--name=value` and a bare input file;
+      CarafeSharp: `--name=value` and Carafe's single dash, so a Carafe 2.2.0 command line runs
+      unchanged). The option names stay Carafe's. A usage error prints the message and `Run
+      CarafeSharp --help for the options.` instead of the whole usage. The settings' own messages
+      still spell `-db` (literal text; the deferred resx extraction moves them). `CommandArgsTest` is the drift killer (every arg grouped, described, exactly
+      Carafe's option set, grammar rules, help forms) and self-updates
+      `Documentation/Help/en/CommandLine.html` as Osprey's does. `docs/08-command-line.md` is the
+      sibling of Osprey's `20-command-line.md`.
+- [x] `OspreyTrainingExportFile.SUFFIX` in `CarafeSharp.Core` (below both Proteome and IO) replaces
+      the `TRAINING_EXPORT_SUFFIX` duplicate; `OspreyTrainingExport.FILE_SUFFIX` aliases it. No
+      `CarafeArgNames` class: nothing below Proteome builds argument text from names (the
+      literal `-rt_reference` etc. in messages are the deferred resx extraction's).
+- [x] CommonTest `CommandLineParserTest`: the three grammars on a six-argument declaration set,
+      with a terse provider, so each message is pinned to the call that built it.
+- [x] Extra gate for PR 2: Skyline's `CommandLineTest` and `CommandLineRefineTest` (TestData),
+      since the tokenizer now serves `CommandArgs`.
 
 ### PR 1, part E - the task contract in Shared, CarafeSharp's stages on it
 
