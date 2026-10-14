@@ -5,8 +5,10 @@
   own `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - PR 1, part A (FileSaver) started 2026-10-14. Mike's agreement to the
-  CommonUtil dependency is assumed pending his return from vacation.
+- **Status**: In Progress - PR 1 (parts A, B, C, E) coded and gated 2026-10-14 in four commits
+  (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
+  the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
+  pending his return from vacation.
 - **GitHub Issue**: (none yet; PR #4717 closed #4707)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -207,37 +209,53 @@ the golden; `CarafeSharp/regression.ps1 -Leg Chained` PASSED.
 
 ### PR 1, part B - CarafeSharp output and errors through CommonUtil
 
-- [ ] `CarafeSharp/Program.cs`: the log writer is a `CommandStatusWriter` over stderr (as Osprey's
-      `Program._out`), so `--timestamp`, `--memstamp` and `--log-file` are available to CarafeSharp
-      and, later, in-process stages write to Osprey's sink with its prefixes. The existing
-      `TextWriter log` plumbing accepts it unchanged.
-- [ ] Top-level catch follows Osprey's `DescribeFailure`: a user-actionable exception
-      (`CommonExceptionUtil.IsProgrammingDefect` false) is its message; a defect is the whole
-      exception with its stack. `UnwrapUserException` for the parallel-loop `AggregateException`.
-- [ ] Exit codes as Osprey's: 0 success, 1 failure to start (usage, missing input), 2 ran with
-      errors. `IsErrorReported` reconciles a failing exit code with an `Error:` line.
-- [ ] Usage errors keep their one-line form (the parser's `ArgumentException`, as today).
-- [ ] `CommandLineErrorTest` asserts the exit codes and that a synthetic defect prints its type.
+Done 2026-10-14, commit bb0ccd12c8. Gate: CarafeSharp build + 98 tests + zero-warning inspection.
+
+- [x] `CarafeSharp/Program.cs`: both console streams are `CommandStatusWriter`s (stdout for
+      progress, stderr for errors and warnings, as Carafe, so the tests' stream split holds);
+      `-log_file` replaces both with one file writer, as Osprey's `--log-file` does;
+      `-timestamp` / `-memstamp` stamp every line. The `TextWriter log` plumbing is unchanged.
+      Parsed by `CarafeCommandLine` in every mode (part D re-declares them).
+- [x] `Program.DescribeFailure` follows Osprey's: a user-actionable exception is its message plus
+      a `Caused by:` line for its root cause (today's behavior, kept); a defect is
+      `Fatal error: <exception>` with type and stack; `UnwrapUserException` for the parallel-loop
+      `AggregateException`. CarafeSharp's settings validation reports bad input as
+      `ArgumentException` and an unported Carafe option as `NotSupportedException`, so those two
+      count as user errors here (part D moves them to parse time).
+- [x] Exit codes as Osprey's: 0, 1 failure to start, 2 ran with errors (`ReconcileExitCode` over
+      `IsErrorReported`). Every error line, usage errors included, starts with
+      `CommandStatusWriter.ERROR_MESSAGE_HINT` (`Error:`), where it was `ERROR:`; no script read
+      the old prefix.
+- [x] `TestOutputAndErrors` in `CommandLineErrorTest`: the log file and stamps, an unopenable log
+      file, the usage-error line, `DescribeFailure` on each exception class, and the exit-code
+      reconciliation.
 
 ### PR 1, part C - one progress reporter in CommonUtil
 
-- [ ] Move `ProgressReporter`, `MultiProgressReporter` (with `IProgressSink`, `FileScope`),
-      Osprey's `ProgressStream` and the `OspreyOutput` seam to `CommonUtil/SystemUtil` under
-      neutral names (the seam becomes the process output writer with the per-flow scoped
-      redirect; `PerfStats` / `Verbose` stay on it or move to `LogTag`, whichever keeps
-      `OspreyLog.Write` unchanged). Behavior, constants and line formats unchanged: the
-      regression gate and `perfviz.py` read them.
-- [ ] CommonUtil's existing `ProgressStream` (Nick's, `IProgressMonitor`-driven) and Osprey's
-      (reporter-driven) differ in sink only; keep one class with two constructors, or two
-      clearly named classes. Decide in the PR, document on the class.
-- [ ] `ProgressReporterTest` moves to `CommonTest`.
-- [ ] CarafeSharp reports its determinate loops through it: `LibraryGenerator`'s batches and
-      chunks, `FineTuneRun`'s epochs, `Digester` / `LibraryDatabase.DigestPeptides` over proteins,
-      `BlibLibraryWriter` over spectra. The `TextWriter log` parameters stay for prose; the
-      reporter carries the percent lines. The `Action<string> log` variants (`ModelFineTuner`,
-      `FastaReader`, `FineTuneRun`) collapse onto the same writer.
-- [ ] `Osprey.Core` keeps `OspreyOutput` only as a thin alias if the rename would touch too many
-      files in one PR; otherwise delete it.
+Done 2026-10-14, commit 517fb096ef. Gates: Osprey build + 636 tests + zero-warning inspection;
+CarafeSharp build + 98 tests + zero-warning inspection; CommonTest; regression Stellar PASSED;
+chained leg PASSED.
+
+- [x] `ProgressReporter`, `MultiProgressReporter` (with `IProgressSink`, `FileScope`) moved to
+      `CommonUtil/SystemUtil` unchanged in behavior, constants and line formats. The seam is
+      `CommandOutput` (`Out`, the per-flow `PushScopedOut`, internal `RealOut`); `OspreyOutput`
+      keeps only `PerfStats`, `Verbose` and `WriteVerbose`, so `OspreyLog.Write` is unchanged.
+      28 Osprey files renamed `OspreyOutput.Out` -> `CommandOutput.Out`.
+- [x] One `ProgressStream`: CommonUtil's (`IProgressMonitor`-driven, 8 Skyline callers) gained
+      a `(Stream, ProgressReporter)` constructor; Osprey's copy deleted.
+- [x] `ProgressReporterTest` and the generic parts of `MultiProgressReporterTest` moved to
+      `CommonTest` (CommonUtil now has `InternalsVisibleTo CommonTest` for the segment and
+      buffer internals the aggregator test reads). Osprey keeps one test: its gated tags stay
+      out of a buffered file block.
+- [x] CarafeSharp: `Program` points `CommandOutput.Out` at its output writer for the run (and
+      restores it), so percent lines land between the stages' log lines with the same stamps;
+      `LibraryDatabase.DigestPeptides` reports over proteins and `LibraryGenerator.PredictChunks`
+      over peptide forms at the I/O cadence. The fine-tune epoch loop already logs a line per
+      epoch and lives in `CarafeSharp.Models` (model code), so it was left alone; the
+      `TextWriter log` / `Action<string> log` plumbing is unchanged (it gives way with part E).
+      `TestModesAndPartialOutput` asserts the digest heading in the output stream.
+- [x] Docs: `docs/21-user-facing-text.md` and the development guide name `CommandOutput`; the
+      guide's "lean toward `IProgressMonitor`" sentence now records decision 2.
 
 ### PR 2, part D - one command-line grammar in CommonUtil, CarafeSharp declared on Argument
 
@@ -274,29 +292,48 @@ the golden; `CarafeSharp/regression.ps1 -Leg Chained` PASSED.
 
 ### PR 1, part E - the task contract in Shared, CarafeSharp's stages on it
 
-- [ ] Extract the generic part of `OspreyTask` + `AnalysisPipeline`'s driver loop to Shared
-      (namespace `pwiz.Common.Pipeline` inside CommonUtil unless it needs its own assembly; decide
-      in the PR): task `Name`, declared `Inputs` / `Outputs`, a validity key, an in-file stamp
-      (`ArtifactStamp` with the version supplied by the host, not read from `OspreyVersion`),
-      `Run` / `Rehydrate`, the skip-when-current rule, the one-shot materialization guard, and the
-      byproduct registry (`Publish` / `Get` / `Demand`). Osprey-specific facts (`OspreyConfig`,
-      `SearchIdentity`, `ISelectableTask`'s HPC predicates, `LogTag` routes) stay in Osprey as a
-      derived task and context.
-- [ ] `OspreyTask` derives from the shared base; `TaskValidityKeyTest`, `SubsetPipelineTest`
-      (resume, rehydrate, HPC chain, sidecars) lock the behavior.
-- [ ] CarafeSharp's four stages become tasks on the shared base, inside CarafeSharp (no Osprey
-      reference): build-entrapment-fasta, reconcile-manifest, predict-library, train. Each
-      declares its inputs and outputs (FASTA, manifest, `.blib` / TSV, `.carafemodel`, the
-      `.training.parquet` set) and stamps its outputs; `CarafeSharp.exe` runs the selected task
-      through the shared driver, so a re-run with current outputs skips, as Osprey's does. Stage
-      selection moves from `Run-CarafeSharpWorkflow.ps1 -Stages` toward the tool.
-- [ ] The `.carafemodel` zip and the blib/TSV writers carry the stamp in their own slot (the model
-      manifest; a blib metadata row; a TSV header comment), per `ArtifactStamp`'s "lives in the
-      artifact" rule. CarafeSharp's `RegressionTest` goldens must be unaffected (the stamp is
-      excluded from the compared content, as Osprey's goldens exclude it).
-- [ ] `TODO-task_file_contract_from_declarations.md` item 1 (`IsPerFile` on the task) and 2
-      (`--help-files` derived from the declarations) are done here for both tools, since the
-      printer is generic once the declarations are shared. Item 3 (harness staging) is PR 4, part I.
+Done 2026-10-14, commit 141b3bc642. Gates: Osprey build + 636 tests + zero-warning inspection;
+CarafeSharp build + 99 tests + zero-warning inspection; CommonTest; `CodeInspection`; regression
+Stellar PASSED; chained leg PASSED.
+
+- [x] `pwiz.Common.Pipeline` in CommonUtil (a namespace, not a new assembly): `PipelineTask`
+      (`Name`, `Inputs` / `Outputs`, `ValidityKey` / `OutputValidityKey`, `OutputStamp`, `Run` /
+      `Rehydrate`, `Publishes`), `TaskContext` (the task registry, the byproduct cache with
+      `Publish` / `TryGet` / `Get` / `Demand` / `Consume` / `Release`, the one-shot materialization
+      guard, `CanRehydrate`, `ExitCode`, the build `Version` and the stamp reader the host supplies)
+      and `PipelineDriver` (the walk with `OnStarting` / `OnDone` / `OnSkipped` hooks).
+      `ArtifactStamp` moved there with `IsCurrent(task, version, key)`; its serialized form
+      (`osprey-validity/1`, the `osprey.validity` / `osprey_validity` slots) is unchanged so every
+      existing artifact still reads.
+- [x] Osprey: `OspreyTask : PipelineTask, ISelectableTask` seals each contract method against
+      `TaskContext` and forwards to the `PipelineContext` overload every task already overrides
+      (no task file changed for that); `PipelineContext : TaskContext` keeps `Config`, `RunPlan`,
+      `Diagnostics`, the `LogTag` overloads, `DropAllButLibrary` and the DEBUG milestone guard
+      (via the base's `OnPublishing` / `WasConsumed` hooks); `AnalysisPipeline` runs an
+      `OspreyPipelineDriver` whose hooks print the `[TASK]` / `[STAGE-WALL]` lines unchanged.
+      `OspreyVersion.Stamp(task, key)` and the `IsCurrent(this ArtifactStamp, task, key)`
+      extension replace `ArtifactStamp.ForCurrentBuild` (23 sites), so the version has one source.
+      `RehydrateFailedException` and the two unknown-type exceptions moved with the context.
+- [x] CarafeSharp: `CarafeContext : TaskContext`, `CarafeTask : PipelineTask` and four tasks
+      (`BuildEntrapmentFasta`, `ReconcileManifest`, `PredictLibrary`, `Train`), each wrapping the
+      existing stage class, with `CarafeValidity.Key` (a hash of the settings' JSON plus the
+      name, length and write time of every input file) as the validity key, computed before the
+      run touches a setting. `Program` runs the mode's task through `CarafeDriver`, whose
+      `OnDone` prints Carafe's completion line. `CarafeSharp.exe` references nothing in Osprey.
+- [x] Stamp slots: the `.carafemodel` manifest's first property (`osprey_validity`, read by
+      `CarafeModelFile.ReadStamp` without unpacking) and the blib's `OspreyMetadata` table (the
+      one Osprey's blib writer uses, under the same key), read by `CarafeStamps`. The TSV
+      library and the FASTA have no slot a reader of those formats would tolerate, so the
+      entrapment-FASTA and reconcile tasks, and a TSV-only prediction, declare no outputs and
+      always run. Goldens unaffected: the stamp is metadata the comparators do not read.
+- [x] `TestResumeSkipsCurrentOutputs`: the second identical prediction is skipped and leaves
+      the `.blib` untouched; a changed `-nce` predicts again with a new key; TSV-only always
+      runs. `TestModesAndPartialOutput`'s locked-library case now changes a setting first, since
+      the same command would be skipped (correctly) rather than fail.
+- [ ] `TODO-task_file_contract_from_declarations.md` items 1 and 2 (`IsPerFile`, which Osprey's
+      `IsPerFileWorker` already is, and `--help-files` printed from the declarations) stay in
+      that TODO: the printer is now writable against the shared contract but was not written
+      here. Item 3 (harness staging) is PR 4, part I.
 
 ## Phase 2 - integration
 
