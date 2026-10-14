@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261014_osprey_parquet_datafield_race`
 - **Base**: `master`
 - **Created**: 2026-10-14
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none - found by the 2026-10-13 sprint acceptance run)
 - **Module**: `osprey`
-- **PR**: [#4842](https://github.com/ProteoWizard/pwiz/pull/4842)
+- **PR**: [#4842](https://github.com/ProteoWizard/pwiz/pull/4842) (merged 2026-10-14)
 
 ## Objective
 
@@ -77,7 +77,7 @@ Reproduced against the shipped `Parquet.dll`: a per-row reader saw `MaxDefinitio
   - `out.blib` differs only in `LibInfo` and the source file paths.
   - The 82 reconciled parquets it wrote are clean by `parqdetect.py`.
 - [x] `/code-review medium`: no correctness findings. Fixed a stale comment, and the test now also checks the read-back row count and makes a minimum of 3 writes per writer.
-- [ ] TeamCity (Perf/Regression #313 red from `tctest.bat`'s `OSPREY_EXIT`, fixed in `e22de13b7e`; needs a re-trigger)
+- [x] TeamCity: all 16 checks green, including Perf/Regression #315 (#313 was red from `tctest.bat`'s `OSPREY_EXIT`, fixed in `e22de13b7e`)
 
 ## Detection of existing files
 
@@ -104,3 +104,13 @@ leg failed at Osprey startup with "does not recognize the environment variable(s
 and #4825 made Osprey refuse unknown `OSPREY_*` variables. The last green build (#302) predates
 both #4825 and #4717, so master fails the same way. Renamed it to `OSPREYDEV_EXIT`, the prefix
 for script variables (commit `e22de13b7e`).
+
+### 2026-10-14 - Merged
+
+PR #4842 merged as commit `7066e0ac39`. Shipped: a `WriteFields` instance (fresh `DataField`s
+plus schema) per scores-parquet write so concurrent writes no longer race on
+`MaxDefinitionLevel`, the `TestConcurrentScoresParquetWritesKeepCwtCandidatesAligned`
+regression test, and the `tctest.bat` rename to `OSPREYDEV_EXIT` that unblocked
+Perf/Regression on master (the chained CarafeSharp leg passed for the first time in #315).
+Nothing deferred; no follow-up issues. Existing parquets written with parallel files before
+this fix can be checked with `parqdetect.py` on the acceptance share.
