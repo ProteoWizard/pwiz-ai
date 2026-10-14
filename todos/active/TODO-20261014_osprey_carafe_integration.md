@@ -11,7 +11,12 @@
   pending his return from vacation.
 - **GitHub Issue**: (none yet; PR #4717 closed #4707)
 - **Module**: `osprey`
-- **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes, opened 2026-10-14; TeamCity Perf/Regression not yet run)
+- **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes, opened 2026-10-14; TeamCity Perf/Regression not yet run - Agent 1 busy with a Skyline build and then PR #4842's run, which carries Brendan's fix for a Perf/Regression breakage from two colliding PRs; ask before triggering on `pull/4845`)
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261014_osprey_carafe_shared_toolkit.md` before starting work. PR 2 (part D,
+the one tokenizer) starts in a parallel session on its own branch off master; after #4845
+merges, that branch needs `git merge origin/master` for the moved types.
 - **Checkout**: `C:\proj\pwiz`
 - **Depends on**: CarafeSharp in `pwiz_tools/CarafeSharp` (PR #4717, merged 2026-10-14)
 - **Related**: `TODO-carafe_osprey_library_contract.md` (the library Carafe writes and Osprey
