@@ -115,9 +115,14 @@ Facts the plan turns on:
    `ProgressStatus` / `CommandProgressMonitor` is too complicated for general use; Osprey's
    `ProgressReporter` has worked well where no GUI tracks in-memory processing. Move it as-is
    (with its sink made injectable) rather than rebuild on `IProgressMonitor`.
-3. **One tokenizer, in one PR.** The end state is a single configurable grammar in CommonUtil
-   that Skyline, Osprey and CarafeSharp all declare against. Do it in PR D rather than a
-   two-tokenizer interim.
+3. **One tokenizer class with grammar options, in one PR.** The end state is a single
+   configurable tokenizer in CommonUtil that Skyline, Osprey and CarafeSharp all declare
+   against. Standardize as far as possible, but every existing grammar stays available as a
+   configuration: Skyline's strict `--name=value` for every tool that drives SkylineCmd today,
+   and Carafe's single-dash grammar because CarafeSharp is a cross-impl parity option for
+   Noble-Lab/Carafe (the maccoss/Carafe fork) and must accept Carafe's exact command lines.
+   Do it in PR D rather than a two-tokenizer interim. (Brendan, 2026-10-14: "one class with
+   tokenizing options is the route we want to take.")
 4. **The task contract is extracted to Shared.** CarafeSharp.exe keeps no Osprey dependency;
    Osprey.exe links CarafeSharp's DLLs directly and runs its tasks in-process, never the
    CarafeSharp exe as a child process.
@@ -206,7 +211,14 @@ progress through the shared pieces).
       ignored, every Carafe 2.2.0 option declared, the unused ones marked as accepted-and-ignored).
       Its `Settings` building (`LibrarySettings`, `TrainingSettings`, `EntrapmentFastaSettings`)
       is untouched. `CarafeSharp.Test/CommandLineErrorTest` and `LibraryCommandLineTest` lock
-      every parse result and error message.
+      every parse result and error message, and the parity tests keep feeding Carafe's own
+      command lines (`CarafeReferenceRun`), which is the reason the grammar is kept at all.
+- [ ] Standard first, compatibility second: one declaration can be reachable under more than one
+      grammar, so CarafeSharp can accept the standard `--name value` form alongside Carafe's
+      `-name value` without a second declaration, and a grammar is a configuration object the
+      host picks, never a subclass per tool. Decide in the PR whether CarafeSharp's generated
+      help shows the standard form, the Carafe form, or both; the Carafe form is what the
+      maccoss/Carafe users and the workflow scripts type today.
 - [ ] `--help` and `--help html` for CarafeSharp are generated from the declarations (the
       `ArgUsage.Provider` descriptions come from a resx of argument text only, as
       `OspreyCommandArgUsage.resx` does; this is not the deferred general resx extraction).
