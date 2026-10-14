@@ -155,29 +155,55 @@ on), then B and C, then E (the task driver logs and reports progress through the
 
 ### PR 1, part A - one atomic file writer in CommonUtil
 
-- [ ] Add `pwiz_tools/Shared/CommonUtil/SystemUtil/FileSaver.cs` from Osprey's (cross-platform
-      temp allocation, overwrite on commit, temp cleaned on dispose). Resource strings move to
-      `CommonResources`.
-- [ ] `KeepFailedWrites` becomes a static property on the shared class; Osprey's `Program` sets
-      it from `OspreyEnvironment.KeepFailedWrites`. CommonUtil reads no `OSPREY_*` variable.
-- [ ] Carry `PartialFile.CommitAs`'s behavior as a method on the shared class: commit under a
-      "name (N)" sibling when the final name cannot be replaced.
-- [ ] `Osprey.Core.csproj` references `CommonUtil.csproj`; delete `Osprey.Core/FileSaver.cs`;
-      25 call sites change only their `using`.
-- [ ] `CarafeSharp.Core.csproj` references `CommonUtil.csproj`; add CommonUtil to
-      `CarafeSharp.sln`; delete `PartialFile.cs`; `BlibLibraryWriter`, `CarafeLibraryTsvWriter`,
-      `EntrapmentFastaBuilder` (FASTA + manifest), `PairingManifestReconciler` move onto it. Note
-      that `PartialFile` is not `IDisposable` and its fixed `<name>.partial` temp is deleted by a
-      second process writing the same output; both go away.
-- [ ] `CarafeModelFile.Save`'s `.tmp` + move becomes a `FileSaver` (the "atomic model-folder
-      writes" follow-up from PR #4717).
-- [ ] SharedBatch: delete `SharedBatch/FileSaver.cs` and its two resource strings; SkylineBatch
-      `DownloadDlg`, `SkylineBatchTest/TestUtils`, DevTools `ImageComparer`, `ResourcesOrganizer`
-      (two files), `SortRESX` reference the shared one. Overwrite semantics change from refuse to
-      replace for these callers: check each site wants that (a download to a fresh name does).
-- [ ] `Osprey.Test/FileSaverTest.cs` moves to `Skyline/CommonTest` (translation-proof per
-      `ai/TESTING.md`); add the `CommitAs` fallback and the keep-failed-writes case.
-- [ ] Extra gate for PR 1: `SkylineBatchTest` and the AutoQC build, since SharedBatch changes.
+Done 2026-10-14, commit 07894725c3. Gates run on the final code: Osprey build + 638 tests +
+zero-warning inspection; CarafeSharp build + 97 tests (8 inconclusive, no local test data) +
+zero-warning inspection; `TestSimpleFileSaver` and `CodeInspection` in the Skyline tree;
+SkylineBatch build + tests and the AutoQC build; `regression.ps1 -Dataset Stellar` PASSED against
+the golden; `CarafeSharp/regression.ps1 -Leg Chained` PASSED.
+
+- [x] Added `pwiz_tools/Shared/CommonUtil/SystemUtil/SimpleFileSaver.cs` from Osprey's
+      (cross-platform temp allocation, overwrite on commit, temp cleaned on dispose). The two
+      resource strings and their ja / zh-Hans translations moved to `MessageResources`.
+      **Named `SimpleFileSaver`, not `FileSaver`**: 49 of the 58 Skyline files that use
+      `pwiz.Skyline.Util.FileSaver` also import `pwiz.Common.SystemUtil`, so a shared `FileSaver`
+      there would be ambiguous in every one of them (Osprey's header comment had proposed the
+      name). Temp prefix is Skyline's `~SK` (was `~OS` in Osprey, `~SB` in SharedBatch).
+- [x] `KeepFailedWrites` is a static property on the shared class; `Program.RunCommand` copies
+      `OspreyEnvironment.KeepFailedWrites` into it beside the other process-wide seams
+      (`OspreyOutput.PerfStats` / `Verbose`). CommonUtil reads no `OSPREY_*` variable.
+- [x] `CommitAs(path)` on the shared class (PartialFile's). The "name (N)" fallback itself stays in
+      the two CarafeSharp writers that choose the name.
+- [x] `Osprey.Core.csproj` references `CommonUtil.csproj`; `Osprey.Core/FileSaver.cs` deleted;
+      29 files renamed `FileSaver` -> `SimpleFileSaver` (type uses, crefs and prose) with the using
+      added where the type is used.
+- [x] `CarafeSharp.Core.csproj` references `CommonUtil.csproj` (no `.sln` entry needed: `dotnet`
+      and the inspection resolve the ProjectReference, as Osprey's do); `PartialFile.cs` deleted;
+      the four writers moved onto `SimpleFileSaver`. `EntrapmentFastaBuilder` no longer refuses a
+      manifest path equal to the FASTA's temp name (temp names are random now). Tests assert "no
+      `~SK*` file left in the folder" instead of "no `<name>.partial`".
+- [x] `CarafeModelFile.Save` writes through `SimpleFileSaver` (the "atomic model-folder writes"
+      follow-up from PR #4717). `ZipFile.Open(..., Create)` needs a non-existent file and the
+      saver pre-claims a 0-byte temp, so it is `new ZipArchive(new FileStream(SafeName, Create))`.
+- [x] SharedBatch: `SharedBatch/FileSaver.cs` and its three resource strings deleted; SkylineBatch
+      `DownloadDlg` and `SkylineBatchTest/TestUtils` use the shared one. Behavior change for
+      `DownloadDlg`: a download onto an existing file now replaces it, where the SharedBatch
+      `Commit` threw on the move and swallowed the exception to `Trace` (the file silently stayed
+      stale).
+- [ ] **Deferred: three more copies in DevTools** (`ImageComparer/FileSaver.cs`,
+      `ResourcesOrganizer/ResourcesOrganizer/FileSaver.cs`, `SortRESX/SortRESX/FileSaver.cs`), all
+      forks of Skyline's with `File.Replace` + backup semantics, each in a standalone solution
+      with its own `FileEx` / `Helpers` copies and (ResourcesOrganizer) a HintPath
+      `System.Resources.Extensions` that CommonUtil's package reference would collide with. Not in
+      PR 1; a small follow-up of its own.
+- [x] `Osprey.Test/FileSaverTest.cs` -> `Skyline/CommonTest/SimpleFileSaverTest.cs` (one
+      `[TestMethod]`, `AssertEx`): the atomic contract, the bare-name case, `CommitAs` including
+      after a failed `Commit`, and keep-failed-writes.
+- [x] Extra gate for PR 1: `SkylineBatchTest` 37 of 39 passed; the two failures
+      (`TestRunFromRScripts`, `TestMultipleLogs`) run R scripts and this machine has no R
+      installed, so they fail on master too. `DataDownloadTest`, the one through `DownloadDlg`,
+      passed. AutoQC builds.
+- [x] `Build-Skyline.ps1 -Target CommonTest` added (pwiz-ai), so a CommonUtil change can be
+      tested without a solution build; `Run-Tests.ps1 -TestName TestSimpleFileSaver` finds it.
 
 ### PR 1, part B - CarafeSharp output and errors through CommonUtil
 

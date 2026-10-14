@@ -118,7 +118,7 @@ grown to these `.csproj`s (`ls pwiz_tools/Osprey/*/*.csproj` is the check):
 
 | Project | Role |
 |---|---|
-| `Osprey.Core` | Data types, configs, enums, env-var wrapper (`OspreyEnvironment`), `FileSaver`, the output seam. **Bottom of the dependency graph -- everything else depends on Core.** |
+| `Osprey.Core` | Data types, configs, enums, env-var wrapper (`OspreyEnvironment`), the output seam. Atomic writes go through CommonUtil's `SimpleFileSaver`. **Bottom of the dependency graph -- everything else depends on Core.** |
 | `Osprey.IO` | Library loaders, parquet readers/writers, sidecars, blib writer |
 | `Osprey.ML` | Machine learning (SVM, PEP, matrix) |
 | `Osprey.Chromatography` | RT calibration (`RTCalibrator`), peak detection |
@@ -184,16 +184,16 @@ New long-running operations should lean
 toward posting `ProgressStatus` to an `IProgressMonitor` rather than writing
 lines directly; fully plumbing that is not a current goal.
 
-### Atomic file writes: FileSaver (never a cross-volume temp + move)
+### Atomic file writes: SimpleFileSaver (never a cross-volume temp + move)
 
 Every DURABLE artifact -- anything a later step, a resume, or the user reads
 back (`calibration.json`, `reconciliation.json`, `.fdr_scores.bin`,
 `.osprey.task`, `.spectra.bin`, `.libcache`, `.scores.parquet`, `.blib`, the
-`--fdrbench` input) -- is written through `FileSaver` (in `Osprey.Core`),
+`--fdrbench` input) -- is written through `SimpleFileSaver` (in `pwiz_tools/Shared/CommonUtil`),
 never straight to its final path:
 
 ```csharp
-using (var saver = new FileSaver(finalPath))
+using (var saver = new SimpleFileSaver(finalPath))
 {
     using (var stream = new FileStream(saver.SafeName, FileMode.Create, FileAccess.Write))
     using (var w = new BinaryWriter(stream))   // or StreamWriter / File.WriteAllText(saver.SafeName, ...)
@@ -204,7 +204,7 @@ using (var saver = new FileSaver(finalPath))
 }
 ```
 
-`FileSaver.SafeName` is a **same-directory sibling** temp; `Commit()` is a
+`SimpleFileSaver.SafeName` is a **same-directory sibling** temp; `Commit()` is a
 same-volume rename (a metadata-only op) -- atomic, and it CANNOT truncate.
 
 *Why* every artifact must commit this way -- presence proving completeness is
@@ -219,7 +219,7 @@ on CIFS/NFS/NAS -- the failure mode Rust guards with `copy_and_verify`. The
 same-directory rename sidesteps it entirely, so no post-move size/hash
 verification is needed on the C# side (`copy_and_verify` need not be ported).
 The parquet writer once did exactly this anti-pattern (temp in the system temp
-dir + `File.Move`, mislabelled "safe NAS writes"); it now uses `FileSaver`.
+dir + `File.Move`, mislabelled "safe NAS writes"); it now uses `SimpleFileSaver`.
 
 **Exempt:** `-d` diagnostic dumps (`OspreyFileDiagnostics` etc.), the streaming
 CLI log, and test fixtures -- transient or append-streaming files that are not
@@ -457,7 +457,7 @@ the normal, cheap way to chain runs, and it has been used successfully many time
 
 The hazard is narrower than "hard links are unsafe", and worth stating precisely because the
 over-broad version costs an hour of pointless copying. **The source run is never overwritten
-through a link.** Every durable artifact is written with `FileSaver` (sibling temp + rename,
+through a link.** Every durable artifact is written with `SimpleFileSaver` (sibling temp + rename,
 above), which replaces the *directory entry*; the other links keep the old content - verified
 on this machine with a two-link probe (`New-Item -ItemType HardLink`, rewrite one side, read
 the other), and it is what makes the `D:\test\osprey-runs\chs-seer\runs\*` link farm safe,
