@@ -710,6 +710,94 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-13 - PUSHED: review fixes gated, inspections run, PR description rewritten
+
+Six medium-review fixes committed, then the pre-push checks:
+- Re-capture of the forms the fixes touch (HeatMapGraph, ManageLayoutsForm,
+  AlertDlg, MessageDlg): display was at 150% by then, so compared against the
+  150% sweep originals - heat map dendrograms 10 px deeper (DPI factor instead
+  of size factor), nothing else moved; alerts identical; Manage Layouts
+  identical in the layout the test shows. Captures in sweep/raw/review-150.
+  NOTE the batch overwrote four after-200 captures + layout dumps with 150%
+  ones; the pngs were restored from copies, the four .layout.txt dumps were
+  not (scores for those four in index-200 now mix 150% dumps). Re-capture
+  batch 84 at 200% when the display is back there.
+- CodeInspection test: PASS (WebClient warning is Installer code, tolerated).
+- QuickInspection: "No modified files detected" because the harness was
+  stashed - it reads git diff HEAD, not the branch - so it fell back to the
+  full solution: 2608 issues, 2491 unresolved-symbol errors from projects jb
+  cannot resolve on net10 (pre-existing noise), 0 in files this branch
+  touches (filter_inspection.py over bin/staging/Debug/InspectCodeOutput.xml;
+  only hits by basename were SkylineNightlyShim/Program.cs). Tooling gap for
+  the ai repo: QuickInspection should take a base ref.
+- Developer question "heat map replicates in a different order between the
+  captures": NOT a defect. Instrumented HeatMapGraph.ScaleAxisLabels (local,
+  reverted): the DPI-aware 150% capture is the 126-column heat map (3 column
+  groups x 42 shared replicate headers) with ZedGraph MajorStep=6, so the
+  drawn labels are indices 0,6,12,... which repeat every 7 - exactly the
+  observed 7-name cycle (heatmap-debug.txt). The DPI-unaware capture is a
+  different, 21-column heat map instance: form mode captures whichever
+  PauseForScreenShot(HeatMapGraph) is reached first and that differed between
+  the runs. Sweep pairs are not guaranteed to be the same instance for forms
+  a test shows several times.
+Push: rejected first - Brendan had merged the repo-wide LF normalization
+(#4789, 2a7b3dea21) into the branch on Oct 8. Rebased the three commits with
+-X renormalize (clean), verified the blobs are LF (tr -cd on git show; a
+grep -c $'\r' on the diff reports false positives on Windows), pushed:
+155088e0ac (200% sweep fixes), 6a68d6516a (3 review fixes), 28d63612c5
+(6 review fixes). PR #4602 description rewritten (summary, known
+limitations incl. DigitalRune follow-up with fork source located, test
+plan); still a draft.
+Remaining: mark ready when the developer says; DigitalRune fix as its own PR;
+post-merge cleanup PR for the duplicated scaling helpers; port-side notes to
+Brendan (see 2026-10-12 answer in session).
+
+### 2026-10-13 - CODE REVIEW ROUND: max ran out of budget, medium found 6 real items
+
+/code-review max (Fable 5.1, 9 angles on the full 87-file diff) hit the session
+limit: only the reuse and simplification angles finished (~540k tokens), all 7
+correctness angles died. Verified from the two reports and committed as
+6a4d03df69: ManageLayoutsForm scaled its ImageList between the 2nd and 3rd
+Images.Add (Pivot/PivotAndFilter blocky, my Oct 5 icon commit); DataGridViewEx
+header-fit block was provably dead (its "fit at 96" test divided the scaled
+measurement by the factor it then scaled by) - deleted; DpiUtil.GetFactor
+comment still cited 4.7.2 DeviceDpi behavior - rewritten.
+Harness stashed, /code-review medium (Opus 5.5, ~177k tokens, one agent):
+10 findings, 6 real, fixed (commit pending):
+- ImportLayout backup (SaveAsXml = device px) was restored through LoadLayout,
+  which denormalizes -> floating windows x factor per failed import. New
+  DpiUtil.NormalizeDockLayoutStream; both directions share
+  TransformDockLayoutStream.
+- NormalizeDockLayoutFile rewrote the .view in place via XmlWriter.Create(path);
+  an exception mid-write left a truncated file that the caller then committed.
+  Now serializes to memory, then File.WriteAllBytes.
+- DendrogramScale used the pane's scaleFactor; HeatMapGraph never sets
+  IsFontsScaled=false, so that is the SIZE-based factor -> the 100-px depth
+  varied with the window even at 96 DPI. Now PaneBase.DpiScaleFactor.
+- CommonAlertDlg MAX_HEIGHT (500) and the 100-px min label width unscaled.
+- TreeViewMS: unused imgHeight local after DrawImageCentered (ReSharper).
+- Member ordering: DockGraphBelowStrip and CommonAlertDlg.Scale moved after
+  their users.
+Set aside (noted, not changed):
+- "ImageList scaled twice via FormEx.ScaleButtonImages" - false: no form both
+  scales a list explicitly and hangs it on a Button (checked Oct 8).
+- DataGridViewEx "untouched column" test (Width != Scale(100)) also matches a
+  designer width that equals the scaled default (150 @150%, 125 @125%) and
+  would double-scale widths set in code before handle creation. Real edge; no
+  sweep hit it. Candidate for the cleanup PR (track designer widths
+  explicitly instead of inferring).
+- BuildLibraryDlg right padding read from tabFiles.Width in the ctor could be
+  stale; files page verified by eye at 150% and 200%, left as is.
+- Duplicated scaling helpers (DpiUtil vs ImageListScaler/DeviceDpi, five
+  hand-rolled ImageList setups, IsScaled spelled two ways, EditListDlg manual
+  scaling, ColorGrid literals, DefineAnnotationDlg anchor flip) -> post-merge
+  cleanup PR.
+Gate for the six: TestClusteredHeatMap, TestPeakBoundaryCompare,
+TestMultiSelect, TestLayoutExportImport, TestAlertDlg, DPI-aware and
+DPI-unaware (gate-review4.log).
+Cost note: Fable at max ~270k tokens per review angle; Opus at medium 177k for
+the whole review. Use medium/high on Opus for diffs this size.
+
 ### 2026-10-08 - 200% FORM SWEEP: 4 real bugs found and fixed (uncommitted)
 
 Display at 200% (1720x720 logical), same harness; everything in -200 folders
