@@ -97,6 +97,23 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
   training on the runs then searched risks overtraining, which the entrapment FDR should measure.
 - `CarafeSharp.exe` stays as a thin front end for library-only use and Carafe command-line compatibility.
 
+### 5. Shared infrastructure instead of reimplementations (survey 2026-10-13)
+
+CarafeSharp references nothing in `Shared/` but the Parquet targets; it reimplements what the project already has,
+and Osprey does too in places. Brendan (2026-10-13): too many ways of doing one thing give developers the chance to
+pick the one where a bug was not fixed. Fold in, as part of this work:
+- **One atomic file writer in CommonUtil.** Today there are three: Osprey's `Osprey.Core/FileSaver.cs` (a port of
+  SharedBatch's, whose own comment proposes the move), CarafeSharp's `CarafeSharp.Core/PartialFile.cs` (a fixed
+  `<name>.partial` temp that two processes writing one output would delete under each other; not `IDisposable`), and
+  `CarafeModelFile.cs:145` (its own `.tmp` and move). Keep `PartialFile.CommitAs`'s "name (N)" fallback on top.
+- **`CommonExceptionUtil`** in `CarafeSharp/Program.cs` (today every exception prints `ERROR: message`, so a
+  programming defect loses its stack trace), and **`CommandStatusWriter`** for its output, so in-process stages write
+  to Osprey's sink with its timestamps and log file.
+- **No second parser:** new options go into `OspreyCommandArgs`; `CarafeCommandLine` stays as the Carafe-compatible
+  front end (Carafe's Java-style grammar does not fit `ArgumentBase`).
+- **Progress:** adopt Osprey's `ProgressReporter` once it leaves `Osprey.Core`; do not build a third.
+- Linux is no obstacle: CommonUtil is plain net10.0 and Osprey ships its dependencies on Linux (never call its DPAPI methods there).
+
 ## Tasks
 1. Agree the design with Mike (default training runs, the stage split, where the contracts assembly lives).
 2. Extract the training-record assembly; move Osprey's writer and CarafeSharp's reader onto it; delete the

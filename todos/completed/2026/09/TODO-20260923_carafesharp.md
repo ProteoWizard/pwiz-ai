@@ -2,12 +2,12 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260923_carafesharp`
-- **Base**: `Skyline/work/20260612_net8_port` (PR [#4619](https://github.com/ProteoWizard/pwiz/pull/4619), .NET 10 port; not yet merged)
+- **Base**: `master` (retargeted 2026-10-13; was `Skyline/work/20260612_net8_port`, the .NET 10 port, since merged to master)
 - **Created**: 2026-09-23
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4707](https://github.com/ProteoWizard/pwiz/issues/4707)
 - **Module**: `osprey`
-- **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (base: the port branch). Since 2026-09-30 it
+- **PR**: [#4717](https://github.com/ProteoWizard/pwiz/pull/4717) (merged 2026-10-14 as `28c7b7ff03`). Since 2026-09-30 it
   also carries the library-writing speed-up, formerly #4719 (GitHub marked it merged), at Brendan's request for one CarafeSharp PR.
   Osprey's training export, folded in for a while, landed on its own as #4708 (squash-merged into the base, 2026-10-01).
   Since 2026-10-01 the diff is CarafeSharp and the trigger configs only (Brendan's request).
@@ -370,8 +370,9 @@ CUDA test pass can run there too.
       committed. Fetch/verify (2026-10-01): `build.ps1 -TestData Fetch|Verify` (and the wrapper's),
       `scripts/TestData.ps1`; fetched into an empty folder from Panorama, the testfiles package's 286
       files match its manifest; negative checks (changed file, no manifest, truncated zip, unknown id).
-- [ ] Later, not blocking merge: a TeamCity config that builds CarafeSharp and runs the tier-1
-      tests; point the `vcs_trigger_and_paths_config.py` entry at it.
+- [x] Later, not blocking merge: a TeamCity config that builds CarafeSharp and runs the tier-1
+      tests; point the `vcs_trigger_and_paths_config.py` entry at it. Superseded 2026-10-13: Osprey's
+      configs build and test it (`tcbuild.bat`, `tcbuild.sh`, `tctest.bat`), and the trigger entries point there.
 
 **Status 2026-09-28 (night session; plan `i-would-like-to-starry-gizmo.md`).** Pushed to #4717 (b70b34d0ab..ad0ac68a31)
 and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
@@ -641,6 +642,29 @@ and merged into #4719 (be16d68b7a; 70/70 with data, inspection 0):
   since squash-merged into the port. Plan: merge `0f79141d23fe` into the branch, `git reset --soft` onto the
   new port tip, and commit once. The branches built on it (write-speed, regression, Chronologer) need the
   same fix before their next push.
+
+### 2026-10-13 - Merged
+
+PR #4717 merged as commit `28c7b7ff03` (squash, to master), finished by Brendan and Claude while Mike was away;
+the PR comment of 2026-10-13 lists the changes. In short:
+- **CI**: Osprey's per-commit configs build and test CarafeSharp (about 2 min more); Perf/Regression runs
+  `pwiz_tools/CarafeSharp/tcregression.ps1` after Osprey's lanes (tests with the data, Stellar golden, chained leg,
+  the subset run twice and compared byte for byte; about 17 min on TCA1, its data in `Perftests\carafesharp`).
+- **Committed test subsets** (`CarafeSharp.Test/TestData`, four zips, 13.5 MB): the Carafe parity checks and a
+  fine-tune regression (`TestRegressionSubset`, `regression.ps1 -Dataset StellarSubset`) run on every commit with no
+  download. Builders in `ai/scripts/CarafeSharp/SubsetData`.
+- **Reproducibility**: the alignment reference predicts in float64 on the CPU (training tables byte-identical on
+  Windows, Linux and the GPU); the CUDA generator is seeded (GPU fine-tunes repeat); the regression gates exact
+  bytes where they must repeat. Stellar, Astral and StellarSubset goldens remade on an i9-14900.
+- **Review fixes**: a locked existing library fails the run up front, and a finished one that cannot take its name
+  is saved as `name (N)` and the run fails; fine-tunes clear what they replace; `-tf` validation; no tensor leaks on a
+  failed load; warnings for `-model_dir` rt_max and unpaired pair-gate writes. `docs/04-testing.md` updated.
+- **Coverage**: 97.7% of 7,973 statements from the unit tests alone, 98.0% with the regression.
+
+Deferred to the backlog: `TODO-osprey_carafe_integration.md` (one training-record contract owned by the training
+side; Osprey running library, search, fine-tune and search in-process; adopting the shared infrastructure CarafeSharp
+reimplements: one FileSaver in CommonUtil in place of `PartialFile` and Osprey's copy, `CommandStatusWriter`,
+`CommonExceptionUtil`), and `TODO-carafe_osprey_library_contract.md`.
 
 ## Next steps
 
