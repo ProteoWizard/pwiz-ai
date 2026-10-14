@@ -408,7 +408,7 @@ Committed `f1f68ea37c`. Second round, committed `7e3163eecb` (2026-09-25):
    Dropped the cache and made the offset lookup lazy: fetched only when there are no MS1
    channels or no MS1 target. Brian replied on the thread.
 
-## Cache format restructure (2026-10-13, A/B/D done in b553531ef2)
+## Cache format restructure (2026-10-13, A/B/D done in b553531ef2, C in 0171cfdb62)
 Goals: Rescore/manual re-integration get exact vendor CCS for ANY re-picked apex from the .skyd
 alone; non-IM users pay nothing in memory or on disk; IM<->CCS stays with the vendor APIs.
 
@@ -435,10 +435,17 @@ Plan:
       nothing else needs it, `MissingObservedIonMobility` (Nick #2, #3). Keep the Skyline 3.6
       mass-error slot fix. Done: also removed `has_observed_ion_mobilities` group flag and
       `RemoveObservedIonMobilities` (minimizer change now identical to master).
-- [ ] C. Per-peak observed IM/CCS out of the fixed-size `ChromPeak` struct into an IM-only
-      per-group block (like peak scores); ChromPeak back to 52 bytes. SKIPPED for now (Brian,
-      2026-10-13): builder/reader/joiner/minimizer/score-dedupe changes for a disk-only cost of
-      ~3.4-3.9% of .skyd (measured on MOBIE Quant 15 MB, Rat_plasma 1 MB). Mention in PR for Nick.
+- [x] C. Per-peak observed IM/CCS out of the fixed-size `ChromPeak` struct into an IM-only
+      block; ChromPeak back to 52 bytes on disk (was ~3.4-3.9% of every .skyd). Done 2026-10-14
+      in 0171cfdb62: in-memory struct keeps the 2 floats; on disk a fast prefix serializer writes
+      52 bytes and clears the observed flags. Group flag `has_observed_peak_values` (0x200); block
+      location/count prepended to `CacheHeaderStruct` (older readers still parse it). No per-group
+      index on disk: block is in peak order, reader maps StartPeakIndex -> offset at load.
+      Not in the scores block, because scores are shared between groups (dedupe). Writers: builder,
+      joiner (whole-block copy), file-removal optimize, minimizer (+ `.observed` temp stream through
+      `Minimize`/`WriteStructs`; callers updated, positional Stream args). Covered by
+      WatersImsMseTest round trip (join of 2 files, remove file + reload, minimize v20, minimize v19
+      drops values keeps peaks) plus ChromPeakTest serializer test.
 - [x] D. `TransitionChromInfo` observed IM/CCS behind the existing `IonMobility` reference so
       non-IM chrom infos carry nothing extra. Done: one `object _ionMobility` field holds the
       filter or an `IonMobilityWithObserved` wrapper; non-IM size identical to master.
