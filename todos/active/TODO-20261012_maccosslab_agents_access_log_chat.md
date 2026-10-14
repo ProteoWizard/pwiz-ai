@@ -5,7 +5,9 @@
 - **Branch**: `work/20261012_access_log_chat`
 - **Base**: `main`
 - **Created**: 2026-10-12 (started 2026-10-12)
-- **Status**: In Progress
+- **Status**: In Review
+- **PR**: [#4](https://github.com/uw-maccosslab/maccosslab-agents/pull/4) (opened 2026-10-14;
+  pre-PR `/code-review` skipped at the developer's request)
 - **Objective**: Add an interactive chat mode to the access log review agent: start it on a
   log window, then ask it free-form questions about the panoramaweb.org access logs. It
   answers using the existing read-only tools and the `access_log_review` MCP server.
