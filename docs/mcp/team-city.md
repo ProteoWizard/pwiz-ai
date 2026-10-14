@@ -179,6 +179,15 @@ The two sets overlap in name, not in config: "Core Windows x86_64" (`bt83`) and 
 `buildTypeId`. The live subproject list is
 `https://teamcity.labkey.org/guestAuth/app/rest/projects/ProteoWizard_VersionedConfigs`.
 
+**Never put `/*` inside a block comment in the Kotlin DSL - not even a path glob like
+`buildTypes/*.kt`.** Kotlin block comments nest, so it opens a comment that never closes and
+everything after it, `project()` included, is commented out. Every VersionedConfigs build of
+that branch then fails before its first step with "Failed to load build settings from VCS" /
+`settings.kts: project definition is not found (a call to the project() function is missing)`
+in the Finalize build settings block, while the tests themselves may still run and pass (PR
+#4844, Osprey Windows .NET). When a VersionedConfigs build fails that way, diff the branch's
+`.teamcity/*.kts` against master first.
+
 **PR builds run with the settings from the PR branch.** A `.teamcity/` change in a PR is
 exercised by that PR's own builds, so it is tested before merge; nothing has to land on master
 first. (The parent's versioned settings are `buildSettings` = `PREFER_VCS` in
