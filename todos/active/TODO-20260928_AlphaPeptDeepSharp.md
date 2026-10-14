@@ -1,20 +1,20 @@
 # TODO-20260928_AlphaPeptDeepSharp.md
 
 ## Branch Information
-- **Checkout**: `E:\Users\nicksh\git_e\sky_net10alphapeptdeep`
-- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (pushed; exploratory, commit 2b58a4be47)
-- **Base**: `Skyline/work/20260923_carafesharp` (PR #4717, itself on the .NET 10 port #4619)
+- **Checkout**: `I:\git_i\sky_net10_alphapeptdeep`
+- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (548d8bebc5 pushed; 0d81b7d843 local)
+- **Base**: `master` (#4717 CarafeSharp squash-merged 2026-10-13 as 28c7b7ff03 and merged into this branch)
 - **Created**: 2026-09-28
 - **Status**: In Progress
-- **Module**: `skyline`
-- **PR**: (none - exploratory)
+- **Module**: `skyline` (also carries CarafeSharp changes Skyline needs; the developer chose to keep them here)
+- **PR**: (none yet)
 
 ## Objective
 
 Replace the Python AlphaPeptDeep (peptdeep 1.5.0 in an embedded Python that Skyline downloads and
 installs) with CarafeSharp's C# TorchSharp port, shipped inside Skyline. Must work with and without an
-NVIDIA GPU. CCS prediction is dropped for now (not ported; someone else will port the CCS model).
-Installer size is not a concern on this branch; on-demand CUDA download is deferred.
+NVIDIA GPU (CPU libtorch ships; the CUDA runtime downloads on demand). CCS prediction is dropped for now;
+CarafeSharp has since ported the CCS model (see Remaining).
 
 ## Done
 
@@ -38,16 +38,37 @@ Installer size is not a concern on this branch; on-demand CUDA download is defer
       settings' libraries while `CheckForFileLocks` moves the test folder (8/8 pass after, ~4/5 failed before).
 - [x] `AlphapeptdeepLibraryBuilderUnitTest`, `PredictionSupportTest`, `SupportedModsTest` pass.
 
+- [x] Deleted the Python infrastructure (`PythonInstaller.cs`, `PythonInstallerUI.cs`, NVIDIA .bat
+      templates, `PythonEmbeddable*` settings, resources, `InstallNvidiaTest`, `PythonBootstrapTimeoutTest`)
+      and the Java `CarafeLibraryBuilder`. Removing the Java Carafe builder is intended: Skyline will never
+      run Java Carafe.
+- [x] Fine-tuned `.carafemodel` support in Build Library (`TestCarafeModelBuildLibrary`, TestPerf).
+- [x] Builder predicts with a `.carafemodel` exactly as CarafeSharp's `-model` does (0d81b7d843):
+      CarafeSharp's RT loading (AlphaPeptDeep or Chronologer, Chronologer's AlphaPeptDeep fallback,
+      `rt_maps.json` alignment, minutes vs iRT) moved into `CarafeSharp.Models.RtPredictorLoader`, shared by
+      `LibraryGenerator` and `AlphapeptdeepLibraryBuilder`; Skyline takes the file's NCE, instrument,
+      activation, analyzer, rt_max and RT model via `CarafeModelFile.ApplyPredictionDefaults`, and ships
+      `models\chronologer-20220601193755`. Before, Skyline loaded any `rt.safetensors` as AlphaPeptDeep's RT
+      model, so a current (Chronologer) model file would fail or mispredict. Older formats (carafemodel-1)
+      need no support or test (developer's decision).
+- [x] Regenerated `TestPerf/CarafeModelBuildLibraryTest.zip` (15.6 MB, was 17.7): carafemodel-2, MS2 and
+      Chronologer RT fine-tuned (RT R2 0.976 -> 0.997), step 3 of
+      `I:\bugs_i\maccoss\20260324_ImportMemory\carafesharp\run-pipeline.ps1` on the Oct 1 Osprey export, CPU,
+      output in `carafesharp\train_chronologer\`. The test asserts the model's RT model is Chronologer.
+      Gates: CarafeSharp 98 passed / 8 skipped (no test data here), inspection clean; Skyline
+      TestCarafeModelBuildLibrary, TestAlphaPeptDeepBuildLibrary (baselines unchanged), TestAlphaPeptDeepUseGpu,
+      AlphapeptdeepLibraryBuilderUnitTest, CodeInspection pass.
+- [x] BlibBuild/BlibFilter deployment to Skyline's bin: already fixed on master by #4751 (GetTargetPath);
+      verified by deleting them from bin and rebuilding.
+
 ## Remaining
 
-- [ ] Verify the CUDA build (`SkylineTorch=cuda`) falls back to CPU on a machine without a GPU, then
-      decide the default.
-- [ ] Verify on a machine with an NVIDIA GPU (compute >= 7.0, driver >= 570).
-- [ ] Delete the now-unused Python infrastructure: `PythonInstaller.cs`, `PythonInstallerUI.cs`, NVIDIA
-      .bat templates, `PythonEmbeddable*` settings, their resources, `InstallNvidiaTest`,
-      `PythonBootstrapTimeoutTest`, SkylineNightly LongPathsEnabled. Keep `PythonInstallerLegacyDlg`
-      (Tool Store) and the `PythonInstallerUtil` path helpers the Java Carafe builder uses.
-- [ ] On-demand CUDA download (in progress 2026-10-13, uncommitted):
+- [ ] Verify on a machine without an NVIDIA GPU: "Use GPU" disabled, CPU prediction works.
+- [ ] Move `CarafeModelBuildLibraryTest.zip` to a server before the PR (developer's task).
+- [ ] `/code-review high`, full build + TestPerf, then open the PR (`skyline:`).
+- [ ] Ion mobility: the CCS model is ported in CarafeSharp (#4717, `-ccs`); Skyline's AlphaPeptDeep libraries
+      could write 1/K0 again. The class doc comment saying CarafeSharp has no CCS port is stale.
+- [x] On-demand CUDA download (committed 548d8bebc5, pushed 2026-10-13):
       * CarafeSharp.Models: `LibTorchRuntime` (preloads a libtorch folder by full path before TorchSharp
         loads by name; refuses a second libtorch, and stale libtorch beside TorchSharp.dll),
         `LibTorchPackageSet` + `LibTorchPackageSet.targets` (build writes the libtorch-cuda part package
@@ -64,12 +85,5 @@ Installer size is not a concern on this branch; on-demand CUDA download is defer
         4.1 GB installed) and GPU prediction, via a temporary uncommitted TestPerf test.
       * Dev gotcha: `Stage-Tests.ps1` robocopies without /MIR, so old CUDA builds leave libtorch in
         `bin\staging\<Config>\runtimes\win-x64\native`; `LibTorchRuntime.Load` now says so.
-- [ ] CCS model port (someone else).
-- [ ] Fine-tuning through CarafeSharp (the Python path never had it wired).
-
-## Notes
-
-- Pre-existing, not this branch: `Skyline.csproj` deploys BlibBuild/BlibFilter from
-  `bin\$(Configuration)\net10.0`, but `Build-Skyline.ps1` passes `/p:Platform=x64`, so they build to
-  `bin\x64\$(Configuration)\net10.0` and never reach Skyline's bin; AlphaPeptDeep's import then fails with
-  "Failure starting command BlibBuild". Worked around locally by copying the x64 output. Same on the port branch.
+- [ ] Later: fine-tuning from inside Skyline (today a .carafemodel comes from the CarafeSharp command line
+      and Osprey's training export).
