@@ -5,13 +5,12 @@
   branches off master, listed here as they start)
 - **Base**: `master`
 - **Created**: 2026-10-10
-- **Status**: In Progress. PR 1, PR 2, PR 3a and PR 3b MERGED (#4820, #4821, #4825, #4830 as
-  d2b56e0a51 on 2026-10-12). No resident route and no allowance is left in the code. PR 4 (issue
-  #4664 + planner maps) is code complete with all local gates green, opened as #4838
-  (2026-10-13 entry). After it merges: the three-machine SEA-AD + CHS-SEER acceptance runs.
+- **Status**: All five PRs MERGED (PR 4 [#4838] as 4c2eba1af8 on 2026-10-13). No O(files x entries)
+  structure is left. Remaining: the three-machine acceptance runs (section "Acceptance runs - three
+  machines"); the TODO stays active until their results are recorded.
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
-- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 [#4838](https://github.com/ProteoWizard/pwiz/pull/4838) (opened 2026-10-13, part of issue #4664)
+- **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 [#4838](https://github.com/ProteoWizard/pwiz/pull/4838) (merged 2026-10-13, part of issue #4664)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Goal
@@ -504,6 +503,20 @@ complete, and records the outcome below this section.
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-13 (evening) - Merged PR 4
+
+PR #4838 merged as 4c2eba1af8 (`osprey: Improved model-diagnostics regeneration to stream per run and
+removed the planner's whole-experiment maps`). Shipped: admitted-decoy sets freed per run; experiment
+records read once; the diagnostics fold reads four parquet columns per run into a reused `Row[]`
+(`FirstPassFoldRows`, changed from parallel arrays to an array of structs on Brendan's review,
+`904ddb0adb`); `FdrScoresSidecar.TryJoinRows` is the one join walk for the stub overlay and the fold;
+the Stage 6 planner keeps no whole-experiment map (actions, consensus targets, refits, gap-fill).
+Gates on the final head: unit 640/640, `regression-parallel -Dataset All` 48/0/0, cross-impl
+Stellar Single + Astral All at 1e-9 (on `dc02532231`), TeamCity Perf/Regression #312 SUCCESS.
+SEA-AD 82 regeneration 14m45s -> 8m12s (measured on `3295597cfb`). Issue #4664 stays open: its
+500/1000-file acceptance is replaced by the three-machine runs (procedure and results on
+`M:\home\brendanx\data\MacCoss\Osprey\acceptance-20261013`, `U:\data\...` on MACS2).
 
 ### 2026-10-13 - PR 4 code complete (4 local commits), all local gates green
 
