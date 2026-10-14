@@ -103,7 +103,7 @@ Facts the plan turns on:
   PrecisionNumber, ...). Osprey has `FileSaverTest`, `ProgressReporterTest`, `ArgTokens`,
   `CommandLineErrorTest`; CarafeSharp has `CommandLineErrorTest`, `LibraryCommandLineTest`,
   `BlibLibraryWriterTest` (exercises `PartialFile`).
-- **PR #4717 deferred two follow-ups**: atomic model-folder writes (closed by PR A) and training
+- **PR #4717 deferred two follow-ups**: atomic model-folder writes (closed by PR 1, part A) and training
   memory at 40-run scale (out of this sprint).
 
 ## Decisions (Brendan, 2026-10-14)
