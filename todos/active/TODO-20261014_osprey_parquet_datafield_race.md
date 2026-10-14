@@ -77,7 +77,7 @@ Reproduced against the shipped `Parquet.dll`: a per-row reader saw `MaxDefinitio
   - `out.blib` differs only in `LibInfo` and the source file paths.
   - The 82 reconciled parquets it wrote are clean by `parqdetect.py`.
 - [x] `/code-review medium`: no correctness findings. Fixed a stale comment, and the test now also checks the read-back row count and makes a minimum of 3 writes per writer.
-- [ ] TeamCity
+- [ ] TeamCity (Perf/Regression #313 red from `tctest.bat`'s `OSPREY_EXIT`, fixed in `e22de13b7e`; needs a re-trigger)
 
 ## Detection of existing files
 
@@ -95,3 +95,12 @@ statistics alone cannot see the corruption.
 ### 2026-10-14 - Found, fixed and verified during the MACS2 acceptance night session
 
 Branch commit `b160fcd8f8`, based on master `4c2eba1af8` (#4838).
+
+### 2026-10-14 - Perf/Regression red from tctest.bat, not from the fix
+
+Build #313 (ID 4216731): Osprey regression 48/48 and 106 tests passed; the CarafeSharp chained
+leg failed at Osprey startup with "does not recognize the environment variable(s) OSPREY_EXIT".
+`tctest.bat` saves the Osprey regression's exit code in `OSPREY_EXIT` before running CarafeSharp,
+and #4825 made Osprey refuse unknown `OSPREY_*` variables. The last green build (#302) predates
+both #4825 and #4717, so master fails the same way. Renamed it to `OSPREYDEV_EXIT`, the prefix
+for script variables (commit `e22de13b7e`).
