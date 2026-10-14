@@ -146,7 +146,11 @@ failed PD's protein FDR has no master protein, so no `Proteins` row.
       with the exact Exp. q-value. In Skyline (connector): peptide 0.01 Add All = 7943 precursors
       exactly; protein 0.01 = 1016 groups, no precursor under a failing group. PD 3.x inventory
       on PanoramaWeb in `ai/.tmp/sessions/20261014-76d46ce6/pd-panoramaweb-inventory.md` (no
-      public PD 3.2 file has its .pdResultDetails; one 3.2 file, 7.8 GB, not yet checked).
+      public PD 3.2 file has its .pdResultDetails). The one PD 3.2.0.196 file (MacCoss fluid assays
+      `240109_P1_IO15cm_NeoLC_CSF_60m_2ThGPF.pdResult`, 7.8 GB, in `F:\GlobalQValueDemo\PD\CSF_3.2\`)
+      is useless for this: corrupt on PanoramaWeb itself (zeroed pages, byte-identical to the
+      server), and it has no TargetPeptideGroups and no Expqvalue/IsMasterProtein; TargetPsms
+      still has qValue/PEP. BlibBuild stops cleanly ("database disk image is malformed").
 - [x] `/code-review medium` (2026-10-14), fixes in fc0a36dfb7: DIA-NN blank/null
       Global.PG.Q.Value no longer stored as 0; the Import FASTA filter no longer keeps a failing
       peptide's heavy (not-in-library) precursors; library minimizing keeps the global columns and
