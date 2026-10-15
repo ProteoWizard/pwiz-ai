@@ -12,9 +12,11 @@
   `-log_file` / `-timestamp` / `-memstamp` options and the hand-written usage) and
   `CarafeSharp.Core.csproj` (the same CommonUtil reference), so the merge re-adds those three
   options as declarations.
+- **PR 3 branch**: `Skyline/work/20261015_osprey_carafe_contracts` (off master `1575f27201`
+  2026-10-15, in `C:\proj\pwiz`). Part F first (the shared training-record assembly), then part G.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb); next PR 3 off master. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 started 2026-10-15 on its branch: part F coded (see the PR 3 section), gating. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
@@ -510,6 +512,44 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
 - **Part F - training-record assembly.** Extract it; move Osprey's writer and CarafeSharp's reader
   onto it; delete the duplicates. Gate: Osprey and CarafeSharp regressions unchanged byte for byte,
   and the chained leg.
+  - **Where it lives (decided 2026-10-15, answering the open question):**
+    `pwiz_tools/CarafeSharp/CarafeSharp.Contracts` (namespace `pwiz.CarafeSharp.Contracts`),
+    plain net10.0 under CarafeSharp's `Directory.Build.props`, depending only on CommonUtil
+    (`SimpleFileSaver`) and the patched Parquet.Net. The dependency runs one way (decision 4):
+    `Osprey.IO`, `Osprey.Scoring`, `Osprey.Tasks`, `Osprey` and `Osprey.Test` reference it as an
+    out-of-solution project, the way they reference CommonUtil (Osprey's
+    `Directory.Build.targets` carries the Configuration), so Osprey.sln stays Osprey-only and
+    CarafeSharp.sln builds and inspects the project. Part G's pairing manifest and library
+    contract validator go in the same assembly.
+  - [x] `TrainingRecord` + `TrainingIonFlags` (Osprey's names, which follow the columns; CarafeSharp
+        renamed onto them: `NPeakScans`, `MpFitted`, `MpResidualMad`, `NSameApexClaimants`,
+        `NCoelutingClaimants`, `NFiniteScans`, `PolishPosResidMax`, `SharedApexN`,
+        `SharedCoeluteN`, `NSlots` for `SlotCount`; `Has(slot, flag)` kept from CarafeSharp's).
+  - [x] `ParquetBlobCodec` public in the assembly (`ParquetScoreCache` uses it from there); its one
+        resource string moved out of `OspreyIOResources` (en, ja, zh-Hans) into `ContractsResources`.
+  - [x] `TrainingExportParquet`: `EXT`, `FORMAT_VERSION` (int; `FORMAT_VERSION_TEXT` for footers),
+        `IsExport`, `ColumnNames`, `Write(..., rowsPerGroup)` and one validated `Read` (format
+        version 1 or 2, every main column present, `4 * (L - 1)` slots per row - the checks
+        CarafeSharp's reader made, now on both sides); `ReadFooter`. Osprey's `PathFor` moved to
+        `TrainingExportWriter.PathFor` (it needs `ArtifactPaths`).
+  - [x] `TrainingExportKeys`: every footer key as a constant; Osprey's `BuildMetadata` and
+        CarafeSharp's `ModelTrainer`, `OspreyTrainingSet`, `TrainingExportLocator` use them.
+  - [x] `TrainingExport` (was `CarafeSharp.IO/OspreyTrainingExport`): path + records + footer with
+        the typed accessors (`RtMax`, `Ms2ScanWindow`, `DominantCollisionEnergy`, ...).
+  - [x] Deleted: `Osprey.Core/TrainingRecord.cs`, `Osprey.IO/TrainingExportParquet.cs`,
+        `Osprey.IO/ParquetBlobCodec.cs`, `CarafeSharp.IO/OspreyTrainingRecord.cs`,
+        `CarafeSharp.IO/OspreyTrainingExport.cs`, `CarafeSharp.Core/OspreyTrainingExportFile.cs`.
+  - [x] CarafeSharp's tests write exports through the shared writer; the reader-refusal cases
+        (format 1 with its extra columns, format 3, no version, a missing column) rewrite a
+        written file column by column (`OspreyTestRecords.Rewrite` over `ParquetColumns`), so
+        the test no longer carries its own copy of the schema.
+  - [x] Docs: `Osprey/docs/14-intermediate-files.md` and `22-training-export.md` name the new home.
+  - [x] Gates (part F commit, 2026-10-15): Osprey Debug build, 637 tests, inspection clean;
+        CarafeSharp Debug build, 103 tests (7 parity tests skipped for test data this machine
+        lacks), inspection clean after dropping eight `using pwiz.CarafeSharp.IO;` that the move
+        made redundant; `regression.ps1 -Dataset Stellar` PASS (byte-identical golden, modes 1,
+        1c, 4, 6); CarafeSharp `regression.ps1 -Leg Chained` REGRESSION PASSED
+        (`CarafeSharp/TestResults/regression/stellar-chained-cpu-20261015-093120`).
 - **Part G - contracts.** Fold the pairing manifest schema into the same assembly and land the
   library contract validator from `TODO-carafe_osprey_library_contract.md` (CarafeSharp refuses to
   write a violating library; Osprey fails at load, every violation listed by class).
@@ -586,7 +626,7 @@ Every PR, before `gh pr create` (then `/code-review medium` on the branch):
 - Default `--training-input` (design 4), with Mike.
 - Whether the shared pipeline base is a namespace in CommonUtil or its own `Shared/` project
   (PR 1 decides; a separate project only if Skyline must not see it).
-- Where the Phase 2 contracts assembly lives so CarafeSharp references it without the Osprey search
-  stack (the library contract TODO's open question; PR 3 decides).
+- ~~Where the Phase 2 contracts assembly lives~~ Decided in PR 3 (2026-10-15):
+  `pwiz_tools/CarafeSharp/CarafeSharp.Contracts`, see the PR 3 section.
 - The `MultiProgressReporter` scoped-output seam depends on `AsyncLocal` flow into `Parallel.For`;
   confirm CarafeSharp's writer thread (`LibraryChunkWriter`) attributes its lines correctly after PR 1.
