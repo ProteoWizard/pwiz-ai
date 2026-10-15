@@ -775,9 +775,30 @@ handoffs of 2026-10-15.
       for TSV libraries only. The contract's rule 6 is then checked from the table. The
       StellarLibDecoy regression library must carry the table (it pairs through the manifest
       today); regenerate it through CarafeSharp or add the table to the committed library.
-- [ ] Name: the metadata table is written by both tools, so when the two tables are formalized
-      in the BiblioSpec schema (the port's `BlibSchema`, then Skyline's reader) it gets a
-      tool-neutral name; `OspreyMetadata` stays until then so existing libraries resume.
+- [ ] **`LibMetadata` (key TEXT PRIMARY KEY, value TEXT), decided with Brendan 2026-10-15,
+      renamed from `OspreyMetadata` in this PR.** One table of single-row values about the
+      library as a whole - `LibInfo` keeps its five identity and version columns and stops
+      growing (the schema's own history shows every past addition went to `RefSpectra` or, once,
+      `SpectrumSourceFiles`; a per-file key-value table was considered and declined). Keys are
+      namespaced by the writing tool (`osprey.validity`, `osprey.version`, `osprey.run_fdr`,
+      `carafe.model`, ...) with a small unprefixed shared set every tool honors
+      (`library_contract` first). Every tool that makes or transforms a library records its full
+      command line under its own key (`bibliospec.blibbuild.command`,
+      `bibliospec.blibfilter.command`, `osprey.command`, `carafe.command`): a library should carry
+      how it was made, which is lost today. Readers test for the table, not the version (Nick's
+      optional-column rule). Osprey's resume stamp reads `LibMetadata` and falls back to
+      `OspreyMetadata` for one release so existing outputs resume. `LibMetadata` and `DecoyPairs`
+      go into the port's `BlibSchema` as the standard definitions.
+
+### PR 3c - BlibMaker on BiblioSpec.IO (Brendan, 2026-10-15; after 3b and the #4848 adaptation)
+
+- [ ] Port `pwiz_tools/BiblioSpec`'s `BlibMaker` to write through `BiblioSpec.IO`'s `BlibWriter`
+      (the writer gains what BlibMaker needs that Osprey and CarafeSharp did not); the BiblioSpec.IO
+      `BlibSchema` copy and the port's `BlibSchemaIdentity` test go, leaving one definition.
+      BlibBuild and BlibFilter record their command lines in `LibMetadata`. Gate: the port's
+      reference checks (`tests/reference/*.check`) and Skyline's library build tests. Skyline's
+      NHibernate `BlibDb` is then the one writer not on it, left for a later PR because its tests
+      compare library bytes.
 
 ### PR 4 - one command
 
