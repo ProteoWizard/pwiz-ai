@@ -6,8 +6,8 @@
 - **Base**: `master`
 - **Created**: 2026-10-10
 - **Status**: All five PRs MERGED (PR 4 [#4838] as 4c2eba1af8 on 2026-10-13). No O(files x entries)
-  structure is left. Remaining: the three-machine acceptance runs (section "Acceptance runs - three
-  machines"); the TODO stays active until their results are recorded.
+  structure is left. Three-machine acceptance PASSED 2026-10-15 (section "Acceptance outcome"). Ready for
+  `/pw-complete` once Brendan has reviewed it and decided on issue #4664.
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
 - **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 [#4838](https://github.com/ProteoWizard/pwiz/pull/4838) (merged 2026-10-13, part of issue #4664)
@@ -495,6 +495,36 @@ spectra written; and the products `out.stats.tsv`, `out.protein_groups.tsv`, `ou
 **Comparison.** UW8's session (or Brendan) compares once all `results\<machine>\RESULTS.md` files are
 complete, and records the outcome below this section.
 
+### Acceptance outcome (UW8 session, 2026-10-15)
+
+All six runs exit 0, and each cohort gives one answer on every machine. Detail and products:
+`M:\home\brendanx\data\MacCoss\Osprey\acceptance-20261013\results\<machine>\RESULTS.md`.
+
+| | UW8 (128 GB) | UW25 (64 GB) | MACS2 (fast1) |
+|---|---|---|---|
+| SEA-AD wall | 3:53:39 active (restarted, resumed) | 4:07:37 | 2:16:20 |
+| SEA-AD `out.stats.tsv` | `45F2E16C` | `45F2E16C` | `28E5A3D9` -> `45F2E16C` with #4842 |
+| SEA-AD FirstPassFDR lanes | 7 | 3 | 8 |
+| CHS 446 wall | 19:29:11 | 21:05:59 | 10:57 |
+| CHS peak private | 50.4 GB (8 lanes) | **31.1 GB** (4 lanes) | 56.3 GB (8 lanes) |
+| CHS `out.stats.tsv` / protein groups | `119E2984` / `F73B639C` | same | same |
+
+1. **Exit 0**: all six.
+2. **CHS 446 on 64 GB (UW25)**: PASS - peak private 31.1 GB, floors falling, no gap >= 30 s.
+3. **Same answer**: PASS on CHS on all three machines (stats and protein groups byte-identical; UW8 vs UW25 blib
+   `OVERALL: PASS`, all 21,241,822 RT rows 0 divergent). SEA-AD: UW8 = UW25 byte-identical, blib 0 divergent;
+   MACS2 differed in run 28 because of a parquet-writer race under parallel files (static `DataField`s shared across
+   concurrent writes), fixed in #4842 (`7066e0ac39`); the fix binary reproduces UW25 exactly, and so does MACS2's
+   SEA-AD under WSL (Linux).
+4. **No wall regression**: i9s within noise of their earlier runs (UW25 +2.1%); MACS2 SEA-AD +5% with the whole
+   difference in PerFileScoring, which the sprint did not touch (shared box load).
+
+- **Restart test (unplanned)**: Windows Update rebooted UW8 at 23:29 mid-rescore (file 57/82). `Run-SeaAd.ps1 -Resume`
+  rolled `run.log` to `run-20261013_232908.log`, skipped PerFileScoring and FirstPassFDR as valid, adopted 56
+  re-scored runs and redid 26; the resumed product is byte-identical to UW25's uninterrupted run.
+- UW8 CHS logged 17 gaps of 30-77 s, all between progress lines of FirstPassFDR scoring/reconciliation planning and
+  SecondPassFDR diagnostics with 8 lanes on 30 threads; UW25 (4 lanes) and MACS2 (72 threads) logged none.
+
 ## Coordination
 
 - #4710 (maccoss demux, port base) touches OspreyEnvironment, PerFileRescoreTask, ScoringTaskShared
@@ -503,6 +533,12 @@ complete, and records the outcome below this section.
 - `ResidentPaths.cs:125` still describes the retired stage7-stream-off oracle oddly - clean up in PR 3
 
 ## Progress Log
+
+### 2026-10-15 - Acceptance runs complete on all three machines
+
+UW8 ran SEA-AD 82 (restarted by Windows Update, finished with `-Resume`) and CHS-SEER 446; compared against UW25 and
+MACS2. All four pass criteria met - see "Acceptance outcome" above. The one cross-machine difference (MACS2 SEA-AD
+run 28) was the parquet `DataField` race, fixed in #4842.
 
 ### 2026-10-13 (evening) - Merged PR 4
 
