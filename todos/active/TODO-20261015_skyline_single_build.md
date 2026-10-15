@@ -6,7 +6,7 @@
 - **Created**: 2026-10-15
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4850](https://github.com/ProteoWizard/pwiz/pull/4850) (draft)
 - **Checkout**: `C:\Dev\BuildTrouble`
 
 ## Objective
