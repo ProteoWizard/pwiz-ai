@@ -734,8 +734,9 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
     mirror the optional columns into the BiblioSpec.IO `BlibSchema` copy so `BlibSchemaIdentity`
     holds.
 
-**Next session handoff**: read `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` before
-touching the blib writer; it supersedes the morning handoff.
+**Next session handoff**: read `ai/.tmp/handoff-20261015_osprey_carafe_pr3_open.md` (PR 3 open
+as #4852; TeamCity, merge, then PR 3b and adapting #4848); it supersedes the two earlier
+handoffs of 2026-10-15.
 - **Part G - one blib writer (decision, Brendan, 2026-10-14).** The core writer lives in
   `pwiz_tools/Shared/BiblioSpec`, which becomes the DLL every tool imports: a plain net10.0
   project depending only on System.Data.SQLite (the version all three already carry), holding
