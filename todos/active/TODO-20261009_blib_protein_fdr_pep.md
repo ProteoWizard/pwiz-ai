@@ -151,6 +151,13 @@ failed PD's protein FDR has no master protein, so no `Proteins` row.
       is useless for this: corrupt on PanoramaWeb itself (zeroed pages, byte-identical to the
       server), and it has no TargetPeptideGroups and no Expqvalue/IsMasterProtein; TargetPsms
       still has qValue/PEP. BlibBuild stops cleanly ("database disk image is malformed").
+      Nick found an intact 13.0 GB copy (plus a PD 3.1.1.39 `240205_P1_IO15cm_NeoLC_GPF_DIA2Th`)
+      in a private MacCoss PanoramaWeb folder: `D:\GlobalQValueDemo\PD\2024-01 CSF methods Thorium\`.
+      It has the full 3.2 schema (TargetPeptideGroups qValue/PEP/Confidence, Expqvalue,
+      IsMasterProtein); 3.2 renamed nothing the reader uses. BlibBuild (default cutoff) 351 s /
+      5.8 GB peak: 242,698 spectra, 12,833 peptides; every peptide value matches PD's group (210
+      spectra match only by I/L equivalence), all 1709 protein rows are master proteins with the
+      exact Exp. q-value. Note `-c` is a probability: `-c 0.05` means q <= 0.95, not 0.05.
 - [x] `/code-review medium` (2026-10-14), fixes in fc0a36dfb7: DIA-NN blank/null
       Global.PG.Q.Value no longer stored as 0; the Import FASTA filter no longer keeps a failing
       peptide's heavy (not-in-library) precursors; library minimizing keeps the global columns and
