@@ -7,7 +7,7 @@
 - **Created**: 2026-09-28
 - **Status**: In Progress
 - **Module**: `skyline` (also carries CarafeSharp changes Skyline needs; the developer chose to keep them here)
-- **PR**: (none yet)
+- **PR**: [#4849](https://github.com/ProteoWizard/pwiz/pull/4849) (draft; screenshots in nickshulman/pr-assets `pwiz/4849-alphapeptdeep`)
 
 ## Objective
 
