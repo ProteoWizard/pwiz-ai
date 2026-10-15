@@ -156,6 +156,16 @@ Facts the plan turns on:
    own writers were the most tenuous part of the two tools. The one writer is
    `pwiz_tools/Shared/BiblioSpec/BiblioSpec.IO` (see PR 3, part G); the BiblioSpec port's
    `BlibMaker` and, the longest pole, Skyline's NHibernate `BlibDb` come onto it after this sprint.
+7. **The blib Osprey and CarafeSharp write carries no tool tables beyond a metadata table and
+   `DecoyPairs` (Brendan, 2026-10-15).** The four `Osprey*` output tables (peak boundaries, run
+   scores, experiment scores, coefficients) go: writing tool information to unsupported tables
+   is not to be encouraged, even where every reader would ignore them, and they are redundant
+   with `RefSpectra.score` / `copies` and `RetentionTimes` anyway. The metadata table (the
+   validity stamp, the contract claim) and `DecoyPairs` have value and stay. A blib that supplies
+   decoys must carry `DecoyPairs` or the search uses generated decoys; Osprey pairs blib decoys
+   from the table, and the manifest pairing and composition fallback for blib input are retired.
+   The first supplier is CarafeSharp; a later one (Skyline with Koina) learns the table. Done as
+   its own PR after PR 3 and before PR 4 (see "PR 3b").
 
 ## PR plan (compressed 2026-10-14)
 
@@ -697,8 +707,28 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
           tests (the 8 parity tests run now that `testfiles` and `export` are on this machine),
           inspection clean; `regression.ps1 -Dataset Stellar` PASSED; CarafeSharp
           `regression.ps1 -Leg Chained` REGRESSION PASSED (`stellar-chained-cpu-20261015-131415`).
-        - [x] Committed as bf892117ff (2026-10-15). Next: `regression-parallel.ps1 -Dataset All`,
-          `/code-review medium`, push, `gh pr create --label osprey`, TeamCity on `pull/<N>` (ask).
+        - [x] Committed as bf892117ff (2026-10-15). `regression-parallel.ps1 -Dataset All` PASSED
+          on it. `/code-review medium`: nine findings, six fixed (a DecoyPairs write failure fails
+          a contract run; the generator refuses contract mode without a blib and manifest before
+          the models load and reads the manifest once; `BlibWriter` disposes the extension once;
+          `ReadDecoyPairs` quotes its path; Osprey logs the recognized decoy prefixes before the
+          check), three dropped (the format-1 training export claim is wrong - a format-1 file is a
+          format-2 file plus extra columns, per `OspreyTrainingExportTest`; the clipped-row pair
+          skip is the documented design; the `BlibSchema` copy is decision 6's). Fixes re-gated:
+          Osprey 637 tests, CarafeSharp 113 tests, both inspections clean, Stellar PASSED, chained
+          leg PASSED (`stellar-chained-cpu-20261015-135825`).
+  - **Nick's PR [#4848](https://github.com/ProteoWizard/pwiz/pull/4848)** (draft,
+    `Skyline/work/20261009_blib_protein_fdr_pep`) adds optional q-value and PEP columns to
+    `RefSpectra` and `Proteins` (`OptionalColumn` in the port's `BlibSchema`, added with
+    `ALTER TABLE`) and writes them from Osprey through the `Osprey.IO/BlibWriter.cs` this PR
+    deletes (`AddSearchGlobalColumns`, `SetGlobalValues`, `AddProteinGroup`,
+    `AddRefSpectraProtein`), plus `BlibOutputWriter`, `BlibComparer`, `BlibGolden.ps1` and the
+    goldens. Decided (Brendan, 2026-10-15): PR 3 merges first; Nick is leaving on vacation and
+    will not merge before us; we adapt his PR after our merge - merge master into it, move the
+    four writer methods into the shared `BlibWriter` as optional-column support (the record
+    carries the four spectrum values; a protein-group insert beside the accession one), and
+    mirror the optional columns into the BiblioSpec.IO `BlibSchema` copy so `BlibSchemaIdentity`
+    holds.
 
 **Next session handoff**: read `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` before
 touching the blib writer; it supersedes the morning handoff.
@@ -725,6 +755,24 @@ touching the blib writer; it supersedes the morning handoff.
 - **Docs.** Done: `CarafeSharp/Carafe-workflow.html`, PR [#4847](https://github.com/ProteoWizard/pwiz/pull/4847) (docs only; merged 2026-10-15 as a5a3fc3dbb), in the style of `Osprey/Osprey-workflow.html`
   (hand-maintained), one block per stage with its checkpoint file; after PR 4 it folds into the
   Osprey page as the library-build chapter.
+
+### PR 3b - the blib schema the two tools write (decision 7, 2026-10-15; not started)
+
+- [ ] Drop `OspreyPeakBoundaries`, `OspreyRunScores`, `OspreyExperimentScores` and
+      `OspreyCoefficients` from `OspreyBlibTables` and `BlibOutputWriter`; the metadata table
+      stays. Check what `Osprey.Test/BlibComparer` and `Regression/BlibGolden.ps1` project (the
+      handoff of 2026-10-15 says values by precursor key, never DDL), rewrite `docs/13` for the
+      tables that remain, and accept the divergence from Rust osprey's output in
+      `Compare/README.md` (the cross-impl bridge compares blibs).
+- [ ] Osprey pairs blib-supplied decoys from `DecoyPairs` (`BlibLoader.ReadDecoyPairs` already
+      reads `IsDecoy`; add `PairID` and `IsEntrapment`) and refuses a decoy-bearing blib without
+      the table unless decoys are generated; the manifest pairing and composition fallback stay
+      for TSV libraries only. The contract's rule 6 is then checked from the table. The
+      StellarLibDecoy regression library must carry the table (it pairs through the manifest
+      today); regenerate it through CarafeSharp or add the table to the committed library.
+- [ ] Name: the metadata table is written by both tools, so when the two tables are formalized
+      in the BiblioSpec schema (the port's `BlibSchema`, then Skyline's reader) it gets a
+      tool-neutral name; `OspreyMetadata` stays until then so existing libraries resume.
 
 ### PR 4 - one command
 
