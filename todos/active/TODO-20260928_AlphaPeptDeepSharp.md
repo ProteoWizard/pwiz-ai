@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Checkout**: `I:\git_i\sky_net10_alphapeptdeep`
-- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (pushed through e62d5693d2)
+- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (master merged 2026-10-15)
 - **Base**: `master` (#4717 CarafeSharp squash-merged 2026-10-13 as 28c7b7ff03 and merged into this branch)
 - **Created**: 2026-09-28
 - **Status**: In Progress
@@ -27,7 +27,7 @@ port of the CCS model.
 - [x] `Skyline.csproj`: ProjectReference to `CarafeSharp.Models`, libtorch native via `SkylineTorch`
       property (cpu default, cuda), pretrained_models.zip + LICENSE copied to `models\alphapeptdeep-v1`.
 - [x] `AlphapeptdeepLibraryBuilder`: in-process prediction replaces settings export + `peptdeep cmd-flow`;
-      writes the same predict.speclib.tsv format (no decoys, no IonMobility/CCS), existing transform +
+      writes the same predict.speclib.tsv format (no decoys; CCS came back in e62d5693d2, below), existing transform +
       BlibBuild/BlibFilter import unchanged. GPU via `TorchDevice.Resolve("gpu")` with CPU fallback.
       Python members removed (CreatePythonInstaller, ScriptsDir, PythonVersion, alpharaw workaround).
 - [x] `BuildLibraryDlg`: no Python setup for AlphaPeptDeep.
@@ -63,9 +63,37 @@ port of the CCS model.
 
 ## Remaining
 
-- [ ] Verify on a machine without an NVIDIA GPU: "Use GPU" disabled, CPU prediction works.
-- [ ] Move `CarafeModelBuildLibraryTest.zip` to a server before the PR (developer's task).
-- [ ] `/code-review high`, full build + TestPerf, then open the PR (`skyline:`).
+- [x] Verified on a machine without an NVIDIA GPU (developer, 2026-10-14): "Use GPU" explains why, CPU
+      prediction works.
+- [x] Old Python installs need no cleanup code: the settings import copies only tools the settings name
+      (never `Tools\Python`), an old ClickOnce install's Python goes with that install's uninstall, and the
+      net10 uninstall removes all of `Tools\` (151b60ae45). Say so in the PR.
+- [x] Removed `PythonInstaller_BuildPrecursorTable_Python_0_installation_is_required`, the one resource
+      the branch left unreferenced (its `_please_wait` sibling and `PythonInstaller_Download_failed_...`
+      were already unused on master; out of scope).
+- [ ] Move `CarafeModelBuildLibraryTest.zip` to a server (developer's task; deferred, not blocking the
+      draft PR).
+- [x] `/code-review high` (2026-10-14), 10 findings. Fixed in a93f925e12: partly loaded libtorch left
+      `Loaded` null; per-package progress segments could repeat an end (packages < 1%); older CUDA runtime
+      versions now removed once a new one installs (renamed first, so one another Skyline has loaded stays);
+      `ProgressStatus.ChangePercentComplete` compared the zoomed percent with the overall one (resets in
+      ChangeSegments kept for external `IsPercentComplete` callers); builder used the GPU whenever the CUDA
+      runtime was loaded, now only with `UseGpu`; dead `ArgumentAndValue`, output-line members and the
+      `_please_wait` resource removed. Dropped: uninstall removing all of `Tools\` (deliberate, see
+      Setup.iss), .carafemodel validated on the UI thread and `CudaInstaller`/`CudaDriver.Find` cost (small
+      files, one-time driver init), `WizardPages.SelectedIndex` hiding the base (all callers go through it).
+- [x] Full ReSharper inspection crashes in jb ("Roslyn Worker process exited unexpectedly", no log detail,
+      3 runs, fresh cache too); the developer fixed the two warnings it found on another run (29c5d0889b).
+      CarafeSharp inspection clean, CodeInspection test passes.
+- [x] `Test-Installer.ps1` (2026-10-14): install, SkylineCmd, uninstall removing Tools\ and user.config all
+      passed; its final check failed only on a `.vs` folder (Visual Studio state from 2026-10-10) left in
+      the install folder, which no installer step creates.
+- [x] Screenshots for the draft PR (2026-10-15, Release build driven through the Skyline MCP): real CUDA
+      download (16 packages, ~2.9 GB, into `Tools\libtorch-cuda-12.8-win-x64.2.10.0`, 4.1 GB), GPU builds
+      with the pretrained and the fine-tuned model, restart message. Found and fixed (ff3b767df4) the
+      download prompt still saying the runtime is shared by all installations.
+- [ ] Decide: the "limited support in the default predictive model ... consider fine-tuning with Carafe"
+      warning still shows when a .carafemodel is chosen.
 - [x] Ion mobility (e62d5693d2): the builder predicts CCS with CarafeSharp's pretrained `CcsModel` (a
       .carafemodel holds none) and writes a `CCS` column, which the transform keeps as
       `CollisionalCrossSection` (0 for Phospho/GlyGly peptides), as the Python path did; Skyline converts CCS
@@ -85,9 +113,12 @@ port of the CCS model.
         driver >= 12.8, compute >= 7.0). Unit test `LibTorchRuntimeInstallerTest`.
       * Skyline: CPU libtorch in `torch\cpu` (not beside the exe), CUDA package restored with
         ExcludeAssets=all only for the list; `TorchRuntimes` picks/loads the runtime, downloads into
-        %LOCALAPPDATA%\Skyline\libtorch\<set>. BuildLibraryDlg AlphaPeptDeep page has a "Use GPU" checkbox
-        (Nick's design): enabled when the GPU qualifies and no libtorch is loaded yet; checking it with
-        the runtime missing confirms the size and downloads; choice saved in `AlphaPeptDeepUseGpu`.
+        Skyline's Tools folder (151b60ae45; was %LOCALAPPDATA%\Skyline\libtorch), which the installer's
+        uninstall removes along with user.config (`Test-Installer.ps1` checks it). BuildLibraryDlg
+        AlphaPeptDeep page has a "Use GPU" checkbox (Nick's design): always enabled; checking it when the GPU
+        cannot be used (no driver, old driver, old GPU, another runtime already loaded this session) says
+        why and unchecks it; with the runtime missing it confirms the size and downloads; choice saved in
+        `AlphaPeptDeepUseGpu`.
         Tests predict on the CPU unless they set `TorchRuntimes.CudaDriver`.
       * Verified 2026-10-13 on RTX 4090 / driver 610.60: real nuget.org download (16 packages, ~6 min,
         4.1 GB installed) and GPU prediction, via a temporary uncommitted TestPerf test.
