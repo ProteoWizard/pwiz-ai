@@ -86,6 +86,13 @@ Monitors PR builds on `teamcity.labkey.org` — build status, test failures, bui
    ```powershell
    claude mcp add teamcity -- python ./ai/mcp/TeamCityMcp/server.py
    ```
+   From a Claude Code session whose shell is pinned to a checkout (the cd guard allows only the
+   active checkout), run it in the root without a `cd`:
+   ```powershell
+   pwsh -WorkingDirectory C:\proj -Command 'claude mcp add teamcity -- python ./ai/mcp/TeamCityMcp/server.py'
+   ```
+   The output names the scope it registered into (`[project: C:\proj]`); anything else is the
+   wrong directory.
 
 4. **Restart** Claude Code / Claude Desktop. MCP servers and their config are read at session
    start, so a newly added server never appears mid-session.
