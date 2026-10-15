@@ -18,7 +18,10 @@
   split `43ed20a53d`, the one writer `a6633cce1e`, the contract `bf892117ff`, the review fixes
   `132c24e067`, plus the master merge `49b2e0b6f2`).
 - **PR 3 branch**: `Skyline/work/20261015_osprey_carafe_contracts` (off master `1575f27201`
-  2026-10-15, in `C:\proj\pwiz`). Part F first (the shared training-record assembly), then part G.
+  2026-10-15, in `C:\proj\pwiz`; deleted after the merge).
+- **PR 3b branch**: `Skyline/work/20261015_osprey_blib_schema` (off master `773aa1bf63`
+  2026-10-15, in `C:\proj\pwiz`, local only; the "PR 3b" section is its checklist). Read
+  `ai/.tmp/handoff-20261015_osprey_carafe_pr3_open.md` first.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
 - **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. Next: PR 3b (decision 7: no Osprey* tables, DecoyPairs pairing, LibMetadata), then adapting Nick's #4848, then PR 3c (BlibMaker on BiblioSpec.IO), then PR 4. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
