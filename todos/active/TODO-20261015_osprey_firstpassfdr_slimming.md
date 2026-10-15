@@ -4,7 +4,13 @@
 - **Branch**: `Skyline/work/20261015_osprey_firstpassfdr_slimming` (local, created from master `a5a3fc3dbb`, not pushed)
 - **Base**: `master`
 - **Created**: 2026-10-15
-- **Status**: Not started. Design and measurements below; read them before touching code.
+- **Status**: A1 in progress (2026-10-15). Design and measurements below; read them before touching code.
+- **Overlap with #4848 (decided 2026-10-15)**: draft PR #4848 (`Skyline/work/20261009_blib_protein_fdr_pep`,
+  stacked on #4823) adds `PeptidePep` inside the pass-2 row walk A1 deletes, plus edits to
+  `FdrExperimentRecord/Accumulator/Sidecar` and `FdrProjectionSinks`. This work is expected to merge FIRST
+  (Mike is not settled on #4848; Nick and Mike are on vacation). After A1 merges, we merge master into
+  #4823 then #4848 and resolve: `PeptidePep` is per-peptide (`peptidePepByPeptide`), so it becomes one more
+  field in A1's per-entry record build. Ask Brendan before pushing to either branch.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: (none yet). Planned as two PRs, A then B (see "Plan").
@@ -152,6 +158,21 @@ Shape:
   without planning. **Verify** (assert equality on SEA-AD and Stellar; CHS logged 648,048).
   `ReleaseUnscorableLibraryFragments` and PerFileRescoring's compaction both read that set, so it must stay
   identical.
+- **No replicated per-run copies (decided 2026-10-15, Brendan; REQUIRED in PR B).** An experiment-wide
+  artifact is written ONCE under the analysis name, never copied under every run stem - Mike has
+  complained about how many files Osprey produces, and an HPC orchestration script can copy one file
+  to every node. Newer artifacts already follow this (`out.1st-pass.retained_base_ids.bin`,
+  `out.1st-pass.fdr_experiment.bin`). In PR B:
+  - the new consensus artifact is analysis-named;
+  - `<stem>.1st-pass.model.json` (82 identical copies on SEA-AD, ~4 KB each) and
+    `<stem>.1st-pass.stratum.json` (82 identical copies, 9.2 MB each = 753 MB; ~4 GB at 446 runs,
+    estimated) become single analysis-named files; update `LoadFromAny`, the resume gates, the HPC
+    relay lists in doc 00 (P1's "replicated" exception goes away), docs 12/14, regression.ps1 mode 3
+    staging and SubsetPipelineTest;
+  - **full inventory of every per-run (`<stem>.*`) file**: confirm each holds information unique to
+    the run it is named for; anything experiment-wide moves to an analysis-named file. Record the
+    inventory (file, writer, readers, per-run or not, size on SEA-AD) in this TODO and doc 14.
+  - Doc 00 ~line 880 "In flight" note on the stratum split is stale (it landed).
 - Consider dropping the envelope's replicated `first_pass_base_ids` (2.79 GB of duplication at 446 runs,
   per doc 00 P1) now that the retained summary exists. Optional; check every reader first.
 
@@ -216,3 +237,81 @@ Contract and plumbing to update (doc 00 is the authority; read it first):
 
 **Next session handoff**: read `ai/.tmp/handoff-20261015_osprey_firstpassfdr_slimming.md` before starting
 work.
+
+### 2026-10-15 (session 2) - A1 implemented, regression running
+
+- Sequencing vs #4848 decided (see Status): this branch merges first; we resolve #4823/#4848 after.
+- A1 design as built (uncommitted, `C:\proj\pwiz`):
+  - New `IFdrFirstPassSink` (`Osprey.FDR/FdrProjectionOutput.cs`): run scope per file
+    (`PrepareRunScope` on the lane / `AcceptRunScope` in order), experiment scope once per distinct
+    entry (`AcceptExperimentEntry`, ascending entry_id), and a per-row fold only when
+    `FoldsRowExperimentValues` (--model-diagnostics).
+  - `RunStreamingFirstPass`: pass 2 deleted. Pass 1 merges per-entry facts (peptide, side, run q)
+    from the lanes into 64 shards (same pattern/hash as `ExperimentQClampFloors`, lowest file index
+    wins); after the barrier `ExperimentScope.Resolve` computes the four values per entry. The
+    diagnostics walk (`FoldRowExperimentValues`) reuses `Resolve` per row.
+  - Aggregate-map miss now THROWS (was: fall back to the row's score). Every row keys its
+    (base_id, side), so a miss means decoy flag != entry_id decoy bit.
+  - Verify-list items: aggregate coverage - holds by construction (above); single-file shortcut -
+    per-entry (unique entry ids per file); resume / `OnFinish` - `FdrStoringSink` replaced by
+    `FdrFirstPassSink` with no write path (pass 1 writes every scored file incl. empty ones; the
+    row-count check moved to `AcceptRunScope`); `FilePassingTargets` kept.
+  - `[COUNT]` tally extracted to `FdrPassingTally`, shared with `FdrStreamingSink` (2nd pass,
+    behavior unchanged).
+  - Experiment records now enter the accumulator in ascending entry_id rather than first-seen order;
+    the resume path already reads them sorted from the sidecar, and every reader is order-free.
+  - Tests: `CapturingSink` also implements `IFdrFirstPassSink` and joins run scope + entries back
+    into per-row values, so every oracle comparison is unchanged; read-back arms now exercise the
+    diagnostics walk.
+- Gates so far: Osprey unit 637/637 + inspection 0 warnings
+  (`ai/.tmp/sessions/20261015-a49aea24/test-run2.log`). `regression-parallel.ps1 -Dataset All` running
+  (`ai/.tmp/sessions/20261015-a49aea24/regression-a1.log`).
+- A1 regression-parallel All: 48/48 PASS, 29:48 (`regression-a1.log`).
+- A2 implemented: `AcceptExperimentEntry` carries the peptide; `FdrFirstPassSink.ApplyProteinQvalues`
+  replaces the resolve walk in `RunFirstPassProteinFdrStreaming` (its `patchFailures` out param and 3
+  resource strings removed). Unit 637/637, inspection 0; regression-parallel All 48/48, 26:47
+  (`regression-a2.log`).
+- NOTE: the SEA-AD acceptance run has `mdiag=True`. With --model-diagnostics the row walk still runs
+  for the report, so A1's saving there is only the per-row sink work. The full saving is for runs
+  without diagnostics.
+- Decided 2026-10-15 (Brendan): the diagnostics report stays where it is (written in FirstPassFDR,
+  right after the score pass). Merging its walk into the co-assignment walk would save only ~10 s:
+  the walk's wall time is the fold itself (in-order `ModelDiagnosticsData.Accumulator.MergeFile`
+  131.9 s of 138.7 s on SEA-AD), not the file reads. ModelDiagnostics performance is out of scope
+  here; Brendan will review it as its own sprint.
+- SEA-AD run 1 (mdiag on) FirstPassFDR: 1,602 s vs 1,556 s acceptance. Diagnostics walk + entry
+  loop 143 s vs pass 2 153.6 s; protein FDR 44.8 vs 62.4 s (A2); pass 1 wall 303.5 vs 270.5 s, the
+  increase all in parquet walk / sidecar write I/O (entry facts merge adds nothing visible), with
+  untouched phases also ~39 s slower - read as disk noise.
+- SEA-AD run 1 products byte-identical to acceptance through SecondPassFDR: out.stats.tsv 45F2E16C,
+  out.protein_groups.tsv 906B6ED8, both fdr_experiment.bin, retained_base_ids, both fdrbench TSVs.
+  Run dir `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compacta1a2-20261015_120508`.
+- SEA-AD run 2 (`-Task FirstPassFDR -NoModelDiagnostics`): FirstPassFDR 1,347.8 s; pass 1 wall 280.0 s,
+  experiment scope 4.5 s, no row walk; protein FDR 46.8 s. Outputs identical to acceptance
+  (experiment sidecar, retained summary, fdrbench pass 1, 82/82 reconciliation.json). Run dir
+  `...\seaad-82files-libdecoy-r1.0-protein-compacta1a2-nomdiag-20261015_140359`.
+- `/code-review medium`: 8 findings. Fixed:
+  - (1, 2, 3) The per-row accumulator's "observations of an entry must agree" check was lost.
+    Production files hold one row per entry per run (verified: SEA-AD file 0001 sidecar, 4,324,599
+    records = distinct entry_ids, strictly ascending), but multi-candidate files (test fixtures) do
+    not. `EntryFactsByEntryId.MergeFile` now refuses an entry_id with a different peptide or side in
+    another run, and marks rows of one file that disagree on run q; a single-file run refuses such an
+    entry (the old accumulator threw there too). Test arm `AssertEntryDisagreementsRefused`, proven
+    by disabling the check (arm fails).
+  - (4) Decoy-flag vs entry_id decoy-bit mismatch now refused per file during pass 1, not after it.
+  - (7) Stale "pass 2" comments in FirstPassFdrTask / PercolatorScorer.
+  Dropped: (5) ~100 MB of unread run-q doubles at 6.2 M entries - needed for the single-file case
+  and the disagreement check, peak is elsewhere; (6) ApexRts.ToArray on resumed files - one array
+  copy per file, and the resumed-file test arm compares apex RT through it; (8) ~75 MB transient
+  entry/peptide lists until protein FDR - small, and simpler than holding the facts map longer.
+- Unit 637/637, inspection 0 (`test-run5.log`). regression-parallel All rerun: 48/48, 29:26
+  (`regression-review.log`).
+- **Committed A1+A2 locally as `89dc0dfefd`** (not pushed, no PR yet). Next: Brendan decides push/PR
+  for PR A (TeamCity Perf/Regression: ask first, on `pull/<N>`); then PR B per the plan above,
+  including the no-replicated-copies inventory.
+- Timing (exe snapshot `D:\test\osprey-runs\_bin\firstpass-slim-a1a2`, version pinned 26.1.1.286):
+  1. Stage 5 on, mdiag on, `-LinkFrom` the acceptance run: product byte-identity + timing. Running.
+  2. `-Task FirstPassFDR -NoModelDiagnostics`: the no-diagnostics saving. Queued after 1.
+- A2 plan (done) was: carry each entry's peptide (already in A1's entry facts) to the sink, keep
+  `(entry_id, peptide)` in ascending order, and resolve protein q from that instead of re-walking the
+  parquets. Byte-identical by construction in every `OSPREY_STUB_IDENTITY` mode; no library lookup.
