@@ -5,9 +5,8 @@
   branches off master, listed here as they start)
 - **Base**: `master`
 - **Created**: 2026-10-10
-- **Status**: All five PRs MERGED (PR 4 [#4838] as 4c2eba1af8 on 2026-10-13). No O(files x entries)
-  structure is left. Three-machine acceptance PASSED 2026-10-15 (section "Acceptance outcome"). Ready for
-  `/pw-complete` once Brendan has reviewed it and decided on issue #4664.
+- **Status**: Completed 2026-10-15. All five PRs MERGED (PR 4 [#4838] as 4c2eba1af8 on 2026-10-13). No
+  O(files x entries) structure is left. Three-machine acceptance PASSED 2026-10-15 (section "Acceptance outcome").
 - **GitHub Issue**: (none - catalogue rows A1-A3, A6-A8 in TODO-osprey_parity_path_retirement.md; #4664)
 - **Module**: `osprey`
 - **PR**: [#4820](https://github.com/ProteoWizard/pwiz/pull/4820) (PR 1, merged 2026-10-11), [#4821](https://github.com/ProteoWizard/pwiz/pull/4821) (PR 2, merged 2026-10-11), [#4825](https://github.com/ProteoWizard/pwiz/pull/4825) (PR 3a, merged 2026-10-12); PR 3b [#4830](https://github.com/ProteoWizard/pwiz/pull/4830) (merged 2026-10-12); PR 4 [#4838](https://github.com/ProteoWizard/pwiz/pull/4838) (merged 2026-10-13, part of issue #4664)
@@ -538,7 +537,7 @@ All six runs exit 0, and each cohort gives one answer on every machine. Detail a
 
 UW8 ran SEA-AD 82 (restarted by Windows Update, finished with `-Resume`) and CHS-SEER 446; compared against UW25 and
 MACS2. All four pass criteria met - see "Acceptance outcome" above. The one cross-machine difference (MACS2 SEA-AD
-run 28) was the parquet `DataField` race, fixed in #4842.
+run 28) was the parquet `DataField` race, fixed in #4842. TODO moved to completed (Brendan, 2026-10-15).
 
 ### 2026-10-13 (evening) - Merged PR 4
 
