@@ -513,9 +513,29 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
   and the chained leg.
 - **Part G - contracts.** Fold the pairing manifest schema into the same assembly and land the
   library contract validator from `TODO-carafe_osprey_library_contract.md` (CarafeSharp refuses to
-  write a violating library; Osprey fails at load, every violation listed by class). Also the one
-  library blib writer: `CarafeSharp.IO/BlibLibraryWriter` and `Osprey.IO/LibraryBlibWriter` become
-  one, in the contracts assembly or CommonUtil, with `LibrarySpectrum`/`LibraryEntry` reconciled.
+  write a violating library; Osprey fails at load, every violation listed by class).
+- **Part G - one blib writer (decision, Brendan, 2026-10-14).** The core writer lives in
+  `pwiz_tools/Shared/BiblioSpec`, which becomes the DLL every tool imports: a plain net10.0
+  project depending only on System.Data.SQLite (the version all three already carry), holding
+  the schema (`BlibSchema`, moved from `pwiz_tools/BiblioSpec`, the one definition with the
+  version history) and a streaming writer over a neutral record (designed from BiblioSpec's
+  `RefSpectrum` outward, so small-molecule metadata fits) with prepared inserts, compressed
+  peak blobs, LibInfo and indexes, an atomic commit through `SimpleFileSaver`, and one hook for
+  a host's own tables in the same transaction. The `BlibBuild` / `BlibFilter` process wrappers
+  stay in that project, and Skyline keeps running the EXEs as processes, as it always has.
+  `CarafeSharp.IO/BlibLibraryWriter` and `Osprey.IO/LibraryBlibWriter` + `BlibWriter` become
+  that writer (Osprey's five `Osprey*` tables and Carafe's `DecoyPairs` through the hook), with
+  `LibrarySpectrum` / `LibraryEntry` reconciled into the record. Gate: both regressions
+  byte-identical, since both compare the written library. Not CommonUtil: a SQLite dependency
+  does not belong in the utility library every tool loads.
+  - Next after this sprint: `pwiz_tools/BiblioSpec`'s `BlibMaker` delegates its table creation
+    and inserts to the same writer (Matt's port; the cpp parity tests are the gate). Four
+    writers to two.
+  - Backlog, not this sprint: Skyline's NHibernate `BlibDb` keeps its own writes (least to gain,
+    byte-level drift risk in libraries its tests compare); a backlog TODO unifies it later.
+- **Docs.** `CarafeSharp/Carafe-workflow.html`, in the style of `Osprey/Osprey-workflow.html`
+  (hand-maintained), one block per stage with its checkpoint file; after PR 4 it folds into the
+  Osprey page as the library-build chapter.
 
 ### PR 4 - one command
 
