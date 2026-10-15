@@ -6,7 +6,7 @@
 - **Created**: 2026-10-09
 - **Status**: In Progress
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: #4848 (draft, stacked on #4823; screenshots in pr-assets `pwiz/4848-blib-global-q/`)
 - **Checkout**: `I:\git_i\sky_proteinfdr`
 - **Related**: `TODO-20261002_osprey_peptide_fdr_pep.md` (Osprey computing the PEPs). The uncommitted
   Osprey writer changes from the abandoned `Skyline/work/20261001_osprey_blib_protein_fdr` branch are
