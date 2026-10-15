@@ -16,7 +16,7 @@
   2026-10-15, in `C:\proj\pwiz`). Part F first (the shared training-record assembly), then part G.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 started 2026-10-15 on its branch: part F and the pairing manifest committed and gated (see the PR 3 section); the blib writer and the library contract validator remain. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 started 2026-10-15 on its branch: part F, the pairing manifest, the BiblioSpecUtil / BiblioSpec.IO split and the one blib writer (Osprey and CarafeSharp on it) committed and gated (see the PR 3 section); the library contract validator remains, then the PR. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
@@ -585,17 +585,60 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
         modes 1, 1b, 1c, 2, 3, 4, 6), CarafeSharp `regression.ps1 -Leg Chained` REGRESSION PASSED
         (`stellar-chained-cpu-20261015-101029`), `-Dataset StellarGenDecoyEntrap` PASSED (writes the
         FDRBench manifest through the shared writer; modes 1, 1b, 1c, 2, 3, 4, 6, 12).
-  - [ ] **One blib writer (part G): started, uncommitted, unbuilt** (2026-10-15 end of session).
+  - [x] **One blib writer (part G): coded and gated 2026-10-15** (the Osprey and CarafeSharp
+        sides are the commit after the project split; see the sub-bullets).
         In the working tree: `pwiz_tools/Shared/BiblioSpec` rewritten as plain net10.0 with
         `BlibSchema` (a COPY of the BiblioSpec port's: Brendan, 2026-10-15, the port keeps its own
         and takes no dependency on Shared/BiblioSpec in this PR; the port's new test-only
         `BlibSchemaIdentity` holds the two identical; the dependency question - Shared/BiblioSpec
         being both the BlibBuild/BlibFilter runner and the writer's home - is faced when BlibMaker
         adopts the writer, after this sprint), `BlibSpectrumRecord`, `IBlibExtensionTables` and
-        `BlibWriter`; `Osprey/docs/23-library-contract.md` drafted for the validator. Nothing references the new
-        writer yet, so Osprey and CarafeSharp build as before. The Osprey and CarafeSharp sides,
-        the tests and the gates remain: `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` has
-        the column-by-column mapping each side must keep for the byte-identical goldens.
+        `BlibWriter`; `Osprey/docs/23-library-contract.md` drafted for the validator.
+        - [x] **Osprey side.** `Osprey.IO/BlibWriter.cs` deleted. `OspreyBlibWriter` is the thin
+              adapter: a `BlibWriter` plus `OspreyBlibTables` (`IBlibExtensionTables`: the five
+              `Osprey*` tables with prepared inserts through the now-public
+              `BlibWriter.PreparedInsert`, their `idx_*` indexes, `AddMetadata`/`AddStamp`, static
+              `ReadStamp`) and Osprey's column values (score type 19, the ordinal as `SpecIDinFile`,
+              0.0 not NULL for the ion mobility columns and TIC, apex/bounds in the spectrum row,
+              modifications 0- to 1-based). `BlibPeptideText` holds `StripFlankingChars`,
+              `ConvertUnimodToMass`, `TryGetUnimodMass`. `BlibOutputWriter` and `LibraryBlibWriter`
+              let the writer own the temp file (`Complete` moves it; `CompleteBlib` maps the move's
+              IOException to `BlibOutputException` as the saver's Commit was). Tests: `IOTest`'s
+              writer region passes modifications and proteins through `AddSpectrum` and calls
+              `Complete` before reading (a writer disposed without it leaves the path untouched),
+              peak decoding through `BlibWriter.DecodeMzs`/`DecodeIntensities`.
+        - [x] **CarafeSharp side.** `BlibLibraryWriter` keeps its public surface (ctor, `WriteBatch`,
+              `WriteDecoyPairs` via `BlibWriter.Connection`, `Complete`, `CommitAs`, `EncodePeaks`,
+              `AnnotationName`, `DecodeBlob`, `FILE_NAME`, `MAX_PEAKS_PER_INSERT`,
+              `ION_MOBILITY_TYPE_*`) over one `BlibWriter`; the stamp is a private
+              `IBlibExtensionTables` creating `OspreyMetadata`. `CarafeSharp.IO.csproj` dropped
+              PROdotnetzip (the shared writer compresses); `BiblioSpec.IO` added to CarafeSharp.sln
+              so its inspection covers the shared writer (it found four issues Osprey's did not,
+              since BiblioSpec.IO is out of Osprey.sln).
+        - [x] **Found and fixed:** a tool's prepared statements on the writer's connection must be
+              disposed before the connection, or System.Data.SQLite keeps the file open until they
+              are finalized and the temp can be neither moved nor deleted (every blib test failed
+              with "being used by another process" on the first run). `IBlibExtensionTables` is now
+              `IDisposable` and `BlibWriter.CloseConnection` disposes it first.
+        - [x] Gates: Osprey Debug build, 637 tests, inspection clean; `regression.ps1 -Dataset
+              Stellar` PASSED (byte-identical golden, Osprey writing through the shared writer);
+              CarafeSharp Debug build, 103 tests (8 skipped for data), inspection clean;
+              CarafeSharp `regression.ps1 -Leg Chained` REGRESSION PASSED
+              (`stellar-chained-cpu-20261015-121818`). The CarafeSharp golden `regression.ps1`
+              needed the `regression-export` and `testfiles` packages fetched to this machine
+              (`build.ps1 -TestData Fetch -TestDataPackage <id>`, 60 MB and 1.5 GB from Panorama),
+              then REGRESSION PASSED (`stellar-isolated-cpu-20261015-122125`): library content
+              SHA-256 identical to the golden, 19344 precursors, 335838 peaks, 19340 DecoyPairs rows.
+        - [x] Committed as a6633cce1e (2026-10-15).
+        - Docs: `13-blib-output-schema.md` rewritten for the three layers (shared writer, Osprey
+          adapter, sequencer) with the old line-number citations dropped; `14-intermediate-files.md`
+          rows; `Osprey-workflow.html` BLIB writer paragraph. The dated divergence audit at the end
+          of doc 13 and `DIVERGENCES.md` keep their old `BlibWriter.cs:NNN` evidence citations as
+          history.
+        - Gap: no `ai/scripts` wrapper builds or tests `pwiz_tools/BiblioSpec`'s port test project,
+          and the `Deny-DirectBuildTest` hook blocks a direct `dotnet test` of it, so
+          `BlibSchemaIdentity` was run once (at the split commit) and not again after the shared
+          writer's cast and doc-comment edits, which do not touch `BlibSchema`.
         - [x] **Two projects, not one (Brendan, 2026-10-15, before the writer was wired in).**
               Committed as 43ed20a53d (2026-10-15) with the writer sources and the port's
               `BlibSchemaIdentity` test. Gates: full Skyline Debug build with `-VendorLicenses`
