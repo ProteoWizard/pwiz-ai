@@ -149,6 +149,13 @@ Facts the plan turns on:
    CarafeSharp exe as a child process.
 5. **Resx extraction for CarafeSharp is deferred.** Osprey got its resx only recently after months
    of development; CarafeSharp's 185 literal sites are a later PR of their own.
+6. **One .blib writer, because the schema is ours (Brendan, 2026-10-15).** The .blib format is the
+   lab's own file type, and no project released from the MacCoss lab / UW Genome Sciences writes
+   it from scratch: every writer written independently is a new set of quirks that every reader
+   has to be adapted to, and keeping them in sync is pain for years. Osprey's and CarafeSharp's
+   own writers were the most tenuous part of the two tools. The one writer is
+   `pwiz_tools/Shared/BiblioSpec/BiblioSpec.IO` (see PR 3, part G); the BiblioSpec port's
+   `BlibMaker` and, the longest pole, Skyline's NHibernate `BlibDb` come onto it after this sprint.
 
 ## PR plan (compressed 2026-10-14)
 
@@ -586,10 +593,27 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
         being both the BlibBuild/BlibFilter runner and the writer's home - is faced when BlibMaker
         adopts the writer, after this sprint), `BlibSpectrumRecord`, `IBlibExtensionTables` and
         `BlibWriter`; `Osprey/docs/23-library-contract.md` drafted for the validator. Nothing references the new
-        writer yet, so Osprey and CarafeSharp build as before; Skyline would pick up the csproj
-        change. The Osprey and CarafeSharp sides, the tests and the gates are the next session's
-        work: `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` has the column-by-column
-        mapping each side must keep for the byte-identical goldens.
+        writer yet, so Osprey and CarafeSharp build as before. The Osprey and CarafeSharp sides,
+        the tests and the gates remain: `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` has
+        the column-by-column mapping each side must keep for the byte-identical goldens.
+        - [x] **Two projects, not one (Brendan, 2026-10-15, before the writer was wired in).**
+              Committed as 43ed20a53d (2026-10-15) with the writer sources and the port's
+              `BlibSchemaIdentity` test. Gates: full Skyline Debug build with `-VendorLicenses`
+              (the solution build plus `-Target TestTutorial` and `-Target TestPerf`, which the
+              solution target skips), the port's test project build, `BlibSchemaIdentity` passed.
+              `pwiz_tools/Shared/BiblioSpec` became a folder with `BiblioSpec.sln` and two
+              projects: `BiblioSpecUtil` (the `BlibBuild` / `BlibFilter` process wrappers and
+              their resx; assembly renamed from `BiblioSpec`, namespace `pwiz.BiblioSpec` kept so
+              the 22 Skyline sources using it do not change; Skyline.csproj, Skyline.sln, the
+              five test csproj files and the installer's `Product-template.wxs` /
+              `FileList64-template.txt` repointed) and `BiblioSpec.IO` (plain net10.0, assembly
+              `BiblioSpec.IO`, namespace `pwiz.BiblioSpec.IO`; CommonUtil, System.Data.SQLite,
+              PROdotnetzip; the schema, record and writer; no resx yet). Why: the runner is for
+              Skyline only and none of Osprey, CarafeSharp or the BiblioSpec port will ever want
+              it, while all three take the writer, and the port taking it is clean only if the
+              writer DLL does not also wrap running the port's executables. Both names end the
+              collision of two `BiblioSpec.csproj` files in one build graph. The move is its own
+              commit before the writer; gate: full Skyline Debug build with `-VendorLicenses`.
   - [ ] **Library contract validator (part G)**: designed in `docs/23-library-contract.md` (rules,
         violation classes, `library_contract` marker, CarafeSharp `--library-contract`, Osprey's
         load-time check); no code yet.
@@ -604,7 +628,8 @@ touching the blib writer; it supersedes the morning handoff.
   `RefSpectrum` outward, so small-molecule metadata fits) with prepared inserts, compressed
   peak blobs, LibInfo and indexes, an atomic commit through `SimpleFileSaver`, and one hook for
   a host's own tables in the same transaction. The `BlibBuild` / `BlibFilter` process wrappers
-  stay in that project, and Skyline keeps running the EXEs as processes, as it always has.
+  stay in that folder (as the sibling `BiblioSpecUtil` project since 2026-10-15, see the part G
+  checklist), and Skyline keeps running the EXEs as processes, as it always has.
   `CarafeSharp.IO/BlibLibraryWriter` and `Osprey.IO/LibraryBlibWriter` + `BlibWriter` become
   that writer (Osprey's five `Osprey*` tables and Carafe's `DecoyPairs` through the hook), with
   `LibrarySpectrum` / `LibraryEntry` reconciled into the record. Gate: both regressions
