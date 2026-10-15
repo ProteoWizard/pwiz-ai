@@ -16,7 +16,7 @@
   2026-10-15, in `C:\proj\pwiz`). Part F first (the shared training-record assembly), then part G.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 started 2026-10-15 on its branch: part F coded (see the PR 3 section), gating. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 started 2026-10-15 on its branch: part F and the pairing manifest committed and gated (see the PR 3 section); the blib writer and the library contract validator remain. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
@@ -27,8 +27,10 @@
 - **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes; TeamCity Perf/Regression green; merged 2026-10-15 as a0107497d1)
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261015_osprey_carafe_pr3_contracts.md` before starting work. Phase 1 is on
-master; PR 3 (the contracts) starts on its own branch off master.
+`ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` before starting work. PR 3 is two gated
+commits in on its branch (part F `c403a1b06f`, the pairing manifest `37751f4895`, local, no PR);
+the one blib writer is started in the working tree, unbuilt, and the validator is designed in
+`Osprey/docs/23-library-contract.md`.
 - **Checkout**: `C:\proj\pwiz`
 - **Depends on**: CarafeSharp in `pwiz_tools/CarafeSharp` (PR #4717, merged 2026-10-14)
 - **Related**: `TODO-carafe_osprey_library_contract.md` (the library Carafe writes and Osprey
