@@ -543,6 +543,18 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
   that names the dataset presets).
 - **Part I - HPC tasks** for the new stages with declared file contracts; harness staging from the
   declarations (`TODO-task_file_contract_from_declarations.md` item 3).
+  - HPC task set (discussed 2026-10-15, to confirm when PR 4 starts): three CarafeSharp
+    boundaries, the FASTA build (reused by stages 5 and 6), library prediction (one task, run
+    pretrained before the training search and fine-tuned after) and fine-tuning (the saved
+    model predicts many libraries), between the two Osprey chains. `ReconcileManifest` stays a
+    command-line mode, not a chain stage. A boundary is justified by resource class (CPU digest,
+    GPU prediction and training, CPU fan-out searches), restart cost and reuse, not by the data
+    flow alone, which needs only the two cuts around Osprey's training search.
+  - Library prediction should fan out across several GPU nodes (Brendan, 2026-10-15: desirable
+    where the cluster has them; node availability decides how many). The split goes inside the
+    prediction task as batches of peptidoforms, the way Osprey's per-file tasks fan out, with the
+    chunks merged into one library; not a new boundary between tasks. Astral's 6.2M precursors
+    are about an hour on one GTX 1650.
 - **Part J - packaging.** libtorch CPU in Osprey's Windows and Linux packages; CUDA as an optional
   download; `OSPREY_VERSION_OVERRIDE` and the daily stamp cover the model file too.
 
