@@ -12,15 +12,16 @@
   `-log_file` / `-timestamp` / `-memstamp` options and the hand-written usage) and
   `CarafeSharp.Core.csproj` (the same CommonUtil reference), so the merge re-adds those three
   options as declarations.
-- **PR 3**: [#4852](https://github.com/ProteoWizard/pwiz/pull/4852) (opened 2026-10-15; six
-  commits: part F `c403a1b06f`, the manifest `37751f4895`, the project split `43ed20a53d`, the one
-  writer `a6633cce1e`, the contract `bf892117ff`, the review fixes `132c24e067`; awaiting the
-  TeamCity Perf/Regression on `pull/4852`, which Brendan triggers).
+- **PR 3**: [#4852](https://github.com/ProteoWizard/pwiz/pull/4852) (merged 2026-10-15 as
+  773aa1bf63; all 19 checks green including the TeamCity Perf/Regression on `pull/4852` and the
+  Skyline tests; six branch commits: part F `c403a1b06f`, the manifest `37751f4895`, the project
+  split `43ed20a53d`, the one writer `a6633cce1e`, the contract `bf892117ff`, the review fixes
+  `132c24e067`, plus the master merge `49b2e0b6f2`).
 - **PR 3 branch**: `Skyline/work/20261015_osprey_carafe_contracts` (off master `1575f27201`
   2026-10-15, in `C:\proj\pwiz`). Part F first (the shared training-record assembly), then part G.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 started 2026-10-15 on its branch: part F, the pairing manifest, the BiblioSpecUtil / BiblioSpec.IO split and the one blib writer (Osprey and CarafeSharp on it) committed and gated (see the PR 3 section); the library contract validator remains, then the PR. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. Next: PR 3b (decision 7: no Osprey* tables, DecoyPairs pairing, LibMetadata), then adapting Nick's #4848, then PR 3c (BlibMaker on BiblioSpec.IO), then PR 4. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
