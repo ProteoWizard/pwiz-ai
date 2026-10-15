@@ -553,6 +553,44 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
 - **Part G - contracts.** Fold the pairing manifest schema into the same assembly and land the
   library contract validator from `TODO-carafe_osprey_library_contract.md` (CarafeSharp refuses to
   write a violating library; Osprey fails at load, every violation listed by class).
+  - [x] **Pairing manifest (coded 2026-10-15).** `CarafeSharp.Contracts/PairingManifest`: the five
+        column names, `HEADER`, `DECOY_YES`/`NO`, the four `KIND_*` spellings, `WriteHeader`/`WriteRow`
+        (a typed overload and a raw-text one for a reconciler copying rows), and one `Read(path,
+        strict, out skipped)`: lenient for Osprey's loader (a row it cannot use is skipped, as Rust
+        skips it), strict for CarafeSharp (a short row or a non-integer pair index refuses the file,
+        as Carafe's `parseManifest` does); both refuse an empty file or a header missing `sequence`,
+        `peptide_type` or `peptide_pair_index`, with `decoy` and `proteins` optional. Header names
+        are matched trimmed and case-insensitively and a BOM is stripped (supersets of both old
+        readers). `PeptideKind` moved from `Osprey.IO` with `PeptideKinds.Name`/`TryParse`/
+        `IsDecoySide`/`IsEntrapment`. On it: Osprey's `DecoyPairingManifest.FromTsv`,
+        `FdrBenchInputWriter.WritePairingManifest`, `TrainingExportWriter` (kind names);
+        CarafeSharp's `EntrapmentFastaBuilder` (its `MANIFEST_HEADER` / `PEPTIDE_TYPE_*` constants
+        deleted), `PairingManifestReconciler` (its own `ManifestRow` reader deleted),
+        `DecoyPairPlanner.ReadManifest` (an empty file still reads as no rows, Carafe's rule) and
+        `EntrapmentPairingValidator`. The two manifest resource strings moved to
+        `ContractsResources` (en, ja, zh-Hans). Shared-reader refusals are `InvalidDataException`;
+        CarafeSharp's two test helpers accept it beside the reconciler's `IOException`.
+  - [x] Pairing manifest committed as 37751f4895 (2026-10-15). Gates: Osprey build/tests/inspection
+        green (637 tests), CarafeSharp build/tests/inspection green (111 tests),
+        `regression.ps1 -Dataset StellarLibDecoy` PASSED (the leg that pairs through the manifest;
+        modes 1, 1b, 1c, 2, 3, 4, 6), CarafeSharp `regression.ps1 -Leg Chained` REGRESSION PASSED
+        (`stellar-chained-cpu-20261015-101029`), `-Dataset StellarGenDecoyEntrap` PASSED (writes the
+        FDRBench manifest through the shared writer; modes 1, 1b, 1c, 2, 3, 4, 6, 12).
+  - [ ] **One blib writer (part G): started, uncommitted, unbuilt** (2026-10-15 end of session).
+        In the working tree: `pwiz_tools/Shared/BiblioSpec` rewritten as plain net10.0 with
+        `BlibSchema` (moved from the BiblioSpec port), `BlibSpectrumRecord`, `IBlibExtensionTables`
+        and `BlibWriter`; the port delegates to the moved schema and references the Shared project;
+        `Osprey/docs/23-library-contract.md` drafted for the validator. Nothing references the new
+        writer yet, so Osprey and CarafeSharp build as before; Skyline would pick up the csproj
+        change. The Osprey and CarafeSharp sides, the tests and the gates are the next session's
+        work: `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` has the column-by-column
+        mapping each side must keep for the byte-identical goldens.
+  - [ ] **Library contract validator (part G)**: designed in `docs/23-library-contract.md` (rules,
+        violation classes, `library_contract` marker, CarafeSharp `--library-contract`, Osprey's
+        load-time check); no code yet.
+
+**Next session handoff**: read `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` before
+touching the blib writer; it supersedes the morning handoff.
 - **Part G - one blib writer (decision, Brendan, 2026-10-14).** The core writer lives in
   `pwiz_tools/Shared/BiblioSpec`, which becomes the DLL every tool imports: a plain net10.0
   project depending only on System.Data.SQLite (the version all three already carry), holding
