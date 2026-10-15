@@ -44,8 +44,16 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
 - [x] Developer clean `bs.bat`: Skyline section 20.6 s (was ~141 s), 48 projects once each
 - [x] run4: Agilent extracted once with both consumers; run5: deleted fixture + stamp restored
 - [ ] Clean `bs.bat` after the extraction change (pwiz-sharp side: UIMF, BiblioSpec archives + reader tests)
-- [ ] `tc-perftests.bat` has the same per-project loop (4 projects) - fold in
-- [ ] `/code-review medium`
+- [x] `tc-perftests.bat` folded in via `-p:SkylineBuildProjects` (%3B-separated, Unescape'd in the proj);
+      run6: 43 projects once each, all four staged (`SKYLINE_TEST_ARGS=test=NoSuchTest`, so TestRunner's
+      "No tests found" exit 1 is expected). Note tc-perftests builds AnyCPU (no Platform=x64), unlike build.bat
+- [x] run7 (`build.bat --no-tests` after review fixes): each archive once, 48 projects once, 21.1 s
+- [x] `/code-review medium` - 9 findings. Fixed: stamp keyed on archive+destination; Parent defaults to the
+      archive's folder (was MSB4184 on empty); tc-perftests; Clean/Rebuild targets on SkylineBuild.proj; stale
+      BUILD_TARGET comment in SkylineTester.csproj. Dropped: RemoveProperties denylist could miss a property
+      (no real caller differs); shared stamp survives deleting a project's obj (clean.bat clears build\obj,
+      old stamp also survived Clean); path-casing mismatch (both spellings derive from project-file paths);
+      no Inputs/Outputs on the calling target (a few tiny evaluations per no-op build)
 
 ## Related
 
