@@ -578,9 +578,12 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
         FDRBench manifest through the shared writer; modes 1, 1b, 1c, 2, 3, 4, 6, 12).
   - [ ] **One blib writer (part G): started, uncommitted, unbuilt** (2026-10-15 end of session).
         In the working tree: `pwiz_tools/Shared/BiblioSpec` rewritten as plain net10.0 with
-        `BlibSchema` (moved from the BiblioSpec port), `BlibSpectrumRecord`, `IBlibExtensionTables`
-        and `BlibWriter`; the port delegates to the moved schema and references the Shared project;
-        `Osprey/docs/23-library-contract.md` drafted for the validator. Nothing references the new
+        `BlibSchema` (a COPY of the BiblioSpec port's: Brendan, 2026-10-15, the port keeps its own
+        and takes no dependency on Shared/BiblioSpec in this PR; the port's new test-only
+        `BlibSchemaIdentity` holds the two identical; the dependency question - Shared/BiblioSpec
+        being both the BlibBuild/BlibFilter runner and the writer's home - is faced when BlibMaker
+        adopts the writer, after this sprint), `BlibSpectrumRecord`, `IBlibExtensionTables` and
+        `BlibWriter`; `Osprey/docs/23-library-contract.md` drafted for the validator. Nothing references the new
         writer yet, so Osprey and CarafeSharp build as before; Skyline would pick up the csproj
         change. The Osprey and CarafeSharp sides, the tests and the gates are the next session's
         work: `ai/.tmp/handoff-20261015_osprey_carafe_pr3_partG.md` has the column-by-column
