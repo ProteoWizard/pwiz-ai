@@ -3,9 +3,9 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20261014_osprey_carafe_shared_toolkit` (PR 1). Later PRs get their
   own `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start.
-- **PR 2**: [#4846](https://github.com/ProteoWizard/pwiz/pull/4846) (part D plus the review
-  fixes, opened 2026-10-14; Perf/Regression green on its first head; master with #4845 merged in
-  2026-10-15, cc3798f994, re-gated locally).
+- **PR 2**: [#4846](https://github.com/ProteoWizard/pwiz/pull/4846) (part D plus the review fixes;
+  Perf/Regression green on its first head, master with #4845 merged in and re-gated locally;
+  merged 2026-10-15 as 1575f27201).
 - **PR 2 branch**: `Skyline/work/20261014_one_command_line_tokenizer` (off master 2026-10-14, in
   `C:\proj\pwiz`; PR 1's branch is pushed and only waits on TeamCity). After #4845 merges, this
   branch needs `git merge origin/master`: PR 1 also edits `CarafeCommandLine.cs` (the
@@ -14,7 +14,7 @@
   options as declarations.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - PR 1 (parts A, B, C, E) coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb); next PR 3 off master. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
