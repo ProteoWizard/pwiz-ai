@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20261014_osprey_carafe_shared_toolkit` (PR 1). Later PRs get their
   own `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start.
 - **PR 2**: [#4846](https://github.com/ProteoWizard/pwiz/pull/4846) (part D plus the review
-  fixes, opened 2026-10-14; Perf/Regression not yet run - ask before triggering on `pull/4846`,
-  after #4845's run; no TeamCity MCP in this session, so Brendan triggers).
+  fixes, opened 2026-10-14; Perf/Regression green on its first head; master with #4845 merged in
+  2026-10-15, cc3798f994, re-gated locally).
 - **PR 2 branch**: `Skyline/work/20261014_one_command_line_tokenizer` (off master 2026-10-14, in
   `C:\proj\pwiz`; PR 1's branch is pushed and only waits on TeamCity). After #4845 merges, this
   branch needs `git merge origin/master`: PR 1 also edits `CarafeCommandLine.cs` (the
@@ -22,7 +22,7 @@
   #4845 merges, `git merge origin/master`.
 - **GitHub Issue**: (none yet; PR #4717 closed #4707)
 - **Module**: `osprey`
-- **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes, opened 2026-10-14; TeamCity Perf/Regression not yet run - Agent 1 busy with a Skyline build and then PR #4842's run, which carries Brendan's fix for a Perf/Regression breakage from two colliding PRs; ask before triggering on `pull/4845`)
+- **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes; TeamCity Perf/Regression green; merged 2026-10-15 as a0107497d1)
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261014_osprey_carafe_shared_toolkit.md` before starting work. PR 2 (part D,
@@ -533,7 +533,7 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
     writers to two.
   - Backlog, not this sprint: Skyline's NHibernate `BlibDb` keeps its own writes (least to gain,
     byte-level drift risk in libraries its tests compare); a backlog TODO unifies it later.
-- **Docs.** Done: `CarafeSharp/Carafe-workflow.html`, PR [#4847](https://github.com/ProteoWizard/pwiz/pull/4847) (docs only, off master 2026-10-14), in the style of `Osprey/Osprey-workflow.html`
+- **Docs.** Done: `CarafeSharp/Carafe-workflow.html`, PR [#4847](https://github.com/ProteoWizard/pwiz/pull/4847) (docs only; merged 2026-10-15 as a5a3fc3dbb), in the style of `Osprey/Osprey-workflow.html`
   (hand-maintained), one block per stage with its checkpoint file; after PR 4 it folds into the
   Osprey page as the library-build chapter.
 
