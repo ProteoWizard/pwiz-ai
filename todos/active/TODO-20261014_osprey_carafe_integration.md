@@ -25,9 +25,8 @@
 - **PR**: [#4845](https://github.com/ProteoWizard/pwiz/pull/4845) (PR 1: parts A, B, C, E plus the review fixes; TeamCity Perf/Regression green; merged 2026-10-15 as a0107497d1)
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261014_osprey_carafe_shared_toolkit.md` before starting work. PR 2 (part D,
-the one tokenizer) starts in a parallel session on its own branch off master; after #4845
-merges, that branch needs `git merge origin/master` for the moved types.
+`ai/.tmp/handoff-20261015_osprey_carafe_pr3_contracts.md` before starting work. Phase 1 is on
+master; PR 3 (the contracts) starts on its own branch off master.
 - **Checkout**: `C:\proj\pwiz`
 - **Depends on**: CarafeSharp in `pwiz_tools/CarafeSharp` (PR #4717, merged 2026-10-14)
 - **Related**: `TODO-carafe_osprey_library_contract.md` (the library Carafe writes and Osprey
