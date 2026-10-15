@@ -533,7 +533,7 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
     writers to two.
   - Backlog, not this sprint: Skyline's NHibernate `BlibDb` keeps its own writes (least to gain,
     byte-level drift risk in libraries its tests compare); a backlog TODO unifies it later.
-- **Docs.** `CarafeSharp/Carafe-workflow.html`, in the style of `Osprey/Osprey-workflow.html`
+- **Docs.** Done: `CarafeSharp/Carafe-workflow.html`, PR [#4847](https://github.com/ProteoWizard/pwiz/pull/4847) (docs only, off master 2026-10-14), in the style of `Osprey/Osprey-workflow.html`
   (hand-maintained), one block per stage with its checkpoint file; after PR 4 it folds into the
   Osprey page as the library-build chapter.
 
