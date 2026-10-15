@@ -12,6 +12,10 @@
   `-log_file` / `-timestamp` / `-memstamp` options and the hand-written usage) and
   `CarafeSharp.Core.csproj` (the same CommonUtil reference), so the merge re-adds those three
   options as declarations.
+- **PR 3**: [#4852](https://github.com/ProteoWizard/pwiz/pull/4852) (opened 2026-10-15; six
+  commits: part F `c403a1b06f`, the manifest `37751f4895`, the project split `43ed20a53d`, the one
+  writer `a6633cce1e`, the contract `bf892117ff`, the review fixes `132c24e067`; awaiting the
+  TeamCity Perf/Regression on `pull/4852`, which Brendan triggers).
 - **PR 3 branch**: `Skyline/work/20261015_osprey_carafe_contracts` (off master `1575f27201`
   2026-10-15, in `C:\proj\pwiz`). Part F first (the shared training-record assembly), then part G.
 - **Base**: `master`
