@@ -20,10 +20,13 @@
 - **PR 3 branch**: `Skyline/work/20261015_osprey_carafe_contracts` (off master `1575f27201`
   2026-10-15, in `C:\proj\pwiz`; deleted after the merge).
 - **PR 3b branch**: `Skyline/work/20261015_osprey_blib_schema` (off master `773aa1bf63`
-  2026-10-15, in `C:\proj\pwiz`, local only, no PR yet; the "PR 3b" section is its checklist).
-  Three gated commits: the four `Osprey*` tables dropped (`8b0d4e9601`), `LibMetadata`
-  (`6f7a9c7895`) and `DecoyPairs` pairing (`6163ea2f89`); next `/code-review medium`, the PR,
-  TeamCity on `pull/<N>` and `regression-parallel.ps1 -Dataset All`. Read
+  2026-10-15, in `C:\proj\pwiz`, pushed; the "PR 3b" section is its checklist). Four gated
+  commits: the four `Osprey*` tables dropped (`8b0d4e9601`), `LibMetadata` (`6f7a9c7895`),
+  `DecoyPairs` pairing (`6163ea2f89`) and the review fixes (`ded6848fde`).
+- **PR 3b**: [#4854](https://github.com/ProteoWizard/pwiz/pull/4854) (opened 2026-10-15 night,
+  label osprey, base master). Before merge: Copilot via `/pw-respond 4854`, the TeamCity
+  Perf/Regression config on `pull/4854` (ask Brendan first), `regression-parallel.ps1 -Dataset All`
+  locally. Read
   `ai/.tmp/handoff-20261015_osprey_blib_schema.md` first.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
