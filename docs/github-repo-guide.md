@@ -54,7 +54,7 @@ front of it without reading anything, and only opens this file for detail.
 - Skills: `skyline-development` (Skyline, `pwiz_tools/Skyline`), `osprey-development` (C# port, `pwiz_tools/Osprey`), `version-control` before any commit or PR.
 - Build: `pwsh -File {ai}/scripts/Skyline/Build-Skyline.ps1 -SourceRoot {root}`
 - Test: `pwsh -File {ai}/scripts/Skyline/Run-Tests.ps1 -SourceRoot {root} -TestName <Name>`
-- Scripts: `{ai}/scripts/Skyline` (README.md, PRE-COMMIT.md), `{ai}/scripts/PwizSharp`, `{ai}/scripts/AutoQC`, `{ai}/scripts/SkylineBatch`, `{ai}/scripts/Osprey` (`Build-Osprey.ps1 -SourceRoot {root}` builds the C# port).
+- Scripts: `{ai}/scripts/Skyline` (README.md, PRE-COMMIT.md), `{ai}/scripts/PwizSharp`, `{ai}/scripts/AutoQC`, `{ai}/scripts/SkylineBatch`, `{ai}/scripts/Osprey` (`Build-Osprey.ps1 -SourceRoot {root}` builds the C# port), `{ai}/scripts/BiblioSpec` (`Build-BiblioSpec.ps1 -SourceRoot {root} -RunTests -TestName BlibSchemaIdentity` gates a `BlibSchema` edit).
 
 ### Notes
 

@@ -17,7 +17,7 @@ characterising the entrapment population from it mixes scopes.
 
 Two specific traps in using the blib for this:
 
-* Its `OspreyExperimentScores.NRunsDetected` is **post-reconciliation** - 99.7% of accepted
+* Its `RefSpectra.copies` (the run count) is **post-reconciliation** - 99.7% of accepted
   precursors read N-of-N, because Stage 6 fills in a peak for every run. It is not the
   independent-detection run count and must not be substituted for it.
 * Pass-2 rescoring sharpens the target/entrapment separation. The same near-copy pairs measure

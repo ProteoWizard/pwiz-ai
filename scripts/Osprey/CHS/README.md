@@ -174,7 +174,7 @@ set. Two things are true at once and it is worth keeping them apart:
 
 Every artifact now carries its own stamp - `osprey-validity/1;task=<Task>;version=<v>;key=<k>`
 as a JSON artifact's first property, a parquet footer entry (`osprey.validity`), a binary
-sidecar's trailer, or a blib `OspreyMetadata` row - and Osprey no longer writes or reads
+sidecar's trailer, or a blib `LibMetadata` row - and Osprey no longer writes or reads
 `.osprey.task` files. A run directory from a build before that change has no embedded stamps,
 so its artifacts read as stale under a current build and are recomputed; that is accepted.
 

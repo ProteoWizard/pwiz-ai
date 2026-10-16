@@ -20,11 +20,13 @@
       Modifications           (peptideModSeq, precursorCharge, position)
       RefSpectraProteins      (peptideModSeq, precursorCharge, accession)
       Proteins                (accession)
-      OspreyPeakBoundaries    (peptideModSeq, precursorCharge, FileName)
-      OspreyRunScores         (peptideModSeq, precursorCharge, FileName)
-      OspreyExperimentScores  (peptideModSeq, precursorCharge)
-      OspreyCoefficients      (peptideModSeq, precursorCharge, FileName, ScanNumber)
-      OspreyMetadata          (Key)
+      OspreyMetadata / LibMetadata (Key; the C# table is LibMetadata with osprey.-prefixed
+                               keys since 2026-10-15, so its SQL strips the prefix)
+
+    Rust osprey also writes OspreyPeakBoundaries, OspreyRunScores,
+    OspreyExperimentScores and OspreyCoefficients; C# Osprey dropped them
+    on 2026-10-15 (every value they held is in RefSpectra / RetentionTimes),
+    so they are not compared - an accepted divergence, see Compare/README.md.
 
 .PARAMETER RustBlib
     Path to the Rust .blib.
@@ -152,12 +154,15 @@ function Compare-Table {
         [string[]]$KeyCols,
         [string[]]$NumericCols = @(),
         [string[]]$ExactCols = @(),
-        [string[]]$BlobCols = @()
+        [string[]]$BlobCols = @(),
+        # The C# side's SQL when its table or key spelling differs from Rust's; the
+        # projected column names must match $Sql's. Defaults to $Sql.
+        [string]$SqlCs = $null
     )
     Write-Host ""
     Write-Host "=== $TableName ===" -ForegroundColor Cyan
     $rResult = Invoke-Sqlite -Db $RustBlib -Sql $Sql
-    $cResult = Invoke-Sqlite -Db $CsBlib   -Sql $Sql
+    $cResult = Invoke-Sqlite -Db $CsBlib   -Sql $(if ($SqlCs) { $SqlCs } else { $Sql })
 
     function Make-Key($row, $cols) {
         ($cols | ForEach-Object {
@@ -361,75 +366,28 @@ $allPass = (Compare-Table `
     -ExactCols @('bestSpectrum')
 ) -and $allPass
 
-# OspreyExperimentScores — one row per RefSpectra.
-$expSql = @"
-SELECT r.peptideModSeq, r.precursorCharge,
-       s.ExperimentQValue, s.NRunsDetected, s.NRunsSearched
-FROM OspreyExperimentScores s
-JOIN RefSpectra r ON s.RefSpectraID = r.id
-"@
-$allPass = (Compare-Table `
-    -TableName 'OspreyExperimentScores' `
-    -Sql $expSql `
-    -KeyCols @('peptideModSeq', 'precursorCharge') `
-    -NumericCols @('ExperimentQValue') `
-    -ExactCols @('NRunsDetected', 'NRunsSearched')
-) -and $allPass
+# The Osprey* tool tables (OspreyExperimentScores, OspreyRunScores, OspreyPeakBoundaries,
+# OspreyCoefficients) are Rust-only since 2026-10-15 and are not compared: RefSpectra.score
+# and copies carry the experiment q-value and run count, and RetentionTimes the per-run
+# q-value and boundaries, all compared above.
 
-# OspreyRunScores — key (RefSpectra key, FileName).
-$runSql = @"
-SELECT r.peptideModSeq, r.precursorCharge,
-       s.FileName, s.RunQValue, s.DiscriminantScore, s.PosteriorErrorProb
-FROM OspreyRunScores s
-JOIN RefSpectra r ON s.RefSpectraID = r.id
-"@
-$allPass = (Compare-Table `
-    -TableName 'OspreyRunScores' `
-    -Sql $runSql `
-    -KeyCols @('peptideModSeq', 'precursorCharge', 'FileName') `
-    -NumericCols @('RunQValue', 'DiscriminantScore', 'PosteriorErrorProb')
-) -and $allPass
-
-# OspreyPeakBoundaries — key (RefSpectra key, FileName).
-$pbSql = @"
-SELECT r.peptideModSeq, r.precursorCharge,
-       s.FileName, s.StartRT, s.EndRT, s.ApexRT, s.ApexIntensity, s.IntegratedArea
-FROM OspreyPeakBoundaries s
-JOIN RefSpectra r ON s.RefSpectraID = r.id
-"@
-$allPass = (Compare-Table `
-    -TableName 'OspreyPeakBoundaries' `
-    -Sql $pbSql `
-    -KeyCols @('peptideModSeq', 'precursorCharge', 'FileName') `
-    -NumericCols @('StartRT', 'EndRT', 'ApexRT', 'ApexIntensity', 'IntegratedArea')
-) -and $allPass
-
-# OspreyCoefficients — key (RefSpectra key, FileName, ScanNumber).
-$coefSql = @"
-SELECT r.peptideModSeq, r.precursorCharge,
-       s.FileName, s.ScanNumber, s.RT, s.Coefficient
-FROM OspreyCoefficients s
-JOIN RefSpectra r ON s.RefSpectraID = r.id
-"@
-$allPass = (Compare-Table `
-    -TableName 'OspreyCoefficients' `
-    -Sql $coefSql `
-    -KeyCols @('peptideModSeq', 'precursorCharge', 'FileName', 'ScanNumber') `
-    -NumericCols @('RT', 'Coefficient')
-) -and $allPass
-
-# OspreyMetadata — exact key + value match, EXCLUDING osprey_version and osprey.validity:
-# Osprey is intentionally on the Skyline version scheme (e.g. 26.1.1.x)
+# Metadata — exact key + value match, EXCLUDING the version, the validity stamp and the
+# command line. Osprey is intentionally on the Skyline version scheme (e.g. 26.1.1.x)
 # while Rust osprey uses its own (e.g. 26.6.1), so that one key is an expected
 # cross-impl difference, not a divergence. osprey.validity is the C#-only
 # artifact stamp (task, build version, validity key) that #4809 (2026-10-09)
 # embedded in every artifact, the blib included; Rust has no counterpart, and
 # it records which build wrote the file, not what the file says. Missing this
 # exclusion turned the gate red on every dataset from #4809 on, with every
-# result column identical. All other metadata must still match.
+# result column identical. Since 2026-10-15 the C# table is LibMetadata, shared by every
+# tool of ours, with Osprey's keys under an osprey. prefix (osprey.run_fdr) and the run's
+# command line under osprey.command, C#-only too; the C# SQL strips the prefix so the
+# three shared values compare by Rust's key. All other metadata must still match.
 $allPass = (Compare-Table `
-    -TableName 'OspreyMetadata' `
+    -TableName 'OspreyMetadata / LibMetadata' `
     -Sql "SELECT Key, Value FROM OspreyMetadata WHERE Key NOT IN ('osprey_version', 'osprey.validity')" `
+    -SqlCs ("SELECT substr(key, 8) AS Key, value AS Value FROM LibMetadata WHERE key LIKE 'osprey.%' " +
+            "AND key NOT IN ('osprey.version', 'osprey.validity', 'osprey.command')") `
     -KeyCols @('Key') `
     -ExactCols @('Value')
 ) -and $allPass

@@ -318,7 +318,7 @@ in the cumulative sweep.
 
 ### OSPREY_DUMP_BLIB_QVALUES=1 (C#-only)
 Pre-write q-values being inserted into the BLib RefSpectra /
-OspreyRunScores rows. No Rust counterpart — Rust's end-to-end output is
+RetentionTimes rows. No Rust counterpart — Rust's end-to-end output is
 verified via `Compare-Blib-Crossimpl.ps1` at the SQL row level instead.
 
 ## Trace mode

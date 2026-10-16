@@ -7,7 +7,7 @@ builds from BEFORE embedded validity stamps, i.e. directories that still hold
 files: every artifact carries its own stamp INSIDE itself
 (`osprey-validity/1;task=...;version=...;key=...` as a JSON first property, a
 parquet `osprey.validity` footer entry, a binary-sidecar trailer, or a blib
-OspreyMetadata row), and moving that version would mean rewriting the artifact.
+LibMetadata row), and moving that version would mean rewriting the artifact.
 For those newer directories the supported route is OSPREY_VERSION_OVERRIDE on the
 consuming run, set to the version the artifacts were written with.  A directory
 with no `.osprey.task` files is reported and skipped (not an error).  Note that a

@@ -77,6 +77,18 @@ The two sub-scripts `Compare-Stage7-Crossimpl.ps1` and
 end-to-end gate; you can call them directly to compare just one
 artifact during a focused investigation.
 
+Accepted blib divergence (2026-10-15): Rust osprey writes four tool tables
+beside the standard ones (`OspreyPeakBoundaries`, `OspreyRunScores`,
+`OspreyExperimentScores`, `OspreyCoefficients`); C# Osprey no longer does,
+because every value they held is already in `RefSpectra` (score, copies,
+the best run's apex and bounds) and `RetentionTimes` (each run's q-value and
+bounds), and tool tables no reader supports are not to be encouraged. The blib
+comparator compares the standard tables and the metadata only; the four
+tables are not a parity failure. The metadata table itself is `LibMetadata` in
+C# (shared by every tool of ours, keys prefixed `osprey.`) against Rust's
+`OspreyMetadata`; the comparator strips the prefix and compares the three shared
+values (`search_mode`, `run_fdr`, `experiment_fdr`).
+
 ## When the gate fails
 
 Most cross-impl drift falls into one of two categories:

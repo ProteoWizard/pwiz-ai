@@ -20,11 +20,13 @@
 - **PR 3 branch**: `Skyline/work/20261015_osprey_carafe_contracts` (off master `1575f27201`
   2026-10-15, in `C:\proj\pwiz`; deleted after the merge).
 - **PR 3b branch**: `Skyline/work/20261015_osprey_blib_schema` (off master `773aa1bf63`
-  2026-10-15, in `C:\proj\pwiz`, local only; the "PR 3b" section is its checklist). Read
-  `ai/.tmp/handoff-20261015_osprey_carafe_pr3_open.md` first.
+  2026-10-15, in `C:\proj\pwiz`, local only, no PR yet; the "PR 3b" section is its checklist).
+  Two gated commits: the four `Osprey*` tables dropped (`8b0d4e9601`) and `LibMetadata`
+  (`6f7a9c7895`); item 2 (`DecoyPairs` pairing) remains. Read
+  `ai/.tmp/handoff-20261015_osprey_blib_schema.md` first.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. Next: PR 3b (decision 7: no Osprey* tables, DecoyPairs pairing, LibMetadata), then adapting Nick's #4848, then PR 3c (BlibMaker on BiblioSpec.IO), then PR 4. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b in progress on its branch (2026-10-15 evening): the Osprey* tables dropped (8b0d4e9601) and LibMetadata (6f7a9c7895) committed and gated; DecoyPairs pairing (item 2) remains, then the PR. Then adapting Nick's #4848, then PR 3c (BlibMaker on BiblioSpec.IO), then PR 4. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
@@ -765,22 +767,57 @@ handoffs of 2026-10-15.
   (hand-maintained), one block per stage with its checkpoint file; after PR 4 it folds into the
   Osprey page as the library-build chapter.
 
-### PR 3b - the blib schema the two tools write (decision 7, 2026-10-15; not started)
+### PR 3b - the blib schema the two tools write (decision 7, 2026-10-15; two of three done)
 
-- [ ] Drop `OspreyPeakBoundaries`, `OspreyRunScores`, `OspreyExperimentScores` and
+- [x] Drop `OspreyPeakBoundaries`, `OspreyRunScores`, `OspreyExperimentScores` and
       `OspreyCoefficients` from `OspreyBlibTables` and `BlibOutputWriter`; the metadata table
       stays. Check what `Osprey.Test/BlibComparer` and `Regression/BlibGolden.ps1` project (the
       handoff of 2026-10-15 says values by precursor key, never DDL), rewrite `docs/13` for the
       tables that remain, and accept the divergence from Rust osprey's output in
       `Compare/README.md` (the cross-impl bridge compares blibs).
+      **Done 2026-10-15 as `8b0d4e9601`.** Both comparers projected the four tables by precursor
+      key; their projections and the goldens' `tables/Osprey*.tsv` and `blib_summary.tsv` rows
+      went with the tables. `BlibOutputWriter.EmitSpectrumRows` lost its `perFileEntriesCount`
+      parameter (only `NRunsSearched` used it). Comments in `SecondPassFdrTask`,
+      `ParquetScoreCache`, `PercolatorEngine` and `ExperimentQFloors` now name
+      `RefSpectra.score` / `copies` and `RetentionTimes.score`. `docs/13` has "The dropped
+      `Osprey*` tables"; `DIVERGENCES.md` an INTENT row. `ai/`: `Compare-Blib-Crossimpl.ps1`
+      skips the four tables, `Compare/README.md` records the accepted divergence,
+      `DIAGNOSTICS.md` and `Entrapment/README.md` name the surviving columns. Gates: Osprey Debug
+      build + 637 tests + inspection; `regression.ps1 -Dataset Stellar` PASSED (5 legs; modes 2
+      and 3 are the dataset table's cut, not an early exit).
 - [ ] Osprey pairs blib-supplied decoys from `DecoyPairs` (`BlibLoader.ReadDecoyPairs` already
       reads `IsDecoy`; add `PairID` and `IsEntrapment`) and refuses a decoy-bearing blib without
       the table unless decoys are generated; the manifest pairing and composition fallback stay
       for TSV libraries only. The contract's rule 6 is then checked from the table. The
       StellarLibDecoy regression library must carry the table (it pairs through the manifest
       today); regenerate it through CarafeSharp or add the table to the committed library.
-- [ ] **`LibMetadata` (key TEXT PRIMARY KEY, value TEXT), decided with Brendan 2026-10-15,
-      renamed from `OspreyMetadata` in this PR.** One table of single-row values about the
+- [x] **`LibMetadata` (key TEXT PRIMARY KEY, value TEXT), decided with Brendan 2026-10-15,
+      renamed from `OspreyMetadata` in this PR.** **Done 2026-10-15 as `6f7a9c7895`**, one step
+      further than the checklist: the table is the one writer's, not an extension. `BlibWriter`
+      creates `LibMetadata` in every library (`BlibSchema.CreateLibMetadata`, in both schema
+      copies with `CreateDecoyPairs` / `CreateIdxDecoyPairsPairId`, outside
+      `AllCreateTableStatements`, version still 11) and exposes `AddMetadata`; the new
+      `BiblioSpec.IO/BlibMetadata.Read` reads a key back and falls back to `OspreyMetadata` for
+      one release. `OspreyBlibTables.cs` and CarafeSharp's `MetadataTable` are gone;
+      `ArtifactStamp` lost its `BLIB_*` SQL. Keys: `osprey.version`, `osprey.search_mode`,
+      `osprey.run_fdr`, `osprey.experiment_fdr`, `osprey.library_source`, `osprey.command`,
+      `osprey.validity`; `carafe.command`; shared `library_contract`. The command lines come
+      from `OspreyConfig.CommandLine` / `LibrarySettings.CommandLine`, set by the parsers
+      through the new `CommonUtil/CommandLine/CommandLineText.Format(tool, args)` (quotes an
+      argument only when a shell would need it). `BlibComparer` and `BlibGolden.ps1` exclude
+      `osprey.validity` and `osprey.command` (the HPC chain's command line differs from the
+      straight-through run's); goldens renamed to `tables/LibMetadata.tsv` with the new keys.
+      `Compare-Blib-Crossimpl.ps1` gained `-SqlCs` and strips the `osprey.` prefix to compare the
+      three shared values with Rust's `OspreyMetadata`. New `ai/scripts/BiblioSpec/Build-BiblioSpec.ps1`
+      is the sanctioned route to the port's `BlibSchemaIdentity` test (the direct `dotnet test`
+      is denied). Gates: Osprey 637 tests + inspection; CarafeSharp 113 tests + inspection;
+      `BlibSchemaIdentity`; `regression.ps1 -Dataset Stellar` PASSED (5 legs, mode 1 against the
+      renamed golden); CarafeSharp `regression.ps1 -Leg Chained` PASSED. Tests added:
+      `OspreyCommandArgsTests.TestArgToConfigMapping` (the command line and quoting),
+      `CommandArgsTest.TestCarafeGrammar` (CarafeSharp's), `SubsetPipelineTest` (the blib carries
+      `osprey.command` and `osprey.version`).
+      One table of single-row values about the
       library as a whole - `LibInfo` keeps its five identity and version columns and stops
       growing (the schema's own history shows every past addition went to `RefSpectra` or, once,
       `SpectrumSourceFiles`; a per-file key-value table was considered and declined). Keys are

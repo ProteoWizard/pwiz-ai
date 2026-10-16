@@ -132,7 +132,7 @@ Write-Host ("  COLD wall: {0:mm\:ss}; blib: {1} bytes" -f $rCold.wall, (Get-Item
 # Delete only the blib so SecondPassFDR re-runs while every upstream task's
 # outputs stay valid on disk (driver skips them -> downstream Demand fires the
 # pure Rehydrate paths). The blib carries its own validity stamp (an
-# OspreyMetadata row), and a task is only skipped when every declared output
+# LibMetadata row), and a task is only skipped when every declared output
 # exists, so deleting the blib is all it takes - there are no .osprey.task files.
 Remove-Item $blibInWork -Force
 Write-Host "[WARM] resume re-run (upstream outputs valid -> pure Rehydrate paths) ..." -ForegroundColor Cyan

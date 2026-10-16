@@ -77,6 +77,12 @@ See [Skyline/README.md](Skyline/README.md) for detailed Skyline build/test docum
 | `CarafeSharp/Measure-CumulativeCoverage.ps1` | dotCover coverage of the unit tests plus `regression.ps1`, merged |
 | `CarafeSharp/Audit-Loc.ps1` | cloc audit of CarafeSharp against its Carafe (Java + Python) reference |
 
+### BiblioSpec/
+
+| Script | Description |
+|--------|-------------|
+| `BiblioSpec/Build-BiblioSpec.ps1` | Build and test the BiblioSpec C# port (`pwiz_tools/BiblioSpec`); `-RunTests -TestName BlibSchemaIdentity` gates an edit to either `BlibSchema` copy |
+
 ### AutoQC/ and SkylineBatch/
 
 | Script | Description |
