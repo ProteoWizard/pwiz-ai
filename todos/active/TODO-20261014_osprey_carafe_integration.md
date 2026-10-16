@@ -853,6 +853,27 @@ handoffs of 2026-10-15.
       `OspreyMetadata` for one release so existing outputs resume. `LibMetadata` and `DecoyPairs`
       go into the port's `BlibSchema` as the standard definitions.
 
+#### PR 3b - `/code-review medium` triage (2026-10-15 night, on 6163ea2f89)
+
+Ten findings; eight fixed in the review-fix commit, two dropped:
+- Fixed: a table row that flips an entry's side now sets or clears the decoy id bit (the manifest
+  arm does, `DecoyPairingManifest.cs:257-261`); the table marks BEFORE the "no decoys at all"
+  check (a blib with unprefixed accessions loads); a manifest given with a blib is logged as
+  serving entrapment pairing only (it still feeds `EntrapmentPairing` / FDRBench) and the
+  low-fraction error for a blib no longer advises a manifest; a pair id with more than two rows
+  pairs nothing in `BlibDecoyPairs.Pair` and fails rule 6 in `LibraryContract` alike (the two
+  rules were inconsistent); the table is read only for `LibrarySuppliesDecoys` or a contract
+  claim and a table Osprey cannot read is an `InvalidDataException` naming the library, not a
+  defect; `CommandLineText.Quote` doubles backslashes before a quote or the closing quote (the
+  .NET / C runtime rule) so the text parses back; the rule 6 example text comes from
+  `ContractsResources` and the tests format the resource; the stale `OspreyMetadata` /
+  `osprey_version` mentions in docs 16 and 19 and `OspreyVersion.cs` renamed.
+- Dropped: "`--export-library` drops the source table's `IsEntrapment` and `Method`" - the export
+  writes what Osprey knows; Osprey classifies entrapment by the `_p_target` accession marker
+  everywhere (`EntrapmentLibraryClassifier`), and `Method` is Carafe's provenance of how it made
+  a decoy, which Osprey never holds. Dropped: "redundant double lookup" as its own item - the
+  loop was rewritten for the strict pair groups and the lookup went with it.
+
 ### PR 3c - BlibMaker on BiblioSpec.IO (Brendan, 2026-10-15; after 3b and the #4848 adaptation)
 
 - [ ] Port `pwiz_tools/BiblioSpec`'s `BlibMaker` to write through `BiblioSpec.IO`'s `BlibWriter`
