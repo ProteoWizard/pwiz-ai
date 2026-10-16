@@ -24,13 +24,15 @@
   commits: the four `Osprey*` tables dropped (`8b0d4e9601`), `LibMetadata` (`6f7a9c7895`),
   `DecoyPairs` pairing (`6163ea2f89`) and the review fixes (`ded6848fde`).
 - **PR 3b**: [#4854](https://github.com/ProteoWizard/pwiz/pull/4854) (opened 2026-10-15 night,
-  label osprey, base master). Before merge: Copilot via `/pw-respond 4854`, the TeamCity
-  Perf/Regression config on `pull/4854` (ask Brendan first), `regression-parallel.ps1 -Dataset All`
-  locally. Read
+  label osprey; merged 2026-10-16 as add3a5df1d on Brendan's say-so with the 19 GitHub checks
+  green; the TeamCity Perf/Regression run and the local `-Dataset All` did NOT run before the
+  merge - Stellar and StellarLibDecoy passed in full locally, Astral and StellarGenDecoyEntrap
+  are first exercised by the overnight TeamCity regression). Copilot posted only a quota-limit
+  notice, no review. Read
   `ai/.tmp/handoff-20261015_osprey_blib_schema.md` first.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b in progress on its branch (2026-10-15 evening): the Osprey* tables dropped (8b0d4e9601) and LibMetadata (6f7a9c7895) committed and gated; DecoyPairs pairing (item 2) remains, then the PR. Then adapting Nick's #4848, then PR 3c (BlibMaker on BiblioSpec.IO), then PR 4. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b (#4854) merged 2026-10-16 as add3a5df1d: no Osprey* tables, LibMetadata and DecoyPairs as the blib's standard optional tables, blib decoys paired from DecoyPairs. Next: adapting Nick's #4848, then PR 3c (BlibMaker on BiblioSpec.IO), then PR 4; watch the overnight TeamCity regression for Astral and StellarGenDecoyEntrap, which did not run locally before the merge. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
