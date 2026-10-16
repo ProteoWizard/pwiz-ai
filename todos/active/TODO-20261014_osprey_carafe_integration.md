@@ -30,9 +30,12 @@
   are first exercised by the overnight TeamCity regression). Copilot posted only a quota-limit
   notice, no review. Read
   `ai/.tmp/handoff-20261015_osprey_blib_schema.md` first.
+- **PR 3c branch**: `Skyline/work/20261016_blibmaker_bibliospec_io` (off master `add3a5df1d`
+  2026-10-16, in `C:\proj\pwiz`; the "PR 3c" section is its checklist). Module `pwiz`: the
+  change is to the BiblioSpec port, with BiblioSpec.IO gaining what it needs.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b (#4854) merged 2026-10-16 as add3a5df1d: no Osprey* tables, LibMetadata and DecoyPairs as the blib's standard optional tables, blib decoys paired from DecoyPairs. Next (decision 8, 2026-10-16): PR 3c (BlibMaker on BiblioSpec.IO), then a review of Skyline's BLIB support and whether a .blib library can do without the Osprey/CarafeSharp library cache, two sprints on BLIB before PR 4 and the #4848 adaptation; watch the overnight TeamCity regression for Astral and StellarGenDecoyEntrap, which did not run locally before the merge. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b (#4854) merged 2026-10-16 as add3a5df1d: no Osprey* tables, LibMetadata and DecoyPairs as the blib's standard optional tables, blib decoys paired from DecoyPairs. Next (decision 8, 2026-10-16): PR 3c (BlibMaker on BiblioSpec.IO), then a review of Skyline's BLIB support and whether a .blib library can do without the Osprey/CarafeSharp library cache, two sprints on BLIB before PR 4 and the #4848 adaptation. The TeamCity Perf/Regression run on PR 3b's head (`ded6848f`, build #322) was green on all four datasets, so Astral and StellarGenDecoyEntrap are covered. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
@@ -888,15 +891,53 @@ Ten findings; eight fixed in the review-fix commit, two dropped:
   a decoy, which Osprey never holds. Dropped: "redundant double lookup" as its own item - the
   loop was rewritten for the strict pair groups and the lookup went with it.
 
-### PR 3c - BlibMaker on BiblioSpec.IO (Brendan, 2026-10-15; NEXT, decision 8 - starts on a fresh `Skyline/work/YYYYMMDD_...` branch off master)
+### PR 3c - BlibMaker on BiblioSpec.IO (Brendan, 2026-10-15; decision 8; coded 2026-10-16 on `Skyline/work/20261016_blibmaker_bibliospec_io`)
 
-- [ ] Port `pwiz_tools/BiblioSpec`'s `BlibMaker` to write through `BiblioSpec.IO`'s `BlibWriter`
-      (the writer gains what BlibMaker needs that Osprey and CarafeSharp did not); the BiblioSpec.IO
-      `BlibSchema` copy and the port's `BlibSchemaIdentity` test go, leaving one definition.
+- [x] Port `pwiz_tools/BiblioSpec`'s `BlibMaker` to write through `BiblioSpec.IO`'s `BlibWriter`
+      (the writer gains what BlibMaker needs that Osprey and CarafeSharp did not); the port's
+      `BlibSchema` copy and its `BlibSchemaIdentity` test go, leaving one definition.
       BlibBuild and BlibFilter record their command lines in `LibMetadata`. Gate: the port's
       reference checks (`tests/reference/*.check`) and Skyline's library build tests. Skyline's
       NHibernate `BlibDb` is then the one writer not on it, left for a later PR because its tests
       compare library bytes.
+      **Done 2026-10-16 (one commit, gated).** What the writer gained: `Open(path, append)` (the
+      database with no schema, or a copy of the library being appended to, since the writer is
+      temp-then-move and BiblioSpec attaches its input libraries to the connection before the
+      schema exists - BlibFilter's LSID comes from the redundant library), `CreateSchema(lsid)`,
+      `SetRevision` (new library 1, filtered = the redundant's, appended = its own + 1),
+      `RollbackBatch`, `DropIndexes`, `EnsureRetentionTimes` (a redundant library has none, as
+      cpp built it; BlibFilter and the DIA-NN reader add it), `EncodeMzs`/`EncodeIntensities` with
+      a compress flag (`-l 0`), `redundantRefId` on `AddRetentionTime`, no `RefSpectraPeaks` row
+      when `MzBlob` is null (precursor-only entries), `Complete` counting `RefSpectra` (the
+      transfers are SQL) and creating the per-table extra indexes only where the table exists.
+      `LibInfo` starts as cpp wrote it (-1 spectra, revision 0) on every path; the final values are
+      unchanged for Osprey and CarafeSharp. The maker keeps overwrite-vs-append, `UpdateTables`
+      (now also adds `cutoffScore` to an ancient library, since the writer names every column),
+      the LSID, the UNKNOWN-source rows and every attached-library transfer as SQL on
+      `Writer.Connection`; `BuildParser` fills a `BlibSpectrumRecord` (modification masses taken
+      through cpp's `%f` text first, so the six-decimal .check values hold) and its
+      SELECT-then-INSERT protein cache is the writer's (primed from the table when appending).
+      `BlibSchema` now holds the `ScoreTypes` and `IonMobilityTypes` rows; the port's `BlibUtils`
+      reads them and its `ProbabilityType` enum went. BlibBuild's peak blobs are stock zlib (Ionic
+      level 6, cpp's bytes) instead of .NET's ZLibStream. `Pwiz.sln` gained BiblioSpec.IO.
+      Parity notes: the .check dumps (LibInfo, Modifications, RefSpectra, SpectrumSourceFiles,
+      ScoreTypes, RetentionTimes) never compared peak blobs, Proteins or indexes; an empty
+      accession is no longer mapped (the writer skips it, the dumps never saw Proteins).
+      Gates: port 145/145 with vendor support (128 without; the 2 new RoundTrip tests: command
+      line in `LibMetadata`; append keeps rows, reuses a protein, bumps the revision, recreates
+      the indexes once); CarafeSharp 113 tests + inspection clean; Osprey 637 tests + inspection
+      clean; `regression.ps1 -Dataset Stellar` 5 legs PASS; CarafeSharp `regression.ps1 -Leg
+      Chained` PASS; Skyline `LibraryBuildTest` PASS on the `-VendorLicenses` build (46 s;
+      covers Create and Append through the real BlibBuild and BlibFilter processes).
+      Gotcha (cost two 14-minute runs): Skyline's `LibraryBuildTest` needs
+      `Build-Skyline.ps1 -VendorLicenses`. Without it the port's BlibBuild is compiled with the
+      Mascot reader out (`MASCOT_SUPPORT` follows `IAgreeToVendorLicenses`), its score-type lookup
+      on the test's `F027319.dat` answers "Reader for input type Mascot ... not yet ported", and
+      the Build Library dialog never reports its score types loaded: a 720-second
+      `WaitForConditionUI` timeout at `LibraryBuildTest.cs:776` that reads like a hang and is
+      the same on master. Stale `MascotShim.dll` / `msparserD.dll` in `bin\staging` from an
+      earlier vendor build do not mean the reader is in. Brendan's screenshot of the stuck
+      dialog (the .dat row with a score-type error) is what pointed at the file.
 
 ### PR 4 - one command
 

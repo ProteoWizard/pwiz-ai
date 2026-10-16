@@ -6,11 +6,11 @@
     which builds the port's library and its four CLI tools (BlibBuild, BlibFilter, BlibSearch,
     BlibToMs2) before it, and optionally runs the tests.
 
-    Most of the suite runs the tools against the golden inputs under pwiz_tools/BiblioSpec/tests.
-    BlibSchemaIdentity, the test that holds the port's BlibSchema and the Shared BiblioSpec.IO copy
-    (the schema Osprey and CarafeSharp write .blib files through) identical member by member,
-    needs nothing else, so an edit to either schema copy is gated with
-    -RunTests -TestName BlibSchemaIdentity.
+    Most of the suite runs the tools against the golden inputs under pwiz_tools/BiblioSpec/tests
+    (the .check reference dumps). The port writes its libraries through the Shared BiblioSpec.IO
+    BlibWriter, the one writer Osprey and CarafeSharp use too, so an edit to BiblioSpec.IO is
+    gated here as well as by the Osprey and CarafeSharp gates. The RoundTrip tests need no
+    inputs: -RunTests -TestName RoundTrip.
 
     The direct dotnet build/test commands are blocked in an AI session (Deny-DirectBuildTest.ps1);
     this script is the sanctioned route, as Build-CarafeSharp.ps1 is for CarafeSharp.
@@ -26,7 +26,7 @@
     Path to the pwiz root. Defaults to the pwiz checkout that is a sibling of this ai/ tree.
     Pass it explicitly in a worktree session, or the build silently tests the other tree.
 .EXAMPLE
-    pwsh -File ./ai/scripts/BiblioSpec/Build-BiblioSpec.ps1 -RunTests -TestName BlibSchemaIdentity
+    pwsh -File ./ai/scripts/BiblioSpec/Build-BiblioSpec.ps1 -RunTests -TestName RoundTrip
 .EXAMPLE
     pwsh -File ./ai/scripts/BiblioSpec/Build-BiblioSpec.ps1 -Configuration Debug -RunTests
 #>

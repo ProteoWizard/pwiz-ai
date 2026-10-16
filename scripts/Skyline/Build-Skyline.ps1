@@ -351,8 +351,9 @@ if ($isNet8) {
     # The vendor projects gate real reader code on this property. Without it some types
     # (e.g. the Waters lockmass refiners) are compiled out, so anything referencing them
     # fails to build. If the developer has already run pwiz-sharp's
-    # i-agree-to-the-vendor-licenses.bat, the gitignored props file sets it for us.
-    $userProps = Join-Path $pwizRoot 'pwiz-sharp\Directory.Build.user.props'
+    # i-agree-to-the-vendor-licenses.bat (at the repo root since the .NET 10 port merged into
+    # master; pwiz-sharp\ is gone), the gitignored props file beside Pwiz.sln sets it for us.
+    $userProps = Join-Path $pwizRoot 'Directory.Build.user.props'
     $vendorAgreed = $VendorLicenses -or (Test-Path -LiteralPath $userProps)
     # Platform matters as much as Configuration. Without it dotnet builds AnyCPU into
     # bin\<Config>\<TFM>, while Visual Studio builds x64 into bin\x64\<Config>\<TFM> - two output
@@ -366,7 +367,8 @@ if ($isNet8) {
     }
     if (-not $vendorAgreed) {
         Write-Host "Vendor support DISABLED - vendor readers build in no-vendor mode." -ForegroundColor Yellow
-        Write-Host "Pass -VendorLicenses, or run pwiz-sharp\i-agree-to-the-vendor-licenses.bat once." -ForegroundColor Gray
+        Write-Host "Pass -VendorLicenses, or run i-agree-to-the-vendor-licenses.bat (repo root) once." -ForegroundColor Gray
+        Write-Host "Without it BlibBuild is built with the Mascot reader out, and Skyline tests that build a library from a .dat (LibraryBuildTest) wait out a 720 s timeout." -ForegroundColor Gray
     }
 
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {

@@ -81,7 +81,7 @@ See [Skyline/README.md](Skyline/README.md) for detailed Skyline build/test docum
 
 | Script | Description |
 |--------|-------------|
-| `BiblioSpec/Build-BiblioSpec.ps1` | Build and test the BiblioSpec C# port (`pwiz_tools/BiblioSpec`); `-RunTests -TestName BlibSchemaIdentity` gates an edit to either `BlibSchema` copy |
+| `BiblioSpec/Build-BiblioSpec.ps1` | Build and test the BiblioSpec C# port (`pwiz_tools/BiblioSpec`); `-RunTests` runs its 142 reference checks, which also gate an edit to the shared `BiblioSpec.IO` writer or schema |
 
 ### AutoQC/ and SkylineBatch/
 
