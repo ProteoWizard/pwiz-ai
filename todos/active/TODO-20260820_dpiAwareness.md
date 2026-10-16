@@ -710,6 +710,40 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-16 - Two more developer-found bugs fixed and pushed (both were mine)
+
+- ComparePeakPickingDlg "check boxes on the graph title, in both versions":
+  my Oct 5 DockGraphBelowStrip docked the graph with a TabPage Padding, and
+  WinForms lays out the page's ANCHORED siblings relative to the padded
+  DisplayRectangle, so the check boxes and combo moved down by the padding
+  (layout dump: designer y=6/24 rendered at 72/100 @150%). BuildLibraryDlg
+  used the same trick with left/right padding: its Add buttons and label were
+  hidden under the grid (I had called that page "verified by eye" - wrong).
+  Fix 881bcc3d20: DpiUtil.FillTabPage(page, control, right) sizes the control
+  by hand on page.Resize; right margin is a parameter because the
+  ZedGraphControl's own width is also wrong at ctor time (422 on a 1059 page).
+  The three graphs also start 10 px lower in the resx (en/ja/zh-Hans) so the
+  title clears the controls at 96 DPI. Gate TestPeakBoundaryCompare +
+  TestLibraryBuild both modes; re-captured both forms at 150%.
+- Targets tree icons "thin grey square outline not in the 96-DPI version":
+  GDI+ bicubic DrawImage with no wrap mode samples transparent black past the
+  bitmap edge, so every scaled icon got a half-transparent rim - visible on
+  the opaque white tree icons. Fix 21c1569366: ImageAttributes with
+  WrapMode.TileFlipXY in both resamplers (DpiUtil.ScaleImageForList and
+  ImageListScaler.ScaleImage). Verified on a fresh MethodEdit s-11 at 150%
+  (tutorials/MethodEdit-fix/after, 8x zoom clean). Gate TestFilesTreeForm,
+  TestMultiSelect, TestLibraryExplorer both modes.
+- Push needed a second rebase: Brendan merged master + the port into the
+  branch (58 commits, 2026-10-15) and added 8346379152 "opt-in DPI-aware
+  tutorial screenshots": TestRunner dpiaware=on calls
+  Application.SetHighDpiMode(SystemAware) before SetDefaultFont, plus DWM
+  frame screenshots. That supersedes the local sweep harness's app.manifest
+  hack - the sweep scripts should pass dpiaware=on instead (harness still
+  local; its TestRunner/Program.cs hunk merged with his option line).
+  Rebased with -X renormalize, clean, no file overlap; pushed.
+- Heat map label question (2026-10-13) closed as not a defect; see the entry
+  below.
+
 ### 2026-10-13 - PUSHED: review fixes gated, inspections run, PR description rewritten
 
 Six medium-review fixes committed, then the pre-push checks:
