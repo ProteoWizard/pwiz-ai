@@ -61,8 +61,23 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
   (`-p:SkylineBuildSet=All|Perf`, unknown name is an error). Replied on the thread.
 - Matt (email) on AnyCPU vs x64: "Everything to x64 I think. Like I already did with Skyline so it
   reused code inspection's build." tc-perftests.bat now passes Platform=x64 (run16: all four staged from
-  bin\x64). Remaining for a follow-up PR: top-level build.bat pwiz-sharp, installer, Osprey.sln override,
-  Osprey package.ps1.
+  bin\x64).
+- 2026-10-16: folded "everything x64" into this PR (developer's call) - a7f0812b6f:
+  Pwiz.sln x64 configs remap the 57 Any CPU projects to x64 (BOM/CRLF preserved - sed stripped the BOM, restored);
+  root Directory.Build.props declares Platforms AnyCPU;x64 (StlContainers in its csproj); build.bat and
+  Run-Tests-Parallel.ps1 pass x64; installer builds x64 and stages from bin/x64/Release (build.bat runs it with
+  -SkipBuild, so both had to move together); Osprey's out-of-solution target passes $(Platform) instead of AnyCPU
+  (reverses #4725's AnyCPU choice - its premise "Skyline can't be x64" ended with cafeb7048c on 10-02; Mike was
+  its author); Bench-*.ps1 paths. Linux build.sh left AnyCPU (no sharing to gain; keeps non-x64 hosts working).
+  Found by test-first: MSConvertGUI IsDevBuildDirectory rejected bin\x64\<Config>\<TFM> (dev defaults silently
+  lost) - extended IsDevBuildDirectory_OnlyBuildOutput (red in run19), fixed (run20 green, 736 passed).
+  Verified: Osprey 637/637 on the shared x64 tree; pwiz<->Skyline alternation no-op both ways (run23 8.6 s,
+  run24 12.4 s). Installer not run locally (no ISCC) - checked its x64 input files exist.
+- Merged master (developer's GitHub "Update branch", aa29c9cd1c): #4852 added Shared\BiblioSpec\BiblioSpec.IO,
+  referenced by BiblioSpec.Tests (in Pwiz.sln) but not added to Pwiz.sln, so Release solution builds built it
+  twice as Debug|AnyCPU into bin\Debug (run25) - a master defect, not from this PR. Added it to Pwiz.sln
+  (482b23a8c6); run28: once, x64 Release, 737 passed.
+- Superseded: my earlier claim that Osprey still builds pwiz-sharp three ways was stale - #4725 fixed that 09-30.
 - Perf set re-restored Skyline.csproj on every run - ROOT CAUSE (found by a Fable 5.1 subagent):
   tc-perftests.bat itself ran `rmdir /s /q pwiz_tools\Skyline\obj` before the build (since the .NET 10 port,
   254112b277), deleting Skyline's NuGet cache and compile intermediates. NuGet 7.9 logs "restore inputs have
