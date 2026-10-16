@@ -1,11 +1,16 @@
 #Requires -Version 7.0
 
 # PreToolUse hook: when Claude is about to Edit/Write/MultiEdit a file under
-# pwiz/pwiz_tools/Skyline or pwiz/pwiz_tools/Osprey, inject the
-# corresponding skill (skyline-development or osprey-development) SKILL.md
-# content into Claude's context. Skill descriptions alone are advisory; this
-# hook makes the load deterministic at the moment Claude is about to change
-# code in the relevant tree.
+# pwiz_tools/Skyline or pwiz_tools/Osprey (in any pwiz checkout), remind it to
+# load the corresponding skill (skyline-development or osprey-development).
+# Skill descriptions alone are advisory; this puts the reminder in front of
+# Claude at the moment it is about to change code in the relevant tree.
+#
+# A one-line reminder, deliberately. This hook used to inject the whole
+# SKILL.md (~20 KB of JSON) on every edit. That cost context on every edit when
+# it got through, and near that size the harness truncates hook output and
+# rejects it as invalid JSON, so it stopped getting through at all. Loading the
+# skill once is cheaper than re-reading it on every edit.
 #
 # Wired up by .claude/settings.json -> PreToolUse -> matcher
 # "Edit|Write|MultiEdit". Exits 0 on every path (including malformed input,
@@ -29,12 +34,12 @@ $norm = $path -replace '\\', '/'
 
 $skillSlug = $null
 $treeLabel = $null
-if ($norm -match '(?i)/pwiz/pwiz_tools/Skyline/') {
+if ($norm -match '(?i)/pwiz_tools/Skyline/') {
     $skillSlug = 'skyline-development'
-    $treeLabel = 'pwiz/pwiz_tools/Skyline'
-} elseif ($norm -match '(?i)/pwiz/pwiz_tools/Osprey/') {
+    $treeLabel = 'pwiz_tools/Skyline'
+} elseif ($norm -match '(?i)/pwiz_tools/Osprey/') {
     $skillSlug = 'osprey-development'
-    $treeLabel = 'pwiz/pwiz_tools/Osprey'
+    $treeLabel = 'pwiz_tools/Osprey'
 }
 
 if (-not $skillSlug) { exit 0 }
@@ -42,18 +47,10 @@ if (-not $skillSlug) { exit 0 }
 $skillPath = Join-Path $PSScriptRoot "..\skills\$skillSlug\SKILL.md"
 if (-not (Test-Path -LiteralPath $skillPath)) { exit 0 }
 
-$skill = Get-Content -LiteralPath $skillPath -Raw
-
-$context = @"
-[Auto-loaded by Inject-PathBasedSkill PreToolUse hook because the upcoming Edit/Write touches a file under $treeLabel. Apply these conventions to the change. Source: .claude/hooks/Inject-PathBasedSkill.ps1]
-
-$skill
-"@
-
 $output = @{
     hookSpecificOutput = @{
         hookEventName     = 'PreToolUse'
-        additionalContext = $context
+        additionalContext = "Editing $treeLabel`: load the $skillSlug skill before making this change, if you have not already."
     }
 }
 

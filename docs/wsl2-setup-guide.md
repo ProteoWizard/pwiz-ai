@@ -117,7 +117,7 @@ hooks enforce on Windows:
 | `Deny-HarnessAttribution` | Blocks Claude Code's default attribution in commits/PRs | Check commit/PR text against the version-control skill |
 | `Check-ReporterCredit` | Reminds about reporter credit on commits/PRs | Manual |
 | `Deny-BomInCommit` | Blocks commits introducing a UTF-8 BOM | Manual |
-| `Inject-PathBasedSkill` | Loads the matching skill when editing certain paths | Load skills per the CLAUDE.md skill list |
+| `Inject-PathBasedSkill` | Reminds Claude to load the matching skill when editing Skyline or Osprey files | Load skills per the CLAUDE.md skill list |
 | `Deny-CodeReviewInAiRepo` | Blocks `/code-review` in the ai repo | Don't run it there |
 | `Deny-DirectBuildTest` | Blocks direct build/test executables | N/A (no Windows builds in WSL) |
 | `Set-ActiveCheckout` | Sets the active pwiz checkout at session start | N/A |
