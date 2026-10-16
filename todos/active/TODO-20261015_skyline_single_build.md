@@ -78,6 +78,13 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
   twice as Debug|AnyCPU into bin\Debug (run25) - a master defect, not from this PR. Added it to Pwiz.sln
   (482b23a8c6); run28: once, x64 Release, 737 passed.
 - Superseded: my earlier claim that Osprey still builds pwiz-sharp three ways was stale - #4725 fixed that 09-30.
+- Copilot (high): BiblioSpec.Tests ExecuteBlib.TryResolveToolPath looked only in bin\<Config>\net10.0. My grep for
+  literal bin\Release missed it (Path.Combine("bin", config, ...)). Earlier "737 passed" runs used STALE AnyCPU tools
+  (BlibBuild.exe 08:54 vs x64 09:44). Deleted stale AnyCPU bin\Release under pwiz-sharp + BiblioSpec tools' bin\Debug:
+  run29 red = 125/144 BiblioSpec skipped, "Test Run Successful" (silent on clean CI); all other suites passed (no
+  other hidden path dependency). Fixed to match the test assembly's layout, never crossing platforms (634b5d8e9d);
+  run30: 737 passed, 0 failed. Replied + resolved the thread. Lesson: after a platform/path move, delete the old
+  output tree before trusting a green run.
 - Perf set re-restored Skyline.csproj on every run - ROOT CAUSE (found by a Fable 5.1 subagent):
   tc-perftests.bat itself ran `rmdir /s /q pwiz_tools\Skyline\obj` before the build (since the .NET 10 port,
   254112b277), deleting Skyline's NuGet cache and compile intermediates. NuGet 7.9 logs "restore inputs have
