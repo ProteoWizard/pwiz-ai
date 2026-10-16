@@ -5,7 +5,7 @@
 - **Base**: `master` (6496d05222)
 - **Created**: 2026-10-15
 - **Status**: In Progress
-- **Module**: `skyline`
+- **Module**: `pwiz` (was `skyline`; retitled 2026-10-16 when x64-everywhere was folded in)
 - **PR**: [#4850](https://github.com/ProteoWizard/pwiz/pull/4850) (draft)
 - **Checkout**: `C:\Dev\BuildTrouble`
 
