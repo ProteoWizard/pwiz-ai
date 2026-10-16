@@ -48,6 +48,7 @@ This directory contains comprehensive, detailed documentation for LLM-assisted d
 
 - **[tutorial-doc-style-guide.md](tutorial-doc-style-guide.md)** - Style conventions for Skyline tutorial HTML
 - **[translation-guide.md](translation-guide.md)** - Updating localized RESX files and translation tables
+- **[translation-drafting-guide.md](translation-drafting-guide.md)** - Claude-drafted ja / zh-Hans translations for expert review
 
 ### AI System
 

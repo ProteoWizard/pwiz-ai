@@ -55,8 +55,9 @@ taking Osprey's first translation through ResourcesOrganizer on the Osprey branc
       and the README naming `localization.zh-Hans.csv`.
 - [ ] Deferred: once Osprey is in `LastReleaseResources.db`, remove the `EXTRA_EXCLUDE` line from
       `UpdateResxFiles.bat`.
-- [ ] Deferred: when the port branch merges to master, update `ai/docs/translation-guide.md` (still says
-      zh-CHS throughout, which is correct for master today).
+- [x] Deferred: when the port branch merges to master, update `ai/docs/translation-guide.md` (still says
+      zh-CHS throughout, which is correct for master today). Done 2026-10-16 with
+      `Validate-TranslationCsvSync.ps1` (master: 353 `.zh-Hans.resx`, 0 `.zh-CHS.resx`).
 
 ## Notes
 - Nick (2026-09-30): ImportLastVersion dropping translations absent from the baseline is by

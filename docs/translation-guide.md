@@ -1,18 +1,30 @@
 # Translation Guide
 
-Guide for updating localized RESX files and preparing translation tables for Japanese (ja) and Chinese Simplified (zh-CHS) translations.
+Guide for updating localized RESX files and preparing translation tables for Japanese (ja) and Chinese Simplified (zh-Hans) translations.
 
 ## Overview
 
 Skyline maintains translations in two languages:
 - **Japanese (ja)** - `.ja.resx` files
-- **Chinese Simplified (zh-CHS)** - `.zh-CHS.resx` files
+- **Chinese Simplified (zh-Hans)** - `.zh-Hans.resx` files
 
 The translation workflow involves:
 1. Syncing localized RESX files with English (copying non-text properties)
 2. Generating CSV files with strings needing translation
 3. Sending CSVs to translators
 4. Importing translated CSVs back into RESX files
+
+**Drafting translations with Claude** instead of a translation company (glossary, style guide,
+drafting subagents, gates, reviewer package): see `ai/docs/translation-drafting-guide.md`. The
+drafts go into this pipeline at step 4, as CSVs.
+
+**Naming**: the RESX satellites, the CSV scripts and `LastReleaseResources.db` use `zh-Hans`
+(renamed from `zh-CHS` in PR #4758). Tutorial HTML folders are still named `zh-CHS`.
+
+**Osprey** (`pwiz_tools/Osprey`) is excluded from `IncrementalUpdateResxFiles` /
+`FinalizeResxFiles` (`EXTRA_EXCLUDE` in `UpdateResxFiles.bat`). Its translations are not in
+`LastReleaseResources.db` yet, and those targets would revert them to English. The CSV
+generate/import scripts do include Osprey.
 
 ## Tools
 
@@ -36,12 +48,22 @@ SQLite database containing resources from the last major release. Used to:
 
 ## Boost Build Targets
 
+> **Broken on master since 2026-10-07.** PR #4658 deleted `ResourcesOrganizer/Jamfile.jam`, and
+> `quickbuild.bat` no longer exists, so none of the `quickbuild.bat ...//<Target>` commands in
+> this guide run. The `scripts\*.bat` files they called still work. They need
+> `ResourcesOrganizer\ResourcesOrganizer\bin\Release\ResourcesOrganizer.exe`, which the Jamfile
+> built with `dotnet build ResourcesOrganizer.csproj /p:Configuration=Release;OutDir=<that bin\Release>`.
+> Interim procedure: build that exe, then run the `.bat` that the target named
+> (`UpdateResxFiles.bat`, `GenerateLocalizationCsvFiles.bat`, `ImportLocalizationCsvFiles.bat`).
+> Read each target's `.bat` first: the incremental and final targets passed different arguments.
+> A replacement entry point is work item 1 in `ai/todos/backlog/TODO-pwiz_translation_expansion.md`.
+
 ### IncrementalUpdateResxFiles
 
 **When to use**: During development cycle when UI changes occur.
 
 **What it does**:
-- Updates `.ja.resx` and `.zh-CHS.resx` files
+- Updates `.ja.resx` and `.zh-Hans.resx` files
 - Syncs non-text properties (layout, size, location) from English RESX files
 - Reverts to English any strings NOT found in `LastReleaseResources.db`
 - Does NOT add "NeedsReview:" comments
@@ -92,7 +114,7 @@ pwiz_tools\Skyline\Executables\DevTools\ResourcesOrganizer\scripts\GenerateLocal
 
 **Output files** (in `pwiz_tools/Skyline/Translation/Scratch/`):
 - `localization.ja.csv` - Japanese translation table
-- `localization.zh-CHS.csv` - Chinese Simplified translation table
+- `localization.zh-Hans.csv` - Chinese Simplified translation table
 
 These CSVs contain only strings with "NeedsReview:" comments.
 
@@ -100,14 +122,14 @@ These CSVs contain only strings with "NeedsReview:" comments.
 
 After running `FinalizeResxFiles` and generating CSVs, validate that all CSV entries exist in the localized RESX files. This catches bugs where the RESX sync process failed to add entries.
 
-**Script**: `ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1`
+**Script**: `ai/scripts/Translation/Validate-TranslationCsvSync.ps1`
 
 ```powershell
 # Validate Japanese - every CSV entry should exist in .ja.resx files
-pwsh -File './ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.ja.csv' -Language ja
+pwsh -File './ai/scripts/Translation/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.ja.csv' -Language ja
 
-# Validate Chinese - every CSV entry should exist in .zh-CHS.resx files
-pwsh -File './ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.zh-CHS.csv' -Language zh-CHS
+# Validate Chinese - every CSV entry should exist in .zh-Hans.resx files
+pwsh -File './ai/scripts/Translation/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.zh-Hans.csv' -Language zh-Hans
 ```
 
 **Expected result**: SUCCESS with 0 missing entries. If entries are missing, there's a bug in `FinalizeResxFiles` or the export process (e.g., missing `--overrideAll` flag).
@@ -131,7 +153,7 @@ After receiving translated CSVs back from translators:
 
 ### 1. Stage the CSVs
 
-Place the translated CSV files in `pwiz_tools\Skyline\Translation\Scratch\` with the exact filenames `localization.ja.csv` and `localization.zh-CHS.csv` (the import script greps for those names in that directory). Create the Scratch directory if it doesn't exist.
+Place the translated CSV files in `pwiz_tools\Skyline\Translation\Scratch\` with the exact filenames `localization.ja.csv` and `localization.zh-Hans.csv` (the import script greps for those names in that directory). Create the Scratch directory if it doesn't exist.
 
 ### 2. Run the import via quickbuild
 
@@ -198,7 +220,7 @@ If you see an unexpectedly large number of **additions** (new entries added to l
 Translations arrive in two stages. Professional translators work against the project
 glossary but are not proteomics practitioners; native-speaker domain reviewers who work
 in the field then review the output in context. Those reviewers change terms on purpose
-when the literal translation reads wrong to a practitioner - the zh-CHS reviewer replaced
+when the literal translation reads wrong to a practitioner - the zh-Hans reviewer replaced
 the literal rendering of "imputation" with a "delineate / mark out" term, for example,
 and the ja reviewer has made comparable substitutions.
 
@@ -243,7 +265,7 @@ If localized RESX files are missing entries that exist in English files:
 
 ### After Receiving Translations
 
-1. Place translated CSVs in `Translation/Scratch/` as `localization.ja.csv` / `localization.zh-CHS.csv`
+1. Place translated CSVs in `Translation/Scratch/` as `localization.ja.csv` / `localization.zh-Hans.csv`
 2. Run `quickbuild.bat address-model=64 pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer//ImportLocalizationCsvFiles` from the pwiz root (chains build + import + zip + extract)
 3. Verify ~50 `.resx` files now show as modified in `git status` and the run ended with `SUCCESS`
 4. Copy `Scratch\ForImportLocalizationCsv.db` over `pwiz_tools\Skyline\Translation\LastReleaseResources.db`
@@ -260,10 +282,11 @@ If localized RESX files are missing entries that exist in English files:
 | `Executables/DevTools/ResourcesOrganizer/scripts/` | Batch scripts |
 | `Executables/DevTools/ResourcesOrganizer/Jamfile.jam` | Boost Build targets |
 | `ai/scripts/revert-whitespace-only-files.ps1` | Clean up whitespace-only changes |
-| `ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1` | Validate CSV entries exist in RESX files |
+| `ai/scripts/Translation/Validate-TranslationCsvSync.ps1` | Validate CSV entries exist in RESX files |
 
 ## Related Documentation
 
+- **ai/docs/translation-drafting-guide.md** - Claude-drafted ja / zh-Hans translations
 - **ai/docs/release-guide.md** - Release management overview
 - **ai/docs/screenshot-update-workflow.md** - Screenshots and RESX sync notes
 - **pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer/README.md** - Tool documentation

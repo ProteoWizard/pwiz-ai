@@ -62,9 +62,14 @@ This directory contains PowerShell scripts for maintaining code quality, automat
 | `Skyline/scripts/Analyze-Coverage.ps1` | Analyze dotCover JSON results for code coverage |
 | `Skyline/scripts/Extract-TypeNames.ps1` | Extract namespace/type names from C# files for coverage |
 | `Skyline/scripts/Sync-DotSettings.ps1` | Synchronize ReSharper .DotSettings across solutions |
-| `Skyline/scripts/Validate-TranslationCsvSync.ps1` | Validate translation CSV strings exist in RESX files |
 
 See [Skyline/README.md](Skyline/README.md) for detailed Skyline build/test documentation.
+
+### Translation/ - ja / zh-Hans localization
+
+Validation of ResourcesOrganizer CSVs plus the corpus, glossary, drafting, reviewer-package and
+evaluation scripts from the first Claude-drafted translation round. See
+[Translation/README.md](Translation/README.md).
 
 ### CarafeSharp/
 

@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     This script reads localization CSV files and verifies that each string name
-    exists in the corresponding .ja.resx or .zh-CHS.resx file. This catches bugs
+    exists in the corresponding .ja.resx or .zh-Hans.resx file. This catches bugs
     where the RESX sync process failed to add entries to localized files.
 
     The script should PASS after FinalizeResxFiles runs correctly, and FAIL if
@@ -14,7 +14,7 @@
     Path to the localization CSV file (e.g., localization.ja.csv)
 
 .PARAMETER Language
-    Language code: 'ja' or 'zh-CHS'
+    Language code: 'ja' or 'zh-Hans'
 
 .PARAMETER PwizRoot
     Path to pwiz repository root (auto-detected from script location if not specified)
@@ -23,7 +23,7 @@
     .\Validate-TranslationCsvSync.ps1 -CsvPath "ai\.tmp\localization.ja.csv" -Language ja
 
 .EXAMPLE
-    .\Validate-TranslationCsvSync.ps1 -CsvPath "ai\.tmp\localization.zh-CHS.csv" -Language zh-CHS
+    .\Validate-TranslationCsvSync.ps1 -CsvPath "ai\.tmp\localization.zh-Hans.csv" -Language zh-Hans
 #>
 
 param(
@@ -31,7 +31,7 @@ param(
     [string]$CsvPath,
 
     [Parameter(Mandatory=$true)]
-    [ValidateSet('ja', 'zh-CHS')]
+    [ValidateSet('ja', 'zh-Hans')]
     [string]$Language,
 
     [string]$PwizRoot = $null
@@ -40,9 +40,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Auto-detect pwiz root if not specified
-# Script location: ai/scripts/Skyline/scripts/ -> ai/ -> project root
+# Script location: ai/scripts/Translation/ -> ai/ -> project root
 if (-not $PwizRoot) {
-    $aiRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    $aiRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $projectRoot = Split-Path -Parent $aiRoot
     # Try sibling mode: look for pwiz/ next to ai/
     $siblingPath = Join-Path $projectRoot 'pwiz'
