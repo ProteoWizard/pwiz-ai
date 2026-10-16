@@ -1,19 +1,23 @@
 # Slim FirstPassFDR: delete the pass-2 row walk, move Stage 6 planning pass 2 into PerFileRescoring
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261015_osprey_firstpassfdr_slimming` (local, created from master `a5a3fc3dbb`, not pushed)
+- **Branch**: PR A was `Skyline/work/20261015_osprey_firstpassfdr_slimming` (merged, deleted). PR B: new
+  branch from master, not created yet.
 - **Base**: `master`
 - **Created**: 2026-10-15
-- **Status**: A1 in progress (2026-10-15). Design and measurements below; read them before touching code.
-- **Overlap with #4848 (decided 2026-10-15)**: draft PR #4848 (`Skyline/work/20261009_blib_protein_fdr_pep`,
-  stacked on #4823) adds `PeptidePep` inside the pass-2 row walk A1 deletes, plus edits to
-  `FdrExperimentRecord/Accumulator/Sidecar` and `FdrProjectionSinks`. This work is expected to merge FIRST
-  (Mike is not settled on #4848; Nick and Mike are on vacation). After A1 merges, we merge master into
-  #4823 then #4848 and resolve: `PeptidePep` is per-peptide (`peptidePepByPeptide`), so it becomes one more
-  field in A1's per-entry record build. Ask Brendan before pushing to either branch.
+- **Status**: PR A (A1+A2) MERGED 2026-10-16. PR B (planning pass 2 into PerFileRescoring + no replicated
+  per-run copies + per-run file inventory) not started. This TODO stays active for PR B.
+- **Owed to #4823 / #4848 (decided 2026-10-15)**: draft PR #4848 (`Skyline/work/20261009_blib_protein_fdr_pep`,
+  stacked on #4823) adds `PeptidePep` inside the pass-2 row walk PR A deleted, plus edits to
+  `FdrExperimentRecord/Accumulator/Sidecar` and `FdrProjectionSinks`. PR A merged first (Mike is not settled
+  on #4848; Nick and Mike are on vacation), so we merge master into #4823 then #4848 and resolve:
+  `PeptidePep` is per-peptide (`peptidePepByPeptide`), so it becomes one more argument of
+  `IFdrFirstPassSink.AcceptExperimentEntry`, built in the per-entry loop. Ask Brendan before pushing to
+  either branch.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (none yet). Planned as two PRs, A then B (see "Plan").
+- **PR**: A = [#4853](https://github.com/ProteoWizard/pwiz/pull/4853) (merged 2026-10-16 as `c30a5af221`).
+  B = (none yet).
 - **Checkout**: `C:\proj\pwiz`
 
 ## Objective
@@ -310,8 +314,20 @@ work.
   overlapping files). After rebase: unit 637/637, inspection 0, regression-parallel All 48/48 in 27:45.
 - **PR A opened: #4853** (pushed with Brendan's OK). TeamCity Osprey Perf/Regression triggered on
   `pull/4853` with his OK: build 4220191 (https://teamcity.labkey.org/build/4220191).
-- Next: watch TeamCity + Copilot review (`/pw-respond 4853`); then PR B per the plan above, including
-  the no-replicated-copies inventory.
+- TeamCity Osprey Perf/Regression build #321 (ID 4220191) SUCCESS on `b8d1e1c0`; Copilot reviewed with
+  no inline comments.
+
+### 2026-10-16 - PR A merged
+
+PR #4853 merged as commit `c30a5af221` (squash), on top of #4854 (blib Osprey* tables dropped,
+LibMetadata/DecoyPairs added), which merged minutes earlier and was not in the tested base - the two
+touch disjoint files (FDR vs blib writer). Shipped: A1 (pass-2 row walk removed; experiment scope per
+entry; per-row walk only for --model-diagnostics) and A2 (protein q from pass 1's entry peptides).
+Work branch deleted locally and on origin. TODO kept active for PR B.
+
+Next session: create PR B's branch from master; read doc 00 first; start with the per-run file
+inventory (it shapes the consensus artifact's naming), then the planning move. Also owed: merge master
+into #4823 / #4848 (see Status), asking Brendan before pushing.
 - Timing (exe snapshot `D:\test\osprey-runs\_bin\firstpass-slim-a1a2`, version pinned 26.1.1.286):
   1. Stage 5 on, mdiag on, `-LinkFrom` the acceptance run: product byte-identity + timing. Running.
   2. `-Task FirstPassFDR -NoModelDiagnostics`: the no-diagnostics saving. Queued after 1.
