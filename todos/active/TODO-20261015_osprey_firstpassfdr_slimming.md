@@ -1,8 +1,9 @@
 # Slim FirstPassFDR: delete the pass-2 row walk, move Stage 6 planning pass 2 into PerFileRescoring
 
 ## Branch Information
-- **Branch**: PR A was `Skyline/work/20261015_osprey_firstpassfdr_slimming` (merged, deleted). PR B: new
-  branch from master, not created yet.
+- **Branch**: `Skyline/work/20261016_osprey_planning_into_rescoring` (PR B; local, created from master
+  `fcb0dcb0ca`, not pushed, no upstream). PR A was `Skyline/work/20261015_osprey_firstpassfdr_slimming`
+  (merged, deleted).
 - **Base**: `master`
 - **Created**: 2026-10-15
 - **Status**: PR A (A1+A2) MERGED 2026-10-16. PR B (planning pass 2 into PerFileRescoring + no replicated
@@ -326,9 +327,11 @@ touch disjoint files (FDR vs blib writer). Shipped: A1 (pass-2 row walk removed;
 entry; per-row walk only for --model-diagnostics) and A2 (protein q from pass 1's entry peptides).
 Work branch deleted locally and on origin. TODO kept active for PR B.
 
-Next session: create PR B's branch from master; read doc 00 first; start with the per-run file
-inventory (it shapes the consensus artifact's naming), then the planning move. Also owed: merge master
-into #4823 / #4848 (see Status), asking Brendan before pushing.
+PR B branch created: `Skyline/work/20261016_osprey_planning_into_rescoring` from master `fcb0dcb0ca`
+(local, no upstream). Line numbers in the "PR B" section are from `a5a3fc3dbb`; re-check them.
+
+**Next session handoff**: read `ai/.tmp/handoff-20261016_osprey_planning_into_rescoring.md` before starting
+work. (The 2026-10-15 handoff file is for PR A and is obsolete.)
 - Timing (exe snapshot `D:\test\osprey-runs\_bin\firstpass-slim-a1a2`, version pinned 26.1.1.286):
   1. Stage 5 on, mdiag on, `-LinkFrom` the acceptance run: product byte-identity + timing. Running.
   2. `-Task FirstPassFDR -NoModelDiagnostics`: the no-diagnostics saving. Queued after 1.
