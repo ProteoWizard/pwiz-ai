@@ -197,6 +197,12 @@ Facts the plan turns on:
    and CarafeSharp drop their library cache (`.libcache`) when the library is a .blib. PR 4 (one
    command) and the #4848 adaptation wait behind both; the review gets its own TODO when it
    starts.
+9. **The BLIB sprint widens to one reader and Skyline (Brendan, 2026-10-16).** After #4855,
+   rather than return to PR 4, the next sprint makes BiblioSpec.IO the one place that reads and
+   writes `.blib` files: a `BlibReader` with Osprey and CarafeSharp on it first (which also
+   answers the `.libcache` question), then the port's `LibReader`, then Skyline's read and write
+   paths. Its TODO is `TODO-20261016_bibliospec_io_unification.md`, with the reader inventory and
+   design. PR 4 and the #4848 adaptation wait behind it.
 
 ## PR plan (compressed 2026-10-14)
 
