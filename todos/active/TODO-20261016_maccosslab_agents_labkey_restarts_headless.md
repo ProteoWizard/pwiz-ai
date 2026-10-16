@@ -57,6 +57,9 @@ claude --permission-mode manual --model claude-haiku-5-5 \
 - [ ] Verify: denied actions are denied (write outside the scratch dir, network access,
       reading a denied path), and the report is the same as on the workstation
 - [ ] Update README.md, CLAUDE.md, and the skill/command docs
+- [x] Slide deck on the sandbox for a team talk: `docs/claude-code-sandbox.html`
+      (standalone HTML, 3 slides: how it works with Manual/Auto mode, the settings, our
+      setup with example commands; speaker notes on `N`). Not yet checked in a browser
 
 ## Progress
 
@@ -68,6 +71,27 @@ claude --permission-mode manual --model claude-haiku-5-5 \
   without writing a settings file; `/sandbox` saves its mode to
   `.claude/settings.local.json`; `--permission-mode manual` is an alias for `default`;
   `Skill(name)` allow rules skip the "Use skill" prompt.
+- The developer ran the command above (manual mode, Haiku, `--settings` sandbox) after
+  the skill allow rule; the "Use skill" prompt was the only prompt they reported.
+- Added `docs/claude-code-sandbox.html` (commit `f6790e8`), a 3-slide deck for presenting
+  the sandbox. It replaced a claude.ai artifact version, which was deleted at the
+  developer's request: the deck belongs in the repository as a plain HTML file. No browser
+  on the WSL machine, so the layout is unchecked; slide 1's Auto mode card is the tightest.
+- Facts gathered from the docs for the headless work:
+  - Sandbox covers Bash, PowerShell and Monitor commands and their child processes only.
+    Read/Edit/Write/WebFetch, hooks, MCP servers, LSP servers, and `!` commands run outside.
+  - Default reads cover most of the machine, including `~/.ssh` and `~/.aws/credentials`:
+    use `filesystem.denyRead` / `credentials` on the server.
+  - Network: no direct route out; a proxy checks hosts against `allowedDomains` (empty by
+    default). Manual mode prompts for other hosts; `dontAsk` refuses; `strictAllowlist`
+    (user, managed or `--settings` only) refuses in every mode.
+  - `allowUnsandboxedCommands: false` in `--settings` makes the sandbox admin-required
+    (repository settings that loosen it are ignored), which may be what the server wants.
+  - Manual-mode retry outside the sandbox prompts "Bash command (unsandboxed)"; `dontAsk`
+    denies it.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261016_labkey_restarts_headless.md` before starting work.
 
 ## Open Questions
 
