@@ -63,11 +63,14 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
   reused code inspection's build." tc-perftests.bat now passes Platform=x64 (run16: all four staged from
   bin\x64). Remaining for a follow-up PR: top-level build.bat pwiz-sharp, installer, Osprey.sln override,
   Osprey package.ps1.
-- Unexplained: the Perf set re-restores Skyline.csproj on EVERY run (~13 s of Skyline recompile), while
-  the All set no-ops - even on a cache the Perf run just wrote (same dgSpecHash GRe4lCBOO1w=, byte-identical
-  dgspec). Ruled out: the -p: global property (separate entry file still re-restored), Skyline as a direct
-  entry (removed it; still re-restored). Normal-verbosity NuGet log gives no reason
-  (ai/.tmp/sessions/20261015-singlebuild/run13-detailed.log). Next step would be a diagnostic-verbosity log.
+- Perf set re-restored Skyline.csproj on every run - ROOT CAUSE (found by a Fable 5.1 subagent):
+  tc-perftests.bat itself ran `rmdir /s /q pwiz_tools\Skyline\obj` before the build (since the .NET 10 port,
+  254112b277), deleting Skyline's NuGet cache and compile intermediates. NuGet 7.9 logs "restore inputs have
+  changed" for ANY non-no-op, including "no cache file" - the hash never differed. Evidence:
+  ai/.tmp/sessions/20261016-restore-rca/ (watch-perf1.log, perf1.log vs perf-normdir.log, notes.md). My two
+  "ruled out" experiments were confounded by the same rmdir. Removed the rmdir (its CS0579 Net8Version.g.cs
+  hazard is gone: one g.cs per IntermediateOutputPath behind an inputs cache, cafeb7048c); run17/run18: no
+  restore, ~9 s each, no CS0579. Lesson: check the wrapper script for obj/ deletion before suspecting NuGet.
 
 ## Related
 
