@@ -6,7 +6,10 @@
   `ProteowizardWrapper`; the pwiz-side changes (TIC, wrapper forwarding) are in support of it
 - **Base**: `master` @ `55cedad25`
 - **Created**: 2026-07-27
-- **Status**: Awaiting re-review, and **now calibration-only**. The m/z sort work was split out on
+- **Status**: **ABANDONED 2026-10-06** - PR closed unmerged. Development moved to the .NET 10 branch
+  (about to become master); the fixes landed there as #4782 (see
+  `TODO-20260930_net10_waters_calibration_port.md`). Last commit here: `c7a6dc27e8`.
+  Previously: awaiting re-review, and **now calibration-only**. The m/z sort work was split out on
   2026-08-04 (Brian's call - it is a separate issue) onto
   `Skyline/work/20260804_mzml_mz_sort_order`; see `TODO-20260804_mzml_mz_sort_order.md`, which
   also carries the general pwiz-level solution. `591445b58` reverts the two sort commits here and
@@ -1187,3 +1190,10 @@ ever fires, the answer is to re-read this section, not to relax the assertion.
 
 `D:\data\lockmass\` - the five cases from Waters, plus `SONAR_Short.raw` and
 `SONAR_Short_first200.mzML` copied in for comparison with their SONAR pulse file.
+
+### 2026-10-16 - Abandoned
+
+PR #4498 was closed unmerged on 2026-10-06 when development moved to the .NET 10 branch. The fixes
+were redone there and merged as #4782 (commit `e7b02632bb`, 2026-10-14); see
+`TODO-20260930_net10_waters_calibration_port.md` in `todos/completed/2026/09/`. The work branch is
+deleted on GitHub and its local checkout removed. Moved here as a record of the investigation.
