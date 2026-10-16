@@ -375,6 +375,14 @@ Lines starting with `#` are comments. When `-UpdateTestList` is used, the existi
 
 ### Running TestRunner.exe Directly (Docker Parallel Testing)
 
+**Setting a machine up for parallel testing is documented on the team wiki, not here**:
+"Getting Started for TestRunner parallelmode" at https://skyline.ms/parallelmode.url (the
+`parallelmode` page of the `/home/development` container; `mcp__labkey__get_wiki_page` with that
+container path reads it). It covers enabling Hyper-V and Containers, installing Docker Desktop in
+Windows-containers mode (not WSL 2), and the first TestRunner run, which downloads AlwaysUpRunner,
+builds the `chambm/always_up_runner` image and asks for the firewall rule on both network types.
+Once that works, `Run-Tests.ps1 -ParallelWorkers N` runs 1 host + N-1 Docker workers.
+
 When `Run-Tests.ps1` is insufficient (e.g. multi-language Docker parallel testing), the developer
 may use SkylineTester to configure and run a more complex TestRunner.exe invocation. Claude can
 take over the full build-test cycle by reading the TestRunner command-line from `SkylineTester.log`:
