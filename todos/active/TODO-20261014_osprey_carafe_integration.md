@@ -929,6 +929,16 @@ Ten findings; eight fixed in the review-fix commit, two dropped:
       clean; `regression.ps1 -Dataset Stellar` 5 legs PASS; CarafeSharp `regression.ps1 -Leg
       Chained` PASS; Skyline `LibraryBuildTest` PASS on the `-VendorLicenses` build (46 s;
       covers Create and Append through the real BlibBuild and BlibFilter processes).
+      `/code-review medium` (2026-10-16): 7 findings, 6 fixed in a second commit - DETACH by
+      position before `Complete` could discard the whole library after one bad .blib input
+      (now `ignoreFailure`), BlibBuild never disposed its builder (temp left on failure),
+      `Init`'s up-front delete of the existing library defeated temp-then-move (dropped),
+      `IsDbOpen` stayed true after `Commit`, `AddFile`/`InsertSpectrum` let raw
+      `SQLiteException` escape (now `FailSql`), and the append path copied the whole library to
+      the temp and back (now written in place, as cpp did, keeping the rollback journal; the
+      copy was a real cost on Skyline's Append of a redundant library). Dropped: the `-d` dump's
+      seed INSERT text duplicating `CreateSchema` - the rows are one list in `BlibSchema`, the
+      dump is documentation text and the writer binds parameters.
       Gotcha (cost two 14-minute runs): Skyline's `LibraryBuildTest` needs
       `Build-Skyline.ps1 -VendorLicenses`. Without it the port's BlibBuild is compiled with the
       Mascot reader out (`MASCOT_SUPPORT` follows `IAgreeToVendorLicenses`), its score-type lookup
