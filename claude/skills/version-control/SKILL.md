@@ -303,12 +303,23 @@ without us maintaining prose.
 **Run it on the branch BEFORE `gh pr create`.** It diffs `master...HEAD`, so
 it needs no PR to exist. Reviewing first is cheaper for three reasons:
 
-- **Copilot auto-reviews on PR open.** Observed on #4460: PR created
-  14:44:23, Copilot review submitted 14:46:57, unrequested. Opening first
-  spends that billed pass on code you are about to rewrite.
+- **Copilot review is requested automatically on PR open - when it runs.**
+  Observed on #4460: PR created 14:44:23, Copilot review submitted 14:46:57,
+  unrequested. Opening first spends that pass on code you are about to rewrite.
 - **Every push re-runs CI.** Fixing review findings after opening costs
   extra TeamCity rounds on states obsolete within the hour. #4460 cost three.
-- Copilot then reviews already-hardened code and has less left to find.
+- When Copilot does review, it reviews already-hardened code and has less left
+  to find.
+
+**Copilot review is occasional, so do not plan on it.** The team's reviews run on
+capped free educational (uw.edu) accounts: the request goes out on every PR but is
+usually refused (Brendan gets real reviews for less than a week a month). **A
+refusal looks like a review** - a `COMMENTED` review whose body is "Copilot was
+unable to review this pull request because the user who requested the review has
+reached their quota limit." Read the body before reporting anything; never call a
+refusal "reviewed, no comments" (#4853 was misreported exactly that way). On a
+refusal there is no Copilot step and nothing to wait for: `/code-review` was the AI
+review. Details in the guide ("Copilot review is occasional").
 
 For **Osprey** there is no counter-argument: the expensive Perf/Regression
 config is manual/overnight and does NOT start on PR open, so opening early
@@ -352,8 +363,9 @@ weigh that overlap against the wasted Copilot pass.)
      that session hit its 4-hour limit. And `max` fills its cap with uncertain
      findings that sessions then over-fix. Details in the guide.
 2. **Open the PR** once the branch is green (build + tests + inspection)
-   and the findings are settled. Copilot reviews automatically; use
-   **`/pw-respond <PR#>`** to address and resolve its threads.
+   and the findings are settled. If Copilot actually reviews it, use
+   **`/pw-respond <PR#>`** to address and resolve its threads; if it refused,
+   skip that step.
 
 **Do NOT use `/code-review ultra` (aka the deprecated `/ultrareview`) on
 this project.** It is a different animal from the effort levels above: a
@@ -363,8 +375,9 @@ nothing useful while still incurring cost. The local levels run on the
 subscription and actually complete here, so there is no case for ultra on
 pwiz.
 
-**The AI reviews do not stack.** Copilot plus `/code-review` is already two
-independent passes; do not add a third by rote.
+**The AI reviews do not stack.** `/code-review` is the review that always runs;
+Copilot is a second pass when its quota allows. Do not add another by rote when
+it refuses.
 
 Request human review only after the findings are settled and TeamCity is
 green.

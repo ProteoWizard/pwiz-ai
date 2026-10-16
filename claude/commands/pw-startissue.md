@@ -246,8 +246,9 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 > lines, no "Claude Opus 4.X (1M context)" variants in Co-Authored-By).
 > Run `/code-review <level>` on the branch BEFORE `gh pr create` and fold the
 > fixes into the opening commits — see the review chain in the version-control
-> skill. After the PR is open, Copilot auto-reviews it; address those comments
-> with `/pw-respond <PR#>`.
+> skill. After the PR is open, check whether Copilot actually reviewed it (it is
+> usually refused for quota, and the refusal is posted as a review); only if it
+> did, address its comments with `/pw-respond <PR#>`.
 
 **For pwiz issues:**
 1. Update TODO Progress Log with completion summary

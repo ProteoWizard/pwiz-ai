@@ -449,10 +449,11 @@ gains capability without us maintaining prose to describe it.
 **Run the review BEFORE opening the PR.** `/code-review` diffs `master...HEAD`,
 so it does not need a PR to exist. Reviewing first is materially cheaper:
 
-- **Copilot auto-reviews on PR open.** Measured on #4460: PR created 14:44:23,
-  Copilot review submitted 14:46:57, nobody requested it. Open first and that
-  billed pass is spent on code you are about to rewrite. Do not add Copilot as
-  a reviewer yourself; the project automation does it. **Exception: a stacked
+- **Copilot review is requested automatically on PR open - when it runs.** Measured
+  on #4460: PR created 14:44:23, Copilot review submitted 14:46:57, nobody requested
+  it. Open first and that pass is spent on code you are about to rewrite. Do not add
+  Copilot as a reviewer yourself; the project automation does it. **Most of the time
+  it does not run** (see "Copilot review is occasional" below). **Exception: a stacked
   PR (base is not `master`) gets no Copilot pass** until its parent merges and
   it is retargeted to `master`, so do not plan an "address Copilot" step for
   one. Do not try to force it: `gh pr edit <N> --add-reviewer Copilot` exits 0
@@ -462,8 +463,8 @@ so it does not need a PR to exist. Reviewing first is materially cheaper:
 - **Every push re-runs CI.** Landing review fixes after opening costs extra
   TeamCity rounds on states that are obsolete within the hour. #4460 cost three
   before this ordering was adopted.
-- Copilot then reviews already-hardened code, so it has less left to find and
-  its findings are more likely to be worth acting on.
+- When Copilot does review, it reviews already-hardened code, so it has less left
+  to find and its findings are more likely to be worth acting on.
 
 For **Osprey** there is no counter-argument to reordering: the expensive
 Perf/Regression config is manual/overnight and does NOT trigger on PR open, so
@@ -537,8 +538,31 @@ auto-start something slow, weigh that overlap against the wasted Copilot pass.
      the fixes then add new defects and guard against misuse that is unlikely,
      which slows the branch down rather than hardening it.
 2. **Open the PR** once the branch is green (build + tests + zero-warning
-   inspection) and the findings are settled. Copilot reviews it automatically;
-   use **`/pw-respond <PR#>`** to address its comments and resolve the threads.
+   inspection) and the findings are settled. If Copilot actually reviews it, use
+   **`/pw-respond <PR#>`** to address its comments and resolve the threads. If it
+   refused (below), there is no Copilot step: `/code-review` was the AI review.
+
+### Copilot review is occasional
+
+The team's Copilot reviews run on free educational accounts (uw.edu), and GitHub
+caps them. The request still goes out on every PR, but it is usually refused:
+Brendan gets real reviews for less than a week of each month, and others for
+longer depending on how much code they post. So **do not plan on a Copilot
+review**, do not wait for one before merging, and do not re-request it.
+
+**A refusal looks like a review.** Copilot posts a `COMMENTED` review whose body
+is "Copilot was unable to review this pull request because the user who
+requested the review has reached their quota limit." A `COMMENTED` state, or zero
+inline comments, therefore says nothing; read the body. Measured 2026-10-16:
+#4853, #4854, #4852, #4846 and #4823 all carry that refusal, and #4853 was
+reported as "Copilot reviewed with no inline comments" before anyone read it.
+
+```bash
+gh pr view <N> --json reviews --jq '[.reviews[] | select(.author.login|test("opilot")) | .body[0:120]]'
+```
+
+Report the outcome as what it was - "Copilot refused (quota)" or "Copilot
+reviewed, N comments" - never "Copilot reviewed" for a refusal.
 
 ### Do not use `ultra` on pwiz
 
@@ -553,8 +577,9 @@ subscription and actually finish on a repo this size. If a
 change feels risky enough to want a third opinion, a human reviewer is the
 better spend.
 
-**The AI reviews do not stack.** Copilot plus `/code-review` is already two
-independent passes; do not add a third by rote.
+**The AI reviews do not stack.** `/code-review` is the review that always runs;
+Copilot is a second, independent pass when its quota allows. Do not add another by
+rote when Copilot refuses.
 
 Request human review only after the findings are settled and TeamCity is green.
 The goal is to spend reviewers' time on judgment calls, not on issues an AI pass

@@ -314,8 +314,9 @@ work.
   overlapping files). After rebase: unit 637/637, inspection 0, regression-parallel All 48/48 in 27:45.
 - **PR A opened: #4853** (pushed with Brendan's OK). TeamCity Osprey Perf/Regression triggered on
   `pull/4853` with his OK: build 4220191 (https://teamcity.labkey.org/build/4220191).
-- TeamCity Osprey Perf/Regression build #321 (ID 4220191) SUCCESS on `b8d1e1c0`; Copilot reviewed with
-  no inline comments.
+- TeamCity Osprey Perf/Regression build #321 (ID 4220191) SUCCESS on `b8d1e1c0`. Copilot did NOT
+  review: its one review is the quota refusal (first reported here, wrongly, as "reviewed with no
+  inline comments").
 
 ### 2026-10-16 - PR A merged
 

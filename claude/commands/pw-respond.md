@@ -10,6 +10,11 @@ commit, then reply to and resolve each addressed thread on GitHub.
 1. Find the open PR for the current branch:
    `gh pr view --json number,url,headRefName,reviews`
    If no PR exists, stop and tell the user.
+   If the only Copilot review's body is "Copilot was unable to review this pull
+   request because the user who requested the review has reached their quota
+   limit", Copilot did NOT review the PR - say so, and stop unless a human left
+   comments. That refusal is the usual outcome (see "Copilot review is occasional"
+   in `ai/docs/version-control-guide.md`).
 2. Fetch inline review comments:
    `gh api repos/<OWNER>/<REPO>/pulls/<N>/comments`
 3. Summarize each in a small table — file, line, severity (real bug

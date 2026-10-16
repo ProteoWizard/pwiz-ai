@@ -36,7 +36,7 @@ may differ from the Skyline defaults in this file.
 **For pwiz repository:**
 - **master** - Stable releases. Run `/code-review <level>` on the branch
   BEFORE opening the PR, and clear TeamCity before requesting human review
-  (Copilot auto-reviews on open) — see
+  (Copilot review is requested on open but is usually refused for quota) — see
   [docs/version-control-guide.md](docs/version-control-guide.md#pre-review-workflow).
 - **Skyline/skyline_YY_N** - Release branches
 - **Skyline/work/YYYYMMDD_description** - Feature/fix branches (all development)
