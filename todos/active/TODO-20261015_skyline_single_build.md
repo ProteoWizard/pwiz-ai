@@ -85,4 +85,4 @@ pwiz-sharp is AnyCPU in the top-level build, installer and Osprey.sln (forced by
 `pwiz_tools/Osprey/Directory.Build.targets`), x64 under Skyline (`pwiz_tools/Directory.Build.targets` passes
 `Platform=$(Platform)`) and Osprey's `package.ps1`. The two targets' comments each claim to share one build
 with the other; they do not. Every vendor SDK DLL in the AnyCPU output is x64-only (PE machine 0x8664),
-except Shimadzu CABINET.DLL (x86). Overlaps TODO-20260927_osprey_pwizsharp_one_config.md.
+except Shimadzu CABINET.DLL (x86). (TODO-20260927_osprey_pwizsharp_one_config.md is completed - #4725.)
