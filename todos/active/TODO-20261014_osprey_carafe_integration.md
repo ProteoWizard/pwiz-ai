@@ -21,8 +21,9 @@
   2026-10-15, in `C:\proj\pwiz`; deleted after the merge).
 - **PR 3b branch**: `Skyline/work/20261015_osprey_blib_schema` (off master `773aa1bf63`
   2026-10-15, in `C:\proj\pwiz`, local only, no PR yet; the "PR 3b" section is its checklist).
-  Two gated commits: the four `Osprey*` tables dropped (`8b0d4e9601`) and `LibMetadata`
-  (`6f7a9c7895`); item 2 (`DecoyPairs` pairing) remains. Read
+  Three gated commits: the four `Osprey*` tables dropped (`8b0d4e9601`), `LibMetadata`
+  (`6f7a9c7895`) and `DecoyPairs` pairing (`6163ea2f89`); next `/code-review medium`, the PR,
+  TeamCity on `pull/<N>` and `regression-parallel.ps1 -Dataset All`. Read
   `ai/.tmp/handoff-20261015_osprey_blib_schema.md` first.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
@@ -767,7 +768,7 @@ handoffs of 2026-10-15.
   (hand-maintained), one block per stage with its checkpoint file; after PR 4 it folds into the
   Osprey page as the library-build chapter.
 
-### PR 3b - the blib schema the two tools write (decision 7, 2026-10-15; two of three done)
+### PR 3b - the blib schema the two tools write (decision 7, 2026-10-15; coded in three commits, review and PR next)
 
 - [x] Drop `OspreyPeakBoundaries`, `OspreyRunScores`, `OspreyExperimentScores` and
       `OspreyCoefficients` from `OspreyBlibTables` and `BlibOutputWriter`; the metadata table
@@ -786,12 +787,33 @@ handoffs of 2026-10-15.
       `DIAGNOSTICS.md` and `Entrapment/README.md` name the surviving columns. Gates: Osprey Debug
       build + 637 tests + inspection; `regression.ps1 -Dataset Stellar` PASSED (5 legs; modes 2
       and 3 are the dataset table's cut, not an early exit).
-- [ ] Osprey pairs blib-supplied decoys from `DecoyPairs` (`BlibLoader.ReadDecoyPairs` already
+- [x] Osprey pairs blib-supplied decoys from `DecoyPairs` (`BlibLoader.ReadDecoyPairs` already
       reads `IsDecoy`; add `PairID` and `IsEntrapment`) and refuses a decoy-bearing blib without
       the table unless decoys are generated; the manifest pairing and composition fallback stay
       for TSV libraries only. The contract's rule 6 is then checked from the table. The
       StellarLibDecoy regression library must carry the table (it pairs through the manifest
       today); regenerate it through CarafeSharp or add the table to the committed library.
+      **Done 2026-10-15 as `6163ea2f89`.** The StellarLibDecoy premise was wrong: that dataset's
+      library is the TSV `carafe_spectral_library.tsv` with its manifest (regression.ps1's
+      dataset table), so it keeps manifest pairing by this very decision and needed no table;
+      Brendan's "add the table to the committed library" had nothing to apply to. New
+      `Osprey.IO/BlibDecoyPairs` (replacing `BlibLoader.ReadDecoyPairs`) reads the table by
+      RefSpectra id BEFORE `LibraryDeduplicator` renumbers the entries (`deduped[i].Id = i`) and
+      carries the rows by entry object into `TryFinishSuppliedDecoys`, which for a blib pairs
+      from the table alone (side authoritative over prefixes; `PairingStats.NPairedViaTable`;
+      its own summary line) and for a TSV runs the manifest and composition arms as before. A
+      blib with `LibrarySuppliesDecoys` and no table fails the load (new resource; the Osprey
+      argument-text inspection refuses `.blib` typed in a resource, so it says "BiblioSpec
+      library"). `LibraryContractRow` gained `PairId`; `LibraryContract.Validate` checks rule 6
+      from pair ids when no manifest is given (`LibraryContractReport.PairsCheckedFromLibrary`,
+      its own Describe line). `BlibWriter.AddDecoyPair` creates the table on first use and its
+      index at Complete; CarafeSharp's `WriteDecoyPairs` goes through it; `LibraryBlibWriter`
+      writes pairs for the decoys the load paired (entrapment from the `_p_target` marker), so
+      an exported decoy library searches back. Tests: `BlibLibraryInputTest` (the refusal, pairing
+      from the table, rule 6 from the table, export pairs), `LibraryContractTest` (pairs from the
+      library). Docs 01 (step 2), 13 (optional tables), 24 ("Osprey, pairing a blib's decoys").
+      Gates: Osprey 637 + inspection, CarafeSharp 113 + inspection, Stellar regression (5 legs),
+      CarafeSharp chained leg.
 - [x] **`LibMetadata` (key TEXT PRIMARY KEY, value TEXT), decided with Brendan 2026-10-15,
       renamed from `OspreyMetadata` in this PR.** **Done 2026-10-15 as `6f7a9c7895`**, one step
       further than the checklist: the table is the one writer's, not an extension. `BlibWriter`
