@@ -55,6 +55,20 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
       old stamp also survived Clean); path-casing mismatch (both spellings derive from project-file paths);
       no Inputs/Outputs on the calling target (a few tiny evaluations per no-op build)
 
+## Matt's review + AnyCPU answer (2026-10-16)
+
+- Matt (review on tc-perftests.bat) found the %3B list awkward; replaced with named sets
+  (`-p:SkylineBuildSet=All|Perf`, unknown name is an error). Replied on the thread.
+- Matt (email) on AnyCPU vs x64: "Everything to x64 I think. Like I already did with Skyline so it
+  reused code inspection's build." tc-perftests.bat now passes Platform=x64 (run16: all four staged from
+  bin\x64). Remaining for a follow-up PR: top-level build.bat pwiz-sharp, installer, Osprey.sln override,
+  Osprey package.ps1.
+- Unexplained: the Perf set re-restores Skyline.csproj on EVERY run (~13 s of Skyline recompile), while
+  the All set no-ops - even on a cache the Perf run just wrote (same dgSpecHash GRe4lCBOO1w=, byte-identical
+  dgspec). Ruled out: the -p: global property (separate entry file still re-restored), Skyline as a direct
+  entry (removed it; still re-restored). Normal-verbosity NuGet log gives no reason
+  (ai/.tmp/sessions/20261015-singlebuild/run13-detailed.log). Next step would be a diagnostic-verbosity log.
+
 ## Related
 
 - Developer's `c:\mystuff\b64_base.bat` hid build.bat failures behind `| tee` (and `tee.exe` there does not
