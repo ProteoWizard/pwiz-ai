@@ -306,9 +306,12 @@ work.
   entry/peptide lists until protein FDR - small, and simpler than holding the facts map longer.
 - Unit 637/637, inspection 0 (`test-run5.log`). regression-parallel All rerun: 48/48, 29:26
   (`regression-review.log`).
-- **Committed A1+A2 locally as `89dc0dfefd`** (not pushed, no PR yet). Next: Brendan decides push/PR
-  for PR A (TeamCity Perf/Regression: ask first, on `pull/<N>`); then PR B per the plan above,
-  including the no-replicated-copies inventory.
+- Committed A1+A2 as `89dc0dfefd`, then rebased onto master `773aa1bf63` (#4852, #4846, #4831 - no
+  overlapping files). After rebase: unit 637/637, inspection 0, regression-parallel All 48/48 in 27:45.
+- **PR A opened: #4853** (pushed with Brendan's OK). TeamCity Osprey Perf/Regression triggered on
+  `pull/4853` with his OK: build 4220191 (https://teamcity.labkey.org/build/4220191).
+- Next: watch TeamCity + Copilot review (`/pw-respond 4853`); then PR B per the plan above, including
+  the no-replicated-copies inventory.
 - Timing (exe snapshot `D:\test\osprey-runs\_bin\firstpass-slim-a1a2`, version pinned 26.1.1.286):
   1. Stage 5 on, mdiag on, `-LinkFrom` the acceptance run: product byte-identity + timing. Running.
   2. `-Task FirstPassFDR -NoModelDiagnostics`: the no-diagnostics saving. Queued after 1.
