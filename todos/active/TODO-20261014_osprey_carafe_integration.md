@@ -32,7 +32,7 @@
   `ai/.tmp/handoff-20261015_osprey_blib_schema.md` first.
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b (#4854) merged 2026-10-16 as add3a5df1d: no Osprey* tables, LibMetadata and DecoyPairs as the blib's standard optional tables, blib decoys paired from DecoyPairs. Next: adapting Nick's #4848, then PR 3c (BlibMaker on BiblioSpec.IO), then PR 4; watch the overnight TeamCity regression for Astral and StellarGenDecoyEntrap, which did not run locally before the merge. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b (#4854) merged 2026-10-16 as add3a5df1d: no Osprey* tables, LibMetadata and DecoyPairs as the blib's standard optional tables, blib decoys paired from DecoyPairs. Next (decision 8, 2026-10-16): PR 3c (BlibMaker on BiblioSpec.IO), then a review of Skyline's BLIB support and whether a .blib library can do without the Osprey/CarafeSharp library cache, two sprints on BLIB before PR 4 and the #4848 adaptation; watch the overnight TeamCity regression for Astral and StellarGenDecoyEntrap, which did not run locally before the merge. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
@@ -182,6 +182,14 @@ Facts the plan turns on:
    from the table, and the manifest pairing and composition fallback for blib input are retired.
    The first supplier is CarafeSharp; a later one (Skyline with Koina) learns the table. Done as
    its own PR after PR 3 and before PR 4 (see "PR 3b").
+8. **Two sprints on BLIB files before PR 4 (Brendan, 2026-10-16).** First PR 3c: `BlibMaker` in
+   `pwiz_tools/BiblioSpec` writes through `BiblioSpec.IO`, taking the writers from three to two
+   (BiblioSpec.IO and Skyline's `BlibDb`). Then a thorough review of Skyline's BLIB support: in
+   the most recent product cycle Nick worked to get rid of Skyline's own library cache for fast
+   reading, and the question is whether unifying more BLIB code into BiblioSpec.IO lets Osprey
+   and CarafeSharp drop their library cache (`.libcache`) when the library is a .blib. PR 4 (one
+   command) and the #4848 adaptation wait behind both; the review gets its own TODO when it
+   starts.
 
 ## PR plan (compressed 2026-10-14)
 
@@ -746,9 +754,10 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
     mirror the optional columns into the BiblioSpec.IO `BlibSchema` copy so `BlibSchemaIdentity`
     holds.
 
-**Next session handoff**: read `ai/.tmp/handoff-20261015_osprey_carafe_pr3_open.md` (PR 3 open
-as #4852; TeamCity, merge, then PR 3b and adapting #4848); it supersedes the two earlier
-handoffs of 2026-10-15.
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261016_blibmaker_on_bibliospec_io.md` before starting work (PR 3b merged as
+#4854; PR 3c, BlibMaker on BiblioSpec.IO, is next by decision 8; it supersedes every earlier
+handoff of 2026-10-15).
 - **Part G - one blib writer (decision, Brendan, 2026-10-14).** The core writer lives in
   `pwiz_tools/Shared/BiblioSpec`, which becomes the DLL every tool imports: a plain net10.0
   project depending only on System.Data.SQLite (the version all three already carry), holding
@@ -879,7 +888,7 @@ Ten findings; eight fixed in the review-fix commit, two dropped:
   a decoy, which Osprey never holds. Dropped: "redundant double lookup" as its own item - the
   loop was rewritten for the strict pair groups and the lookup went with it.
 
-### PR 3c - BlibMaker on BiblioSpec.IO (Brendan, 2026-10-15; after 3b and the #4848 adaptation)
+### PR 3c - BlibMaker on BiblioSpec.IO (Brendan, 2026-10-15; NEXT, decision 8 - starts on a fresh `Skyline/work/YYYYMMDD_...` branch off master)
 
 - [ ] Port `pwiz_tools/BiblioSpec`'s `BlibMaker` to write through `BiblioSpec.IO`'s `BlibWriter`
       (the writer gains what BlibMaker needs that Osprey and CarafeSharp did not); the BiblioSpec.IO
