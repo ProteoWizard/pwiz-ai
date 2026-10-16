@@ -4,10 +4,10 @@
 #
 # Two mechanisms, because the first one has not been reaching the model:
 #
-#   1. additionalContext (exit 0). The original design: return the skill text as hook output
-#      so it lands in Claude's context. Observed NOT to surface (issue filed with the Claude
-#      Code team; the exit-0 path's stdout JSON appears to be dropped). Kept, so it starts
-#      working again the day the harness honours it.
+#   1. additionalContext (exit 0), on every later matching command: a one-line reminder. It
+#      originally returned the whole skill text, which was observed NOT to surface. The cause
+#      was the payload's size, not the exit-0 path: ~20 KB of JSON is truncated by the harness
+#      and then rejected as invalid ("Unterminated string"), measured 2026-10-16.
 #
 #   2. Block ONCE per session (exit 2). The exit-2 path demonstrably reaches the model - every
 #      Deny-* hook here relies on it. The first matching command of a session is refused with
@@ -77,16 +77,15 @@ Blocked by: .claude/hooks/Inject-VersionControlSkill.ps1
     exit 2
 }
 
-# ---- mechanism 1: additionalContext, kept for the day the harness honours it -------------
-$skill = Get-Content -LiteralPath $skillPath -Raw
-$context = @"
-[Auto-loaded by the Inject-VersionControlSkill PreToolUse hook because the upcoming command invokes git commit/push or gh. Review these conventions BEFORE running the command. Source: .claude/hooks/Inject-VersionControlSkill.ps1]
-$skill
-"@
+# ---- mechanism 1: a one-line reminder on every later command -----------------------------
+# Deliberately short. This used to carry the whole SKILL.md (~20 KB of JSON) on every commit,
+# push and gh call; the harness truncates hook output near that size and then fails to parse
+# it ("Hook output looks like a JSON object but is not valid JSON - Unterminated string"), so
+# the context never arrived and every call printed a hook error instead.
 $output = @{
     hookSpecificOutput = @{
         hookEventName     = 'PreToolUse'
-        additionalContext = $context
+        additionalContext = 'Load the version-control skill before using git or gh, if you have not already.'
     }
 }
 $output | ConvertTo-Json -Depth 5 -Compress
