@@ -1014,6 +1014,17 @@ while master looks correct.
 pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineAiConnector/SkylineAiConnector.zip
 ```
 
+**Which branch you are on decides how the ZIP gets its version.**
+- **master (.NET 10, the 26.1.2 line)** stamps it automatically: `SkylineVersion.targets`
+  computes `26.1.2.DDD` from the HEAD commit date, and there is no `Properties/AssemblyInfo.cs`.
+  A leftover one from an old jam build breaks the build with duplicate-attribute errors
+  (CS0579); delete it. Skip the stamping steps below.
+- **`Skyline/skyline_26_1_1` (.NET Framework 4.7.2 line)** still uses the jam-generated
+  `AssemblyInfo.cs` files, and everything below applies. Its connector exe is net472 and its
+  MCP server net8, so its ZIP needs only the .NET 8 Desktop Runtime; master's ZIP needs .NET
+  10 for both. Do not publish a master-built ZIP while Skyline-daily users are on the 4.7.2
+  line - it adds a runtime requirement they do not have.
+
 **Rebuild it AFTER the version-bump commit, and stamp `AssemblyInfo.cs` first.** The
 ZIP's advertised version is stamped by `PackageToolZip` (`AfterTargets="Build"` in
 `SkylineAiConnector.csproj`) from `SkylineAiConnector/Properties/AssemblyInfo.cs` — a
@@ -1059,10 +1070,15 @@ check: ZIP `info.properties` == bundled `SkylineMcpServer.exe` `FileVersion` ==
 `EXPECTED_ZIP_VERSION` == the version the Tool Store lists. Do not restamp a committed,
 tested ZIP just to make its number match the release.
 
-**Rebuild from `SkylineMcp.sln` in Visual Studio**, not `Skyline.sln` (which does not
-build it) and not the command line: a whole-solution `dotnet build` of `SkylineMcp.sln`
-fails on the net472 `SkylineTool.csproj` for want of its `packages.config` restore, on a
-clean checkout with no local changes.
+**Rebuild with the wrapper**, which builds the connector project (not `Skyline.sln`, which
+does not include it), restores the MCP server for its nested build, and prints the version
+stamped into the ZIP:
+
+```bash
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -Target AiConnector -Configuration Release -SourceRoot <checkout> -Summary
+```
+
+It works on both the 4.7.2 line (MSBuild) and master (dotnet).
 
 **Update the test pin in the same commit.** `TestSkylineMcp` asserts the ZIP's version
 against `EXPECTED_ZIP_VERSION` in `pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs`
@@ -1075,7 +1091,7 @@ rebuild after adding or renaming a tool fails. Nothing catches a stale
 
 1. Commit the version bump
 2. Stamp `SkylineAiConnector/Properties/AssemblyInfo.cs` for that commit (see above)
-3. Rebuild the ZIP from `SkylineMcp.sln`; check `Version =` in its `info.properties`
+3. Rebuild the ZIP with `Build-Skyline.ps1 -Target AiConnector`; check the version it prints
 4. Update `EXPECTED_ZIP_VERSION` to the new version
 5. Commit the ZIP and the pin together — this is the commit to build and tag
 6. Run the full release build (`clean.bat` + `bso.bat`) and tag

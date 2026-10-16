@@ -42,6 +42,9 @@ PowerShell script for building, testing, and validating Skyline from LLM-assiste
 
 # Clean build
 .\ai\Build-Skyline.ps1 -Target Clean
+
+# Build the AI Connector and package SkylineAiConnector.zip (prints the stamped version)
+.\ai\Build-Skyline.ps1 -Target AiConnector -Configuration Release
 ```
 
 ### Run-Tests.ps1

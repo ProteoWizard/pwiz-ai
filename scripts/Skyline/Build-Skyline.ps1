@@ -57,7 +57,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Solution", "Skyline", "SkylineTester", "CommonTest", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "Clean", "Rebuild")]
+    [ValidateSet("Solution", "Skyline", "SkylineTester", "CommonTest", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "AiConnector", "Clean", "Rebuild")]
     [string]$Target = "Solution",
 
     [Parameter(Mandatory=$false)]
@@ -313,12 +313,33 @@ $buildArgs += @(
     "/verbosity:$Verbosity"
 )
 
+if ($Target -eq 'AiConnector') {
+    # The AI Connector is not in Skyline.sln. Build its project directly; it builds
+    # SkylineMcpServer and packages SkylineAiConnector.zip. No Platform: the connector
+    # projects have no x64 configuration and PackageToolZip reads bin\<Config>\<TFM>.
+    $buildArgs = @(
+        'Executables\Tools\SkylineMcp\SkylineAiConnector\SkylineAiConnector.csproj'
+        '/restore'
+        "/p:Configuration=$Configuration"
+        '/nologo'
+        "/verbosity:$Verbosity"
+    )
+}
+
 if ($isNet8) {
     $verbLabel = if ($Target -eq 'Clean') { "dotnet clean" } elseif ($Target -eq 'Rebuild') { "dotnet build --no-incremental" } else { "dotnet build" }
     Write-Host "`n$Target ($Configuration, $SdkTfm) via $verbLabel" -ForegroundColor Yellow
 } else {
     Write-Host "`nBuilding: $Target ($Configuration|$Platform)" -ForegroundColor Yellow
     Write-Host "Command: & `"$msbuild`" $($buildArgs -join ' ')`n" -ForegroundColor Gray
+}
+
+# The connector build makes a nested MSBuild call for SkylineMcpServer that does not restore.
+if ($Target -eq 'AiConnector') {
+    $mcpServerProj = 'Executables\Tools\SkylineMcp\SkylineMcpServer\SkylineMcpServer.csproj'
+    Write-Host "dotnet restore $mcpServerProj" -ForegroundColor Cyan
+    & dotnet restore $mcpServerProj -nologo "-v:$Verbosity"
+    if ($LASTEXITCODE -ne 0) { Write-Host "dotnet restore SkylineMcpServer failed" -ForegroundColor Red; exit 1 }
 }
 
 # Execute build
@@ -337,6 +358,11 @@ if ($isNet8) {
     )
     if ($Target -eq 'Skyline') {
         $net8Projects = @('Skyline.csproj')
+    } elseif ($Target -eq 'AiConnector') {
+        # Not in Skyline.sln. Building the connector also builds SkylineMcpServer (a nested
+        # MSBuild call that does not restore) and packages SkylineAiConnector.zip, stamped with
+        # the version SkylineVersion.targets computes from the HEAD commit.
+        $net8Projects = @('Executables\Tools\SkylineMcp\SkylineAiConnector\SkylineAiConnector.csproj')
     } elseif ($Target -notin @('Solution', 'Rebuild', 'Clean')) {
         $net8Projects = @("$Target\$Target.csproj")
     }
@@ -362,6 +388,10 @@ if ($isNet8) {
     # SkylineTester's staging check on 2026-08-26 after an x64 rebuild, so the run used a binary
     # four hours older than the source and failed on an argument it had never heard of.
     $net8Props = @("/p:Configuration=$Configuration", "/p:Platform=$Platform")
+    if ($Target -eq 'AiConnector') {
+        # The connector projects have no x64 platform; PackageToolZip reads bin\<Config>\<TFM>.
+        $net8Props = @("/p:Configuration=$Configuration")
+    }
     if ($VendorLicenses) {
         $net8Props += '/p:IAgreeToVendorLicenses=true'
     }
@@ -410,6 +440,21 @@ if ($buildExitCode -ne 0) {
 }
 
 Write-Host "`n✅ Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
+
+if ($Target -eq 'AiConnector') {
+    # Report the version actually stamped into the ZIP; file timestamps only say it was rebuilt.
+    $zipPath = Join-Path $skylineRoot 'Executables\Tools\SkylineMcp\SkylineAiConnector\SkylineAiConnector.zip'
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        $reader = New-Object System.IO.StreamReader($zip.GetEntry('tool-inf/info.properties').Open())
+        $zipVersion = ($reader.ReadToEnd() -split "`r?`n" | Where-Object { $_ -match '^Version\s*=' }) -replace '^Version\s*=\s*', ''
+        $reader.Dispose()
+    } finally {
+        $zip.Dispose()
+    }
+    Write-Host "SkylineAiConnector.zip version: $zipVersion" -ForegroundColor Cyan
+}
 
 # Distro zips, the same three steps pwiz_tools/Skyline/build.bat runs for its *.zip arguments:
 # build SkylineTester (not in the project list above), stage it, then its DistroZips target.
