@@ -366,6 +366,13 @@ design question for the morning); the removed `numPeaks` inference (as before); 
 `RetentionTimes` range assertion in the subset tests (an exact count would pin data noise); the
 26-column reconciler scan (as before).
 
+**End of session (2026-10-17 ~01:30)**: five commits pushed, last 097b7b63a9; TeamCity Osprey
+Perf/Regression build 4223785 queued on `pull/4860` behind four Skyline perf builds (Brendan's
+go-ahead given; do not re-trigger without asking). Merge pending his review and approval.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261016_bibliospec_io_reader_morning.md` before starting work.
+
 **What the .blib still cannot carry**: on StellarLibDecoy the .blib search matched the golden
 in every leg but mode 1b, the model diagnostics' paired entrapment FDP (0.00721 vs 0.00809).
 That statistic pairs each entrapment peptide with its original target, which the FDRBench
