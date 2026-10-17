@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261007_pepxml_bare_ampersand`
 - **Base**: `master` (retargeted 2026-10-12 from `Skyline/work/20260612_net8_port`, which merged into master)
 - **Created**: 2026-10-07
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#4790](https://github.com/ProteoWizard/pwiz/pull/4790)
+- **PR**: [#4790](https://github.com/ProteoWizard/pwiz/pull/4790) (merged 2026-10-17)
 
 ## Objective
 
@@ -51,4 +51,15 @@ so the C# BlibBuild port is not the cause.
       consolidated into one TestMethod (e5d792eb3f); both threads replied (marked as
       Claude Code replies) and resolved
 - [x] Deferred PSM key-matching bugs (dotted Tide stems, Comet drive-root folder) -> #4791
-- [ ] TeamCity green, human review
+- [x] TeamCity green (except Wine container, see below), human review
+
+## Progress Log
+
+### 2026-10-17 - Merged
+
+PR #4790 merged as commit 23e870a9b7. Shipped the '&' escape for Comet/Tide pepXML paths,
+escape-after-parse so '&' in spectrum IDs no longer forces q=1, the single
+PercolatorPepXmlAnnotator, and the stricter PathEx.EscapePathForXML. Merged over one red
+check: Docker/Wine container failed TestStaticAndHeavyTextSequences with "Error creating
+window handle" (Wine environment; passes locally in Release). The PSM key-matching bugs
+remain deferred to #4791.
