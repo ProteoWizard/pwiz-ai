@@ -710,6 +710,50 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-16 - Consolidation tier of the review cleanup (3bf85eddfb, pushed)
+
+Developer chose to do the helper consolidation in this PR rather than a
+follow-up. Scope = structure only, no behavior changes:
+- New pwiz.Common.Controls.DpiScale (CommonBaseUI): Factor (Control.DeviceDpi,
+  cached screen DPI when the caller has no control), IsScaled, Scale/ScaleSize,
+  ToLogical(int/Size), ScaleImage (disposes input, no-op at 100%), Resample
+  (bicubic, keyed before interpolation, TileFlipXY). Skyline's DpiUtil keeps its
+  API and delegates (220 call sites untouched); ScaleFromLogical removed (3
+  callers -> ScaleSize); ScaleImageForList renamed ScaleImage.
+- ImageListScaler: ScaleToDpi on DpiScale; new AddScaled/AddRangeScaled for
+  icons added AFTER a list was scaled (ExportLiveReportDlg, ChooseViewsControl
+  add their view icons on context change - a plain Add left ImageList to
+  nearest-neighbour stretch them). ScaleToDpi keeps the list's TransparentColor:
+  my first version switched it to Transparent and those late adds showed
+  magenta squares - caught by the pixel comparison, not by the gate.
+- Hand-rolled ImageList setups replaced by one ScaleToDpi call after the adds:
+  SequenceTree (both lists), FilesTree, StatementCompletionTextBox (null
+  control -> system DPI), NoModeUIDlg (back to the original three in-place
+  assignments). Shared factor copies (CommonAlertDlg, BoundDataGridView,
+  CommonDataGridView) and the 14 is-scaled predicates go through DpiScale.
+Verification (display at 150%):
+- Gate 11 tests both DPI modes, three times (gate-consolidate*.log): PASS.
+- Pixel comparison: DPI-aware re-capture of all 228 forms with the
+  consolidated build (raw/after-c) vs the same capture from the build just
+  before it (raw/after-base; the Oct-7 'after' set was useless as a baseline -
+  every later fix shows up in it). 215/228 identical inside a 2-px frame
+  (window border = active/inactive colour). Of the rest: 5 no baseline (batch
+  flake), heat map / DDA search log / volcano cell / documentation viewer /
+  start page = data or timing (different instance or scroll state), and the two
+  late-add dialogs, which after the AddScaled fix differ only by the smoother
+  resample of their icons (final-*.png crops). EditPepModsDlg captured a
+  different peptide (12 vs 21 rows), not a layout change.
+- MethodEdit s-11 tree region identical to the icon-edge capture.
+Probes that settled the magenta question: scratchpad probe-imagelist.ps1 and
+probe-treeview.ps1 (synthetic keyed list through DpiScale + a real TreeView
+drawn offscreen: all variants clean when icons are present at scaling time).
+Harness lesson: pwsh prefix-matches script parameters, so -Suffix '-b' became
+-Batch and -Suffix "-debug" became -Debug; use suffixes that are not a prefix
+of any parameter name.
+Not done (deferred, behavior changes): DataGridViewEx default-width heuristic,
+EditListDlg manual scaling, ColorGrid literals, DefineAnnotationDlg anchor flip,
+BaseFileDialogNE lookInImageListSmall drawn at a hard-coded 16 px (pre-existing).
+
 ### 2026-10-16 - Two more developer-found bugs fixed and pushed (both were mine)
 
 - ComparePeakPickingDlg "check boxes on the graph title, in both versions":
