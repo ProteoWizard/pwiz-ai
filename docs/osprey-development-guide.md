@@ -1131,10 +1131,33 @@ extraction, scoring and two FDR passes, so each iteration returns about one bit
 against a hypothesis space the size of the pipeline, and no hypothesis discipline
 makes it converge. Bisecting fixes both at once: the loop shortens and every
 iteration returns a root cause. This correction has been needed twice, six months
-apart (the original port, 2026-04; the `.tsv`/`.blib` identity work on #4860,
-2026-10-17), both times by the developer, both times after a session had spent
-hours on the count. When you notice yourself re-running a 40-minute gate to see
-whether a number moved, stop and write the cut.
+apart, both times by the developer, both times after a session had spent hours on
+the count. **What it looked like**, so the next session recognizes it in itself:
+
+- **2026-04, the original port.** Claude had ported enough of maccoss/osprey to C#
+  for the pipeline to produce identification counts on the data that are now the
+  regression datasets, and the two tools did not agree. The session then read the
+  code, trying to guess which of the ported stages explained the difference, and
+  re-ran whole searches to see whether the count moved. Brendan stopped it, had
+  Claude diagram its understanding of the pipeline, load the debugging skill, and
+  add diagnostics from the FIRST stage forward, comparing short-cycle dumps to
+  isolate the cause of ULP-level differences stage by stage. That work is the
+  dump/compare infrastructure in this section.
+- **2026-10-17, #4860.** A `.tsv` library and its `.blib` export had to load as
+  the same object. The session changed the loaders and judged each change by the
+  `-LibraryAsBlib` sweep's PASS/FAIL and the four golden counts, 40 minutes per
+  iteration; a `.libcache` diff script from the previous night existed and had
+  not been promoted to a test. Brendan named the narrower loop. The round-trip
+  test took ten minutes to write, started at 485 differences, and five
+  half-second runs located three loader asymmetries and a real defect
+  (`StripFlankingChars` cutting peptides with two mass brackets) that no count
+  could have found.
+
+The symptoms are the same both times: two things that should agree do not; the
+session is reading code to guess which stage is responsible; the only measurement
+is a number from the end of the pipeline; the loop is long enough that iterations
+are overlapped with other work rather than shortened. When you notice yourself
+re-running a 40-minute gate to see whether a number moved, stop and write the cut.
 
 ### Bisection walk order
 

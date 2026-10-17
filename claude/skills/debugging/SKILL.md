@@ -158,6 +158,13 @@ Recognize debugging mode when user:
 - Describes unexpected behavior
 - Mentions failures, crashes, leaks, errors
 - References test results or exception reports
+
+Recognize it in YOURSELF, with no failure reported, when two things that should
+agree do not and you are reading code to guess which stage is responsible, with a
+number from the end of the pipeline as the only measurement. That loop has been
+caught twice on Osprey by the developer, not the session (the 2026-04 port's Rust
+vs C# counts; the 2026-10 `.tsv` vs `.blib` sweep counts) - the account is under
+"Cross-impl bisection methodology" in `ai/docs/osprey-development-guide.md`.
 - Asks "why?" rather than "how do I build?"
 - Provides stack traces or error messages
 
