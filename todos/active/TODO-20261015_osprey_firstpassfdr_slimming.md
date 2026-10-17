@@ -6,8 +6,9 @@
   (merged, deleted).
 - **Base**: `master`
 - **Created**: 2026-10-15
-- **Status**: PR A (A1+A2) MERGED 2026-10-16. PR B (planning pass 2 into PerFileRescoring + no replicated
-  per-run copies + per-run file inventory) not started. This TODO stays active for PR B.
+- **Status**: PR A (A1+A2) MERGED 2026-10-16. PR B steps 1-3 committed locally (`c398ff986c`,
+  `21f51395ca`), all gates green incl. SEA-AD byte identity. Not pushed, no PR. Remaining: step 4
+  (cross-impl gate run), ai/ script commits at merge, PR open (ask first).
 - **Owed to #4823 / #4848 (decided 2026-10-15)**: draft PR #4848 (`Skyline/work/20261009_blib_protein_fdr_pep`,
   stacked on #4823) adds `PeptidePep` inside the pass-2 row walk PR A deleted, plus edits to
   `FdrExperimentRecord/Accumulator/Sidecar` and `FdrProjectionSinks`. PR A merged first (Mike is not settled
@@ -181,6 +182,51 @@ Shape:
 - Consider dropping the envelope's replicated `first_pass_base_ids` (2.79 GB of duplication at 446 runs,
   per doc 00 P1) now that the retained summary exists. Optional; check every reader first.
 
+#### Per-run file inventory (measured 2026-10-16, SEA-AD 82 acceptance run)
+
+Run dir `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compactsprintfinal`
+(`--model-diagnostics` on, protein-compact). Script: `ai/.tmp/sessions/20261016-b2pr/inventory.py`
+(SHA-256 over every copy when all copies share one size) and `envelope_keys.py` (per-key breakdown of
+4 sampled envelopes). `.spectra.bin` lives in the cache dir, not here.
+
+| `<stem>.*` | Writer | Readers | Content scope | Mean / total (82) |
+|---|---|---|---|---|
+| `.calibration.json` | PerFileScoring (Stage 3) | all four tasks | run | 0.05 MB / 4 MB |
+| `.scores.parquet` | PerFileScoring (Stage 4) | FirstPassFDR, PerFileRescoring | run | 1,873 MB / 153.6 GB |
+| `.1st-pass.fdr_scores.bin` | FirstPassFDR pass 1 | PerFileRescoring (+ SecondPassFDR under `OSPREY_PASS2_VERIFY_WORKER`) | run | 155 MB / 12.7 GB |
+| `.1st-pass.model.json` | FirstPassFDR training | PerFileRescoring, SecondPassFDR, FirstPassFDR resume (`LoadFromAny`, `LoadCurrentModelSidecar`) | **exp - 82 identical copies** | 3.4 KB / 0.3 MB |
+| `.1st-pass.stratum.json` | FirstPassFDR protein FDR | same as model (paired by stem + stamp in `LoadFromAny`) | **exp - 82 identical copies** | 9.6 MB / **790 MB** |
+| `.reconciliation.json` | FirstPassFDR planning pass 2 (PR B moves it to PerFileRescoring) | PerFileRescoring, SecondPassFDR (gap-fill entry ids) | run, **except** `first_pass_base_ids` | 25.2 MB / 2.07 GB |
+| `.scores-reconciled.parquet` | PerFileRescoring | SecondPassFDR, PerFileRescoring resume / training export | run | 474 MB / 38.9 GB |
+| `.2nd-pass.fdr_decoys.bin` | PerFileRescoring pass-2 worker (protein-compact) | SecondPassFDR | run | 6.4 MB / 0.53 GB |
+| `.2nd-pass.fdr_scores.bin` | PerFileRescoring pass-2 worker | SecondPassFDR, training export | run | 39.5 MB / 3.24 GB |
+
+Inside `.reconciliation.json` (v3), per key, 4 sampled runs: `first_pass_base_ids` 5.68 MB
+(727,101 ids) is **identical in all 4**, as are `file_stems`, `library_hash`, `search_hash`,
+`osprey_validity` (small). The run-specific keys are `use_cwt_peak_actions` 3.86 MB,
+`forced_integration_actions` 3.56 MB, `refined_rt_calibration` 2.62 MB, `gap_fill_targets` 1.02 MB.
+So ~466 MB of the 2.07 GB is replicated `first_pass_base_ids` here (2.79 GB at CHS 446 per doc 00 P1).
+
+**`first_pass_base_ids` has no live reader** (grep 2026-10-16): `RescoreHydration` copies it into
+`GlobalFirstPassBaseIds` and nothing reads that property; `ReconciliationFile` only refuses a null
+array. Its consumer was the all-runs reconciliation bundle removed 2026-10-12. Since PR B moves the
+envelope writer anyway, drop the field (format v3 -> v4) rather than keep it optional.
+
+**Rule (Brendan, 2026-10-16): Osprey never writes the same content to a `<stem>.<ext>` file for
+every run.** Experiment-wide content goes to `<blib-stem>.<ext>`, written once. Enforce with a
+`SubsetPipelineTest` arm: after a straight-through multi-run analysis, group every `<stem>.*` output
+by suffix and fail when one suffix is byte-identical across all runs. That cannot see a replicated
+payload INSIDE an otherwise per-run file (the envelope's `first_pass_base_ids`), so doc 00 P1 states
+that case too and drops its "replicated under each run stem" exception.
+
+Decisions from the inventory:
+- Model and stratum become `<blib-stem>.1st-pass.model.json` / `<blib-stem>.1st-pass.stratum.json`,
+  path from `ArtifactPaths.ResolveOutputDir(ScoringTaskShared.ArtifactSiblingPath(config))` like
+  `RetainedBaseIdSidecar.PathFor`. `OutputBlib` is required on every pipeline path
+  (`Program.cs:915`, `OspreyTask.cs:95`), so the name is always available.
+- The new consensus artifact follows the same rule: `<blib-stem>.1st-pass.consensus.bin` (name TBD).
+- No other per-run file carries experiment-wide content.
+
 Contract and plumbing to update (doc 00 is the authority; read it first):
 - `00-pipeline-architecture.md`:
   - the contract table: `.reconciliation.json` is written by PerFileRescoring; the new consensus
@@ -335,6 +381,171 @@ work. (The 2026-10-15 handoff file is for PR A and is obsolete.)
 - Timing (exe snapshot `D:\test\osprey-runs\_bin\firstpass-slim-a1a2`, version pinned 26.1.1.286):
   1. Stage 5 on, mdiag on, `-LinkFrom` the acceptance run: product byte-identity + timing. Running.
   2. `-Task FirstPassFDR -NoModelDiagnostics`: the no-diagnostics saving. Queued after 1.
+### 2026-10-16 (session 2) - PR B steps 1-2: inventory, model/stratum to analysis names
+
+- Step 1 inventory done (table in the PR B section). Only model and stratum are whole-file
+  replicated; the envelope's `first_pass_base_ids` is a replicated payload with no live reader.
+- Brendan (mid-session): the sprint must also ASSERT the rule - no `<stem>.<ext>` output may be the
+  same for every run. Done as `SubsetPipelineTest.AssertNoReplicatedPerRunOutputs`, called from
+  `ValidateStraightThrough` (3-run default) and `TestSubsetLibraryDecoysAndReports` (diagnostics,
+  fdrbench, --write-pin). Proven: a temporary per-run model copy fails it with
+  "identical in every run ... <stem>.1st-pass.model.json" (`probe-replication.log`), then removed.
+- Step 2 (uncommitted, `C:\proj\pwiz`):
+  - `FirstPassModelIO`: `PathFor(config)` / `StratumPathFor(config)` -> `<blib-stem>.1st-pass.{model,stratum}.json`
+    via `ResolveOutputDir(ArtifactSiblingPath)`; `LoadFromAny` -> `LoadForAnalysis` (pairs by stamp);
+    `SerializeStratum` folded into `SaveStratum`; legacy inline `ModelDto.StratumBaseIds` removed
+    (model file bytes lose `"StratumBaseIds": null`; pin updated).
+  - `FirstPassFdrTask`, `Pass2FdrSidecar.EnsureFrozenFirstPassPublished(ctx)`,
+    `PerFileRescoreTask.CreatePass2Worker`, `SecondPassFdrTask`: one write / one read.
+  - Resources: 8 keys removed (all 3 resx), 5 added (English + Designer, inserted in place).
+  - Tests: FirstPassModelIoTest arms rewritten around an analysis config; SubsetPipelineTest HPC chain
+    and TrainingExport node ship `output.1st-pass.{model,stratum}.json`.
+  - `regression.ps1` mode 3 staging renamed. Docs 00 (P1 rewritten: no replication exception;
+    contract table gains retained_base_ids/model/stratum rows; stale stratum "In flight" removed),
+    07, 12, 14 updated.
+  - ai scripts (UNCOMMITTED in ai/ - commit when PR B merges, since master builds still write
+    per-stem names): `OspreyDatasetRun.psm1` moves model/stratum to `$ANALYSIS_ARTIFACTS` (its glob
+    also adopts an old bed's per-stem copy under the new name), `New-OspreyResumeStage.ps1`,
+    `Run-SeaAd.ps1` help text.
+- Gate run 1: inspection 0, unit 636/637 - the failure was the removed legacy inline-stratum arm,
+  rewritten (`test-run1.log`). Run 2: unit 637/637, inspection 0 (`test-run2.log`).
+- regression-parallel All: 48 PASS / 0 FAIL in 28:58, mode 3 (HPC chain==straight) green on the
+  renamed staging (`regression-step2.log`).
+- Brendan: update `Osprey-workflow.html` before committing (done: FirstPassFDR 2 files/run + 4
+  experiment-wide, 168 files at 82 runs; rescoring and SecondPassFDR inputs list the analysis-named
+  model/stratum; SecondPassFDR inputs also gained the retained summary).
+- **Committed step 2 as `c398ff986c`** (local, no upstream).
+- **Committed step 3 as `21f51395ca`** (local, no upstream) after: unit 637/637 + inspection 0
+  (`test-step3-run5.log`), regression-parallel All 48/48 twice (before and after review fixes),
+  SEA-AD byte-identity + all 82 envelopes identical.
+- **Decided (Brendan, 2026-10-16): remove unused outputs rather than keep them for Rust parity.**
+  Rust is becoming a stale reference; the cross-impl test stays as a validation tool, so its
+  comparators strip C#-only differences (as they already must for `osprey_validity`). So step 3
+  drops the envelope's `first_pass_base_ids` (v4) and updates the bisection comparators to strip it
+  from the Rust side.
+- Deferred to step 3: drop `first_pass_base_ids` (envelope v4). The cross-impl bisection tools
+  (`Compare-CrossImpl-Reference.ps1`, `Compare-EndToEnd-Bisect-Crossimpl.ps1`) SHA-compare the
+  envelope against Rust, which still writes the field; they would need to strip it as they must
+  already strip `osprey_validity`. Answered below: drop it.
+
+### 2026-10-16 (session 2, continued) - PR B step 3: planning pass 2 into PerFileRescoring
+
+Design as built (uncommitted until gates pass):
+- FirstPassFDR: `Stage6Planner` keeps ONLY pass A + `BuildConsensus` and returns
+  `Stage6Planner.Result { Stage6Consensus Consensus, HashSet<uint> GlobalBaseIds }`. `PlanStage6`
+  writes `<blib-stem>.1st-pass.consensus.json` (new `Stage6ConsensusFile`: JSON, stamp first,
+  consensus list + PassingBaseIds + PassingPrecursors as sorted parallel arrays, doubles via
+  RoundtripDoubleConverter) and the retained summary = GlobalBaseIds alone. No envelopes.
+  Declared outputs: envelopes out, consensus in. `PlannedActionCount` byproduct removed.
+- Retained summary equality (`GlobalBaseIds` == old union): holds by construction - pass B planned
+  over entries from the same survivor loader that built GlobalBaseIds, so every action target's
+  base_id was already in it. Confirmed empirically: SubsetPipelineTest straight-through/HPC chain
+  pass; byte-compare against SEA-AD acceptance pending.
+- PerFileRescoring: new `RunReconciliationPlanner` (built once in `CreateRunPlanner` from the
+  consensus file, PerFileCalibrations, PerFileIsolationMz, library lookups). `HydrateOneRun` takes a
+  `planRun` callback instead of loading the envelope; `PlanAndWriteRun` plans over a canonically
+  sorted copy of the compacted survivors (the order FirstPassSurvivorLoader gave the old planner),
+  saves `<stem>.reconciliation.json` with the reconciled parquet's stamp BEFORE rescoring, and the
+  plan goes through the same PlanActions/CaptureCalibrationAndGapFill conversions as a read-back.
+  Planning runs inside `_survivorLoadLock` (CWT column load is a large transient like the stub
+  load). Per-run log line kept; summary (refit count, action count) logged by the planner.
+- Envelope v4: dropped file_stems, first_pass_base_ids, library_hash, search_hash (+ their Load
+  checks, 2 IO resources). `RunRescoreInputs.JoinFileStems/GlobalFirstPassBaseIds` removed.
+- Done predicate: `Pass2FdrSidecar.HasWorkerStamp` also requires the envelope stamp == reconciled
+  stamp; `PerFileRescoreTask.Outputs` declares the envelope; Stage 7 `LoadGapFillEntryIds` now
+  throws instead of folding everything on a missing plan.
+- Retired OSPREY_DUMP_REFIT / _REFIT_ONLY / _DUMP_LOESS_FIT / _LOESS_FIT_ONLY (all-runs dumps;
+  each refit is in its envelope). Consensus + inv_predict dumps stay in FirstPassFDR.
+- Resources: Tasks -8/+6, IO -2 (patch script `patch_resx.py` now refuses unless parsed Designer
+  properties tile the file - it silently dropped multi-separator properties once; caught by build).
+- Tests: IOTest envelope fixtures v4; TaskValidityKeyTest worker-answer fixture adds the plan;
+  SubsetPipelineTest HPC chain ships consensus (not envelopes) to phase 3; TrainingExport node same.
+- regression.ps1 mode 3 ships consensus to phase 3; RegressionData.ps1 resume invalidation no
+  longer deletes envelopes (PerFileRescoring's now).
+- Docs: 00, 14 (section 5 rewritten + 5a consensus), workflow page; 05/10/11/15 by a doc agent.
+- ai/ (uncommitted until merge): runner link tables (envelope -> PerFileRescoring, consensus ->
+  analysis-wide), Run-SeaAd help; cross-impl comparators now content-compare envelopes via new
+  `Compare/reconciliation_diff.py` (drops stamp + the 4 v4-removed fields + format_version).
+- Gate run 1: inspection 0, unit 635/637 (two fixture failures, fixed). Run 2: 637/637, inspection 0.
+  Comment sweep + CLI help example ("and once for the analysis: out.1st-pass.*"); run 3: 636/637,
+  the one being the self-updating CommandLine.html test regenerating en/ja/zh (expected).
+- regression-parallel All: 48 PASS / 0 FAIL in 27:31 (`regression-step3.log`) - byte-identical with
+  planning moved, HPC chain shipping the consensus instead of envelopes.
+- SEA-AD 82 result (`ai/.tmp/sessions/20261016-b2pr/seaad-step3-compare.txt`), vs the acceptance run:
+  - byte-identical: out.stats.tsv 45F2E16C, out.protein_groups.tsv 906B6ED8, retained_base_ids
+    C722D325 (equality with the old GlobalBaseIds-union-actions set CONFIRMED on SEA-AD), both
+    fdr_experiment.bin, both fdrbench TSVs, 2nd-pass model-diagnostics, all 246 per-run FDR
+    sidecars; model + stratum content identical; ALL 82 envelopes identical by content
+    (reconciliation_diff semantics) - planning moved without changing a single plan.
+  - out.1st-pass.model-diagnostics.json differs ONLY by `cal` = null, which is pre-existing on every
+    -LinkFrom run (PR A run, 10-12/10-13 runs too): Stage 1-4 calibration diagnostics are not in
+    memory on a resume. Content otherwise identical to the PR A run. Separate P16 gap - report to
+    Brendan, not in scope.
+  - Envelopes 2.07 GB -> 1.30 GB; consensus.json 27.7 MB.
+  - Wall (vs PR A run, same setup): FirstPassFDR 1,602 -> 1,328 s (-274); PerFileRescoring
+    4,461 -> 4,809 s (+347); SecondPassFDR 1,041 -> 1,367 s (+326). The first two are the predicted
+    break-even. The Stage 7 rise is uniform across every parquet-streaming fold pass (+30-45%)
+    while compute steps match - looks like disk throughput. Reconciled parquet volume is identical
+    (38,883,121,348 bytes both runs). Same-session A/B via the resume route (`-LinkUpTo
+    SecondPassFDR`, no --task; Run-SeaAd.ps1 gained -LinkUpTo, as Run-Chs.ps1 has): PR A build
+    (`_bin\firstpass-slim-a1a2`) Stage 7 = 1,427 s (products 45F2E16C / 906B6ED8) - slower than the
+    step-3 run's 1,367 s, so the rise is the machine, not the change. Candidate leg (`_bin\planrescore-21f5139`,
+    the committed step 3 incl. review fixes): Stage 7 = 1,354 s, products 45F2E16C / 906B6ED8, and
+    PerFileRescoring resumed as "skipping (outputs valid)" with the envelopes linked (the new done
+    predicate holds on resume). Stage 7 is NOT slower. Run dirs `...ab7base-20261016_165733`,
+    `...ab7new-20261016_173419`.
+- Pre-existing defects found and FIXED on this branch (Brendan, 2026-10-16: "fix issues as we find
+  them and write new tests"; both found by the SEA-AD verification, missed by existing tests):
+  1. `--task SecondPassFDR --model-diagnostics` died before loading a run when the node lacked
+     `out.1st-pass.model-diagnostics.json`. Root cause: `FirstPassFdrTask.WillOnlyFoldDiagnostics`
+     answered "only the report is owed" for a FirstPassFDR this process does not run, sending
+     `PerFileScoringTask.Rehydrate` down the fold route, which refuses reconciled-input nodes. Fix:
+     add `ScoringTaskShared.Includes<FirstPassFdrTask>`. Test: new leg at the end of
+     `TestSubsetDiagnosticsWithoutReanalysis` (no blib, no diagnostics products, --task SecondPassFDR
+     -> exit 0, same blib, no pass-1 product written). Red on the old code with the exact exception.
+     Regression mode 3 never saw it: it ships the pass-1 product.
+  2. Report's calibration view (`cal`) null on every resume past Stage 3 and every HPC join. Root
+     cause: Stage 3's `CalFileRow`s lived only in a byproduct. Fix: PerFileScoring writes
+     `<stem>.calibration-diagnostics.json` (row + mass unit, calibration's stamp) when it computes the
+     row; `BuildCalibrationData` reads it for runs not in the byproduct, only when its stamp matches
+     `.calibration.json`. Test: `AssertSameFirstPassProduct` no longer excludes `cal` - it had listed
+     it as "a view a fold cannot rebuild", which is how the gap passed. Red before, green after.
+     Relayed in regression.ps1 mode 3 phase 2 + SubsetPipelineTest chain phase 2; docs 00, 14;
+     runner link table (PerFileScoring). NOT fixed (decision for Brendan): adding --model-diagnostics
+     AFTER Stage 3 ran still has no calibration view - the rows need Stage 3's in-memory matches and
+     Stage 3 skips that work when the flag is off. Options: always compute + write the row (Stage 3
+     cost: entrapment tally + match retention), or accept the gap and say so in the report. Same
+     class: the `model`, `featureHistEdges`, `modelComposite` views remain excluded from the fold
+     comparison.
+- Former note: Pre-existing defects found (now fixed above):
+  - `Run-SeaAd.ps1 -Task SecondPassFDR -LinkFrom <run>` fails on the PR A build in 22 s:
+    "A reconciled-input (--task SecondPassFDR) configuration reached the per-file scoring load"
+    (`PerFileScoringTask.AssertLeanProjection` via `PerFileRescoreTask.Rehydrate`). The HPC-merge
+    route from the runner is broken on master-era builds; regression mode 3 phase 4 passes, so it
+    is something in the runner's command line (e.g. --model-diagnostics/--fdrbench) on that route.
+  - `out.1st-pass.model-diagnostics.json` has `cal = null` on every -LinkFrom resume (P16 gap).
+- `/code-review medium`: 8 findings, no correctness bug. Fixed (uncompiled until the SEA-AD run's
+  timed stages finish):
+  - (1) planning ran inside `_survivorLoadLock`, serializing it across rescore lanes. Split:
+    `HydrateOneRun` (under the lock) now returns survivors only; `RescoreHydration.ApplyPlan` +
+    `RescorePassInputs.PlanRun` plan, write and apply OUTSIDE the lock on the file lanes.
+    (SEA-AD measures sequential rescore, so its timing is unaffected.)
+  - (2) consensus loaded eagerly even when every run is done (and leaked the Pass2Worker on a
+    throw): `RunReconciliationPlanner` loads it lazily (`Lazy<State>`) on the first PlanRun.
+  - (4) consensus JSON: `double?` MAD bypassed RoundtripDoubleConverter and a NaN would have
+    failed FirstPassFDR; now Json.NET default round-trip doubles (bit-exact, NaN-tolerant).
+  - (5) 4th copy of the blib-stem path rule: shared `ScoringTaskShared.AnalysisArtifactPath`
+    (model, stratum, consensus).
+  - (7) `Inputs` null guard; (8) dead DiagnosticsOnly branch in PlanAndWriteRun removed.
+  - Dropped: (3) null-path writer/reader mismatch - OutputBlib is required on every pipeline path;
+    reading the consensus back in-process is deliberate (P10). (6) per-run log order under lanes -
+    lanes already buffer per-file output.
+- SEA-AD 82 timing run started 14:07 (exe snapshot `D:\test\osprey-runs\_bin\planrescore-step3`,
+  -LinkFrom acceptance, version pinned 26.1.1.286): run dir
+  `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compactplanrescore-20261016_140730`.
+- Next: regression-parallel All; SEA-AD -LinkFrom timing run from FirstPassFDR on, compare products,
+  retained summary bytes, and every envelope (reconciliation_diff.py vs the acceptance v3 files).
+
 - A2 plan (done) was: carry each entry's peptide (already in A1's entry facts) to the sink, keep
   `(entry_id, peptide)` in ascending order, and resolve protein q from that instead of re-walking the
   parquets. Byte-identical by construction in every `OSPREY_STUB_IDENTITY` mode; no library lookup.
