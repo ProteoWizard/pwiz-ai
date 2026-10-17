@@ -710,6 +710,31 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-16 - Harness switched to TestRunner dpiaware=on; PR description updated
+
+- PR #4602 description: DpiScale/ImageListScaler/FillTabPage in the summary,
+  test plan extended with the consolidation pixel comparison and this week's
+  developer-reported fixes. Still a draft.
+- Local sweep harness now uses Brendan's runner option instead of the
+  app.manifest hack: Run-Tests.ps1 (ai, uncommitted) gained -DpiAware ->
+  "dpiaware=on"; Run-FormBatch / Run-PaneSweep / run-tutorialshots pass it in
+  the after phase and no longer set the DPIUNAWARE AppCompat layer for the
+  before phase (the runner's default is 96 DPI). TestRunner/app.manifest edit
+  reverted. New run-gate-dpi.ps1 -Tests 'A,B' is the two-pass gate template
+  (dpiaware=on, then default). Verified: batch 84 at 200% captured all four
+  forms with dpiFactor=2 through the option; index-200.html regenerated with
+  proper 200% captures and layout dumps for them.
+- TRAP found on the way: Build-Skyline -Target TestFunctional does NOT build
+  TestRunner.csproj (only -Target Solution does), and Run-Tests stages
+  whatever TestRunner.exe exists. The staged runner was from Oct 7 until
+  today, so dpiaware=on was "Unrecognized argument" after a TestFunctional
+  build. Every gate since Oct 7 ran test assemblies that were fresh on a
+  runner host that was not - harmless here, but a Solution build is needed
+  whenever TestRunner/TestRunnerLib change (Run-Tests does warn "output looks
+  stale"; the warning scrolls by in the batch logs).
+- Also: a waiter that greps "Build succeeded" fires on the FIRST project of a
+  Solution build; wait for "All operations completed".
+
 ### 2026-10-16 - Consolidation tier of the review cleanup (3bf85eddfb, pushed)
 
 Developer chose to do the helper consolidation in this PR rather than a
