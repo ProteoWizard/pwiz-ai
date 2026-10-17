@@ -768,9 +768,9 @@ Osprey --fasta proteome.fasta --input run1 run2 run3 [--training-input run2] [--
     holds.
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261016_blibmaker_on_bibliospec_io.md` before starting work (PR 3b merged as
-#4854; PR 3c, BlibMaker on BiblioSpec.IO, is next by decision 8; it supersedes every earlier
-handoff of 2026-10-15).
+`ai/.tmp/handoff-20261016_bibliospec_io_reader.md` before starting work (PR 3c merged as #4855;
+by decision 9 the next sprint is `TODO-20261016_bibliospec_io_unification.md`, PR A, the shared
+BlibReader; this TODO's PR 4 waits behind it. It supersedes every earlier handoff).
 - **Part G - one blib writer (decision, Brendan, 2026-10-14).** The core writer lives in
   `pwiz_tools/Shared/BiblioSpec`, which becomes the DLL every tool imports: a plain net10.0
   project depending only on System.Data.SQLite (the version all three already carry), holding

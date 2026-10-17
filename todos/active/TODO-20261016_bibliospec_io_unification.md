@@ -136,4 +136,8 @@ Run the unit gates one at a time: all build CommonUtil and BiblioSpec.IO.
 
 ### 2026-10-16 - Planned
 Created at the end of the PR 3c session from the read-side design discussion with Brendan.
-Nothing coded. Start with PR A after #4855 merges.
+Nothing coded. #4855 merged the same day as 9c3712129e (BlibMaker on BlibWriter; one schema), so
+PR A can start from master.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261016_bibliospec_io_reader.md` before starting work.
