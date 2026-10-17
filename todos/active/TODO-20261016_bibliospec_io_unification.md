@@ -597,3 +597,50 @@ final Release build running (`run-final-gates.ps1` -> `final-gates.log`): `regre
 -Dataset All`, then `Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All`. The #4860
 description update is built (`pr-body-new.md`, from `merge_pr_body.py`). Then: push both,
 open the Rust PR, `gh pr edit 4860 --body-file`, ask Brendan for the TeamCity go-ahead.
+
+**Pushed (2026-10-17 ~11:40)**: pwiz 29c194f35c on #4860; maccoss/osprey 2d72cc4 as
+**https://github.com/maccoss/osprey/pull/73** (branch `fix/one-peak-per-mz-typed-from-mz`).
+Final gates on the final Release build: `regression-parallel -Dataset All` PASSED (every mode,
+all four datasets); cross-impl Stellar single and all-files and Astral all-files OVERALL PASS at
+1e-9 (Rust and C# both 118,314 Astral precursors; `crossimpl-astral.log`). #4860 retitled
+"pwiz: Added BlibReader to BiblioSpec.IO and made a .blib structurally equivalent to Osprey's
+library cache" (Brendan's framing: everything the .libcache holds, the .blib holds or
+re-derives exactly, a replacement for it if made fast enough) and the description carries the
+new section. TeamCity NOT triggered: Brendan wants the `DecoyPairs` extension in this PR first
+(the manifest's 4-row group in the .blib, so a .blib alone reproduces the manifest pairing and
+the `-LibraryAsBlib` legs drop the manifest). **Speed is a separate PR** (Brendan): the blib is
+not yet fast enough to replace the cache (3.35 s vs 0.59 s on HeLa; typing is 2.43 s of it).
+Code mapping for the `DecoyPairs` design was delegated to an Explore agent at the time of
+writing; the design is to be proposed before coding.
+
+### 2026-10-17 (afternoon) - DecoyPairs as the whole pairing design
+Brendan's reframing of #4860: **a .blib structurally equivalent to Osprey's .libcache**, a
+replacement for it if made fast enough (speed is a separate PR: 3.35 s blib parse vs 0.59 s
+cache read on HeLa). The remaining asymmetry was `DecoyPairs`, which paired a decoy with its
+target but not an entrapment peptide with its original target (the manifest's 4-row group), so
+a .blib still travelled with the manifest. No backward compatibility (the table was merged days
+ago and no important library carries it). Schema settled with Brendan - `PairingID` (his name:
+it identifies a group of four, "PairID"/"PairIndex" read as one pair), `TargetRefSpectraID` as
+an indexed foreign key, `IsDecoy`/`IsEntrapment` kept (SQLite stores 0/1 in zero payload
+bytes; a `Kind` column would be the same bytes), `Method` per row because Osprey's generator
+mixes reverse and cycle within one library, and `entrapment_method` for LibMetadata (a
+per-library fact; not yet written). Measured first: zero library peptides outside the manifest
+on the libdecoy library (359,296 target-side sequences), so the Met-clip reconciliation never
+fires on our data; it moved to load time unchanged.
+
+Implemented (see handoff `ai/.tmp/handoff-20261017_bibliospec_io_reader_pairing.md` for the
+file-by-file list): BiblioSpec.IO schema/record/writer/reader + tests; CarafeSharp row, planner
+(the manifest index it already grouped by, the target id it already zipped), writer, tests;
+Osprey `LibraryEntry.PairingId` (uint?, manifest indices start at 0), libcache v5,
+`PairingIds.Assign` at load on both routes, `EntrapmentPairing.Build` from entries, the three
+consumers off the manifest file, `BlibDecoyPairs.Pair` by target id, export rows for every
+entry in a pairing, contract rule 6 link-based, `-LibraryAsBlib` legs manifest-free, docs
+01/13/24. Gates: BiblioSpec 147, CarafeSharp 113, Osprey 639 + inspection (last log
+`osprey-gate-15.log`). Not yet: the loader-level round trip on the libdecoy subset, the
+Carafe-built-.blib -> Osprey test (Brendan: "a primary goal of this work is to make BLIB the
+primary communication format between Carafe and Osprey"; the Carafe subset .blib is built, see
+the handoff), `entrapment_method`, the libdecoy/entrapment regressions on manifest-free .blib
+legs, review, PR text, TeamCity. Handed off at 10% context (measured).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261017_bibliospec_io_reader_pairing.md` before starting work.
