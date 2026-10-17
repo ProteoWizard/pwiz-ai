@@ -439,3 +439,161 @@ the manifest on the .blib legs - the loader ignores it for pairing when the libr
 table, the diagnostics still read it. For a .blib to replace a .tsv plus manifest outright,
 `DecoyPairs` would need the entrapment partner too (a fourth-row group id, or a column naming
 the original target): a schema and CarafeSharp writer change, for a later PR.
+
+### 2026-10-17 (morning) - one peak per m/z, order-independent tie-breaks
+Brendan on where the isobaric-pair work should stop: two peaks at one m/z are a scoring
+error as much as a representation one - two XICs at one m/z scored as independent evidence
+of the precursor is counting one measurement twice - but a multi-annotation representation
+(`RefSpectraPeakAnnotations` rows, an annotation list on a fragment, per-annotation decoy
+fragments) is a qualitative change to a table Skyline uses only for small molecules, made to
+improve gendecoy, our less reliable decoy mechanism, which can do less and still match the
+field. And the merge rule is EQUALITY, not a tolerance: the .tsv is a spectrometer of unknown
+resolution, two rows at different m/z, however close, are what it states, and whether they
+extract one XIC is the extraction's question at its own tolerance. What no instrument can
+produce is two peaks at ONE m/z, and that is what is not carried forward from Carafe. Other
+formats merge such a pair to one intensity and let the reader credit one source, as Skyline
+picks the most likely ion for a peak.
+
+**Data behind the decision** (`ai/.tmp/sessions/20261017-isobaric/isobaric_pairs.py`,
+`exact_vs_near.py`; outputs beside them). Across the whole libraries: Stellar 2,419 groups of
+rows at one m/z (2,023 b/b - `b4^2` at `b2` for a peptide whose first four residues repeat a
+composition, Carafe giving the doubly charged one 0.01-0.04 - 277 b/y, 117 y/y), Astral 1,695
+(975 b/y), libdecoy 2,340. Every group is an EXACT duplicate of the written m/z text; zero
+groups with distinct text within 1e-5 Th, so equality and the typing's tie tolerance pick the
+same rows here. Carafe's split is lopsided (high/low median 3.3-4.3, upper quartile 8-10); for
+b/y pairs the y ion holds a median 0.52-0.66 of the sum and is the larger in 57-68%. Carafe's
+own decoys (libdecoy, paired through the manifest, 534 pairs with both ions on the decoy at
+separate m/z) keep each ion's share: decoy ion / target same ion median 0.96 (IQR 0.46-2.00),
+decoy sum / target sum median 0.98. Full sum on both decoy ions would put ~17x Carafe's value
+on the minor one (`AQIHQFR` b4 0.064 / y3 0.524 -> Carafe decoy 0.035 / 0.498). Under the
+rule adopted, the merged peak is typed once (the preferred ion, which is the major one nearly
+every time: `b2` over `b4^2`, y over b) and the decoy gets that one fragment at the sum; the
+minor ion has no decoy fragment.
+
+**Code** (uncommitted at the time of writing, Osprey Debug gate 638/638 + inspection clean):
+- `FragmentPeaks.MergeEqualMz` (new, Osprey.Core): peaks in m/z order sharing one m/z become
+  one peak with the summed intensity (first annotation kept), then the spectrum is scaled to
+  its base peak. Called by `DiannTsvLoader` after the m/z sort and by `BlibLoader.ToFragments`
+  (which now also sorts by m/z, for a .blib written in another order) - both before typing.
+  Both `READER_VERSION`s bumped (TSV 3 -> 4, blib "3" -> "4"); no libcache format change.
+- Order-independent tie-breaks: `TopFragmentExtractor.SelectTopFragmentIndices` breaks equal
+  intensities by m/z, then ion type, ordinal, charge; `FragmentTyping.TypeFragments` by m/z
+  then index. Neither depends on a library's row order any more.
+- Tests: `FragmentTypingTest.TestOnePeakPerMz` (helper, .tsv route, .blib route),
+  `FragmentSelectionTest` tie case; `BlibLibraryInputTest` fixture put in m/z order;
+  `SubsetPipelineTest` counts distinct (peptide, charge, m/z) where it counted lines.
+- Export unchanged: the merged peak is written once; `RefSpectraPeakAnnotations` untouched.
+
+**Golden sweep** launched 08:25 (`ai/.tmp/sessions/20261017-isobaric/run-golden-sweep.ps1`,
+log `golden-sweep.log`): per dataset `-CreateGolden` then `-LibraryAsBlib`, serial.
+
+**Rust side**: no maccoss/osprey checkout exists on this machine (nothing at `C:\proj\osprey`
+or elsewhere on C:/D:); the paired PR needs a clone first.
+
+**Later the same morning (C# follow-through)**: `FragmentMath.GetTop6FragmentMzs` (the spectrum
+prefilter's memoized top six) ranked by intensity with its own stable sort, so it needed the
+same tie-break as the extraction; both now go through `FragmentMath.TopIndicesByIntensity`
+(Osprey.Core), the one ranking every top-N selection uses. Gate green again (638/638,
+inspection clean). The first golden sweep was launched before that change and could not be
+stopped (the permission classifier refused the kill), so its numbers are indicative and the
+definitive sweep runs after it: Stellar 32,110 -> 32,082 (-0.09%, `-LibraryAsBlib` PASS),
+StellarLibDecoy 31,015 -> 31,076 (+0.2%, PASS), StellarGenDecoyEntrap 31,909 -> 32,287
+(+1.2%).
+
+**Rust port (paired maccoss/osprey PR)**, in `C:\proj\osprey` (cloned this morning at
+d19be4c; rustup via winget, vcpkg at `C:\vcpkg` with openblas/openssl, per
+new-machine-setup.md), branch `fix/one-peak-per-mz-typed-from-mz`:
+- New `osprey-core/src/fragment_typing.rs`: residue masses as the C# computes them (exact
+  round-trip doubles from `pwiz.CommonUtil`, dumped by `ai/.tmp/sessions/20261017-isobaric/
+  dump-masses.ps1` -> `masses.txt`), water/ammonia/phosphoric acid, proton 1.007276;
+  `calculate_fragment_mz` in the C# summation order; the ladder, `FragmentCandidates`,
+  `type_fragments`, `merge_equal_mz`, `prepare_library_fragments`/`prepare_library`,
+  `top_fragment_indices` (the tie-break), .NET-style NaN comparators.
+- `load_library(source, cache_dir, fragment_tolerance)` prepares every entry after a fresh
+  parse; the `.libcache` is VERSION 2 and records the tolerance (a cache typed within another
+  tolerance is not used). `pipeline.rs` passes `config.fragment_tolerance`.
+- `DecoyGenerator` lost its six-decimal table: residue masses, the fragment m/z calculation
+  and the collision ladder's constants come from core. `NeutralLoss::mass` too.
+- The five top-N sites in `osprey-scoring` (`has_any_top_fragment_match`,
+  `has_topn_fragment_match`, `get_top_n_fragment_indices`, the top-6 mass-error count,
+  `extract_fragment_xics`) call `top_fragment_indices`.
+- Gate: `Build-OspreyRust.ps1 -FmtFix -Clippy -RunTests` green (two test expectations
+  updated: U has a mass now, so the ladder test's unknown residue is X).
+- Cross-impl (`Compare-EndToEnd-Crossimpl.ps1`) still to run: Stellar `-Files Single` first,
+  then Stellar and Astral `-Files All`, after the definitive C# sweep (the script runs the C#
+  Release exe from the build tree, the same one the sweep locks).
+
+**Tighter loop (Brendan, late morning)**: a seconds-long exact check in place of the 40-minute
+sweep - `SubsetPipelineTest.TestLibraryLoadsIdenticallyFromTsvAndBlib`
+(`SubsetPipelineTest.LibraryRoundTrip.cs`): the subset .tsv loaded by `DiannTsvLoader`,
+written by `LibraryBlibWriter`, read back by `BlibLoader`, and the two entry lists compared
+field by field (id, sequence, modified sequence, charge, precursor m/z, RT, decoy flag, every
+modification's position/mass/UniMod id/name, every fragment's m/z, intensity and annotation,
+proteins, genes), reporting a count per field and the first forty lines. Stellar (unit 0.5) and
+Astral (10 ppm) subsets. First run: 485 differences, three families, all fixed so the round
+trip is exact:
+- **Id**: the TSV loader numbers from 0, the blib loader used the 1-based RefSpectra id. The
+  blib loader now numbers from 0 in reading order and keeps `BlibLoader.RefSpectraIds` beside
+  the entries for the tables that refer to the file's id (protein mappings, `DecoyPairs`:
+  `BlibDecoyPairs.ByEntry` and `LibraryLoader.CheckLibraryContract` take the list).
+- **ModifiedSequence text**: `C[UniMod:4]` (TSV) vs `C[+57.0215]` (blib). Both loaders now
+  rebuild the text from the modification masses with `BlibSpectrum.FormatModifiedSequence`,
+  the blib writer's own text, so the precision a file printed does not matter either. The
+  text reaches no compared output (the `-LibraryAsBlib` legs passed with the two texts
+  differing), so the goldens do not move for it.
+- **Modification.Name**: `UniMod:4` (TSV) vs `Carbamidomethyl` (blib): the TSV loader names a
+  modification by its UniMod entry when the id is known.
+- **Untyped peak placeholder**: the blib route's `Unknown` carried ordinal i+1 / charge 1, the
+  TSV route's 0/0; both are the bare `Unknown` now (pinned in `TestOnePeakPerMz`; the subset
+  libraries have no untyped peak to show it).
+`PrecursorData.ModifiedSequence` (TSV loader) is gone, unused. Gate: 639/639, inspection clean.
+Residual the round trip cannot close: an entry with two modifications on one residue (an
+N-terminal acetyl and an oxidized first methionine) is two `Modification` records from a .tsv
+and one summed record from a .blib; the text, masses and fragments agree, the record count does
+not. None of the regression libraries has one.
+
+Definitive sweep launched after the gate (log `golden-sweep-2.log`); the indicative sweep had
+finished with every leg PASS on all four datasets.
+
+**`/code-review medium` on the C# diff** (8 findings). Fixed: the task validity key carried
+only the blib reader term, so a TSV work directory scored under reader 3 would be adopted by a
+reader-4 search - `OspreyTask.TSV_READER_TERM` (`;tsvreader=4`) now keys TSV searches as
+`BLIB_READER_TERM` keys blib ones (`TaskValidityKeyTest` updated); a mass-bracket modification
+in a .tsv (`C[+57.021464]`, DIA-NN's notation) was not identified where the blib loader
+identifies the same text - `DiannTsvLoader.AddModification` now matches a numeric bracket by
+residue at the printed precision (`UniMod.Match`), as `BlibLoader.IdentifyModification` does;
+`BlibDecoyPairs.ByEntry` and `LibraryLoader.CheckLibraryContract` refuse entry/id lists of
+different lengths; the blib writer's unresolved-text guard counts modified residues rather
+than modification records (two records on one residue are one bracket); `BlibLoader.ToFragments`
+sorts only when a .blib is not already in m/z order; the tie-break comment points at the Rust
+twin. Dropped: the type-check report's choice between two stated labels at one m/z is
+row-order dependent (said in the comment; the typing is not); `PeaklessPrecursorException`
+reporting the 0-based id for a blib (TSV ids were never file rows either; the message carries
+the sequence).
+
+**A real defect the round trip then exposed**, through the mass-notation case added for the
+review fix: `DiannTsvLoader.StripFlankingChars` took the text between the FIRST and LAST dot
+as the `K.PEPTIDE.R` flanking notation, so `_KDC[+57.021464]PWPC[+57.021464]PK_` was cut to
+`021464]PWPC[+57` - one `+57` on the wrong residue, matched to Carbamidomethyl at precision 0.
+Every mass-notation library with two or more modified residues on a peptide loaded wrong
+(Carafe's UniMod notation has no dots, so the regression libraries never showed it). Flanks are
+now one residue and a dot at each end, nothing else; pinned in the round-trip test. The Rust
+loader's `strip_flanking_chars` had the identical rule and fix
+(`test_strip_flanking_chars_leaves_mass_brackets_whole`). Gates: C# 639/639 + inspection
+clean; Rust fmt/clippy/tests green.
+
+Cross-impl so far: Stellar `-Files Single` and `-Files All` OVERALL PASS at 1e-9 (on the
+pre-review binary); Astral refused by the stale-binary guard (source edited after the Release
+build) and reruns on the final build with the final sweep.
+
+**Committed (local, pushes after the final gates)**: pwiz 29c194f35c on
+`Skyline/work/20261016_bibliospec_io_reader` (16 source files + the four goldens); maccoss/osprey
+2d72cc4 on `fix/one-peak-per-mz-typed-from-mz` (8 files; PR to open with
+`gh pr create --repo maccoss/osprey`, body `ai/.tmp/sessions/20261017-isobaric/pr-body-rust.md`).
+Definitive sweep (`golden-sweep-2.log`): 49 legs PASS, 0 FAIL; counts Stellar 32,082,
+StellarLibDecoy 31,076, StellarGenDecoyEntrap 32,287, Astral 118,314 (the indicative run's
+Astral 118,456 predates the prefilter tie-break, which that dataset felt). Final gates on the
+final Release build running (`run-final-gates.ps1` -> `final-gates.log`): `regression-parallel
+-Dataset All`, then `Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All`. The #4860
+description update is built (`pr-body-new.md`, from `merge_pr_body.py`). Then: push both,
+open the Rust PR, `gh pr edit 4860 --body-file`, ask Brendan for the TeamCity go-ahead.
