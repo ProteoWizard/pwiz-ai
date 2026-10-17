@@ -8,7 +8,8 @@
 - **Status**: PR A in progress (Brendan, 2026-10-16: this sprint, ahead of the Osprey-Carafe PR 4)
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
-- **PR**: (pending)
+- **PR**: PR A https://github.com/ProteoWizard/pwiz/pull/4860 (open 2026-10-16; the TeamCity
+  Osprey Perf/Regression on `pull/4860` is still to be triggered, with Brendan's go-ahead)
 
 ## Goal
 
@@ -226,3 +227,13 @@ Large local blibs Osprey refuses (peptides under 6 residues): the 557 MB Bereman
 library and the 128 MB HeldDIA one under `Perftests`; webinar 27's tutorial data
 (`PeakBoundaryImputation-DIA.zip`, downloaded to `Downloads\Tutorials\PeakBoundaryImputation-DIA-download`)
 holds only a 28 MB blib; webinar 22's local copy has mzMLs and `PRTC.sky` only.
+
+**Final state**: three commits (38b36bdcb1 reader, cc883ef8bf review fixes, ee2775b9ba timing
+lines), every gate re-run green on the final code (BiblioSpec 147, Osprey 637 + inspection,
+CarafeSharp 113 + inspection, Stellar 5 PASS, chained PASSED), PR #4860 opened with the
+`pwiz` label. Next: Brendan's go-ahead for the TeamCity Osprey Perf/Regression on `pull/4860`;
+`/pw-respond 4860` if Copilot reviews; then PR B (the port's `LibReader`). Follow-up idea from
+the timings, for an Osprey PR: type spectra on the thread pool while the reader streams them,
+or carry typed ions in the blib, so a blib load approaches the cache read. Scratch to clean
+when done: `D:\test\osprey-runs\blibreader-ab\` (the A/B runs, spectra caches included) and
+the three `_bin` snapshots.
