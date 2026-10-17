@@ -10,10 +10,9 @@
 - **GitHub Issue**: (none yet)
 - **PR**: (none)
 - **Cherry-pick to release**: undecided
-- **Obsolete C++ branch**: `Skyline/work/20260809_mz5_continueonerror` in `C:\Dev\BugFix`, two
-  unpushed commits (`30e25b3e57`, `6fb292297c`). Every file it touches was deleted when #4658
-  retired the C++ tree, so it cannot be merged; it stays only as the reference for the port.
-  Delete the branch once the C# PR merges.
+- **Obsolete C++ branch**: `Skyline/work/20260809_mz5_continueonerror` (`30e25b3e57`,
+  `6fb292297c`, never pushed) deleted 2026-10-17 after its last unported fix (progress before
+  the fetch) landed in the C# branch; `C:\Dev\BugFix` is now a clean master checkout.
 
 ## Objective
 
@@ -270,6 +269,14 @@ mzXML, MGF, MS2 and CMS2 through `MSDataFile.Write` - the msconvert path, so for
 - Red before the fix (mzML index 2 vs 1; mzXML threw nothing). Proved MGF and MSn forwarding are
   covered by removing each from `MSDataFile.Write` in turn: red both times, restored.
 - Full MsData.Tests green (89); MsConvert.Tests green (18).
+
+**2026-10-17: ported the last C++ fix** (`e4556ce43a`). cpp `6fb292297c` moved MSn's progress
+broadcast before the fetch; in C# a spectrum skipped under the flag `continue`d past `Broadcast`
+in both MSn loops and in `MzmlWriter` too. All three now broadcast at the top of the loop (MSn
+also reports MS-level-filtered spectra). The cancel half of the cpp fix has no C# counterpart: no
+writer reads `Broadcast`'s status, and cancellation arrives as `OperationCanceledException`.
+New test `..._ContinueOnError_StillReportProgressForTheSkippedSpectrum` (red for mzML first, then
+MSn). MsData.Tests 92/92, MsConvert.Tests 18/18.
 
 **Follow-ups, not in this change**
 
