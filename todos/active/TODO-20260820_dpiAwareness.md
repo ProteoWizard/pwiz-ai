@@ -710,6 +710,15 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-16 - PR #4602 marked READY FOR REVIEW (22 commits, label skyline)
+
+Description finalized: TODO as a markdown link to pwiz-ai master, test plan
+includes the audit log fix. Branch history is public from here: update by
+merging master in, never rebase; review feedback as new commits.
+Open after merge: DigitalRune fork fix (own PR), deferred behavior-change
+cleanups (see the consolidation entry), tutorial gallery refresh (DPI-aware
+captures of 20 tutorials still date from Oct 5), port-side notes to Brendan.
+
 ### 2026-10-16 - Audit log row icons (developer-found in the AuditLog tutorial s-09/s-13) - dacb65e282, pushed
 
 The magnifier and undo icons in the audit log grid rows stayed 16 px while the
