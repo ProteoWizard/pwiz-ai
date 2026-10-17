@@ -511,10 +511,14 @@ Design as built (uncommitted until gates pass):
      `.calibration.json`. Test: `AssertSameFirstPassProduct` no longer excludes `cal` - it had listed
      it as "a view a fold cannot rebuild", which is how the gap passed. Red before, green after.
      Relayed in regression.ps1 mode 3 phase 2 + SubsetPipelineTest chain phase 2; docs 00, 14;
-     runner link table (PerFileScoring). NOT fixed (decision for Brendan): adding --model-diagnostics
-     AFTER Stage 3 ran still has no calibration view - the rows need Stage 3's in-memory matches and
-     Stage 3 skips that work when the flag is off. Options: always compute + write the row (Stage 3
-     cost: entrapment tally + match retention), or accept the gap and say so in the report. Same
+     runner link table (PerFileScoring). NOT fixed yet - and Brendan (2026-10-16) ruled it a BUG, not a
+     design choice: P16 requires a run WITHOUT the flag to store enough to reproduce the report fully
+     later. Adding --model-diagnostics AFTER Stage 3 ran still has no calibration view - the rows need Stage 3's in-memory matches and
+     Stage 3 skips that work when the flag is off. Required: always persist what the report needs.
+     Missing test (Brendan's plan had it backwards-incomplete): start from a run WITHOUT
+     --model-diagnostics, then (3) --task ModelDiagnostics and (4) the original command line + flag
+     must reproduce the WITH-flag run's diagnostics files exactly. Write it first; likely a
+     regression - bisect. Same
      class: the `model`, `featureHistEdges`, `modelComposite` views remain excluded from the fold
      comparison.
 - Former note: Pre-existing defects found (now fixed above):
