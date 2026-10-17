@@ -228,12 +228,137 @@ library and the 128 MB HeldDIA one under `Perftests`; webinar 27's tutorial data
 (`PeakBoundaryImputation-DIA.zip`, downloaded to `Downloads\Tutorials\PeakBoundaryImputation-DIA-download`)
 holds only a 28 MB blib; webinar 22's local copy has mzMLs and `PRTC.sky` only.
 
-**Final state**: three commits (38b36bdcb1 reader, cc883ef8bf review fixes, ee2775b9ba timing
-lines), every gate re-run green on the final code (BiblioSpec 147, Osprey 637 + inspection,
-CarafeSharp 113 + inspection, Stellar 5 PASS, chained PASSED), PR #4860 opened with the
-`pwiz` label. Next: Brendan's go-ahead for the TeamCity Osprey Perf/Regression on `pull/4860`;
-`/pw-respond 4860` if Copilot reviews; then PR B (the port's `LibReader`). Follow-up idea from
-the timings, for an Osprey PR: type spectra on the thread pool while the reader streams them,
-or carry typed ions in the blib, so a blib load approaches the cache read. Scratch to clean
-when done: `D:\test\osprey-runs\blibreader-ab\` (the A/B runs, spectra caches included) and
-the three `_bin` snapshots.
+**State at the PR's opening**: three commits (38b36bdcb1 reader, cc883ef8bf review fixes,
+ee2775b9ba timing lines), every gate green, PR #4860 opened with the `pwiz` label. Follow-up
+idea from the timings, for an Osprey PR: type spectra on the thread pool while the reader
+streams them, or carry typed ions in the blib, so a blib load approaches the cache read.
+Scratch to clean when done: `D:\test\osprey-runs\blibreader-ab\` (the A/B runs, spectra
+caches included) and the `_bin` snapshots.
+
+### 2026-10-16 (night) - the sweep: a .tsv library and its .blib must search identically
+Brendan: "the results should be identical", and PRs are costly, so fix what the new test
+uncovers on this branch. The new test is `regression.ps1 -LibraryAsBlib`: before the legs,
+the built Osprey exports each dataset's staged library with `--export-library` (with the
+dataset's decoy and manifest arguments, so a library-decoy library carries `DecoyPairs`) and
+every leg searches the .blib, with no manifest; mode 1 then holds the .blib search against the
+.tsv golden. Opt-in, refused with `-CreateGolden`, `Compare-BlibGolden -LibraryAsBlib` leaves
+`SpectrumSourceFiles.idFileName` (the library's own name) out of the comparison. First run on
+Stellar: FAIL, 48 issues, every score moved.
+
+Bisected with a `.libcache` differ (`ai/.tmp/sessions/20261016-blibreader/diff_libcache.py`,
+format v4, keyed on sequence + charge + modifications) on the two runs' caches. Three
+differences between the loaded libraries, and what was done about each:
+1. **474 fragment annotations** - all of them 237 isobaric pairs (`b4^2`/`y3^2` of `AQIHQFR` at
+   225.6266, `b6^2`/`b3`, `y5^2`/`y2`): Carafe lists two peaks at one m/z with their own
+   intensities, the typing hands the first its preferred ion, the library listed them the other
+   way. No "Differ" cases at all (the TSV loader's own report, with `FragmentTypeCheck` now
+   keeping library-choice examples too). Fixed by option 2 of the three Brendan weighed (sparse
+   annotations only where they disagree; typing authoritative, "what Skyline will do anyway";
+   a lossy golden of its own): `DiannTsvLoader.ApplyTyping` takes the typing's ion wherever it
+   names one, keeping a stated type only where the typing cannot reproduce it (no ion in reach,
+   or a loss / a ion / charge above 2). `TestStatedTypesAreComparedWithTyping` updated.
+2. **Fragment order** - every entry: .tsv row order (Carafe's: intensity descending) vs the
+   .blib's m/z order. Reaches the search through tie-breaks only (`SelectTopFragmentIndices`
+   keeps library order on equal intensities and returns a short entry in it; `TypeFragments`
+   breaks intensity ties by index), but Carafe prints four decimals, so ties are common. Fixed
+   by loading .tsv fragments in m/z order (stable), as the blib stores them, before typing.
+   Brendan: in principle agreed - Skyline's `MassListImporter` loads a precursor at a time and
+   derives fragment matches once it has all of them, untangling interleaved light/heavy SIL
+   fragments in SRM lists the same way; accumulating a precursor's rows costs no significant
+   memory. The loader already accumulated per precursor; the sort sits at that point.
+3. **Modification text** - `C[UniMod:4]` / name `UniMod:4` from the .tsv vs `C[+57.0215]` /
+   `Carbamidomethyl` from the .blib. Inert for these libraries (one modification, nothing sorts
+   across the notations; the output text is built from the masses). Left as is; a library with
+   several modifications would be the place to revisit (`PerFileScoringTask` and
+   `ConsensusRts` order by the text).
+
+   Astral then showed the last asymmetry of that rule: 90 selenocysteine peptides
+   (`AEENITESCQUR`), whose fragments the typing cannot name (no residue mass for U, by design
+   in `PeptideFragmentMass`), kept their stated `y` labels on the .tsv route and were Unknown
+   on the .blib route - 51 issues, every Astral score moved. So the TSV loader now types every
+   fragment from m/z exactly as `BlibLoader` does and the columns are a report only; a peak the
+   typing cannot name is Unknown on both routes. (A residue mass for U would type them on both
+   routes alike - a later improvement, not an asymmetry.) Brendan: add the U mass now, so
+   the tools calculating peptide and fragment masses agree; done in `PeptideFragmentMass`
+   (150.953636, C3H5NOSe from the table's own atomic masses). **Follow-up (Brendan)**: Osprey
+   should compute residue masses from the atomic mass table already in
+   `pwiz_tools/Shared/CommonUtil/Chemistry` (`AminoAcidFormulas`, the formulas Skyline
+   calculates from, which is what lets it do isotope distributions), rather than keep its own
+   six-decimal table; CarafeSharp has its own `AlphabaseMasses` too, and the BiblioSpec port
+   its own. Whether the four tools (Skyline, Osprey, Carafe, BiblioSpec) can share one
+   sequence mass calculator is on Brendan's list; Skyline's handles every UniMod modification
+   and neutral and charged losses and may be too much to extract, but agreement is the
+   priority. Precedent (Brendan): Skyline was itself normalized onto the shared chemistry,
+   under `BioMassCalc`, to gain Nick's isotope distribution calculator, which he first wrote
+   for Topograph and which the two tools then shared - the same move Osprey would make. The
+   values Skyline uses: monoisotopic masses and abundances in
+   `pwiz.Common.Chemistry.IsotopeAbundances` (CommonUtil), average masses in
+   `Skyline.Util.BioMassCalc`. The U entry added here (150.953636) is C3H5NOSe from the
+   `IsotopeAbundances` values (150.9536356), so it agrees with Skyline at Osprey's six decimals.
+   Measured difference per residue, Osprey's table vs Skyline's calculation
+   (`ai/.tmp/sessions/20261016-blibreader/residue_masses.py`; note `IsotopeAbundances.Default`
+   uses Skyline's traditional C/H/N/O/P/S values, NIST only for the other elements): Osprey's
+   table is exactly Skyline's values rounded to six decimals, every residue within 5e-7 Da
+   (largest T and C, 4.95e-7, 0.005 ppm of the residue); ten residues at the bound move a
+   1000 Da peptide by 0.005 ppm.
+   Then Brendan: "if Osprey is calculating from chemical formulas and atomic masses, why not
+   just use the values in IsotopeAbundances" - done: `PeptideFragmentMass` now builds its
+   residue masses from `AminoAcidFormulas.Default` (the 20 + U), and `NeutralLoss`'s water,
+   ammonia and phosphoric acid come from `Molecule.Parse` summed over `IsotopeAbundances.Default`.
+   Every fragment m/z moves by up to 5e-7 Da, so all four goldens are recaptured once more.
+   `FragmentLadderTest.AssertResidueMassesAgreeWithCommonChemistry` pins the calculation to the
+   values the shared tables give today (C 103.009184505, T 101.047678505, U 150.953635605,
+   water 18.0105647, ammonia 17.026549105), so a change to the shared chemistry shows up as a
+   deliberate change. **The proton stays 1.007276** (Brendan: maintain consistency with
+   Skyline, not something to change tonight): three proton values live in the tree -
+   `BioMassCalc.MassProton` 1.007276 (Skyline's peptide and fragment m/z, the BiblioSpec port,
+   Osprey), `AminoAcidFormulas.ProtonMass` 1.00727649 (CommonUtil's isotope distributions; the
+   commented-out line in `BioMassCalc` shows Skyline was meant to adopt it and never did),
+   alphabase's 1.007276467 in CarafeSharp, with NIST's 1.007276466879 in a comment. Unifying
+   them is a separate sprint.
+   CarafeSharp keeps its `AlphabaseMasses` (its Carafe-parity gates compare against Carafe's
+   Java output); the BiblioSpec port keeps its own; those are the remaining two of the four.
+   **Where the four tools stand** (monoisotopic element masses; residues are formulas over them):
+   - Skyline and now Osprey: `IsotopeAbundances.Default` - the traditional values for C, H, N,
+     O, P, S (H 1.007825035, N 14.003074, O 15.99491463, S 31.9720707), NIST for the rest
+     (Se 79.9165218); proton `AminoAcidFormulas.ProtonMass` 1.00727649.
+   - CarafeSharp (`AlphabaseMasses`, alphabase's table = current NIST): H 1.00782503223,
+     N 14.00307400443, O 15.99491461957, S 31.9720711744, Se 79.9165218; proton 1.007276467.
+     Against Skyline: a few 1e-8 per residue, 4.7e-7 (0.005 ppm) through sulfur for C and M,
+     proton 2.3e-8. Cannot switch without Carafe (Java) switching, or a 1e-7-level parity
+     tolerance.
+   - BiblioSpec port (`AminoAcidMasses`, the C++ values, kept for the reference checks):
+     H 1.00782503521, N 14.0030740052, O 15.9949146221, S 31.97207069, P 30.97376151; proton
+     1.007276. Against Skyline: residues within about 1e-8, proton 4.9e-7.
+   Brendan, on Skyline's traditional values: disappointing that Skyline may have fallen behind
+   the standard values. The hold looks deliberate (`traditional_Skyline_CHONPS`, with the
+   `ParseIsotopeAbundancesFromNIST` tool beside it), and the gap is thousandths of a ppm. The
+   way to unify three of the four: move Skyline's C, H, N, O, P, S to NIST (a test-expectation
+   sweep); Osprey follows automatically now that it computes from the shared table, and
+   CarafeSharp's alphabase table is NIST already. Only the BiblioSpec port's C++ values would
+   remain.
+
+After 1 and 2 the .blib search equals the .tsv search in every table. **The goldens move**,
+and by more than the changes suggest: Stellar precursors at 1% FDR went 31,720 (old) ->
+31,253 (typing only) -> 30,534 (typing + m/z order). An experiment with m/z DESCENDING order
+gave 31,175, so the count swings about 2% with nothing but the order ties are broken in: a
+tie-break noise band in the pipeline's identification count, not m/z order being worse.
+Worth its own follow-up (order-independent tie-breaks in the top-6 selection and the typing,
+or a look at why the FDR estimate is that sensitive); not this PR. Goldens recaptured with
+`-CreateGolden` on the final code (shared-chemistry residue masses, proton 1.007276), each
+then checked with `-LibraryAsBlib`: Stellar 31,720 -> 32,110 (PASS), StellarLibDecoy 31,392
+-> 31,015 (PASS; library decoys, so the mass change touched nothing), StellarGenDecoyEntrap
+31,750 -> 31,909 (PASS), Astral 117,236 -> 118,271 (check running at the time of writing).
+Stellar's count over the night's loader variants: 31,720 (old), 31,253 (typing only), 30,534
+(typing + m/z order), 31,175 (m/z descending), 30,840 (shared masses, proton 1.00727649),
+32,110 (shared masses, proton 1.007276) - the tie-break noise band, about +/-2%.
+
+**What the .blib still cannot carry**: on StellarLibDecoy the .blib search matched the golden
+in every leg but mode 1b, the model diagnostics' paired entrapment FDP (0.00721 vs 0.00809).
+That statistic pairs each entrapment peptide with its original target, which the FDRBench
+manifest describes (`peptide_pair_index` groups target, p_target, decoy, p_decoy) and
+`DecoyPairs` does not (its `PairID` joins a target with its decoy only). So the switch keeps
+the manifest on the .blib legs - the loader ignores it for pairing when the library has the
+table, the diagnostics still read it. For a .blib to replace a .tsv plus manifest outright,
+`DecoyPairs` would need the entrapment partner too (a fourth-row group id, or a column naming
+the original target): a schema and CarafeSharp writer change, for a later PR.
