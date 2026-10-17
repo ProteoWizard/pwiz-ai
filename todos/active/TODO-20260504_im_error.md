@@ -481,5 +481,5 @@ Plan:
 - Long-standing request (skyline.ms #774, opened 2021-03-04 by Brian Pratt).
 - POST-RELEASE PATCH phase: enhancement is not for the release branch, no cherry-pick.
   Lands on the .NET 10 port branch (which is to become master).
-- IMoffset branch (`wip/im-window-offset`) is conceptually related (IM filter window
+- IMoffset branch (`Skyline/work/20261017_asymmetric_im_windows`, was `wip/im-window-offset`) is conceptually related (IM filter window
   machinery) but does not overlap with this error-measurement work.
