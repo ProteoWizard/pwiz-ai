@@ -134,6 +134,17 @@ If bug present → it's before the return
 If bug absent → it's after the return
 Repeat to isolate.
 
+**Judge a loop by the information its indicator returns, not only by its length.**
+A loop that iterates on a number from the END of a pipeline (an identification count,
+a golden PASS/FAIL) is "guess-and-test" even with careful hypotheses: the indicator is
+one scalar summed over every stage, so each run returns about one bit against a
+hypothesis space the size of the pipeline, and it cannot converge. The fix is to
+bisect the problem space, which shortens the loop and makes each measurement
+informative at the same time: cut at the first stage where the change acts, and
+compare there with a check that names the differing field. The Osprey instance
+(Rust vs C#, `.tsv` vs `.blib`) is "Cross-impl bisection methodology" in
+`ai/docs/osprey-development-guide.md`.
+
 ## Related Skills
 
 - **leak-debugging** - Handle leaks, memory leaks, GC leak tracker failures

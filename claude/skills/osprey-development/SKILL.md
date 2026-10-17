@@ -227,6 +227,15 @@ and `README.md` are the authoritative gate references.
     `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`
     (`-Dataset All` before a behavior/perf-sensitive merge). Also the overnight
     TeamCity gate.
+  - **Changing what a loader makes of a library** (peaks, typing, ids, modification
+    text, either reader)? The first check is
+    `SubsetPipelineTest.TestLibraryLoadsIdenticallyFromTsvAndBlib` - the subset `.tsv`
+    loaded, written to a `.blib`, loaded back, every field of every entry compared,
+    half a second, and it names the field that differs. Iterate on THAT; the regression
+    sweep (40 minutes, a count) comes after and cannot locate a loader difference. The
+    general rule - bisect to the first stage where two routes can diverge and measure
+    there - is "Cross-impl bisection methodology" in
+    `ai/docs/osprey-development-guide.md`.
   - **Adding coverage for pipeline behavior** (caching, resume, task boundaries,
     sidecar contracts, route markers, which files a run writes)? It goes in
     `Osprey.Test\SubsetPipelineTest.cs`, NOT a new `regression.ps1` leg or Stellar

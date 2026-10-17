@@ -1116,6 +1116,26 @@ counts or summary statistics** -- they hide the structure of the
 drift. Bisect stage-by-stage, prove each matches via `diff`, never
 compare downstream values before upstream is proven identical.
 
+**The method is general: whenever two routes must produce the same result, find
+the first stage where they can diverge and measure THERE, with a check that names
+the differing field, before any long gate runs.** "Two routes" has meant two
+implementations (Rust vs C#, the stage dumps below), and it equally means two
+SOURCES into one implementation (a `.tsv` library vs its `.blib` export, where the
+first stage that can diverge is the library load and the check is
+`SubsetPipelineTest.TestLibraryLoadsIdenticallyFromTsvAndBlib`: load, write, load
+back, compare every field of every entry, half a second). A loop that instead
+iterates on an end-of-pipeline indicator - the precursor count at 1% FDR, a golden
+PASS/FAIL - is **guess-and-test** (Brendan's term): it is long, AND its indicator
+carries almost no information, one scalar summed over library load, typing, decoys,
+extraction, scoring and two FDR passes, so each iteration returns about one bit
+against a hypothesis space the size of the pipeline, and no hypothesis discipline
+makes it converge. Bisecting fixes both at once: the loop shortens and every
+iteration returns a root cause. This correction has been needed twice, six months
+apart (the original port, 2026-04; the `.tsv`/`.blib` identity work on #4860,
+2026-10-17), both times by the developer, both times after a session had spent
+hours on the count. When you notice yourself re-running a 40-minute gate to see
+whether a number moved, stop and write the cut.
+
 ### Bisection walk order
 
 Walk the checkpoints in sequence; advance only after the previous
