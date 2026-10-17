@@ -366,6 +366,22 @@ design question for the morning); the removed `numPeaks` inference (as before); 
 `RetentionTimes` range assertion in the subset tests (an exact count would pin data noise); the
 26-column reconciler scan (as before).
 
+**Brendan on the isobaric pairs (2026-10-17, morning)**: a mass spectrometer cannot say which
+of two isobaric fragments contributed how much to one peak (CPTAC's "auto-interference" with
+light/heavy pairs; ion-trap vs triple-quad secondary fragmentation, PMC3227787). The true
+representation is ONE peak with the summed intensity and BOTH annotations, as Skyline's spectrum
+annotation and `RefSpectraPeakAnnotations` (several rows per peak index) already allow. What the
+sweep did instead: kept Carafe's two peaks at one m/z and assigned them two ions consistently on
+both routes. Consequences left in place: two identical XICs at one m/z (two top-6 slots, double
+weight in coelution features) and a decoy with two fragments at two m/z carrying Carafe's split
+intensities. **First follow-up PR, ahead of the DecoyPairs group id**: at library load on both
+routes merge fragments within the typing's 1e-5 Th into one peak with summed intensity and the
+set of ions in reach; `FragmentAnnotation` on a fragment becomes a small list (libcache version
+bump); the decoy generator makes one decoy fragment per annotation (decide: full summed intensity
+or a share); the export writes the summed peak once with its annotations in
+`RefSpectraPeakAnnotations` for multi-annotated peaks only (the sparse form of option 1, now the
+right use of the table). Goldens move again (237 HeLa pairs and Astral's).
+
 **End of session (2026-10-17 ~01:30)**: five commits pushed, last 097b7b63a9; TeamCity Osprey
 Perf/Regression build 4223785 queued on `pull/4860` behind four Skyline perf builds (Brendan's
 go-ahead given; do not re-trigger without asking). Merge pending his review and approval.
