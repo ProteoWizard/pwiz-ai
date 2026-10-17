@@ -407,6 +407,22 @@ ion's m/z; discuss); `BlibSpectrum`/export writes the merged peak once and
 `BlibLoader` reads those rows back when present (they are Osprey's own). Then `-CreateGolden`
 on all four, `-LibraryAsBlib` on all four, gates, TeamCity.
 
+**Completion criterion (Brendan, 2026-10-17)**: every requirement for a normal merge is met
+(build 4223785 green), but the PR is NOT merged, because it moved goldens, the two changes
+above move them again, and there is no paired `maccoss/osprey` change yet. #4860 completes
+only together with a **paired maccoss/osprey PR that passes the cross-impl test**
+(`ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1`, Stellar + Astral; tolerance in
+`Compare/README.md`; build with `Compare/Build-OspreyRust.ps1 -Fmt -Clippy -RunTests`). Rust
+side to port, in `C:\proj\osprey` (upstream conventions: LF, cargo fmt + clippy, no Skyline
+commit format; Rust TODOs are `TODO-OR-*.md`): fragments in m/z order at load; typing from m/z
+authoritative over the TSV's labels (FragmentType/Number/Charge a report); residue masses equal
+to the C# values (Skyline's traditional C/H/N/O/S, NIST Se, U = 150.9536356050, proton 1.007276,
+water 18.0105647, ammonia 17.026549105) - the Rust table is the six-decimal one, so this is a
+1e-7-level change there too; then the two new rules (order-independent tie-breaks; summed
+isobaric peaks with every ion in reach, one decoy fragment per annotation at the full sum).
+The next session carries #4860 to that end: C# changes -> goldens -> Rust port -> cross-impl
+green -> TeamCity on `pull/4860` -> both PRs merged with Brendan's approval.
+
 **End of session (2026-10-17 ~01:30)**: five commits pushed, last 097b7b63a9; TeamCity Osprey
 Perf/Regression build 4223785 queued on `pull/4860` behind four Skyline perf builds (Brendan's
 go-ahead given; do not re-trigger without asking). Merge pending his review and approval.
