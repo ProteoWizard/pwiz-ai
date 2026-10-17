@@ -382,6 +382,31 @@ or a share); the export writes the summed peak once with its annotations in
 `RefSpectraPeakAnnotations` for multi-annotated peaks only (the sparse form of option 1, now the
 right use of the table). Goldens move again (237 HeLa pairs and Astral's).
 
+**Decision (Brendan, 2026-10-17 morning, TeamCity build 4223785 green)**: #4860 stays open as
+the checkpoint and takes two more changes before merge, because both move all four goldens
+and a PR's golden diff is net: (1) **summed isobaric peaks with both annotations** (above);
+(2) **order-independent tie-breaks** in `SelectTopFragmentIndices` and `TypeFragments` (ties on
+intensity broken by m/z, not by input index), so the identification count no longer depends on
+a library's row order. Then one Perf/Regression run and merge. The `DecoyPairs` group id is the
+NEXT PR (the format is the plan of record on master but incomplete; the gap is tolerable while
+the manifest stays on the legs). The mass sprint (Skyline to NIST, proton onto the shared
+constant) is NOT this sprint: Skyline has shipped to thousands of users for 15 years and its
+proton cannot change lightly, which is why it is still 1.007276 while the code carries more
+precise values.
+
+Design notes for (1): merge at library load on both routes (`DiannTsvLoader` after the m/z
+sort, `BlibLoader.ToFragments`) - fragments within `FragmentTyping.TIE_TOLERANCE` (1e-5 Th)
+become one fragment with the summed intensity; typing lets ONE peak claim EVERY primary ion in
+reach rather than one; `FragmentAnnotation` on a `LibraryFragment` becomes a small list (or a
+primary plus `Also`); libcache `VERSION` 4 -> 5 and both `READER_VERSION`s bump;
+`DecoyGenerator.RecalculateFragments` emits one decoy fragment per annotation (decide the
+intensity: full sum each, or divided - Brendan's physics says the measurement is one summed
+peak, so a decoy that is a "measurement" of the reversed sequence would show the sum at each
+ion's m/z; discuss); `BlibSpectrum`/export writes the merged peak once and
+`RefSpectraPeakAnnotations` rows only for peaks with more than one ion (the sparse form);
+`BlibLoader` reads those rows back when present (they are Osprey's own). Then `-CreateGolden`
+on all four, `-LibraryAsBlib` on all four, gates, TeamCity.
+
 **End of session (2026-10-17 ~01:30)**: five commits pushed, last 097b7b63a9; TeamCity Osprey
 Perf/Regression build 4223785 queued on `pull/4860` behind four Skyline perf builds (Brendan's
 go-ahead given; do not re-trigger without asking). Merge pending his review and approval.
