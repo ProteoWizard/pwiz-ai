@@ -353,6 +353,19 @@ Stellar's count over the night's loader variants: 31,720 (old), 31,253 (typing o
 (typing + m/z order), 31,175 (m/z descending), 30,840 (shared masses, proton 1.00727649),
 32,110 (shared masses, proton 1.007276) - the tie-break noise band, about +/-2%.
 
+**Second `/code-review medium`** (after the sweep, 10 findings). Fixed: both readers'
+`READER_VERSION` bumped (TSV 2 -> 3, blib "2" -> "3") and the TSV `.libcache` term keyed on the
+fragment tolerance like the blib's (`DiannTsvLoader.CacheTerm`), so caches typed under the old
+rules or masses are re-read; a `.tsv` with no fragment type column is typed from m/z like any
+other (the early return typed nothing); `ReadDecoyPairs` reads a table without `Method`;
+`FragmentTypeCheck` keeps library-choice examples in their own list so `--verbose` still shows
+the peaks that disagree; `BlibLoader`'s cysteine constant comes from `PeptideFragmentMass`.
+Dropped: the TSV task validity key carrying no reader term (the daily version stamp already
+refuses a resumed stage from another build, and a bare `tsv_reader` term in the task key is a
+design question for the morning); the removed `numPeaks` inference (as before); the
+`RetentionTimes` range assertion in the subset tests (an exact count would pin data noise); the
+26-column reconciler scan (as before).
+
 **What the .blib still cannot carry**: on StellarLibDecoy the .blib search matched the golden
 in every leg but mode 1b, the model diagnostics' paired entrapment FDP (0.00721 vs 0.00809).
 That statistic pairs each entrapment peptide with its original target, which the FDRBench
