@@ -1,11 +1,11 @@
 # TODO-20261016_bibliospec_io_unification.md
 
 ## Branch Information
-- **Branch**: not started. Each PR below gets its own `Skyline/work/YYYYMMDD_...` branch off `master`,
-  the first after #4855 merges.
+- **Branch**: `Skyline/work/20261016_bibliospec_io_reader` (PR A). Each later PR gets its own
+  `Skyline/work/YYYYMMDD_...` branch off `master`.
 - **Base**: `master`
 - **Created**: 2026-10-16
-- **Status**: Planned (Brendan, 2026-10-16: next sprint, ahead of the Osprey-Carafe PR 4)
+- **Status**: PR A in progress (Brendan, 2026-10-16: this sprint, ahead of the Osprey-Carafe PR 4)
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: (pending)
@@ -141,3 +141,88 @@ PR A can start from master.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261016_bibliospec_io_reader.md` before starting work.
+
+### 2026-10-16 (evening) - PR A coded, unit gates green
+Branch `Skyline/work/20261016_bibliospec_io_reader` off master at 9c3712129e.
+
+**BiblioSpec.IO** (`pwiz_tools/Shared/BiblioSpec/BiblioSpec.IO`):
+- `BlibReader` (new): `Info` (LibInfo), `HasTable`, `CountSpectra`, the small tables whole
+  (`ReadSourceFiles`, `ReadScoreTypes`, `ReadMetadata`, `ReadDecoyPairs`, `ReadProteins` as an
+  `ILookup` by RefSpectra id), streaming `ReadSpectra(withPeaks, partitionCount, partitionIndex)`
+  and `ReadRetentionTimes(...)` with Nick's `id % N = k` partitioning, and by id `ReadPeaks`,
+  `ReadModifications`, `ReadAnnotations`. Two constructors: a path (own read-only connection) or
+  a caller's `SQLiteConnection` (Skyline's pool later). Column detection through
+  `PRAGMA table_info`, so a legacy library reads with the record defaults for what it lacks.
+- `BlibLibraryRecords` (new): `BlibLibraryInfo`, `BlibSourceFile`, `BlibRetentionTimeRecord`,
+  `BlibDecoyPair` (moved here from Osprey, `Method` added), `BlibPeaks`.
+- `BlibSqlite` (new, internal): `OpenReadOnly`, `TableExists`, `ColumnNames`; BlibWriter and
+  BlibMetadata use it too.
+- `BlibSpectrumRecord.Id`; `BlibWriter.DecodeBlob` refuses a blob that inflates to the wrong
+  length; `DecodeIntensities` accepts eight bytes per peak (float64, the Rust reader's leniency).
+- Tests: `BiblioSpec.Tests/BlibReaderTests.cs` (writer round trip through every call; a
+  hand-made schema-0 library with missing tables and columns and float64 intensities).
+
+**Osprey**: `BlibLoader` reads through `BlibReader.ReadSpectra(true)` / `ReadProteins`; its own
+inflate (`TryZlibDecompress`, `DecodeBlibPeaks`, `DecompressPeakBlobs`) is gone, `ToFragments`
+keeps the base-peak scaling. `BlibDecoyPairs.Read` wraps `BlibReader.ReadDecoyPairs`, keyed by
+`long`. `READER_VERSION` unchanged (output must be byte-identical). Two unused resources removed
+(en/ja/zh-Hans + Designer).
+
+**CarafeSharp**: `PairingManifestReconciler.ReadBlibSequences` through `ReadSpectra(false)`;
+`CarafeSharp.Proteome` references BiblioSpec.IO instead of the SQLite package directly.
+
+**Gates**: BiblioSpec 147/147 (145 + 2 new), Osprey Debug 637/637 + inspection clean,
+CarafeSharp 113/113 + inspection clean, Osprey `regression.ps1 -Dataset Stellar` 5 PASS (mode 1
+vs golden byte-identical, 285 s across 10 phases), CarafeSharp `regression.ps1 -Leg Chained`
+PASSED (`TestResults/regression/stellar-chained-cpu-20261016-181627`, run with `-NoBuild
+-OspreyExe D:/test/osprey-runs/_bin/20261016-blibreader/Osprey.exe`, a snapshot of the
+regression's own Release build, so the two gates ran concurrently without colliding on the
+build tree; pass that path with forward slashes from the Bash tool, which eats backslashes).
+Committed as 38b36bdcb1.
+
+**Deferred to PR C** (noted in the reader's docs): the schema 2-5 ion mobility column names in
+`RetentionTimes` (`driftTimeMsec`, `ionMobilityValue`, ...) read as null; the annotation's
+small-molecule text columns are not on `BlibPeakAnnotation` yet.
+
+**Review** (`/code-review medium`, 10 findings): fixed in cc883ef8bf - the peaks join and
+`ReadPeaks` on a library without `RefSpectraPeaks`, table presence cached, a bad partition
+refused at the call, compressed float64 intensities, a blob neither raw nor zlib refused as
+library data, CarafeSharp's missing-table IOException, a NULL `peptideModSeq` read as unmodified.
+Dropped: the removed `numPeaks` inference (the format's contract, trusted by Skyline and the
+port too), the 26-column reconciler scan (a one-off step), the compressed-length-equals-8n
+ambiguity (no writer of ours keeps a compressed blob larger than raw).
+
+**The blib read path was NOT covered by the Osprey regression**: every regression dataset
+searches a TSV library (`carafe_spectral_library.tsv`, the HeLa filtered TSV). Covered instead
+by an A/B on the HeLa TSV exported with `--export-library` as a 130 MB blib (242,841
+precursors), master build vs branch build, under `D:\test\osprey-runs\blibreader-ab\`
+(`_bin\20261016-master`, `_bin\20261016-blibreader`, `_bin\20261016-blibreader-timing`):
+the `.libcache` of the two builds is byte-identical (104,733,099 bytes) and the search
+`output.blib` identical in every table (compare_blib.py; only the work-dir path in
+`LibMetadata.osprey.command` differs).
+
+**Load timings** (Brendan's question: is the blib fast enough to drop the `.libcache`?).
+Measured with `--export-library --perf-stats` and the two `[TIMING]` lines added to
+`LibraryLoader` in this PR (`Library parse: ...` with the blib's split, `Library cache read: ...`),
+logs under `D:\test\osprey-runs\blibreader-ab\time2\`:
+
+| HeLa 242,841 precursors | seconds |
+|---|---|
+| TSV parse | 6.25 |
+| blib parse, total | 3.35 (both builds, 3 s at whole-second resolution) |
+| blib: file read + peak decode | 0.80 |
+| blib: modification parse + peak typing | 2.43 |
+| .libcache read | 0.59 |
+
+Prosit tutorial blib (151,009 precursors, 170 MB): blib 4.30 s = read 1.52 + typing 2.70;
+cache 0.65 s. So the SQLite read is already within tenths of the cache; what keeps the blib
+from replacing the cache is Osprey's per-spectrum work (FragmentTyping from m/z), which is
+pure and per-spectrum and could run on the thread pool while the reader streams, interning
+kept in row order for identical output. An Osprey follow-up, not BiblioSpec.IO. The
+`.libcache` file is not interned on disk: every entry writes its own strings; the interner
+runs at read for the cache, the blib and the TSV alike.
+
+Large local blibs Osprey refuses (peptides under 6 residues): the 557 MB Bereman redundant
+library and the 128 MB HeldDIA one under `Perftests`; webinar 27's tutorial data
+(`PeakBoundaryImputation-DIA.zip`, downloaded to `Downloads\Tutorials\PeakBoundaryImputation-DIA-download`)
+holds only a 28 MB blib; webinar 22's local copy has mzMLs and `PRTC.sky` only.
