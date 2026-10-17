@@ -644,3 +644,64 @@ legs, review, PR text, TeamCity. Handed off at 10% context (measured).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261017_bibliospec_io_reader_pairing.md` before starting work.
+
+### 2026-10-17 (evening) - every entry a pairing id; the .blib legs manifest-free end to end
+Brendan's end-of-afternoon rule implemented: `LibraryEntry.PairingId` is a `uint` every entry
+has (libcache v6), `PairingIds.Assign` is the one assigner (a .blib's DecoyPairs rows, then
+the manifest, then Met-clip reconstruction, then a standalone index), and "excluded" is a
+property of the group - `PairingIds.ExcludedEntrapment`: an entrapment peptide whose id no
+original target shares, in a library that pairs entrapment at all (a .tsv with no manifest
+pairs nothing and excludes nothing, which keeps `EntrapmentPairingTest`'s no-manifest block
+as it was; the reviewer flagged that guard as a heuristic - see "Decisions for Brendan").
+
+Three defects in the afternoon's commit, all fixed: (1) the .blib route ran `Assign` with no
+manifest AFTER the table set the ids and overwrote every one with a standalone index; (2) the
+generated-decoy route read neither the manifest nor the table, so an entrapment library with
+generated decoys had no pairing; (3) the export wrote no DecoyPairs for a decoy-less entrapment
+library (the StripDecoys dataset). Now the table is read on every .blib load that has one, the
+manifest once per load (for a .tsv only; a .blib with a table logs that the manifest is not
+read), `Assign` runs once after the decoys are finished, and the export writes a row per entry
+of a decoy or entrapment library. One decoy-side test (`EntrapmentLibraryClassifier.IsDecoySide
+(entry)`: flag or accessions) now serves `Build`, `PairingIds`, the FDRBench manifest writer
+and the diagnostics - a generated decoy is flagged but carries `DECOY_`, not `decoy_`.
+
+Tests: the library-decoy subset through `LibraryLoader.Load` (.tsv + manifest vs its .blib
+alone, pairing ids and `EntrapmentPairing.Build` compared) in
+`TestLibraryLoadsIdenticallyFromTsvAndBlib` - a mutation restoring defect (1) fails it with
+2,142 differences; `CarafeBlibLibraryTest` with `Osprey.Test/TestData/CarafeSubset.zip` (the
+CarafeSharp subset regression's .blib, 1,896 precursors with a DecoyPairs row each, plus the
+manifest it was built from): the Carafe .blib loaded alone gives every entry the manifest's
+pairing id, pairs every decoy, and `Build` equals the manifest. `/code-review medium`: 8
+findings; fixed 2, 4, 5, 7, 8 (one manifest decision, shared decoy-side test, Met-clip
+classification only from the manifest when there is one, explicit ids in the writer test);
+dropped 3 (reading DecoyPairs on every .blib load is the point) and 6 (ApplyToLibrary stays
+the supplied-decoy route's; doc reworded); 1 is a decision (below).
+
+Gates: Osprey 640 + inspection clean. Regressions on the final build:
+`-Dataset StellarLibDecoy -LibraryAsBlib` PASSED every leg;
+`-Dataset StellarGenDecoyEntrap -LibraryAsBlib` every leg PASS except mode 1b
+`pass1/pass2.experiment.pairedFdp` (3.6e-5 / 3.1e-5 off the golden); `regression-parallel`
+(all four datasets, .tsv legs) 47 PASS / 2 FAIL in 29:38 wall, the two failures the same two
+values of the same dataset, to the last digit on both routes (run 0.01158881178911224 vs
+golden 0.011624579726732956). Logs: `ai/.tmp/sessions/20261017-pairing/`.
+
+**Why that golden moves (root cause, measured)**: `StellarGenDecoyEntrap`'s spec in
+`regression.ps1` has no `Manifest`, so its legs never pass `--decoy-pairing-manifest` and its
+paired FDP has always been the degenerate no-pairing value (every peptide its own group; the
+estimator keys a target by (pair index, charge), so no entrapment finds one). The old
+no-manifest `Build` numbered generated-decoy SEQUENCES as peptides; this library holds 116
+target/entrapment pairs that are each other's C-term-preserving reversal, so a generated decoy
+could hand a base id its entrapment partner's index and make an accidental pair. The new code
+has none: on the exported library, 359,296 sequences, 359,296 pairing ids, no (id, charge) key
+shared by a target and an entrapment peptide.
+
+**Decisions for Brendan**: (a) the `StellarGenDecoyEntrap` golden: recapture as is, or first add
+`Manifest = 'osprey_library_db_pairing.tsv'` to its spec so the paired FDP is real there (the
+better fix; mode 12's emitted manifest would then carry real pairs too); (b) the no-manifest
+guard in `ExcludedEntrapment` (review finding 1): the pure group rule would exclude every
+entrapment peptide of a .tsv searched with no manifest, which changes the test's no-manifest
+expectations he asked to hold; (c) `entrapment_method` in LibMetadata - the method is known at
+CarafeSharp's `-build_entrapment_fasta` stage only, and the manifest is the one file that
+reaches the library build, so carrying it means a manifest column (all three readers find
+columns by name; FDRBench never reads Carafe's manifest, Osprey rewrites its own) or a library
+command flag. Not done.
