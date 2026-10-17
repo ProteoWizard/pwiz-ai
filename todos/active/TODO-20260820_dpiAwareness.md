@@ -710,6 +710,29 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-16 - Audit log row icons (developer-found in the AuditLog tutorial s-09/s-13) - dacb65e282, pushed
+
+The magnifier and undo icons in the audit log grid rows stayed 16 px while the
+row scaled. TextImageCell paints the column's images with DrawImageUnscaled at
+their own size and hit-tests the same rectangle; AuditLogColumn builds the
+images in its ctor, where no grid exists to take a DPI from. Fix:
+TextImageColumn.DisplayImages resamples Images once, lazily, from
+DataGridView's DPI; the cell uses it for painting and hit-testing. Also
+covers SpectrumFilterDataGridViewColumn. First attempt made the icons "way
+oversized" (developer): the cell painted with DrawImageUnscaled, which sizes by
+the image's DPI metadata - 96 on the resampled copy drawn on a 144-DPI grid
+= inflated 1.5x again. (The ORIGINAL small-icon symptom was the same trap the
+other way: new Bitmap(Resources.X) in a DPI-aware process carries the screen
+DPI, so DrawImageUnscaled drew it at 16 px.) Now the cell draws into its
+pixel rectangle, as DpiUtil.DrawImageCentered does for the trees. Verified on
+AuditLog tutorial captures at 150% (gallery refreshed; old set in
+tutorials/AuditLog/after-oct5). Gate TestAuditLog + TestAuditLogSaving,
+dpiaware=on and default: PASS.
+Rule of thumb: never DrawImageUnscaled a bitmap in a DPI-aware process; give
+DrawImage the destination rectangle.
+Lesson for the sweep: the form sweep captures AuditLogForm empty (no rows), so
+row-level custom painting in grids is only visible in the tutorial captures.
+
 ### 2026-10-16 - Harness switched to TestRunner dpiaware=on; PR description updated
 
 - PR #4602 description: DpiScale/ImageListScaler/FillTabPage in the summary,
