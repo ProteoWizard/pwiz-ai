@@ -9,8 +9,8 @@
   #4863, #4864).
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (none yet). Related open Rust PR: [maccoss/osprey#73](https://github.com/maccoss/osprey/pull/73).
-- **Checkout**: `C:\proj\pwiz` (master), `C:\proj\osprey` (Rust, `main` at `d19be4c`)
+- **PR**: (none yet). Related Rust PR: [maccoss/osprey#73](https://github.com/maccoss/osprey/pull/73) (merged 2026-10-18).
+- **Checkout**: `C:\proj\pwiz` (master), `C:\proj\osprey` (Rust, `main`; #73 merged as `64e37ae828`, local checkout still `d19be4c` - pull)
 
 ## Objective
 
@@ -24,16 +24,12 @@ as its own fan-out; training candidates into PerFileScoring) stay deferred.
 
 ## Tasks
 
-### 1. maccoss/osprey#73 - Rust companion to pwiz#4860
-- #73 (`fix/one-peak-per-mz-typed-from-mz`, Brendan, opened 2026-10-17, MERGEABLE, +798/-195): every
-      library loads as one peak per m/z, typed from m/z with the C# (`pwiz.Common.Chemistry`) masses;
-      `top_fragment_indices` tie-break by m/z; `.libcache` v2; `strip_flanking_chars` fix. Its body reports
-      cross-impl Stellar single + all and Astral all OVERALL PASS at 1e-9 against pwiz#4860's head.
-- pwiz#4860 merged 2026-10-18 (`5c5f3ae815`), so C# master now carries that change and Rust `main`
-      does not: the cross-impl gate against Rust `main` is expected to drift until #73 merges.
-- [ ] Verify: build Rust from #73's branch, run `Compare-EndToEnd-Crossimpl.ps1` Stellar Single + Astral All
-      against current pwiz master. Then get #73 reviewed and merged (maccoss/osprey maintainer conventions -
-      see osprey-development-guide; ask Brendan before pushing or merging).
+### 1. Cross-impl gate on current master vs Rust main
+- pwiz#4860 (one peak per m/z, typed from m/z with the C# masses, top-N tie-break by m/z) merged to master
+  2026-10-18 (`5c5f3ae815`); its Rust companion maccoss/osprey#73 merged 2026-10-18 (`64e37ae828`, Brendan).
+  #73's own runs passed against #4860's head; nobody has run the gate since both landed.
+- [ ] Pull Rust `main`, build both sides (C# Release), run `Compare-EndToEnd-Crossimpl.ps1` Stellar Single and
+      Astral All against current pwiz master. PASS at 1e-9 is the expectation; a FAIL is real drift to bisect.
 
 ### 2. Stage 4 feature drift (found 2026-10-18 by the DIAGNOSTICS.md parity recipe)
 - Stellar file 20, C# at `aef1494771` (master, includes #4860) vs Rust `main` `d19be4c` (no #73), C# on
@@ -44,8 +40,8 @@ as its own fan-out; training candidates into PerFileScoring) stay deferred.
       2,934). Exact: entry_id, is_decoy, sequence, charge, precursor_mz, protein_ids, the two MS1 features.
       Representation-only (not parity): `modified_sequence` (UniMod vs +mass), `fragment_mzs` /
       `fragment_intensities` (binary lists). The end-to-end gate still passed at 1e-9 before #4860 merged.
-- [ ] FIRST re-run the recipe with Rust built from #73: fragment typing/merging and top-N tie-breaks are
-      exactly what moves fragment-based features and apex choice. Only what survives that is real drift.
+- [ ] Re-run the recipe with Rust `main` (now carrying #73): fragment typing/merging and top-N tie-breaks
+      are exactly what moves fragment-based features and apex choice. Only what survives that is real drift.
 - [ ] For a surviving difference: bisect per the osprey-development-guide (stage dumps), decide per case
       whether C# or Rust is right; port or adjust the comparator.
 
