@@ -705,3 +705,16 @@ CarafeSharp's `-build_entrapment_fasta` stage only, and the manifest is the one 
 reaches the library build, so carrying it means a manifest column (all three readers find
 columns by name; FDRBench never reads Carafe's manifest, Osprey rewrites its own) or a library
 command flag. Not done.
+
+**Brendan's decision on (a) and (b) (2026-10-17, evening)**: never guess entrapment pairing;
+fail loudly when the user seems to be requesting entrapment without the information for it,
+on every load, no flag - the Skyline principle: restrict parameters to what seems reasonable
+and widen only on a user's request. Done: `LibraryLoader.Load` refuses a library with
+`_p_target` accessions that brings neither a DecoyPairs table nor a manifest, with the message
+naming what to supply; `PairingIds.ExcludedEntrapment` is the plain group rule (the no-manifest
+guard is gone, so review finding 1 is closed); the subset round trip checks the refusal;
+`EntrapmentPairingTest`'s no-manifest block now runs on the library minus its entrapment
+peptides. `regression.ps1`: `StellarGenDecoyEntrap` gets `Manifest =
+'osprey_library_db_pairing.tsv'` (the refusal would have demanded it) and its diagnostics
+golden is recaptured: `pass1.experiment.pairedFdp` 0.011625 -> 0.010552, `pass2` 0.009155 ->
+0.008286, nothing else. Decision (c), `entrapment_method`, stays open.
