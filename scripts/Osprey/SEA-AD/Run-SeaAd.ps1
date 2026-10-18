@@ -106,9 +106,10 @@
 
     Without -Task (or with -Task FirstPassFDR) that is the Stage 1-4 set and the run resumes
     from Stage 5, which is the historical behavior. With -Task SecondPassFDR it also links
-    the Stage 5 sidecars (.1st-pass.fdr_scores.bin, .1st-pass.model.json, .reconciliation.json)
-    and the Stage 6 .scores-reconciled.parquet, because a --task SecondPassFDR node consumes
-    those. Linking only the Stage 1-4 set there leaves no reconciled parquet, so the frozen
+    the Stage 5 artifacts (.1st-pass.fdr_scores.bin and the analysis-wide
+    <blib-stem>.1st-pass.model.json / .stratum.json / .consensus.json)
+    and the Stage 6 .reconciliation.json and .scores-reconciled.parquet, because a
+    --task SecondPassFDR node consumes those. Linking only the Stage 1-4 set there leaves no reconciled parquet, so the frozen
     pass-2 modes fail-fast with "could not run the frozen recompute" - a message that reads
     like a code bug rather than an under-linked input.
 
@@ -199,6 +200,13 @@ param(
     [string]$SourceRoot,
     [string]$Exe,
     [string[]]$LinkFrom = @(),
+    # Stage the link farm up to a boundary other than the one -Task implies, as Run-Chs.ps1
+    # does. `-LinkUpTo SecondPassFDR` with no -Task is the ordinary run resumed at a completed
+    # bed: every pre-Stage-7 artifact linked in, no --task on the command line - the shape to
+    # time Stage 7 with, since -Task SecondPassFDR is the HPC merge route instead.
+    [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
+                 'SecondPassFDR', 'ModelDiagnostics')]
+    [string]$LinkUpTo,
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,

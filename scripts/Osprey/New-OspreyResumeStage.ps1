@@ -22,9 +22,9 @@
 
 .PARAMETER Include
     Artifact suffixes to link. Defaults to everything FirstPassFDR needs as INPUT: the Stage 1-4
-    parquets and calibrations, the 1st-pass sidecars, the per-file .1st-pass.model.json (without
-    which a fully-resumable run retrains a model it has already persisted), and the
-    analysis-wide experiment sidecar and retained base_id summary. Every artifact carries its
+    parquets and calibrations and the 1st-pass sidecars. The analysis-wide experiment sidecar,
+    retained base_id summary, .1st-pass.model.json (without which a fully-resumable run retrains
+    a model it has already persisted) and .1st-pass.stratum.json are always linked as well. Every artifact carries its
     own validity stamp inside it, so there are no separate marker files to list.
 
 .PARAMETER KeepFraction
@@ -53,8 +53,7 @@ param(
     [Parameter(Mandatory)] [string]$Name,
     [string[]]$Include = @('.scores.parquet',
                            '.calibration.json',
-                           '.1st-pass.fdr_scores.bin',
-                           '.1st-pass.model.json'),
+                           '.1st-pass.fdr_scores.bin'),
     [double]$KeepFraction = 1.0,
     # WHICH artifact KeepFraction thins. Defaulted to the 1st-pass sidecar so every existing
     # caller is unaffected, but it must be a parameter: the partial-resume case that matters is
@@ -106,7 +105,11 @@ foreach ($stem in $stems) {
 # staged by this script could not exercise the per-run path at all. The list stopped being
 # complete the moment the artifact became required, which is the "one edit PER PRODUCER" trap:
 # the producers of a relay obligation are not co-located with the relay.
-$wideSuffixes = @('.1st-pass.fdr_experiment.bin', '.1st-pass.retained_base_ids.bin')
+#
+# The model and stratum joined this list when Osprey stopped copying them beside every run
+# (pwiz doc 00, P1): one analysis-named file each.
+$wideSuffixes = @('.1st-pass.fdr_experiment.bin', '.1st-pass.retained_base_ids.bin',
+                  '.1st-pass.model.json', '.1st-pass.stratum.json')
 foreach ($suffix in $wideSuffixes) {
     $found = @(Get-ChildItem (Join-Path $Source ('*' + $suffix)) -File -ErrorAction SilentlyContinue |
                Where-Object { $_.Name -notlike '*.osprey.task' } | Select-Object -First 1)

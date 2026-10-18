@@ -16,8 +16,8 @@
     Boundary walk order (continues through all stages; tracks first
     FAIL as the drill band start):
 
-      Stage 3   <stem>.calibration.json           byte equality
-      Stage 5   <stem>.reconciliation.json        byte equality
+      Stage 3   <stem>.calibration.json           content (calibration_diff.py)
+      Stage 6   <stem>.reconciliation.json        content (reconciliation_diff.py)
       Stage 5   <stem>.1st-pass.fdr_scores.bin    SHA-256 equality
       Stage 6   <stem>.scores.parquet (rewritten) parquet_diff 1e-9 per column
       Stage 6b  <stem>.2nd-pass.fdr_scores.bin    SHA-256 equality
@@ -231,44 +231,35 @@ Write-Host "=== Boundary walk (each side's own end-to-end outputs, no crossfeedi
 # Resolve per-file stems.
 $stems = @($mzmls | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_) })
 
-# --- Stage 3: calibration.json (byte equality) ---
+# --- Stage 3: calibration.json (content) ---
+# Never byte-comparable: C# writes a validity stamp and its report's calibration-view row
+# (model_diagnostics), and both sides time-stamp the run. calibration_diff.py drops those and
+# compares every calibration value exactly.
+$calDiff = Join-Path $scriptDir 'calibration_diff.py'
 foreach ($stem in $stems) {
     $r = Join-Path $rustDir ($stem + '.calibration.json')
     $c = Join-Path $csDir   ($stem + '.calibration.json')
     if ((Test-Path $r) -and (Test-Path $c)) {
-        $rH = Get-Sha256 $r
-        $cH = Get-Sha256 $c
-        if ($rH -eq $cH) {
-            Record-Stage -Stage 'stage3' -Boundary ("calibration.json[{0}]" -f $stem) `
-                -Pass $true -Detail ("sha equal {0}" -f $rH.Substring(0,12))
-        } else {
-            $rLen = (Get-Item $r).Length
-            $cLen = (Get-Item $c).Length
-            Record-Stage -Stage 'stage3' -Boundary ("calibration.json[{0}]" -f $stem) `
-                -Pass $false -Detail ("sha differ; sizes rust={0} cs={1}" -f $rLen, $cLen)
-        }
+        $detail = (python $calDiff $r $c 2>&1 | Select-Object -First 1)
+        Record-Stage -Stage 'stage3' -Boundary ("calibration.json[{0}]" -f $stem) `
+            -Pass ($LASTEXITCODE -eq 0) -Detail ([string]$detail)
     } else {
         Record-Stage -Stage 'stage3' -Boundary ("calibration.json[{0}]" -f $stem) `
             -Pass $false -Detail "missing on one side"
     }
 }
 
-# --- Stage 5: reconciliation.json (byte equality) ---
+# --- Stage 6 plan: reconciliation.json (content) ---
+# C# v4 dropped four fields Rust still writes and adds a validity stamp, so the files are no
+# longer byte-comparable; reconciliation_diff.py drops those and compares the rest exactly.
+$reconDiff = Join-Path $scriptDir 'reconciliation_diff.py'
 foreach ($stem in $stems) {
     $r = Join-Path $rustDir ($stem + '.reconciliation.json')
     $c = Join-Path $csDir   ($stem + '.reconciliation.json')
     if ((Test-Path $r) -and (Test-Path $c)) {
-        $rH = Get-Sha256 $r
-        $cH = Get-Sha256 $c
-        if ($rH -eq $cH) {
-            Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
-                -Pass $true -Detail ("sha equal {0}" -f $rH.Substring(0,12))
-        } else {
-            $rLen = (Get-Item $r).Length
-            $cLen = (Get-Item $c).Length
-            Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
-                -Pass $false -Detail ("sha differ; sizes rust={0} cs={1}" -f $rLen, $cLen)
-        }
+        $detail = (python $reconDiff $r $c 2>&1 | Select-Object -First 1)
+        Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
+            -Pass ($LASTEXITCODE -eq 0) -Detail ([string]$detail)
     } else {
         Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
             -Pass $false -Detail "missing on one side"

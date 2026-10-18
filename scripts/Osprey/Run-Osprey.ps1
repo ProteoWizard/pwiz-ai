@@ -98,6 +98,12 @@
     that must not lock the build tree). Pair it with --work-dir in -ExtraArgs so the run's
     caches stay out of the shared dataset folder.
 
+.PARAMETER Output
+    Write the output blib here and keep it, instead of the default temporary blib in the
+    dataset folder that is deleted after the run. The analysis-wide products (model
+    diagnostics, first-pass model) are named for it. Needed to re-run the same command line
+    against a finished analysis - a resume, or a pay-later --model-diagnostics run.
+
 .PARAMETER Summary
     Show only key output lines (timing, calibration, results)
 
@@ -212,7 +218,10 @@ param(
     [string]$TestBaseDir = $null,
 
     [Parameter(Mandatory=$false)]
-    [string]$Exe = $null
+    [string]$Exe = $null,
+
+    [Parameter(Mandatory=$false)]
+    [string]$Output = $null
 )
 
 $ErrorActionPreference = "Stop"
@@ -383,8 +392,12 @@ try {
     $toolArgs += "-l"
     $toolArgs += $library
     $toolArgs += "-o"
-    $tempBlib = Join-Path $testDir "_temp_output.blib"
-    $toolArgs += $tempBlib
+    if ($Output) {
+        $toolArgs += $Output
+    } else {
+        $tempBlib = Join-Path $testDir "_temp_output.blib"
+        $toolArgs += $tempBlib
+    }
     $toolArgs += "--resolution"
     $toolArgs += $ds.Resolution
     $toolArgs += "--protein-fdr"

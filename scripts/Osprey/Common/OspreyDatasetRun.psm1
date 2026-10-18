@@ -838,16 +838,10 @@ function Invoke-OspreyDatasetRun {
             # artifact links its stamp. There are no separate .osprey.task files to stage;
             # those were retired when the stamps were embedded.
             'PerFileScoring'   = @('.calibration.json', '.scores.parquet')
-            # .1st-pass.stratum.json is the protein-compact stratum, split out of the model
-            # sidecar by PR #4633 because a different phase produces it. Omitting it staged a
-            # cohort that LOOKED complete - 6690 files, 0 missing - and then failed 11 minutes
-            # into Stage 7 with "could not run the frozen recompute ... or protein stratum are
-            # absent", which reads as a code bug rather than as "the link set is one artifact
-            # short".
-            'FirstPassFDR'     = @('.1st-pass.fdr_scores.bin',
-                                   '.1st-pass.model.json',
-                                   '.1st-pass.stratum.json',
-                                   '.reconciliation.json')
+            # The model, stratum and cross-run consensus are analysis-wide (see
+            # $ANALYSIS_ARTIFACTS). Each run's .reconciliation.json is PerFileRescoring's now:
+            # that task plans the run from the consensus and writes it.
+            'FirstPassFDR'     = @('.1st-pass.fdr_scores.bin')
             # The per-run 2nd-pass sidecar and the decoy side of its competition are
             # PerFileRescoring outputs since issue #4486 - the worker computes and writes them,
             # and SecondPassFDR only folds them. This table still listed the sidecar under
@@ -860,7 +854,8 @@ function Invoke-OspreyDatasetRun {
             # Safe for the modes that do NOT have a per-file half (transfer, the retrain modes):
             # those never write a per-run 2nd-pass sidecar, so nothing matches and nothing
             # links.
-            'PerFileRescoring' = @('.scores-reconciled.parquet',
+            'PerFileRescoring' = @('.reconciliation.json',
+                                   '.scores-reconciled.parquet',
                                    '.2nd-pass.fdr_scores.bin',
                                    '.2nd-pass.fdr_decoys.bin')
             # Analysis-wide outputs are not per-file, so there is nothing here to hard-link per
@@ -896,8 +891,19 @@ function Invoke-OspreyDatasetRun {
             # that effect, which is why both FirstPassFDR outputs are listed.
             # retained_base_ids.bin is now a declared FirstPassFDR output with its own embedded
             # stamp, so it is part of the "is every output current?" question too.
+            #
+            # The model and the protein-compact stratum are written once under the blib stem
+            # (pwiz doc 00, P1). Older beds wrote an identical copy beside every input; the glob
+            # below matches one of those copies too and links it under this run's blib name, so
+            # such a bed still stages. Omitting the stratum once staged a cohort that LOOKED
+            # complete and then failed 11 minutes into Stage 7 with "could not run the frozen
+            # recompute ... or protein stratum are absent", which reads as a code bug rather
+            # than as "the link set is one artifact short".
             'FirstPassFDR'     = @('.1st-pass.fdr_experiment.bin',
-                                   '.1st-pass.retained_base_ids.bin')
+                                   '.1st-pass.retained_base_ids.bin',
+                                   '.1st-pass.consensus.json',
+                                   '.1st-pass.model.json',
+                                   '.1st-pass.stratum.json')
             'PerFileRescoring' = @()
             # The analysis-wide 2nd-pass experiment sidecar is SecondPassFDR's own end-of-join
             # output, and it is how a later invocation learns a second pass EXISTS to describe

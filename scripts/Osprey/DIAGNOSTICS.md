@@ -237,21 +237,25 @@ MULTICHARGE. Rust still writes it; set it only for the Rust process.
 ### OSPREY_RECONCILIATION_ONLY=1 (Rust-only)
 Exit after reconciliation dump. Removed from C# with the dump.
 
-### OSPREY_DUMP_REFIT=1
-Refined per-file RT calibration after consensus rescoring —
+### OSPREY_DUMP_REFIT=1 (Rust-only)
+Refined per-file RT calibration after consensus rescoring -
 `(library_rt, fitted_value, abs_residual)` per refit point.
+**Removed from C# Osprey on 2026-10-16**: it wrote every run's refit at once,
+and the refit moved into the per-run rescore. Each run's refit is in its own
+`reconciliation.json` (`refined_rt_calibration`). Rust still writes it; set it
+only for the Rust process.
 
-### OSPREY_REFIT_ONLY=1
-Exit after refit dump.
+### OSPREY_REFIT_ONLY=1 (Rust-only)
+Exit after refit dump. Removed from C# with the dump.
 
-### OSPREY_DUMP_LOESS_FIT=1
+### OSPREY_DUMP_LOESS_FIT=1 (Rust-only)
 Per-point Stage 6 refit RTCalibration state. Lets you bisect a refit
-ULP divergence between "stats computation differs" (R²/SD/MAD computed
+ULP divergence between "stats computation differs" (R^2/SD/MAD computed
 differently) vs "LOESS smoother arithmetic differs" (fitted_value
-diverges).
+diverges). **Removed from C# Osprey on 2026-10-16** with OSPREY_DUMP_REFIT.
 
-### OSPREY_LOESS_FIT_ONLY=1
-Exit after LOESS fit dump.
+### OSPREY_LOESS_FIT_ONLY=1 (Rust-only)
+Exit after LOESS fit dump. Removed from C# with the dump.
 
 ### OSPREY_DUMP_INV_PREDICT=1
 Reconciliation inverse-predict records (mapping consensus library RTs

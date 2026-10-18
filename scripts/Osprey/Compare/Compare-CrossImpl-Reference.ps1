@@ -12,7 +12,7 @@
 
     Comparators (each at the parity level actually achieved during the port):
       scores.parquet (Stage 4) -> reference .scores.stage4.parquet   parquet 1e-9
-      reconciliation.json                                            byte (SHA) equality
+      reconciliation.json                                            content (reconciliation_diff.py)
       1st/2nd-pass.fdr_scores.bin                                    bin_tol_diff value 1e-9
       stage7 protein-FDR dump                                        Compare-Stage7-Crossimpl 1e-9
       output.blib                                                    Compare-Blib-Crossimpl 1e-9 (osprey_version whitelisted)
@@ -142,10 +142,14 @@ foreach ($stem in $stems) {
         (Join-Path $csDir  ($stem + '.scores.parquet')) `
         $parquetDiff ("stage4_parquet_{0}.log" -f $stem)
 
-    # Stage 5: reconciliation.json (byte equality -- achieved bit-identical)
+    # Stage 6 plan: reconciliation.json, by content. C# v4 dropped four fields Rust still
+    # writes and adds a validity stamp, so the files are no longer byte-comparable;
+    # reconciliation_diff.py drops those and compares every action and value exactly.
     $rj = Join-Path $refDir ($stem + '.reconciliation.json'); $cj = Join-Path $csDir ($stem + '.reconciliation.json')
     if ((Test-Path $rj) -and (Test-Path $cj)) {
-        Record 'stage5' ("reconciliation.json[{0}]" -f $stem) ((Sha $rj) -eq (Sha $cj)) 'sha equality'
+        python (Join-Path $scriptDir 'reconciliation_diff.py') $rj $cj *>&1 |
+            Tee-Object -FilePath (Join-Path $cmpDir ("stage5_reconciliation_{0}.log" -f $stem)) | Out-Null
+        Record 'stage5' ("reconciliation.json[{0}]" -f $stem) ($LASTEXITCODE -eq 0) 'content equality'
     } else { Record 'stage5' ("reconciliation.json[{0}]" -f $stem) $false 'missing on one side' }
 
     # Stage 5/6b: fdr_scores.bin sidecars (value-level)
