@@ -1037,3 +1037,51 @@ Nick's branches; C: #4866 before #4848's final master merge), unanswered at clos
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261018_blib_cleanup_next.md` before starting work.
+
+### 2026-10-18 (evening) - PR B gated and pushed, #4823 published, #4848 under review
+
+**Decisions (Brendan, 2026-10-18)**: all three recommendations accepted: Perf/Regression on
+`pull/4866` and `pull/4848` (permission given for both), publish by fast-forward onto Nick's
+branches, #4866 first.
+
+**PR B (#4866)**: CarafeSharp 113/113 + zero inspection; Release build; `regression.ps1 -Dataset
+Stellar -NoBuild` PASSED (every mode) and the same with `-LibraryAsBlib` PASSED. Pushed
+(85ea3d1393 -> dd4e949f1e; GitHub now MERGEABLE). TeamCity Perf/Regression build 4224618 queued
+on `pull/4866`. Then `/pw-complete 4866`.
+
+**#4865 cleanup**: local master fast-forwarded to 1be16fdafe, local `Skyline/work/20261018_blib_as_cache`
+deleted. The remote delete (`git push origin --delete Skyline/work/20261018_blib_as_cache`) was
+refused by the session's permission classifier; Brendan to run it.
+
+**#4823 published**: fast-forward push 4560f3684f -> 2bc52c9f18 onto Nick's branch, converted to
+draft, description rewritten (the moved peptide competition and PEPs, "no blib changes", the
+peptide q now listed among the values that change, test plan with no TeamCity run). Body kept in
+`ai/.tmp/sessions/20261018-cde5/pr-body-4823.md`.
+
+**#4848 in progress**: checkout switched to `Skyline/work/20261009_blib_protein_fdr_pep`;
+`/code-review medium` running. Master is one squash (#4865) ahead of its last merge; the merge
+waits for #4866 so it happens once.
+
+**#4848 reviewed and published** (2026-10-18 evening): `/code-review medium` returned seven findings;
+four fixed as 909c95fcd4 (BlibWriter.AddProtein fills a row written without values with the first
+values a later call supplies, through a prepared `UPDATE ... IFNULL` once per protein;
+BiblioSpecLite offers a cutoff level only where the column has a non-NULL value; LibraryGlobalScores
+caches BestProteinGroup; the SecondPassFdrTask doc line the 1af19ebadb revert dropped restored;
+BlibReader.ReadProteins documented as accessions-only). Dropped: DIA-NN float parsing (the parquet
+report is float32 and Score shares it), the per-entry LibraryGlobalScores for a library with
+protein mappings but no global columns (raised in the PR body as a review question for Brendan:
+master kept one string per entry), ReadProteins not reading protein values (no caller copies a
+search blib through it). Gates on the fixes: BiblioSpec 151/151, Osprey 643/643 + zero inspection,
+CarafeSharp 113/113 + zero inspection, Skyline build + GlobalQValueFilterTest. Pushed onto Nick's
+branch (fast-forward 5c76314140 -> 909c95fcd4); description applied from
+`ai/.tmp/sessions/20261018-cde5/pr-body-4848.md`. Still draft; master merge (#4865, #4866) and
+Perf/Regression on `pull/4848` follow #4866's merge.
+
+**Memory question resolved** (2026-10-18 evening, Brendan): the per-entry `LibraryGlobalScores` is not a
+regression to gate away. Master held one accession string per entry (26 + 2 x length bytes); the branch
+holds a fixed `LibraryGlobalScores` + `Singleton` (about 112 bytes) and shares one `LibraryProteinGroup`
+per protein. Break-even at about 43 characters, a saving for semicolon-joined group names. Brendan's
+fix taken: `BiblioLiteSpectrumInfo.Protein` is now a getter on the first group's name (the entry's own
+reference and name copy dropped; `LibraryGlobalScores.ForProtein` + a string overload keep BlibDb's
+three name-only callers). Commit d33f22622f, Skyline build + GlobalQValueFilterTest passed, pushed onto
+Nick's branch; PR body's review paragraph replaced by the arithmetic.
