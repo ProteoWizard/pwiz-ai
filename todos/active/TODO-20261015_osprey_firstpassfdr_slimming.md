@@ -6,9 +6,10 @@
   (merged, deleted).
 - **Base**: `master`
 - **Created**: 2026-10-15
-- **Status**: PR A (A1+A2) MERGED 2026-10-16. PR B steps 1-3 committed locally (`c398ff986c`,
-  `21f51395ca`), all gates green incl. SEA-AD byte identity. Not pushed, no PR. Remaining: step 4
-  (cross-impl gate run), ai/ script commits at merge, PR open (ask first).
+- **Status**: PR B complete: steps 1-3 + defect fixes + P16 pay-later fix committed (`c398ff986c`,
+  `21f51395ca`, `7b21b0b239`, `0cd3c6fa16`, review fixes). Gates green (unit, regression-parallel All 48/48,
+  cross-impl Stellar + Astral 1e-9). Pushing / PR / TeamCity approved by Brendan 2026-10-17. ai/ script
+  changes commit at merge. Follow-up PR prepared: TODO-20261017_osprey_remove_write_pin.
 - **Owed to #4823 / #4848 (decided 2026-10-15)**: draft PR #4848 (`Skyline/work/20261009_blib_protein_fdr_pep`,
   stacked on #4823) adds `PeptidePep` inside the pass-2 row walk PR A deleted, plus edits to
   `FdrExperimentRecord/Accumulator/Sidecar` and `FdrProjectionSinks`. PR A merged first (Mike is not settled
@@ -272,9 +273,8 @@ Contract and plumbing to update (doc 00 is the authority; read it first):
   of an existing fan-out, so it fits the rule, but it needs a size measurement first. Candidate for a later TODO.
 
 ## Housekeeping
-- Scratch dir from the 2026-10-15 measurement: `D:\test\osprey-runs\sea-ad\runs\seaad-82files-planonly-lanes1`
-  (hard links to the acceptance run plus about 2 GB of new envelopes and an FDRBench TSV). Delete when no
-  longer useful; deleting it does not affect the acceptance run dir.
+- Done 2026-10-17: the 2026-10-15 `seaad-82files-planonly-lanes1` scratch dir and the 2026-10-16 scratch runs and
+  exe snapshots are deleted (see the 2026-10-16/17 progress entry).
 
 ## Progress Log
 
@@ -553,3 +553,68 @@ Design as built (uncommitted until gates pass):
 - A2 plan (done) was: carry each entry's peptide (already in A1's entry facts) to the sink, keep
   `(entry_id, peptide)` in ascending order, and resolve protein q from that instead of re-walking the
   parquets. Byte-identical by construction in every `OSPREY_STUB_IDENTITY` mode; no library lookup.
+
+### 2026-10-16/17 (session 3) - defect fixes committed; P16 pay-later design decided
+
+- Gates for the two defect fixes: unit 637/637 + inspection 0 (`sessions/20261016-b2pr/test-defects-run1.log`),
+  regression-parallel All 48/48 in 30:00 (`regression-defects.log`). Committed `7b21b0b239`.
+- New acceptance test `TestSubsetDiagnosticsAddedLater` (no-flag run, then `--task ModelDiagnostics` and the
+  original command line + flag must reproduce the with-flag products) and `AssertSameFirstPassProduct` made
+  strict (only generatedUtc excluded). Red as expected: `featureCount, modelComposite, model, featureHistEdges`
+  (+ `cal` from a no-flag start). Uncommitted.
+- NOT a regression: Brendan's scenario (flag on, delete both diagnostics JSON + html, rerun) scripted
+  (`sessions/20261016-b2pr/paylater-scenario.ps1`) and run on 09-03 `51c0c24837`, 10-05 `dfcb8d17ef` and
+  `7b21b0b`: pass-1 Model views missing on all three ("not retrained" note dates from #4377, 07-06). Mode 11 /
+  AssertSameFirstPassProduct hid it with a named skip-list; TODO-20260906's "removing the skip-list is the
+  acceptance test for item 2" was lost to a second, unrelated "Item 2" being marked CLOSED.
+- Cost measured (`D:/test/osprey-runs/mdiag-cost-20261016_222220`): Astral FirstPassFDR +7.7 s with the flag,
+  of which ~5 s is report-only; keeping per-row standardized vectors costs +1.8 GB transient at 3 files and
+  ~0.5 GB per in-flight cohort file.
+- DECIDED (Brendan, 2026-10-17):
+  1. Rust is reference only - never shape a C# format to Rust's schema; change the parity check instead.
+  2. CAL row goes INTO `<stem>.calibration.json` (no separate .calibration-diagnostics.json), written every run.
+     Compare-EndToEnd-Bisect-Crossimpl's Stage 3 byte compare becomes a content compare ignoring the member.
+  3. Model view: each run's share (target/decoy feature sums in row order, class counts, fixed-bin histogram
+     counts) goes into its `<stem>.1st-pass.fdr_scores.bin` (v9, every run), summed on the lane (no vectors
+     kept); shares summed in run order; coefficients from `.1st-pass.model.json`. No model-view.json. Also
+     fixes a pre-existing defect: a partially resumed FirstPassFDR reported contributions of re-scored runs only.
+     Last-digit shift vs today's row-order sums accepted; FdrTest oracle follows.
+  4. Separate PR off master: remove `--write-pin` / `.cs_features.tsv`; feature parity via
+     `Compare/parquet_diff.py` on Stage 4 `.scores.parquet` (Rust `--no-join`).
+- ai/ uncommitted: `Run-Osprey.ps1 -Output` (keeps the blib for re-runs).
+- IMPLEMENTED (uncommitted, 2026-10-17):
+  - CAL row: `CalibrationParams.ModelDiagnostics` (`model_diagnostics`, opaque JObject) filled by
+    `ModelDiagnosticsReport.CalibrationDiagnosticsToJson`; Calibrator builds the row on every run (its gates
+    were the only cost: library accession scan; the training report was always built). Separate file,
+    relays (SubsetPipelineTest chain, regression mode 3) and runner link-table entry removed.
+  - Model view: `Osprey.Core/FeatureSums` (counts, standardized sums, 60-bin histograms, ~10 KB);
+    `BinarySidecarStamp` header [28..32] = extension length (0 for every other format, so unchanged);
+    `FdrScoresSidecar` v9 writes/reads it (`ReadFeatureSums`). `PercolatorScorer.ScoreRows` reduces the
+    share on the lane (no per-row vectors kept; keepLinearVectors / AccumulatesTreeFeatures gone); resident
+    path also sums per file; resumed files read their share (`tryLoadFeatureSums`); a missing share gives
+    null contributions, never a partial report. Fold: `FirstPassFdrTask.ModelViewFromArtifacts` = model.json
+    (stamp must match) + shares via `PercolatorEngine.FirstPassContributionsFromShares`.
+  - Tests: TestSubsetDiagnosticsAddedLater + strict AssertSameFirstPassProduct green; FdrTest resume arm now
+    asserts resumed contributions == scored, and null without a share; AssertContributionsEqual bit-exact.
+  - Gates: unit 638/638 + inspection 0 (`sessions/20261016-b2pr/test-shares-run5.log`). regression-parallel
+    run 1: 46/4, all four = mode 3 "per-file FDR sidecars==straight" refusing v9 in `Regression/FdrSidecars.ps1`
+    (fixed: v9 + [28..32] length + feature-sums byte compare); mode1b diagnostics vs golden PASSED. Run 2
+    in flight (`regression-shares2.log`).
+  - ai/: `Compare/calibration_diff.py` (new; Stage 3 of the bisect driver was a SHA compare that could never
+    pass - stamp + metadata.timestamp), psm1 link table.
+  - regression-parallel All run 2: 48/48 in 27:46 (`regression-shares2.log`). Cross-impl: Stellar 1-file PASS,
+    Astral 3-file PASS (Rust 21:10, C# 6:54) (`crossimpl-stellar.log`, `crossimpl-astral.log`). Committed
+    `0cd3c6fa16`.
+- `/code-review medium` on the branch (4 commits): 10 findings. Fixed: (1) the resident scorer (also pass 2)
+  built shares and, under gbdt, serially standardized every row with no reader - now gated on
+  captureContributions/--verbose; (4) `FeatureSums.Read` overflowed int on corrupt counts and threw past
+  `ReadFeatureSums` - long arithmetic, new `IOTest.TestFdrScoresSidecarFeatureSums`; (10) `--task
+  FirstPassFDR` completion message still said "reconciliation planning done". Dropped: (2) calibration
+  diagnostics cost - the decided trade-off (training report was always built); (3) last-digit shift vs Rust
+  - decided; (5) consensus stamp not checked on load - same as the retained summary, existing pattern for
+  FirstPassFDR's analysis-wide products (possible follow-up); (6) lane exception text on net472 - net10 only;
+  (7) refit dumps - retired deliberately in step 3; (8) Rust v8 sidecars in FdrSidecars.ps1 - refuted, the
+  cross-impl sidecar compare passed (Rust goes through the fused reader); (9) actions= count on resume -
+  adopted runs perform no actions. Unit 639/639 + inspection 0 (`test-review-run1.log`).
+- Housekeeping done (Brendan OK): removed C:\proj\pwiz-bisect worktree, paylater-bisect-*, mdiag-cost-*, the
+  four 10-16 SEA-AD scratch runs, _bin bisect-51c0c24837 / defects-7b21b0b / planrescore-*.
