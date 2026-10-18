@@ -983,3 +983,29 @@ until the golden lanes finish: they write into this checkout's tree.
 force-push: his commits stay, followed by two reverts, the merge and the adaptation), or open a
 replacement PR from a new branch and close #4848 pointing at it. Either way #4848's description
 needs the "stacked on #4823" line replaced and the Osprey column list cut to four.
+
+**Schema branch finished** (2026-10-18, local): Skyline built and `GlobalQValueFilterTest` passed;
+goldens recaptured on all four datasets (two lanes, each PASSED; `protein_fdr.tsv` unchanged in
+content), committed as 5df9b1c7b1 on top of the merge a92a505085. The regenerated Stellar rows
+show the dependency plainly: `PeptideQValue` equals the precursor q (the second pass copies it
+until #4823's peptide competition) and every protein group's `QValue` is 0 (the defect #4823
+fixes). Replacement PR description drafted in `ai/.tmp/sessions/20261018-865c/pr-body-4848.md`.
+
+**#4823 side, done locally** (local `Skyline/work/20261011_osprey_protein_fdr`, NOT pushed):
+1. `git merge origin/master`: only the four `protein_fdr.tsv` goldens conflicted (master's #4860
+   recaptured them after Nick's base); kept Nick's for the merge commit 837bab4555.
+2. The calculation half of 209c65fcac applied with `git apply -3` from
+   `ai/.tmp/sessions/20261018-865c/4823-calc-from-209c.patch` (28 files; the blib-writing hunks
+   left out). Five conflicts: master had restructured the first-pass streaming path since Nick's
+   base (`ExperimentScope.Resolve` resolves each entry's experiment values once; the diagnostics
+   walk hands prepared folds to the sink), so the peptide PEP became a fifth output of `Resolve`,
+   a parameter of `IFdrFirstPassSink.AcceptExperimentEntry` and a value the sidecar overlay
+   applies; the blib test hunk in `IOTest` dropped; docs/14 updated to sidecar v4. Commit
+   8b50e62cb8. Gate: Osprey Debug 645/645 + zero inspection.
+3. Stellar regression on it: every blib table PASSED (the competition changes nothing the blib
+   captures on master's schema); `protein_fdr.tsv` differs from Nick's golden only by master's
+   drift since his base (#4860 regrouped proteins), so the four goldens are being recaptured
+   (two lanes in flight). The expected net change against master is `protein_fdr.tsv` only.
+
+**Both branches then need Brendan's publishing call** (fast-forward pushes onto Nick's branches,
+or replacement PRs) and the TeamCity Perf/Regression gate on each `pull/<N>`, asked for first.
