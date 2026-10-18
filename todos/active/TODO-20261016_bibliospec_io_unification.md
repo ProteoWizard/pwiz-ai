@@ -735,3 +735,15 @@ Follow-ons, not in this PR: (1) `LibMetadata` should record the foreign source F
 one was used (Brendan); (2) Osprey's `--export-library` writes `Method` NULL on every row - it
 keeps no method on `LibraryEntry` - so a .blib exported from a Carafe .blib loses `reverse` /
 `cycle` / `shuffle`; carrying it means an entry field, libcache v7, and the round-trip check.
+
+**Night session planned (Brendan, 2026-10-17 evening)**: goal 1, the .blib replaces Osprey's
+`.libcache` (stop re-typing Osprey-stamped annotations, intern parsed modifications, parallel
+decode, then the derived .blib written where the cache was, `LoadCache` kept one release); goal 3,
+Nick's #4848 adaptation, as fallback or extra credit; then 4 (the port's `LibReader`) and only
+then PR 4. Scope: BLIB I/O outside Skyline; PRs C and D later. Local commits only overnight.
+TeamCity on `pull/4860`: Osprey Perf/Regression #326 48/48 PASS; the Skyline PR build failed
+once on an agent-specific leak flake (TestTicChromatogram, MacCoss Agent 1, heap delta at the
+20 KB threshold; same on master #22282) and was re-run.
+
+**Next session handoff**: read `ai/.tmp/handoff-20261018_night_blib_as_cache.md` before starting
+work (it supersedes `handoff-20261017_bibliospec_io_reader_pairing.md`).
