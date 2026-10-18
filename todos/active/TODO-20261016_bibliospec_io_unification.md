@@ -8,7 +8,10 @@
 - **Status**: PR A merged 2026-10-18; the night's `.blib`-as-cache work is PR
   [#4865](https://github.com/ProteoWizard/pwiz/pull/4865) (`Skyline/work/20261018_blib_as_cache`,
   rebased onto master after #4860 and #4864, opened 2026-10-18; TeamCity Perf/Regression
-  triggered on `pull/4865`); then B-E
+  triggered on `pull/4865`). PR B coded and gated 2026-10-18 on
+  `Skyline/work/20261018_bibliospec_libreader`. Nick's #4848 adaptation waits for Nick
+  (Brendan, 2026-10-18: his branch carries the open #4823). Then C-E, expected to move to the
+  backlog
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
@@ -99,7 +102,8 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       carries its own pairing and metadata; the composition hash is what a blib-only read must
       still answer).
 - [ ] **B. The port's `LibReader` onto it** (BlibSearch, BlibToMs2). Gate: the port's reference
-      checks (`.report`, `.lms2`, `.check`).
+      checks (`.report`, `.lms2`, `.check`). Coded and gated 2026-10-18 on
+      `Skyline/work/20261018_bibliospec_libreader`; see the 2026-10-18 PR B entry.
 - [ ] **C. Skyline's read path** (`BiblioSpecLiteLibrary`) onto it, Skyline keeping its domain
       conversion. Gate: Skyline's library tests, plus load time and memory against master on large
       libraries (the property Nick worked for); ask Nick which libraries he measured on.
@@ -853,3 +857,64 @@ the Skyline PRs C-E are expected to move to the backlog.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261018_bibliospec_next.md` before starting work.
+
+### 2026-10-18 - PR B: the port's LibReader onto BlibReader
+
+**Decision (Brendan, 2026-10-18)**: Nick's #4848 adaptation waits for Nick. His branch tip is
+unchanged (5c76314140, 20 commits ahead of master, 16 behind) and it contains his still-open
+[#4823](https://github.com/ProteoWizard/pwiz/pull/4823) (the protein-group q-value fix: Osprey
+FDR code plus the four `protein_fdr.tsv` goldens, unit builds green, nothing since his 2026-10-15
+master merge), so adapting #4848 as planned would carry an algorithm change and the schema change
+in one PR with the goldens moving for two reasons. Offered: merge #4823 first, adapt with #4823
+inside, a schema-only branch off master, or skip. Brendan chose to skip #4848 and do PR B. A
+dry-run merge of his branch onto master now conflicts in 7 source files (`BlibSchema.cs` and
+`Osprey.IO/BlibWriter.cs` modify/delete against #4860's moves; `BuildParser.cs`,
+`PercolatorScorer.cs`, `BlibOutputWriter.cs`, `FdrProjectionSinks.cs`, `SubsetPipelineTest.cs`);
+the goldens auto-merge.
+
+**PR B coded and gated** on `Skyline/work/20261018_bibliospec_libreader` (off master at
+aef1494771), commit 507f1cced5:
+- `BlibReader` gains the two reads the port needed and the shared reader lacked: a filtered scan
+  (`ReadSpectra(withPeaks, BlibSpectrumFilter, partitions...)`, the filter's inclusive bounds on
+  precursor m/z, charge and `numPeaks` going into the SQL as bound parameters) and one row by id
+  (`ReadSpectrum(refId, withPeaks)`, null when absent). Partition and filter conditions share one
+  private `WhereClause`; `ReadRetentionTimes` uses it too.
+- The port's `LibReader` (703 lines -> 290) keeps its `RefSpectrum` surface for BlibSearch
+  (`GetSpecInMzRange`) and BlibToMs2 (`GetNextSpectrum`) plus `CountAllSpec`, `GetRefSpec`,
+  `GetAllRefSpec` (the RoundTrip test), converting `BlibSpectrumRecord`s; its SQL, prepared
+  statement and zlib code are gone. cpp quirks kept and documented: only spectra with a peaks row
+  (cpp's inner join; the shared LEFT JOIN's null-blob rows are skipped), `"-"` flanking residues
+  where cpp hard-coded them and empty where cpp read neither column, NULL retention time as 0,
+  the `modPrecision` rebuild from `Modifications` (through `ReadModifications`). Members nothing
+  called went: `MaxSpecId`, `GetRefSpecsInRange`, `Initialize`, the default constructor,
+  `GetUncompressedPeaks`. The connection stays the port's own `SqliteRoutine.Open` (unpooled,
+  extended-prefix handling) handed to `BlibReader(SQLiteConnection)`.
+- Order: the shared scan appends `ORDER BY r.id`; the port's range query had none, but the blib
+  has no index on `precursorMZ`, so SQLite walked `RefSpectra` in rowid order already - the
+  `.check` references confirm nothing moved.
+- `BlibReaderTests` covers the filter (each bound, a null bound, composed with a partition) and
+  the by-id read, in the existing test method.
+
+**Gates**: BiblioSpec 147/147 (zero warnings), Osprey Debug 642/642 + zero inspection,
+CarafeSharp 113/113 + zero inspection. CarafeSharp's inspection (not Osprey's) caught two
+pre-existing `<see cref="ReadSpectra"/>` references made ambiguous by the overload; qualified.
+`/code-review medium` run before the PR (triage below).
+
+**#4865 this morning**: 9 checks green, the TeamCity Perf/Regression build 4224466 (triggered
+06:45) still running at 35% after 20 minutes; Skyline build and inspection pending. Nothing to fix.
+`mcp__status__get_pr_checks(pr_number=4865)` again resolved the current branch instead; `gh pr
+checks 4865` is the reliable form.
+
+**`/code-review medium` triage** (7 findings, before the PR): fixed 6 - a library without
+`RefSpectra` or `RefSpectraPeaks` is refused at open as cpp's prepare failure was, the
+connection disposed when that check throws; the peaks-row condition is
+`BlibSpectrumFilter.RequirePeaksRow` (an inner join in the SQL) instead of a client-side skip
+in three places; `WhereClause` keeps (name, value) pairs and binds fresh parameters per command,
+since a deferred scan may be enumerated twice; a bad peak blob is reported with the spectrum id
+and the library; `LibReaderTests` writes a fixture library (compressed and raw blobs, a NULL
+retention time, a precursor-only row, modifications at one position twice and past the end) and
+pins the window, the charge filters, the by-id read, the enumeration's end, the `modPrecision`
+rebuild (summed and clamped) and the missing-table refusal. Dropped 1: `minPeaks + 1` overflow at
+`int.MaxValue` - the only caller passes 5. Gates re-run after the fixes: BiblioSpec 148/148,
+Osprey 642/642 + zero inspection, CarafeSharp 113/113 + zero inspection; logs in
+`ai/.tmp/sessions/20261018-865c/`.
