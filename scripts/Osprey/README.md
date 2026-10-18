@@ -30,6 +30,7 @@ ai/scripts/Osprey/
   Test-Full-Regression.ps1      wrapper around Test-Snapshot (smoke/quick/full)
 
   Measure-Pipeline.ps1          perf table generator (Osprey-workflow.html)
+  Measure-LibraryLoad.ps1       time one library load (.tsv/.blib parse or cache read) per rep; A/B two exe snapshots
   Profile-Osprey.ps1       dotTrace wrapper for Osprey
   Profile-Stage5.sh             isolated Stage 5 profile (WSL)
   Combine-Stage5-Profile.ps1    merge dotTrace + samply outputs into a table
