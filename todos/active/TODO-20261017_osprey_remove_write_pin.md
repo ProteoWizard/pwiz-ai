@@ -1,13 +1,14 @@
 # Remove --write-pin and its .cs_features.tsv dump
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261017_osprey_remove_write_pin` (local, from origin/master `23e870a9b7`, not pushed)
+- **Branch**: `Skyline/work/20261017_osprey_remove_write_pin` (rebased onto master `e89d533739`, pushed)
 - **Base**: `master`
 - **Created**: 2026-10-17
-- **Status**: Implemented and committed locally; unit 637/637 + inspection 0. Not pushed, no PR.
+- **Status**: PR open, TeamCity Perf/Regression build 4224410 queued. Unit 639/639 + inspection 0, Stellar
+  regression PASS. At merge, apply the ai/ patch below.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (none yet)
+- **PR**: [#4864](https://github.com/ProteoWizard/pwiz/pull/4864) (opened 2026-10-17 at `84e1f3ea74`)
 - **Checkout**: `C:\proj\pwiz-writepin` (worktree of `C:\proj\pwiz`)
 
 ## Objective
@@ -26,7 +27,8 @@ reference only; C# does not carry output whose purpose is Rust integration.
       CommandLine.html regenerated (en/ja/zh-Hans) by its self-updating test.
 
 ## Remaining
-- [ ] `regression.ps1 -Dataset Stellar` in the worktree (outputs unchanged by construction - non-default flag)
+- [x] `regression.ps1 -Dataset Stellar` in the worktree: PASS, data dir unchanged
+      (`sessions/20261016-b2pr/writepin-regression-stellar.log`)
 - [ ] At merge, apply `ai/.tmp/sessions/20261016-b2pr/patch_ai_write_pin.py C:/proj/ai`: drops
       `Run-Osprey.ps1 -WritePin`; rewrites the DIAGNOSTICS.md feature-parity recipe onto
       `Compare/parquet_diff.py` over the Stage 4 `.scores.parquet` (Rust `-ExitAfterScoring`).
@@ -34,7 +36,7 @@ reference only; C# does not carry output whose purpose is Rust integration.
 - [ ] Optional: add a Stage 4 `.scores.parquet` boundary to `Compare-EndToEnd-Bisect-Crossimpl.ps1`
       (its "rewritten in place at Stage 6" note is stale for C#, which writes `.scores-reconciled.parquet`;
       check whether Rust still rewrites in place).
-- [ ] Ask Brendan before push / PR.
+- [x] Push / PR / TeamCity (Brendan approved 2026-10-17).
 
 ## Progress Log
 
