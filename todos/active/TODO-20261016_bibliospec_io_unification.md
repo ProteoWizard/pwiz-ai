@@ -1100,3 +1100,10 @@ delete still needs Brendan's hand.
 **#4848 after #4866**: `git merge origin/master` on `Skyline/work/20261009_blib_protein_fdr_pep` was
 clean (ort auto-merged `BlibReader.cs` and `BlibReaderTests.cs`; no golden conflicts, so master's
 goldens did not move in #4865/#4866 and the branch's recaptured goldens stand). Re-gate in progress.
+
+**#4848 re-gated on master with #4866** (2026-10-18 evening): merge commit df1b4e298a. BiblioSpec
+152/152, Osprey Debug 643/643 + zero inspection, CarafeSharp 113/113 + zero inspection, Skyline build +
+GlobalQValueFilterTest, `regression.ps1 -Dataset Stellar -NoBuild` PASSED against the branch's goldens.
+Pushed onto Nick's branch (fast-forward d33f22622f -> df1b4e298a). TeamCity Perf/Regression triggered
+on `pull/4848` (Brendan's permission): the first run that compares the recaptured goldens rather than
+captures them. Still draft until it passes; then mark ready for Brendan's review.
