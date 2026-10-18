@@ -718,3 +718,20 @@ peptides. `regression.ps1`: `StellarGenDecoyEntrap` gets `Manifest =
 'osprey_library_db_pairing.tsv'` (the refusal would have demanded it) and its diagnostics
 golden is recaptured: `pass1.experiment.pairedFdp` 0.011625 -> 0.010552, `pass2` 0.009155 ->
 0.008286, nothing else. Decision (c), `entrapment_method`, stays open.
+
+**Decision (c) resolved (Brendan, 2026-10-17, evening)**: `Method` is how a row's sequence was
+made from the row it was made from, so entrapment targets get one too - `shuffle` or
+`foreign` - beside the decoys' `reverse` / `cycle`. Only CarafeSharp's `-build_entrapment_fasta`
+stage knows it, and the manifest is the hand-off to the library build, so the manifest gains an
+optional sixth column `entrapment_method` (on the `p_target` rows; every reader finds columns
+by name, FDRBench never reads Carafe's manifest, Osprey writes its own five-column one for it),
+the reconciler keeps it, and `DecoyPairPlanner` copies it onto the entrapment-target
+`DecoyPairs` rows. Direction stated with it: the .blib is the transfer format between
+CarafeSharp and Osprey; Carafe internal will write .blib too; the .tsv-plus-manifest path is
+the Java-Carafe-to-Rust-Osprey bridge and a removal candidate once Rust stops being the parity
+oracle, with the .tsv loader kept for DIA-NN libraries.
+
+Follow-ons, not in this PR: (1) `LibMetadata` should record the foreign source FASTA's path when
+one was used (Brendan); (2) Osprey's `--export-library` writes `Method` NULL on every row - it
+keeps no method on `LibraryEntry` - so a .blib exported from a Carafe .blib loses `reverse` /
+`cycle` / `shuffle`; carrying it means an entry field, libcache v7, and the round-trip check.
