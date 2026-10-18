@@ -16,8 +16,14 @@ Default tolerance is 1e-6, mirroring Test-Features.ps1's gate. Pass
 
 Exit code: 0 if every column matches (within tolerance), 1 otherwise.
 
+--common-entries reports the entry_id set difference (with samples) and then compares every
+column over the entry_ids both files hold, instead of stopping at a row-count mismatch. Use it
+where the two sides' candidate sets legitimately differ by a few rows - the Stage 4
+.scores.parquet of Rust vs C# (DIAGNOSTICS.md, main-search feature parity). The exit code is
+still 1 when the sets differ.
+
 Usage:
-    python parquet_diff.py <a.parquet> <b.parquet> [--tolerance N]
+    python parquet_diff.py <a.parquet> <b.parquet> [--tolerance N] [--common-entries]
 """
 import argparse
 import sys
@@ -106,8 +112,22 @@ if __name__ == "__main__":
     p.add_argument("b", help="second parquet file")
     p.add_argument("--tolerance", type=float, default=0.0,
                    help="numeric tolerance: rows where |a-b| <= tolerance match (default 0 = exact)")
+    p.add_argument("--common-entries", action="store_true",
+                   help="report the entry_id set difference, then compare over the shared entry_ids")
     args = p.parse_args()
     a = load_sorted(args.a)
     b = load_sorted(args.b)
+    sets_match = True
+    if args.common_entries:
+        ids_a = set(a.column("entry_id").to_pylist())
+        ids_b = set(b.column("entry_id").to_pylist())
+        only_a = sorted(ids_a - ids_b)
+        only_b = sorted(ids_b - ids_a)
+        common = pa.array(sorted(ids_a & ids_b), type=a.schema.field("entry_id").type)
+        print(f"=== entry_ids: {len(common)} common, {len(only_a)} only in A {only_a[:5]}, "
+              f"{len(only_b)} only in B {only_b[:5]} ===")
+        sets_match = not only_a and not only_b
+        a = a.filter(pc.is_in(a.column("entry_id"), value_set=common))
+        b = b.filter(pc.is_in(b.column("entry_id"), value_set=common))
     ok = diff_tables(a, b, args.a, args.b, tolerance=args.tolerance)
-    sys.exit(0 if ok else 1)
+    sys.exit(0 if ok and sets_match else 1)

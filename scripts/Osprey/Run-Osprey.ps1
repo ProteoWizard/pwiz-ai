@@ -237,6 +237,10 @@ $csharpBinary = Get-OspreyExe -SourceRoot (Join-Path $projRoot 'pwiz')
 $rustForkBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
 $rustUpstreamBinary = Join-Path $projRoot "osprey-mm\target\release\osprey.exe"
 $rustBinary = if ($RustTree -eq "Upstream") { $rustUpstreamBinary } else { $rustForkBinary }
+# The Rust exe links OpenBLAS dynamically; without the vcpkg runtime folder on PATH it dies
+# before main with 0xC0000135 (exit -1073741515). Get-OspreyRustExe does this for every other
+# script; this one builds its own paths, so it has to ask.
+if ($Tool -eq "Rust") { Add-VcpkgRuntimeToPath }
 
 $binary = if ($Exe) { $Exe } elseif ($Tool -eq "CSharp") { $csharpBinary } else { $rustBinary }
 if (-not (Test-Path $binary)) {

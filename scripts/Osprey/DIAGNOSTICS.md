@@ -413,13 +413,22 @@ For ad-hoc dumps (single tool, specific entries, benchmarking), use
 `Run-Osprey.ps1` directly:
 
 ```powershell
-# Main-search feature parity: run both tools through Stage 4 (the C# run on the Rust
-# calibration), then diff the per-candidate features in the Stage 4 .scores.parquet
-# column by column (--write-pin and its .cs_features.tsv are gone, #4864)
-pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool Rust  -Clean -ExitAfterScoring
-pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool CSharp -ExitAfterScoring `
-     -ExtraArgs "--load-calibration file.calibration.json"
-python ./ai/scripts/Osprey/Compare/parquet_diff.py <rust>.scores.parquet <csharp>.scores.parquet --tolerance 1e-6
+# Main-search feature parity: run both tools through Stage 4 into SEPARATE directories (both
+# write <stem>.scores.parquet; --cache-dir keeps the spectra caches out of the data folder), the
+# C# run on Rust's calibration (OSPREY_LOAD_CALIBRATION - C# has no --load-calibration flag),
+# then diff the per-candidate features column by column over the entry_ids both sides hold.
+# (--write-pin and its .cs_features.tsv are gone, #4864.) Verified on Stellar 2026-10-18.
+$rust = 'D:\test\osprey-runs\feature-parity\rust'; $cs = 'D:\test\osprey-runs\feature-parity\csharp'
+pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool Rust -ExitAfterScoring "-ExtraArgs:--output-dir $rust --cache-dir $rust"
+$env:OSPREY_LOAD_CALIBRATION = "$rust\<stem>.calibration.json"
+pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool CSharp -ExitAfterScoring "-ExtraArgs:--output-dir $cs --cache-dir $cs"
+Remove-Item Env:OSPREY_LOAD_CALIBRATION
+python ./ai/scripts/Osprey/Compare/parquet_diff.py "$rust\<stem>.scores.parquet" "$cs\<stem>.scores.parquet" --tolerance 1e-6 --common-entries
+# Reading it: the entry_id line is the candidate-set difference. modified_sequence (UniMod vs
+# +mass notation) and fragment_mzs / fragment_intensities (binary-encoded lists) differ in
+# REPRESENTATION on every row and say nothing about parity; compare the 21 PIN feature columns.
+# Rust writes its log and calibration_debug.csv to the working directory (the data folder) -
+# delete them afterwards.
 
 # Benchmark Stages 1-4 only (uses OSPREY_EXIT_AFTER_SCORING internally)
 pwsh -File './ai/scripts/Osprey/Bench-Scoring.ps1' -Dataset Stellar
