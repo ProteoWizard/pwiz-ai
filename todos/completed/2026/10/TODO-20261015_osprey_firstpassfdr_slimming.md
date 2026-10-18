@@ -6,10 +6,8 @@
   (merged, deleted).
 - **Base**: `master`
 - **Created**: 2026-10-15
-- **Status**: PR B complete: steps 1-3 + defect fixes + P16 pay-later fix committed (`c398ff986c`,
-  `21f51395ca`, `7b21b0b239`, `0cd3c6fa16`, review fixes). Gates green (unit, regression-parallel All 48/48,
-  cross-impl Stellar + Astral 1e-9). Pushing / PR / TeamCity approved by Brendan 2026-10-17. ai/ script
-  changes commit at merge. Follow-up PR prepared: TODO-20261017_osprey_remove_write_pin.
+- **Status**: Completed. PR A merged 2026-10-16, PR B merged 2026-10-17. Still owed: the #4823 / #4848
+  reconciliation below. Follow-up PR prepared: TODO-20261017_osprey_remove_write_pin.
 - **Owed to #4823 / #4848 (decided 2026-10-15)**: draft PR #4848 (`Skyline/work/20261009_blib_protein_fdr_pep`,
   stacked on #4823) adds `PeptidePep` inside the pass-2 row walk PR A deleted, plus edits to
   `FdrExperimentRecord/Accumulator/Sidecar` and `FdrProjectionSinks`. PR A merged first (Mike is not settled
@@ -20,7 +18,7 @@
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: A = [#4853](https://github.com/ProteoWizard/pwiz/pull/4853) (merged 2026-10-16 as `c30a5af221`).
-  B = (none yet).
+  B = [#4863](https://github.com/ProteoWizard/pwiz/pull/4863) (merged 2026-10-17 as `e89d533739`).
 - **Checkout**: `C:\proj\pwiz`
 
 ## Objective
@@ -618,3 +616,18 @@ Design as built (uncommitted until gates pass):
   adopted runs perform no actions. Unit 639/639 + inspection 0 (`test-review-run1.log`).
 - Housekeeping done (Brendan OK): removed C:\proj\pwiz-bisect worktree, paylater-bisect-*, mdiag-cost-*, the
   four 10-16 SEA-AD scratch runs, _bin bisect-51c0c24837 / defects-7b21b0b / planrescore-*.
+
+### 2026-10-17 - PR B merged
+
+PR #4863 merged as commit e89d533739 (TeamCity Osprey Perf/Regression build 4224399 / #325 green at
+a4504c59ac; Copilot refused on quota, so /code-review medium was the AI review). Shipped: per-run Stage 6
+planning moved into PerFileRescoring from a cross-run consensus file (envelope v4); one analysis-named
+first-pass model and stratum; the --task SecondPassFDR diagnostics fix; and the P16 pay-later fix - each
+run's calibration-view row in .calibration.json and its FeatureSums share in .1st-pass.fdr_scores.bin (v9),
+so a report asked for later, an HPC join or a partial resume reproduces the flag-up-front report. ai/
+script changes (runner link tables, Run-Osprey -Output, Run-SeaAd -LinkUpTo, reconciliation_diff.py,
+calibration_diff.py, bisect driver Stage 3 content compare) committed with this move. Deferred: the
+#4823 / #4848 PeptidePep reconciliation (Branch Information); consensus/retained-summary stamp checks on
+load (review finding 5, existing pattern); --write-pin removal is its own PR
+(TODO-20261017_osprey_remove_write_pin).
+
