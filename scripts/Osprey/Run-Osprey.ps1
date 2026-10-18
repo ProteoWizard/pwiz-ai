@@ -23,9 +23,6 @@
 .PARAMETER Clean
     Clean cached files before running (parquet, calibration, spectra caches)
 
-.PARAMETER WritePin
-    Write PIN feature dump for cross-implementation comparison
-
 .PARAMETER DiagEntryIds
     Comma-separated entry IDs for OSPREY_DIAG_SEARCH_ENTRY_IDS diagnostic
 
@@ -120,10 +117,6 @@
     Clean caches and run Rust on all 3 Astral files
 
 .EXAMPLE
-    .\Run-Osprey.ps1 -Dataset Astral -Clean -WritePin
-    Clean and run C# on Astral with feature dump
-
-.EXAMPLE
     .\Run-Osprey.ps1 -DiagEntryIds "0,1080,5765,28988"
     Run C# on Stellar with search XIC diagnostic for specific entries
 #>
@@ -147,9 +140,6 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$Clean = $false,
-
-    [Parameter(Mandatory=$false)]
-    [switch]$WritePin = $false,
 
     [Parameter(Mandatory=$false)]
     [switch]$Summary = $false,
@@ -402,9 +392,6 @@ try {
     $toolArgs += $ds.Resolution
     $toolArgs += "--protein-fdr"
     $toolArgs += "0.01"
-    if ($WritePin) {
-        $toolArgs += "--write-pin"
-    }
     if ($ExitAfterScoring) {
         if ($Tool -eq "CSharp") {
             $toolArgs += "--task"

@@ -4,11 +4,10 @@
 - **Branch**: `Skyline/work/20261017_osprey_remove_write_pin` (rebased onto master `e89d533739`, pushed)
 - **Base**: `master`
 - **Created**: 2026-10-17
-- **Status**: PR open, TeamCity Perf/Regression build 4224410 queued. Unit 639/639 + inspection 0, Stellar
-  regression PASS. At merge, apply the ai/ patch below.
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4864](https://github.com/ProteoWizard/pwiz/pull/4864) (opened 2026-10-17 at `84e1f3ea74`)
+- **PR**: [#4864](https://github.com/ProteoWizard/pwiz/pull/4864) (merged 2026-10-18 as `aef1494771`)
 - **Checkout**: `C:\proj\pwiz-writepin` (worktree of `C:\proj\pwiz`)
 
 ## Objective
@@ -29,10 +28,10 @@ reference only; C# does not carry output whose purpose is Rust integration.
 ## Remaining
 - [x] `regression.ps1 -Dataset Stellar` in the worktree: PASS, data dir unchanged
       (`sessions/20261016-b2pr/writepin-regression-stellar.log`)
-- [ ] At merge, apply `ai/.tmp/sessions/20261016-b2pr/patch_ai_write_pin.py C:/proj/ai`: drops
-      `Run-Osprey.ps1 -WritePin`; rewrites the DIAGNOSTICS.md feature-parity recipe onto
-      `Compare/parquet_diff.py` over the Stage 4 `.scores.parquet` (Rust `-ExitAfterScoring`).
-      Not before: current master still accepts the flag.
+- [x] At merge, the ai/ follow-through (applied by hand 2026-10-18; the patch script had been
+      cleaned out of `ai/.tmp`): `Run-Osprey.ps1 -WritePin` dropped; the DIAGNOSTICS.md
+      feature-parity recipe rewritten onto `Compare/parquet_diff.py` over the Stage 4
+      `.scores.parquet` from two `-ExitAfterScoring` runs.
 - [ ] Optional: add a Stage 4 `.scores.parquet` boundary to `Compare-EndToEnd-Bisect-Crossimpl.ps1`
       (its "rewritten in place at Stage 6" note is stale for C#, which writes `.scores-reconciled.parquet`;
       check whether Rust still rewrites in place).
@@ -43,3 +42,13 @@ reference only; C# does not carry output whose purpose is Rust integration.
 ### 2026-10-17 - Implemented
 - Gates: `sessions/20261016-b2pr/writepin-run1.log` (inspection 0; only the self-updating help test red),
   `writepin-run2.log` (637/637).
+
+### 2026-10-18 - Merged
+
+PR #4864 merged as commit aef1494771 (squash; every check green, Copilot refused on quota, no review
+threads). Shipped: `--write-pin` and the `.cs_features.tsv` dump removed, the usage resource and doc
+rows gone, CommandLine.html regenerated. The ai/ follow-through landed in the same pwiz-ai commit as
+this entry (`Run-Osprey.ps1 -WritePin` dropped, DIAGNOSTICS.md recipe on `parquet_diff.py`).
+Deferred: the optional Stage 4 `.scores.parquet` boundary in `Compare-EndToEnd-Bisect-Crossimpl.ps1`
+(and the check whether Rust still rewrites its parquet in place at Stage 6) was not done; it belongs
+with the next cross-impl bisect that needs it. The `C:\proj\pwiz-writepin` worktree was already gone.

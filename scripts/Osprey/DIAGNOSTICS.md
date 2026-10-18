@@ -413,10 +413,13 @@ For ad-hoc dumps (single tool, specific entries, benchmarking), use
 `Run-Osprey.ps1` directly:
 
 ```powershell
-# Share Rust calibration for main-search feature comparison
-pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool Rust  -Clean -WritePin
-pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool CSharp -WritePin `
+# Main-search feature parity: run both tools through Stage 4 (the C# run on the Rust
+# calibration), then diff the per-candidate features in the Stage 4 .scores.parquet
+# column by column (--write-pin and its .cs_features.tsv are gone, #4864)
+pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool Rust  -Clean -ExitAfterScoring
+pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool CSharp -ExitAfterScoring `
      -ExtraArgs "--load-calibration file.calibration.json"
+python ./ai/scripts/Osprey/Compare/parquet_diff.py <rust>.scores.parquet <csharp>.scores.parquet --tolerance 1e-6
 
 # Benchmark Stages 1-4 only (uses OSPREY_EXIT_AFTER_SCORING internally)
 pwsh -File './ai/scripts/Osprey/Bench-Scoring.ps1' -Dataset Stellar
