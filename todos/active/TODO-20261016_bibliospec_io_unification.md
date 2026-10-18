@@ -788,3 +788,14 @@ memory profile of the derived route (`--timestamp --memstamp`, `perfviz.py`) not
 library whose decoys are flagged only by the Decoy column gets `DECOY_`-prefixed accessions in the
 derived .blib (the export always did this), so its decoys' ProteinIds differ from the parse's -
 pre-existing property of the .blib route, no regression dataset has one.
+
+**Later the same night (01:00-02:00)**: Astral scale (1.57M precursors, hram): derived load 5.13s
+vs 2.37s cache read, derived write 41s vs 2s, peak +0.9 GB total during the load, floor equal; thread
+scaling of the derived scan 8.5 / 5.2 / 3.8 / 2.8 / 4.4s at 1 / 2 / 4 / 8 / 16 threads (SQLite's
+fetch stops scaling past a few connections). **Commit 4302722c92** caps the reader partitions at 8
+(`BlibLoader.MAX_PARTITIONS`): Astral 3.47s (1.46x the cache), HeLa 1.06s (1.8x; 0.85s at 16). A
+reader/typer split (8 SQLite readers feeding 16 typing threads through a bounded queue) measured
+WORSE (Astral 3.86s, HeLa 0.88s) and was reverted; numbers in the handoff. Stellar regression PASSED
+on 4302722c92 (`sessions/20261018-night/regression-stellar-cap8.log`); Astral `-LibraryAsBlib` on
+HEAD launched 01:53. The derived .blib's `DecoyPairs.Method` is NULL (entries carry no Method; nothing
+in Osprey reads it) - the open "Method through the export" follow-on covers it.
