@@ -1085,3 +1085,18 @@ fix taken: `BiblioLiteSpectrumInfo.Protein` is now a getter on the first group's
 reference and name copy dropped; `LibraryGlobalScores.ForProtein` + a string overload keep BlibDb's
 three name-only callers). Commit d33f22622f, Skyline build + GlobalQValueFilterTest passed, pushed onto
 Nick's branch; PR body's review paragraph replaced by the arithmetic.
+
+### 2026-10-18 - PR B (#4866) merged
+
+PR #4866 merged as commit 43c5e5eb8a (squash, `/pw-complete`; every check green: Perf/Regression
+build 330 on `pull/4866` 114 passed, Skyline PR build 1819 passed, Osprey Windows and Linux 747 each,
+code inspection clean). Shipped: the port's `LibReader` (BlibSearch, BlibToMs2) on the shared
+`BlibReader`, which gained the filtered scan (`BlibSpectrumFilter`) and the by-id read sharing one
+WHERE builder with #4865's id-range partitions; `LibReaderTests` over a fixture library. Local master
+at 43c5e5eb8a; `Skyline/work/20261018_bibliospec_libreader` deleted locally and on origin. This TODO
+stays active for #4848 and #4823 (and the PeptidePep/Proteins.Pep follow-up); the #4865 remote branch
+delete still needs Brendan's hand.
+
+**#4848 after #4866**: `git merge origin/master` on `Skyline/work/20261009_blib_protein_fdr_pep` was
+clean (ort auto-merged `BlibReader.cs` and `BlibReaderTests.cs`; no golden conflicts, so master's
+goldens did not move in #4865/#4866 and the branch's recaptured goldens stand). Re-gate in progress.
