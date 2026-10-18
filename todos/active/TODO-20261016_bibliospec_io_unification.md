@@ -747,3 +747,44 @@ once on an agent-specific leak flake (TestTicChromatogram, MacCoss Agent 1, heap
 
 **Next session handoff**: read `ai/.tmp/handoff-20261018_night_blib_as_cache.md` before starting
 work (it supersedes `handoff-20261017_bibliospec_io_reader_pairing.md`).
+
+### 2026-10-18 (night session) - the .blib replaces Osprey's `.libcache`
+
+Branch `Skyline/work/20261018_blib_as_cache` off the #4860 branch (1c49fde332), two local
+commits, nothing pushed. Full detail in `ai/.tmp/handoff-20261018_blib_as_cache_morning.md`.
+
+**Commit 59d6fbc489 - the .blib load is fast enough** (HeLa, 242,841 precursors, 16 threads):
+3.38s -> 0.76-0.85s against a 0.59s `.libcache` read (the handoff's bar was 2x). Of the 2.54s
+"modifications and typing" bucket, 2.42s was `FragmentTyping` and 0.03s modification parsing, so
+the planned modification interning was dropped. `FragmentLadder.Build` sums each ion once per
+peptide, bit-identical to `CalculateFragmentMz` (pinned by `FragmentTypingTest`); `PreferredSlot`
+scans its window twice with no list; `BlibLoader` reads id-RANGE partitions on every thread
+(`BlibReader` partitions were `id % N`, a full table scan per thread: 9.2s of SQLite summed over
+16 threads against 0.69s on one) and merges in id order. The `RefSpectraPeakAnnotations` idea was
+not taken: Skyline reads that table for peptides too (as small-molecule attributes), and 4.8M rows
+cost more than the typing they replace. Per-thread typing inflates ~4x at 16 threads on this box
+(i9-14900, 8 P + 16 E cores), not a lock, not GC. TSV parse fell 6.25s -> 4.53s as a side effect.
+
+**Commit 99e5e595fb - the derived .blib** (implemented by a sub-agent from a written brief,
+reviewed and gated by the session): a `.tsv` source writes `<lib>.tsv.blib` where the `.libcache`
+went, keyed by LibMetadata `osprey.library_hash` (composition text + `BlibLoader.CacheTerm`); a
+match loads through the existing blib branch of `LibraryLoader.Load` (the `-LibraryAsBlib` route);
+a valid legacy `.libcache` is still read first for one release and never written. `OmitFragments`
+reads no peak blobs; `RetainFragmentsFor` skips by final base id before the scan and releases the
+rest. Derived load 0.85s on HeLa. Tests in `TestSubsetStraightThroughAndReruns` and
+`TestLibraryLoadsIdenticallyFromTsvAndBlib` (`DerivedLibraryDifferences`); docs 00/01/13/14/19/20/22
+and `regression.ps1` staging updated.
+
+**Gates**: Osprey Debug 642/642 + zero inspection, BiblioSpec 147, CarafeSharp 113 (perf commit);
+Stellar and StellarLibDecoy regressions PASSED on both commits, `-LibraryAsBlib` legs on the first;
+`regression-parallel.ps1` (all four datasets) launched on 99e5e595fb at 00:17 - result in the
+handoff.
+
+**Open**: goal 3 (#4848) not started - Nick's branch is 103 files / 44k lines against master,
+mostly Skyline UI and resx plus merges of two other branches, a daytime task. The first-run cost of
+writing the derived .blib (1.57M precursors ~40s; the 6.2M entrapment library a few minutes, once
+per library + configuration) against ~15s for the `.libcache` is worth a line in the PR. Astral-scale
+memory profile of the derived route (`--timestamp --memstamp`, `perfviz.py`) not taken. A DIA-NN
+library whose decoys are flagged only by the Decoy column gets `DECOY_`-prefixed accessions in the
+derived .blib (the export always did this), so its decoys' ProteinIds differ from the parse's -
+pre-existing property of the .blib route, no regression dataset has one.
