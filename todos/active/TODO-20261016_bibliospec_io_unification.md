@@ -5,17 +5,18 @@
   `Skyline/work/YYYYMMDD_...` branch off `master`.
 - **Base**: `master`
 - **Created**: 2026-10-16
-- **Status**: PR A merged 2026-10-18; the night's `.blib`-as-cache work is PR
-  [#4865](https://github.com/ProteoWizard/pwiz/pull/4865) (`Skyline/work/20261018_blib_as_cache`,
-  rebased onto master after #4860 and #4864, opened 2026-10-18; TeamCity Perf/Regression
-  triggered on `pull/4865`). PR B is [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
-  (`Skyline/work/20261018_bibliospec_libreader`, opened 2026-10-18). Nick's #4848 adaptation waits for Nick
-  (Brendan, 2026-10-18: his branch carries the open #4823). Then C-E, expected to move to the
-  backlog
+- **Status**: PR A merged 2026-10-18 (#4860); the `.blib`-as-cache PR
+  [#4865](https://github.com/ProteoWizard/pwiz/pull/4865) merged 2026-10-18 as 1be16fdafe. PR B
+  is [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
+  (`Skyline/work/20261018_bibliospec_libreader`, opened 2026-10-18, all checks green). Nick's
+  #4848 and #4823 are being untangled locally (the 2026-10-18 afternoon entry): schema in #4848 off
+  master, calculation in #4823, both awaiting Brendan's publishing call. Then C-E, expected to
+  move to the backlog
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
-  5c5f3ae815); PR B [#4866](https://github.com/ProteoWizard/pwiz/pull/4866) (open)
+  5c5f3ae815); the `.blib`-as-cache PR [#4865](https://github.com/ProteoWizard/pwiz/pull/4865)
+  (merged 2026-10-18 as 1be16fdafe); PR B [#4866](https://github.com/ProteoWizard/pwiz/pull/4866) (open)
 
 ## Goal
 
@@ -1009,3 +1010,17 @@ fixes). Replacement PR description drafted in `ai/.tmp/sessions/20261018-865c/pr
 
 **Both branches then need Brendan's publishing call** (fast-forward pushes onto Nick's branches,
 or replacement PRs) and the TeamCity Perf/Regression gate on each `pull/<N>`, asked for first.
+
+### 2026-10-18 - PR #4865 merged
+
+PR #4865 merged as commit 1be16fdafe (squash, `/pw-complete`; all 18 checks green, TeamCity
+Perf/Regression build 4224466 SUCCESS on `pull/4865`, Copilot a quota refusal). Shipped: the
+.blib as the library Osprey derives from a .tsv in place of the `.libcache` (written once as
+`<lib>.tsv.blib` with the composition hash in `LibMetadata`; a valid legacy `.libcache` still
+read for one release, never written), the fast .blib load (allocation-free fragment typing,
+id-range partitions on several threads, capped at eight), the fallback to the .tsv when a derived
+read faults, and the docs and `regression.ps1` staging. Deferred, unchanged from the night's
+notes: `DecoyPairs.Method` through the export (the derived file's Method is NULL), GeneNames not
+carried, no Astral-scale memory profile of the derived route. The work branch is deleted once the
+golden lanes free the checkout. This TODO stays active for PR B (#4866) and the #4848/#4823
+untangling.
