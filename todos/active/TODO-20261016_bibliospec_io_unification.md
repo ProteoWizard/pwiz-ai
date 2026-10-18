@@ -1024,3 +1024,16 @@ notes: `DecoyPairs.Method` through the export (the derived file's Method is NULL
 carried, no Astral-scale memory profile of the derived route. The work branch is deleted once the
 golden lanes free the checkout. This TODO stays active for PR B (#4866) and the #4848/#4823
 untangling.
+
+**Session close (2026-10-18 afternoon, context 25%)**: goldens on the #4823 branch recaptured
+(2bc52c9f18; `protein_fdr.tsv` its only golden difference from master). PR B: master merged
+(8a2dbb2c78), the `BlibReader` conflict with #4865 resolved by giving `WhereClause.AddPartition`
+the id span and the BETWEEN range; BiblioSpec 148/148; Osprey gate running at close, CarafeSharp
+and the Stellar regressions, the push and the TeamCity gate still to do. Brendan's plan request
+answered with the three-phase plan (complete #4866; make #4848 mergeable off master, published
+by fast-forwarding Nick's branch, Perf/Regression on `pull/4848`; #4823 pushed as a draft with no
+TeamCity trigger) and three decisions (A: Perf/Regression on `pull/4866` first; B: push onto
+Nick's branches; C: #4866 before #4848's final master merge), unanswered at close.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261018_blib_cleanup_next.md` before starting work.
