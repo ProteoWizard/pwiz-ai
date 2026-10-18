@@ -920,3 +920,10 @@ rebuild (summed and clamped) and the missing-table refusal. Dropped 1: `minPeaks
 `int.MaxValue` - the only caller passes 5. Gates re-run after the fixes: BiblioSpec 148/148,
 Osprey 642/642 + zero inspection, CarafeSharp 113/113 + zero inspection; logs in
 `ai/.tmp/sessions/20261018-865c/`.
+
+**Osprey regression on #4866** (local, Release build of 85ea3d1393): Stellar PASSED on the
+`.tsv` route and with `-LibraryAsBlib` (the leg that reads the library through the changed
+partition scan; 242,841 precursors exported and searched). Logs
+`ai/.tmp/sessions/20261018-865c/regression-stellar-prB.log` and
+`regression-stellar-blib-prB.log`. The TeamCity Perf/Regression on `pull/4866` is not triggered:
+the agent was on #4865's run and the trigger is asked for, never assumed.
