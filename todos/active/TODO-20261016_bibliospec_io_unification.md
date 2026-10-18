@@ -799,3 +799,12 @@ WORSE (Astral 3.86s, HeLa 0.88s) and was reverted; numbers in the handoff. Stell
 on 4302722c92 (`sessions/20261018-night/regression-stellar-cap8.log`); Astral `-LibraryAsBlib` on
 HEAD launched 01:53. The derived .blib's `DecoyPairs.Method` is NULL (entries carry no Method; nothing
 in Osprey reads it) - the open "Method through the export" follow-on covers it.
+
+**Session close (02:59)**: `/code-review medium` on the night's diff gave nine findings; five fixed in
+f1291d1924 (fallback to the .tsv when the derived read faults; decoy accessions kept as loaded in
+the derived file; per-partition string interning; peptide-length check before any row work; the
+"manifest is not read" line suppressed on warm derived runs), four dropped with reasons in the
+handoff. efe167f695 adds the test for manifest-declared decoys without an accession prefix (374
+differences without the fix). All gated (Osprey 642 + inspection; Stellar + StellarLibDecoy
+regressions on f1291d1924). Five local commits, none pushed. 4h28m, context 91% -> 36%.
+Handoff: `ai/.tmp/handoff-20261018_blib_as_cache_morning.md`.
