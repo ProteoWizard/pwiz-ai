@@ -104,6 +104,27 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       minimize / export / share-zip onto the shared copier, then `BlibDb` and the BLIB `Db*`
       mappings go. Risk: Skyline tests compare library bytes; match `BlibDb`'s output (defaults,
       NULL versus empty, the index set) or update expected files deliberately, one by one.
+- [ ] **E. Skyline's other library formats derive a .blib instead of a cache of their own** (after
+      D; Brendan, 2026-10-18). `NistLibraryBase` (`.msp` -> `.slc`), `SpectrastLibrary` (`.sptxt`
+      -> `.splc`) and `XHunterLibrary` (`.hlf` -> `.slc`) each keep a text parser plus a private
+      binary cache writer and reader (~1,300 lines in `NistLibSpec.cs` alone), while
+      `BiblioSpecLiteLibrary` dropped its cache in 26.1 once Nick made the .blib load fast enough.
+      Each `CreateCache` already walks the text once into spectra with peaks, modifications,
+      retention time, copies and a score: feed that walk to `BlibWriter`, load the derived .blib
+      through the BiblioSpecLite path, and the three cache formats and their readers go; the
+      converted library is a standard file for any tool. Invalidation as Osprey's derived library
+      does it (source identity plus converter version in `LibMetadata`, rebuilt on a mismatch). To
+      settle first: (1) fidelity - inventory what each `CreateCache` keeps that is not a
+      `RefSpectra` column (NIST TF ratio, SpectraST probability versus replicate count, X!Hunter
+      expect) and map it to `ScoreTypes` or an optional column, the door #4848 opens; (2) the
+      first-open cost - SQLite writes slower than a flat cache (Osprey: 41s vs 2s at 1.57M
+      spectra), tens of seconds once for a NIST-sized library, to be stated in the design. Related
+      Skyline findings from the 2026-10-18 review of Skyline's typing: `MassListRowReader.
+      CalcTransitionExplanations` rebuilds `GetFragmentIonMasses` and `CalcPotentialLosses` per row
+      (cache per consecutive precursor), and `TransitionCalc.CompareIonMatch` keeps the first
+      candidate on an equal delta while scanning ordinals longest-first, so an isobaric b12^2+ beats
+      b6+ when the list gives no product charge (prefer the lower charge, then the shorter ion, as
+      Osprey's typing does; pin with an import test).
 
 ## Gates and their commands (from the PR 3c work)
 - `pwsh -File C:/proj/ai/scripts/BiblioSpec/Build-BiblioSpec.ps1 -SourceRoot C:/proj/pwiz -RunTests`
