@@ -8,14 +8,14 @@
 - **Status**: PR A merged 2026-10-18; the night's `.blib`-as-cache work is PR
   [#4865](https://github.com/ProteoWizard/pwiz/pull/4865) (`Skyline/work/20261018_blib_as_cache`,
   rebased onto master after #4860 and #4864, opened 2026-10-18; TeamCity Perf/Regression
-  triggered on `pull/4865`). PR B coded and gated 2026-10-18 on
-  `Skyline/work/20261018_bibliospec_libreader`. Nick's #4848 adaptation waits for Nick
+  triggered on `pull/4865`). PR B is [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
+  (`Skyline/work/20261018_bibliospec_libreader`, opened 2026-10-18). Nick's #4848 adaptation waits for Nick
   (Brendan, 2026-10-18: his branch carries the open #4823). Then C-E, expected to move to the
   backlog
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
-  5c5f3ae815)
+  5c5f3ae815); PR B [#4866](https://github.com/ProteoWizard/pwiz/pull/4866) (open)
 
 ## Goal
 
@@ -102,8 +102,9 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       carries its own pairing and metadata; the composition hash is what a blib-only read must
       still answer).
 - [ ] **B. The port's `LibReader` onto it** (BlibSearch, BlibToMs2). Gate: the port's reference
-      checks (`.report`, `.lms2`, `.check`). Coded and gated 2026-10-18 on
-      `Skyline/work/20261018_bibliospec_libreader`; see the 2026-10-18 PR B entry.
+      checks (`.report`, `.lms2`, `.check`). Coded, gated and opened 2026-10-18 as
+      [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
+      (`Skyline/work/20261018_bibliospec_libreader`); see the 2026-10-18 PR B entry.
 - [ ] **C. Skyline's read path** (`BiblioSpecLiteLibrary`) onto it, Skyline keeping its domain
       conversion. Gate: Skyline's library tests, plus load time and memory against master on large
       libraries (the property Nick worked for); ask Nick which libraries he measured on.
@@ -872,8 +873,9 @@ dry-run merge of his branch onto master now conflicts in 7 source files (`BlibSc
 `PercolatorScorer.cs`, `BlibOutputWriter.cs`, `FdrProjectionSinks.cs`, `SubsetPipelineTest.cs`);
 the goldens auto-merge.
 
-**PR B coded and gated** on `Skyline/work/20261018_bibliospec_libreader` (off master at
-aef1494771), commit 507f1cced5:
+**PR B coded, gated and opened** as [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
+(`Skyline/work/20261018_bibliospec_libreader` off master at aef1494771, commit 85ea3d1393 after
+the review fixes below):
 - `BlibReader` gains the two reads the port needed and the shared reader lacked: a filtered scan
   (`ReadSpectra(withPeaks, BlibSpectrumFilter, partitions...)`, the filter's inclusive bounds on
   precursor m/z, charge and `numPeaks` going into the SQL as bound parameters) and one row by id
