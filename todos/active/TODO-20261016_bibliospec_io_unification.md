@@ -5,11 +5,12 @@
   `Skyline/work/YYYYMMDD_...` branch off `master`.
 - **Base**: `master`
 - **Created**: 2026-10-16
-- **Status**: PR A in progress (Brendan, 2026-10-16: this sprint, ahead of the Osprey-Carafe PR 4)
+- **Status**: PR A merged 2026-10-18; next the night's `.blib`-as-cache branch
+  (`Skyline/work/20261018_blib_as_cache`, five local commits) as its own PR on master, then B-E
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
-- **PR**: PR A https://github.com/ProteoWizard/pwiz/pull/4860 (open 2026-10-16; the TeamCity
-  Osprey Perf/Regression on `pull/4860` is still to be triggered, with Brendan's go-ahead)
+- **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
+  5c5f3ae815)
 
 ## Goal
 
@@ -88,7 +89,7 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
 
 ## PR plan (each gated on its own)
 
-- [ ] **A. Reader, Osprey and CarafeSharp onto it.** `BlibReader` in BiblioSpec.IO; Osprey's
+- [x] **A. Reader, Osprey and CarafeSharp onto it** (#4860, merged 2026-10-18). `BlibReader` in BiblioSpec.IO; Osprey's
       `BlibLoader` and `BlibDecoyPairs` and CarafeSharp's sequence query read through it. Gate:
       the Osprey regression byte-identical (it compares the written library and the search output),
       the unit gates of Osprey, CarafeSharp and the port. Then measure the `.libcache` question
@@ -829,3 +830,15 @@ handoff. efe167f695 adds the test for manifest-declared decoys without an access
 differences without the fix). All gated (Osprey 642 + inspection; Stellar + StellarLibDecoy
 regressions on f1291d1924). Five local commits, none pushed. 4h28m, context 91% -> 36%.
 Handoff: `ai/.tmp/handoff-20261018_blib_as_cache_morning.md`.
+
+### 2026-10-18 - PR A merged
+
+PR #4860 merged as commit 5c5f3ae815 (squash, `--admin`: the only red status was the required
+"Skyline code inspection", which had failed on an agent-side file-copy error, MSB3021 on
+`QTFLDebugLog.dll`, before inspectcode ran; the same build's 1,819 Skyline tests passed and the step
+passed on master minutes later. Brendan chose to merge rather than spend a Skyline build cycle on the
+re-run, which was cancelled, and to put the TeamCity time on the night's branch instead). Shipped:
+`BlibReader` and the reader-side unification, a `.tsv` and its `.blib` loading as the same object,
+`DecoyPairs` as the whole pairing design, `-LibraryAsBlib` regression legs, recaptured goldens.
+Deferred from A, carried by the night's branch: the `.blib` fast enough to replace the `.libcache`
+(done there) and `Method` on the export (open). The TODO stays active for the night's PR and B-E.
