@@ -927,3 +927,59 @@ partition scan; 242,841 precursors exported and searched). Logs
 `ai/.tmp/sessions/20261018-865c/regression-stellar-prB.log` and
 `regression-stellar-blib-prB.log`. The TeamCity Perf/Regression on `pull/4866` is not triggered:
 the agent was on #4865's run and the trigger is asked for, never assumed.
+
+### 2026-10-18 (afternoon) - untangling #4848 and #4823
+
+**Direction (Brendan, 2026-10-18)**: while #4865 waits for its merge, separate the two PRs so
+every BLIB schema change lives in #4848 targeting master, and #4823 stands alone with only the
+FDR calculation changes, which are the controversial part holding the schema work up.
+
+**The cut.** Nick's 209c65fcac mixed three things: a second-pass peptide-level competition that
+changes reported peptide q-values (calculation), peptide and protein-group PEP fits that depend on
+#4823's new picked-protein competition (calculation), and the two columns Osprey wrote them to
+(`RefSpectra.PeptidePep`, `Proteins.Pep`). So: the schema PR defines all six optional columns
+(DIA-NN, Proteome Discoverer and Skyline use them) and Osprey writes the four it has values for
+today (`PrecursorQValue`, `PrecursorPep`, `PeptideQValue`, `Proteins.QValue`); the peptide
+competition and both PEP fits move to #4823; Osprey writing the two PEP columns is a small
+follow-up once both have merged.
+
+**Schema branch, done locally** (local `Skyline/work/20261009_blib_protein_fdr_pep`, NOT pushed;
+Nick's remote tip stays 5c76314140 until Brendan says how to publish):
+1. `git revert 209c65fcac` (clean) and `git revert 1af19ebadb` (one conflict in
+   `SecondPassFdrTask.cs`, the reverted `ReadFirstPassProteinScores` beside a method master added).
+2. `git merge origin/master`: 18 conflicts. The 12 goldens taken from master (regenerated below);
+   the port's `BlibSchema.cs` and `Osprey.IO/BlibWriter.cs` deleted (master moved both to
+   BiblioSpec.IO in #4855/#4860); `BuildParser.cs`, `BlibOutputWriter.cs`, `SubsetPipelineTest.cs`
+   and docs/13 taken from master and Nick's intent re-applied on the shared writer.
+3. The adaptation (commit on top of the merge, 2026-10-18): `BlibOptionalColumn` and the six
+   definitions in BiblioSpec.IO `BlibSchema`; `BlibSpectrumRecord` carries the four spectrum values;
+   `BlibWriter.AddOptionalColumn` / `RemoveOptionalColumns` / `HasOptionalColumn` (ALTER TABLE,
+   the prepared inserts rebuilt with the columns, an appended library's columns loaded at open),
+   `AddProtein(accession, qValue, pep)` + `AddSpectrumProtein` (the record's accessions resolve to
+   a row registered with values); `BlibReader` reads the four spectrum columns. The port's
+   `BlibMaker.AddOptionalColumn` / `RemoveOptionalColumns` / `AddProtein` delegate to the writer,
+   `BuildParser.EnableOptionalColumn` and `InsertSpectrum` fill the record and register valued
+   proteins; Nick's BlibFilter transfer SQL (`OptionalColumnsCsv`) and `BlibBuilder.AllowsOptionalColumns`
+   kept as they were. Osprey: `OspreyBlibWriter.AddSearchGlobalColumns` (four columns),
+   `SearchGlobalValues` on `AddSpectrum`, `AddProteinGroup` + `AddSpectrumProtein`;
+   `BlibOutputWriter` writes protein groups through `ProteinGroupRows` and leaves the library's
+   own proteins off a search spectrum; `IOTest.TestSearchGlobalColumns` rewritten on the wrapper;
+   `SubsetPipelineTest` asserts the four columns and the groups. Two leftovers of 209c that its
+   revert could not see fixed by hand: a six-argument `FdrQValues` call Nick added later in
+   `ScoringTaskShared.cs`, and a doc cref in `BlibSpectrum.cs`.
+4. Gates on the result: BiblioSpec 151/151 (Nick's DIA-NN and PD references and tests included),
+   Osprey Debug 643/643 + zero inspection, CarafeSharp 113/113 + zero inspection. Skyline build
+   and `GlobalQValueFilterTest` and the golden regeneration (two lanes, `-CreateGolden`) in flight
+   at the time of writing; see below.
+
+**#4823 side, still to do**: on a local copy of `Skyline/work/20261011_osprey_protein_fdr`,
+merge master and cherry-pick 209c65fcac minus its blib-writing hunks (`Osprey.IO/BlibWriter.cs`,
+`BlibOutputWriter.cs`, `BlibComparer.cs`, `BlibGolden.ps1`, docs/13, the `SubsetPipelineTest`
+column asserts), so #4823 = the protein-group competition fix + the second-pass peptide
+competition + the peptide and protein-group PEPs (sidecar v4), no blib changes. Cannot start
+until the golden lanes finish: they write into this checkout's tree.
+
+**Publishing (Brendan to decide)**: push the reworked branch onto Nick's (a fast-forward, no
+force-push: his commits stay, followed by two reverts, the merge and the adaptation), or open a
+replacement PR from a new branch and close #4848 pointing at it. Either way #4848's description
+needs the "stacked on #4823" line replaced and the Osprey column list cut to four.
