@@ -5,8 +5,10 @@
   `Skyline/work/YYYYMMDD_...` branch off `master`.
 - **Base**: `master`
 - **Created**: 2026-10-16
-- **Status**: PR A merged 2026-10-18; next the night's `.blib`-as-cache branch
-  (`Skyline/work/20261018_blib_as_cache`, five local commits) as its own PR on master, then B-E
+- **Status**: PR A merged 2026-10-18; the night's `.blib`-as-cache work is PR
+  [#4865](https://github.com/ProteoWizard/pwiz/pull/4865) (`Skyline/work/20261018_blib_as_cache`,
+  rebased onto master after #4860 and #4864, opened 2026-10-18; TeamCity Perf/Regression
+  triggered on `pull/4865`); then B-E
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
