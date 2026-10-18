@@ -844,3 +844,12 @@ re-run, which was cancelled, and to put the TeamCity time on the night's branch 
 `DecoyPairs` as the whole pairing design, `-LibraryAsBlib` regression legs, recaptured goldens.
 Deferred from A, carried by the night's branch: the `.blib` fast enough to replace the `.libcache`
 (done there) and `Method` on the export (open). The TODO stays active for the night's PR and B-E.
+
+**Session end (2026-10-18 morning)**: #4864 completed alongside (merged aef1494771); the night's five
+commits rebased onto master after both merges (gate 642 + inspection each time) and opened as
+PR #4865 with the TeamCity Osprey Perf/Regression on `pull/4865` (build 4224466). PR E added to the
+plan. Next: #4865's checks, then Nick's #4848 adaptation, then PR B, then back to Osprey-Carafe PR 4;
+the Skyline PRs C-E are expected to move to the backlog.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261018_bibliospec_next.md` before starting work.
