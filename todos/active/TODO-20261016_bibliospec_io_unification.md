@@ -102,10 +102,9 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       from the Osprey-Carafe TODO (what the cache buys over reading the .blib now that a blib
       carries its own pairing and metadata; the composition hash is what a blib-only read must
       still answer).
-- [ ] **B. The port's `LibReader` onto it** (BlibSearch, BlibToMs2). Gate: the port's reference
-      checks (`.report`, `.lms2`, `.check`). Coded, gated and opened 2026-10-18 as
-      [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
-      (`Skyline/work/20261018_bibliospec_libreader`); see the 2026-10-18 PR B entry.
+- [x] **B. The port's `LibReader` onto it** (BlibSearch, BlibToMs2). Gate: the port's reference
+      checks (`.report`, `.lms2`, `.check`). [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
+      merged 2026-10-18 as 43c5e5eb8a; see the 2026-10-18 PR B entries.
 - [ ] **C. Skyline's read path** (`BiblioSpecLiteLibrary`) onto it, Skyline keeping its domain
       conversion. Gate: Skyline's library tests, plus load time and memory against master on large
       libraries (the property Nick worked for); ask Nick which libraries he measured on.
@@ -134,6 +133,27 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       candidate on an equal delta while scanning ordinals longest-first, so an isobaric b12^2+ beats
       b6+ when the list gives no product charge (prefer the lower charge, then the shorter ion, as
       Osprey's typing does; pin with an import test).
+- [ ] **F. The port free of .blib SQL** (Brendan, 2026-10-18; next after #4848 and #4823 merge,
+      ahead of the PeptidePep/Proteins.Pep follow-up). `pwiz_tools/BiblioSpec` is to interact with
+      .blib files only through BiblioSpec.IO's classes; SQL stays legitimate for the input formats
+      that are themselves databases (`MSFReader` for .msf/.pdResult, `OSWReader`, EncyclopeDIA
+      .elib). What remains today is BlibFilter's transfer path in `BlibMaker`: `ATTACH` of the
+      redundant library and about 45 `SqlStmt` calls (`INSERT INTO main.<table> ... SELECT ... FROM
+      <attached>.<table>` per table, `CreateUpdatedRefSpectraView` for older schemas,
+      `TableExists`/`TableColumnExists` by `sqlite_master`/`PRAGMA`, the SpectrumSourceFiles and
+      ScoreTypes upkeep, the schema upgrade `ALTER TABLE`s). #4855 moved the build path's row writes
+      onto `BlibWriter` but not this cross-schema transfer, and #4848 splices the optional column
+      names into three of its statements (`OptionalColumnsCsv`), which go with them. Two shapes:
+      (1) code motion, a `BlibTransfer` in BiblioSpec.IO owning the `ATTACH` and the transfer
+      statements, taking the schema's column lists; (2) the end state, BlibFilter on `BlibReader` +
+      `BlibWriter` with no `ATTACH`: read the redundant library's rows (the filtered scan and by-id
+      read from #4866), pick the best spectrum per precursor, write through `AddSpectrum`,
+      `AddRetentionTime`, `AddProtein`/`AddSpectrumProtein`. Prefer (2); measure its wall time on a
+      large redundant library against the SQL path before committing to it. Gate: the port's
+      reference checks (`.check`, `.report`, `.lms2`), `FilterTests`, and a byte comparison of a
+      filtered library against master's output; `BlibMaker.SqlStmt` gone or private to schema
+      creation is the finish line. A survey of which BlibBuild readers fill the global columns, and
+      which formats could, is in the 2026-10-18 progress entry below.
 
 ## Gates and their commands (from the PR 3c work)
 - `pwsh -File C:/proj/ai/scripts/BiblioSpec/Build-BiblioSpec.ps1 -SourceRoot C:/proj/pwiz -RunTests`
