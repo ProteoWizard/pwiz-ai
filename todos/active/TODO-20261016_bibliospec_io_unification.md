@@ -7,9 +7,11 @@
 - **Created**: 2026-10-16
 - **Status**: Merged 2026-10-18: PR A (#4860), the `.blib`-as-cache PR (#4865), PR B (#4866) and
   Nick's schema PR (#4848, untangled from #4823 and brought onto master). #4823 is an experimental
-  draft on Nick's branch with the FDR calculation changes only. Next: F (the port free of .blib SQL),
-  G (Brendan's UI review of the global cutoff), H (the other BlibBuild readers onto the columns), then
-  C-E; the PeptidePep/Proteins.Pep follow-up once #4823 merges
+  draft on Nick's branch with the FDR calculation changes only. F (the port free of .blib SQL) is open
+  as [#4867](https://github.com/ProteoWizard/pwiz/pull/4867). Next: C + D in one night-session PR
+  stacked on #4867 (Skyline's .blib read and write paths onto BiblioSpec.IO, with load-time
+  measurement), then G (Brendan's UI review of the global cutoff), H (the other BlibBuild readers onto
+  the columns), E; the PeptidePep/Proteins.Pep follow-up once #4823 merges
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
@@ -1271,3 +1273,14 @@ it was given as it stands), 1 dropped (BlibFilter's by-id second pass: the desig
 filtered library's ids and row order). Gates after the fixes: BiblioSpec 153, Osprey 643 + inspection,
 CarafeSharp 113 + inspection. No Perf/Regression run: Osprey's behaviour is unchanged and its unit
 gate covers the reader and writer. Awaiting TeamCity and Brendan's review.
+
+**Session end (2026-10-18 night)**: #4867 open with TeamCity running (`gh pr checks 4867`). Brendan's
+direction for the next, autonomous night session: items C and D together - Skyline's `.blib` reading
+(`BiblioSpecLiteLibrary`) and writing (`BlibDb`, the NHibernate `Db*` mappings) onto BiblioSpec.IO, off
+SQL and NHibernate (NHibernate stays for IrtDb, IonMobilityDb, OptimizationDb, MidasLibrary), as one PR
+stacked on #4867, green on all TeamCity configs including the manual Skyline PR Perf and Tutorial
+tests (authorized for that PR), with a before/after load-time measurement on the large libraries on
+this machine, since Nick profiled the 26.1 load. Details, order of work and stop rules in the handoff.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261018_skyline_blib_io_night.md` before starting work.
