@@ -77,6 +77,10 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
   referenced by BiblioSpec.Tests (in Pwiz.sln) but not added to Pwiz.sln, so Release solution builds built it
   twice as Debug|AnyCPU into bin\Debug (run25) - a master defect, not from this PR. Added it to Pwiz.sln
   (482b23a8c6); run28: once, x64 Release, 737 passed.
+- 2026-10-19: #4855 (Brendan, 10-16) added BiblioSpec.IO to Pwiz.sln on master too; the developer's master merge
+  (340a941e78) kept both entries (no textual conflict). Removed ours, kept master's (already x64->x64): 10699696a1.
+  Pwiz.sln now differs from master only by the 228 x64 remap lines. Clean bs.bat on 0608dac15e + fix: 757 passed,
+  BiblioSpec.IO once per section. PR body bullet about adding BiblioSpec.IO removed.
 - Superseded: my earlier claim that Osprey still builds pwiz-sharp three ways was stale - #4725 fixed that 09-30.
 - Copilot (high): BiblioSpec.Tests ExecuteBlib.TryResolveToolPath looked only in bin\<Config>\net10.0. My grep for
   literal bin\Release missed it (Path.Combine("bin", config, ...)). Earlier "737 passed" runs used STALE AnyCPU tools
