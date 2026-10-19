@@ -1127,3 +1127,47 @@ GlobalQValueFilterTest, `regression.ps1 -Dataset Stellar -NoBuild` PASSED agains
 Pushed onto Nick's branch (fast-forward d33f22622f -> df1b4e298a). TeamCity Perf/Regression triggered
 on `pull/4848` (Brendan's permission): the first run that compares the recaptured goldens rather than
 captures them. Still draft until it passes; then mark ready for Brendan's review.
+
+### 2026-10-18 - Survey: which BlibBuild readers fill the global q-value and PEP columns
+
+Asked for by Brendan with item F. Refs are `pwiz_tools/BiblioSpec/src/BiblioSpec/<file>:<line>` on the
+#4848 branch at df1b4e298a. Readers register in `BlibBuilder._readerFactories` (BlibBuilder.cs:834-855);
+`BuildParser.InsertSpectrum` writes the four spectrum values (BuildParser.cs:1046-1049) and a protein row
+with values (1083-1084). `Protein.QValue`/`Pep` are init-only (PSM.cs:34, 37): a reader sharing one
+`Protein` per accession (MzIdentMLReader.cs:358-363, OSWReader.cs:177-182, TSVReader.cs:449-452) must
+know the value when it creates the object.
+
+**Fill today**: DiaNNSpecLibReader - PrecursorQValue (:327, `Global.Q.Value` :437) and Protein.QValue
+(:312, `Global.PG.Q.Value` :438); MSFReader - PeptideQValue/PeptidePep (:543-544, TargetPeptideGroups
+`qValue`/`PEP` or `Qvalityqvalue`/`QvalityPEP` :600-608) and Protein.QValue (:657, TargetProteins
+`Expqvalue`, master proteins). Nobody sets PrecursorPep or Protein.Pep.
+
+| Reader | Formats | Score today (type) | Precursor q/PEP in format (parsed?) | Peptide q/PEP | Protein q/PEP | Notes |
+|---|---|---|---|---|---|---|
+| DiaNNSpecLibReader | .speclib/.parquet + report | `Global.Q.Value` (GenericQValue) | q parsed; `PEP` column unread | `Global.Peptidoform.Q.Value` (1.9+) unread | group q parsed; `PG.PEP` unread | same row loop, :437-439 |
+| MSFReader | .msf, .pdResult | PSM `PercolatorqValue`/`qValue`, or peptide-group `Qvalityqvalue`, or Confidence/Mascot expect (:782-813) | PSM q is Score on the Percolator branch (:800-806); PSM `PercolatorPEP` unread | parsed | q parsed; PEP unknown | PrecursorQValue = Score only when the PSM branch ran |
+| PepXMLreader | .pep.xml (PP/iProphet, Crux/Tide+Percolator, Comet, MSFragger, Tandem, MS-GF+, Morpheus, PEAKS, PD, Spectrum Mill) | engine-dependent (:821-845) | Crux `percolator_qvalue`, MS-GF+ `qvalue`, Morpheus `psm q-value` parsed; `percolator_PEP` unread; PP probability ~ 1-PEP | MS-GF+ `PepQValue` unread | none (prot.xml not read) | PD SEQUEST: SetScoreType(PercolatorQValue) at :572 but the `q-value` capture at :830 requires SequestXCorr, so it never fires (cpp parity comment; check the C++) |
+| SQTreader | .sqt | Percolator q = -(M col 6) (:330) or XCorr | q parsed when percolated | unknown | L lines are names only | PrecursorQValue = Score when percolated |
+| PercolatorXmlReader | .perc.xml | psm `<q_value>` (:341) | q parsed; `<pep>` sibling unread | `<peptides>` block has q/pep; reader enters the state and consumes nothing (:279, :301) | `<proteins>` q/pep when protein inference ran; unread | most complete untapped source |
+| MzIdentMLReader | .mzid(.gz) | first matching cvParam (:484-570) | MS-GF/percolator/generic q parsed; `percolator:PEP`, `MS-GF:PEP` unread (same loop :487) | `MS-GF:PepQValue`, distinct-peptide q unread | ProteinDetectionList group q unread; proteins from DBSequence only (:358-363) | |
+| MzTabReader | .mzTab | one `psm_search_engine_score[n]` by priority (:111-119) | chosen q or MaxQuant:PEP parsed | PEH/PEP section unread (:230-241) | PRH/PRT unread | PrecursorQValue or PrecursorPep = Score by type (:646) |
+| OSWReader | .osw | `SCORE_MS2.QVALUE` (:167), feature-level | `SCORE_MS2.PEP` unread | `SCORE_PEPTIDE` CONTEXT='global' unread | `SCORE_PROTEIN` unread | SQL joins; proteins built at :177-182 |
+| TSVReader OpenSWATH | .tsv with `m_score` | `m_score` (:585) | parsed | pyprophet `m_score_peptide_global` (names unverified) | `m_score_protein_global` (unverified) | |
+| TSVReader Paser | .tsv File.Name/Q.Value | `Q.Value` (:1207), run-level | unknown global columns | unknown | `Protein.Ids` only | |
+| MaxQuantReader | msms.txt | `PEP` (:783) | PSM PEP parsed; no PSM q in msms.txt | peptides.txt/evidence.txt `PEP` unread | proteinGroups.txt `Q-value` unread | PrecursorPep = Score |
+| TandemNativeParser | .xtan.xml | `expect` | none | none | `<protein expect>` is an e-value | nothing to add |
+| MascotResultsReader (MASCOT_SUPPORT) | .dat | ions score / expect | unknown | unknown | unknown | |
+| IdpXMLreader | .idpXML | `result FDR` (:506) | FDR as Score | unknown | unknown | |
+| ProteinPilotReader | .group(.xml) | `confidence` | none known | unknown | ProtScore, not q | |
+| PrideXmlReader | .pride.xml | first recognized cvParam | `percolator:q value` parsed when chosen | unknown | unknown | |
+| ProxlXmlReader | .proxl.xml | Percolator `q-value` (:443) etc. | parsed; PSM `PEP` annotation unread | reported-peptide annotations unread | none | BuildTables hardcodes PercolatorQValue (:502) against GetScoreTypes (:182-189) |
+| WatersMseReader | final_fragment.csv | `peptide.score` | none | none | `protein.falsePositiveRate` maybe | |
+| SslReader | .ssl | `score` + `score-type` | only if a q type | none | none | setter table :112-132 could take new columns |
+| ShimadzuMLB, Hardklor, library TSVs (OpenSWATH assay, AlphaPepDeep, Paser lib) | | none / similarity | none | none | none | |
+
+**Cheapest wins**: MaxQuant `PrecursorPep = Pep` (:783); PercolatorXml `PrecursorQValue` from :341 plus
+`<pep>` and the `<peptides>`/`<proteins>` blocks; copy-the-Score for SQT (percolated), Crux/MS-GF+/Morpheus
+pep.xml, mzIdentML q types, mzTab q types, PRIDE percolator q, Proxl Percolator; mzIdentML PEP cvParams in
+the loop at :487; DIA-NN `PEP`/`PG.PEP`; MSFReader PSM PEP and PrecursorQValue on the PSM branch; OSW
+global peptide/protein joins. Caveat for every copy-the-Score case: a PSM q is experiment-wide only when
+the tool ran across all runs; a run-level q must not be labelled global.
