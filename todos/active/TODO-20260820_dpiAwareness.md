@@ -710,6 +710,37 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-19 - Behavior-change cleanups done (three of four), verified by dump + pixel sweep - 30efa4bfcd, pushed
+
+- DataGridViewEx: scales designer MinimumWidth too (> 5, WinForms' own default),
+  read the width BEFORE raising the minimum (raising it bumps a narrower width,
+  which was then scaled again: first attempt doubled three button columns,
+  30 -> 45 px, caught by the dump diff). ColorGrid drops its opt-out and manual
+  column scaling; VolcanoPlotFormattingDlg sets its button column in 96-DPI
+  units. The "designer width == scaled default" ambiguity is documented on the
+  property - WinForms gives a fresh column the DPI-scaled default at
+  construction (probe-gridwidth.ps1: 150 at 144 DPI) and no flag, so it cannot
+  be resolved at runtime.
+- EditListDlg rename form: AutoScaleDimensions 6x13 + Font + ClientSize 334x95,
+  no DpiUtil literals. Runtime form, not in the registry sweep; verify by eye
+  (Settings > any list > Rename) at 150% before trusting.
+- DefineAnnotationDlg: resx anchors restored to the designer's (en/ja/zh-Hans);
+  DpiUtil.DeferBottomAnchors(form, pages) strips Bottom until Form.Load and
+  restores. Pixel-identical to the previous capture.
+- ColorGrid literals (35/21) KEPT: reading the gaps off the controls after
+  InitializeComponent picks up geometry the UserControl has already
+  font-scaled, so scaling them again shrank the grid 310 -> 281 px. Reason now
+  in the comment. The review item was wrong on this one.
+Verification: gate TestAnnotations, TestVolcanoPlotFormatting,
+TestVolcanoPlotLayout, TestEditCustomTheme both DPI modes PASS (twice); DPI-aware
+form sweep (raw/after-cl) vs the consolidated build (raw/after-c): all 62
+grids' cols=[...] identical, 215/228 pixel-identical, the rest the known
+instance/state/timing set (heat map, start page, two settings tabs shown by a
+different test this run, version strings, text carets).
+Harness: '-d' prefix-matched the common -Debug parameter (0 captures) - like
+'-b'/-Batch and '-debug' before; suffixes must not prefix any parameter, incl.
+PowerShell's common ones.
+
 ### 2026-10-16 - PR #4602 marked READY FOR REVIEW (22 commits, label skyline)
 
 Description finalized: TODO as a markdown link to pwiz-ai master, test plan
