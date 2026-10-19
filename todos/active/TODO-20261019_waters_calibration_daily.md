@@ -26,7 +26,8 @@
 - [x] Full `bs.bat` build incl. pwiz C++ unit tests
 - [x] Skyline: TestWatersCalibrationSpectrum, TestTicChromatogram, WatersLockmassCmdlinePerfTest
 - [x] CodeInspectionTest
-- [ ] Commit, push, PR against `Skyline/skyline_26_1_1`
+- [x] Commit, push, PR against `Skyline/skyline_26_1_1` - [#4874](https://github.com/ProteoWizard/pwiz/pull/4874)
+- [ ] Review (developer adding reviewers), TeamCity green, merge
 
 ## Progress Log
 ### 2026-10-19
