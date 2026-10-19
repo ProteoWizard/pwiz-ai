@@ -5,20 +5,20 @@
   `Skyline/work/YYYYMMDD_...` branch off `master`.
 - **Base**: `master`
 - **Created**: 2026-10-16
-- **Status**: Merged 2026-10-18: PR A (#4860), the `.blib`-as-cache PR (#4865), PR B (#4866) and
-  Nick's schema PR (#4848, untangled from #4823 and brought onto master). #4823 is an experimental
-  draft on Nick's branch with the FDR calculation changes only. F (the port free of .blib SQL) is open
-  as [#4867](https://github.com/ProteoWizard/pwiz/pull/4867). Next: C + D in one night-session PR
-  stacked on #4867 (Skyline's .blib read and write paths onto BiblioSpec.IO, with load-time
-  measurement), then G (Brendan's UI review of the global cutoff), H (the other BlibBuild readers onto
-  the columns), E; the PeptidePep/Proteins.Pep follow-up once #4823 merges
+- **Status**: Completed 2026-10-19. Merged: PR A (#4860), the `.blib`-as-cache PR (#4865), PR B
+  (#4866), Nick's schema PR (#4848), F (#4867) and C + D (#4868). Deferred to their own efforts:
+  E (no issue yet), G (Brendan's UI review), H (#4870), the PeptidePep/Proteins.Pep follow-up once
+  #4823 merges, NHibernate removal (#4869), the BiblioSpec.IO string standard (#4871). Next sprint:
+  `backlog/brendanx67/TODO-osprey_one_command.md`
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
   5c5f3ae815); the `.blib`-as-cache PR [#4865](https://github.com/ProteoWizard/pwiz/pull/4865)
   (merged 2026-10-18 as 1be16fdafe); PR B [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
   (merged 2026-10-18 as 43c5e5eb8a); Nick's [#4848](https://github.com/ProteoWizard/pwiz/pull/4848)
-  (merged 2026-10-18 as 2762e51ccb); [#4823](https://github.com/ProteoWizard/pwiz/pull/4823) (draft)
+  (merged 2026-10-18 as 2762e51ccb); [#4823](https://github.com/ProteoWizard/pwiz/pull/4823) (draft);
+  F [#4867](https://github.com/ProteoWizard/pwiz/pull/4867) (merged 2026-10-19 as 662a851eaa);
+  C + D [#4868](https://github.com/ProteoWizard/pwiz/pull/4868) (merged 2026-10-19 as 394c5e364e)
 
 ## Goal
 
@@ -1379,3 +1379,39 @@ Done this morning, all pushed: the long-path connection string (4011442510), the
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261019_skyline_blib_io.md` before starting work.
+
+### 2026-10-19 - Merged: F (#4867) and C + D (#4868); the sprint completes
+
+PR #4867 merged as commit 662a851eaa and PR #4868 as commit 394c5e364e (squash, both on 2026-10-19,
+Brendan's pre-approved messages, the `/pw-complete` ritual run unattended while he drove). The
+chain's one Skyline Perf and Tutorial run (on 4bda79b6e4, at Brendan's call) passed. After #4867
+merged, master was merged into #4868's branch in `C:\proj\pwiz-work1` (four conflicts in
+BiblioSpec.IO and `BlibReaderTests.cs`; master's copies were byte-identical to #4867's head
+c6afee3e53, already in the branch, so all four resolved to the branch side; BiblioSpec gate
+142/142; merge commit 63eff9729d). On that head every build and test passed (Skyline 1826, Osprey
+748 twice, Core 723/567/474) and the one red status was the Skyline code inspection, whose own
+MSBuild died on the agent (`MSB3021: Unable to copy Shimadzu.GCMS.DebugLog.dll ... Access to the
+path is denied`, build 4225599, no report produced; the inspection was clean on both parent heads
+and the merge added no code), so #4868 was merged with `--admin` over it, as Brendan had authorized
+for a check that gets in the way without providing value; the master build's inspection is the
+confirmation. The Perf/Tutorial config was not re-run, by his rule.
+
+**What shipped across the sprint**: one reader and one writer for `.blib` in BiblioSpec.IO, with
+Osprey and CarafeSharp (#4860), the port's LibReader (#4866), BlibFilter and BlibBuild (#4867) and
+Skyline's `BiblioSpecLiteLibrary` and `BlibDb` (#4868) on them; the `.libcache` retired for a
+`.blib`-as-cache (#4865); Nick's global q-value and PEP columns (#4848). Skyline's load time and
+peak working set on 265, 533 and 708 MB libraries are within noise of 26.1's (the table above);
+Dapper is gone from Skyline and the 12 `Db*` NHibernate entities with it.
+
+**Deferred, not shipped here**: E (NIST, SpectraST and X!Hunter libraries deriving a `.blib`
+instead of their own caches; no issue yet - a sprint of its own when Brendan schedules it);
+G (Brendan's UI review of the global cutoff; his to do); H (BlibBuild readers onto the global
+columns, [#4870](https://github.com/ProteoWizard/pwiz/issues/4870), unassigned); the
+PeptidePep / Proteins.Pep follow-up once #4823 merges; NHibernate removal
+([#4869](https://github.com/ProteoWizard/pwiz/issues/4869), Nick); the BiblioSpec.IO string
+standard ([#4871](https://github.com/ProteoWizard/pwiz/issues/4871)). The `DecoyPairs`
+entrapment-partner schema question stays open in the Osprey one-command TODO.
+
+**What comes next**: the Osprey one-command sprint,
+`todos/backlog/brendanx67/TODO-osprey_one_command.md` (designed 2026-10-19), which the
+integration TODO this sprint interrupted hands over to.

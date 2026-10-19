@@ -39,7 +39,9 @@
   2026-10-16, in `C:\proj\pwiz`, pushed; the "PR 3c" section is its checklist).
 - **Base**: `master`
 - **Created**: 2026-10-14 (vision note 2026-10-13; restructured into a staged sprint 2026-10-14)
-- **Status**: In Progress - Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b (#4854) merged 2026-10-16 as add3a5df1d: no Osprey* tables, LibMetadata and DecoyPairs as the blib's standard optional tables, blib decoys paired from DecoyPairs. PR 3c (#4855) merged 2026-10-16 as 9c3712129e: BlibBuild and BlibFilter write through BiblioSpec.IO, one blib schema definition. Next (decision 9): the BiblioSpec.IO unification sprint, `TODO-20261016_bibliospec_io_unification.md` (one reader, Osprey and CarafeSharp onto it first, then the port's LibReader and Skyline), before PR 4 and the #4848 adaptation. The TeamCity Perf/Regression run on PR 3b's head (`ded6848f`, build #322) was green on all four datasets, so Astral and StellarGenDecoyEntrap are covered. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
+- **Status**: Completed 2026-10-19 - PRs 1, 2, 3, 3b and 3c merged; PR 4 (one command, HPC
+  tasks, packaging) continues as `backlog/brendanx67/TODO-osprey_one_command.md`, designed
+  2026-10-19 after the BLIB sprint (#4867, #4868) closed. Earlier status: Phase 1 merged 2026-10-15 (PR 1 #4845 as a0107497d1, PR 2 #4846 as 1575f27201; the workflow page #4847 as a5a3fc3dbb). PR 3 (#4852) merged 2026-10-15 as 773aa1bf63: the contracts assembly, the BiblioSpecUtil / BiblioSpec.IO split, the one blib writer and the library contract. PR 3b (#4854) merged 2026-10-16 as add3a5df1d: no Osprey* tables, LibMetadata and DecoyPairs as the blib's standard optional tables, blib decoys paired from DecoyPairs. PR 3c (#4855) merged 2026-10-16 as 9c3712129e: BlibBuild and BlibFilter write through BiblioSpec.IO, one blib schema definition. Next (decision 9): the BiblioSpec.IO unification sprint, `TODO-20261016_bibliospec_io_unification.md` (one reader, Osprey and CarafeSharp onto it first, then the port's LibReader and Skyline), before PR 4 and the #4848 adaptation. The TeamCity Perf/Regression run on PR 3b's head (`ded6848f`, build #322) was green on all four datasets, so Astral and StellarGenDecoyEntrap are covered. This TODO stays active through PR 4. PR 1 (parts A, B, C, E) was coded and gated 2026-10-14 in four commits
   (07894725c3, bb0ccd12c8, 517fb096ef, 141b3bc642); next the pre-PR `/code-review`, the PR, and
   the TeamCity Perf/Regression gate. Mike's agreement to the CommonUtil dependency is assumed
   pending his return from vacation. PR 2 (part D) coded and gated 2026-10-14 on its own branch
@@ -1013,3 +1015,21 @@ Every PR, before `gh pr create` (then `/code-review medium` on the branch):
   `pwiz_tools/CarafeSharp/CarafeSharp.Contracts`, see the PR 3 section.
 - The `MultiProgressReporter` scoped-output seam depends on `AsyncLocal` flow into `Parallel.For`;
   confirm CarafeSharp's writer thread (`LibraryChunkWriter`) attributes its lines correctly after PR 1.
+
+## Progress Log (closing)
+
+### 2026-10-19 - Closed: PR 4 continues as the one-command TODO
+
+Phase 1 (PRs #4845, #4846, #4847), PR 3 (#4852), PR 3b (#4854) and PR 3c (#4855) merged between
+2026-10-15 and 2026-10-16; decision 9 then handed the BLIB work to
+`TODO-20261016_bibliospec_io_unification.md`, which completed today with #4867 (662a851eaa) and
+#4868 (394c5e364e) merged: one `.blib` reader and writer in BiblioSpec.IO under Osprey, CarafeSharp,
+the BiblioSpec port and Skyline. Every precondition PR 4 was waiting on is therefore in master.
+
+PR 4 (parts H, I, J - one command, HPC tasks, packaging), the measurement, and the open questions
+(Mike on the CommonUtil dependency, the `.carafemodel` in the package) move to
+`todos/backlog/brendanx67/TODO-osprey_one_command.md`, designed with Brendan on 2026-10-19 with
+its companion `TODO-osprey_one_command-workflows.html`: three modes (predict, tune, saved model)
+on top of today's library search, each phase a task on the shared contract this sprint built. The
+"#4848 adaptation" item is moot: #4848 merged on master 2026-10-18 inside the BLIB sprint. This
+TODO closes here; the one-command TODO starts from master at the #4868 merge.
