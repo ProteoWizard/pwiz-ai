@@ -1180,3 +1180,10 @@ fixed as 53473678f7 and pushed. The local `Build-Skyline.ps1 -RunInspection` is 
 this machine: unresolved `JetBrains.Annotations` / `IdentityModel` symbols in the Shared projects swamp
 it (389 "errors"), none in the touched files; TeamCity's inspection resolves them. Perf/Regression not
 re-triggered for the Skyline-only fix.
+
+**#4848 ready for Brendan's review** (2026-10-18 night): every check green on 53473678f7 - Skyline PR
+build 1824 tests, code inspection clean, Osprey Windows and Linux 748 each, Core builds, GitHub Actions;
+Perf/Regression build 331 SUCCESS on the previous tip df1b4e298a (the fix between them was Skyline-only).
+Base master, not a draft, fast-forward of Nick's 5c76314140. Next after it merges: #4823 stays an
+experimental draft (its description is current); item F (the port free of .blib SQL); then the
+PeptidePep / Proteins.Pep follow-up once #4823 also merges.
