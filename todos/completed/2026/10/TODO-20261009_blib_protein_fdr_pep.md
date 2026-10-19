@@ -4,9 +4,11 @@
 - **Branch**: `Skyline/work/20261009_blib_protein_fdr_pep`
 - **Base**: `master` (be284d2ab9)
 - **Created**: 2026-10-09
-- **Status**: In Progress
-- **Module**: `pwiz`
-- **PR**: #4848 (draft, stacked on #4823; screenshots in pr-assets `pwiz/4848-blib-global-q/`)
+- **Status**: Completed
+- **Module**: `pwiz` (merged under `skyline:`, the PR's title and label; the intent, filtering what
+  enters a Skyline document, lives in Skyline)
+- **PR**: [#4848](https://github.com/ProteoWizard/pwiz/pull/4848) (merged 2026-10-18 as 2762e51ccb;
+  screenshots in pr-assets `pwiz/4848-blib-global-q/`)
 - **Checkout**: `I:\git_i\sky_proteinfdr`
 - **Related**: `TODO-20261002_osprey_peptide_fdr_pep.md` (Osprey computing the PEPs). The uncommitted
   Osprey writer changes from the abandoned `Skyline/work/20261001_osprey_blib_protein_fdr` branch are
@@ -207,3 +209,27 @@ failed PD's protein FDR has no master protein, so no `Proteins` row.
 - [x] Osprey experiment code removed from the working tree (2026-10-11): stashed in
       sky_proteinfdr as "OSPREY_EXPERIMENT protein FDR prototype (superseded by PR #4823)". The real
       fix is PR #4823 (`Skyline/work/20261011_osprey_protein_fdr`, TODO-20261011_osprey_protein_fdr.md).
+
+### 2026-10-18 - Merged
+
+PR #4848 merged as commit 2762e51ccb (squash, by Brendan's session while Nick is away). Before the
+merge the branch was untangled from #4823 so every schema change stands alone on master: Nick's tip
+5c76314140, then reverts of 209c65fcac (the peptide competition and PEP fits, moved to #4823 with
+the `PeptidePep`/`Proteins.Pep` writes to follow once both have merged) and 1af19ebadb, master merged
+twice (#4855/#4860 moved the writer and reader into BiblioSpec.IO, so the optional columns moved onto
+the shared `BlibWriter`/`BlibReader`; then #4865/#4866), the goldens recaptured on all four datasets,
+seven `/code-review` findings handled (four fixed: a protein's late value kept by `AddProtein`, cutoff
+levels gated on a non-NULL value, `BestProteinGroup` cached, a dropped doc line), `BiblioLiteSpectrumInfo.
+Protein` made a getter on the first protein group, and eight ReSharper warnings fixed. Gates at merge:
+BiblioSpec 152, Osprey 643 + inspection, CarafeSharp 113 + inspection, Skyline build +
+GlobalQValueFilterTest, Stellar regression, TeamCity Perf/Regression build 331 on `pull/4848`, Skyline PR
+build 1824 tests, inspection clean. Shipped as the Objective describes, with Osprey writing four of the
+six columns (`PrecursorQValue`, `PrecursorPep`, `PeptideQValue`, `Proteins.QValue`) and its protein
+groups; its protein-group q is 0 everywhere until #4823.
+
+Deferred, now tracked in TODO-20261016_bibliospec_io_unification.md: the UI review of the global cutoff
+(item G; Brendan's first sense is a small form off Add All rather than controls in the Explorer), the
+other BlibBuild readers onto the columns (item H, with a survey of what each format offers), the
+BlibFilter transfer SQL the column splices ride (item F). Still open from this file: the NuGet audit
+failure on `System.Security.Cryptography.Xml` 8.0.4 (needs a package bump on master) and the PD reader's
+score 0 for confidence-filtered PSMs (cpp parity).

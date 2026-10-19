@@ -5,18 +5,18 @@
   `Skyline/work/YYYYMMDD_...` branch off `master`.
 - **Base**: `master`
 - **Created**: 2026-10-16
-- **Status**: PR A merged 2026-10-18 (#4860); the `.blib`-as-cache PR
-  [#4865](https://github.com/ProteoWizard/pwiz/pull/4865) merged 2026-10-18 as 1be16fdafe. PR B
-  is [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
-  (`Skyline/work/20261018_bibliospec_libreader`, opened 2026-10-18, all checks green). Nick's
-  #4848 and #4823 are being untangled locally (the 2026-10-18 afternoon entry): schema in #4848 off
-  master, calculation in #4823, both awaiting Brendan's publishing call. Then C-E, expected to
-  move to the backlog
+- **Status**: Merged 2026-10-18: PR A (#4860), the `.blib`-as-cache PR (#4865), PR B (#4866) and
+  Nick's schema PR (#4848, untangled from #4823 and brought onto master). #4823 is an experimental
+  draft on Nick's branch with the FDR calculation changes only. Next: F (the port free of .blib SQL),
+  G (Brendan's UI review of the global cutoff), H (the other BlibBuild readers onto the columns), then
+  C-E; the PeptidePep/Proteins.Pep follow-up once #4823 merges
 - **GitHub Issue**: (none)
 - **Module**: `pwiz` (BiblioSpec and the shared BiblioSpec.IO; the Skyline PRs take `skyline`)
 - **PR**: PR A [#4860](https://github.com/ProteoWizard/pwiz/pull/4860) (merged 2026-10-18 as
   5c5f3ae815); the `.blib`-as-cache PR [#4865](https://github.com/ProteoWizard/pwiz/pull/4865)
-  (merged 2026-10-18 as 1be16fdafe); PR B [#4866](https://github.com/ProteoWizard/pwiz/pull/4866) (open)
+  (merged 2026-10-18 as 1be16fdafe); PR B [#4866](https://github.com/ProteoWizard/pwiz/pull/4866)
+  (merged 2026-10-18 as 43c5e5eb8a); Nick's [#4848](https://github.com/ProteoWizard/pwiz/pull/4848)
+  (merged 2026-10-18 as 2762e51ccb); [#4823](https://github.com/ProteoWizard/pwiz/pull/4823) (draft)
 
 ## Goal
 
@@ -154,6 +154,19 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       filtered library against master's output; `BlibMaker.SqlStmt` gone or private to schema
       creation is the finish line. A survey of which BlibBuild readers fill the global columns, and
       which formats could, is in the 2026-10-18 progress entry below.
+- [ ] **G. UI review of the global cutoff** (Brendan, 2026-10-18, after #4848 merged). Brendan's first
+      sense: Add All should gain a small form that asks about the cutoff when the library has global
+      q-values, rather than the level dropdown and cutoff textbox sitting in the Library Explorer beside
+      Add All. Review the Explorer, the Import FASTA page group box, the Associate Proteins behaviour on
+      library protein groups, the property sheet, and the audit log entries; tune after the review.
+- [ ] **H. BlibBuild readers onto the global columns**. Only DIA-NN and Proteome Discoverer fill them
+      (survey in the 2026-10-18 progress entry). Work through the readers whose formats carry the values:
+      Percolator XML (all three levels, q and PEP, in one file), mzIdentML (PSM/peptide PEP cvParams in
+      the loop already walked, protein groups via ProteinDetectionList), Crux/MS-GF+/Morpheus pep.xml,
+      percolated SQT, MaxQuant (PSM PEP), mzTab, OpenSWATH .osw (SCORE_PEPTIDE/SCORE_PROTEIN global),
+      MSFReader's PSM level. For every copy-the-Score case, confirm the q-value is experiment-wide
+      before labelling it global. Check the PD SEQUEST pep.xml q-value capture that cannot fire
+      (PepXMLreader.cs:572 vs :830) against the C++.
 
 ## Gates and their commands (from the PR 3c work)
 - `pwsh -File C:/proj/ai/scripts/BiblioSpec/Build-BiblioSpec.ps1 -SourceRoot C:/proj/pwiz -RunTests`
@@ -1187,3 +1200,15 @@ Perf/Regression build 331 SUCCESS on the previous tip df1b4e298a (the fix betwee
 Base master, not a draft, fast-forward of Nick's 5c76314140. Next after it merges: #4823 stays an
 experimental draft (its description is current); item F (the port free of .blib SQL); then the
 PeptidePep / Proteins.Pep follow-up once #4823 also merges.
+
+### 2026-10-18 - #4848 merged
+
+PR #4848 merged as commit 2762e51ccb (squash, `/pw-complete`, Brendan's call: merge in sequence with the
+BLIB clean-up rather than carry the merge cost through items C-F; Nick is away and agreed). All checks
+green on 53473678f7, Perf/Regression build 331 on the previous tip. Local master at 2762e51ccb; the
+work branch deleted locally and on origin. Nick's TODO-20261009_blib_protein_fdr_pep.md completed and
+moved to todos/completed/2026/10 with its open follow-ups pointed here (G, H, F). Brendan will review
+the UI (G). Known until #4823 merges: an Osprey search library's `Proteins.QValue` is 0 for every group,
+so Skyline offers a protein cutoff every entry passes.
+
+This TODO stays active: items C, D, E, F, G, H, and the PeptidePep/Proteins.Pep follow-up after #4823.
