@@ -12,6 +12,11 @@ first_pass_base_ids, library_hash, search_hash. Those fields, the stamp and form
 removed from both sides; every action, gap-fill target and refined-calibration value is still
 compared exactly. JSON numbers parse to the same float on both sides because both writers emit
 round-trip decimal forms.
+
+A gap-fill target's modified_sequence is removed too: Rust writes modifications as UniMod ids
+([UniMod:4]) and C# as masses ([+57.0215]), and the target is already identified by its
+target_entry_id, which is compared (the Stage 4 parquet comparison checks that both sides map
+entry_ids to the same peptides).
 """
 import json
 import sys
@@ -25,6 +30,9 @@ def load(path):
         doc = json.load(f)
     for key in DROPPED:
         doc.pop(key, None)
+    for target in doc.get('gap_fill_targets') or []:
+        if isinstance(target, dict):
+            target.pop('modified_sequence', None)
     return doc
 
 

@@ -8,9 +8,12 @@ a read error.
 The two files were never byte-comparable: C# writes its validity stamp first (osprey_validity),
 and both sides record when the calibration ran (metadata.timestamp). C# also writes
 model_diagnostics (2026-10-17), the run's row of the model diagnostics report's calibration view,
-which has no Rust counterpart. Those three are removed from both sides; every calibration value
-is compared exactly. JSON numbers parse to the same float on both sides because both writers emit
-round-trip decimal forms.
+which has no Rust counterpart. Two more fields are one-sided: Rust writes a mass-error
+`histogram` under ms1_calibration and ms2_calibration, which C# never populates (a diagnostic
+derived from the same errors the compared statistics summarize), and C# writes
+rt_calibration.rt_search_window_halfwidth (#4369), which Rust does not. All of those are removed
+from both sides; every calibration value is compared exactly. JSON numbers parse to the same
+float on both sides because both writers emit round-trip decimal forms.
 """
 import json
 import sys
@@ -19,6 +22,9 @@ from reconciliation_diff import diff
 
 DROPPED = ('osprey_validity', 'model_diagnostics')
 DROPPED_METADATA = ('timestamp',)
+# (section, key) present on one side only; see the module docstring.
+DROPPED_NESTED = (('ms1_calibration', 'histogram'), ('ms2_calibration', 'histogram'),
+                  ('rt_calibration', 'rt_search_window_halfwidth'))
 
 
 def load(path):
@@ -30,6 +36,9 @@ def load(path):
     if isinstance(metadata, dict):
         for key in DROPPED_METADATA:
             metadata.pop(key, None)
+    for section, key in DROPPED_NESTED:
+        if isinstance(doc.get(section), dict):
+            doc[section].pop(key, None)
     return doc
 
 

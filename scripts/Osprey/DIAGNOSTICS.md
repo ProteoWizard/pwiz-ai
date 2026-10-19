@@ -425,8 +425,10 @@ pwsh -File './ai/scripts/Osprey/Run-Osprey.ps1' -Tool CSharp -ExitAfterScoring "
 Remove-Item Env:OSPREY_LOAD_CALIBRATION
 python ./ai/scripts/Osprey/Compare/parquet_diff.py "$rust\<stem>.scores.parquet" "$cs\<stem>.scores.parquet" --tolerance 1e-6 --common-entries
 # Reading it: the entry_id line is the candidate-set difference. modified_sequence (UniMod vs
-# +mass notation) and fragment_mzs / fragment_intensities (binary-encoded lists) differ in
-# REPRESENTATION on every row and say nothing about parity; compare the 21 PIN feature columns.
+# +mass notation) differs in REPRESENTATION on modified rows and says nothing about parity.
+# Expected state (Stellar file 20, pwiz 1be16fdafe vs Rust 64e37ae, 2026-10-18): 0 entry_ids on
+# one side only and every other column, fragment lists included, equal at 1e-6. Any further
+# difference is drift. (Before Rust #73 there were 11 one-sided entry_ids and ~500 apex changes.)
 # Rust writes its log and calibration_debug.csv to the working directory (the data folder) -
 # delete them afterwards.
 

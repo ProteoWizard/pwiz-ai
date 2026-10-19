@@ -1,8 +1,7 @@
 # Restore Osprey cross-impl parity and finish the FirstPassFDR sprint follow-ups
 
 ## Branch Information
-- **Branch**: (none yet - create `Skyline/work/YYYYMMDD_osprey_...` from master when a pwiz change is needed;
-  Rust work goes on maccoss/osprey branches)
+- **Branch**: `Skyline/work/20261019_osprey_firstpass_stamp_check` (pwiz, task 3a)
 - **Base**: `master` (pwiz); `main` (maccoss/osprey)
 - **Created**: 2026-10-18
 - **Status**: Not started. Picks up from TODO-20261015_osprey_firstpassfdr_slimming (completed, PRs #4853,
@@ -28,8 +27,10 @@ as its own fan-out; training candidates into PerFileScoring) stay deferred.
 - pwiz#4860 (one peak per m/z, typed from m/z with the C# masses, top-N tie-break by m/z) merged to master
   2026-10-18 (`5c5f3ae815`); its Rust companion maccoss/osprey#73 merged 2026-10-18 (`64e37ae828`, Brendan).
   #73's own runs passed against #4860's head; nobody has run the gate since both landed.
-- [ ] Pull Rust `main`, build both sides (C# Release), run `Compare-EndToEnd-Crossimpl.ps1` Stellar Single and
+- [x] Pull Rust `main`, build both sides (C# Release), run `Compare-EndToEnd-Crossimpl.ps1` Stellar Single and
       Astral All against current pwiz master. PASS at 1e-9 is the expectation; a FAIL is real drift to bisect.
+      Stellar Single PASS at 1e-9 (pwiz `1be16fdafe` incl. #4865, Rust `64e37ae`; 26,812 precursors each).
+      Astral All PASS at 1e-9 (118,314 precursors each; walls Rust 19:32, C# 06:50).
 
 ### 2. Stage 4 feature drift (found 2026-10-18 by the DIAGNOSTICS.md parity recipe)
 - Stellar file 20, C# at `aef1494771` (master, includes #4860) vs Rust `main` `d19be4c` (no #73), C# on
@@ -40,17 +41,24 @@ as its own fan-out; training candidates into PerFileScoring) stay deferred.
       2,934). Exact: entry_id, is_decoy, sequence, charge, precursor_mz, protein_ids, the two MS1 features.
       Representation-only (not parity): `modified_sequence` (UniMod vs +mass), `fragment_mzs` /
       `fragment_intensities` (binary lists). The end-to-end gate still passed at 1e-9 before #4860 merged.
-- [ ] Re-run the recipe with Rust `main` (now carrying #73): fragment typing/merging and top-N tie-breaks
+- [x] Re-run the recipe with Rust `main` (now carrying #73): fragment typing/merging and top-N tie-breaks
       are exactly what moves fragment-based features and apex choice. Only what survives that is real drift.
-- [ ] For a surviving difference: bisect per the osprey-development-guide (stage dumps), decide per case
-      whether C# or Rust is right; port or adjust the comparator.
+      Nothing survives: 482,886 entry_ids common, 0 one-sided; every column equal at 1e-6 except
+      `modified_sequence` notation. Expected state recorded in DIAGNOSTICS.md.
+- [x] For a surviving difference: bisect... - none survived.
 
 ### 3. Small follow-ups
-- [ ] Stamp-check FirstPassFDR's analysis-wide products on load: `Stage6ConsensusFile.Load` and
+- [x] (Branch `Skyline/work/20261019_osprey_firstpass_stamp_check`, uncommitted, 644 tests + inspection
+      green.) Consistency check, since a reading node cannot rebuild FirstPassFDR's key (its
+      `LibraryFragmentRelease` term records the writing leg): stamp names FirstPassFDR of this build,
+      and consensus + retained carry the same stamp where both are present. Not anchored on the model
+      file (best-effort write). Test: `FirstPassModelIoTest.TestFirstPassProductsLoadOnlyFromThisBuildAndOneRun`.
+      Original item: Stamp-check FirstPassFDR's analysis-wide products on load: `Stage6ConsensusFile.Load` and
       `ScoringTaskShared.ReadRetainedBaseIds` read the files without checking the embedded
       `osprey_validity` stamp, so a stale file (an HPC node shipped an old one, a failed overwrite) drives
       planning / compaction and the outputs look current (#4863 /code-review finding 5).
-- [ ] Optional: a Stage 4 `.scores.parquet` boundary in `ai/scripts/Osprey/Compare/Compare-EndToEnd-Bisect-Crossimpl.ps1`
+- [x] Fixed the bisect driver (2026-10-19); Stellar 3-file 15/15 boundaries PASS. Was: an
+      optional Stage 4 `.scores.parquet` boundary in `ai/scripts/Osprey/Compare/Compare-EndToEnd-Bisect-Crossimpl.ps1`
       using `parquet_diff.py --common-entries`. Its "rewritten in place at Stage 6" note is stale for C#,
       which writes `.scores-reconciled.parquet`; check whether Rust still rewrites in place (else it needs
       a `--no-join` Rust pass).
@@ -67,3 +75,37 @@ as its own fan-out; training candidates into PerFileScoring) stay deferred.
 - Split from the completed FirstPassFDR sprint. Recipe run artifacts: `D:\test\osprey-runs\feature-parity-20261018_064838`
   (rust/, csharp/), diff `ai/.tmp/sessions/20261016-b2pr/parquet-diff-common.log`.
 - **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261018_osprey_crossimpl_parity.md` before starting work.
+
+### 2026-10-18 (afternoon) - Gate and feature parity re-run
+- Pulled Rust `main` (`64e37ae`, #73) and pwiz master (`1be16fdafe`, now also #4865: `.blib` replaces
+  `.libcache`). Built both (C# Release). Logs: `ai/.tmp/sessions/20261018-xparity/`.
+- Stellar Single gate PASS at 1e-9 (`pwiz_tools/Osprey/TestResults/crossimpl-stellar/`).
+- Feature-parity recipe: drift fully explained by #73. Run `D:\test\osprey-runs\feature-parity-20261018_130553`,
+  diff `ai/.tmp/sessions/20261018-xparity/feature-parity.log`. DIAGNOSTICS.md note updated.
+- Task 3b finding: Rust still rewrites `.scores.parquet` in place (`crates/osprey/src/rescore.rs:637`), but C#
+  writes Stage 6 to `.scores-reconciled.parquet` (survivor subset + row-ordinal column). So the bisect
+  driver's existing Stage 6 boundary compares Rust Stage 6 against C# Stage 4 and cannot pass. Its
+  `Stage-DatasetFiles` also still copies a `.libcache` (inert since #4865).
+
+### 2026-10-19 - Stamp check, review, bisect driver, #4848 comparator drift
+- 3a committed on `Skyline/work/20261019_osprey_firstpass_stamp_check`: `9e27d633bc` + review fixes
+  `a1edb1db89` (/code-review medium: 9 findings, fixed 4 - experiment sidecar added to the
+  sibling set, unreadable sibling skipped not blamed, remedy on the consensus refusal, test gaps;
+  dropped 5 with reasons in the session). 644 tests + inspection green. Not pushed; no PR yet.
+- Gate on Stellar All (new: never run before) FAILED on blib `Proteins`/`RefSpectraProteins`. Root
+  cause: #4848 (merged after the morning's gate runs) made C# write parsimony protein GROUPS there,
+  tagged [INTENTIONAL-CSHARP-DESIGN] in docs/13, but `Compare-Blib-Crossimpl.ps1` was never
+  updated - the gate failed on master for every dataset. Comparator now skips both tables
+  (protein inference still compared at Stage 7); README records the accepted divergence.
+- Bisect driver rebuilt: Stage 4 boundary (Rust `--no-join` pass vs C# `.scores.parquet`), Stage 6
+  against C# `.scores-reconciled.parquet` (`parquet_diff.py --b-subset --ignore-columns`), FDR
+  sidecars via `Compare-FdrSidecars-Crossimpl.ps1` (SHA was meaningless since #4486), data and
+  workdir resolved like the gate (`TestResults/crossbisect-<dataset>`), no `.libcache`.
+- Found while there: Stage 3 / reconciliation boundaries read `$LASTEXITCODE` after
+  `| Select-Object -First 1`, which stops the pipeline before the exit code is set - they reported
+  stale PASSes. `calibration_diff.py` had always failed on real data (Rust-only mass `histogram`,
+  C#-only `rt_search_window_halfwidth`); `reconciliation_diff.py` on modification notation. Both
+  now drop those one-sided / notation-only fields.
+- With the comparator fix, on master + branch (incl. #4848): gate Stellar All PASS (blib re-compared),
+  Astral All PASS at 1e-9 (118,314 precursors each). Remaining: push the pwiz branch and open the PR
+  (Brendan's call), then TeamCity on ask.

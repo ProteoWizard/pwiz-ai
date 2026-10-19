@@ -17,17 +17,29 @@
     FAIL as the drill band start):
 
       Stage 3   <stem>.calibration.json           content (calibration_diff.py)
+      Stage 4   <stem>.scores.parquet             parquet_diff 1e-9 per column
       Stage 6   <stem>.reconciliation.json        content (reconciliation_diff.py)
-      Stage 5   <stem>.1st-pass.fdr_scores.bin    SHA-256 equality
-      Stage 6   <stem>.scores.parquet (rewritten) parquet_diff 1e-9 per column
-      Stage 6b  <stem>.2nd-pass.fdr_scores.bin    SHA-256 equality
+      Stage 5   FDR score sidecars, both passes   Compare-FdrSidecars-Crossimpl 1e-9
+                (reported once, at Stage 5; its log names the pass that differs)
+      Stage 6   reconciled scores parquet         parquet_diff 1e-9 per column
       Stage 7   *_stage7_protein_fdr.tsv          Compare-Stage7-Crossimpl 1e-9
       Blib      output.blib                       Compare-Blib-Crossimpl 1e-9
 
-    The Stage 4 boundary is NOT compared here (the .scores.parquet is
-    rewritten in place at Stage 6 in a single end-to-end run). If
-    Stage 5 boundary FAILs, follow up with a --no-join run pair to
-    capture pre-Stage-6 .scores.parquet for Stage 4 isolation.
+    The two sides keep their scores parquets differently. Rust rewrites
+    <stem>.scores.parquet IN PLACE at Stage 6, so its end-to-end run holds
+    no Stage 4 parquet; C# leaves <stem>.scores.parquet as the Stage 4
+    output and writes Stage 6 to <stem>.scores-reconciled.parquet. So:
+
+      Stage 4  an extra Rust run with --no-join (stops after Stage 4, in
+               rust_stage4/) against the C# end-to-end run's
+               .scores.parquet, over the shared entry_ids.
+      Stage 6  Rust's rewritten .scores.parquet against C#'s
+               .scores-reconciled.parquet. C# keeps only the survivors, so
+               every C# row must be in Rust (--b-subset); the Rust-only rows
+               are the non-survivors and do not fail the boundary.
+
+    Both ignore modified_sequence (UniMod vs +mass notation, never parity)
+    and Stage 6 ignores score_index (a C#-only row ordinal).
 
     Exit codes:
       0 = all boundaries PASS at tolerance
@@ -38,8 +50,9 @@
     Stellar (default) or Astral.
 
 .PARAMETER TestBaseDir
-    Override dataset root (defaults to OSPREYDEV_TEST_BASE_DIR or
-    D:\test\osprey-runs).
+    Override dataset root (defaults to the regression data tree,
+    <Downloads>\Perftests\osprey-testfiles-mzML-v2, as Compare-EndToEnd-Crossimpl.ps1).
+    Work goes to pwiz_tools/Osprey/TestResults/crossbisect-<dataset>.
 
 .PARAMETER Force
     Wipe any existing workdirs before running.
@@ -88,14 +101,24 @@ if (-not (Test-Path $ospreyShExe)) {
     exit 2
 }
 
+# The read-only data tree regression.ps1 and Compare-EndToEnd-Crossimpl.ps1 use
+# (<Downloads>\Perftests\osprey-testfiles-mzML-v2, acquired skip-if-present).
+. (Join-Path (Get-PwizRoot) 'pwiz_tools/Osprey/Regression/RegressionData.ps1')
+if ([string]::IsNullOrEmpty($TestBaseDir)) {
+    $dataUrl = 'https://panoramaweb.org/_webdav/MacCoss/software/%40files/perftests/osprey-testfiles-mzML-v2.zip'
+    $TestBaseDir = Get-RegressionData -Url $dataUrl
+}
 $ds = Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir
 $mzmls = @($ds.AllFiles)
 $libraryName = $ds.Library
 $resolution = $ds.Resolution
 $datasetRoot = $ds.TestDir
 
-$rootDir = Join-Path $datasetRoot "_endtoend_bisect"
+# Workdirs under the C# checkout's gitignored TestResults, beside the gate's crossimpl-*
+# dirs; the data tree gets nothing written into it (inputs are copied in per side).
+$rootDir = Join-Path (Get-PwizRoot) ("pwiz_tools/Osprey/TestResults/crossbisect-" + $Dataset.ToLowerInvariant())
 $rustDir = Join-Path $rootDir "rust"
+$rustStage4Dir = Join-Path $rootDir "rust_stage4"
 $csDir   = Join-Path $rootDir "cs"
 $cmpDir  = Join-Path $rootDir "compare_logs"
 
@@ -112,10 +135,6 @@ function Stage-DatasetFiles {
         Copy-Item (Join-Path $datasetRoot $f) (Join-Path $Dir $f)
     }
     Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $Dir $libraryName)
-    $cache = Join-Path $datasetRoot ($libraryName + '.libcache')
-    if (Test-Path $cache) {
-        Copy-Item $cache (Join-Path $Dir ($libraryName + '.libcache'))
-    }
 }
 
 function Invoke-Tool {
@@ -138,18 +157,13 @@ function Invoke-Tool {
 
 function Get-PrecursorCount {
     param([string]$LogPath)
-    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d+)\s+precursors' -AllMatches | Select-Object -Last 1
-    if ($m -and $m.Matches.Count -gt 0) { return [int]$m.Matches[0].Groups[1].Value }
+    # Rust logs "Wrote N precursors"; C# "Wrote N library spectra ..." (as the gate reads it).
+    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d[\d,]*)\s+(?:\w+\s+)?(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
+    if ($m -and $m.Matches.Count -gt 0) { return [int]($m.Matches[0].Groups[1].Value -replace ',', '') }
     return -1
 }
 
 function Format-Duration { param([TimeSpan]$T) ('{0:mm\:ss}' -f $T) }
-
-function Get-Sha256 {
-    param([string]$Path)
-    if (-not (Test-Path $Path)) { return $null }
-    return (Get-FileHash -Path $Path -Algorithm SHA256).Hash
-}
 
 # ============================================================
 #                       RUN BOTH SIDES
@@ -162,11 +176,18 @@ Write-Host ("Workdir: {0}" -f $rootDir)
 Write-Host ""
 
 function Run-Side {
-    param([string]$SideName, [string]$Exe, [string]$Dir, [switch]$Skip)
-    $logName = if ($SideName -eq 'rust') { 'osprey.log' } else { 'osprey-cs.log' }
+    param([string]$SideName, [string]$Exe, [string]$Dir, [switch]$Skip, [string[]]$Extra = @())
+    $logName = if ($SideName -eq 'cs') { 'osprey-cs.log' } else { 'osprey.log' }
     $logPath = Join-Path $Dir $logName
-    $blibPath = Join-Path $Dir 'output.blib'
-    if ($Skip -and (Test-Path $blibPath) -and (Test-Path $logPath)) {
+    # A --no-join run stops after Stage 4 and writes no library; its last output is the
+    # final run's scores parquet.
+    $stage4Only = $Extra -contains '--no-join'
+    $lastOutput = if ($stage4Only) {
+        Join-Path $Dir ([System.IO.Path]::GetFileNameWithoutExtension($mzmls[-1]) + '.scores.parquet')
+    } else {
+        Join-Path $Dir 'output.blib'
+    }
+    if ($Skip -and (Test-Path $lastOutput) -and (Test-Path $logPath)) {
         Write-Host ("[{0}] -Skip: reusing existing outputs in {1}" -f $SideName, $Dir) -ForegroundColor DarkGray
         return @{ wall = [TimeSpan]::Zero; logPath = $logPath }
     }
@@ -179,6 +200,7 @@ function Run-Side {
     $cliArgs += @('-l', $libraryName, '-o', 'output.blib',
                   '--resolution', $resolution,
                   '--protein-fdr', '0.01', '--threads', $Threads.ToString())
+    $cliArgs += $Extra
     # Only Stage 7 dump enabled in Pass 1 (it doesn't produce a file
     # otherwise). All other boundary files are written naturally.
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
@@ -191,12 +213,18 @@ function Run-Side {
         Remove-Item Env:OSPREY_DUMP_STAGE7_PROTEIN_FDR -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     }
-    $prec = Get-PrecursorCount -LogPath $r.logPath
-    Write-Host ("  {0} wall: {1}; precursors: {2}" -f $SideName, (Format-Duration $r.wall), $prec) -ForegroundColor Green
+    if ($stage4Only) {
+        Write-Host ("  {0} wall: {1}; stopped after Stage 4" -f $SideName, (Format-Duration $r.wall)) -ForegroundColor Green
+    } else {
+        $prec = Get-PrecursorCount -LogPath $r.logPath
+        Write-Host ("  {0} wall: {1}; precursors: {2}" -f $SideName, (Format-Duration $r.wall), $prec) -ForegroundColor Green
+    }
     return $r
 }
 
 $rustResult = Run-Side -SideName 'rust' -Exe $ospreyExe   -Dir $rustDir -Skip:$SkipRust
+# Rust's end-to-end run rewrites its Stage 4 parquet at Stage 6; this run keeps one.
+$null       = Run-Side -SideName 'rust_stage4' -Exe $ospreyExe -Dir $rustStage4Dir -Skip:$SkipRust -Extra @('--no-join')
 $csResult   = Run-Side -SideName 'cs'   -Exe $ospreyShExe -Dir $csDir   -Skip:$SkipCs
 $rustWall = $rustResult.wall
 $csWall   = $csResult.wall
@@ -240,13 +268,39 @@ foreach ($stem in $stems) {
     $r = Join-Path $rustDir ($stem + '.calibration.json')
     $c = Join-Path $csDir   ($stem + '.calibration.json')
     if ((Test-Path $r) -and (Test-Path $c)) {
-        $detail = (python $calDiff $r $c 2>&1 | Select-Object -First 1)
+        # Capture all output first: piping straight into Select-Object -First 1 stops the
+        # pipeline before $LASTEXITCODE is set, so a failing diff read as the previous PASS.
+        $out = @(python $calDiff $r $c 2>&1)
+        $ok = ($LASTEXITCODE -eq 0)
         Record-Stage -Stage 'stage3' -Boundary ("calibration.json[{0}]" -f $stem) `
-            -Pass ($LASTEXITCODE -eq 0) -Detail ([string]$detail)
+            -Pass $ok -Detail ([string]($out | Select-Object -First 1))
     } else {
         Record-Stage -Stage 'stage3' -Boundary ("calibration.json[{0}]" -f $stem) `
             -Pass $false -Detail "missing on one side"
     }
+}
+
+# --- Stage 4 / Stage 6: scores parquets (parquet_diff 1e-9 per column) ---
+$parquetDiff = Join-Path $scriptDir 'parquet_diff.py'
+function Compare-ScoresParquet {
+    param([string]$Stage, [string]$Stem, [string]$RustPath, [string]$CsPath, [string[]]$DiffArgs)
+    $boundary = "{0}[{1}]" -f (Split-Path -Leaf $CsPath).Substring($Stem.Length + 1), $Stem
+    if (-not ((Test-Path $RustPath) -and (Test-Path $CsPath))) {
+        Record-Stage -Stage $Stage -Boundary $boundary -Pass $false -Detail "missing on one side"
+        return
+    }
+    $logPath = Join-Path $cmpDir ("{0}_parquet_{1}.log" -f $Stage, $Stem)
+    python $parquetDiff $RustPath $CsPath --tolerance 1e-9 @DiffArgs *>&1 |
+        Tee-Object -FilePath $logPath | Out-Null
+    Record-Stage -Stage $Stage -Boundary $boundary `
+        -Pass ($LASTEXITCODE -eq 0) -Detail ("see {0}" -f (Split-Path -Leaf $logPath))
+}
+
+foreach ($stem in $stems) {
+    Compare-ScoresParquet -Stage 'stage4' -Stem $stem `
+        -RustPath (Join-Path $rustStage4Dir ($stem + '.scores.parquet')) `
+        -CsPath   (Join-Path $csDir ($stem + '.scores.parquet')) `
+        -DiffArgs @('--common-entries', '--ignore-columns', 'modified_sequence')
 }
 
 # --- Stage 6 plan: reconciliation.json (content) ---
@@ -257,78 +311,33 @@ foreach ($stem in $stems) {
     $r = Join-Path $rustDir ($stem + '.reconciliation.json')
     $c = Join-Path $csDir   ($stem + '.reconciliation.json')
     if ((Test-Path $r) -and (Test-Path $c)) {
-        $detail = (python $reconDiff $r $c 2>&1 | Select-Object -First 1)
-        Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
-            -Pass ($LASTEXITCODE -eq 0) -Detail ([string]$detail)
-    } else {
-        Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
-            -Pass $false -Detail "missing on one side"
-    }
-}
-
-# --- Stage 5: 1st-pass.fdr_scores.bin (SHA equality) ---
-foreach ($stem in $stems) {
-    $r = Join-Path $rustDir ($stem + '.1st-pass.fdr_scores.bin')
-    $c = Join-Path $csDir   ($stem + '.1st-pass.fdr_scores.bin')
-    if ((Test-Path $r) -and (Test-Path $c)) {
-        $rH = Get-Sha256 $r
-        $cH = Get-Sha256 $c
-        if ($rH -eq $cH) {
-            Record-Stage -Stage 'stage5' -Boundary ("1st-pass.fdr_scores.bin[{0}]" -f $stem) `
-                -Pass $true -Detail ("sha equal {0}" -f $rH.Substring(0,12))
-        } else {
-            $rLen = (Get-Item $r).Length
-            $cLen = (Get-Item $c).Length
-            Record-Stage -Stage 'stage5' -Boundary ("1st-pass.fdr_scores.bin[{0}]" -f $stem) `
-                -Pass $false -Detail ("sha differ; sizes rust={0} cs={1}" -f $rLen, $cLen)
-        }
-    } else {
-        Record-Stage -Stage 'stage5' -Boundary ("1st-pass.fdr_scores.bin[{0}]" -f $stem) `
-            -Pass $false -Detail "missing on one side"
-    }
-}
-
-# --- Stage 6: reconciled scores.parquet (parquet_diff 1e-9 per column) ---
-$parquetDiff = Join-Path $scriptDir 'parquet_diff.py'
-foreach ($stem in $stems) {
-    $r = Join-Path $rustDir ($stem + '.scores.parquet')
-    $c = Join-Path $csDir   ($stem + '.scores.parquet')
-    if ((Test-Path $r) -and (Test-Path $c)) {
-        $logPath = Join-Path $cmpDir ("stage6_parquet_{0}.log" -f $stem)
-        python $parquetDiff $r $c --tolerance 1e-9 *>&1 |
-            Tee-Object -FilePath $logPath | Out-Null
+        $out = @(python $reconDiff $r $c 2>&1)
         $ok = ($LASTEXITCODE -eq 0)
-        # Pull a short summary line for the detail column.
-        $summary = (Get-Content $logPath | Select-String -Pattern '^(===|\[DIFF\]|ROW COUNT)' | Select-Object -First 3) -join '; '
-        if (-not $summary) { $summary = 'all columns within 1e-9' }
-        Record-Stage -Stage 'stage6' -Boundary ("scores.parquet[{0}]" -f $stem) `
-            -Pass $ok -Detail ("see {0}" -f (Split-Path -Leaf $logPath))
+        Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
+            -Pass $ok -Detail ([string]($out | Select-Object -First 1))
     } else {
-        Record-Stage -Stage 'stage6' -Boundary ("scores.parquet[{0}]" -f $stem) `
+        Record-Stage -Stage 'stage5' -Boundary ("reconciliation.json[{0}]" -f $stem) `
             -Pass $false -Detail "missing on one side"
     }
 }
 
-# --- Stage 6b: 2nd-pass.fdr_scores.bin (SHA equality) ---
+# --- Stage 5 / 6b: FDR score sidecars, both passes (Compare-FdrSidecars-Crossimpl 1e-9) ---
+# Not byte-comparable since #4486: Rust fuses run and experiment scope into one record per
+# file, C# splits them into a per-file and an analysis-wide file. The comparator rebuilds
+# Rust's view from the C# pair and compares field by field; its log names the pass.
+$sidecarLog = Join-Path $cmpDir 'fdr_sidecar_compare.log'
+& pwsh -File (Join-Path $scriptDir 'Compare-FdrSidecars-Crossimpl.ps1') `
+    -RustDir $rustDir -CsDir $csDir *>&1 |
+    Tee-Object -FilePath $sidecarLog | Out-Null
+Record-Stage -Stage 'stage5' -Boundary 'fdr_scores sidecars (1st+2nd pass)' `
+    -Pass ($LASTEXITCODE -eq 0) -Detail ("see {0}" -f (Split-Path -Leaf $sidecarLog))
+
+# --- Stage 6: reconciled scores (Rust rewrites in place; C# writes the survivors apart) ---
 foreach ($stem in $stems) {
-    $r = Join-Path $rustDir ($stem + '.2nd-pass.fdr_scores.bin')
-    $c = Join-Path $csDir   ($stem + '.2nd-pass.fdr_scores.bin')
-    if ((Test-Path $r) -and (Test-Path $c)) {
-        $rH = Get-Sha256 $r
-        $cH = Get-Sha256 $c
-        if ($rH -eq $cH) {
-            Record-Stage -Stage 'stage6b' -Boundary ("2nd-pass.fdr_scores.bin[{0}]" -f $stem) `
-                -Pass $true -Detail ("sha equal {0}" -f $rH.Substring(0,12))
-        } else {
-            $rLen = (Get-Item $r).Length
-            $cLen = (Get-Item $c).Length
-            Record-Stage -Stage 'stage6b' -Boundary ("2nd-pass.fdr_scores.bin[{0}]" -f $stem) `
-                -Pass $false -Detail ("sha differ; sizes rust={0} cs={1}" -f $rLen, $cLen)
-        }
-    } else {
-        Record-Stage -Stage 'stage6b' -Boundary ("2nd-pass.fdr_scores.bin[{0}]" -f $stem) `
-            -Pass $false -Detail "missing on one side"
-    }
+    Compare-ScoresParquet -Stage 'stage6' -Stem $stem `
+        -RustPath (Join-Path $rustDir ($stem + '.scores.parquet')) `
+        -CsPath   (Join-Path $csDir ($stem + '.scores-reconciled.parquet')) `
+        -DiffArgs @('--b-subset', '--ignore-columns', 'modified_sequence,score_index')
 }
 
 # --- Stage 7: protein FDR dump (Compare-Stage7-Crossimpl 1e-9) ---
@@ -377,7 +386,7 @@ Write-Host ("  Boundaries: {0} PASS, {1} FAIL (of {2} compared)" -f $nPass, $nFa
 
 if ($firstFailStage) {
     # Find the last passing stage BEFORE the first-fail.
-    $stageOrder = @('stage3','stage5','stage6','stage6b','stage7','blib')
+    $stageOrder = @('stage3','stage4','stage5','stage6','stage7','blib')
     $firstFailIdx = $stageOrder.IndexOf($firstFailStage)
     $lastPassStage = if ($firstFailIdx -gt 0) { $stageOrder[$firstFailIdx - 1] } else { '(none -- divergence starts at first compared stage)' }
     Write-Host ""

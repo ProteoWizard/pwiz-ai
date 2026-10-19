@@ -18,10 +18,12 @@
       RefSpectra              (peptideModSeq, precursorCharge)
       RetentionTimes          (peptideModSeq, precursorCharge, fileName)
       Modifications           (peptideModSeq, precursorCharge, position)
-      RefSpectraProteins      (peptideModSeq, precursorCharge, accession)
-      Proteins                (accession)
       OspreyMetadata / LibMetadata (Key; the C# table is LibMetadata with osprey.-prefixed
                                keys since 2026-10-15, so its SQL strips the prefix)
+
+    Proteins and RefSpectraProteins are not compared since #4848: C# writes
+    parsimony protein groups there and Rust library accessions (accepted
+    divergence, see Compare/README.md).
 
     Rust osprey also writes OspreyPeakBoundaries, OspreyRunScores,
     OspreyExperimentScores and OspreyCoefficients; C# Osprey dropped them
@@ -329,25 +331,13 @@ $allPass = (Compare-Table `
     -NumericCols @('mass')
 ) -and $allPass
 
-# Proteins — keyed by accession.
-$allPass = (Compare-Table `
-    -TableName 'Proteins' `
-    -Sql 'SELECT accession FROM Proteins' `
-    -KeyCols @('accession')
-) -and $allPass
-
-# RefSpectraProteins — link table, key (RefSpectra key, accession).
-$rspSql = @"
-SELECT r.peptideModSeq, r.precursorCharge, p.accession
-FROM RefSpectraProteins x
-JOIN RefSpectra r ON x.RefSpectraID = r.id
-JOIN Proteins p   ON x.ProteinID    = p.id
-"@
-$allPass = (Compare-Table `
-    -TableName 'RefSpectraProteins' `
-    -Sql $rspSql `
-    -KeyCols @('peptideModSeq', 'precursorCharge', 'accession')
-) -and $allPass
+# Proteins and RefSpectraProteins are not compared (accepted divergence since #4848,
+# 2026-10-19). Rust writes one Proteins row per library accession and links each spectrum to
+# its library entry's accessions. C# writes the second-pass parsimony protein GROUPS
+# (accessions joined by ';', with a QValue column) and links each spectrum to its peptide's
+# groups - tagged [INTENTIONAL-CSHARP-DESIGN] in pwiz_tools/Osprey/docs/13-blib-output-schema.md.
+# The protein inference both sides must agree on is compared at Stage 7
+# (Compare-Stage7-Crossimpl.ps1: group accessions, q-values, winners).
 
 # RetentionTimes — key (RefSpectra key, fileName). Join through
 # SpectrumSourceFiles for fileName.

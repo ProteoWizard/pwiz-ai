@@ -22,8 +22,18 @@ where the two sides' candidate sets legitimately differ by a few rows - the Stag
 .scores.parquet of Rust vs C# (DIAGNOSTICS.md, main-search feature parity). The exit code is
 still 1 when the sets differ.
 
+--b-subset is --common-entries where B is expected to hold a SUBSET of A's entry_ids: entries
+only in A are reported but do not fail the diff, entries only in B do. Use it for Stage 6, where
+Rust rewrites every row of its .scores.parquet in place but C# writes only the survivors to
+.scores-reconciled.parquet.
+
+--ignore-columns drops the named columns (comma-separated) from both sides before comparing:
+for Rust vs C#, modified_sequence (UniMod vs +mass notation) and score_index (a C#-only row
+ordinal in .scores-reconciled.parquet).
+
 Usage:
-    python parquet_diff.py <a.parquet> <b.parquet> [--tolerance N] [--common-entries]
+    python parquet_diff.py <a.parquet> <b.parquet> [--tolerance N] [--common-entries | --b-subset]
+                           [--ignore-columns c1,c2]
 """
 import argparse
 import sys
@@ -114,11 +124,20 @@ if __name__ == "__main__":
                    help="numeric tolerance: rows where |a-b| <= tolerance match (default 0 = exact)")
     p.add_argument("--common-entries", action="store_true",
                    help="report the entry_id set difference, then compare over the shared entry_ids")
+    p.add_argument("--b-subset", action="store_true",
+                   help="like --common-entries, but entries only in A do not fail the diff")
+    p.add_argument("--ignore-columns", default="",
+                   help="comma-separated columns to drop from both sides before comparing")
     args = p.parse_args()
     a = load_sorted(args.a)
     b = load_sorted(args.b)
+    for col in filter(None, (c.strip() for c in args.ignore_columns.split(","))):
+        if col in a.column_names:
+            a = a.drop([col])
+        if col in b.column_names:
+            b = b.drop([col])
     sets_match = True
-    if args.common_entries:
+    if args.common_entries or args.b_subset:
         ids_a = set(a.column("entry_id").to_pylist())
         ids_b = set(b.column("entry_id").to_pylist())
         only_a = sorted(ids_a - ids_b)
@@ -126,7 +145,7 @@ if __name__ == "__main__":
         common = pa.array(sorted(ids_a & ids_b), type=a.schema.field("entry_id").type)
         print(f"=== entry_ids: {len(common)} common, {len(only_a)} only in A {only_a[:5]}, "
               f"{len(only_b)} only in B {only_b[:5]} ===")
-        sets_match = not only_a and not only_b
+        sets_match = not only_b if args.b_subset else not only_a and not only_b
         a = a.filter(pc.is_in(a.column("entry_id"), value_set=common))
         b = b.filter(pc.is_in(b.column("entry_id"), value_set=common))
     ok = diff_tables(a, b, args.a, args.b, tolerance=args.tolerance)

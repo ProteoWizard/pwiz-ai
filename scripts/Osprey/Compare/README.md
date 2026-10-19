@@ -89,6 +89,14 @@ C# (shared by every tool of ours, keys prefixed `osprey.`) against Rust's
 `OspreyMetadata`; the comparator strips the prefix and compares the three shared
 values (`search_mode`, `run_fdr`, `experiment_fdr`).
 
+Accepted blib divergence (2026-10-19, #4848): C# `Proteins` rows are the second-pass parsimony
+protein groups (accessions joined by `;`, with a `QValue` column) and `RefSpectraProteins` links
+each spectrum to its peptide's groups; Rust writes one row per library accession and links the
+library entry's accessions. The blib comparator skips both tables. Protein inference is still
+compared, at Stage 7 (`Compare-Stage7-Crossimpl.ps1`). The new optional RefSpectra columns
+(`PrecursorQValue`, `PrecursorPep`, `PeptideQValue`) are C#-only and not in the comparator's
+projection.
+
 ## When the gate fails
 
 Most cross-impl drift falls into one of two categories:
