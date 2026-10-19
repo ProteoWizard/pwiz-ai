@@ -1212,3 +1212,49 @@ the UI (G). Known until #4823 merges: an Osprey search library's `Proteins.QValu
 so Skyline offers a protein cutoff every entry passes.
 
 This TODO stays active: items C, D, E, F, G, H, and the PeptidePep/Proteins.Pep follow-up after #4823.
+
+### 2026-10-18 (night) - Item F coded: the port free of .blib SQL
+
+Branch `Skyline/work/20261018_bibliospec_blib_sql_free` from master 2762e51ccb, commit 90be0879c1. Shape
+(2) as planned: BlibFilter and BlibBuild on `BlibReader` + `BlibWriter`, no `ATTACH`.
+
+**BiblioSpec.IO additions**: `BlibReader` reads the legacy ion mobility columns as the current ones
+(`KnownColumns` takes earlier names per column, drift-time units where the library has no
+`ionMobilityType`), `ReadSpectraByPrecursor` (cpp's grouping ORDER BY, the tie-break columns in a
+fixed order), `ReadScoreTypesInUse`, `ReadProteinTable` (`BlibProtein` with the optional values),
+`ReadProteinIds`, `HasColumn`/`HasSpectrumColumn`, annotations with all columns. `BlibWriter`:
+`AddSpectrum(record, keepId)` (an INSERT naming the id), `UpgradeSchema` (the former `UpdateTables`,
+with the seeds shared with `CreateSchema`), `EnsureUnknownSourceFile`, `TryFindSourceFile`,
+`SetCutoffScore`, `ReadSourceFiles`, `MergeSourceFiles`, `ExistingRevision`, `SetCacheSize`, temp_store
+in memory, the annotation insert binding formula/InChI key/other keys/adduct/comment (99 rows per
+INSERT now, 991 variables). New `BlibCopier`: source files first (reused by name, cutoff -1 on
+disagreement, idFileName defaulting to fileName, cutoff to -1), the source's optional columns added
+to the target, then a spectrum with blobs verbatim, modifications, annotations and proteins
+re-registered by accession with values; a schema before the IM columns gets 0 for them (BuildParser
+writes zeros) while a NULL the source holds stays NULL.
+
+**Port**: `BlibMaker` lost ~900 lines (transfer path, `CreateUpdatedRefSpectraView`, probes,
+`UpdateTables`, `SqlStmt`/`CheckRc`/`CheckStep`, `Db`); `AttachAll`/`DetachAll` became
+`OpenSources`/`CloseSources`. `BlibFilter`: reader + grouped scan + `ToRefSpectrum`/`PeaksOf`
+(`BlibReader.DecodePeaks`), retention times via `BlibCopier.TargetFileId` (`RefSpectrum.FileId`
+added), then the chosen spectra copied in id order with `keepId`, so ids, row order and `.check`
+dumps are unchanged. `BlibBuilder.TransferLibrary` streams `ReadSpectra(withPeaks)` through the
+copier; `CollapseSources` through `MergeSourceFiles`; `GetBlibScoreTypes` through the reader. DIA-NN:
+`BuildParser.OnSpectrumInserted(psm, refId)` hook; the retention times are written after
+`BuildTables` under the real ids (same order), the `UPDATE ... FROM` remap gone.
+
+**Deliberate output changes**: (1) the copied `SpectrumSourceFiles` had `cutoffScore` and
+`workflowType` swapped since the cpp (the port reproduced it); six `.check` references changed by
+exactly those two columns (diffs reviewed; the shared `mse-mobility-from-v13.check` patched by line
+because its observed dump was V15's, whose float32-precision values differ within the comparator's
+5e-6 tolerance). (2) A `.blib` input's protein mappings were copied by dangling source protein id;
+now re-registered. (3) Modification masses of a `.blib` input copy exactly instead of `%f`-rounded.
+
+**Gates**: BiblioSpec 153/153 (new `Copier_CopiesSpectraWithTheirRowsAndIds`), Osprey 643 + zero
+inspection, CarafeSharp 113 + zero inspection (after qualifying three `AddSpectrum` crefs the overload
+made ambiguous, as the handoff warned). **Wall time**: BlibBuild copying the 265 MB
+`carafe_spectral_library.stellar-libdecoy-v3.nodecoy.blib` (484,208 spectra, 126k modifications,
+511k protein mappings) in 14.1 s (`D:\test\blib-copy-timing`). No large redundant library on this
+machine to time BlibFilter itself; its per-spectrum reads replace a SELECT per spectrum on a second
+connection, so no slower. `/code-review medium` running; then push, PR, Perf/Regression not needed
+(no Osprey behaviour change; its unit gate covers the reader/writer).
