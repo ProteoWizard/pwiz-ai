@@ -710,6 +710,25 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-19 - Copilot review (submitted 2026-10-17, "changes recommended") addressed
+
+Copilot's quota allowed a real review this time: two inline findings, both valid.
+- DpiUtil.NormalizeDockLayoutFile: File.WriteAllBytes can truncate and then
+  fail (full disk); the catch swallowed it and SaveLayout committed the
+  truncated temp file. Now only parse/serialize failures fall back; the write
+  sits outside the try so FileSaver discards the file on error.
+- DataGridViewEx: a designer width equal to the scaled default was skipped -
+  EditSpectrumFilterDlg's Property/Operation columns (resx 150) stayed 150 at
+  150% (dump: 150,150,757). Resolution: read the designer's own values back
+  from the container's ComponentResourceManager ("<column>.Width",
+  ".MinimumWidth"; the container is found by walking Parent until a resx
+  answers for one of the grid's columns). Exact for resx-built grids; code-set
+  widths (ColorGrid's Designer.cs, Volcano) keep the value test. Dump diff vs
+  after-c: exactly one grid changed, EditSpectrumFilterDlg 150,150,757 ->
+  225,225,607; the other 61 unchanged. Gate TestEditSpectrumFilter,
+  TestLayoutExportImport, TestEditCustomTheme both modes PASS.
+Committed as a new commit (branch is under review; no amend).
+
 ### 2026-10-19 - Behavior-change cleanups done (three of four), verified by dump + pixel sweep - 30efa4bfcd, pushed
 
 - DataGridViewEx: scales designer MinimumWidth too (> 5, WinForms' own default),
