@@ -133,8 +133,8 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       candidate on an equal delta while scanning ordinals longest-first, so an isobaric b12^2+ beats
       b6+ when the list gives no product charge (prefer the lower charge, then the shorter ion, as
       Osprey's typing does; pin with an import test).
-- [ ] **F. The port free of .blib SQL** (Brendan, 2026-10-18; next after #4848 and #4823 merge,
-      ahead of the PeptidePep/Proteins.Pep follow-up). `pwiz_tools/BiblioSpec` is to interact with
+- [ ] **F. The port free of .blib SQL** (Brendan, 2026-10-18). Coded and opened 2026-10-18 as
+      [#4867](https://github.com/ProteoWizard/pwiz/pull/4867); see the night entries. `pwiz_tools/BiblioSpec` is to interact with
       .blib files only through BiblioSpec.IO's classes; SQL stays legitimate for the input formats
       that are themselves databases (`MSFReader` for .msf/.pdResult, `OSWReader`, EncyclopeDIA
       .elib). What remains today is BlibFilter's transfer path in `BlibMaker`: `ATTACH` of the
@@ -1258,3 +1258,16 @@ made ambiguous, as the handoff warned). **Wall time**: BlibBuild copying the 265
 machine to time BlibFilter itself; its per-spectrum reads replace a SELECT per spectrum on a second
 connection, so no slower. `/code-review medium` running; then push, PR, Perf/Regression not needed
 (no Osprey behaviour change; its unit gate covers the reader/writer).
+
+**Item F opened** (2026-10-18 night): [#4867](https://github.com/ProteoWizard/pwiz/pull/4867),
+`Skyline/work/20261018_bibliospec_blib_sql_free`, two commits (90be0879c1 the rewrite, 216de12a55 the
+review fixes). `/code-review medium`: 9 findings, 7 fixed (BlibReader reads a TINYINT -1 as -1, not
+255, which the cpp-written libraries with the swapped workflowType -1 need; a schema-3
+`ionMobilityValue` is an ion mobility only when its type is drift time; `UpgradeSchema` moves the
+legacy ion mobility values into the columns it adds; BlibFilter names an unreadable redundant library;
+the score-type probe treats a library without its tables as unknown; no peaks read for the spectra a
+target list skips; the copier's empty-Proteins sentinel), 1 documented (the copier writes the record
+it was given as it stands), 1 dropped (BlibFilter's by-id second pass: the design that keeps the
+filtered library's ids and row order). Gates after the fixes: BiblioSpec 153, Osprey 643 + inspection,
+CarafeSharp 113 + inspection. No Perf/Regression run: Osprey's behaviour is unchanged and its unit
+gate covers the reader and writer. Awaiting TeamCity and Brendan's review.
