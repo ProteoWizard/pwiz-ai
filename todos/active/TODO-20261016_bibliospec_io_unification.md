@@ -1364,3 +1364,5 @@ Merged into #4868's branch (gate on the merge: BiblioSpec 157, Skyline build, Al
 **NHibernate removal**: planned as [#4869](https://github.com/ProteoWizard/pwiz/issues/4869) (assigned to Nick): shared SQLite helper, then iRT, optimization, ion mobility, chromatogram library, background proteome, MIDAS last, then the session wrappers and package references.
 
 **Housekeeping** (2026-10-19): the `Skyline/work/20261018_blib_as_cache` remote branch (#4865, merged) deleted at Brendan's direct request.
+
+**Schema script into BiblioSpec.IO** (2026-10-19, Brendan's review of #4867): `BlibMaker.CreateTables`/`CreateTable` kept a hand-maintained copy of the writer's table order and seed rows behind a switch over table-name literals, for the `blibbuild -d` documentation dump only. Now `BlibSchema.CreateScript(lsid, createTime)` derives the script from `AllCreateTableStatements` and the seed arrays, BlibMaker prints it, `CreateTable` is gone (the last table-name literals in the port), `Schema_CreateScriptMatchesTheWriter` holds the script and the writer to the same tables and seeds, and `tables.check` is unchanged. Commit 5fef7a9ac1 on #4867, merged into #4868.
