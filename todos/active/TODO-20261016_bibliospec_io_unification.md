@@ -161,7 +161,7 @@ Only `BlibDb` depends on the BLIB mappings (`Model/Lib/BlibData/Db*.cs`).
       q-values, rather than the level dropdown and cutoff textbox sitting in the Library Explorer beside
       Add All. Review the Explorer, the Import FASTA page group box, the Associate Proteins behaviour on
       library protein groups, the property sheet, and the audit log entries; tune after the review.
-- [ ] **H. BlibBuild readers onto the global columns**. Only DIA-NN and Proteome Discoverer fill them
+- [ ] **H. BlibBuild readers onto the global columns**. Posted as [#4870](https://github.com/ProteoWizard/pwiz/issues/4870) (2026-10-19, unassigned: Nick or Matt). Only DIA-NN and Proteome Discoverer fill them
       (survey in the 2026-10-18 progress entry). Work through the readers whose formats carry the values:
       Percolator XML (all three levels, q and PEP, in one file), mzIdentML (PSM/peptide PEP cvParams in
       the loop already walked, protein groups via ProteinDetectionList), Crux/MS-GF+/Morpheus pep.xml,
