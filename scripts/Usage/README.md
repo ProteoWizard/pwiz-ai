@@ -36,7 +36,7 @@ ai/scripts/Usage/                    (pwiz-ai repo — the tooling)
   CSV that outlives them. Dates still in transcripts are recomputed each run (today's partial
   total self-corrects); aged-out dates are preserved.
 - **One CSV per machine** (machine name is the key — matches our nightly-test convention),
-  with a `user` column (`<account>@proteinms.net`, auto-derived from the Drive account label).
+  with a `user` column (`<account>@proteinms.net`, derived from the Windows account name; the Drive volume label is checked for an email first, but current Drive labels it just `Google Drive`).
 - **est_cost_usd is MODELED** from public per-token rates (`$Rates` in the snapshot script) —
   a relative-trend signal, not a bill on a Max subscription.
 
@@ -86,6 +86,11 @@ pwsh -File "C:\proj\ai\scripts\Usage\Combine-ClaudeUsage.ps1"    # rebuild combi
 - Tracks **absolute work (tokens) per machine/person** — richer than the Claude UI. It does
   **not** capture the UI's account-wide "% of plan" numbers (no documented API; they reset on
   rolling windows). Overlay those by logging a periodic manual reading.
+- **Shared logins:** the `user` column comes from the Windows account name,
+  which is wrong for a shared account (e.g. SKYLINE-DEV6 under `maccoss`). Add a row to
+  `<store>\user_overrides.csv` (`machine,user,from,to`, inclusive dates, blank = open-ended);
+  `Combine` re-attributes matching rows. Editing the machine's own CSV does not stick — its
+  daily snapshot rewrites every date still in its transcripts.
 - `<synthetic>` rows are Claude Code placeholders (zero real cost); dated model ids collapse
   to base.
 - **Sharing:** the data folder currently sits in one person's *My Drive*, shared with edit

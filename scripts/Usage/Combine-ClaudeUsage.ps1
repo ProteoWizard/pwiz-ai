@@ -26,6 +26,25 @@ $files = Get-ChildItem -Path $DataDir -Filter 'usage_*.csv' |
 if (-not $files) { throw "No per-machine usage_*.csv files found in $DataDir" }
 
 $rows = foreach ($f in $files) { Import-Csv $f.FullName }
+
+# --- Attribution overrides: <store>\user_overrides.csv (machine,user,from,to; dates inclusive,
+# blank = open-ended). For a shared Windows login that is not the person doing the work
+# (e.g. SKYLINE-DEV6 logged in as maccoss). Applied here, not in Snapshot, so it holds even
+# though the machine's own task keeps re-deriving its user from $env:USERNAME.
+$overridesPath = Join-Path (Split-Path $DataDir -Parent) 'user_overrides.csv'
+if (Test-Path $overridesPath) {
+    $overrides = @(Import-Csv $overridesPath)
+    foreach ($r in $rows) {
+        foreach ($o in $overrides) {
+            if ($r.machine -ne $o.machine) { continue }
+            if ($o.from -and $r.date -lt $o.from) { continue }
+            if ($o.to   -and $r.date -gt $o.to)   { continue }
+            $r.user = $o.user
+        }
+    }
+    Write-Host ("Applied {0} attribution override(s) from {1}" -f $overrides.Count, $overridesPath)
+}
+
 $rows = $rows | Sort-Object date, user, machine, model
 
 $combined = Join-Path $DataDir 'usage_combined.csv'

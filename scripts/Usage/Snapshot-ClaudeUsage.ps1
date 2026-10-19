@@ -9,7 +9,7 @@
     Parses the local Claude Code JSONL transcripts (~/.claude/projects) and writes a
     daily x model aggregate to data\usage_<MACHINE>.csv. Machine name is the unique key
     (matches the nightly-test convention); a 'user' column (<account>@proteinms.net) is
-    derived from the store drive's Google account label.
+    derived from the Windows account ($env:USERNAME) unless the Drive volume label holds an email.
 
     IDEMPOTENT and SELF-HEALING against the 30-day transcript reaper: dates still in the
     transcripts are recomputed and replace their rows (today's partial total self-corrects);
@@ -25,7 +25,7 @@
 .PARAMETER Machine
     Machine tag. Default: $env:COMPUTERNAME
 .PARAMETER User
-    Person tag. Default: derived from the store drive's Google account email.
+    Person tag. Default: the Drive volume label's email if it has one (current Drive labels it just 'Google Drive'), else $env:USERNAME@proteinms.net.
 #>
 [CmdletBinding()]
 param(
@@ -69,7 +69,7 @@ if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir | O
 $DataDir = (Resolve-Path $DataDir).Path
 $csvPath = Join-Path $DataDir ("usage_{0}.csv" -f $Machine)
 
-# --- Team identity: <account>@proteinms.net from the store drive's volume label ---
+# --- Team identity: <account>@proteinms.net from the Drive volume label if it holds an email, else the Windows account ---
 if (-not $User) {
     try {
         $q = Split-Path -Qualifier $DataDir
