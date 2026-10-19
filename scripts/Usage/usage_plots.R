@@ -45,16 +45,17 @@ start_date <- as.Date("2026-05-15")   # 28 days before the project's common star
 recent_start <- Sys.Date() - 30
 
 # Friendly display names for the 'user' column — emails are noisy, and some (e.g.
-# Matt@proteinms.net) aren't even real addresses; they're just derived from the Drive label.
-# Keep names UNIQUE: if two teammates share a first name (e.g. Brian Pratt and a future Brian
-# Connolly), switch to first + last initial ("Brian P." / "Brian C."), or their rows would
-# merge into one. Unmapped users fall back to the email's local-part.
+# Matt@proteinms.net) aren't even real addresses; they're just derived from the Windows account.
+# Keep names UNIQUE: when two teammates share a first name (Brian Pratt and Brian Connolly),
+# use first + last initial ("Brian P." / "Brian C."), or their rows would merge into one.
+# Unmapped users fall back to the email's local-part.
 user_display <- c(
   "brendanx@proteinms.net" = "Brendan",
   "matt@proteinms.net"     = "Matt",
   "nicksh@proteinms.net"   = "Nick",
   "vsharma@proteinms.net"  = "Vagisha",
-  "bspratt@proteinms.net"  = "Brian",
+  "bspratt@proteinms.net"  = "Brian P.",
+  "bconn@proteinms.net"    = "Brian C.",
   "ritach@proteinms.net"   = "Rita"
 )
 display_user <- function(u) {
