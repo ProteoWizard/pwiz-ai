@@ -4,11 +4,13 @@
 - **Branch**: `Skyline/work/20261019_osprey_firstpass_stamp_check` (pwiz, task 3a)
 - **Base**: `master` (pwiz); `main` (maccoss/osprey)
 - **Created**: 2026-10-18
-- **Status**: Not started. Picks up from TODO-20261015_osprey_firstpassfdr_slimming (completed, PRs #4853,
+- **Status**: In progress - task 3a open as #4875 (2026-10-19), the comparator and bisect-driver
+  fixes done on this branch's session. Picks up from TODO-20261015_osprey_firstpassfdr_slimming (completed, PRs #4853,
   #4863, #4864).
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (none yet). Related Rust PR: [maccoss/osprey#73](https://github.com/maccoss/osprey/pull/73) (merged 2026-10-18).
+- **PR**: [#4875](https://github.com/ProteoWizard/pwiz/pull/4875) (task 3a, opened 2026-10-19 on
+  Brendan's go-ahead, rebased onto master at #4868; TeamCity Perf/Regression on ask). Related Rust PR: [maccoss/osprey#73](https://github.com/maccoss/osprey/pull/73) (merged 2026-10-18).
 - **Checkout**: `C:\proj\pwiz` (master), `C:\proj\osprey` (Rust, `main`; #73 merged as `64e37ae828`, local checkout still `d19be4c` - pull)
 
 ## Objective
@@ -109,3 +111,9 @@ as its own fan-out; training candidates into PerFileScoring) stay deferred.
 - With the comparator fix, on master + branch (incl. #4848): gate Stellar All PASS (blib re-compared),
   Astral All PASS at 1e-9 (118,314 precursors each). Remaining: push the pwiz branch and open the PR
   (Brendan's call), then TeamCity on ask.
+- **Opened as #4875** (2026-10-19 evening, Brendan: "Go ahead with a new PR for the stamp check" once
+  #4867 and #4868 had merged; he held the branch back so it would not slow that chain). Rebased onto
+  master at 394c5e364e before the push (pre-PR, so a rebase; commits now 3e726e7775 + 20cc4ab965);
+  gate on the rebased tree Osprey Debug 644/644 + inspection clean. Not triggered: the TeamCity
+  Perf/Regression config (ask first). Next: TeamCity's PR checks, then the Perf/Regression run when
+  Brendan calls it, then `/pw-complete`.
