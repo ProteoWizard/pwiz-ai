@@ -1362,3 +1362,5 @@ Both PRs failed the Docker container config on `AlphapeptdeepLibraryBuilderUnitT
 Merged into #4868's branch (gate on the merge: BiblioSpec 157, Skyline build, AlphapeptdeepLibraryBuilderUnitTest + TestLibraryBuild + TestExportSpectralLibrary); both PRs rebuild on TeamCity. The Perf/Tutorial config needs a manual re-trigger on #4867 (pull/4867) and #4868 (pull/4868) once the PR builds are green.
 
 **NHibernate removal**: planned as [#4869](https://github.com/ProteoWizard/pwiz/issues/4869) (assigned to Nick): shared SQLite helper, then iRT, optimization, ion mobility, chromatogram library, background proteome, MIDAS last, then the session wrappers and package references.
+
+**Housekeeping** (2026-10-19): the `Skyline/work/20261018_blib_as_cache` remote branch (#4865, merged) deleted at Brendan's direct request.
