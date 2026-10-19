@@ -1171,3 +1171,12 @@ pep.xml, mzIdentML q types, mzTab q types, PRIDE percolator q, Proxl Percolator;
 the loop at :487; DIA-NN `PEP`/`PG.PEP`; MSFReader PSM PEP and PrecursorQValue on the PSM branch; OSW
 global peptide/protein joins. Caveat for every copy-the-Score case: a PSM q is experiment-wide only when
 the tool ran across all runs; a run-level q must not be labelled global.
+
+**#4848 TeamCity** (2026-10-18 evening): Perf/Regression build 331 on `pull/4848` (df1b4e298a) SUCCESS,
+the first run comparing the recaptured goldens. Marked ready for review so the Skyline/Osprey/Core PR
+builds start (a draft does not trigger them). Skyline code inspection failed with eight warnings, all in
+Nick's Skyline code (seven redundant casts the .NET 10 compiler resolves without them, one unused using);
+fixed as 53473678f7 and pushed. The local `Build-Skyline.ps1 -RunInspection` is not usable as a gate on
+this machine: unresolved `JetBrains.Annotations` / `IdentityModel` symbols in the Shared projects swamp
+it (389 "errors"), none in the touched files; TeamCity's inspection resolves them. Perf/Regression not
+re-triggered for the Skyline-only fix.
