@@ -1284,3 +1284,61 @@ this machine, since Nick profiled the 26.1 load. Details, order of work and stop
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261018_skyline_blib_io_night.md` before starting work.
+
+### 2026-10-18 (night session) - Items C + D: Skyline's .blib reading and writing onto BiblioSpec.IO
+
+Branch `Skyline/work/20261019_skyline_blib_io`, stacked on #4867's `Skyline/work/20261018_bibliospec_blib_sql_free`.
+
+**Baseline first** (`pwiz_tools/Skyline/Test/BlibLoadTimingTest.cs`, skipped unless `SKYLINE_BLIB_TIMING`
+names libraries; `SKYLINE_BLIB_TIMING_OUT` collects a line per run). One process per run, three runs each,
+medians of `BiblioSpecLiteLibrary.Load` on master's Dapper reader (`ai/.tmp/sessions/20261018-blib-io/timing-before.tsv`):
+
+| library | entries | load s | peak WS MB |
+|---|---|---|---|
+| carafe...nodecoy.blib (265 MB) | 484,208 | 3.05 | 579 |
+| carafe_spectral_library.blib (533 MB) | 968,394 | 5.81 | 1017 |
+| SkylineAI_spectral_library.blib (708 MB) | 1,565,673 | 8.23 | 1601 |
+
+**BiblioSpec.IO additions** (gated by `BlibReaderTests`, two new tests): `BlibReader.ReadSpectrumRetentionTimes(id)`
+(a by-id read; named apart from the partition overload, which an int literal would bind to), `CountRetentionTimes`,
+`ReadScoreTypeTable` (`BlibScoreType` with the probability type), `HasValues(table, column)`; the `RetentionTimes`
+scan reads the legacy ion mobility columns of schemas 2-5 as the current ones, a schema-3 CCS included (shared
+`ReadLegacyIonMobility` with the RefSpectra scan, which keeps BlibFilter's drift-time-only reading).
+`BlibWriter.Create(path, lsid, redundant)` (Skyline's own LSIDs; a redundant library without RetentionTimes),
+`AddScoreType(name, probabilityType)` (BiblioSpec's seeded rows found by name, a new one numbered after them),
+`DeleteSourceFiles(names)` (an appended library loses the files, their spectra and every row of theirs, the
+header's count following), and a record `FileId` of 0 written as NULL (a spectrum without a source file, as Skyline
+has always written one minimized from a library without files; the reader reads NULL as 0 already).
+
+**Skyline read path** (`BiblioSpecLite.cs`, 2,672 -> 2,010 lines; Dapper, `SqliteOperations`, `UtilDB` and
+every SQL string gone; Dapper dropped from Skyline.csproj, BiblioSpec.IO referenced): the header and small tables
+through `PooledSqliteConnection.ExecuteWithReader` (a `BlibReader` kept with the pooled connection, remade when the
+pool reopens the file; every reader use is under the pooled connection's lock, which the old per-call SQL was not);
+the RefSpectra and RetentionTimes scans on one read-only `BlibReader` per thread over id-range partitions in place of
+`id % N`; peaks, annotations, the redundant spectrum, the property sheet, the per-key observations
+(`GetRedundantSpectra`) and the PSM count through the reader; `DeleteDataFiles` through `BlibWriter.Open(append)`.
+Behaviour kept: schema-0 guards, the files-table join semantics (an observation without a listed file is left out),
+`AnyRedundantSpectra` from a nonzero RedundantRefSpectraID (Skyline writes -1 for its own libraries so the
+RetentionTimes path is taken). One deliberate addition: a spectrum with no source file in a modern-schema library
+falls back to the entry's own best spectrum (`base.GetSpectra`) rather than vanishing, since Skyline now writes
+schema 11 for a library minimized from NIST/X!Hunter, where it wrote schema 0 before and the schema-0 guard did that.
+
+**Skyline write path** (`BlibDb.cs` rewritten on `BlibWriter`; the 12 `Db*` entities, `mapping.xml`,
+`mapping_redundant.xml` and `BlibSessionFactoryFactory` deleted; `DbEntity` stays, the other NHibernate models derive
+from it): `CreateLibraryFromSpectra` converts spectra to records in parallel batches of 1,024 and writes them in list
+order (ids now deterministic); `MinimizeLibrary` surveys the document's precursors once (`GetLibraryPrecursors`) so the
+optional q-value/PEP columns are added before the rows, then writes each precursor's record, observations, proteins
+and the redundant library's spectra under their source ids. Deliberate output changes from the NHibernate writer:
+schema 11 with BiblioSpec's seeded ScoreTypes and IonMobilityTypes (Skyline wrote schema 7 and ad-hoc score rows),
+`createTime` in ctime format, `prevAA`/`nextAA` as `-` not NULL, the extra indexes of `Complete`, and
+`ModsFromModifiedSequence` fixed: it counted the residue after a bracket twice, so the second and later modifications
+of a sequence were one position too high, and it parses the mass invariantly. Progress is per precursor.
+
+**Tests**: `SpectralLibraryTestUtil` reads `BlibSpectrumRecord`s through `BlibReader`; `Ms1FullScanFilteringTutorial`
+checks the libraries through the reader; the timing test is kept, skipped by default.
+
+**After the port** (same harness, same libraries, `timing-after.tsv`), medians of three: 3.20 s / 571 MB (was 3.05 / 579), 5.56 s / 1033 MB (was 5.81 / 1017), 7.94 s / 1628 MB (was 8.23 / 1601): within a few percent either way, no regression; the id-range partitions and the per-thread read-only readers hold the 26.1 load speed.
+
+**Library test sweep** (sub-agent, lists in `ai/.tmp/sessions/20261018-blib-io/blib-batch*.txt`, logs `pwiz_tools/Skyline/bin/staging/Debug/blib-*.log`): 112 tests, one failure: `TestUnreadableBlib` drops the SpectrumSourceFiles table and expects the load to fail, which the reader's tolerant empty read let through; `ReadFromDatabase` now refuses a schema 1+ library without that table (new LibResources string). Rerun of all 112: green. BiblioSpec gate 155/155.
+
+**`/code-review medium`**: 9 findings, 4 fixed (`DeleteSourceFiles` also clears DecoyPairs rows of the deleted spectra and nulls targets pointing at them; the legacy ion mobility helper moved into `KnownColumns` with the names dictionary among the static fields; the RefSpectra legacy read writes the CCS back as the RetentionTimes one does; minimize looks up each precursor's global scores once, on `LibraryPrecursor`). 5 dropped: a NULL scoreType reads as UNKNOWN (BiblioSpec never writes NULL and an explicit 0 already read that way); `GetIonMobility` for type none considers all three columns (the old RetentionTimes path did, the old GetRedundantSpectra did not - unified); a schema-3 value with type 0 is not a drift time (BlibFilter's rule, which #4867 adopted; the old Skyline paths disagreed with each other); the property sheet reading the small files and score tables per selection; the RetentionTimes reader coalescing NULLs to 0 before the ion mobility factory (the old reader did; preserved).
