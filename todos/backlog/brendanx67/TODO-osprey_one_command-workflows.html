@@ -209,15 +209,15 @@
 
   <!-- A: digest -->
   <g transform="translate(16, 86)">
-    <rect class="task-carafe" x="0" y="0" width="328" height="66" rx="6"/>
-    <text class="stage-title" x="12" y="17">Digest the proteome</text>
-    <text class="task-role" x="316" y="17" text-anchor="end">CarafeSharp &#183; CPU</text>
-    <text class="task-name" x="12" y="31">--task DigestFasta</text>
-    <text class="stage-desc" x="12" y="45">--fasta &#8594; peptides.fasta + pairing.tsv (targets, decoys)</text>
-    <text class="stage-desc" x="12" y="59">digest, mods, charges, windows: Carafe's own options</text>
+    <rect x="0" y="0" width="328" height="66" rx="6" fill="none" stroke="#5e35b1" stroke-width="1" stroke-dasharray="4,3"/>
+    <text class="stage-title" x="12" y="17">Digest the proteome, in memory</text>
+    <text class="task-role" x="316" y="17" text-anchor="end">no task, no file</text>
+    <text class="stage-desc" x="12" y="33">--fasta &#8594; an enumerable of peptides with their proteins,</text>
+    <text class="stage-desc" x="12" y="47">decoys and pair ids; Carafe's digest options apply</text>
+    <text class="stage-desc" x="12" y="61">seconds, so the predicted .blib is the first checkpoint</text>
   </g>
   <path class="flow" d="M 180 152 L 180 172" marker-end="url(#arrow)"/>
-  <text class="file" x="188" y="166">out.library/peptides.fasta</text>
+  <text class="file-note" x="188" y="166">streamed into the predictor</text>
 
   <!-- B: predict -->
   <g transform="translate(16, 174)">
@@ -262,15 +262,15 @@
 
   <!-- A: digest -->
   <g transform="translate(16, 86)">
-    <rect class="task-carafe" x="0" y="0" width="328" height="66" rx="6"/>
-    <text class="stage-title" x="12" y="17">Digest the proteome</text>
-    <text class="task-role" x="316" y="17" text-anchor="end">CarafeSharp &#183; CPU</text>
-    <text class="task-name" x="12" y="31">--task DigestFasta</text>
-    <text class="stage-desc" x="12" y="45">--fasta &#8594; peptides.fasta + pairing.tsv (targets, decoys)</text>
-    <text class="stage-desc" x="12" y="59">--entrapment adds an entrapment-free FASTA for training</text>
+    <rect x="0" y="0" width="328" height="66" rx="6" fill="none" stroke="#5e35b1" stroke-width="1" stroke-dasharray="4,3"/>
+    <text class="stage-title" x="12" y="17">Digest the proteome, in memory</text>
+    <text class="task-role" x="316" y="17" text-anchor="end">no task, no file</text>
+    <text class="stage-desc" x="12" y="33">--fasta &#8594; an enumerable of peptides with their proteins,</text>
+    <text class="stage-desc" x="12" y="47">decoys and pair ids; entrapment-free here, quartets at the</text>
+    <text class="stage-desc" x="12" y="61">final library when --entrapment is given; seconds of CPU</text>
   </g>
   <path class="flow" d="M 180 152 L 180 172" marker-end="url(#arrow)"/>
-  <text class="file" x="188" y="166">out.library/peptides.fasta</text>
+  <text class="file-note" x="188" y="166">streamed into the predictor</text>
 
   <!-- B: predict the training library -->
   <g transform="translate(16, 174)">
@@ -353,15 +353,15 @@
 
   <!-- A: digest -->
   <g transform="translate(16, 86)">
-    <rect class="task-carafe" x="0" y="0" width="328" height="66" rx="6"/>
-    <text class="stage-title" x="12" y="17">Digest the proteome</text>
-    <text class="task-role" x="316" y="17" text-anchor="end">CarafeSharp &#183; CPU</text>
-    <text class="task-name" x="12" y="31">--task DigestFasta</text>
-    <text class="stage-desc" x="12" y="45">--fasta &#8594; peptides.fasta + pairing.tsv (targets, decoys)</text>
-    <text class="stage-desc" x="12" y="59">any proteome: a saved model predicts any peptides</text>
+    <rect x="0" y="0" width="328" height="66" rx="6" fill="none" stroke="#5e35b1" stroke-width="1" stroke-dasharray="4,3"/>
+    <text class="stage-title" x="12" y="17">Digest the proteome, in memory</text>
+    <text class="task-role" x="316" y="17" text-anchor="end">no task, no file</text>
+    <text class="stage-desc" x="12" y="33">--fasta &#8594; an enumerable of peptides with their proteins,</text>
+    <text class="stage-desc" x="12" y="47">decoys and pair ids; any proteome, since a saved model</text>
+    <text class="stage-desc" x="12" y="61">predicts any peptides; seconds of CPU</text>
   </g>
   <path class="flow" d="M 180 152 L 180 172" marker-end="url(#arrow)"/>
-  <text class="file" x="188" y="166">out.library/peptides.fasta</text>
+  <text class="file-note" x="188" y="166">streamed into the predictor</text>
 
   <!-- B: predict with the saved model -->
   <g transform="translate(16, 174)">
@@ -410,11 +410,11 @@
       <tr><th>Phase</th><th><code>--task</code></th><th>Code</th><th>Reads</th><th>Writes (the checkpoint)</th><th>Modes</th></tr>
     </thead>
     <tbody>
-      <tr><td>Digest</td><td><code>DigestFasta</code></td><td>CarafeSharp <code>EntrapmentFastaTask</code></td><td><code>--fasta</code></td><td><code>out.library/peptides.fasta</code>, <code>pairing.tsv</code>; with <code>--entrapment</code> also the entrapment-free training pair</td><td>1, 2, 3</td></tr>
-      <tr><td>Predict the training library</td><td><code>PredictTrainingLibrary</code></td><td>CarafeSharp <code>PredictLibraryTask</code></td><td>training peptides; pretrained models or <code>--model</code></td><td><code>out.library/initial.blib</code></td><td>2</td></tr>
+      <tr><td>Digest (inside the prediction tasks)</td><td>none</td><td>CarafeSharp <code>Digester</code> + the decoy and entrapment steps of <code>EntrapmentFastaBuilder</code></td><td><code>--fasta</code></td><td>nothing: an in-memory enumerable of peptides, proteins, decoys and pair ids that the predictor and the blib writer consume</td><td>1, 2, 3</td></tr>
+      <tr><td>Predict the training library</td><td><code>PredictTrainingLibrary</code></td><td>CarafeSharp <code>PredictLibraryTask</code></td><td>the entrapment-free digest; pretrained models or <code>--model</code></td><td><code>out.library/initial.blib</code></td><td>2</td></tr>
       <tr><td>Search the tuning runs</td><td><code>TrainingSearch</code> (HPC: each stage with <code>--training-search</code>)</td><td>Osprey, the four stages</td><td><code>initial.blib</code>, <code>--training-input</code></td><td><code>out.library/training/&lt;stem&gt;.training.parquet</code> per run, that analysis's artifacts, <code>training.blib</code></td><td>2</td></tr>
       <tr><td>Tune</td><td><code>TrainModel</code></td><td>CarafeSharp <code>TrainTask</code></td><td>the exports; pretrained models or <code>--model</code></td><td><code>out.carafemodel</code> (+ Carafe's folder under <code>out.library/model/</code>)</td><td>2</td></tr>
-      <tr><td>Predict the library</td><td><code>PredictLibrary</code></td><td>CarafeSharp <code>PredictLibraryTask</code></td><td>peptides; pretrained, <code>--model</code>, or the tuned model</td><td><code>out.library.blib</code></td><td>1, 2, 3</td></tr>
+      <tr><td>Predict the library</td><td><code>PredictLibrary</code></td><td>CarafeSharp <code>PredictLibraryTask</code></td><td>the digest (quartets with <code>--entrapment</code>); pretrained, <code>--model</code>, or the tuned model</td><td><code>out.library.blib</code></td><td>1, 2, 3</td></tr>
       <tr><td>Search</td><td>the canonical four</td><td>Osprey</td><td><code>out.library.blib</code>, <code>-i</code></td><td><code>out.blib</code> and its sidecars, as today</td><td>all</td></tr>
     </tbody>
   </table>
@@ -424,8 +424,7 @@
 out.library.blib               the library it was searched with (modes 1-3); -l takes it next time
 out.carafemodel                the tuned model (mode 2); --model takes it next time; CarafeSharp --model_info describes it
 out.library/                   working files of the library build - one folder a user can delete
-  peptides.fasta, pairing.tsv                      digest (the final library)
-  training-peptides.fasta, training-pairing.tsv    only with --entrapment
+  pairing.tsv                                      only with --entrapment: the FDRBench quartets, until DecoyPairs can carry the entrapment partner
   initial.blib                                     the training library (mode 2)
   training/                                        the training analysis: parquets, sidecars, the exports, training.blib
   model/                                           Carafe's model folder (what --model_dir reads)</pre>

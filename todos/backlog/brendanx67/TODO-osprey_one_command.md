@@ -178,15 +178,24 @@ input, and what a resumed run finds current):
 
 | Phase | Task (`--task`) | Owner | In | Out (checkpoint) | Modes |
 |---|---|---|---|---|---|
-| Digest | `DigestFasta` (`EntrapmentFastaTask`) | CarafeSharp, CPU | `--fasta` | `<out>.library/peptides.fasta` + `pairing.tsv`; with `--entrapment` also `training-peptides.fasta` + `training-pairing.tsv` (entrapment-free, for the training library) | 1, 2, 3 |
-| Predict the training library | `PredictTrainingLibrary` (`PredictLibraryTask`) | CarafeSharp, GPU | training peptides, pretrained or `--model` | `<out>.library/initial.blib` | 2 |
+| Predict the training library | `PredictTrainingLibrary` (`PredictLibraryTask`) | CarafeSharp, GPU | `--fasta` (digested in memory, entrapment-free), pretrained or `--model` | `<out>.library/initial.blib` | 2 |
 | Search the tuning runs | `TrainingSearch` (selector: the four stages over `--training-input` with `--training-export`) | Osprey | `initial.blib`, the tuning runs | `<out>.library/training/<stem>.training.parquet` per run, plus that analysis's own artifacts and `training.blib` | 2 |
 | Tune | `TrainModel` (`TrainTask`) | CarafeSharp, GPU | the exports, pretrained or `--model` | `<out>.carafemodel` (plus Carafe's model folder under `<out>.library/model/`) | 2 |
-| Predict the library | `PredictLibrary` (`PredictLibraryTask`) | CarafeSharp, GPU | peptides, pretrained / `--model` / the tuned model | `<out>.library.blib` | 1, 2, 3 |
+| Predict the library | `PredictLibrary` (`PredictLibraryTask`) | CarafeSharp, GPU | `--fasta` (digested in memory, with `--entrapment` as quartets), pretrained / `--model` / the tuned model | `<out>.library.blib` | 1, 2, 3 |
 | Search | the canonical four | Osprey | `<out>.library.blib`, `-i` | `out.blib` and sidecars, as today | all |
 
-Modes 1 and 3 are Digest, PredictLibrary, Search; mode 2 is all six. Without `--entrapment` the
-training library and the final library are predicted from the same peptide FASTA; only the model
+Modes 1 and 3 are PredictLibrary then Search; mode 2 is all five. **The digest is not a phase
+(decision 7)**: it is an `IEnumerable` of (peptide, source proteins, kind, pair id) produced
+from `--fasta` inside the prediction task - cleavage by `Digester`/`EnzymeTable`, decoys and
+entrapment by `EntrapmentFastaBuilder`'s generation steps - which the predictor consumes and the
+blib writer takes its `Proteins` and `DecoyPairs` from. It is seconds of CPU and deterministic
+(seeded), so the predicted `.blib` is the first checkpoint and the prediction task's validity key
+(FASTA identity plus the digest settings, which `CarafeValidity.Key` already hashes) covers it.
+This also ends CarafeSharp's second digest: `LibraryDatabase` re-digests `-db` inside prediction
+today, reproducing Java's HashMap order for the `ProteinID` text (`JavaHashOrder`), because in
+Carafe the FASTA builder and the predictor are separate runs; in-process one digest feeds both
+and the Java-order reproduction is needed only by the parity tests. Without `--entrapment` the
+training library and the final library are predicted from the same digest; only the model
 differs. The spectra cache is shared between the two analyses (`--cache-dir`), so a tuning run
 that is also searched is parsed once.
 
@@ -202,8 +211,8 @@ out.blib                       the result (-o), sidecars as today
 out.library.blib               the library it was searched with (modes 1-3)
 out.carafemodel                the tuned model (mode 2)
 out.library/                   working files of the library build
-  peptides.fasta, pairing.tsv              digest (final library)
-  training-peptides.fasta, training-pairing.tsv   only with --entrapment
+  pairing.tsv                              only with --entrapment: the FDRBench quartets, until
+                                           DecoyPairs can carry the entrapment partner (open question)
   initial.blib                             the training library (mode 2)
   training/                                the training analysis: its parquets, sidecars,
                                            <stem>.training.parquet, training.blib
@@ -240,8 +249,9 @@ file lists and TeamCity artifacts change; measure the package size before and af
 
 ### 6. HPC (part I)
 
-The library phases are single-node tasks (`--task DigestFasta`, `PredictTrainingLibrary`,
-`TrainModel`, `PredictLibrary`), each with a declared file contract. The two analyses are the
+The library phases are single-node tasks (`--task PredictTrainingLibrary`, `TrainModel`,
+`PredictLibrary`), each with a declared file contract; the digest runs inside the two prediction
+tasks (decision 7). The two analyses are the
 existing four-task chains; the training analysis is addressed by adding `--training-search` to a
 stage task (`--task PerFileScoring --training-search`), which selects the tuning runs, the
 training output directory, the initial library and the export, exactly as the in-process workflow
@@ -280,12 +290,36 @@ nodes, merged into one library) when the cluster has several GPUs - not a new ta
 5. **CarafeSharp's RT default stays** (Chronologer; `--rt_model alphapeptdeep` is there).
 6. **Three PRs** (4a modes 1 and 3, 4b mode 2, 4c HPC and packaging), each gated, no PR per
    topic - as specified to the session that wrote the integration TODO this one supersedes.
+7. **The digest is an enumerable, not a task (Brendan, 2026-10-19 evening).** Too small for a
+   sidecar of its own; the predictor and the blib writer consume it in memory (section 2).
+   Skyline's own `Enzyme` (its protease table, mixed-enzyme digestion, semi-cleavage, ragged ends)
+   is the better general model but lives inside Skyline.exe, and the shared `ProteomeDb` digester
+   drags NHibernate along; merging the digesters is too complicated for this sprint, so
+   CarafeSharp's Carafe-parity `Digester` stays. `CarafeSharp --build_entrapment_fasta` keeps
+   writing the peptide FASTA and manifest for whoever wants the files.
+8. **Decoy source in mode 1: predicted decoys, as the lab workflow has them (proposed).**
+   With the digest in memory, mode 1 could hand CarafeSharp only targets and let Osprey's
+   `DecoyGenerator` reverse them at load (half the prediction time, no `DecoyPairs`); keep
+   CarafeSharp predicting the decoy peptides and writing the pairs as the default (the
+   StellarLibDecoy shape; generated decoys are the less reliable mechanism, Brendan 2026-10-17),
+   with the generated route available as it is for `-l`.
+9. **Option spelling: standard pwiz hyphens, Carafe's underscores accepted (proposed, Brendan
+   leaning yes 2026-10-19 evening).** 57 of CarafeSharp's 97 options use underscores
+   (`--build_entrapment_fasta`, `--miss_c`, `--lf_top_n_frag`, `--rt_model`, `--log_file`, ...);
+   Osprey and Skyline have none. We need not match Java Carafe's spelling: the help, the docs and
+   Osprey's library sections spell them `--build-entrapment-fasta`, `--miss-c`, and one grammar
+   rule makes `_` and `-` equivalent when a name is matched, so every recorded Carafe command
+   line (which the parity tests replay from `parameter.txt`) still runs and the "OTHER FORMS
+   ACCEPTED" paragraph says so - no per-option alias list. CarafeSharp's own additions that
+   duplicate an Osprey option under Carafe's style (`--log_file` for `--log-file`) take Osprey's
+   name outright. Word-level renames (`--miss-c` to `--missed-cleavages`) are a separate choice,
+   not made here.
 
 ## PR plan
 
 | PR | Holds | Gate beyond the standing ones |
 |---|---|---|
-| **4a** `--fasta` modes 1 and 3 | the options and CarafeSharp's sections in Osprey's help; the workflow layer with Digest, PredictLibrary and the search; the file layout; the lazy libtorch seam; docs 20 and 00; `SubsetPipelineTest` mode-1 and mode-3 cases on the subset FASTA (CPU prediction, seconds) | CarafeSharp's chained leg unchanged; a mode-1 Stellar run against `Run-CarafeSharpWorkflow.ps1 -Stages 1a,2,6` (same library bytes, same result) |
+| **4a** `--fasta` modes 1 and 3 | the options and CarafeSharp's sections in Osprey's help (hyphenated per decision 9); the workflow layer with PredictLibrary over the in-memory digest and the search; the file layout; the lazy libtorch seam; docs 20 and 00; `SubsetPipelineTest` mode-1 and mode-3 cases on the subset FASTA (CPU prediction, seconds) | CarafeSharp's chained leg unchanged; a mode-1 Stellar run against `Run-CarafeSharpWorkflow.ps1 -Stages 1a,2,6` (same library bytes, same result) |
 | **4b** `--training-input` mode 2 | PredictTrainingLibrary, TrainingSearch, TrainModel; the model beside `-o`; resume across the chain; `--model` + `--training-input`; `regression.ps1` gains a one-command leg that replaces CarafeSharp's chained leg as the end-to-end gate | the mode-2 Stellar run against the six-stage script (same `.carafemodel` content, same library, same result); `SubsetPipelineTest` resume cases |
 | **4c** HPC and packaging | the `--task` names, `--training-search`, the file contracts and harness staging (the backlog item); installers and TeamCity artifacts with CarafeSharp and libtorch CPU; `Run-CarafeSharpWorkflow.ps1` reduced; the workflow page folded | the HPC chain of the regression on mode 2; package size recorded; a mode-0 run on a build without libtorch |
 
@@ -310,6 +344,9 @@ Every PR, before `gh pr create` (then `/code-review medium` on the branch):
 - Whether `--fasta` with `-l` should ever mean anything (DIA-NN re-annotates proteins from the
   FASTA; Carafe's library already carries them).
 - The pretrained archives' size in the package, and whether Chronologer's `.pt` ships or converts.
+- A later toolkit sprint, not this one: one shared enzyme table and digester (Skyline's rules and
+  protease list, Carafe's table as presets) that Skyline, CarafeSharp and the BiblioSpec port use;
+  the Carafe parity tests would need a Carafe-rules mode, as the similarity gate has one.
 - `DecoyPairs` and the entrapment partner (the BLIB sprint's open schema question): until it is
   answered, `--entrapment` keeps writing the pairing manifest beside the library for FDRBench.
 
