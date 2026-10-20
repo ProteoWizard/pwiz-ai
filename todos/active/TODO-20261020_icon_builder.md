@@ -50,10 +50,17 @@ Transparent key (the DPI branch already does above 100%).
 ## Tasks
 
 - [x] Branch created from the DPI branch tip (a7a85a182b)
-- [ ] Final per-icon choices from the gallery (vector vs hq2x) -> manifest
-- [ ] IconBuilder project: csproj (net10.0-windows, UseWPF), Program.cs, manifest reader
-- [ ] Move vector sources and hq2x rasters into the project
-- [ ] Generate the first full per-size set; review in the gallery at 20/24/32
+- [x] Manifest from the round-1 gallery choices: 89 vector, 30 raster (hq2x rows); revise as
+      the gallery decisions settle (`ai/.tmp/sessions/20261006-d785f537/New-Manifest.ps1`
+      regenerates it from a choices export)
+- [x] IconBuilder project: csproj (net10.0-windows, UseWPF + WinForms), Program.cs with the
+      manifest reader, WPF vector render and bicubic raster scaling, README, .gitignore
+- [x] Vector sources (119 xaml) and hq2x rasters (all 119, so a manifest line can flip) and
+      `Tools/hq2x_icons.py` moved into the project
+- [x] First full run (2026-10-20): 357 files, 0 failures, all square 32-bit ARGB at the named
+      size; log `ai/.tmp/sessions/20261006-d785f537/iconbuilder-run1.log`, sample sheet
+      `iconbuilder-sample.png` in the same folder. Output/ is git-ignored until wired in
+- [ ] Review the generated set in the gallery at 20/24/32 (add an "IconBuilder output" column)
 - [ ] Wire the outputs into Skyline resources on the DPI branch (separate step/PR)
 - [ ] README for the tool; mention in ai/docs/github-repo-guide.md if a script wrapper is added
 
