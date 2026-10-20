@@ -871,3 +871,23 @@ through `--model`. TeamCity build 4228048 on b9bf53b1cb was cancelled as superse
 
 Commit f63bcfd169. Gates: Osprey Debug 649 + inspection (after the rename and the hook); the help
 test re-run after regeneration.
+
+### 2026-10-20 evening - Second review, TeamCity
+
+`/code-review medium 4885` (second cycle, triage reported before fixing): 9 findings; Brendan approved
+fixing 3 in 9719d88da2 - a failed task no longer counts toward `OSPREY_STOP_AFTER_TASKS` (it was
+reported as a clean stop, exit 0); `--model` naming the model the run writes (`<out>.carafemodel`)
+is refused (it could be deleted, and a re-run never converged to a skip); the model-folder check
+compares each packed file's SHA-256 with the model file's, not just its name. Dropped 6: a late (not
+silent) failure for `--rt-reference` with an AlphaPeptDeep saved model; held-out runs without a
+source but with a cache (a feature gap); the tuning search's unread protein and summary reports
+(seconds); the budget in CommonUtil's shared driver (Skyline's too; finding 1's fix removed the bug
+the reviewer tied to the placement); the `ArtifactPaths` static swap (existing design); a redundant
+`?? TASK_NAME`. Osprey Debug 649 + inspection green. TeamCity Perf/Regression 4228241 on
+`pull/4885` (9719d88da2) queued.
+
+GPU (Brendan's question): CarafeSharp has run on this machine's RTX 4000 Ada from a `-Torch cuda`
+build (currently only in `pwiz-scanmajor`); every run this session was on the CPU, and Osprey.exe
+links only the CPU libtorch, so `--device gpu` in the one command falls back to the CPU. **4c**:
+give Osprey a CUDA build (`Build-Osprey.ps1 -Torch cuda`, as CarafeSharp's) with the packaging, and
+measure the one command on the GPU.
