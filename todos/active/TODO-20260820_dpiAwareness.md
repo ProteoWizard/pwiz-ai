@@ -257,7 +257,10 @@ formId/menu syntax, permission handshake) recorded in memory
 an upstream fix (gitignored file stamps 25.1.1.430 < required
 26.1.1.070).
 
-## Known issue: dock-pane tab descender clip (2026-08-25)
+## Known issue: dock-pane tab descender clip (2026-08-25) - RESOLVED 2026-10-20
+
+Fixed in the fork source (see the 2026-10-20 DigitalRune entry in the
+Progress Log); the paragraph below is the original analysis.
 
 Developer-reported: the Targets/Files tab strip under the tree clips
 text descenders (~2px) at 150%. Root cause is inside the BINARY
@@ -709,6 +712,51 @@ Developer 2026-09-22: Existing Experiments accepted; asked for spectrum viewers
 next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
+
+### 2026-10-20 - DigitalRune fork fixed at the source; DLL rebuilt into the PR (ac129460e5, not pushed)
+
+Fork source: uw-maccosslab/developers, skylinedev/DigitalRune-Docking-Windows
+(checked out at Workspaces/ProteoWiz/developers). Committed there on master as
+0cd2a44 (NOT pushed - needs the developer's say on branch/push conventions).
+- Helpers/DpiHelper.cs (new): system DPI factor read once; Scale(int),
+  Scale(Bitmap) bicubic, ScaleCrisp(Bitmap) nearest-neighbor, ToLogical(Point).
+- DockPanelProfessionalRenderer: the 58 layout constants (gaps, image sizes,
+  splitter, minimum pane widths) returned through DpiHelper.Scale, also where
+  methods used the fields directly. The twelve button bitmaps ScaleCrisp, because
+  DrawButtonImage remaps exact black and the exact corner color.
+- InertButton default size, DockIndicator 10-px margin, PanelIndicator and
+  PaneIndicator images scaled; PaneIndicator.HitTest maps the point back with
+  ToLogical before the 96-DPI hot-spot mask lookup. Indicators are ScaleCrisp
+  too: bicubic left a red fringe against the drag form's transparency key.
+- Developer-found after the first build: a 1-px stale band between the Targets
+  tree and the tab strip (MethodEdit s-04/s-05). Root cause: DockPaneBorder is
+  1 px, Scale rounds 1.5 to 2, SetContentBounds insets 2 but DrawDockPaneBorder
+  draws a 1-px rectangle, so one row was never painted. The three hairline
+  borders (DockPaneBorder, DocumentZoneBorder, AutoHideWindowBorder) now stay
+  at 96-DPI values; verified by pixel rows (final matches the stock sequence).
+- Tab text position questioned: measured, same as the DPI-unaware tab within
+  1 px (ascender 696 vs 697, descender 716 vs 715); the stock DPI-aware build
+  had it 8 rows lower with clipped descenders.
+- Build: ai/scripts/Skyline/DigitalRune/Build-DigitalRune.ps1 -SourceRepo
+  <developers> -PwizRoot <pwiz1>; its -Install still targets the old flat
+  Shared/Lib path, so the DLL/PDB were copied by hand into
+  Shared/Lib/DigitalRune/net10 (292352 bytes). net472 binary untouched
+  (SeeMS/IDPicker). Script's -Install path is a pwiz-ai follow-up.
+- pwiz1 commit ac129460e5: net10 DLL + PDB, and the TestFunctional
+  BeginDragDisplay EdgeAwareOffset workaround removed (indicators sit at scaled
+  offsets now, so proportional points reach them). Only that hunk was staged
+  (HEAD blob patched and update-index --cacheinfo; harness stays unstaged).
+- Verified: MethodEdit-dr2 (23) and GroupedStudies1-dr2 (98) captures; gallery
+  ai/.tmp/dpi-sweep/tutorials/index-dr.html (three columns: unaware, stock
+  DigitalRune, fixed; own localStorage key dpidr:); docking gate
+  TestLayoutExportImport, TestFilesTreeForm, TestManageResults, TestMultiSelect
+  PASS both modes (gate-dr4.log, gate-dr5.log in sessions/20260910-dpi).
+- Asked in passing: the Targets tab icon is SequenceTreeForm.resx $this.Icon,
+  byte-identical to Skyline/SkylineDoc.ico (16/32/48 frames), not a Resources
+  entry, hence absent from the icon gallery. Files tab icon (FilesTreeForm.resx)
+  has only a 16-px frame, so DrawIcon upsamples it at 150% (asset follow-up).
+Next: push both commits on request; PR description: drop DigitalRune from the
+known limitations and add the DLL to the summary/test plan.
 
 ### 2026-10-20 - TeamCity inspection findings fixed; master merged in (PR base is master now)
 
