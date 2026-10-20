@@ -6,12 +6,12 @@
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: In Review - #4877 (the CarafeSharp option spelling, split out 2026-10-19 late
-  evening) merged 2026-10-20; #4876, PR 4a (modes 1 and 3), is based on master and awaiting merge.
+- **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 (the
+  CarafeSharp option spelling, split out of it) before it. Next: PR 4b (mode 2) on a new branch.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
-  [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (PR 4a)
+  [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (merged 2026-10-20) (PR 4a)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
   pages are; folds into `pwiz_tools/Osprey/Osprey-workflow.html` as its library-build chapter when
@@ -483,9 +483,9 @@ boxes are done on the branch.
       PR #4876 opened 2026-10-19 evening
 - [x] `regression-parallel.ps1 -Dataset All`: 48 PASS / 0 FAIL in 36:38 wall (2026-10-19 evening,
       on the one-command head before the split)
-- [ ] TeamCity Perf/Regression build 4226386 on `pull/4876` (running at the time of writing)
+- [x] TeamCity Perf/Regression build 4226386 on `pull/4876` (SUCCESS), and 4226729 on the final head
 - [x] Split (Brendan): #4877 holds the spelling work, #4876 the one-command work, stacked (below)
-- [ ] Merge #4877; re-target #4876 to master and `git merge origin/master`; human review; merge
+- [x] Merge #4877; re-target #4876 to master and `git merge origin/master`; human review; merge
 
 ## Progress Log
 
@@ -651,6 +651,15 @@ Carafe spells them" - the deferral in the 4a plan is withdrawn.
   #4877's head, so the gated content is what is pushed.
 - TeamCity Perf/Regression on `pull/4876`: 4226386 (pre-split head, SUCCESS); 4226729 (final head,
   run 2 of 2).
+
+### 2026-10-20 - PR 4a merged
+
+PR #4876 merged as commit 6aaa29a684 (squash message approved by Brendan). All 18 checks green on
+head e614040a15, including Perf/Regression 4226729; master's tree after the merge equals that
+head's tree (a69a08ad4b). Shipped: modes 1 and 3 of the one-command library build. No Skyline PR
+Perf and Tutorial check ran on #4876 (that config came to #4877 from the nightly trigger only).
+This TODO stays active: PR 4b (mode 2, `--training-input`) and 4c (HPC and packaging) follow on
+new branches off master; the CarafeSharp doc sweep (docs 01/03/04/06/07) is still open.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261019_osprey_one_command.md` before starting work.
