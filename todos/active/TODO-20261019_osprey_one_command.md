@@ -438,27 +438,44 @@ boxes are done on the branch.
 
 ### Tasks
 
-- [ ] CommonUtil: `NameSeparatorsEquivalent` on the grammar + parser; `Argument<T>` copy constructor;
-      `CommandLineParserTest` cases
-- [ ] CarafeSharp.Tasks project (git mv), `InternalsVisibleTo` kept, CarafeSharp.exe and .Test on it
-- [ ] CarafeSharp declarations hyphenated; `Interpret` by declaration; hosted-library API; grammar
-      flag; `CommandArgsTest` option list + an underscore-spelling case; help HTML regenerated;
-      docs/08
-- [ ] `EntrapmentFastaBuilder.Build()` split; `LibraryPeptides`; `LibraryGenerator.Peptides` +
-      `OutputFile`; `PredictLibraryTask` over an in-memory digest; CarafeSharp tests green
-- [ ] LibTorch.props/targets factored; Osprey.csproj / Osprey.Test.csproj on CarafeSharp.Tasks +
-      `UseLibTorch`
-- [ ] Osprey: `LibraryBuildConfig` on `OspreyConfig`; options + resx + Designer; `ValidateArgs`
-      rules; banner; `LibraryBuildWorkflow`; `Program.Run` wiring
-- [ ] Osprey tests: `OspreyCommandArgsTests` (hosted args excluded from the field count, new
-      options mapped, refusals), `SubsetPipelineTest.LibraryBuild.cs` modes 1 and 3 + warm re-run
-      skips the prediction; help pages regenerated (en, ja, zh-Hans)
-- [ ] Docs: 20-command-line.md (Library Build sections, the three modes), 00-pipeline-architecture.md
-      (the workflow above the pipeline), CarafeSharp docs/08
-- [ ] Gates: Osprey / CarafeSharp / BiblioSpec builds + tests + inspection; `regression.ps1 -Dataset
-      Stellar` byte-identical; CarafeSharp `regression.ps1 -Leg Chained`; the mode-1 Stellar run
-      against `Run-CarafeSharpWorkflow.ps1 -Stages 1a,2,6` (library equal after accession
-      normalisation; search output equal)
+- [x] CommonUtil: `NameSeparatorsEquivalent` on the grammar + parser; `Argument<T>` copy constructor
+      (`ArgumentBase(ArgumentBase template)`); `CommandLineParserTest` cases (equivalent separators,
+      hosted declarations) - the Skyline CommonTest run is still owed (gates)
+- [x] CarafeSharp.Tasks project (git mv of the 13 sources, namespace `pwiz.CarafeSharp.Tasks`),
+      `InternalsVisibleTo` CarafeSharp and CarafeSharp.Test; `CarafeTask`, `CarafeContext` (plus a
+      host constructor with no command line), `CarafeDriver`, `PredictLibraryTask` public
+- [x] CarafeSharp declarations hyphenated (104, by script; camelCase names untouched); `Interpret`
+      by declaration (`Has(ARG_MISS_C)`); `InterpretDigest` factored; hosted API
+      (`HostedDigestArguments`, `HostedPredictionArguments`, `Record`, `GetDescription`,
+      `CreateHosted`, `InterpretHostedLibrary`); grammar flag; usage text names options in the
+      standard form; "OTHER FORMS ACCEPTED" states the Java Carafe compatibility; `CommandArgsTest`
+      (Carafe's list compared hyphenated, four spellings of `--miss-c`, two misspellings refused);
+      help HTML regenerated; docs/08
+- [x] `EntrapmentFastaBuilder.Build()` split from the writes (`ValidateOutputs` separate,
+      `WriteManifest` and `ProteinLabel` public); `LibraryPeptides`; `LibraryGenerator.PeptideSource`
+      + `ReadPairing` + `OutputFile` (`BlibOutput`); `PredictLibraryTask(settings, digest)` with the
+      digest settings and foreign FASTA in the key; `LibrarySettings.CommandLine` `[JsonIgnore]` (see
+      the progress entry); CarafeSharp tests green (104 passed, 8 without data)
+- [x] LibTorch.props/targets factored out of CarafeSharp's Directory.Build.*, imported by Osprey's;
+      Osprey.csproj on CarafeSharp.Proteome + CarafeSharp.Tasks with `UseLibTorch`; Osprey.Test.csproj
+      likewise
+- [x] Osprey: `LibraryBuildConfig` on `OspreyConfig` (+ `OptionsWithoutFasta`); `--fasta`, `--model`,
+      `--device`, `--entrapment [ratio]`, `--entrapment-fasta` in "Library Build"; the hosted
+      "Library Digest" and "Library Prediction" sections; 21 resources + 5 usage strings (resx and
+      Designer); `Program.LibraryBuildError`; the banner; `LibraryBuildWorkflow` with its `[TASK]`
+      driver; `Program.Run` dispatch; `NotSupportedException` a usage error
+- [x] Osprey tests: `OspreyCommandArgsTests.TestEveryArgIsGroupedAndDescribed` knows the hosted
+      arguments; `SubsetPipelineTest.LibraryBuild.cs` - `TestSubsetLibraryBuild` (mode 1, warm,
+      digest change, underscore spelling, entrapment + pairing.tsv, six refusals) and
+      `TestSubsetLibraryBuildSavedModel` (mode 3 from a saved model minted from the pretrained
+      weights, warm, missing model refused); help pages regenerated (en, ja, zh-Hans)
+- [x] Docs: 20-command-line.md ("Library build", the spelling note), 00-pipeline-architecture.md
+      ("A workflow above the pipeline"), CarafeSharp docs/08
+- [ ] Gates: Osprey Debug tests + inspection (running); CarafeSharp tests after the last
+      Proteome edits; BiblioSpec; Skyline CommonTest `TestCommandLineParserGrammars`;
+      `regression.ps1 -Dataset Stellar` byte-identical; CarafeSharp `regression.ps1 -Leg Chained`;
+      the mode-1 Stellar run against `Run-CarafeSharpWorkflow.ps1 -Stages 1a,2,6` (library equal
+      after accession normalisation; search output equal)
 - [ ] `/code-review medium`, PR
 
 ## Progress Log
@@ -479,3 +496,36 @@ and create PR 4a's branch.
 (parsers, pipeline contract, `LibraryGenerator`, `EntrapmentFastaBuilder`, the test fixtures, the
 chained regression leg). The "PR 4a plan" section above records what was found and the decisions
 taken for the PR. Coding starts with the CommonUtil grammar change.
+
+### 2026-10-19 night - PR 4a coded: modes 1 and 3 run end to end on the subset
+Brendan (mid-session): "Carafe and Osprey help documentation should list arguments in the standard
+form noting compatibility with the Java tool form" - decision 9 confirmed; both helps now list
+`--miss-c` and say `-miss_c` is accepted for Java Carafe compatibility.
+
+What runs, on the Stellar subset in `SubsetPipelineTest` (CPU, Debug): the one command predicts
+674 precursors (337 targets + 337 decoys at the window's charges, from 651 digested peptides)
+in about a second, searches them, and reports **136 precursors at 1% FDR** against about 177
+from the curated subset library; a warm re-run skips all five tasks; `--miss-c 0` predicts again
+(552 precursors) and the search follows; `--miss_c 0` after it skips everything (same library);
+`--entrapment` doubles the library and writes `output.library/pairing.tsv` with `p_target` rows;
+a saved model minted from the pretrained weights (`--model`) reports the same as mode 1. The two
+tests take 9 s and 2 s. Hand runs are under `D:\test\osprey-runs\one-command-subset\run1`
+(Chronologer, 136 reported) and `run2` (`--rt-model alphapeptdeep`, 15 reported).
+
+Findings worth keeping:
+- **The AlphaPeptDeep RT model collapses this window: 15 reported against Chronologer's 136**,
+  with the same first pass (259 vs 349 targets at 1% run FDR) - the loss is in the second pass.
+  Carafe's default RT model would be the wrong default here, which is what #4759 found at
+  scale; the mode-3 fixture therefore saves Chronologer, as CarafeSharp's training does.
+- **`LibrarySettings.CommandLine` was in the validity key** (CarafeValidity hashes the whole
+  settings object), so the same options spelled differently (`--miss_c` for `--miss-c`, a
+  different order) re-predicted the library. It is `[JsonIgnore]` now: provenance, not a
+  setting. CarafeSharp.exe keys change with it, so a library CarafeSharp predicted before this
+  branch is predicted again once - a version change already does that.
+- `EntrapmentFastaResult.PTargetEntries` is counted while writing the FASTA, so a build without
+  files has none; `LibraryPeptides.HasEntrapment` reads the quartets instead.
+- The Osprey package (`package.ps1` publishes per RID) now carries libtorch CPU (about 330 MB)
+  and the pretrained models; 4c measures and decides the layout, but the TeamCity artifact
+  grows on this PR already. Say so in the PR.
+- `--task` with `--fasta` is refused with a message naming the two-step alternative; the
+  addressing is 4c.
