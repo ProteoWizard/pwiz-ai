@@ -11,7 +11,8 @@
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
-  [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (merged 2026-10-20) (PR 4a)
+  [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (merged 2026-10-20) (PR 4a);
+  [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (doc sweep, open)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
   pages are; folds into `pwiz_tools/Osprey/Osprey-workflow.html` as its library-build chapter when
@@ -546,9 +547,6 @@ the mode-1 Stellar comparison (`D:\test\osprey-runs\one-command-stellar`, refere
 `TestCommandLineParserGrammars`. Not yet run: CarafeSharp `regression.ps1 -Leg Chained`. The branch
 is uncommitted; commit message and PR body are drafted in the session folder.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261019_osprey_one_command.md` before starting work.
-
 ### 2026-10-19 late evening - Gates green, the Stellar comparison read, one fix from it
 The three gates left running finished green (task list above). The mode-1 Stellar comparison
 (`ai/.tmp/sessions/20261019-one-command/Compare-StellarOneCommand.ps1`; reference = the lab
@@ -659,7 +657,19 @@ head e614040a15, including Perf/Regression 4226729; master's tree after the merg
 head's tree (a69a08ad4b). Shipped: modes 1 and 3 of the one-command library build. No Skyline PR
 Perf and Tutorial check ran on #4876 (that config came to #4877 from the nightly trigger only).
 This TODO stays active: PR 4b (mode 2, `--training-input`) and 4c (HPC and packaging) follow on
-new branches off master; the CarafeSharp doc sweep (docs 01/03/04/06/07) is still open.
+new branches off master.
+
+### 2026-10-20 - CarafeSharp doc sweep opened as #4878
+
+- [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (branch
+  `Skyline/work/20261020_carafesharp_doc_spelling`, documentation only): docs 01/03/04/06/07 name
+  every option in the standard form (110 lines). Only single-dash tokens naming a declared
+  CarafeSharp option changed; PowerShell parameters, the Python trainer's flags (`--tf_type`,
+  `--seed`) and Osprey's `--training-export` did not. Script:
+  `ai/.tmp/sessions/20261019-one-command/spell_docs_sweep.py`. No TeamCity builds triggered by hand
+  (Brendan: docs only, the Osprey unit tests are enough).
+- Next: PR 4b (mode 2, `--training-input`) in a fresh session, on a new branch off master; see
+  "PR plan", "Gates" and "Open questions" above.
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261019_osprey_one_command.md` before starting work.
+`ai/.tmp/handoff-20261020_osprey_one_command_4b.md` before starting work.
