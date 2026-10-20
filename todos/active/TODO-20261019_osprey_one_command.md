@@ -16,9 +16,9 @@
   [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (doc sweep, merged 2026-10-20);
   [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) (PR 4b, `Skyline/work/20261020_osprey_one_command_training`, open)
 - **Checkout**: `C:\proj\pwiz`
-- **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
-  pages are; folds into `pwiz_tools/Osprey/Osprey-workflow.html` as its library-build chapter when
-  the sprint ends)
+- **Companion**: folded into `pwiz_tools/Osprey/Osprey-workflow.html` as part 1 ("Building the
+  library") in PR 4b (#4885); the draft `TODO-20261019_osprey_one_command-workflows.html` is deleted.
+  `Carafe-workflow.html` (the six-stage script view) still folds in with 4c
 - **Continues**: `TODO-20261014_osprey_carafe_integration.md` (completed with #4868's merge; its
   PR 4 - parts H, I, J - is this TODO) and `TODO-20261016_bibliospec_io_unification.md` (the BLIB
   sprint that ran between)
@@ -319,6 +319,17 @@ nodes, merged into one library) when the cluster has several GPUs - not a new ta
    duplicate an Osprey option under Carafe's style (`--log_file` for `--log-file`) take Osprey's
    name outright. Word-level renames (`--miss-c` to `--missed-cleavages`) are a separate choice,
    not made here.
+10. **The predicted library is `<out>.predicted.blib` (Brendan, 2026-10-20).** `<out>.library.blib`
+   beside `out.blib` did not say how the two differ; `out.blib` holds what the search detected, and
+   the other a predicted spectrum for every precursor the search looked for. The working folder is
+   `<out>.predicted/` so the pair sorts together. Renamed in 4b before it merged; decision 3 and
+   the design sections above still say `.library` and mean this.
+11. **One workflow page (Brendan, 2026-10-20).** The library build is part 1 of
+   `Osprey-workflow.html` and the search pipeline part 2, one page with a contents bar: the one
+   command is one run and the four stages are its last phase.
+12. **A resume demonstration at real scale (Brendan, 2026-10-20).** `OSPREY_STOP_AFTER_TASKS=N`
+   ends a run cleanly after N tasks have run; `regression.ps1 -StepwiseOneCommand` (opt-in, mode 13)
+   runs the tuned one command on Stellar that way, one task per run, against a straight-through run.
 
 ## PR plan
 
@@ -829,3 +840,34 @@ reference = all six stages of `Run-CarafeSharpWorkflow.ps1` on the CPU with Chro
 Snapshots used: `D:\test\osprey-runs\_bin\one-command-4b-wip1` (Osprey) and
 `D:\test\osprey-runs\_bin\carafesharp-4b-wip1` (CarafeSharp), both from be73f44f51's tree before the
 commit.
+
+### 2026-10-20 afternoon - Rename, resume demonstration, one workflow page (Brendan)
+
+Brendan asked to land three more things in #4885 rather than a new PR (decisions 10-12), and
+pointed out that before 4b mode 3 had only been tested with a model minted from the pretrained
+weights; 4b's `TestSubsetLibraryBuildTuned` is the first Osprey-only test of a real tuned model
+through `--model`. TeamCity build 4228048 on b9bf53b1cb was cancelled as superseded.
+
+- **Rename**: `<out>.predicted.blib` and `<out>.predicted/` (`LibraryBuildWorkflow.PREDICTED_SUFFIX`);
+  docs 20 and 00, help pages, and a paragraph in 20 on what the two `.blib` files hold.
+- **Stop hook**: `OSPREY_STOP_AFTER_TASKS=N` (`OspreyEnvironment.StopAfterTasks`, read per access);
+  `TaskBudget` counts tasks that RAN in both Osprey drivers (`OspreyPipelineDriver`,
+  `LibraryPhaseDriver`) and throws `TaskBudgetSpentException` after the Nth task's `OnDone`;
+  `AnalysisPipeline` and the workflow let it pass, Program logs `[TASK] stop:after N (...)` and
+  exits 0. The shared `PipelineDriver` (CommonUtil, Skyline's too) is untouched.
+- **Tests**: `TestSubsetLibraryBuildTunedStepwise` (12 runs: run k skips k tasks and starts exactly
+  the next, in straight-through order; result equal to straight-through) in 12 s; regression
+  **mode 13** (`regression.ps1 -StepwiseOneCommand`, opt-in, Stellar): PASS, 11 tasks one per run,
+  straight 18:26 vs stepwise 19:08 over 12 runs
+  (`ai/.tmp/sessions/20261020-4b/logs/regression-mode13.log`). The script's header rule now names
+  the exception.
+- **Workflow page**: `Osprey-workflow.html` part 1 "Building the library" (the draft's drawing, its
+  `--task` labels changed to task names since the cluster addressing is 4c, the hosted option names
+  corrected) and part 2 the search pipeline, with a contents bar
+  (`ai/.tmp/sessions/20261020-4b/merge_workflow_pages.py`). Not seen in a browser this session
+  (the extension was not connected); markup checked balanced.
+- **regression.html** regenerated (Write-RegressionMatrix with mode 13 as an opt-in row) from the
+  2026-10-20 lane logs, `-VerifyAgainst` clean: 48 lines; slower lane 37 min.
+
+Commit f63bcfd169. Gates: Osprey Debug 649 + inspection (after the rename and the hook); the help
+test re-run after regeneration.
