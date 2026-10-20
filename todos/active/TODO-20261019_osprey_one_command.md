@@ -6,11 +6,15 @@
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: In Review - PR 4a (modes 1 and 3) is #4876; before merge: `regression-parallel.ps1
-  -Dataset All` locally and the TeamCity Perf/Regression config on `pull/4876` (ask first)
+- **Status**: In Review - two stacked PRs (Brendan, 2026-10-19 late evening: the argument
+  spelling work is its own thing and obscured the one-command changes). #4877, the CarafeSharp
+  option spelling, merges first; #4876, PR 4a (modes 1 and 3), is based on #4877's branch until
+  then and re-targets to master after.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (PR 4a)
+- **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (option spelling, branch
+  `Skyline/work/20261020_carafesharp_arg_spelling` in `C:\proj\pwiz-work1`), then
+  [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (PR 4a)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
   pages are; folds into `pwiz_tools/Osprey/Osprey-workflow.html` as its library-build chapter when
@@ -480,8 +484,11 @@ boxes are done on the branch.
       mode-1 Stellar comparison (`D:\test\osprey-runs\one-command-stellar`, see the progress entry)
 - [x] `/code-review medium` (9 findings: 6 fixed in 5d71b74c11, 3 dropped - see the progress entry),
       PR #4876 opened 2026-10-19 evening
-- [ ] Before merge: `regression-parallel.ps1 -Dataset All`; TeamCity Perf/Regression on `pull/4876`
-      (ask first); human review
+- [x] `regression-parallel.ps1 -Dataset All`: 48 PASS / 0 FAIL in 36:38 wall (2026-10-19 evening,
+      on the one-command head before the split)
+- [ ] TeamCity Perf/Regression build 4226386 on `pull/4876` (running at the time of writing)
+- [x] Split (Brendan): #4877 holds the spelling work, #4876 the one-command work, stacked (below)
+- [ ] Merge #4877; re-target #4876 to master and `git merge origin/master`; human review; merge
 
 ## Progress Log
 
@@ -595,3 +602,37 @@ checked against the code:
   on Osprey.exe grows every build and shares cpu/cuda bins" - packaging is 4c and the PR says
   so; Osprey is CPU-only in 4a.
 PR #4876 opened with the body in the session folder.
+
+### 2026-10-19 late evening (2) - Split into two PRs; messages spell options as the help does
+Brendan: the argument refactoring (hyphenated declarations, the grammar rule, the help) is its
+own thing, extensive enough to obscure the one-command changes, so it merges first on its own.
+And: "Error messages should spell things the way the help spells them, not the way that Java
+Carafe spells them" - the deferral in the 4a plan is withdrawn.
+
+- **#4877** (`Skyline/work/20261020_carafesharp_arg_spelling`, built in `pwiz-work1` so the
+  all-datasets regression could keep running in `pwiz`): the grammar rule
+  (`NameSeparatorsEquivalent`, on for CarafeSharp and Osprey), the hyphenated declarations,
+  `Interpret` by declaration, the help in standard form with the Java Carafe note, "Not in Java
+  Carafe", `LibrarySettings.CommandLine` out of the validity key, docs/08 and 06 - and every
+  message naming an option through its `ArgumentText` (the parse helpers take the declaration;
+  ~45 literal messages in `CarafeCommandLine`, `ModelTrainer`, `LibraryGenerator`,
+  `CarafeModelFile`, `CarafeModelOrigin`, `EntrapmentPairingValidator`, `LibraryOutputs`; the
+  Training and Models assemblies, below the declarations, carry the literal standard form). The
+  parser's own errors (unknown option, missing value) still quote the token as typed, by design.
+  Script: `ai/.tmp/sessions/20261019-one-command/spell_options_as_help.py` (asserts every
+  replacement's count; strips the raw-string `\'` it once left in five lines). Gates green:
+  CarafeSharp 105 + inspection, Osprey 643 + inspection, Skyline `TestCommandLineParserGrammars`.
+  `/code-review medium`: 9 findings, 8 fixed (two false doc claims about Osprey, fixed by giving
+  Osprey the rule; usage lines from `ArgumentText`; docs/08 spellings; the saved-models doc's
+  quoted warning; `--rt-model` text names "a saved model or model folder"; the one-time key change
+  noted; two stale framework comments), 1 dropped (literal `--i`/`--tf` in assemblies that cannot
+  see the declarations).
+- **#4876** re-based on #4877 by merging its branch in twice (one conflict round:
+  `CarafeCommandLine.cs`, docs/08, `CommandLineParserTest.cs`, all resolved as the one-command
+  side plus the spelling script) and re-targeted onto #4877's branch. Gates on the merged tree:
+  CarafeSharp 105 + inspection, Osprey 645 + inspection, Skyline parser test. Not in #4876 any
+  more: the copy constructor is still there (hosting needs it), but the hyphenation, grammar and
+  message work are #4877's.
+- Still open in the CarafeSharp docs: `01-model-spec.md`, `03-performance.md`, `04-testing.md`,
+  `06-saved-models.md`, `07-chronologer.md` show Carafe's spelling in their command-line examples
+  (about 120 tokens); they run as typed, and 08 states the rule. A doc sweep, not this PR.
