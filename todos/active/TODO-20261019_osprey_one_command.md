@@ -7,7 +7,8 @@
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
 - **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 (the
-  CarafeSharp option spelling, split out of it) before it. Next: PR 4b (mode 2) on a new branch.
+  CarafeSharp option spelling, split out of it) before it. PR 4b (mode 2) on `Skyline/work/20261020_osprey_one_command_training`: plan written, two questions
+  to Brendan before coding ("PR 4b plan").
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
@@ -488,6 +489,87 @@ boxes are done on the branch.
 - [x] Split (Brendan): #4877 holds the spelling work, #4876 the one-command work, stacked (below)
 - [x] Merge #4877; re-target #4876 to master and `git merge origin/master`; human review; merge
 
+## PR 4b plan (2026-10-20, after reading the code 4a left)
+
+Branch `Skyline/work/20261020_osprey_one_command_training` in `C:\proj\pwiz`, off master 6aaa29a684.
+
+### Where things stand in the code
+
+- `LibraryBuildWorkflow.Run` (Osprey.exe) runs one `PredictLibraryTask` through `LibraryPhaseDriver`
+  (the `[TASK]` lines), writes `pairing.tsv` with `--entrapment`, then sets `LibrarySource` and
+  `DecoysInLibrary` on the run's config and calls `AnalysisPipeline.Run`. `OspreyConfig.ShallowClone`
+  exists for the derived training config.
+- `TrainTask(TrainingSettings)` (`internal`) runs `ModelTrainer`: reads the exports
+  `TrainingExportLocator.Find(Identifications, MsFiles)` selects, fine-tunes, writes Carafe's model
+  folder and `<OutputDirectory>/<CarafeModelFile.DEFAULT_FILE_NAME>` (stamped), and with
+  `Library` set predicts the library from the folder it just wrote. Its key hashes the settings and
+  the exports', base model's and pretrained archive's identities (name, length, mtime).
+- **The two prediction routes after training are not the same code.** Stage 4-5 of
+  `Run-CarafeSharpWorkflow.ps1` (one `CarafeSharp -db -i -ms` call) predicts from the trained folder
+  with `ApplyTrainingRunMeta` (precursor window, NCE, instrument and rt_max from the training run's
+  `meta.json`) and `PreferSafetensors`; mode 3 (`--model x.carafemodel`) applies the saved model's
+  NCE, instrument and rt_max but keeps the command line's m/z window.
+- `CarafeCommandLine.InterpretTraining` is private and reads `-i`, `-ms`, `-o`, `-fdr`, `-cor`,
+  `-n_ion_min`, `-c_ion_min`, `-lf_frag_n_min`, `-nf`, `-min_n`, `-valid`, `-no_masking`, `-tf`,
+  `-seed`, `-device`, `-nce`, `-ms_instrument`, `-activation`, `-analyzer`, `-rt_max`, `-ms2_model`,
+  `-model`, `-pretrained`, `-rt_model`, `-rt_align`, `-rt_select`; there is no hosted training API.
+- Defaults differ from the lab's workflow: TrainingSettings has Carafe's code defaults (`-cor 0.75`,
+  `-n_ion_min 0`, `-c_ion_min 0`, `-valid` off); the script passes `-cor 0.8 -n_ion_min 2
+  -c_ion_min 2 -valid -nf 4 -min_n 4 -tf all`.
+- A fine-tune of the Stellar subset takes 44 s on the CPU in Release (chained leg,
+  `pwiz_tools/CarafeSharp/TestResults/regression/stellar-chained-cpu-20261019-184210`, 20 epochs);
+  CarafeSharp's own tests shorten it through `ModelTrainer.ConfigureFineTune` (internal).
+
+### Shape (proposed)
+
+| Phase | Task class | Settings | Checkpoint |
+|---|---|---|---|
+| PredictTrainingLibrary | `PredictLibraryTask` | the run's library, no entrapment, pretrained or `--model` | `<out>.library/initial.blib` |
+| TrainingSearch | `AnalysisPipeline.Run` over a `ShallowClone` | `InputFiles` = `--training-input`, `-o` `<out>.library/training/training.blib`, `--output-dir` that folder, the initial library with its decoys, `--training-export` on, the run's `--cache-dir` | `<stem>.training.parquet` per tuning run, Osprey's own stamps |
+| TrainModel | `TrainTask` (made public), `Library` = null | `-i` the training folder, `-ms` the tuning runs, `-fdr` from `--training-export-max-q`, `--model` as the base model, the hosted tuning options | Carafe's folder `<out>.library/model/`, and the model file written as `<out>.carafemodel` (a `TrainingSettings.ModelFile` override, as 4a's `LibrarySettings.OutputFile`) |
+| PredictLibrary | `PredictLibraryTask` | the run's library with entrapment, `ModelDirectory` = the trained folder, `ApplyTrainingRunMeta`, `PreferSafetensors`, the training type - stage 4-5's prediction exactly, as a separate task | `<out>.library.blib` |
+| Search | the canonical four | as 4a | `out.blib` |
+
+- Separate TrainModel and PredictLibrary (not `TrainTask` with `Library`) so a change to
+  `--entrapment` or `-i` never re-trains; the trained folder is the final prediction's key input.
+- `--training-input` (variadic, as `-i`) in "Library Build"; a new hosted "Library Tuning" section
+  (`--tf`, `--cor`, `--n-ion-min`, `--c-ion-min`, `--nf`, `--min-n`, `--valid`, `--no-masking`,
+  `--rt-align`, `--rt-select`, `--rt-reference`, and `--seed` if it does not collide); an
+  `InterpretHostedTraining(exports, runs, output, baseModel, device, fdr)` beside
+  `InterpretHostedLibrary`. `--rt-reference` refused without `--training-input`.
+- `LibMetadata` gets `osprey.training_input` (decision 4); `SpectrumSourceFiles` names `-i` only.
+- Test seam: the subset test needs a short fine-tune; an epoch override reachable from Osprey.Test
+  (not an option, not an env var).
+
+### Questions for Brendan before coding
+
+1. Tuning defaults: CarafeSharp's (Carafe's code defaults, one declaration set) or the lab
+   workflow's (`-cor 0.8 -n_ion_min 2 -c_ion_min 2 -valid`)? Proposed: CarafeSharp's; the Stellar
+   comparison passes the script's values explicitly.
+2. The `regression.ps1` one-command leg the PR plan names: the skill now puts pipeline mechanics in
+   `SubsetPipelineTest` and keeps `regression.ps1` for real-data results, and a mode-2 Stellar
+   leg trains on the CPU on the TeamCity agent. Proposed: the chained leg's structural checks move
+   into a `SubsetPipelineTest` mode-2 case and the chained leg retires; the real-scale mode-2 run
+   stays the hand comparison against the six-stage script.
+
+### Tasks
+
+- [ ] Questions above answered
+- [ ] CarafeSharp: `TrainTask` public, `TrainingSettings.ModelFile`, hosted tuning section and
+      `InterpretHostedTraining`, the epoch seam; `CommandArgsTest` cases
+- [ ] Osprey: `--training-input`, the hosted "Library Tuning" section, resx and usage text, the
+      refusals (`--training-input` without `--fasta`, `--rt-reference` without it); the banner
+- [ ] `LibraryBuildWorkflow`: the five phases, the training config, the shared spectra cache,
+      `osprey.training_input`
+- [ ] `SubsetPipelineTest` mode 2: cold, warm (all skip), `-i` change (search only), `--entrapment`
+      change (PredictLibrary + search), `--training-input` change (TrainingSearch on), the model
+      file deleted (TrainModel on, no re-search), held-out tuning run absent from the output,
+      `--model` + `--training-input`
+- [ ] Docs 20 and 00; help pages regenerated
+- [ ] Gates (section "Gates"); the mode-2 Stellar comparison against
+      `Run-CarafeSharpWorkflow.ps1` (`.carafemodel` content, library content, result)
+- [ ] `/code-review medium`, PR
+
 ## Progress Log
 
 ### 2026-10-19 - Designed
@@ -673,3 +755,9 @@ new branches off master.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261020_osprey_one_command_4b.md` before starting work.
+
+### 2026-10-20 - PR 4b branch cut, plan written
+Cut `Skyline/work/20261020_osprey_one_command_training` from master 6aaa29a684 in `C:\proj\pwiz` and
+read the code 4a left (`LibraryBuildWorkflow`, `PredictLibraryTask`, `TrainTask`, `ModelTrainer`,
+`CarafeCommandLine.InterpretTraining`, `CarafeValidity`, the six-stage script, the chained leg). The
+"PR 4b plan" section records the shape and two questions for Brendan; nothing coded.
