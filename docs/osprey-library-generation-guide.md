@@ -15,6 +15,18 @@ doing any work.
 > only; Astral's Carafe `-itol` is an instrument-appropriate assumption because no
 > Astral Carafe log exists. See [Open questions](#open-questions).
 
+> **The one command (2026-10-19).** For a library predicted with the pretrained models, or
+> with a saved fine-tuned model, none of the steps below is needed any more:
+> `osprey -i runs... --fasta proteome.fasta -o out.blib` digests the FASTA in memory, predicts
+> the library in-process through CarafeSharp (decoys and `--entrapment` included, `DecoyPairs`
+> written) and searches it, leaving `out.library.blib` beside the result for `-l` next time. The
+> library-build options are CarafeSharp's, hosted in Osprey's help as the Library Digest and
+> Library Prediction sections. Reference: `pwiz_tools/Osprey/docs/20-command-line.md`, "Library
+> build"; the sprint record is `ai/todos/active/TODO-20261019_osprey_one_command.md`. Tuning the
+> models on some of the runs first (`--training-input`) is the sprint's next PR; until then the
+> fine-tuned route is still `Run-CarafeSharpWorkflow.ps1`, and the Java Carafe route below stays
+> the reference for the parity work.
+
 ---
 
 ## Why this exists
