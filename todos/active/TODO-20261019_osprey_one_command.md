@@ -471,11 +471,12 @@ boxes are done on the branch.
       weights, warm, missing model refused); help pages regenerated (en, ja, zh-Hans)
 - [x] Docs: 20-command-line.md ("Library build", the spelling note), 00-pipeline-architecture.md
       ("A workflow above the pipeline"), CarafeSharp docs/08
-- [ ] Gates: Osprey Debug tests + inspection (running); CarafeSharp tests after the last
-      Proteome edits; BiblioSpec; Skyline CommonTest `TestCommandLineParserGrammars`;
-      `regression.ps1 -Dataset Stellar` byte-identical; CarafeSharp `regression.ps1 -Leg Chained`;
-      the mode-1 Stellar run against `Run-CarafeSharpWorkflow.ps1 -Stages 1a,2,6` (library equal
-      after accession normalisation; search output equal)
+- [x] Gates (all green 2026-10-19 evening): Osprey Debug 645 tests + inspection clean; CarafeSharp
+      105 passed, 8 without perf data, inspection clean; BiblioSpec 142; Skyline CommonTest
+      `TestCommandLineParserGrammars`; `regression.ps1 -Dataset Stellar` PASS (mode 1 vs golden,
+      1c, 4, 6); CarafeSharp `regression.ps1 -Leg Chained` PASS
+      (`pwiz_tools/CarafeSharp/TestResults/regression/stellar-chained-cpu-20261019-184210`); the
+      mode-1 Stellar comparison (`D:\test\osprey-runs\one-command-stellar`, see the progress entry)
 - [ ] `/code-review medium`, PR
 
 ## Progress Log
@@ -539,3 +540,35 @@ is uncommitted; commit message and PR body are drafted in the session folder.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261019_osprey_one_command.md` before starting work.
+
+### 2026-10-19 late evening - Gates green, the Stellar comparison read, one fix from it
+The three gates left running finished green (task list above). The mode-1 Stellar comparison
+(`ai/.tmp/sessions/20261019-one-command/Compare-StellarOneCommand.ps1`; reference = the lab
+workflow's stages 1a, 2 and 6 on the CPU with Chronologer, `hela-filtered.fasta`, 437,794 peptide
+forms) is under `D:\test\osprey-runs\one-command-stellar`:
+
+- **Search results identical** in every content table (`compare-result*.txt`: RefSpectra 33,194,
+  RefSpectraPeaks, RetentionTimes 99,582, Proteins 4,633, RefSpectraProteins, Modifications);
+  only LibMetadata (command, validity key), LibInfo (name, time) and the library file name in
+  SpectrumSourceFiles differ. Per-run counts 26,424 / 26,911 / 27,148 at 1% run FDR, both ways.
+- **Library identical as content** (`compare-library-content-one-command-2.txt`, ids excluded):
+  483,560 spectra (sequence, charge, m/z, RT, peaks), 483,554 DecoyPairs rows and 179,426 pair
+  groups by sequence, 510,388 peptide-to-accession rows with the reference's `_pepNNNNN` counter
+  stripped. `compare_blib.py` still says DIFFERENT because it hashes ids: 8 of 483,560 spectra
+  are isobaric ties (DEELEER / EELEEDR / EEEEEVR; LQQQEQR and its group) that the two routes
+  order differently, so their ids and the DecoyPairs rows naming them swap. The Proteins table
+  is 21,294 rows against the reference's 379,182 (one accession per protein, no counter).
+- **One defect found and fixed**: the first run (`one-command/`) lacked 3 of the 510,388 protein
+  rows, all decoy accessions (`EEEEEVR` under `decoy_sp|P35579|MYH9_HUMAN` and `MYH10`,
+  `QEQQQLR` under `decoy_sp|Q8N8S7|ENAH_HUMAN`): a sequence generated twice (a cycle decoy that
+  is also another target's reverse) kept only its first quartet's proteins, where the FASTA
+  route's `MapPeptidesToProteins` unions every record's. `LibraryPeptides.Add` now merges the
+  later record's labels into the text (`MergeProteins`); CarafeSharp and Osprey gates re-run
+  green and the re-run (`one-command-2/`) has all 510,388.
+- Wall: prediction 112-140 s on the CPU at 16 threads, the search 2-3 min; the one command
+  6.1 min against the reference's 1a+2 (2.9 min predict) + 6 (3.1 min) with copies between.
+
+Scripts kept in the session folder: `peek_blibs.py`, `diff_blib_columns.py` (per-column diff
+joined on id), `hash_blib_content.py` and `diff_pairs_proteins.py` (id-independent content
+comparison), `Rerun-OneCommandStellar.ps1`. Worth folding the id-independent comparison into
+`compare_blib.py` as a mode if the one-command leg becomes a regression leg in 4b.
