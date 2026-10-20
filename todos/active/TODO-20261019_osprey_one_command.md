@@ -6,14 +6,11 @@
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: In Review - two stacked PRs (Brendan, 2026-10-19 late evening: the argument
-  spelling work is its own thing and obscured the one-command changes). #4877, the CarafeSharp
-  option spelling, merges first; #4876, PR 4a (modes 1 and 3), is based on #4877's branch until
-  then and re-targets to master after.
+- **Status**: In Review - #4877 (the CarafeSharp option spelling, split out 2026-10-19 late
+  evening) merged 2026-10-20; #4876, PR 4a (modes 1 and 3), is based on master and awaiting merge.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (option spelling, branch
-  `Skyline/work/20261020_carafesharp_arg_spelling` in `C:\proj\pwiz-work1`), then
+- **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
   [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (PR 4a)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
@@ -640,6 +637,20 @@ Carafe spells them" - the deferral in the 4a plan is withdrawn.
   runs on this machine's RTX 4000 Ada from the `-Torch cuda` build with nothing installed
   (`ai/docs/osprey-library-generation-guide.md`, "GPU (CUDA) setup"; StellarSubset 0.41 min GPU
   vs 0.91 min CPU).
+
+### 2026-10-20 - #4877 merged; #4876 on master
+
+- #4877 merged as commit fd839c04cb (night session, squash message approved by Brendan). All 20
+  checks green, including Osprey Perf/Regression 4226410 and Skyline PR Perf and Tutorial 4226705.
+  Branch deleted local + remote; `C:\proj\pwiz-work1` left detached at master. This TODO stays
+  active for #4876.
+- #4876 re-targeted to master and brought current: merged #4875 (e9e349fd34, clean; Osprey Debug
+  646 + inspection 0), then master after #4877's squash (e614040a15). The squash-merged-parent
+  conflicts (CarafeCommandLine.cs, docs/08, CommandLineParserTest.cs) resolved to the branch side;
+  the resulting tree is identical to e9e349fd34's (a69a08ad4b), and master's 26 #4877 files equal
+  #4877's head, so the gated content is what is pushed.
+- TeamCity Perf/Regression on `pull/4876`: 4226386 (pre-split head, SUCCESS); 4226729 (final head,
+  run 2 of 2).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261019_osprey_one_command.md` before starting work.
