@@ -8,12 +8,13 @@
   #4867 and #4868 merged)
 - **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 (the
   CarafeSharp option spelling, split out of it) before it. PR 4b (mode 2) coded and gated on `Skyline/work/20261020_osprey_one_command_training`
-  (`C:\proj\pwiz`); `/code-review medium`, then the PR.
+  (`C:\proj\pwiz`), opened as #4885; `regression-parallel.ps1 -Dataset All` and TeamCity next.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
   [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (merged 2026-10-20) (PR 4a);
-  [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (doc sweep, open)
+  [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (doc sweep, merged 2026-10-20);
+  [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) (PR 4b, `Skyline/work/20261020_osprey_one_command_training`, open)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
   pages are; folds into `pwiz_tools/Osprey/Osprey-workflow.html` as its library-build chapter when
@@ -583,8 +584,16 @@ Branch `Skyline/work/20261020_osprey_one_command_training` in `C:\proj\pwiz`, of
 - [x] Chained leg retired (Brendan): `regression.ps1`, `tcregression.ps1`, `RegressionTest`,
       CarafeSharp docs 04/06, `ai/scripts/CarafeSharp/Measure-CumulativeCoverage.ps1`; after #4878
       merged, so the doc edits did not conflict
-- [ ] `/code-review medium` (running), then `regression-parallel.ps1 -Dataset All`, PR, TeamCity
-      Perf/Regression on `pull/<N>` (ask first)
+- [x] `/code-review medium`: 10 findings, 8 fixed in b9bf53b1cb (`--rt-reference` checked before
+      any phase; a lost model folder tunes again; folder-format tuning runs accepted; stems checked
+      across inputs and tuning runs; `ArtifactPaths.ResolveCacheAs` replaces `CacheFallbackDir` so
+      the tuning search resolves the cache exactly as the output's search, no data-dir probe;
+      `training.blib` records no `osprey.training_input`; a misplaced doc comment; `TrainTask`'s name
+      fallback), 2 dropped (the further-tuning metric check exists in `FineTuneLoopTest`; the second
+      in-memory digest is seconds, decision 7). Gates re-run green (Osprey 648, CarafeSharp 105)
+- [x] PR [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) opened 2026-10-20
+- [ ] `regression-parallel.ps1 -Dataset All` (running); TeamCity Perf/Regression on `pull/4885`
+      (ask first); human review; merge
 
 ## Progress Log
 
