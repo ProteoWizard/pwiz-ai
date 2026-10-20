@@ -1,17 +1,17 @@
-# TODO-osprey_one_command.md
+# TODO-20261019_osprey_one_command.md
 
-## Branch Information (Future)
-- **Branch**: Not yet created - will be `Skyline/work/YYYYMMDD_osprey_one_command` (PR 4a; later
-  PRs get their own `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section
-  as they start)
+## Branch Information
+- **Branch**: `Skyline/work/20261019_osprey_one_command` (PR 4a; later PRs get their own
+  `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start)
 - **Base**: `master`
-- **Created**: 2026-10-19 (design day; the sprint starts after #4867 and #4868 merge)
-- **Status**: Design. Moves to `active/` as `TODO-YYYYMMDD_osprey_one_command.md` with its companion
-  `TODO-YYYYMMDD_osprey_one_command-workflows.html` when the first branch is created.
+- **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
+  #4867 and #4868 merged)
+- **Status**: In Progress - PR 4a (modes 1 and 3)
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
+- **PR**: (pending)
 - **Checkout**: `C:\proj\pwiz`
-- **Companion**: `TODO-osprey_one_command-workflows.html` (the three modes drawn as the workflow
+- **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
   pages are; folds into `pwiz_tools/Osprey/Osprey-workflow.html` as its library-build chapter when
   the sprint ends)
 - **Continues**: `TODO-20261014_osprey_carafe_integration.md` (completed with #4868's merge; its
@@ -350,6 +350,117 @@ Every PR, before `gh pr create` (then `/code-review medium` on the branch):
 - `DecoyPairs` and the entrapment partner (the BLIB sprint's open schema question): until it is
   answered, `--entrapment` keeps writing the pairing manifest beside the library for FDRBench.
 
+## PR 4a plan (2026-10-19 evening, after reading the code the design names)
+
+What the code looks like today, where it bears on 4a, and the shape each piece takes. Checked
+boxes are done on the branch.
+
+### Where things stand in the code
+
+- CarafeSharp's tasks (`CarafeTask`, `PredictLibraryTask`, `TrainTask`, `EntrapmentFastaTask`,
+  `ReconcileManifestTask`), their context, driver, validity and stamp reader, and the two engines
+  (`LibraryGenerator`, `ModelTrainer`) all live in the **exe** project `CarafeSharp/CarafeSharp`,
+  `internal`. Osprey.exe cannot reference an exe cleanly, so they move to a library.
+- `LibraryGenerator` digests `-db` twice (`LibraryDatabase.DigestPeptides` for the forms,
+  `MapPeptidesToProteins` for the `ProteinID` text in Java HashMap order) and plans `DecoyPairs`
+  from the pairing manifest **file** (`DecoyPairPlanner.ReadManifest`). The library's output path is
+  `OutputDirectory + carafe_spectral_library.blib`, fixed.
+- `EntrapmentFastaBuilder.Run()` is already the digest-and-generate pipeline the design wants in
+  memory (digest targets with sources, assign entrapment, assign decoys, drop unusable, sort) with
+  the FASTA and manifest writes at the end of the same method.
+- The shared parser matches option names ordinally (`CommandLineParser.MatchOption`); the grammar is a
+  process-wide static (`ArgUsage.Grammar`, `ArgUsage.Provider`), installed by each tool's static
+  constructor. `ArgumentBase` has no constructor that copies another declaration.
+- `CarafeCommandLine.Interpret` reads its records by **string name** (`Has(@"miss_c")`), 100-odd sites;
+  `Record` is private.
+- Osprey: `OspreyConfig` (Osprey.Core) cannot see CarafeSharp.Proteome; `Program.Run` validates, logs
+  the banner, then `new AnalysisPipeline().Run(config, pipeline)`. `OspreyCommandArgsTests.
+  TestEveryArgIsGroupedAndDescribed` counts every static `OspreyArgument` field against the groups
+  and demands Osprey resx text for each.
+- libtorch comes in through `UseLibTorch=true` in CarafeSharp's `Directory.Build.targets` (plus the
+  pretrained model files), keyed on properties in CarafeSharp's `Directory.Build.props`; Osprey's tree
+  imports neither.
+- Test data: `Osprey.Test/TestData/StellarSubset.zip` has three 7-minute single-window mzMLs and a
+  358-precursor TSV library with synthetic proteins; there is no protein FASTA for it.
+  `CarafeSharp.Test/TestData/Stage1Inputs.zip` has `hela-filtered.fasta` (3.1 MB). The CarafeSharp
+  regression's `StellarSubset` leg predicts a 1752-record peptide FASTA on the CPU in seconds.
+
+### Decisions taken for 4a (mine; flag to Brendan in the PR)
+
+- **CarafeSharp.Tasks** is the new library project (namespace `pwiz.CarafeSharp.Tasks`), holding the
+  tasks, context, driver, validity, stamps and both engines; `CarafeSharp.exe` keeps `Program.cs`.
+  Osprey.exe references it (and so Proteome, Training, Models). Mirrors `Osprey.Tasks`.
+- **libtorch for Osprey**: the backend properties and the `UseLibTorch` item groups factor into
+  `CarafeSharp/LibTorch.props` / `LibTorch.targets`, imported by both trees' `Directory.Build.*`;
+  `Osprey.csproj` and `Osprey.Test.csproj` set `UseLibTorch=true` (CPU; the bin-cuda split stays
+  CarafeSharp's). Packaging is 4c.
+- **Hosting the declarations**: a copy constructor on `Argument<TContext>` (name, value example,
+  listed values, optional-value and variadic flags copied from another `ArgumentBase`) lets Osprey
+  wrap each surfaced Carafe declaration as an `OspreyArgument` whose handler records into a
+  `CarafeCommandLine` the host owns; `CarafeCommandLine` exposes the surfaced sections
+  (`HostedDigestArguments`, `HostedPredictionArguments`), a public `Record`, a public description
+  lookup, and `InterpretHostedLibrary(fasta, device, model)` that fills the derived values and
+  returns `LibrarySettings` (+ the digest settings). Osprey's usage provider falls through to
+  Carafe's text for a hosted name. The static-constructor order (Carafe's runs during Osprey's
+  field initialisation, Osprey's body installs last) is made explicit with a comment and a
+  `RuntimeHelpers.RunClassConstructor` call.
+- **Decision 9 implemented**: `CommandLineGrammar.NameSeparatorsEquivalent` (`_` matches `-` in a
+  name), on for Osprey and CarafeSharp; CarafeSharp's declarations renamed to hyphens
+  (`miss-c`, `lf-top-n-frag`, ...; camelCase names `minLength`, `fixMod`, `I2L` untouched - a
+  word-level rename is not this PR); resx keys unchanged (`_miss_c`); `Interpret` reads by
+  declaration (`Has(ARG_MISS_C)`) instead of by string. Error-message literals keep Carafe's
+  spelling (the deferred resx extraction).
+- **The in-memory digest**: `EntrapmentFastaBuilder` splits into `Build()` (returns the kept,
+  sorted quartets; no I/O) and the two writers; a new `LibraryPeptides` (Proteome) is built from
+  the quartets - unique peptides, peptide-to-proteins text (`db|ACC|ENTRY` joined by `;`, **no**
+  `_pepNNNNN` counter: that counter kept peptdeep from deduplicating FASTA entries by accession,
+  which an in-memory digest never meets; Osprey's `CarafeProteinIdNormalizer` already strips it on
+  the file route), protein N-term peptides, and the pairing as in-memory
+  `DecoyPairPlanner.ManifestEntry` rows. `LibraryGenerator` takes it through a `Peptides` property
+  (null = digest `-db` as today) and `LibrarySettings.OutputFile` overrides the fixed name. The
+  digest runs inside the prediction task's `Run`, so a resumed run never digests.
+- **Osprey's options for 4a**: `--fasta`, `--model`, `--device gpu|cpu`, `--entrapment [<ratio>]`,
+  `--entrapment-fasta <foreign.fasta>` in a new "Library Build" group, then the two hosted sections
+  "Library Digest" and "Library Prediction". `--training-input` and the tuning section are 4b.
+  `--task` and `--export-library` with `--fasta` are refused in 4a (HPC addressing is 4c).
+- **Products** land under `--output-dir` when given, else beside `-o`, named from the `-o` stem:
+  `<out>.library.blib`, `<out>.library/pairing.tsv` (only with `--entrapment`, for FDRBench).
+- **The workflow** is `LibraryBuildWorkflow` in Osprey.exe: phase 1 runs `PredictLibraryTask`
+  through a driver that logs `[TASK] PredictLibrary:starting|skipping|done` lines like the search
+  stages; phase 2 is `AnalysisPipeline.Run` over the same config with `LibrarySource` = the built
+  blib and `DecoysInLibrary` = true. The library's `carafe.command` metadata records Osprey's
+  command line.
+- **Test fixture for modes 1 and 3**: a synthetic protein FASTA is built in the test from the
+  Stellar subset library's peptides (each synthetic protein group's peptides concatenated, so
+  trypsin returns them), predicted with `--min-pep-mz/--max-pep-mz` set to the subset's isolation
+  window so the library is tiny and the prediction takes seconds on the CPU. Mode 3 predicts from
+  a `.carafemodel` the test writes from the pretrained models (`CarafeModelFile.Write`).
+
+### Tasks
+
+- [ ] CommonUtil: `NameSeparatorsEquivalent` on the grammar + parser; `Argument<T>` copy constructor;
+      `CommandLineParserTest` cases
+- [ ] CarafeSharp.Tasks project (git mv), `InternalsVisibleTo` kept, CarafeSharp.exe and .Test on it
+- [ ] CarafeSharp declarations hyphenated; `Interpret` by declaration; hosted-library API; grammar
+      flag; `CommandArgsTest` option list + an underscore-spelling case; help HTML regenerated;
+      docs/08
+- [ ] `EntrapmentFastaBuilder.Build()` split; `LibraryPeptides`; `LibraryGenerator.Peptides` +
+      `OutputFile`; `PredictLibraryTask` over an in-memory digest; CarafeSharp tests green
+- [ ] LibTorch.props/targets factored; Osprey.csproj / Osprey.Test.csproj on CarafeSharp.Tasks +
+      `UseLibTorch`
+- [ ] Osprey: `LibraryBuildConfig` on `OspreyConfig`; options + resx + Designer; `ValidateArgs`
+      rules; banner; `LibraryBuildWorkflow`; `Program.Run` wiring
+- [ ] Osprey tests: `OspreyCommandArgsTests` (hosted args excluded from the field count, new
+      options mapped, refusals), `SubsetPipelineTest.LibraryBuild.cs` modes 1 and 3 + warm re-run
+      skips the prediction; help pages regenerated (en, ja, zh-Hans)
+- [ ] Docs: 20-command-line.md (Library Build sections, the three modes), 00-pipeline-architecture.md
+      (the workflow above the pipeline), CarafeSharp docs/08
+- [ ] Gates: Osprey / CarafeSharp / BiblioSpec builds + tests + inspection; `regression.ps1 -Dataset
+      Stellar` byte-identical; CarafeSharp `regression.ps1 -Leg Chained`; the mode-1 Stellar run
+      against `Run-CarafeSharpWorkflow.ps1 -Stages 1a,2,6` (library equal after accession
+      normalisation; search output equal)
+- [ ] `/code-review medium`, PR
+
 ## Progress Log
 
 ### 2026-10-19 - Designed
@@ -360,3 +471,11 @@ Written in the design window while #4868's Skyline Perf and Tutorial run (the la
 sprint's TODO, move `TODO-20261014_osprey_carafe_integration.md` to `completed/2026/10` with a
 closing entry that points here, then `git mv` this TODO and its HTML to `active/` with the date
 and create PR 4a's branch.
+
+### 2026-10-19 evening - Branch cut, plan written
+#4867 merged 21:03 UTC and #4868 at 22:26 UTC; the two predecessor TODOs were already in
+`completed/2026/10`. Created `Skyline/work/20261019_osprey_one_command` off `origin/master` in
+`C:\proj\pwiz`, moved this TODO and its HTML to `active/`, and read the code the design names
+(parsers, pipeline contract, `LibraryGenerator`, `EntrapmentFastaBuilder`, the test fixtures, the
+chained regression leg). The "PR 4a plan" section above records what was found and the decisions
+taken for the PR. Coding starts with the CommonUtil grammar change.
