@@ -43,3 +43,20 @@ showed wrong peaks silently before (not verified).
   TestPdResultGlobalValues, TestPdResultLegacyGlobalValues - pass (TestDiannGlobalQValueFilter
   failed once on a leftover `.ses` temp file, then passed 3x alone and in its batch)
 - [x] CodeInspection - passes
+
+## Follow-up: Save As cleanup (from Brendan's approving review)
+Save As carried a `DotConvertedToSmallMolecules` special case that existed only for the test-only
+conversion path, which predicted the saved `.sky` name and wrote its library there.
+- `SkylineFiles.RenameDocumentLibraryAs`: copies from the document library spec's `FilePath`
+  (the same as `GetLibraryFileName(DocumentFilePath)` for any document opened from disk), skips
+  the copy when source and destination are the same file, and no longer checks the suffix.
+- `AbstractFunctionalTestEx.ConvertDocumentToSmallMolecules`: writes converted libraries to a
+  unique `ConvertedToSmallMolecules<guid>` subfolder, so re-converting never overwrites a library
+  it is reading from (non-document libraries stay referenced there); Save As copies the document
+  library beside the new `.sky` and rebinds the spec.
+- `RefinementSettings.ConvertToSmallMolecules` needed no change - it already writes to any
+  `pathForLibraryFiles`, and ~30 unit-test callers depend on the suffixed names.
+- Validated: TestSaveDocumentLibraryAs, TestSaveDocumentLibraryAsLocked, TestTargetedMSMSTutorial,
+  and every `*AsSmallMolecules` test that goes through the helper (TargetedMSMS x2, CEOptimization,
+  StandardType, EditSpectrumFilter, MultiSelectPeakAreaGraph, AssayLibraryImport, Optimization,
+  ExportIsolationList x4), CodeInspection - all pass. Commit cbc4daf1dd.
