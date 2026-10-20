@@ -529,3 +529,13 @@ Findings worth keeping:
   grows on this PR already. Say so in the PR.
 - `--task` with `--fasta` is refused with a message naming the two-step alternative; the
   addressing is 4c.
+
+Gates at the end of the session: Osprey Debug tests (645) + inspection, CarafeSharp tests +
+inspection, BiblioSpec (142) all green. Running when Brendan ended the session, outcome unrecorded:
+the mode-1 Stellar comparison (`D:\test\osprey-runs\one-command-stellar`, reference prediction at
+79%), `regression.ps1 -Dataset Stellar -NoBuild`, and the Skyline build for
+`TestCommandLineParserGrammars`. Not yet run: CarafeSharp `regression.ps1 -Leg Chained`. The branch
+is uncommitted; commit message and PR body are drafted in the session folder.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261019_osprey_one_command.md` before starting work.
