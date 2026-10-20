@@ -56,13 +56,13 @@ dotnet build
 
 The server exe is at:
 ```
-pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Mcp/bin/Debug/net8.0-windows/win-x64/ImageComparer.Mcp.exe
+pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Mcp/bin/Debug/net10.0-windows/win-x64/ImageComparer.Mcp.exe
 ```
 
 ### Configure Claude Code
 
 ```bash
-claude mcp add imagecomparer -- C:/proj/pwiz/pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Mcp/bin/Debug/net8.0-windows/win-x64/ImageComparer.Mcp.exe
+claude mcp add imagecomparer -- C:/proj/pwiz/pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Mcp/bin/Debug/net10.0-windows/win-x64/ImageComparer.Mcp.exe
 ```
 
 ## Typical Workflow

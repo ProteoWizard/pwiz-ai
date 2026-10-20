@@ -141,7 +141,7 @@ This server is a .NET executable built from the Skyline solution. It must be bui
 
 ```powershell
 # Build the ImageComparer.Mcp project first (requires Visual Studio / MSBuild)
-claude mcp add imagecomparer -- ./pwiz/pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Mcp/bin/Debug/net8.0-windows/win-x64/ImageComparer.Mcp.exe
+claude mcp add imagecomparer -- ./pwiz/pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Mcp/bin/Debug/net10.0-windows/win-x64/ImageComparer.Mcp.exe
 ```
 
 See [image-comparer.md](image-comparer.md) for tool documentation.
