@@ -49,14 +49,20 @@ Save As carried a `DotConvertedToSmallMolecules` special case that existed only 
 conversion path, which predicted the saved `.sky` name and wrote its library there.
 - `SkylineFiles.RenameDocumentLibraryAs`: copies from the document library spec's `FilePath`
   (the same as `GetLibraryFileName(DocumentFilePath)` for any document opened from disk), skips
-  the copy when source and destination are the same file, and no longer checks the suffix.
-- `AbstractFunctionalTestEx.ConvertDocumentToSmallMolecules`: writes converted libraries to a
-  unique `ConvertedToSmallMolecules<guid>` subfolder, so re-converting never overwrites a library
-  it is reading from (non-document libraries stay referenced there); Save As copies the document
-  library beside the new `.sky` and rebinds the spec.
-- `RefinementSettings.ConvertToSmallMolecules` needed no change - it already writes to any
-  `pathForLibraryFiles`, and ~30 unit-test callers depend on the suffixed names.
-- Validated: TestSaveDocumentLibraryAs, TestSaveDocumentLibraryAsLocked, TestTargetedMSMSTutorial,
-  and every `*AsSmallMolecules` test that goes through the helper (TargetedMSMS x2, CEOptimization,
-  StandardType, EditSpectrumFilter, MultiSelectPeakAreaGraph, AssayLibraryImport, Optimization,
-  ExportIsolationList x4), CodeInspection - all pass. Commit cbc4daf1dd.
+  the copy when source and destination are the same file (full-path compare), and no longer
+  checks the suffix. The helper's first save now takes that skip.
+- `TestSaveDocumentLibraryAs` extended: Save As of a document whose library spec names a marked
+  copy in another folder must copy that marked file (red against the old copy source).
+- Helper NOT changed in the end. Making it write to a separate folder (cbc4daf1dd) broke
+  re-conversion: `TestTargetedMSMSTutorialAsSmallMoleculeMasses` converts, runs Import Peptide
+  Search, then converts again - that save goes to the same name, so no Save As moves the library
+  into place. e1d9ec6079 reverted the helper. Widening the Save gate to plain Save was also tried
+  and failed TestSaveDocumentLibraryAs: replacing the `.blib` beside the `.sky` hits the file the
+  previous library still holds open (Brendan's warned hazard). So the "conversion writes anywhere"
+  half of the suggestion is not achievable while re-conversion saves in place.
+- `RefinementSettings.ConvertToSmallMolecules` needed no change - ~30 unit-test callers depend
+  on the suffixed names.
+- Validated (e1d9ec6079): TestSaveDocumentLibraryAs, TestSaveDocumentLibraryAsLocked,
+  TestTargetedMSMSTutorial, every `*AsSmallMolecules` test through the helper (TargetedMSMS x2,
+  CEOptimization, StandardType, EditSpectrumFilter, MultiSelectPeakAreaGraph, AssayLibraryImport,
+  Optimization, ExportIsolationList x4), CodeInspection - all pass. Master merged in (f0a13c16fd).
