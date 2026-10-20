@@ -8,7 +8,7 @@
 - **Status**: In Review
 - **GitHub Issue**: (none)
 - **Nightly failure**: https://skyline.ms/home/development/Nightly%20x64/testresults-showRun.view?runId=86204
-- **PR**: (pending)
+- **PR**: [#4879](https://github.com/ProteoWizard/pwiz/pull/4879)
 
 ## Objective
 Fix `TestTargetedMSMSTutorialAsSmallMolecules`, which failed on all six Nightly x64 machines on
