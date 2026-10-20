@@ -103,11 +103,21 @@ Contract the DPI branch can plan against now: one call per icon,
       size; log `ai/.tmp/sessions/20261006-d785f537/iconbuilder-run1.log`, sample sheet
       `iconbuilder-sample.png` in the same folder. Output/ is git-ignored until wired in
 - [x] Gallery "IconBuilder output" column at 125/150/200% with the manifest kind (2026-10-20)
-- [x] Manifest resynced to the round-2 gallery choices: 103 vector, 16 raster (uncommitted)
-- [ ] Default output to `pwiz_tools/Skyline/Resources/Icons`; check the generated set in
-- [ ] Skyline.csproj: `<EmbeddedResource Include="Resources\Icons\*.png" />`
-- [ ] `DpiUtil` loader: size from DPI factor, embedded-stream cache, fallback to `ScaleImage`
-- [ ] Test: every 16/14 px Resources bitmap has its three embedded sizes
+- [x] Manifest resynced to the round-2 gallery choices (commit 3e49356703): 103 vector, 17 raster
+- [x] Default output to `pwiz_tools/Skyline/Resources/Icons`; generated set checked in (360 files)
+- [x] Skyline.csproj: `<EmbeddedResource Include="Resources\Icons\*.png" />`
+- [x] `DpiUtil.GetIcon(control, name, native, key)` + `GetIconSizes` + `GetIconResourceName`:
+      size from DPI factor, resample down between sizes, fallback to `ScaleImage`. No cache:
+      each call decodes a 1-2 KB PNG and returns a bitmap the caller owns, same contract as
+      `ScaleImage` (native disposed unless returned at 100%)
+- [x] `IconResourcesTest` (Test.csproj): every 16/14 px Resources.resx bitmap has its three
+      embedded sizes at the right dimensions. First run caught `magnifier_zoom_in` (a .ico the
+      Resources-folder inventory had skipped); added as an hq2x raster. Passed 2026-10-20
+- [x] Icon names = Resources.resx property names: add_pro32, down_pro32, up_pro32, HomeIcon1,
+      Properties_Button renamed in Icons/Vector, Icons/Raster and the manifest; 13 icons have no
+      Resources.resx entry (FolderSampleSet, Locked, Trash, ...; other resx or unused) and keep
+      their file names
+- [ ] magnifier_zoom_in: trace a vector if wanted (currently raster)
 - [ ] PR against the DPI branch; then the DPI branch wires its call sites (see Handoff)
 - [ ] README for the tool is written; mention in ai/docs/github-repo-guide.md if a script
       wrapper is added
