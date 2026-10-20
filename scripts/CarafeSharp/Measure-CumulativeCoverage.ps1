@@ -8,16 +8,16 @@
 
       1. Unit leg      -- build.ps1 -Coverage -RequireData (Release, CPU) -> unit.dcvr.
       2. Isolated leg  -- regression.ps1 -NoBuild under `dotCover cover`   -> isolated.dcvr.
-      3. Chained leg   -- regression.ps1 -NoBuild -Leg Chained              -> chained.dcvr.
-      4. Merge and report, per assembly: unit alone, each leg, and the cumulative total.
+      3. Merge and report, per assembly: unit alone, the regression, and the cumulative total.
 
     dotCover covers pwsh and its children, but /ProcessFilters keeps only the CarafeSharp processes, so
     the regression comparator (RegressionTest, run through dotnet test) does not add the
-    production code it calls to the regression legs. The unit leg is the only place test
-    processes count. Osprey.exe (chained leg) is outside the module filter.
+    production code it calls to the regression leg. The unit leg is the only place test
+    processes count.
 
-    Everything runs on the CPU build so the snapshots are of one set of binaries. The chained
-    leg needs Osprey built in the same checkout (pwiz_tools/Osprey/build.ps1 -NoTests).
+    Everything runs on the CPU build so the snapshots are of one set of binaries. regression.ps1's
+    chained leg retired in PR 4b of the one command (Osprey's SubsetPipelineTest runs that chain
+    now, inside Osprey's own coverage).
 
 .PARAMETER SourceRoot
     The pwiz checkout (default <project root>\pwiz).
@@ -28,9 +28,6 @@
 .PARAMETER SkipUnit
     Skip the unit leg (reuse nothing; regression legs only).
 
-.PARAMETER SkipChained
-    Skip the chained leg.
-
 .PARAMETER OutDir
     Where the snapshots and reports go (default ai\.tmp\carafesharp-cumcov-<timestamp>).
 #>
@@ -38,7 +35,6 @@ param(
     [string]$SourceRoot,
     [ValidateSet('Stellar', 'Astral')] [string]$Dataset = 'Stellar',
     [switch]$SkipUnit,
-    [switch]$SkipChained,
     [string]$OutDir
 )
 
@@ -89,7 +85,7 @@ if (-not $SkipUnit) {
     $legs['unit'] = $unitSnap
 }
 
-# ---- 2/3. Regression legs ----
+# ---- 2. Regression leg ----
 function Invoke-CoveredRegression([string]$name, [string[]]$regressionArgs) {
     $snap = Join-Path $OutDir "$name.dcvr"
     $log = Join-Path $OutDir "$name.log"
@@ -106,20 +102,12 @@ function Invoke-CoveredRegression([string]$name, [string[]]$regressionArgs) {
 }
 
 Invoke-CoveredRegression 'isolated' @('-NoBuild', '-Dataset', $Dataset)
-if (-not $SkipChained) {
-    Invoke-CoveredRegression 'chained' @('-NoBuild', '-Leg', 'Chained')
-}
 
-# ---- 4. Merge and report ----
+# ---- 3. Merge and report ----
 $merged = Join-Path $OutDir 'cumulative.dcvr'
 & $dotCover merge "/Source=$(@($legs.Values) -join ';')" "/Output=$merged" | Out-Null
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $merged)) { throw 'dotCover merge failed' }
 $legs['cumulative'] = $merged
-if ($legs.Contains('isolated') -and $legs.Contains('chained')) {
-    $regOnly = Join-Path $OutDir 'regression.dcvr'
-    & $dotCover merge "/Source=$($legs['isolated']);$($legs['chained'])" "/Output=$regOnly" | Out-Null
-    $legs.Insert(3, 'regression', $regOnly)
-}
 
 $reports = [ordered]@{}
 foreach ($name in $legs.Keys) { $reports[$name] = Get-Report $legs[$name] }

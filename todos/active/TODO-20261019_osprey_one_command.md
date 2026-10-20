@@ -7,8 +7,8 @@
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
 - **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 (the
-  CarafeSharp option spelling, split out of it) before it. PR 4b (mode 2) on `Skyline/work/20261020_osprey_one_command_training`: plan written, two questions
-  to Brendan before coding ("PR 4b plan").
+  CarafeSharp option spelling, split out of it) before it. PR 4b (mode 2) coded and gated on `Skyline/work/20261020_osprey_one_command_training`
+  (`C:\proj\pwiz`); `/code-review medium`, then the PR.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
@@ -338,7 +338,8 @@ Every PR, before `gh pr create` (then `/code-review medium` on the branch):
 - `pwsh -File C:/proj/ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -SourceRoot C:/proj/pwiz -RunTests -RunInspection -Summary`
 - `pwsh -File C:/proj/ai/scripts/BiblioSpec/Build-BiblioSpec.ps1 -SourceRoot C:/proj/pwiz -RunTests -Summary` (the shared reader and writer gate)
 - `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar` - byte-identical: `-l` searches do not move
-- `pwsh -File ./pwiz_tools/CarafeSharp/regression.ps1 -Leg Chained` (until 4b replaces it)
+- `pwsh -File ./pwiz_tools/CarafeSharp/regression.ps1 -Leg Chained` (retired in 4b: the chain is
+  `SubsetPipelineTest.TestSubsetLibraryBuildTuned` now)
 - Before merge: `regression-parallel.ps1 -Dataset All` locally and the TeamCity Perf/Regression
   config on `pull/<N>` (ask first), once per merge candidate.
 
@@ -541,7 +542,7 @@ Branch `Skyline/work/20261020_osprey_one_command_training` in `C:\proj\pwiz`, of
 - Test seam: the subset test needs a short fine-tune; an epoch override reachable from Osprey.Test
   (not an option, not an env var).
 
-### Questions for Brendan before coding
+### Questions for Brendan before coding (answered 2026-10-20: both as proposed)
 
 1. Tuning defaults: CarafeSharp's (Carafe's code defaults, one declaration set) or the lab
    workflow's (`-cor 0.8 -n_ion_min 2 -c_ion_min 2 -valid`)? Proposed: CarafeSharp's; the Stellar
@@ -554,21 +555,36 @@ Branch `Skyline/work/20261020_osprey_one_command_training` in `C:\proj\pwiz`, of
 
 ### Tasks
 
-- [ ] Questions above answered
-- [ ] CarafeSharp: `TrainTask` public, `TrainingSettings.ModelFile`, hosted tuning section and
-      `InterpretHostedTraining`, the epoch seam; `CommandArgsTest` cases
-- [ ] Osprey: `--training-input`, the hosted "Library Tuning" section, resx and usage text, the
-      refusals (`--training-input` without `--fasta`, `--rt-reference` without it); the banner
-- [ ] `LibraryBuildWorkflow`: the five phases, the training config, the shared spectra cache,
-      `osprey.training_input`
-- [ ] `SubsetPipelineTest` mode 2: cold, warm (all skip), `-i` change (search only), `--entrapment`
-      change (PredictLibrary + search), `--training-input` change (TrainingSearch on), the model
-      file deleted (TrainModel on, no re-search), held-out tuning run absent from the output,
-      `--model` + `--training-input`
-- [ ] Docs 20 and 00; help pages regenerated
-- [ ] Gates (section "Gates"); the mode-2 Stellar comparison against
-      `Run-CarafeSharpWorkflow.ps1` (`.carafemodel` content, library content, result)
-- [ ] `/code-review medium`, PR
+- [x] Questions above answered (Brendan: CarafeSharp's defaults; the gate in `SubsetPipelineTest`,
+      chained leg retired)
+- [x] CarafeSharp: `TrainTask` public (with a host-set name and `ConfigureFineTune`),
+      `PredictLibraryTask` host-set name, `TrainingSettings.ModelFile` (`ModelTrainer.ModelFilePath`),
+      `HostedTrainingArguments` and `InterpretHostedTraining` (paths left to the host),
+      `CheckModelTrainingType` factored out of `Interpret`. No `CommandArgsTest` case: the hosted
+      tuning is covered end to end by the Osprey tests
+- [x] Osprey: `--training-input` (variadic) in "Library Build"; hosted "Library Tuning" section (12
+      options); `LibraryBuildSettings` (library + training) out of `ParseArgs`; refusals (a tuning
+      option without `--training-input`, the runs without `--fasta`, a missing tuning run, duplicate
+      stems); the banner's tuning line; export settings apply to the tuning search without
+      `--training-export`; 5 resources + 1 usage string
+- [x] `LibraryBuildWorkflow`: PredictTrainingLibrary, the tuning search (a `ShallowClone`, its own
+      `--output-dir`, a FRESH task set - see the progress entry), TrainModel, PredictLibrary from the
+      trained folder; `ArtifactPaths.CacheFallbackDir` so both analyses share the spectra cache;
+      `osprey.training_input` in the result's LibMetadata
+- [x] `SubsetPipelineTest.LibraryTuning.cs`: `TestSubsetLibraryBuildTuned` (cold, the chained
+      leg's checks, mode 3 from the saved model with the same spectra, warm, `--entrapment`, model
+      deleted, `--seed`, `-i` only, four refusals) and `TestSubsetLibraryBuildTunedHeldOut` (a tuning
+      run absent from the output; `--model` + `--training-input` naming its base by SHA-256)
+- [x] Docs 20 and 00; help pages regenerated (en, ja, zh-Hans)
+- [x] Gates: Osprey Debug 648 + inspection; CarafeSharp 105 (8 without data) + inspection;
+      `regression.ps1 -Dataset Stellar` PASS; CarafeSharp `regression.ps1 -Dataset StellarSubset`
+      PASS after the retirement; the mode-2 Stellar comparison (progress entry). BiblioSpec not run:
+      `BiblioSpec.IO` untouched
+- [x] Chained leg retired (Brendan): `regression.ps1`, `tcregression.ps1`, `RegressionTest`,
+      CarafeSharp docs 04/06, `ai/scripts/CarafeSharp/Measure-CumulativeCoverage.ps1`; after #4878
+      merged, so the doc edits did not conflict
+- [ ] `/code-review medium` (running), then `regression-parallel.ps1 -Dataset All`, PR, TeamCity
+      Perf/Regression on `pull/<N>` (ask first)
 
 ## Progress Log
 
@@ -761,3 +777,46 @@ Cut `Skyline/work/20261020_osprey_one_command_training` from master 6aaa29a684 i
 read the code 4a left (`LibraryBuildWorkflow`, `PredictLibraryTask`, `TrainTask`, `ModelTrainer`,
 `CarafeCommandLine.InterpretTraining`, `CarafeValidity`, the six-stage script, the chained leg). The
 "PR 4b plan" section records the shape and two questions for Brendan; nothing coded.
+
+### 2026-10-20 - PR 4b coded and gated; chained leg retired
+
+Brendan answered both plan questions as proposed (CarafeSharp's tuning defaults; the end-to-end gate
+in `SubsetPipelineTest`, chained leg retired), and approved merging #4878 (fb5afc569d) so the
+retirement's doc edits would not conflict. Branch commits: be73f44f51 (mode 2), 496811f3b7 (master
+merged), 92a673a61f (chained leg retired).
+
+Findings worth keeping:
+- **Osprey's task objects carry state between their stages**: `PerFileRescoreTask._poolPlan` (the
+  survivor plan SecondPassFDR rebuilds against) is an instance field. The first cut reused
+  Program's task set for both analyses in one process, and the output's SecondPassFDR failed with
+  "PerFileRescoring rebuild: reset 116 peaks ... but the rescore reset 126". The tuning search now
+  gets `OspreyTasks.Create().PipelineFor(null)` of its own (documented in 00-pipeline-architecture).
+  Anything that runs two analyses in one process must do the same.
+- **One subset run alone trains nothing**: tuned on one of the three Stellar subset runs, the first
+  pass keeps 109 at 1% but the second pass keeps 0 of 155 reconciled targets, so the export is
+  empty and TrainModel fails ("No RT training rows"). The full-size one-run tuning (the lab's
+  habit) is fine (below). The tests tune on all three subset runs.
+- Two one-epoch tunes in a row (the further-tuned test) report 22 precursors; the count floor
+  applies only to a single tune.
+
+**The mode-2 Stellar comparison** (`ai/.tmp/sessions/20261020-4b/Compare-StellarOneCommandTuned.ps1`;
+reference = all six stages of `Run-CarafeSharpWorkflow.ps1` on the CPU with Chronologer; one command
+`--training-input <_21> --entrapment` with stage 4-5's tuning values) under
+`D:\test\osprey-runs\one-command-stellar-tuned`:
+- **Tuned model identical** (`compare-model-one-command.txt`): `ms2.safetensors`, `rt.safetensors`,
+  `rt_maps.json`, `meta.json` and the metrics byte-identical; the manifest differs only in the time,
+  the creator's version, the stamp (task `TrainModel` vs `Train`) and the hashes of the training
+  library and search files.
+- **Final library identical as content** (`compare-library-content-one-command.txt`): 968,394 spectra
+  identical; 968,332 DecoyPairs, 179,648 pair groups and 1,022,108 peptide-to-accession rows
+  set-equal; ids differ by the isobaric ties 4a found. The training library matches 4a's.
+- **Result identical** in every content table (`compare-result-one-command.txt`: RefSpectra 35,473,
+  RetentionTimes 106,371, Proteins 4,518, RefSpectraProteins, Modifications); LibInfo, LibMetadata
+  (one more row, `osprey.training_input`) and the library name in SpectrumSourceFiles differ.
+- Wall: the one command 15.8 min (PredictTrainingLibrary 109 s, tuning search 77 s, TrainModel 416 s,
+  PredictLibrary 214 s, search 132 s) against the script's 16.8 min (2: 1.9, 3: 1.5, 4-5: 10.7,
+  6: 2.6 min), both on the CPU at 16 threads, sharing the machine with the Stellar regression.
+
+Snapshots used: `D:\test\osprey-runs\_bin\one-command-4b-wip1` (Osprey) and
+`D:\test\osprey-runs\_bin\carafesharp-4b-wip1` (CarafeSharp), both from be73f44f51's tree before the
+commit.
