@@ -37,6 +37,48 @@ Transparency: keyed on magenta only (top-left pixel magenta); alpha PNGs as-is; 
 bitmaps as-is. All outputs are 32-bit ARGB; consumers must use 32-bit image lists with a
 Transparent key (the DPI branch already does above 100%).
 
+## Deployment design (agreed 2026-10-20)
+
+Generated icons are embedded PNG files looked up by name at run time; no resx entries.
+
+- IconBuilder's default output is `pwiz_tools/Skyline/Resources/Icons/<Name>.<Size>.png`,
+  checked in like the native bitmaps. Skyline.csproj (SDK-style) embeds them with one line:
+  `<EmbeddedResource Include="Resources\Icons\*.png" />`. Adding an icon or a size never
+  touches the project file.
+- `DpiUtil` gains the single entry point for DPI-sized icons (name to be settled when written,
+  e.g. `DpiUtil.GetIcon(Control control, string name, Image native, Color? transparentKey)`):
+  picks the size from the control's DPI factor (20 at 125%, 24 at 150%, 32 at 200%; 18/21/28
+  for 14 px icons; other factors take the next larger file bicubic-downscaled), loads the
+  embedded stream once into a cache keyed by name and size, and falls back to the existing
+  bicubic `ScaleImage` of the native bitmap when no file exists. At 100% it returns the native.
+- Call sites pass `nameof(Resources.X)` next to the bitmap they already pass, so names are
+  compiler-checked and survive renames. The manifest's source kind is invisible here.
+- A test (Test.csproj) walks `Resources` for every 16 and 14 px bitmap and asserts the three
+  embedded sizes exist, so a missing or misnamed output fails CI instead of silently blurring.
+- Rejected: resx entries (357 entries in Resources.resx and Resources.Designer.cs, regenerated
+  and reviewed on every change, for accessors a size-keyed lookup would not use); multi-size
+  .ico or sprite files (opaque to review, GDI+ frame selection rules).
+
+## Handoff to the DPI awareness branch (TODO-20260820_dpiAwareness)
+
+Order of work, because this branch is stacked on the DPI branch and the DPI branch cannot see
+it until merged:
+
+1. This branch finishes the asset side: default output to `Resources/Icons`, the generated set
+   checked in, the csproj wildcard, the `DpiUtil` loader with cache and fallback, and the
+   existence test. PR base = `Skyline/work/20260820_dpiAwareness`, merged into it.
+2. The DPI branch then adopts the loader: its three `DpiUtil.ScaleImage` call sites
+   (ImportTransitionListColumnSelectDlg, ViewLibraryDlg x2) and the tree image lists
+   (SequenceTree, FilesTree, StatementCompletionTextBox `AddNodeImage`/`AddImage`), which
+   today add the native 16 px bitmaps directly. Lists must be 32-bit with
+   `TransparentColor = Color.Transparent` and `ImageSize` scaled to the DPI.
+3. Icon corrections keep flowing through this branch's gallery and manifest; the DPI branch
+   never edits drawings.
+
+Contract the DPI branch can plan against now: one call per icon,
+`DpiUtil.GetIcon(this, nameof(Resources.Save), Resources.Save, Color.Magenta)`, returning a
+32-bit ARGB bitmap of the right pixel size for the control's DPI, or the native at 100%.
+
 ## Decision source
 
 - Gallery: `ai/.tmp/icon-gallery/skyline-icons-2x.html` (bicubic / hq2x / hq2x at 150% /
@@ -60,9 +102,15 @@ Transparent key (the DPI branch already does above 100%).
 - [x] First full run (2026-10-20): 357 files, 0 failures, all square 32-bit ARGB at the named
       size; log `ai/.tmp/sessions/20261006-d785f537/iconbuilder-run1.log`, sample sheet
       `iconbuilder-sample.png` in the same folder. Output/ is git-ignored until wired in
-- [ ] Review the generated set in the gallery at 20/24/32 (add an "IconBuilder output" column)
-- [ ] Wire the outputs into Skyline resources on the DPI branch (separate step/PR)
-- [ ] README for the tool; mention in ai/docs/github-repo-guide.md if a script wrapper is added
+- [x] Gallery "IconBuilder output" column at 125/150/200% with the manifest kind (2026-10-20)
+- [x] Manifest resynced to the round-2 gallery choices: 103 vector, 16 raster (uncommitted)
+- [ ] Default output to `pwiz_tools/Skyline/Resources/Icons`; check the generated set in
+- [ ] Skyline.csproj: `<EmbeddedResource Include="Resources\Icons\*.png" />`
+- [ ] `DpiUtil` loader: size from DPI factor, embedded-stream cache, fallback to `ScaleImage`
+- [ ] Test: every 16/14 px Resources bitmap has its three embedded sizes
+- [ ] PR against the DPI branch; then the DPI branch wires its call sites (see Handoff)
+- [ ] README for the tool is written; mention in ai/docs/github-repo-guide.md if a script
+      wrapper is added
 
 ## Notes
 
