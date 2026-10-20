@@ -93,6 +93,51 @@ in [`Carafe/README.md`](../scripts/Osprey/Carafe/README.md#machine-configuration
 
 ---
 
+## GPU (CUDA) setup for CarafeSharp
+
+CarafeSharp fine-tunes and predicts on the CPU unless it is built against the CUDA
+libtorch. The reference for the GPU requirements is
+`pwiz_tools/CarafeSharp/docs/04-testing.md` ("GPUs"); this is the machine checklist.
+
+**What a machine needs:**
+
+| Requirement | Detail |
+|---|---|
+| GPU | NVIDIA, compute capability 7.0 or later (Volta through Blackwell; Ada runs on the 8.6 kernels). Maxwell and Pascal do not run. |
+| Driver | Release 570 or later (the CUDA 12.8 floor). `nvidia-smi` shows the version. |
+| CUDA toolkit | **Not needed.** The `libtorch-cuda-12.8-win-x64` NuGet packages carry the runtime: `cudart64_12`, cuBLAS, cuDNN 9, nvrtc and `torch_cuda.dll` land in `bin-cuda/.../runtimes/win-x64/native`. |
+| Disk | About 4 GB for the packages in `~/.nuget/packages` (fetched once per machine), plus a copy in `bin-cuda`. |
+
+**Steps:**
+
+1. `nvidia-smi`: confirm the GPU and a driver of 570 or later. Update the driver only if
+   it is older.
+2. Build the CUDA backend (it writes `bin-cuda`/`obj-cuda`, so the CPU build in `bin`
+   stays as it is). The build's preflight reads `nvidia-smi` and stops, saying why, on a
+   GPU or driver that cannot run it:
+   `pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -Torch cuda -Summary`
+   (add `-SourceRoot <checkout>` for any checkout other than `pwiz`).
+3. Prove the GPU is used, two ways:
+   - `pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -Torch cuda -Summary -RunTests`
+     runs the `Cuda` test category with `CARAFESHARP_REQUIRE_CUDA=1`, so a test that
+     finds no GPU fails instead of passing.
+   - `pwsh -File ./pwiz_tools/CarafeSharp/regression.ps1 -Dataset StellarSubset -Torch cuda -NoBuild`
+     (no test data needed). Its `regression-run.json` must say `"device_used": "cuda"`, and
+     `carafesharp.log` must not contain CarafeSharp's fallback message, "No CUDA device is
+     available to this build; running on the CPU."
+4. `Run-CarafeSharpWorkflow.ps1` defaults to `-Device gpu` and takes `bin-cuda` first;
+   with only a CPU build it warns that `-device gpu` falls back to the CPU.
+
+**Measured (2026-10-19, BRENDANX-UW8):** RTX 4000 Ada Generation (compute 8.9, 20 GB),
+driver 596.71, no CUDA toolkit installed, nothing installed for this. The CUDA build took
+38 s with the packages already cached. Both `Cuda` tests passed (47 s). StellarSubset
+regression, fine-tune and library: **0.41 min on the GPU, 0.91 min on the CPU**, both
+within the golden's tolerances (the GPU's models differ from the CPU golden's, as
+expected). The subset run is short, so fixed startup costs are a large share of it; the
+full-size Stellar and Astral runs were not timed on this machine.
+
+---
+
 ## The pipeline
 
 ```
