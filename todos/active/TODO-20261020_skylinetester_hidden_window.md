@@ -5,6 +5,7 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-20
+- **PR**: [#4882](https://github.com/ProteoWizard/pwiz/pull/4882)
 - **Objective**: SkylineTester shows the Skyline main window again in Screenshot, Auto-Screenshot
   and Cover shot modes on .NET 10.
 
