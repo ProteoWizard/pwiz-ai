@@ -6,10 +6,11 @@
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: In Progress - PR 4a (modes 1 and 3)
+- **Status**: In Review - PR 4a (modes 1 and 3) is #4876; before merge: `regression-parallel.ps1
+  -Dataset All` locally and the TeamCity Perf/Regression config on `pull/4876` (ask first)
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (PR 4a)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: `TODO-20261019_osprey_one_command-workflows.html` (the three modes drawn as the workflow
   pages are; folds into `pwiz_tools/Osprey/Osprey-workflow.html` as its library-build chapter when
@@ -477,7 +478,10 @@ boxes are done on the branch.
       1c, 4, 6); CarafeSharp `regression.ps1 -Leg Chained` PASS
       (`pwiz_tools/CarafeSharp/TestResults/regression/stellar-chained-cpu-20261019-184210`); the
       mode-1 Stellar comparison (`D:\test\osprey-runs\one-command-stellar`, see the progress entry)
-- [ ] `/code-review medium`, PR
+- [x] `/code-review medium` (9 findings: 6 fixed in 5d71b74c11, 3 dropped - see the progress entry),
+      PR #4876 opened 2026-10-19 evening
+- [ ] Before merge: `regression-parallel.ps1 -Dataset All`; TeamCity Perf/Regression on `pull/4876`
+      (ask first); human review
 
 ## Progress Log
 
@@ -572,3 +576,22 @@ Scripts kept in the session folder: `peek_blibs.py`, `diff_blib_columns.py` (per
 joined on id), `hash_blib_content.py` and `diff_pairs_proteins.py` (id-independent content
 comparison), `Rerun-OneCommandStellar.ps1`. Worth folding the id-independent comparison into
 `compare_blib.py` as a mode if the one-command leg becomes a regression leg in 4b.
+
+Committed (ac26edd5fc, 61 files) and pushed; `/code-review medium` returned 9 findings, each
+checked against the code:
+- Fixed (5d71b74c11): the `--task` refusal formatted `LibraryPath(config)` before `-o` was
+  validated (null path; now spelled as the help does, `<output>.library.blib`, with a test case);
+  the entrapment pairing manifest was written only after the stamped library was committed, so a
+  failed write left a current library that never got one (now written after a skipped prediction
+  too, from the same seeded digest); `--rt-reference` was hosted although it works only with a
+  model trained on aligned runs and fails deep in prediction with a stack (dropped from the
+  hosted set; 4b hosts it with tuning); the "CarafeSharp only." suffix read wrong in Osprey's
+  help (now "Not in Java Carafe." in both helps) and `--rt-model`'s text named `--model-dir`;
+  `MIN_ENTRAPMENT_RATIO` was declared twice (Osprey uses `EntrapmentFastaSettings`'s).
+- Dropped: "the refusal tests check only the exit code" - wrong, `RunOspreyExpecting` asserts
+  exactly one `Error:` line and no exception text; "error messages spell Carafe's underscores"
+  - the deferred resx extraction, recorded in the 4a plan; "exception classification lives in
+  three places" - CarafeSharp's refusal types are a CarafeSharp item, not this PR; "UseLibTorch
+  on Osprey.exe grows every build and shares cpu/cuda bins" - packaging is 4c and the PR says
+  so; Osprey is CPU-only in 4a.
+PR #4876 opened with the body in the session folder.
