@@ -710,6 +710,25 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-20 - TeamCity inspection findings fixed; master merged in (PR base is master now)
+
+- "Skyline code inspection" status on the bt209 PR build (not the separate
+  ReSharper config, which last ran on this PR on Sep 17) reported 3 issues:
+  RedundantCast in ImageListScaler (my (Color?) null), RedundantUsingDirective
+  in NoModeUIDlg (System.Windows.Forms, unused since the consolidation),
+  RedundantCast in ScreenshotManager (Brendan's 8346379152). Fixed, 25c90b7c60.
+  To read these from a log: the bt209 build log, step "inspectcode over
+  Skyline.sln", lines "<file>(<line>): <TypeId> - <message>"; the teamcity
+  MCP's get_code_inspections only knows the ReSharper config's artifact.
+- GitHub reported CONFLICTING: master is the PR base now (the port branch was
+  merged) and had 41 new commits. Merged origin/master in (a7a85a182b; merge,
+  not rebase - the branch is public). One conflict, ViewLibraryDlg.cs: Nick's
+  #4848 q-value filter controls and my listPeptide.ItemHeight scaling both add
+  a line after InitializeComponent - kept both. Full Solution build + gate
+  TestLibraryExplorer, TestEditSpectrumFilter, TestFilesTreeForm both modes:
+  PASS. Harness stash popped clean over master's TestFunctional/TestRunner
+  changes.
+
 ### 2026-10-19 - Copilot review (submitted 2026-10-17, "changes recommended") addressed
 
 Copilot's quota allowed a real review this time: two inline findings, both valid.
