@@ -5,6 +5,14 @@ description: Prepare handoff summary
 
 Prepare a complete handoff for the next session to continue this work.
 
+**First, check whether `/pw-continue` was meant.** If the session has done no work
+before this command (it has just started or come out of `/clear`) and the handoff file
+named in the arguments, or the one the TODO points to, already exists and is complete,
+the developer most likely typed `/pw-handoff` where they meant `/pw-continue`. The two
+commands take the same handoff path. Do not write the handoff again or make a TODO commit
+with nothing new in it. Say in one line that you are treating the command as `/pw-continue`,
+then follow `.claude/commands/pw-continue.md`.
+
 ## Steps
 
 1. **Update the TODO file** with current progress (mark completed items, add notes).
