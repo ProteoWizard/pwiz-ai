@@ -636,3 +636,10 @@ Carafe spells them" - the deferral in the 4a plan is withdrawn.
 - Still open in the CarafeSharp docs: `01-model-spec.md`, `03-performance.md`, `04-testing.md`,
   `06-saved-models.md`, `07-chronologer.md` show Carafe's spelling in their command-line examples
   (about 120 tokens); they run as typed, and 08 states the rule. A doc sweep, not this PR.
+- Copilot refused both PRs (quota); `/code-review medium` is the AI review on each. GPU: CarafeSharp
+  runs on this machine's RTX 4000 Ada from the `-Torch cuda` build with nothing installed
+  (`ai/docs/osprey-library-generation-guide.md`, "GPU (CUDA) setup"; StellarSubset 0.41 min GPU
+  vs 0.91 min CPU).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261019_osprey_one_command.md` before starting work.
