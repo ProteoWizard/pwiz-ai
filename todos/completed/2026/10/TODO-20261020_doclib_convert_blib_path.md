@@ -5,10 +5,10 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-20
-- **Status**: In Review
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Nightly failure**: https://skyline.ms/home/development/Nightly%20x64/testresults-showRun.view?runId=86204
-- **PR**: [#4879](https://github.com/ProteoWizard/pwiz/pull/4879)
+- **PR**: [#4879](https://github.com/ProteoWizard/pwiz/pull/4879) (merged 2026-10-21)
 
 ## Objective
 Fix `TestTargetedMSMSTutorialAsSmallMolecules`, which failed on all six Nightly x64 machines on
@@ -66,3 +66,14 @@ conversion path, which predicted the saved `.sky` name and wrote its library the
   TestTargetedMSMSTutorial, every `*AsSmallMolecules` test through the helper (TargetedMSMS x2,
   CEOptimization, StandardType, EditSpectrumFilter, MultiSelectPeakAreaGraph, AssayLibraryImport,
   Optimization, ExportIsolationList x4), CodeInspection - all pass. Master merged in (f0a13c16fd).
+
+## Progress Log
+
+### 2026-10-21 - Merged
+
+PR #4879 merged as commit 3559e6c0fa. Shipped: the minimized document library spec now names the
+`.blib` it writes (the nightly TestTargetedMSMSTutorialAsSmallMolecules blob-length failure), and
+Save As copies the document library from its spec's file, removing the test-only
+`DotConvertedToSmallMolecules` special case, with TestSaveDocumentLibraryAs extended to cover it.
+Deferred by design, not as a follow-up: the "conversion writes its library anywhere" half of
+Brendan's suggestion, because re-conversion saves in place (see Follow-up above). No issues filed.
