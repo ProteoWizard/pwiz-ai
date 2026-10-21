@@ -5,7 +5,8 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-21
-- **PR**: [#4890](https://github.com/ProteoWizard/pwiz/pull/4890)
+- **Status**: Completed
+- **PR**: [#4890](https://github.com/ProteoWizard/pwiz/pull/4890) (merged 2026-10-21)
 - **Objective**: Fix TestAlphaPeptDeepBuildLibrary failing on every TeamCity "PR Perf and Tutorial
   tests" run since 2026-10-11 with "Failed loading library ...rat_consensus_final_true_lib.blib"
   (SQLite CantOpen), then find other tests with the same race.
@@ -62,5 +63,20 @@ switches to an empty document and waits for background loaders before checking f
 - [x] Reproduce locally and confirm root cause
 - [x] Fix AlphapeptdeepBuildLibraryTest and verify locally
 - [x] Search other tests for the same race, and fix TestKoinaSkylineIntegration
-- [ ] TeamCity PR Perf and Tutorial tests green
-- [ ] PR merged
+- [ ] TeamCity PR Perf and Tutorial tests green on the final commit (see Merged entry)
+- [x] PR merged
+
+## Progress Log
+
+### 2026-10-21 - Merged
+
+PR #4890 merged as commit 8b31ddfb44. Shipped: TestAlphaPeptDeepBuildLibrary waits for the document
+and the background loaders before `CheckForFileLocks`; `AbstractFunctionalTest.WaitForBackgroundLoaders`
+is now protected; TestKoinaSkylineIntegration no longer deletes Koina.blib in its empty-document
+path. TeamCity PR Perf and Tutorial build #15671 passed TestAlphaPeptDeepBuildLibrary with the first
+version of the fix (88e2ca3); the PR was merged while the checks on the final commit (a2ac86f) were
+still running, so confirm on the next nightly / PR Perf runs. A second `/code-review medium` pass
+left four findings, all dropped with reasons (no defects in the committed change). Not done:
+BackgroundProteomeTest and ArdiaImportResultsTest borderline cases (above); `LibraryManager`
+closing only `ReadStream` (not `ReadStreams`) after load, harmless today because the redundant
+connection opens lazily.
