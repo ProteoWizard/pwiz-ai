@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4888](https://github.com/ProteoWizard/pwiz/issues/4888)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4889](https://github.com/ProteoWizard/pwiz/pull/4889)
 
 ## Objective
 
@@ -26,16 +26,18 @@ DIA-NN library.
 - [x] Confirm the mechanism with temporary instrumentation (late writes at rt == MaxTime after the spill was read for release)
 - [x] Fix: release only when extraction is strictly past `MaxTime` (`float.MaxValue` still releases everything)
 - [x] Verify the fix on the reproducer (2 clean runs, no late writes)
-- [ ] Regression test for the release condition
-- [ ] Build and run tests on the branch
-- [ ] Open the PR (label `skyline`, `Cherry pick to release`), then `/pw-self-review`
+- [x] Regression test for the release condition
+- [x] Build and run tests on the branch
+- [x] Regression check on real data: PZR16 imported with the fixed vs the official 26.1.1.279 build gives identical Area/RT/Background for all 1,022,317 transitions
+- [x] Open the PR (label `skyline`, `Cherry pick to release`)
+- [ ] `/pw-self-review`
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
+- **Test name**: TestChromGroupsReleaseTime (`pwiz_tools/Skyline/Test/ChromGroupsTest.cs`)
 - **Test project**: Test
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
+- **Fails on master**: yes. Branch Debug build with the fix stashed (origin/master f1156f1019): `Assert.AreEqual failed. Expected:<-1>. Actual:<7>`, i.e. release at rt == MaxTime.
+- **Passes on fix**: yes, `Skyline/work/20261020_spill_release_race` Debug build, net10.0-windows.
 
 ## Progress Log
 
