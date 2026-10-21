@@ -190,3 +190,4 @@ proxied. The paid bot-blocking proxy is not in use because of the 100 MB upload 
 ## Related documentation
 
 - [access-logs.md](access-logs.md) — Apache/Tomcat access log analysis for panoramaweb.org
+- [../uptime-monitoring.md](../uptime-monitoring.md) — Grafana Cloud uptime checks and alerts for panoramaweb.org and skyline.ms
