@@ -755,8 +755,15 @@ Fork source: uw-maccosslab/developers, skylinedev/DigitalRune-Docking-Windows
   byte-identical to Skyline/SkylineDoc.ico (16/32/48 frames), not a Resources
   entry, hence absent from the icon gallery. Files tab icon (FilesTreeForm.resx)
   has only a 16-px frame, so DrawIcon upsamples it at 150% (asset follow-up).
-Next: push both commits on request; PR description: drop DigitalRune from the
-known limitations and add the DLL to the summary/test plan.
+Pushed ac129460e5 (developer request, 2026-10-20) and updated the PR description:
+Docking library bullet in the summary, DigitalRune gate/captures in the test plan,
+DigitalRune limitation removed (and the stale deferred-consolidation one).
+developers push BLOCKED: after SSO re-authorization the push still returns 403
+'Write access to repository not granted' - the account has pull-only permission
+on uw-maccosslab/developers. Developer asked Brendan for push access 2026-10-20;
+push 0cd2a44 from Workspaces/ProteoWiz/developers (local master, ahead 1) when it
+arrives. Fallback: patch file sessions/20260910-dpi/0001-Scaled-DigitalRune*.patch,
+or fork + PR (forking is allowed) if the developer prefers.
 
 ### 2026-10-20 - TeamCity inspection findings fixed; master merged in (PR base is master now)
 
