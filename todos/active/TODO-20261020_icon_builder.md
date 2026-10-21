@@ -1,12 +1,15 @@
 # TODO-20261020_icon_builder.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261020_icon_builder`
-- **Base**: `Skyline/work/20260820_dpiAwareness` (stacked; merge that branch in, never rebase, once a PR exists)
+- **Branch**: `Skyline/work/20261020_icon_assets` (tool, assets, csproj wildcard, test)
+- **Base**: `master`
 - **Created**: 2026-10-20
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: [#4886](https://github.com/ProteoWizard/pwiz/pull/4886) (base: the DPI awareness branch)
+- **PR**: [#4887](https://github.com/ProteoWizard/pwiz/pull/4887) (artwork review by a human; nothing waits on it)
+- **Superseded**: `Skyline/work/20261020_icon_builder` / [#4886](https://github.com/ProteoWizard/pwiz/pull/4886),
+  closed 2026-10-20: it was stacked on the DPI branch and carried the loader too. Its
+  `DpiUtil.GetIcon` goes into #4602 via `TODO-20261020_icon_builder-DpiUtil-GetIcon.patch`
 - **Related**: [#4839](https://github.com/ProteoWizard/pwiz/pull/4839) (ImageExtractor sizes), issue #4599 (DPI awareness)
 
 ## Objective
@@ -129,11 +132,14 @@ the DPI branch.
       Resources.resx entry (FolderSampleSet, Locked, Trash, ...; other resx or unused) and keep
       their file names
 - [ ] magnifier_zoom_in: trace a vector if wanted (currently raster)
-- [x] Pushed; PR #4886 against the DPI branch opened 2026-10-20. Sequence: review and merge
-      #4886 into the DPI branch first; the DPI branch then pulls it and wires its call sites
-      (see Handoff). Do not merge the icon branch into the DPI branch locally before #4886 is
-      merged, or the DPI PR would carry unreviewed code and depend on #4886's review order
-- [ ] Address review on #4886
+- [x] #4886 (stacked on the DPI branch) closed; assets re-cut from master as
+      `Skyline/work/20261020_icon_assets`, commit f74a028bf2, PR #4887 against master. Build +
+      IconResourcesTest green on master's tree. The test is self-contained (own size list and
+      suffix lookup) because master has no DpiUtil yet
+- [ ] Address review on #4887 (artwork); drawing fixes go through the gallery -> XAML ->
+      IconBuilder re-run -> commit on the assets branch
+- [ ] After #4602 and #4887 are both on master: point IconResourcesTest at
+      DpiUtil.GetIconSizes / GetIconResourceName (ten-line cleanup)
 - [ ] README for the tool is written; mention in ai/docs/github-repo-guide.md if a script
       wrapper is added
 
