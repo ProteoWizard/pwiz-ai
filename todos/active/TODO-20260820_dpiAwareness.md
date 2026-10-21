@@ -713,7 +713,7 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
-### 2026-10-20 - icon_builder handoff applied: DpiUtil.GetIcon + call sites (c358532cd3, not pushed)
+### 2026-10-20 - icon_builder handoff applied: DpiUtil.GetIcon + call sites (c358532cd3, pushed)
 
 Per TODO-20261020_icon_builder.md "Handoff" (the loader ships in #4602, the assets go to
 master on #4887):

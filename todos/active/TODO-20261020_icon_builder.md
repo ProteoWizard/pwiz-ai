@@ -135,7 +135,7 @@ the DPI branch.
       Properties_Button renamed in Icons/Vector, Icons/Raster and the manifest; 13 icons have no
       Resources.resx entry (FolderSampleSet, Locked, Trash, ...; other resx or unused) and keep
       their file names
-- [x] Handoff to #4602 applied (2026-10-20, c358532cd3 on the DPI branch, not yet pushed):
+- [x] Handoff to #4602 applied (2026-10-20, c358532cd3 on the DPI branch, pushed):
       see the Handoff section
 - [ ] magnifier_zoom_in: trace a vector if wanted (currently raster)
 - [x] #4886 (stacked on the DPI branch) closed; assets re-cut from master as
