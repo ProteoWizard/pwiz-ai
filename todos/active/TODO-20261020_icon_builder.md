@@ -67,7 +67,11 @@ Generated icons are embedded PNG files looked up by name at run time; no resx en
 Decided 2026-10-20: #4602 ships first and is never blocked by the artwork review, so the two
 halves travel separately.
 
-1. **The loader goes into #4602 itself.** `DpiUtil.GetIcon` (plus `GetIconSizes` and
+1. **The loader goes into #4602 itself.** DONE 2026-10-20: c358532cd3 on the DPI branch
+   (patch applied unchanged; call sites wired; lists prepared by the new
+   `ImageListScaler.PrepareForDpi`; the column-select combo glyph stays on `ScaleImage`
+   because it is recolored at run time). Details in TODO-20260820_dpiAwareness.md, entry
+   "icon_builder handoff applied". `DpiUtil.GetIcon` (plus `GetIconSizes` and
    `GetIconResourceName`) is written and tested; the DPI agent applies
    `TODO-20261020_icon_builder-DpiUtil-GetIcon.patch` (next to this file; a plain diff of
    `pwiz_tools/Skyline/Util/DpiUtil.cs` against the DPI branch tip a7a85a182b, `git apply`)
@@ -131,6 +135,8 @@ the DPI branch.
       Properties_Button renamed in Icons/Vector, Icons/Raster and the manifest; 13 icons have no
       Resources.resx entry (FolderSampleSet, Locked, Trash, ...; other resx or unused) and keep
       their file names
+- [x] Handoff to #4602 applied (2026-10-20, c358532cd3 on the DPI branch, not yet pushed):
+      see the Handoff section
 - [ ] magnifier_zoom_in: trace a vector if wanted (currently raster)
 - [x] #4886 (stacked on the DPI branch) closed; assets re-cut from master as
       `Skyline/work/20261020_icon_assets`, commit f74a028bf2, PR #4887 against master. Build +

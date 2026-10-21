@@ -713,6 +713,33 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-20 - icon_builder handoff applied: DpiUtil.GetIcon + call sites (c358532cd3, not pushed)
+
+Per TODO-20261020_icon_builder.md "Handoff" (the loader ships in #4602, the assets go to
+master on #4887):
+- `TODO-20261020_icon_builder-DpiUtil-GetIcon.patch` applied as-is to DpiUtil.cs
+  (GetIcon / GetIconSizes / GetIconResourceName + embedded loader). Those three members are
+  owned by the icon_builder branch; signature changes are coordinated, not made here.
+- ImageListScaler.PrepareForDpi (CommonBaseUI) added beside ScaleToDpi: at scaled DPI a
+  list becomes 32-bit, ImageSize scaled, TransparentColor = Transparent (GetIcon results
+  carry alpha); at 100% untouched, since the native bitmaps are added unchanged. This is
+  how the handoff's list requirement is met without changing 96-DPI behavior.
+- Wired: SequenceTree (30 node + 4 state icons), FilesTree (17), StatementCompletionTextBox
+  (2, control null -> system DPI), ViewLibraryDlg (_peptideImg/_moleculeImg); each
+  AddNodeImage/AddImage takes nameof(Resources.X) and calls GetIcon with the magenta key.
+  ScaleToDpi calls on those lists removed.
+- Deviation: ImportTransitionListColumnSelectDlg keeps ScaleImage - the LiteDropDownList
+  glyph is a Common resource recolored at run time to the fore color, so no pre-rendered
+  icon could stand in; comment says so.
+- No icons are embedded on this branch, so every call takes the fallback path (same
+  resampler, size and key as before). Verified: gate TestFilesTreeForm, TestMultiSelect,
+  TestLibraryExplorer, TestBackgroundProteome, TestImportHighPrecTransitionList PASS both
+  modes (gate-icons.log); MethodEdit re-captured (tutorials/MethodEdit-dr3) and diffed
+  against dr2: identical except icon edge pixels within 5 levels per channel (alpha
+  blending instead of the magenta mask) and one caption active/inactive focus artifact.
+Next: push on request; after #4602 and #4887 are both on master, the embedded sizes start
+being returned with no further code change.
+
 ### 2026-10-20 - DigitalRune fork fixed at the source; DLL rebuilt into the PR (ac129460e5, not pushed)
 
 Fork source: uw-maccosslab/developers, skylinedev/DigitalRune-Docking-Windows
