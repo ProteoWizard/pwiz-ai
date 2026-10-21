@@ -50,6 +50,11 @@ Worth telling Brian about the two ZedGraph regressions so they are not undone.
   `ResourcesOrganizer/scripts/UpdateResxFiles.bat` (and the CSV import/export scripts) remain and
   already use zh-Hans; it needs a way to build `ResourcesOrganizer.exe` and call it.
   `ResourcesOrganizer/README.md` still recommends "Jamfile Targets" - update it.
+  - Second case, worse: #4385 moved the MS1 isotope filter row up 10 px in en
+    `FullScanSettingsControl.resx` for the new "and M-1" checkbox (y=115). The ja and zh-CHS
+    layouts override that row's positions and still have the old y=102 (text box bottom at 122),
+    while the checkbox has no override, so it overlaps the text box by 7 px. Seen in DDASearch
+    zh-CHS s-09 (left unaccepted until fixed); ja very likely the same. Check after the sync.
 - **Preset row in the Import Peptide Search button bar** (#3819: `lblSettingsPreset`,
   `cbSettingsPreset`, `btnSavePreset` in `ImportPeptideSearchDlg.resx`):
   - "Save..." is clipped to "Save." by the fixed 45 px button.
