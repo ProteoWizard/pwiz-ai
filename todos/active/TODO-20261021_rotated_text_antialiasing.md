@@ -34,8 +34,12 @@ annotations (unselected peptide labels in `ChromGraphItem`). `FontSpec.Default.I
 - [x] Implement in `pwiz_tools/Shared/zedgraph/ZedGraph/FontSpec.cs`
 - [x] Build; TestFullScanGraph, TestClusteredHeatMap, TestFullScanFilterInteraction pass
 - [x] Before/after render of a pane with Y title and rotated X labels (master vs patched DLL)
-- [ ] /code-review, CodeInspection
-- [ ] PR
+- [x] /code-review medium: fixed hint-after-measure (now decided before MeasureString, as the
+      IsAntiAlias path does) and dropped SmoothingMode for rotated text (glyph hint only, so
+      borders/fills unchanged); dropped 180-degree, allocation, design-alternative, screenshot findings
+- [x] CodeInspection
+- [x] PR [#4892](https://github.com/ProteoWizard/pwiz/pull/4892)
+- [ ] TeamCity green, review, merge
 - [ ] Look at the real mobilogram in Skyline
 - [ ] Tutorial screenshots with vertical text will show diffs at the next screenshot refresh -
       expected, accept them (see ai/docs/screenshot-update-workflow.md "Font Rendering Differences")
