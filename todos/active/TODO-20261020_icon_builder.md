@@ -65,9 +65,10 @@ Order of work, because this branch is stacked on the DPI branch and the DPI bran
 it until merged:
 
 1. This branch finishes the asset side: default output to `Resources/Icons`, the generated set
-   checked in, the csproj wildcard, the `DpiUtil` loader with cache and fallback, and the
-   existence test. PR base = `Skyline/work/20260820_dpiAwareness`, merged into it.
-2. The DPI branch then adopts the loader: its three `DpiUtil.ScaleImage` call sites
+   checked in, the csproj wildcard, the `DpiUtil` loader with fallback, and the existence
+   test. PR #4886, base = `Skyline/work/20260820_dpiAwareness`, is reviewed and merged into
+   it first. The DPI branch does not merge this branch locally before that.
+2. The DPI branch then pulls and adopts the loader: its three `DpiUtil.ScaleImage` call sites
    (ImportTransitionListColumnSelectDlg, ViewLibraryDlg x2) and the tree image lists
    (SequenceTree, FilesTree, StatementCompletionTextBox `AddNodeImage`/`AddImage`), which
    today add the native 16 px bitmaps directly. Lists must be 32-bit with
@@ -118,9 +119,10 @@ Contract the DPI branch can plan against now: one call per icon,
       Resources.resx entry (FolderSampleSet, Locked, Trash, ...; other resx or unused) and keep
       their file names
 - [ ] magnifier_zoom_in: trace a vector if wanted (currently raster)
-- [x] Pushed; PR #4886 against the DPI branch opened 2026-10-20. The DPI branch can merge
-      `origin/Skyline/work/20261020_icon_builder` locally now and wire its call sites (see
-      Handoff); the later PR merge is then a no-op for it
+- [x] Pushed; PR #4886 against the DPI branch opened 2026-10-20. Sequence: review and merge
+      #4886 into the DPI branch first; the DPI branch then pulls it and wires its call sites
+      (see Handoff). Do not merge the icon branch into the DPI branch locally before #4886 is
+      merged, or the DPI PR would carry unreviewed code and depend on #4886's review order
 - [ ] Address review on #4886
 - [ ] README for the tool is written; mention in ai/docs/github-repo-guide.md if a script
       wrapper is added
