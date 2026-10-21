@@ -91,6 +91,16 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
   both flagged projects are outside Skyline.sln - consistent with a VS background restore after the pull racing the
   command-line build (not provable after the fact). With VS closed, clean build: no NU1105. Not a #4850 defect.
   Possible prevention for the Skyline.sln owner: add BiblioSpec.IO and Bruker.PrmScheduling to it (unverified).
+- 2026-10-21: REGRESSION from the single session, found by TeamCity "Skyline PR Perf and Tutorial tests" #15665 on
+  66a62056ce (1 failed / 115 passed): TestAlphaPeptDeepBuildLibrary - Win32Exception(2) starting
+  bin\staging\Release\SkylineProcessRunner.exe. clean.bat ran first; Skyline.csproj deployed SkylineProcessRunner via
+  an evaluation-time Exists() on its bin folder, which in ONE session is evaluated before the reference builds, so a
+  clean tree never deploys it (old per-project loop re-evaluated Skyline in later sessions and hid it). Per-commit CI
+  passed only because no per-commit test starts it. Red reproduced locally (run36: built, not deployed); fixed by
+  DeployOutput="true" on the reference so _DeployBundledToolOutputs deploys it (0263fa4112); green run37: deployed
+  and staged from clean. Audited remaining Exists() in Skyline.csproj: line 290 is inside the target (execution
+  time), Hardklor is prebuilt by the bat, the rest test source files. Lesson: any evaluation-time Exists() on a
+  sibling's build output is a single-session hazard.
 - Superseded: my earlier claim that Osprey still builds pwiz-sharp three ways was stale - #4725 fixed that 09-30.
 - Copilot (high): BiblioSpec.Tests ExecuteBlib.TryResolveToolPath looked only in bin\<Config>\net10.0. My grep for
   literal bin\Release missed it (Path.Combine("bin", config, ...)). Earlier "737 passed" runs used STALE AnyCPU tools
