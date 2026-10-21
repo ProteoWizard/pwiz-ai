@@ -59,26 +59,36 @@ Generated icons are embedded PNG files looked up by name at run time; no resx en
   and reviewed on every change, for accessors a size-keyed lookup would not use); multi-size
   .ico or sprite files (opaque to review, GDI+ frame selection rules).
 
-## Handoff to the DPI awareness branch (TODO-20260820_dpiAwareness)
+## Handoff to the DPI awareness branch (TODO-20260820_dpiAwareness, PR #4602)
 
-Order of work, because this branch is stacked on the DPI branch and the DPI branch cannot see
-it until merged:
+Decided 2026-10-20: #4602 ships first and is never blocked by the artwork review, so the two
+halves travel separately.
 
-1. This branch finishes the asset side: default output to `Resources/Icons`, the generated set
-   checked in, the csproj wildcard, the `DpiUtil` loader with fallback, and the existence
-   test. PR #4886, base = `Skyline/work/20260820_dpiAwareness`, is reviewed and merged into
-   it first. The DPI branch does not merge this branch locally before that.
-2. The DPI branch then pulls and adopts the loader: its three `DpiUtil.ScaleImage` call sites
+1. **The loader goes into #4602 itself.** `DpiUtil.GetIcon` (plus `GetIconSizes` and
+   `GetIconResourceName`) is written and tested; the DPI agent applies
+   `TODO-20261020_icon_builder-DpiUtil-GetIcon.patch` (next to this file; a plain diff of
+   `pwiz_tools/Skyline/Util/DpiUtil.cs` against the DPI branch tip a7a85a182b, `git apply`)
+   and wires the call sites: the three `DpiUtil.ScaleImage` call sites
    (ImportTransitionListColumnSelectDlg, ViewLibraryDlg x2) and the tree image lists
    (SequenceTree, FilesTree, StatementCompletionTextBox `AddNodeImage`/`AddImage`), which
    today add the native 16 px bitmaps directly. Lists must be 32-bit with
-   `TransparentColor = Color.Transparent` and `ImageSize` scaled to the DPI.
-3. Icon corrections keep flowing through this branch's gallery and manifest; the DPI branch
+   `TransparentColor = Color.Transparent` and `ImageSize` scaled to the DPI. With no embedded
+   icons on that branch, `GetIcon` takes its fallback path and behaves exactly like
+   `ScaleImage`, so #4602 is unchanged in behavior until the assets land.
+2. **The assets go to master on their own PR** (tool, `Resources/Icons`, csproj wildcard,
+   `IconResourcesTest` made self-contained so it does not reference `DpiUtil`). Reviewed by a
+   human for the artwork, at its own pace. When it merges and the DPI code is on master too,
+   the embedded sizes exist and `GetIcon` starts returning them with no further code change.
+3. Cleanup once both are on master: make `IconResourcesTest` use `DpiUtil.GetIconSizes` /
+   `GetIconResourceName` instead of its private copies.
+4. Icon corrections keep flowing through this branch's gallery and manifest; the DPI branch
    never edits drawings.
 
-Contract the DPI branch can plan against now: one call per icon,
+Contract: one call per icon,
 `DpiUtil.GetIcon(this, nameof(Resources.Save), Resources.Save, Color.Magenta)`, returning a
 32-bit ARGB bitmap of the right pixel size for the control's DPI, or the native at 100%.
+The three `DpiUtil` members are owned here; signature changes are coordinated, not made on
+the DPI branch.
 
 ## Decision source
 
