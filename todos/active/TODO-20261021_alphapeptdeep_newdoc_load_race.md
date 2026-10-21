@@ -33,11 +33,26 @@ settings dialog, #4802 build.bat submodule update), so the onset is likely CI ti
 ## Fix
 
 Added `WaitForDocumentLoaded()` after the save-changes `ClickNo` and before `CheckForFileLocks`.
+Passed on TeamCity build #15671 (88e2ca3).
+
+## Audit of similar tests
+
+Reviewed every mid-test Directory/File Move/Delete and SafeDelete in TestFunctional, TestPerf,
+TestTutorial and TestConnected (~130 hits). The framework's end-of-test cleanup is safe: `EndTest`
+switches to an empty document and waits for background loaders before checking for locks.
+
+- Fixed: `KoinaSkylineIntegrationTest.TestKoinaLibraryBuild(newDocument: true)` deleted Koina.blib
+  right after `NewDocument(true)`; the earlier library build stored Koina.blib in the last-used
+  settings, so the new document loads it. Added `WaitForDocumentLoaded()`. No failure history.
+- Left as is (judged unlikely, no failure history):
+  - `BackgroundProteomeTest.cs:121-129` renames the .protdb after waiting only for
+    ProteinMetadataManager; another reader of the file might still be busy.
+  - `ArdiaImportResultsTest.cs:174-183` deletes the downloaded .raw before its wait; the loader
+    reads the .skyd and the replicate points at the remote URI.
 
 ## Tasks
 - [x] Reproduce locally and confirm root cause
 - [x] Fix AlphapeptdeepBuildLibraryTest and verify locally
+- [x] Search other tests for the same race, and fix TestKoinaSkylineIntegration
 - [ ] TeamCity PR Perf and Tutorial tests green
-- [ ] Search other tests for NewDocument (or other library-loading actions) followed by
-      CheckForFileLocks without a wait, and fix them on this branch
 - [ ] PR merged
