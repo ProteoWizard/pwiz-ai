@@ -81,6 +81,16 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
   (340a941e78) kept both entries (no textual conflict). Removed ours, kept master's (already x64->x64): 10699696a1.
   Pwiz.sln now differs from master only by the 228 x64 remap lines. Clean bs.bat on 0608dac15e + fix: 757 passed,
   BiblioSpec.IO once per section. PR body bullet about adding BiblioSpec.IO removed.
+- 2026-10-20: Matt approved; CI 18/18 green on 5c5ca0a95c incl. a real installer build. Master merge 284b4776a7
+  brought build\CvGen (CV enum generator), referenced by Common.Tests but not in Pwiz.sln -> built Debug|AnyCPU in
+  the clean build. Added to Pwiz.sln (66a62056ce); verified: CvGen -> build\CvGen\bin\x64\Release, 773 passed.
+- Same clean build failed Skyline with NU1105 in TestTutorial (BiblioSpec.IO, Bruker.PrmScheduling). From the
+  diagnostic log: raised by ResolvePackageAssets replaying a STALE obj\x64\Release\...\TestTutorial.assets.cache
+  (16:59:10) holding errors the current project.assets.json (16:59:09, no logs) does not. Deleting the cache fixed it;
+  clearing all Skyline obj and rebuilding did not reproduce. Visual Studio had this checkout's Skyline.sln open, and
+  both flagged projects are outside Skyline.sln - consistent with a VS background restore after the pull racing the
+  command-line build (not provable after the fact). With VS closed, clean build: no NU1105. Not a #4850 defect.
+  Possible prevention for the Skyline.sln owner: add BiblioSpec.IO and Bruker.PrmScheduling to it (unverified).
 - Superseded: my earlier claim that Osprey still builds pwiz-sharp three ways was stale - #4725 fixed that 09-30.
 - Copilot (high): BiblioSpec.Tests ExecuteBlib.TryResolveToolPath looked only in bin\<Config>\net10.0. My grep for
   literal bin\Release missed it (Path.Combine("bin", config, ...)). Earlier "737 passed" runs used STALE AnyCPU tools
