@@ -6,7 +6,7 @@
 - **Created**: 2026-10-20
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4886](https://github.com/ProteoWizard/pwiz/pull/4886) (base: the DPI awareness branch)
 - **Related**: [#4839](https://github.com/ProteoWizard/pwiz/pull/4839) (ImageExtractor sizes), issue #4599 (DPI awareness)
 
 ## Objective
@@ -118,7 +118,10 @@ Contract the DPI branch can plan against now: one call per icon,
       Resources.resx entry (FolderSampleSet, Locked, Trash, ...; other resx or unused) and keep
       their file names
 - [ ] magnifier_zoom_in: trace a vector if wanted (currently raster)
-- [ ] PR against the DPI branch; then the DPI branch wires its call sites (see Handoff)
+- [x] Pushed; PR #4886 against the DPI branch opened 2026-10-20. The DPI branch can merge
+      `origin/Skyline/work/20261020_icon_builder` locally now and wire its call sites (see
+      Handoff); the later PR merge is then a no-op for it
+- [ ] Address review on #4886
 - [ ] README for the tool is written; mention in ai/docs/github-repo-guide.md if a script
       wrapper is added
 
