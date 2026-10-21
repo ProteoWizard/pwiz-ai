@@ -35,6 +35,12 @@ settings dialog, #4802 build.bat submodule update), so the onset is likely CI ti
 Added `WaitForDocumentLoaded()` after the save-changes `ClickNo` and before `CheckForFileLocks`.
 Passed on TeamCity build #15671 (88e2ca3).
 
+`/code-review medium` then found that `LibraryManager.LoadBackground` closes each library's read
+stream in its `finally`, after `CompleteProcessing` has published the loaded document
+(Library.cs ~290-301), so `WaitForDocumentLoaded` alone leaves a short window with the .blib open.
+Added `WaitForBackgroundLoaders()` after it (`EndProcessing` runs after the streams close) and made
+that helper protected (it was private in AbstractFunctionalTest).
+
 ## Audit of similar tests
 
 Reviewed every mid-test Directory/File Move/Delete and SafeDelete in TestFunctional, TestPerf,
@@ -43,7 +49,9 @@ switches to an empty document and waits for background loaders before checking f
 
 - Fixed: `KoinaSkylineIntegrationTest.TestKoinaLibraryBuild(newDocument: true)` deleted Koina.blib
   right after `NewDocument(true)`; the earlier library build stored Koina.blib in the last-used
-  settings, so the new document loads it. Added `WaitForDocumentLoaded()`. No failure history.
+  settings, so the new document loads it. That path uses an empty document, whose library build is
+  refused, so the delete was pointless: it now runs only when `newDocument` is false. No failure
+  history.
 - Left as is (judged unlikely, no failure history):
   - `BackgroundProteomeTest.cs:121-129` renames the .protdb after waiting only for
     ProteinMetadataManager; another reader of the file might still be busy.
