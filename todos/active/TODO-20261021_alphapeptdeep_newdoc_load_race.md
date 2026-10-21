@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-21
-- **PR**: (pending)
+- **PR**: [#4890](https://github.com/ProteoWizard/pwiz/pull/4890)
 - **Objective**: Fix TestAlphaPeptDeepBuildLibrary failing on every TeamCity "PR Perf and Tutorial
   tests" run since 2026-10-11 with "Failed loading library ...rat_consensus_final_true_lib.blib"
   (SQLite CantOpen), then find other tests with the same race.
