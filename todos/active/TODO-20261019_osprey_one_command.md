@@ -957,5 +957,114 @@ one command measured on the GPU, `Run-CarafeSharpWorkflow.ps1` reduced, `Carafe-
 folded into `Osprey-workflow.html`. The rulesets note: no Osprey check is required on master (only
 Core and Skyline), so watch the Osprey Linux and Windows checks by hand before every merge.
 
+
+### 2026-10-21 - Clean-up PR: item 1 coded; a protein-compact defect found
+
+Branch `Skyline/work/20261021_osprey_one_command_cleanup` (from master 7819a9b6ac), uncommitted.
+
+**Item 1 (a search that detects nothing fails) - done, gates green.** FirstPassFDR's compaction
+gate (`CompactFromSidecars`, shared by compute and resume) logs one Error: naming the library,
+`--reconciliation-compaction-fdr` and `--protein-fdr` when no precursor survives, exit 1, so the
+run stops before the second pass. SecondPassFDR throws `UserMessageException` (caught beside
+`BlibOutputException`) when nothing passes `--experiment-fdr`: Error:, exit 1, no `.blib`; the
+"Writing an empty .blib" warning and its resource (with ja/zh-Hans) are gone. An empty stratum is
+now written and read back as empty (`FirstPassModelIO.SaveStratum`/`LoadStratum`), and
+`PerFileRescoreTask.CreatePass2Worker` and `Pass2FdrSidecar.ComputePass2FrozenCompetition` refuse
+only a missing one. `OspreyArgNames` gained `EXPERIMENT_FDR`, `RECONCILIATION_COMPACTION_FDR`,
+`PROTEIN_FDR`. `SubsetPipelineTest.TestSubsetNothingPasses`: thresholds 0 (first pass), experiment
+FDR 0 (second pass), and one protein per peptide (empty stratum, ends in the second-pass error).
+Gates: Osprey Debug 650/650 + inspection 0; `regression.ps1 -Dataset Stellar` PASS.
+
+**Defect found, its own item (Brendan, 2026-10-21: a defect, not this PR).** Protein-compact never
+reports a first-pass passer outside the stratum unless reconciliation moved its peak:
+`StreamingFdr.CompeteOneFile` admits only stratum members and changed peaks, the worker stamps
+everything else run q = 1.0 (`Pass2PerFileWorker.cs:235`), and `FoldAndPublishExperimentScope`'s
+best-run floor raises the carried pass-1 experiment q to that 1.0. The comments say the opposite
+(`Pass2FdrSidecar.cs:1182` "report = pass1 U stratum passers ... never drops an already-passing
+peptide"; `FinishRecord`). Evidence: the one-protein-per-peptide subset search had 179 first-pass
+passers, "Raised 179 of 358 experiment-level precursor candidate q-values", 0 reported
+(`ai/.tmp/sessions/20261021-cleanup/nothing-passes-1.log`). On real data this drops peptides of
+single-hit proteins; a fix moves the goldens. Measure the Stellar loss before choosing a fix.
+
+**Item 2 decided (Brendan): `.carafemodel` becomes `.model.zip`.** Old files keep opening: the
+reader goes by content (`manifest.json` format `carafemodel-1/2`), not the name.
+
+Committed: 5b75e2f9b0 (item 1), 8b5dea4a69 (item 2). Gates: Osprey 650/650 + inspection 0 (help
+pages regenerated), CarafeSharp 105 passed + inspection 0 (8 Carafe parity tests NotExecuted: no
+reference data on this machine). **#4849 (Nick, draft)** lists a folder's models with
+`"*" + CarafeModelFile.EXTENSION` in `CarafeModelChooserDlg`; whichever merges second switches it to
+`CarafeModelFile.FilePatterns` so `.carafemodel` files stay listed. **#4823** touches
+`Pass2FdrSidecar`, `SecondPassFdrTask`, `ExperimentQFloors`, the tasks resx: expect small conflicts.
+
+**4c candidate (Brendan asked, 2026-10-21): ship the default models as a `.model.zip`.** A tuned
+file is the same networks with fine-tuned weights plus a manifest; a model absent from it is the
+pretrained one. Packaging the pretrained MS2/RT/CCS (and Chronologer) as one default model file
+makes mode 1 mode 3 with the default, answers the package-size and Chronologer `.pt` questions, and
+`SubsetPipelineTest.WriteSavedModelFromPretrained` already does it. Cost: the MannLabs archive's
+SHA-256 pin moves into the manifest, and the Carafe parity tests must show identical predictions.
+
+**Item 3 decided (Brendan): follow Skyline** - placeholders from resources (`path/to/file` +
+extension, `path/to/folder`), translated as Skyline's are.
+
+**Items 3 and 4, and what Brendan's help review added (2026-10-21, uncommitted):**
+- Placeholders as Skyline's (`OspreyResources` `OspreyCommandArgs_PATH_TO_FILE/FOLDER`,
+  `<integer>`, `<number>`, with Skyline's ja/zh); CarafeSharp's as literals (it has no
+  translations). USAGE lines and the missing-argument errors built from the declarations
+  (`OspreyCommandArgs.UsageInput/Library/Output/Fasta`; `Program.USAGE_*` removed).
+- The program is `Osprey` (osprey is maccoss/osprey) in the help and docs/20.
+- Carafe's camel-case options hyphenated (`--min-length`, `--fix-mod`, `--i2l`, `--print-ptm`, ...);
+  `CommandLineGrammar.NamesMatch` (shared CommonUtil) treats a lower-to-upper boundary as a
+  separator and ignores case, so Carafe's spelling still parses (`StandardName`). Our own scripts
+  and tests use the documented spelling (Brendan: no history to keep for our own scripts); the
+  parity tests' recorded Carafe command lines and `Run-CarafeOspreyWorkflow.ps1` (Java Carafe)
+  keep Carafe's.
+- Descriptions rewritten from what the code does (Brendan: "Resource file -> Creates a new resource
+  file" is the anti-pattern): `-i` (any ProteoWizard format), `-l` (.blib first; decoys generated
+  unless `--decoys-in-library`; how each format pairs), `-o` (what the blib holds, the two reports
+  beside it), `--export-library` (self-contained blib, searches back with no manifest),
+  `--resolution`, `--fragment-tolerance/-unit`, `--no-prefilter`, `--run-fdr` (Skyline ID lines per
+  run, Percolator train/test), `--experiment-fdr`, `--fdr-level`, `--shared-peptides`,
+  `--work-dir/--output-dir/--cache-dir`, `--protein-fdr` (default 0.01), `--tf` (no `--model-dir`).
+  Their ja/zh entries removed where the meaning changed (the next translation pass redoes them).
+- `--report` removed: it only named a fallback report stem used when there is no `-o`, which a
+  search requires (`OspreyReportWriter.ReportStem`); also from the Demux scripts in ai/scripts.
+- **`--resolution auto` removed; the default is `hram` (Brendan).** `auto` detected nothing: the
+  scorer and bins treated it as unit while the unit tolerances applied only to an explicit `unit`,
+  so a search without `--resolution` scored unit bins at 10 ppm. Detection is
+  [#4893](https://github.com/ProteoWizard/pwiz/issues/4893).
+- Item 4: the HPC section's preamble says `--fasta` runs as one process and is refused with `--task`.
+
+### 2026-10-21 evening - Clean-up PR coded and committed (4 commits); review and PR next
+
+Branch `Skyline/work/20261021_osprey_one_command_cleanup` (not pushed): 5b75e2f9b0 (empty result
+fails), 8b5dea4a69 (.model.zip), 773b91c9dc (help rewrite, hram default, --training-input-list,
+--report removed), bf61571ed7 (value tables, OSPREY_DIANN_REPORTS, more help). Gates on bf61571ed7:
+Osprey 650/650 + inspection 0, CarafeSharp 105 + inspection 0 (8 Carafe parity NotExecuted: no
+reference data here), Skyline TestCommandLineParserGrammars 0 failures; Stellar regression PASS
+(on 773b91c9dc + the env-var change; bf61571ed7 is help-only). Help page reviewed by Brendan
+(artifact https://claude.ai/artifact/SFhdVjKSCqBFzx32xewzuS v5, "Looks much better").
+
+Also in bf61571ed7, from Brendan's review: `--enzyme` takes a name; the enzymes and modifications
+are compact reference tables generated from `EnzymeTable` / `CarafeModification` (new shared
+`pwiz.Common.CommandLine.TableUsageBlock`: caption, column groups, right-aligned numbers, indented,
+borderless); `--threads` first in Performance and `--parallel-files` says it is for NUMA servers;
+examples lead with vendor files and `.blib`, `.tsv` last as the DIA-NN comparison form;
+`<output>.protein_groups.tsv` / `.stats.tsv` only under `OSPREY_DIANN_REPORTS` (they hold nothing
+the .blib lacks); `--cache-dir`, `--export-library` (the same file as the .tsv library's cache, minus
+the validity hash), decoy options and `--log-file` rewritten.
+
+Issues filed (Brendan): [#4893](https://github.com/ProteoWizard/pwiz/issues/4893) detect
+`--resolution` from the data; [#4894](https://github.com/ProteoWizard/pwiz/issues/4894) search .blib
+RefSpectra lacks the predicted RT and CCS, in Osprey AND BiblioSpec's DIA-NN reader (March 2025
+design: RefSpectra = the predictions, RetentionTimes = the measured observations; only the spectrum
+half was implemented). Not filed (Brendan): phosphate neutral loss (AlphaPeptDeep's modloss head is
+masked in CarafeSharp). Proposal not acted on: move Carafe's training-curation levers (~16 hosted
+options) behind one `OSPREY_CARAFE_ARGS` variable - ask Mike.
+
+**Held in the ai repo, uncommitted until the PR merges** (they use spellings only this branch
+accepts): `scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1` (documented `--hyphen` spellings),
+`scripts/Osprey/Demux/Run-DemuxSearchArms.ps1` and `Run-EclipseSearch.ps1` (`--report` dropped,
+`OSPREY_DIANN_REPORTS=1` set for Compare-DemuxSearches.py).
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261021_osprey_one_command_cleanup.md` before starting work.
