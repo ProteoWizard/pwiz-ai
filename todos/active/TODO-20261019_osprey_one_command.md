@@ -7,14 +7,15 @@
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
 - **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 (the
-  CarafeSharp option spelling, split out of it) before it. PR 4b (mode 2) coded and gated on `Skyline/work/20261020_osprey_one_command_training`
-  (`C:\proj\pwiz`), opened as #4885; `regression-parallel.ps1 -Dataset All` and TeamCity next.
+  CarafeSharp option spelling, split out of it) before it. PR 4b (mode 2, the predicted-library
+  rename, stop-after-task resume) merged 2026-10-21 as #4885. Next: a search that detects nothing fails with an error (own PR), then
+  4c (HPC, packaging, Osprey's CUDA build).
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
   [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (merged 2026-10-20) (PR 4a);
   [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (doc sweep, merged 2026-10-20);
-  [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) (PR 4b, `Skyline/work/20261020_osprey_one_command_training`, open)
+  [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) (PR 4b, merged 2026-10-21 as 7819a9b6ac)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: folded into `pwiz_tools/Osprey/Osprey-workflow.html` as part 1 ("Building the
   library") in PR 4b (#4885); the draft `TODO-20261019_osprey_one_command-workflows.html` is deleted.
@@ -891,3 +892,37 @@ build (currently only in `pwiz-scanmajor`); every run this session was on the CP
 links only the CPU libtorch, so `--device gpu` in the one command falls back to the CPU. **4c**:
 give Osprey a CUDA build (`Build-Osprey.ps1 -Torch cuda`, as CarafeSharp's) with the packaging, and
 measure the one command on the GPU.
+
+### 2026-10-21 - PR 4b merged
+
+PR #4885 merged as commit 7819a9b6ac (squash message approved by Brendan). All 16 checks green on
+head 4614fdde38, including Osprey Linux .NET 4229243; TeamCity Perf/Regression 4228241 SUCCESS on
+9719d88da2 (the later commit changed only a subset test). Shipped: mode 2 (`--training-input`), the
+`<out>.predicted.blib` name, `OSPREY_STOP_AFTER_TASKS` with the stepwise subset test and opt-in
+regression mode 13, the retired chained leg, and the library build as part 1 of
+`Osprey-workflow.html`. `C:\proj\pwiz` is left detached at master (master is checked out in the
+`pwiz-scanmajor` worktree); branch deleted local + remote. This TODO stays active (Brendan: a
+checkpoint, the sprint continues).
+
+The Linux failure (4228252) was `TestSubsetLibraryBuildTunedHeldOut`: its further tuning (a second
+one-epoch tune at the first's learning rate) left a model so marginal that on Linux nothing passed
+1% in the output's search, and PerFileRescoring then threw "The saved first-pass model carries no
+list of precursor candidates from proteins with 2 or more detections ... Run --task FirstPassFDR
+again". The test now tunes further at learning rate 0 (4614fdde38).
+
+**Next item (Brendan, 2026-10-21): a search that detects nothing fails with an error, never an
+empty result.** Two defects, both before this branch:
+- An empty protein stratum is indistinguishable from a missing one: `FirstPassModelIO.SaveStratum`
+  writes no file for an empty stratum, `LoadStratum` reads an empty one as missing, and
+  `PerFileRescoreTask.CreatePass2Worker` (`PerFileRescoreTask.cs:1147`, from #4816) refuses with a
+  message advising a re-run that cannot help. `FirstPassFdrTask.cs:2151` reads the same field for
+  resume.
+- SecondPassFDR's "No precursors pass the FDR threshold. Writing an empty .blib." succeeds with
+  output that only a later step can notice (Brendan: "It is generally a bad idea to succeed with
+  useless or nominally correct output").
+Shape: when nothing passes (first pass, or the reported set), the run ends with a clear error
+naming what passed nothing and why (precursors at the run FDR, the library and runs), with a
+failure exit code and no `.blib`; a subset test where nothing passes asserts exactly that. Own PR,
+since it changes FirstPassFDR's artifacts and the empty-result contract. The one command's own
+phases should get the same rule (a tuning search with an empty export already fails in TrainModel,
+with "No RT training rows"; check its message names the tuning runs).
