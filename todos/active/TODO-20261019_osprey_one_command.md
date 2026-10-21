@@ -926,3 +926,36 @@ failure exit code and no `.blib`; a subset test where nothing passes asserts exa
 since it changes FirstPassFDR's artifacts and the empty-result contract. The one command's own
 phases should get the same rule (a tuning search with an empty export already fails in TrainModel,
 with "No RT training rows"; check its message names the tuning runs).
+
+### 2026-10-21 - Handoff: a clean-up PR first, then 4c
+
+Brendan's plan for the next session: a grab-bag clean-up PR of things left from earlier sessions,
+then the next full PR (4c: packaging and GPU use). The clean-up PR's items:
+
+1. **A search that detects nothing fails with an error** (the "Next item" in the merged entry
+   above): the empty-stratum refusal in PerFileRescoring and SecondPassFDR's empty `.blib` both
+   become one clear error, failure exit code, no `.blib`; a subset test where nothing passes.
+2. **Reconsider `.carafemodel`** (Brendan: long, and the format is not evident). What it is today:
+   a ZIP archive (`CarafeModelFile`, `CarafeSharp.Proteome`; `EXTENSION`, `DEFAULT_FILE_NAME`
+   `carafe_fine_tuned_model.carafemodel`) holding `manifest.json` (stamp, lineage, per-entry
+   SHA-256), the safetensors (`ms2.safetensors`, `rt.safetensors`, optional base MS2), `rt_maps.json`,
+   `meta.json` and `model_evaluation_metrics.json`. Bring Brendan options (a shorter extension; say
+   in the help and docs/06 that it is a ZIP) and decide whether old files keep opening.
+3. **Command-line help review, for consistency with Skyline** (leave `--name=value` vs
+   `--name value` alone): value placeholders as Skyline writes them (`--in=path/to/file.sky`), so
+   `--input-list path/to/list.txt` and `--work-dir path/to/dir`, not `<list.txt>` / `<dir>`; then a
+   full read of every group's text (Osprey's resx usage strings and the hosted CarafeSharp ones,
+   e.g. `--tf` still names `--model-dir`, which Osprey does not have). Regenerate the help pages.
+4. **The HPC section of the help names no library-build tasks.** The cluster addressing of
+   PredictTrainingLibrary / TrainModel / PredictLibrary is 4c; until then the section should at
+   least say `--fasta` runs as one process and is refused with `--task` (check whether 4c lands
+   soon enough that this is only a sentence).
+
+Then **4c**: HPC addressing and harness staging, packaging (installers, TeamCity artifacts, CarafeSharp
++ CPU libtorch; measure the package), Osprey's CUDA build (`Build-Osprey.ps1 -Torch cuda`) and the
+one command measured on the GPU, `Run-CarafeSharpWorkflow.ps1` reduced, `Carafe-workflow.html`
+folded into `Osprey-workflow.html`. The rulesets note: no Osprey check is required on master (only
+Core and Skyline), so watch the Osprey Linux and Windows checks by hand before every merge.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261021_osprey_one_command_cleanup.md` before starting work.
