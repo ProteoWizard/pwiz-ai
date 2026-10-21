@@ -38,3 +38,15 @@
 - WatersLockmassCmdlinePerfTest passed via Run-Tests.ps1 (data cached under SKYLINE_DOWNLOAD_PATH,
   raw touched by the run). CodeInspection passed.
 - Committed `a2e361057a`.
+- Full bs.bat run also hit TestFullScanGraph / TestKoinaSkylineIntegration / TestGetControlsMcpConnector
+  UI-wait timeouts; all pass alone (TestFullScanGraph 6/6). Treated as environmental.
+
+### 2026-10-20 / 21
+- `/code-review medium`: 10 findings; fixed only #10 (history-style comments, `d166ded0fb`). Dropped:
+  DDA calibrationSpectraAreOmitted (Skyline never sets ddaProcessing; pwiz-sharp same), IgnoreCalibrationScans
+  read cost (gated on fileContent; dropped in port 5b too), UIMF/Waters TIC per-frame costs (no cpp fixture),
+  IsCalibrationSpectrum interop cost (master parity), whitespace ids (hypothetical), benefitsFromWorkerThreads
+  (deliberate, comment explains).
+- TeamCity perf/tutorial build #567 (bt19762): only TestDiannSearchTutorial failed ("DIA-NN search did not
+  produce a spectral library output") on MacCoss TeamCity Agent 1 - identical failure in #561 (`14c0cab0`,
+  pre-PR) on the same agent. Pre-existing, agent-specific.
