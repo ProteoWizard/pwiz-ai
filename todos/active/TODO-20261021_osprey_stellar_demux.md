@@ -199,6 +199,11 @@ cosine of the demultiplexed spectrum to the true one on a 0.05 Th grid blurred b
   is wrong on these data (0.61 Th, snapped to its 200 kTh/s preset); a Gaussian fit to isolated MS2 peaks gives
   **sigma 0.327 Th (FWHM 0.77)** at every m/z (Turbo-like, on a 0.2 Th grid): run with `--sigma-ms2 0.33`.
   It refuses files whose first spectra are centroided (keep MS1 in profile too). ~1 min per 6,000 spectra.
+- **k=3 and k=4** (same slice summed into 6 and 8 Th windows stepped 2 Th; `k3.mzML`, `k4.mzML`), makima +
+  Centrix vs Centrix truth, median / ion-weighted / p10: k=2 0.979 / 0.983 / 0.877; k=3 0.950 / 0.961 /
+  0.706; k=4 0.917 / 0.934 / 0.603 (no demux: 0.735, 0.507, 0.389). Pessimistic on sampling: here a window
+  returns every k x 2.4 s (9.6 s at k=4) against 4.7 s in the real SuperOverlap, and the windows are twice as wide.
+- Tool code committed: bc76e155e9 (`--remultiplex`), d31553c8ff (`--thin`).
 - Pipeline now: tool (makima, `--profile --channel-th 0.09 --fill-time-ions 1000`) -> Centrix -> Osprey
   (`Run-StellarTool.ps1 -Centrix`). Arms queued 2026-10-22 00:00: 50% profile, 2Th and 4Th profile through the
   same pipeline (controls), 50% and 4Th thinned 2x, SuperOverlap profile.
