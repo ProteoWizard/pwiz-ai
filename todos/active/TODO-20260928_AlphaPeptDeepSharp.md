@@ -256,3 +256,21 @@ TestPerf builds, the five branch tests pass (log
 `bin\staging\Debug\AlphapeptdeepLibraryBuilderUnitTest,...,CodeInspection.log`). Email to Mike and Nick about
 "Add All..." sits as a Gmail draft for Brendan to send. Then master merged (f4f24aefad: #4904, #4902; one
 comment in Skyline.csproj auto-merged).
+
+### 2026-10-22 - Review fixes, resource key fix, TeamCity (Brendan's session, evening)
+
+Brendan: the two sessions' UI work looks right; apply the review fixes, push, watch TeamCity, then trigger
+Perf and Tutorial. `/code-review medium 8c08464fe2..HEAD`: 9 findings, 5 fixed in ce7b115b78 (one
+`LIBRARY_PREDICTION_SUPPORT` threshold for the in-form warning and the per-peptide "limited" message; a
+fine-tuned modification widens a narrower pretrained entry (GlyGly) instead of being skipped; exact UniMod
+match before the loss-stripped one; `MatchUniMod` memoized per definition in a static `ConcurrentDictionary`;
+dead `ILibraryBuildWarning` removed), 4 dropped (model validated on the UI thread at Finish - dropped
+2026-10-14 already; manifest re-read per combo change and the double warning on first show - milliseconds;
+combo selection by display text falling to the default if a model file vanishes between two list reloads -
+needs the file to disappear mid-dialog). TeamCity build 22440 (cc9dc013) failed `CheckForMissingResources`:
+the `SettingsUIResources` designer property renamed with `EditCarafeModelDlg` still looked up the old
+`BuildLibraryDlg_ValidateCarafeModel_...` key; fixed in 31079d741b (reproduced and verified locally, 1 s).
+Only bt209 runs automatically on this PR; Perf and Tutorial
+(`ProteoWizard_SkylinePrPerfAndTutorialTestsWindowsX8664`, ~3.5 h) to trigger once bt209 is green. Brendan's
+plan after: approve, give Mike and Nick time to respond, merge, then a night session on PR 4d of the
+Osprey-Carafe integration.
