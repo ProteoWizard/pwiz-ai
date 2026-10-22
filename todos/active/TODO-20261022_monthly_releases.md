@@ -19,12 +19,12 @@ The issue body holds the full technical detail: how the website resolves downloa
 
 ## Tasks
 
-- [ ] Seed PR (never merged): `bt83.xml` from `2deb47a782` + `seed.commit` parameter + first step `git checkout --detach %seed.commit%` + artifacts limited to `build-nt-x86/*.msi` and `build-nt-x86/VERSION`
-- [ ] Trial seed build for 2026-09 (`10aac2d`): agents still build the C++ tree, and `VERSION` = `3.0.<commit YYDOY>.10aac2d`
-- [ ] Remaining 7 seed builds; pin + tag each `release-YYYY-MM` with the seed commit in the pin comment
+- [x] Seed PR #4900 (draft, never merged): `bt83.xml` from `2deb47a782` + `seed.commit` parameter + first step that fetches it by SHA and checks it out as `master` + artifacts limited to `build-nt-x86/*.msi` and `build-nt-x86/VERSION`
+- [x] Trial seed build for 2026-09 (`10aac2d`): build 4230560, `3.0.26272.10aac2d9`, 308/308 tests, pinned + tagged `release-2026-09`
+- [x] Remaining 7 seed builds; pin + tag each `release-YYYY-MM` with the seed commit in the pin comment
 - [ ] Monthly pin job (1st of the month): pin + tag the last successful default-branch bt83 build of the previous month
 - [ ] Archive metadata file uploaded to `htdocs/releases/` (builds tagged `release-*` on any branch)
-- [ ] Website archive page in ProteoWizard/web (`.msi` for the C++ months, three `.exe` variants from 2026-10)
+- [ ] Website in ProteoWizard/web (uncommitted, branch `release-channels` in `C:\dev\pwiz-web-help`): Monthly/Beta channel selector for the Windows installers + archive dropdown with a license-gated Download button. Merge only after the pin job publishes `releases/bt83-monthly.xml` and `releases/bt83-archive.json`
 - [ ] Commit-date versioning in `scripts/installer/build.ps1` (and `build-linux.sh`)
 
 ## Seed commits
@@ -49,3 +49,28 @@ Researched and filed #4899. Key findings:
 * bt83 artifact retention is ~2 weeks (artifacts back to 2026-10-08 only); nothing pinned.
 * All 8 seed months are C++-tree builds; the C++ Jamroot stamps the date and SHA from `HEAD` (commit date since `cee2c514d0`), so a build with `HEAD` detached at the seed commit is stamped correctly without clock changes.
 * bt83 settings only entered VCS at `2deb47a782` (C++-era export); since then only `bt83.xml` changed among bt83's settings, so a PR restoring it runs the C++ pipeline under `PREFER_VCS`.
+
+### 2026-10-22 - Seed PR and the September trial
+
+* Opened draft PR #4900 (branch `Skyline/work/20261022_seed_cpp_releases`). TeamCity's VCS root only builds `master`, `pull/*` and `container/*`, so the seed needs a PR; `.teamcity/` changes trigger nothing (`vcs_trigger_and_paths_config.py`).
+* First trial (4230554) failed in seconds: the VCS root enforces a depth-1 clone, so the seed commit was not on the agent. Fixed by `git fetch --depth=1 --no-tags origin %seed.commit%` before the checkout (depth 1 suffices; date and SHA come from HEAD's own commit).
+* Second trial 4230560 succeeded in ~20 min on an AWS agent: `pwiz-setup-3.0.26272.10aac2d9-x86_64.msi` (92 MB) + `VERSION`, 308/308 tests (same count as the original 4193616), MSI reachable at `mc-tca-01.s3.../ProteoWizard/bt83/4230560/`. Pinned and tagged `release-2026-09`. No clock change was needed.
+* The SHA in the version is 8 hex chars (`git rev-parse --short` in the shallow agent clone), not 7.
+* Queued 2026-08..2026-02 as 4230565..4230571, pinned to PR head `b367b702dc`.
+* TeamCity REST from scripts: the front proxy returns a bare nginx 403 for XML POST bodies; JSON bodies work. The MCP `trigger_build` cannot pass build parameters, so seed builds were queued with a small REST script using `~/.teamcity-mcp/config.json`.
+* Seed results (all SUCCESS, 308/308 tests, pinned + tagged; version day-of-year matches each original month-end build):
+
+  | Month | Build | Version |
+  |---|---|---|
+  | 2026-09 | 4230560 | 3.0.26272.10aac2d9 |
+  | 2026-08 | 4230565 | 3.0.26240.99609d5b |
+  | 2026-07 | 4230566 | 3.0.26211.72e04015 |
+  | 2026-06 | 4230567 | 3.0.26181.1c640eff |
+  | 2026-05 | 4230568 | 3.0.26151.e7e989cc |
+  | 2026-04 | 4230569 | 3.0.26120.bb3c999a |
+  | 2026-03 | 4230570 | 3.0.26090.f128208e |
+  | 2026-02 | 4230760 | 3.0.26058.7b1a2a7b |
+
+* The first 2026-02 run (4230571, not pinned) built and passed everything but failed tcbuild.bat's clean-tree check: the Hardklor submodule stayed at the PR head's commit (its gitlink changed 2026-03-16, #4054). No submodule is in bt83's targets (BiblioSpec's `HardklorReader.cpp` is its own file reader), so Mar-Sep were unaffected. The seed step now runs `git submodule update --init --recursive --force --depth 1` (seed PR head `47e9787c39`).
+* Website design (ProteoWizard/web): Monthly reads `releases/bt83-monthly.xml` (same format as `bt83.xml`), Beta reads `releases/bt83.xml`; the selector shows only for the bt83 options, default Monthly. The archive dropdown reads `releases/bt83-archive.json` = `{"releases": [{"month", "version", "buildId", "commit", "artifacts": [file names]}]}`, newest first; the format is documented in `js/main.js`. Tested in Chrome against a scratch copy with sample release files.
+* Uncommitted on the work branch: `scripts/installer/build.ps1` and `build-linux.sh` now take YYDOY from HEAD's committer date (matching `build/PwizVersion.targets`), falling back to today. Verified on `3f290fc` -> `4.0.26281-3f290fc`, the version TeamCity stamped that day.
