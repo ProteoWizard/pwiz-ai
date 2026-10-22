@@ -7,7 +7,7 @@
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 before it; 4b merged 2026-10-21 as #4885; the clean-up PR merged 2026-10-21 as #4895; 4c (HPC addressing, task declarations, one chain shape) merged 2026-10-22 as #4898 (46af8ac754). `.libcache` retirement on `Skyline/work/20261022_osprey_retire_libcache` (2026-10-22, PR #4904 open; TeamCity Perf/Regression #341 SUCCESS; review and merge pending). Next: finish #4849 (Nick away two weeks), then 4d (Osprey as a download using #4849's libtorch runtime).
+- **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 before it; 4b merged 2026-10-21 as #4885; the clean-up PR merged 2026-10-21 as #4895; 4c (HPC addressing, task declarations, one chain shape) merged 2026-10-22 as #4898 (46af8ac754). `.libcache` retirement merged 2026-10-22 as #4904 (f4f24aefad). Next: finish #4849 (Nick away two weeks), then 4d (Osprey as a download using #4849's libtorch runtime).
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
@@ -16,7 +16,7 @@
   [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) (PR 4b, merged 2026-10-21 as 7819a9b6ac);
   [#4895](https://github.com/ProteoWizard/pwiz/pull/4895) (clean-up, merged 2026-10-21 as 22626556a4);
   [#4898](https://github.com/ProteoWizard/pwiz/pull/4898) (PR 4c, merged 2026-10-22 as 46af8ac754);
-  [#4904](https://github.com/ProteoWizard/pwiz/pull/4904) (`.libcache` retirement, opened 2026-10-22)
+  [#4904](https://github.com/ProteoWizard/pwiz/pull/4904) (`.libcache` retirement, merged 2026-10-22 as f4f24aefad)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: folded into `pwiz_tools/Osprey/Osprey-workflow.html` as part 1 ("Building the
   library") in PR 4b (#4885); the draft `TODO-20261019_osprey_one_command-workflows.html` is deleted.
@@ -1343,3 +1343,7 @@ dir is harmless and the same race as the derived write; the `regression.html` mo
 doc item, folded in on purpose; ja/zh-Hans pick new keys up in the translation pass, as the derived-library
 strings did. Committed as 37d30526cb; PR [#4904](https://github.com/ProteoWizard/pwiz/pull/4904) opened.
 TeamCity Perf/Regression #341 (4231041) on `pull/4904`: SUCCESS (triggered at Brendan's request). Left: review, merge.
+
+### 2026-10-22 - .libcache retirement merged (#4904)
+
+PR #4904 merged as f4f24aefad (squash approved by Brendan; 17/17 checks, TeamCity Perf/Regression #341 SUCCESS). Shipped: `LibraryCache` gone with its tests and strings; `LibraryLoader` reads the derived `.blib` only and deletes `<lib>.libcache` at its exact path once the derived library is in place; `regression.ps1` relays the `.blib` only; P18 in `00-pipeline-architecture.md`; the `regression.html` mode 3 note. Not done, on purpose: a `.libcache` beside a `.blib` SOURCE is left alone (no successor file). This TODO stays active for #4849 and 4d.
