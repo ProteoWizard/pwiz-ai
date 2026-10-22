@@ -3,11 +3,12 @@
 ## Branch Information
 - **Checkout**: `I:\git_i\sky_net10_alphapeptdeep` (Nick); `C:\proj\pwiz` (Brendan's sessions, adopted
   2026-10-22 with `/pw-adopt` while Nick is away two weeks)
-- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (master merged 2026-10-15; again 2026-10-22 at
-  46af8ac754, which carries #4895's `.carafemodel` -> `.model.zip` rename and 4a-4c's CarafeSharp changes)
+- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (master merged 2026-10-15; 2026-10-22 at
+  46af8ac754, which carries #4895's `.carafemodel` -> `.model.zip` rename and 4a-4c's CarafeSharp changes;
+  again 2026-10-22 evening at f4f24aefad as 1be6a071bf)
 - **Base**: `master` (#4717 CarafeSharp squash-merged 2026-10-13 as 28c7b7ff03 and merged into this branch)
 - **Created**: 2026-09-28
-- **Status**: In Progress - master merged 2026-10-22 (5dcac06743), all branch tests green; next `/pw-review 4849` with Brendan, then merge
+- **Status**: In Progress - Carafe model list, modification matching and fine-tuned modification support built and pushed 2026-10-22; next `/code-review medium`, TeamCity, Brendan's UI pass on a Release build, human review, merge
 - **Module**: `skyline` (also carries CarafeSharp changes Skyline needs; the developer chose to keep them here)
 - **PR**: [#4849](https://github.com/ProteoWizard/pwiz/pull/4849) (draft; screenshots in nickshulman/pr-assets `pwiz/4849-alphapeptdeep`)
 
@@ -94,8 +95,9 @@ port of the CCS model.
       download (16 packages, ~2.9 GB, into `Tools\libtorch-cuda-12.8-win-x64.2.10.0`, 4.1 GB), GPU builds
       with the pretrained and the fine-tuned model, restart message. Found and fixed (ff3b767df4) the
       download prompt still saying the runtime is shared by all installations.
-- [ ] Decide: the "limited support in the default predictive model ... consider fine-tuning with Carafe"
-      warning still shows when a .carafemodel is chosen.
+- [x] The "limited support ... consider fine-tuning with Carafe" warning judges against the chosen model
+      (ad68ed0e88): a fine-tuned file's training modifications count as supported for fragmentation and
+      retention time.
 - [x] Ion mobility (e62d5693d2): the builder predicts CCS with CarafeSharp's pretrained `CcsModel` (a
       .carafemodel holds none) and writes a `CCS` column, which the transform keeps as
       `CollisionalCrossSection` (0 for Phospho/GlyGly peptides), as the Python path did; Skyline converts CCS
@@ -236,3 +238,21 @@ Brendan's test document defines carbamidomethylation the old way ("Carbamidometh
 ### 2026-10-22 - Handoff
 
 **Next session handoff**: read `ai/.tmp/handoff-20261022_4849_carafe_model_list.md` first. Uncommitted in `C:\proj\pwiz`: fine-tuned model modifications (compiles; `TestFineTunedModificationSupport` fails because a custom Oxidation with losses does not match UniMod Oxidation (M) - suspect `RelativeRT`/`IsVariable` in `StaticMod.Equivalent`). Test model for Brendan: `D:	est\carafe-models\Stellar-gpu-tuned+TMT-MetOx.model.zip`. Pending: email draft to Mike and Nick about "Add All..."; master merge; code review; TeamCity.
+
+### 2026-10-22 - Fine-tuned model modifications committed (Brendan's session, evening)
+
+Committed ad68ed0e88: `AlphapeptdeepLibraryBuilder.GetModificationSupport(carafeModelPath)` extends the pretrained
+support with the file's `Training.Modifications` (CarafeSharp names -> UniMod ids, fragmentation + retention
+time; CCS stays pretrained), the builder's support follows `CarafeModelPath`, `BuildLibraryDlg`'s in-form
+warning follows the chosen model, and the limited-support list ignores a missing CCS. Root cause of the
+failing `TestFineTunedModificationSupport`: `UniMod` builds its modifications with `RelativeRT.Matching` and
+`StaticMod.Equivalent` compares `RelativeRT`, so the test's `RelativeRT.Unknown` MetOx never matched; the
+losses-only retry also could not match a definition with extra losses, since UniMod's Oxidation (M) carries
+its own. Fix, scoped on Brendan's challenge about touching central code: `StaticMod.Equivalent` untouched;
+`UniMod.FindMatchingStaticMod` gained an optional `ignoreLosses` (existing callers unchanged; loss-only
+entries such as Water Loss, which have no UniMod id, are skipped since `ChangeLosses(null)` fails their
+validation), and `MatchUniMod` normalizes `RelativeRT` before calling it with the flag. Gates: solution +
+TestPerf builds, the five branch tests pass (log
+`bin\staging\Debug\AlphapeptdeepLibraryBuilderUnitTest,...,CodeInspection.log`). Email to Mike and Nick about
+"Add All..." sits as a Gmail draft for Brendan to send. Then master merged (f4f24aefad: #4904, #4902; one
+comment in Skyline.csproj auto-merged).
