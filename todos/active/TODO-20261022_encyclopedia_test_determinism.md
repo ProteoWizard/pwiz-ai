@@ -24,9 +24,39 @@ check: expected `<366, 698, 698, 4907>`, actual `<366, 699, 699, 4915>` - always
   TODO-20261015_skyline_single_build.md, 2026-10-21 entry) - #4879 is not involved.
 - Same shape as #4840 (TestDdaSearch / MS Amanda, TODO-20261013_testddasearch_skyline_dev6.md): external search
   tool, count check at AssociateProteinsDlg.NewTargetsFinalSync, BelowNormal priority. Difference: MS Amanda lost
-  hits (varying counts down); here one borderline peptide flips (always +1), consistent with EncyclopeDIA's
-  embedded Percolator seeing input in thread-dependent order (EncyclopeDiaHelpers: NumberOfThreadsUsed default 32,
-  PercolatorThreshold 0.01). Mechanism inside EncyclopeDIA not verified from its source.
+  hits (varying counts down); here one borderline peptide flips (always +1).
+
+## Root cause (EncyclopeDIA 2.12.30 source, tag e753f10, plus a capture of a passing and a failing run)
+
+Captured every EncyclopeDIA output from a passing (`<..698, 4907>`) and a failing (`<..699, 4915>`)
+multi-threaded run and diffed them (`ai/.tmp/sessions/20261022-encyclopedia/capture/132757_698_4907` vs
+`133115_699_4915`):
+
+- Chromatogram-library stage (narrow files): byte-identical.
+- Quant stage, `wide_1a ... .first.rt_fit.txt`: the same 338 input points (library RT, actual RT, peptide), but in
+  a different row order. 3 fitted RTs differ, all near library RT 32.31 min (ALELEQERK, QDLAYER, EPMQTGIK; ~0.0006
+  min). `fitProb` differs slightly on all 338 rows.
+- Quant `wide_1a ... features.txt` (Percolator input): same 1,373 rows, same IDs, same sorted order. 5 rows differ
+  only in `deltaRT`, by 0.0006-0.0007 (EPMQTGIK, decoyEIGTQMPK, QDLAYER, DVTLENR, LVEAVDGK). From there through
+  wide_1b, the concatenated quant Percolator run, and the elib.
+- Percolator's input is NOT order-dependent: `AbstractScoringResultsToTSVConsumer` sorts the feature file by
+  PSM ID. (This was my earlier guess; it was wrong.)
+
+Mechanism:
+1. `Encyclopedia.getRescoringModel` (Encyclopedia.java ~519) builds `passingPSMs` by iterating `data`, which the
+   scoring threads fill in completion order. So point order depends on the threads.
+2. `ScoredPSMFilter` -> `RetentionTimeFilter.getFilter` -> `TwoDimensionalKDE`: `stampDistribution` adds each
+   point's float kernel into a 3000x3000 `float` grid (`twoDimensionalHistogram[x][y] += stamp[i][j]`). Float
+   addition is not associative, so a different point order leaves a cell differing in its last bits.
+3. `TwoDimensionalKDE.trace()` walks the density ridge using exact float comparisons (`northeast == max`,
+   `east == north`, argmax). A last-bit difference changes one step, which moves a local stretch of the
+   `LinearInterpolatedFunction` knots. The mixture model fit on the deltas then shifts slightly everywhere.
+4. The shifted RT warp changes `deltaRT`, a Percolator feature, for peptides in that stretch. One target peptide
+   sits on the 1% q-value boundary and flips.
+
+So the defect is order-sensitive float accumulation in the KDE alignment fed in thread-completion order. It is
+not Percolator randomness. Upstream fix options: sort `passingPSMs`, or the KDE input points, by a stable key
+(e.g. peptide + charge) before fitting; or accumulate the grid in double.
 
 ## Experiment
 
@@ -49,5 +79,5 @@ the thread count (32 -> 1, two places).
   `FinalTargetCounts` {33, 35, 35, 140} after a real search) but no failure history, a small search (fewer
   borderline peptides), and skips without a Koina server. Left unpinned to minimize changes (developer's call). If
   it ever flakes, the same one-line `NumberOfThreadsUsed = 1` applies.
-- Upstream: EncyclopeDIA feeding Percolator in thread-dependent order is worth reporting to the Searle lab, as
-  #4840 did with MSAmanda#9, if Brendan agrees it is the mechanism.
+- Upstream: the order-dependent KDE RT alignment (see Root cause) is worth reporting to the Searle lab, as
+  #4840 did with MSAmanda#9, if Brendan agrees.
