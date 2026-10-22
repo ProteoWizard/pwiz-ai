@@ -340,6 +340,13 @@ nodes, merged into one library) when the cluster has several GPUs - not a new ta
 | **4b** `--training-input` mode 2 | PredictTrainingLibrary, TrainingSearch, TrainModel; the model beside `-o`; resume across the chain; `--model` + `--training-input`; `regression.ps1` gains a one-command leg that replaces CarafeSharp's chained leg as the end-to-end gate | the mode-2 Stellar run against the six-stage script (same `.carafemodel` content, same library, same result); `SubsetPipelineTest` resume cases |
 | **4c** HPC and packaging | the `--task` names, `--training-search`, the file contracts and harness staging (the backlog item); installers and TeamCity artifacts with CarafeSharp and libtorch CPU; `Run-CarafeSharpWorkflow.ps1` reduced; the workflow page folded | the HPC chain of the regression on mode 2; package size recorded; a mode-0 run on a build without libtorch |
 
+**4c split (Brendan, 2026-10-21 night):** 4c is HPC addressing and harness staging, the opt-in
+CUDA build (`Build-Osprey.ps1 -Torch cuda`; the default build stays CPU libtorch) with the one
+command measured on the GPU, `Run-CarafeSharpWorkflow.ps1` reduced, and `Carafe-workflow.html`
+folded. Installers and TeamCity artifacts move to **4d** (they need TeamCity configuration and
+installer work a session cannot verify alone). The default-models `.model.zip` is not in 4c (it moves
+the MannLabs SHA-256 pin and needs the Carafe parity reference data).
+
 Measurement after 4b, no PR of its own: one-command Stellar / Astral / ZT Scan against today's
 four-step workflow - IDs at matched entrapment FDP and wall time; tuning on searched vs held-out
 runs (the overtraining question), recorded here with the run folders.
@@ -1081,3 +1088,5 @@ against that threshold); re-runs not finding a tuned `<out>.carafemodel` (one-co
 the same day, so no user has one); `WriteProteinReport`/`WriteSummaryReport` always true
 (pre-existing); `CarafeModelFile.FilePatterns` unused (for #4849). Gates on be229fd949: Osprey 650 +
 inspection 0, CarafeSharp 105 (8 without data) + inspection 0, Stellar regression PASS.
+
+**Night session handoff (4c)**: read `ai/.tmp/handoff-20261022_osprey_4c_night.md` before starting work.
