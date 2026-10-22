@@ -169,3 +169,4 @@ tests set the driver, so they stay synchronous). `TorchRuntimes.CudaInstaller` i
 by the folder setters. Dropped as not worth it: nothing else. Gates: CarafeSharp 106 + 8 skipped + inspection
 0; Skyline solution and TestPerf builds; the five branch tests pass. Next: Brendan's interactive UI testing
 on a Release build; then TeamCity, human review, merge.
+Brendan: the GPU probe belongs behind `LongWaitDlg` with an indeterminate (marquee) bar - the Skyline wrapper for a potentially long operation on a background thread - not a bare thread that re-enables the box. Done (the `Action` overload, no cancel, shown past 500 ms; resource "Looking for an NVIDIA GPU"); the five tests pass; Release rebuilt for his UI pass.
