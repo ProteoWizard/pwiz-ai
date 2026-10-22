@@ -70,6 +70,20 @@ Osprey (stellar-base-vendor snapshot = #4710 head + build fixes), unit resolutio
 |---|---|---|
 | 2Th acquired | 37,596 / 36,455 / 36,971 | 42,232 / 37,875 / 5,717 |
 | 4Th acquired | 24,277 / 24,552 / 24,931 | 28,133 / 25,422 / 4,720 |
+| 50% `--demux auto`, current engine (10 ppm channels, one counts-per-ion) | 24,911 / 25,403 / 25,823 | 28,241 / 25,225 / 4,595 |
+
+The current engine on 50% is no better than acquired 4Th: 54.4M fragment channels for 138k MS2 spectra
+(at unit resolution nearly every peak is its own 10 ppm channel) and 20% of the ions passed through unsolved.
+
+**k=4 coupling prototype** (`coupling_proto.py`: 70 precursors x 8 fragments over 400 unit-resolution
+channels, 40 1-Th bins, 40 passes, Poisson noise; apex error of single-source channels / leak):
+oracle 12.7% / 0; per-channel elution fit 17.4% / 4.0%; per-channel peaks pooled into a (bin, apex)
+map that restricts a second fit 16.2% / 3.5%; group-sparse greedy across channels (S-OMP) 16.8% / 4.2%;
+support oracle (true bin and apex given) 14.2% / 1.1%. With exact peak widths the leak halves (1.9%),
+so width mismatch drives the bin errors. The largest remaining loss is dropped observations: 7.7% of
+single-source apex observations have no fitted peak in their window (weak fragments below the gain
+threshold); the pooled fit as a fallback prior recovers part (5.0%). Next for k=4: how weak, unexplained
+signal is apportioned, and a peak-width dictionary (several sigmas).
 
 **Synthetic, noiseless** (`DemuxTest.TestDemuxPassRateMeasurement`, temporary; table in
 `D:\test\osprey-runs\stellar-demux\synthetic\passrate-elution.tsv`): apex error of single-source fragments,
