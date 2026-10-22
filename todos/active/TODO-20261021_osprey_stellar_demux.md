@@ -177,6 +177,32 @@ peaks summed profile x fill time is ~951: ions = summed profile intensity x fill
 `--fill-time-ions 1000` for profile points (290 for centroid heights). The first profile arms used 380 and
 keep it for comparability; later arms use 1000.
 
+## Ground truth on real data: remultiplexed 2Th (2026-10-21 night)
+
+`Osprey.DemuxTool --remultiplex K` sums each cycle's adjacent narrow windows into K-fold staggered windows
+(grouping shifted one window per cycle; ions added through each member's fill time), so any demultiplexer can be
+scored against the narrow spectra it should recover. Slice: 2Th profile TR01, spectra 30000-35999 (24 cycles,
+RT 6.7-7.6 min; `D:\test\osprey-runs\stellar-demux\synthetic\remux2`), k=2 -> 4 Th windows, 2 Th bins (each
+window every 4.8 s: sparser than the real 50%'s 2.4 s). `eval_remux.py`: per (bin, cycle) with >= 50 true ions,
+cosine of the demultiplexed spectrum to the true one on a 0.05 Th grid blurred by 0.3 Th.
+
+| k=2 | No demux | Makima per 0.2 Th grid point |
+|---|---|---|
+| Profile vs true profile | 0.788 | 0.983 (ion-weighted 0.985) |
+| Centrix vs Centrix-centroided truth | 0.735 | **0.979** (0.983) |
+| My valley-split centroider (EventCentroider.CentroidLinear) vs the same | 0.645 | 0.888 |
+
+- The demultiplexing itself is near-perfect at k=2 on the profile; the stand-in centroider was the weak link,
+  and **Centrix** keeps the agreement. The per-grid-point elution fit scored 0.849 (centroided, own centroider)
+  against makima's 0.888: makima stays the default.
+- **Centrix** (maccoss/centrix, Rust) is installed in WSL (`~/.cargo/bin/centrix`). Its CWT sigma calibration
+  is wrong on these data (0.61 Th, snapped to its 200 kTh/s preset); a Gaussian fit to isolated MS2 peaks gives
+  **sigma 0.327 Th (FWHM 0.77)** at every m/z (Turbo-like, on a 0.2 Th grid): run with `--sigma-ms2 0.33`.
+  It refuses files whose first spectra are centroided (keep MS1 in profile too). ~1 min per 6,000 spectra.
+- Pipeline now: tool (makima, `--profile --channel-th 0.09 --fill-time-ions 1000`) -> Centrix -> Osprey
+  (`Run-StellarTool.ps1 -Centrix`). Arms queued 2026-10-22 00:00: 50% profile, 2Th and 4Th profile through the
+  same pipeline (controls), 50% and 4Th thinned 2x, SuperOverlap profile.
+
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
