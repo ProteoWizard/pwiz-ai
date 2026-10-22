@@ -235,6 +235,32 @@ k=3 0.959 / 0.967 / 0.798, k=4 0.930 / 0.942 / 0.684; makima split + Centrix 0.9
   (`Run-StellarTool.ps1 -Centrix`). Arms queued 2026-10-22 00:00: 50% profile, 2Th and 4Th profile through the
   same pipeline (controls), 50% and 4Th thinned 2x, SuperOverlap profile.
 
+**C# Centrix port (ad6f14adca, 0834d6fc03; 2026-10-22).** Mike: port Centrix to C#, for regular centroiding of
+profile data and inside the joint solves. New pure library `pwiz_tools/Osprey/Osprey.Centroid` (no references):
+`CentrixBasis` (Toeplitz Gram row; Rust's f64::EPSILON truncation, not .NET's double.Epsilon), `NonNegativeLasso`
+(coordinate descent, active set, KKT sweep every 10, log-parabola subgrid), `NoiseProfile` (IQR rough, residual +
+gap refinement in 20 Th windows), `SignalRegion`, `CentrixCentroider` (two passes, merge within sigma);
+`CentrixParams` holds Centrix's defaults. Not ported: sigma calibration (filter-string preset and CWT both misread
+the Stellar), so the caller gives sigma. `CentrixTest` ports Centrix's unit tests (681/681 pass).
+- **Parity with Rust Centrix** on `k2_jointprof.mzML` (6,000 spectra; `centrix_parity.py` in
+  `ai/.tmp/sessions/20261021-stellar`): the same 832,332 centroids, equal counts in every spectrum; 99.98% within
+  1e-4 Th and 1e-4 relative intensity (over 99% bit-identical m/z); worst 4e-4 Th and 0.4%, from BLAS vs sequential
+  summation of A'y under the 1e-6 absolute stopping tolerance.
+- **In the staggered joint solve** (0834d6fc03): each bin's apportioned share per pass is centroided in-process by
+  Centrix, in the pass's intensity units (its noise floor of 1 is in an instrument's units, not ions), replacing the
+  one-bin joint solve. `--joint` alone now gives what `--joint-profile` + WSL Centrix gave: k=2 truth scored
+  identically (median 0.982, ion-weighted 0.985, p10 0.926; `remux2/k2_jointcentrix.mzML`), 38 s for the slice
+  against 49 s + 25 s. Settings: `ScanningDemuxOptions.Centrix`; sigma from `--peak-sigma-th`, spacing from the grid.
+- **Tool:** `Osprey.DemuxTool --scheme none --centroid centrix` centroids any profile mzML/raw (MS1 sigma
+  `--centrix-sigma-ms1`, MS2 `--centrix-sigma`, tuning `--centrix-param Name=Value`); with a demux scheme,
+  `--centroid centrix` centroids the output as it is written (MS1 too, e.g. `--joint --centroid centrix`).
+- **Cost:** about 10 ms per spectrum on one thread (6,000 spectra: 29 s I/O, ~58 s centroiding). 579k lasso solves,
+  347 sweeps each on average, 6% stopping at the 2,000-sweep cap: neighboring basis peaks correlate at 0.91 (sigma
+  1.65 samples), so coordinate descent converges slowly. Inside the joint path it runs on the solve threads. An exact
+  active-set solve of each region's small active set would be much faster but would differ from Rust where Rust
+  stops unconverged; not done.
+- Rust Centrix in WSL took 808 s on one 4Th file and 2,329 s on one SuperOverlap file in the queued arms.
+
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
