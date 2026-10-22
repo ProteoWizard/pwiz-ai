@@ -1,11 +1,13 @@
 # TODO-20260928_AlphaPeptDeepSharp.md
 
 ## Branch Information
-- **Checkout**: `I:\git_i\sky_net10_alphapeptdeep`
-- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (master merged 2026-10-15)
+- **Checkout**: `I:\git_i\sky_net10_alphapeptdeep` (Nick); `C:\proj\pwiz` (Brendan's sessions, adopted
+  2026-10-22 with `/pw-adopt` while Nick is away two weeks)
+- **Branch**: `Skyline/work/20260928_AlphaPeptDeepSharp` (master merged 2026-10-15; again 2026-10-22 at
+  46af8ac754, which carries #4895's `.carafemodel` -> `.model.zip` rename and 4a-4c's CarafeSharp changes)
 - **Base**: `master` (#4717 CarafeSharp squash-merged 2026-10-13 as 28c7b7ff03 and merged into this branch)
 - **Created**: 2026-09-28
-- **Status**: In Progress
+- **Status**: In Progress - master merged 2026-10-22 (5dcac06743), all branch tests green; next `/pw-review 4849` with Brendan, then merge
 - **Module**: `skyline` (also carries CarafeSharp changes Skyline needs; the developer chose to keep them here)
 - **PR**: [#4849](https://github.com/ProteoWizard/pwiz/pull/4849) (draft; screenshots in nickshulman/pr-assets `pwiz/4849-alphapeptdeep`)
 
@@ -126,3 +128,24 @@ port of the CCS model.
         `bin\staging\<Config>\runtimes\win-x64\native`; `LibTorchRuntime.Load` now says so.
 - [ ] Later: fine-tuning from inside Skyline (today a .carafemodel comes from the CarafeSharp command line
       and Osprey's training export).
+
+## Progress Log
+
+### 2026-10-22 - Adopted; master merged (Brendan's session, Nick away)
+
+Brendan: first bring the branch to current CarafeSharp, build and pass tests, then `/pw-review`. Adopted in
+`C:\proj\pwiz` with `/pw-adopt`; `git merge origin/master` (46af8ac754: #4879, #4890, #4885, #4895, #4844,
+#4850, #4897, #4898). One textual conflict, `TestPerf/AlphapeptdeepBuildLibraryTest.cs`: both sides fixed the
+same teardown race (the new document loading libraries while `CheckForFileLocks` moves the folder); master's
+#4890 form (`WaitForDocumentLoaded` + `WaitForBackgroundLoaders`) taken. One semantic conflict: #4895 renamed
+`.carafemodel` to `.model.zip` (`CarafeModelFile.EXTENSION`, `LEGACY_EXTENSION`, `FilePatterns`,
+`IsModelFileName`); `CarafeModelChooserDlg.UpdateModels` listed a folder with `"*" + EXTENSION` and would have
+hidden every existing `.carafemodel`, so it enumerates `CarafeModelFile.FilePatterns` now. The model's
+`Open`/`Read` already accepted either name by content. Comments naming `.carafemodel` say `.model.zip`.
+Gates on the merge: Skyline solution build; CarafeSharp 106 passed + 8 NotExecuted (no Carafe reference
+data on this box) + inspection 0; Skyline `AlphapeptdeepLibraryBuilderUnitTest`, `TestAlphaPeptDeepUseGpu`,
+`CodeInspection`, and after `-Target TestPerf` (not in the solution build; the first run silently ran only the
+three built ones) `TestAlphaPeptDeepBuildLibrary` (6 s) and `TestCarafeModelBuildLibrary` (3 s), all pass
+on the CPU. Next: `/pw-review 4849` with Brendan; Mike's open question on the model chooser (grid with
+metadata - the "..." grid is the current answer) and Brendan's: the Use GPU checkbox stays enabled and explains
+itself (already the design).
