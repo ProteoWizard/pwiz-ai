@@ -129,6 +129,53 @@ port of the CCS model.
 - [ ] Later: fine-tuning from inside Skyline (today a .carafemodel comes from the CarafeSharp command line
       and Osprey's training export).
 
+## Design: "Carafe" as the source, the model as an editable list (Brendan, 2026-10-22; for Nick to react to)
+
+Brendan's interactive pass found the current UI wonky: the source is called AlphaPeptDeep when it is Carafe
+running the AlphaPeptDeep model, the "fine-tuned Carafe model" sits as an option under it, and the editable
+combo does not say what one is supposed to type into it. The change, decided in discussion (not built yet):
+
+1. **The source radio says `Carafe`** (`radioAlphaSource`, group box "Carafe Options"). Internals keep their
+   names (`AlphapeptdeepLibraryBuilder`, the `AlphaPeptDeep` test property): the builder IS the AlphaPeptDeep-
+   format predictor, and a rename is churn with no user-visible value. The status line "Predicting with
+   AlphaPeptDeep on the GPU/CPU" stays true and stays.
+2. **One `Model:` combo in the standard editable-list paradigm** (`SettingsListComboDriver`): the uneditable
+   default `Default (AlphaPeptDeep)` (`ExcludeDefaults = 1`) first, the user's fine-tuned models after it, then
+   `<Add...>`, `<Edit current...>`, `<Edit list...>`. A `DropDownList`: no typed path, so the "file does not
+   exist" validation goes; the editable path box, the "..." button and the recent-10-by-side-effect list go
+   with it (`CarafeModelList` as a list of paths, `MAX_RECENT_CARAFE_MODELS`, `AddRecentCarafeModel`,
+   `RecentCarafeModels`, the owner-drawn rows in the main combo).
+3. **The item** is `CarafeModelSpec : XmlNamedElement` - name + file path, serialized in `user.config` in a
+   `CarafeModelList : SettingsList<CarafeModelSpec>`, `IItemEditor<CarafeModelSpec>`. The file's metadata
+   (instrument, gradient, precursor m/z, NCE, fragmentation, training runs, held-out cosine and R2, date;
+   `CarafeModelChoice` reads it today through `CarafeModelFile.ReadDescription`) is read from the file when
+   shown, never stored, so a moved or deleted file shows as missing rather than describing a file that is
+   gone. A named spec rather than a bare path, so that later Osprey's one command and the Skyline MCP can
+   refer to a model by name.
+4. **`<Add...>` and `<Edit current...>`** open a small item editor: Name, File with Browse... (OpenFileDialog,
+   `CarafeModelFile.FilePatterns`: `*.model.zip;*.carafemodel`), and below them the file's details read-only
+   (what `CarafeSharp --model_info` prints, in the grid's columns), refreshed when the file changes. One
+   model per Add, as every other list in Skyline adds one item (a folder-at-once add was considered and
+   dropped: a model is a deliberate choice, like a library).
+5. **`<Edit list...>` opens Nick's grid as a custom list editor** (`CarafeModelList` overrides
+   `SettingsListBase.EditList`, as `ReportSpecList` does with its own form): the list's models as rows with
+   the same sortable columns, and Add..., Edit..., Remove, Up, Down. This is where a user compares models
+   to pick the one matching the instrument and method (Mike, 2026-10-21); the item editor alone cannot show
+   that. `CarafeModelChooserDlg` becomes this editor: the Folder box and its browse go; `FolderPath`,
+   `GetInitialFolder` and `Settings.Default.CarafeModelDirectory` survive only as the start folder of the
+   file dialog.
+6. **The combo's rows** are `GetDisplayName` strings, so the dropdown is plain text; start with a one-line
+   display name (`<name> - <instrument>, <gradient> min, NCE <n>`) and judge whether that is enough to
+   recognise a chosen model, since the comparison lives in the grid.
+7. Untouched: the builder, `TorchRuntimes`, Use GPU (orthogonal to the model, stays in the group),
+   `CarafeModelFile`, the tests' mechanics. `TestCarafeModelBuildLibrary` drives `<Edit list...>` -> Add...
+   (or `<Add...>`) with the test model instead of the chooser's folder; `TestAlphaPeptDeepUseGpu` unchanged.
+   `PeptideSettingsUI.BuildLibrary`'s recent-model update (from the review fixes) goes with the recent list.
+
+Open for Nick: whether `Default (AlphaPeptDeep)` should be the wording (Brendan prefers it to a bare
+"AlphaPeptDeep": it says what happens when you choose nothing); and whether the one-line display name
+suffices or the owner-drawn two-line rows should come back for the list items.
+
 ## Progress Log
 
 ### 2026-10-22 - Adopted; master merged (Brendan's session, Nick away)
