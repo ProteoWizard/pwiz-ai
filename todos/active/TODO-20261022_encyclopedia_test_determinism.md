@@ -68,6 +68,8 @@ the thread count (32 -> 1, two places).
 
 - [x] `TestPerf/EncyclopeDiaSearchTutorialTest.cs`: pin EncyclopeDIA to one thread, with a comment on why
 - [x] `TestTutorial/TutorialAuditLogs/en/TestEncyclopeDiaSearchTutorialDraft.log`: re-recorded (only 32 -> 1)
+- [x] fr/ja/tr/zh baselines of the same log: 32 -> 1 in both places (Copilot review; 1526b5215c). Verified with
+      a French run (passed, 217 s)
 - [x] No screenshot or tutorial text shows the thread count (it is an additional setting, not on the settings
       page; no tutorial HTML for this draft in the repo)
 - [x] Gates: build 0 warnings, CodeInspection passed, final normal-mode soak 3/3
