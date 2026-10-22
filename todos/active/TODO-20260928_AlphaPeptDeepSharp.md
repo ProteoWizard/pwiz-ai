@@ -133,7 +133,10 @@ port of the CCS model.
 
 Brendan's interactive pass found the current UI wonky: the source is called AlphaPeptDeep when it is Carafe
 running the AlphaPeptDeep model, the "fine-tuned Carafe model" sits as an option under it, and the editable
-combo does not say what one is supposed to type into it. The change, decided in discussion (not built yet):
+combo does not say what one is supposed to type into it. The chooser is folder-shaped where the user's act
+is "this file": one model means browsing for its parent folder, and a folder holding several models cannot
+be picked from one at a time without separating the files into folders. The change, decided in discussion
+(not built yet):
 
 1. **The source radio says `Carafe`** (`radioAlphaSource`, group box "Carafe Options"). Internals keep their
    names (`AlphapeptdeepLibraryBuilder`, the `AlphaPeptDeep` test property): the builder IS the AlphaPeptDeep-
@@ -217,3 +220,7 @@ by the folder setters. Dropped as not worth it: nothing else. Gates: CarafeSharp
 0; Skyline solution and TestPerf builds; the five branch tests pass. Next: Brendan's interactive UI testing
 on a Release build; then TeamCity, human review, merge.
 Brendan: the GPU probe belongs behind `LongWaitDlg` with an indeterminate (marquee) bar - the Skyline wrapper for a potentially long operation on a background thread - not a bare thread that re-enables the box. Done (the `Action` overload, no cancel, shown past 500 ms; resource "Looking for an NVIDIA GPU"); the five tests pass; Release rebuilt for his UI pass.
+
+### 2026-10-22 - "No NVIDIA GPU" in a harness-launched Skyline (Brendan)
+
+Brendan checked Use GPU in a Skyline paused inside a SkylineTester tutorial run (TestRunner `pause=-1`) and got "No NVIDIA GPU was found" on an RTX 4000 Ada (driver 596.71, CUDA 13.2, compute 8.9). Root cause: not the probe - `CudaDriver.Find()` from the built `CarafeSharp.Models.dll` returns the driver in the same RDP session (`ai/.tmp/sessions/20261022-libcache/Probe-Cuda.ps1` and a reflection call both confirm) - but `TorchRuntimes`'s constructor nulled the driver whenever `Program.UnitTest` was set, which a harness-launched Skyline shares with a real test. Fix: the override is gone; `TestAlphaPeptDeepBuildLibrary` and `TestCarafeModelBuildLibrary` set `CudaDriver = null` on the dialog's `TorchRuntimes` themselves (before selecting AlphaPeptDeep, so the probe never runs in them). Five tests pass; Release rebuilt. Lesson for the design above: nothing in product code should tell a test from a developer driving Skyline through the harness.
