@@ -338,6 +338,31 @@ nodes, merged into one library) when the cluster has several GPUs - not a new ta
    ends a run cleanly after N tasks have run; `regression.ps1 -StepwiseOneCommand` (opt-in, mode 13)
    runs the tuned one command on Stellar that way, one task per run, against a straight-through run.
 
+## Second-pass levers - for Brendan and Mike (2026-10-22)
+
+Brendan: the minimum search is the first pass with a cut-off applied, written to a `.blib`; everything
+the second pass adds is a factor that changes that result. Decide with Mike which of these a USER may
+turn off (options, in `--help`) and which only a DEVELOPER may (`OSPREY_*` variables, for testing), and
+whether "no second pass at all" is a user option. What exists today (2026-10-22, master + #4898):
+
+| Step (task) | What it changes | Switch today |
+|---|---|---|
+| First pass: SVM, run and experiment q-values (FirstPassFDR) | the baseline every later step starts from | always on; classifier `OSPREY_FDR_MODEL` (dev), C selection `OSPREY_SVM_C_TOLERANCE` (dev), experiment aggregation `OSPREY_EXPERIMENT_AGG` (dev) |
+| Compaction gate (FirstPassFDR) | which precursors reach the second pass | `--reconciliation-compaction-fdr` (user) |
+| Cross-run consensus and reconciliation (FirstPassFDR plans, PerFileRescoring re-picks) | moves peaks to the consensus RT, imputes boundaries | none: `ReconciliationConfig.Enabled` exists but no option sets it (only a unit test); with one run it has nothing to do |
+| Multi-charge consensus (PerFileRescoring) | re-scores a run's charge states together; applies to one run too | none |
+| Gap-fill (PerFileRescoring) | adds peaks missing from a run | none |
+| Per-run second pass (PerFileRescoring) and experiment fold (SecondPassFDR) | the reported q-values | `OSPREY_PASS2_QVALUE` (dev): `protein-compact` (default, a constrained re-competition) or `transfer` (carries the first-pass values; no re-competition, but the second-pass machinery still runs); `OSPREY_PASS2_VERIFY_WORKER` (dev, test instrument) |
+| Protein inference and protein FDR (SecondPassFDR) | protein groups, protein q gate | `--protein-fdr`, `--shared-peptides`, `--fdr-level` (user) |
+| `.blib` write (SecondPassFDR) | the output | always |
+
+Gaps to decide: (1) no switch for "first pass + cut-off -> .blib" (the minimum search); the nearest is
+`OSPREY_PASS2_QVALUE=transfer`, which still runs Stage 6. (2) Reconciliation, multi-charge consensus and
+gap-fill have no switch at all, not even for developers. (3) Whether the user-facing ones belong in a
+"Second pass" help section. Mechanics: the task chain no longer assumes reconciliation (#4898 removed
+FirstPassFDR's refusals of one run and of reconciliation off), so turning steps off is a matter of
+switches, not of the HPC chain's shape.
+
 ## PR plan
 
 | PR | Holds | Gate beyond the standing ones |
@@ -1197,6 +1222,25 @@ GPU-tuned library. The search is the same 3.6-4.1 min in every arm. GPU use conf
 cpu-pretrained, cpu-tuned), each with osprey.log, contention.tsv, command.txt and timing.tsv.
 Gap: Osprey/CarafeSharp log no line naming the device a phase ran on; only the fallback warns.
 
+**One build, GPU when present (measured 2026-10-22, for 4d).** The CPU and CUDA builds differ only in the
+native libtorch payload (`runtimes/win-x64/native`: 271 MB vs 4.1 GB); the managed assemblies are the
+same, and the CUDA payload carries its own `torch_cpu.dll`. `TorchDevice` already falls back
+(`TryInitializeDeviceType(CUDA) && cuda.is_available()`). The CUDA build with `CUDA_VISIBLE_DEVICES=-1`
+and `--device gpu` logged "No CUDA device is available to this build; running on the CPU", predicted the
+pretrained Stellar library in 160.6 s (CPU build 143.4 s; a regression ran alongside), and wrote a library
+whose RefSpectra and RefSpectraPeaks are IDENTICAL to the CPU build's (484,908 spectra; the GPU library
+differs in every spectrum, as expected). Run: `D:\test\osprey-runs\cuda-4c\gpu-hidden-pretrained`. Not yet
+tested: a machine with no NVIDIA driver at all (a TeamCity cloud agent), a driver too old for CUDA 12.8,
+Linux, and pointing TorchSharp at a native folder chosen at run time.
+Proposal (Brendan's goal: no second build or install, GPU when present, CPU otherwise): one managed build
+in-process; the CPU payload ships as now; the CUDA payload is an on-demand download (Skyline's tool-download
+pattern) into a folder of its own; before the first torch call (the lazy seam already guarantees it is the
+library phases) Osprey loads the natives from that folder when an NVIDIA driver is present and the payload
+is installed, else the shipped CPU ones, and says which in the log (today nothing names the device a phase
+ran on). A separate GPU CarafeSharp.exe process is the fallback only if the native folder cannot be chosen
+in-process (or a host has already loaded CPU libtorch); the library phases are already file-in/file-out
+tasks, so that fallback is cheap.
+
 **Later the same night.** 7a7c451bc3 (agent): every stage task's `Inputs` completed to what it reads
 (library and manifest everywhere; FirstPassFDR + calibration; PerFileRescoring + spectra cache, scores,
 calibration, model, stratum under protein-compact, experiment and retained-ids sidecars; SecondPassFDR +
@@ -1225,3 +1269,17 @@ the same folder skips (outputs valid). Commit it, `OspreyDatasetRun.psm1` (-Link
 CI on #4898: all 16 checks green (Osprey Windows .NET build 4230347 and Linux .NET on 62b68b9cfc; TeamCity picked the
 PR up ~2 h after it opened). Left for Brendan: TeamCity Perf/Regression on pull/4898 (ask-first), review, merge.
 Morning handoff: `ai/.tmp/handoff-20261022_osprey_4c_morning.md`.
+
+### 2026-10-22 morning - One chain shape whatever the run count (Brendan)
+
+Brendan's review: a workflow manager should not have to count the tuning runs to choose the chain's shape.
+8e6a3a7338: `--task FirstPassFDR` accepts one input (the refusal said its files were "only useful when there
+are other runs to reconcile against", but Stage 5 trains the first-pass model and q-values for any count);
+`--training-search` again needs a stage task (its whole-search form, a18192152d's workaround, is gone).
+With one run PerFileRescoring is not a no-op: it re-scores the run's multi-charge consensus, gap-fills and
+writes its half of the second pass. `TestSubsetHpcTaskChainOneRun`: the one-run `-l` chain equals one-run
+straight-through (blib, every FDR sidecar, both experiment sidecars byte-identical). d1df38fa29: the
+reconciliation-off refusal removed too (no option can turn reconciliation off; FirstPassFDR has no
+ValidateSelection of its own now). Gates: Osprey 652/652 + inspection 0; mode 14 PASS on 8e6a3a7338 with
+15 nodes, Stellar's single tuning run as four stage nodes (node by node 20:26). Pushed; #4898 body updated.
+See "Second-pass levers" (above the PR plan) for the Mike discussion this raised.
