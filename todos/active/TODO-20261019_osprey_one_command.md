@@ -1310,3 +1310,5 @@ See "Second-pass levers" (above the PR plan) for the Mike discussion this raised
 ### 2026-10-22 - PR 4c merged
 
 PR #4898 merged as commit 46af8ac754 (squash approved by Brendan). All 17 checks green on d1df38fa29; TeamCity Perf/Regression 4230580 SUCCESS (triggered at Brendan's request). Shipped: `--task PredictTrainingLibrary|TrainModel|PredictLibrary`, `--training-search`, `--task-files`, completed stage declarations with the regression HPC chain staged from them, `--task FirstPassFDR` accepting one run and reconciliation off, regression mode 14, the folded workflow page. Not in 4c (moved on): installers and TeamCity artifacts (4d), and the CUDA build was measured rather than packaged (4d via #4849). The held pwiz-ai scripts (`Run-CarafeSharpWorkflow.ps1` reduced to one Osprey call, `OspreyDatasetRun.psm1 -LinkFrom` from `--task-files`) committed with this entry. This TODO stays active for the `.libcache` retirement, #4849 and 4d.
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261022_osprey_libcache_and_4849.md` before starting work (.libcache retirement PR, then finishing #4849, then 4d).
