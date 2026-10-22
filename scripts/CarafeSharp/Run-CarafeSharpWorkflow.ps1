@@ -166,7 +166,7 @@ $presets = @{
         MinPepMz    = '392'
         MaxPepMz    = '900'
         MaxCharge   = '4'
-        CarafeExtra = @('-ms_instrument', 'SciexTOF', '-nce', '27')
+        CarafeExtra = @('--ms-instrument', 'SciexTOF', '--nce', '27')
     }
 }
 $preset = $presets[$Dataset]
@@ -280,19 +280,19 @@ function Invoke-Step([string]$Name, [string]$Exe, [string[]]$CliArgs) {
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 
 # Carafe's library-generation parameters, identical for stage 2 and stage 4-5, with .blib output.
-# CarafeSharp reports the XIC options (-itol, -rf, ...) as Osprey's to decide when training.
+# CarafeSharp reports the XIC options (--itol, --rf, ...) as Osprey's to decide when training.
 $libGen = @(
-    '-fdr', '0.01', '-itol', $preset.CarafeItol, '-itolu', $preset.CarafeItolU,
-    '-rf', '-rf_rt_win', 'auto', '-cor', '0.8', '-min_mz', '200',
-    '-n_ion_min', '2', '-c_ion_min', '2', '-mode', 'general', '-device', $Device,
-    '-enzyme', 'NoCut', '-miss_c', '1', '-fixMod', '1', '-varMod', '0', '-maxVar', '1', '-clip_n_m',
-    '-minLength', '7', '-maxLength', '35',
-    '-min_pep_mz', $preset.MinPepMz, '-max_pep_mz', $preset.MaxPepMz,
-    '-min_pep_charge', '2', '-max_pep_charge', $maxCharge,
-    '-lf_frag_mz_min', '200', '-lf_frag_mz_max', '1960', '-lf_top_n_frag', '20',
-    '-lf_min_n_frag', '2', '-lf_frag_n_min', '2', '-lf_type', 'blib',
-    '-se', 'Osprey', '-decoy_prefix', 'decoy_', '-nm', '-nf', '4', '-min_n', '4',
-    '-valid', '-na', '0', '-fast')
+    '--fdr', '0.01', '--itol', $preset.CarafeItol, '--itolu', $preset.CarafeItolU,
+    '--rf', '--rf-rt-win', 'auto', '--cor', '0.8', '--min-mz', '200',
+    '--n-ion-min', '2', '--c-ion-min', '2', '--mode', 'general', '--device', $Device,
+    '--enzyme', 'NoCut', '--miss-c', '1', '--fix-mod', '1', '--var-mod', '0', '--max-var', '1', '--clip-n-m',
+    '--min-length', '7', '--max-length', '35',
+    '--min-pep-mz', $preset.MinPepMz, '--max-pep-mz', $preset.MaxPepMz,
+    '--min-pep-charge', '2', '--max-pep-charge', $maxCharge,
+    '--lf-frag-mz-min', '200', '--lf-frag-mz-max', '1960', '--lf-top-n-frag', '20',
+    '--lf-min-n-frag', '2', '--lf-frag-n-min', '2', '--lf-type', 'blib',
+    '--se', 'Osprey', '--decoy-prefix', 'decoy_', '--nm', '--nf', '4', '--min-n', '4',
+    '--valid', '--na', '0', '--fast')
 if ($preset.CarafeExtra) { $libGen += $preset.CarafeExtra }
 
 $cacheDir = if ($CacheDir) { $CacheDir } else { Join-Path $WorkDir 'spectra-cache' }
@@ -318,29 +318,29 @@ $projectDir   = Join-Path $WorkDir 'osprey_project'
 $libraryBlib  = 'carafe_spectral_library.blib'
 
 # Always passed: the RT model is the run's choice, not whatever the CarafeSharp build defaults to.
-$rtModelArgs = @('-rt_model', $RtModel)
+$rtModelArgs = @('--rt-model', $RtModel)
 
 $digestCommon = @(
-    '-enzyme', '2', '-miss_c', '1', '-minLength', '7', '-maxLength', '35',
-    '-min_pep_charge', '2', '-max_pep_charge', $maxCharge)
+    '--enzyme', '2', '--miss-c', '1', '--min-length', '7', '--max-length', '35',
+    '--min-pep-charge', '2', '--max-pep-charge', $maxCharge)
 
 if ($StageList -contains '1a') {
     Invoke-Step 'Stage 1a: train FASTA (target+decoy)' $CarafeSharpExe (@(
-        '-build_entrapment_fasta', $trainFasta, '-db', $InputFasta, '-manifest', $trainPairing) + $digestCommon)
+        '--build-entrapment-fasta', $trainFasta, '--db', $InputFasta, '--manifest', $trainPairing) + $digestCommon)
 }
 
 if ($StageList -contains '1b') {
-    $entrapArgs = @('-entrapment')
-    if ($EntrapmentSource -eq 'natural') { $entrapArgs += @('-entrapment_db', $ForeignFasta) }
-    if ($EntrapmentRatio -ne 1.0) { $entrapArgs += @('-entrapment_ratio', "$EntrapmentRatio") }
-    if ($NoSimilarityGate) { $entrapArgs += '-no_similarity_gate' }
+    $entrapArgs = @('--entrapment')
+    if ($EntrapmentSource -eq 'natural') { $entrapArgs += @('--entrapment-db', $ForeignFasta) }
+    if ($EntrapmentRatio -ne 1.0) { $entrapArgs += @('--entrapment-ratio', "$EntrapmentRatio") }
+    if ($NoSimilarityGate) { $entrapArgs += '--no-similarity-gate' }
     Invoke-Step "Stage 1b: library FASTA ($EntrapmentSource entrapment)" $CarafeSharpExe (@(
-        '-build_entrapment_fasta', $libFasta, '-db', $InputFasta, '-manifest', $libPairing) + $digestCommon + $entrapArgs)
+        '--build-entrapment-fasta', $libFasta, '--db', $InputFasta, '--manifest', $libPairing) + $digestCommon + $entrapArgs)
 }
 
 if ($StageList -contains '2') {
     Invoke-Step 'Stage 2: initial library' $CarafeSharpExe (@(
-        '-db', $trainFasta, '-o', $initialLib, '-pairing_manifest', $trainPairing) + $libGen + $rtModelArgs)
+        '--db', $trainFasta, '--o', $initialLib, '--pairing-manifest', $trainPairing) + $libGen + $rtModelArgs)
 }
 
 if ($StageList -contains '3') {
@@ -353,8 +353,8 @@ if ($StageList -contains '3') {
 
 if ($StageList -contains '4-5') {
     Invoke-Step 'Stage 4/5: fine-tune + final library' $CarafeSharpExe (@(
-        '-db', $libFasta, '-i', $trainBlib, '-ms', $trainMzml, '-o', $newLib,
-        '-pairing_manifest', $libPairing) + $libGen + @('-tf', 'all') + $rtModelArgs)
+        '--db', $libFasta, '--i', $trainBlib, '--ms', $trainMzml, '--o', $newLib,
+        '--pairing-manifest', $libPairing) + $libGen + @('--tf', 'all') + $rtModelArgs)
 }
 
 if ($StageList -contains '6') {

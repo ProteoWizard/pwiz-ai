@@ -26,9 +26,11 @@ if ($Tool) {
 }
 $lib = Join-Path $dataRoot 'Eclipse-staggered\carafe_spectral_library+decoy+entrapment.tsv'
 $sw = [Diagnostics.Stopwatch]::StartNew()
+# Compare-DemuxSearches.py reads output.stats.tsv, which Osprey writes only under this variable.
+$env:OSPREY_DIANN_REPORTS = '1'
 & $Exe -i (Join-Path $in "$($stems[0]).mzML") -i (Join-Path $in "$($stems[1]).mzML") `
     -l $lib -o (Join-Path $out 'output.blib') --resolution hram --fdr-level precursor --protein-fdr 0.01 --decoys-in-library `
-    --fdrbench (Join-Path $out 'fdrbench.tsv') --report (Join-Path $out 'report.tsv') `
+    --fdrbench (Join-Path $out 'fdrbench.tsv') `
     --cache-dir $cache --output-dir $out --threads $Threads --timestamp --memstamp `
     --log-file (Join-Path $out 'osprey.log') *> (Join-Path $out 'console.log')
 "search-${Name}: exit $LASTEXITCODE, $([math]::Round($sw.Elapsed.TotalSeconds)) s"

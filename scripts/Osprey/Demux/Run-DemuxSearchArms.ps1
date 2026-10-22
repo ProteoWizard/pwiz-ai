@@ -71,9 +71,11 @@ foreach ($seed in $seedList) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     "[$(Get-Date -Format s)] START $arm exe=$Exe engine=$Engine interpolation=$Interpolation block=$Block output=$Output seed=$seed train=$MaxTrainSize runs=$($stems.Count)" |
         Tee-Object -FilePath $summary -Append
+    # Compare-DemuxSearches.py reads output.stats.tsv, which Osprey writes only under this variable.
+    $env:OSPREY_DIANN_REPORTS = '1'
     & $Exe @inputs -l $Library -o (Join-Path $out 'output.blib') --resolution hram --fdr-level precursor `
         --protein-fdr 0.01 --decoys-in-library --demux auto `
-        --fdrbench (Join-Path $out 'fdrbench.tsv') --report (Join-Path $out 'report.tsv') `
+        --fdrbench (Join-Path $out 'fdrbench.tsv') `
         --cache-dir $cache --output-dir $out --timestamp --memstamp --perf-stats --verbose `
         --log-file (Join-Path $out 'osprey.log') *> (Join-Path $out 'console.log')
     "[$(Get-Date -Format s)] END $arm exit $LASTEXITCODE, $([math]::Round($sw.Elapsed.TotalSeconds)) s" |
