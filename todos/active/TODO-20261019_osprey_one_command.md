@@ -1241,6 +1241,19 @@ ran on). A separate GPU CarafeSharp.exe process is the fallback only if the nati
 in-process (or a host has already loaded CPU libtorch); the library phases are already file-in/file-out
 tasks, so that fallback is cheap.
 
+**4d direction (Brendan, 2026-10-22).** Osprey becomes a separate download for Skyline, like the other
+search engines: Skyline's ZIP installers are under 100 MB and most users will not want Osprey, so it cannot
+ride in Skyline's install. Once Osprey is a download, the user chooses CUDA as they do for AlphaPeptDeep.
+The mechanism exists in Nick's [#4849](https://github.com/ProteoWizard/pwiz/pull/4849) (open), in
+`CarafeSharp.Models`, which Osprey already references: `LibTorchRuntime` loads a chosen libtorch folder
+(CPU or CUDA) into the process before TorchSharp needs it (one runtime per process, never beside
+TorchSharp.dll); `LibTorchRuntimeInstaller` downloads the CUDA 12.8 runtime on demand (~2.9 GB from nuget.org,
+4.1 GB installed, SHA-512 verified) into `Tools\libtorch-cuda-12.8-win-x64.2.10.0`; `CudaDriver` explains a
+missing or old driver or GPU. So the in-process design above is proven there, and 4d is: Osprey (standalone
+and as Skyline's download) uses the same runtime folder and installer - one CUDA download shared by Skyline's
+AlphaPeptDeep and Osprey - and logs the device; then the untested cases (no driver, old driver, Linux).
+4d follows #4849's merge. Perf/Regression on pull/4898 triggered 2026-10-22 morning (Brendan): build 4230580.
+
 **Later the same night.** 7a7c451bc3 (agent): every stage task's `Inputs` completed to what it reads
 (library and manifest everywhere; FirstPassFDR + calibration; PerFileRescoring + spectra cache, scores,
 calibration, model, stratum under protein-compact, experiment and retained-ids sidecars; SecondPassFDR +
