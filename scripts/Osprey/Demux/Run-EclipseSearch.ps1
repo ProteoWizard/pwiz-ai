@@ -12,9 +12,10 @@ $out = Join-Path $root "search-$Name"
 $cache = Join-Path $root "$Name-cache"
 $stems = 'Ecl_2022_0705_Beads_EV13_SAXN_12mz_10', 'Ecl_2022_0705_Beads_EV14_SAXN_12mz_17'
 New-Item -ItemType Directory -Force $in, $out, $cache | Out-Null
-$libcache = Join-Path $cache 'carafe_spectral_library+decoy+entrapment.tsv.libcache'
-if (-not (Test-Path $libcache)) {
-    Copy-Item (Join-Path $root 'msconvert\carafe_spectral_library+decoy+entrapment.tsv.libcache') $cache
+$derivedLibrary = Join-Path $cache 'carafe_spectral_library+decoy+entrapment.tsv.blib'
+if (-not (Test-Path $derivedLibrary)) {
+    $source = Join-Path $root 'msconvert\carafe_spectral_library+decoy+entrapment.tsv.blib'
+    if (Test-Path $source) { Copy-Item $source $cache }
 }
 if ($Tool) {
     foreach ($stem in $stems) {

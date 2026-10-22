@@ -386,9 +386,9 @@ if (-not (Test-Path $workRoot)) {
         Copy-Item (Join-Path $datasetRoot $mzml) (Join-Path $inputsDir (Split-Path $mzml -Leaf))
     }
     Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $inputsDir $libraryName)
-    $libcache = Join-Path $datasetRoot ($libraryName + '.libcache')
+    $libcache = Join-Path $datasetRoot ($libraryName + '.blib')
     if (Test-Path $libcache) {
-        Copy-Item $libcache (Join-Path $inputsDir ($libraryName + '.libcache'))
+        Copy-Item $libcache (Join-Path $inputsDir ($libraryName + '.blib'))
     }
 }
 
@@ -673,8 +673,8 @@ function Stage-Inputs-Stage1to4 {
             (Join-Path $sIn (Split-Path $mzml -Leaf))
     }
     Copy-Item (Join-Path $inputsDir $libraryName) (Join-Path $sIn $libraryName)
-    $cache = Join-Path $inputsDir ($libraryName + '.libcache')
-    if (Test-Path $cache) { Copy-Item $cache (Join-Path $sIn ($libraryName + '.libcache')) }
+    $cache = Join-Path $inputsDir ($libraryName + '.blib')
+    if (Test-Path $cache) { Copy-Item $cache (Join-Path $sIn ($libraryName + '.blib')) }
 }
 
 function Run-Stage1to4 {
@@ -1093,8 +1093,8 @@ function Freeze-Stage1to4 {
         if (Test-Path $s) { Copy-Item $s (Join-Path $next (Split-Path $mzml -Leaf)) }
     }
     Copy-Item (Join-Path $inputsDir $libraryName) (Join-Path $next $libraryName)
-    $cache = Join-Path $inputsDir ($libraryName + '.libcache')
-    if (Test-Path $cache) { Copy-Item $cache (Join-Path $next ($libraryName + '.libcache')) }
+    $cache = Join-Path $inputsDir ($libraryName + '.blib')
+    if (Test-Path $cache) { Copy-Item $cache (Join-Path $next ($libraryName + '.blib')) }
     # From the TOOL dir, not the snapshot dir: the cache is not a captured artifact.
     Copy-SpectraCacheForward -From (Get-StageToolDir 'stage1to4') -To $next
 }

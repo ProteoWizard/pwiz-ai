@@ -628,9 +628,9 @@ function Invoke-OspreyDatasetRun {
     # .spectra.bin beside its source on its own (ai/docs/osprey-run-layout.md: the cache "is
     # not a separate tree"), so the runner used to pass --cache-dir <data dir> only as a
     # restatement of that default. It was not harmless: --cache-dir also moves the library's
-    # .libcache lookup, so a post-scoring leg missed the .libcache the straight run wrote
-    # beside the library and re-parsed the 13 GB SEA-AD TSV - without the retained-fragment
-    # skip - writing a second 2.2 GB .libcache into the data directory.
+    # derived-library lookup, so a post-scoring leg missed the derived library the straight
+    # run wrote beside the library and re-parsed the 13 GB SEA-AD TSV - without the
+    # retained-fragment skip - writing a second copy into the data directory.
     if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics

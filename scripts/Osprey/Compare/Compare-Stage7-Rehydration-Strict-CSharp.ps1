@@ -119,9 +119,9 @@ function Stage-DatasetFiles {
     }
     Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $Dir $libraryName)
     if ($IncludeLibcache) {
-        $cache = Join-Path $datasetRoot ($libraryName + '.libcache')
+        $cache = Join-Path $datasetRoot ($libraryName + '.blib')
         if (Test-Path $cache) {
-            Copy-Item $cache (Join-Path $Dir ($libraryName + '.libcache'))
+            Copy-Item $cache (Join-Path $Dir ($libraryName + '.blib'))
         }
     }
 }

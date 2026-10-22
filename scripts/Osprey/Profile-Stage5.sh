@@ -31,7 +31,7 @@ echo ""
 if [ ! -f "$RUSTDIR/$SCORES_NAME" ]; then
     echo "=== Rust Stage 1-4 freeze ==="
     mkdir -p "$RUSTDIR"
-    cp "$INPUTS/$MZML_NAME" "$INPUTS/$LIB_NAME" "$INPUTS/${LIB_NAME}.libcache" "$RUSTDIR/" 2>/dev/null || true
+    cp "$INPUTS/$MZML_NAME" "$INPUTS/$LIB_NAME" "$INPUTS/${LIB_NAME}.blib" "$RUSTDIR/" 2>/dev/null || true
     cd "$RUSTDIR"
     time "$OSPREY_RUST" \
         -i "$MZML_NAME" -l "$LIB_NAME" -o /tmp/_freeze_rust.blib \

@@ -86,8 +86,8 @@ if ($SkipCs -and (Test-Path (Join-Path $csDir 'output.blib'))) {
     New-Item -ItemType Directory -Path $csDir -Force | Out-Null
     foreach ($f in $mzmls) { Copy-Item (Join-Path $datasetRoot $f) (Join-Path $csDir $f) }
     Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $csDir $libraryName)
-    $cache = Join-Path $datasetRoot ($libraryName + '.libcache')
-    if (Test-Path $cache) { Copy-Item $cache (Join-Path $csDir ($libraryName + '.libcache')) }
+    $cache = Join-Path $datasetRoot ($libraryName + '.blib')
+    if (Test-Path $cache) { Copy-Item $cache (Join-Path $csDir ($libraryName + '.blib')) }
 
     $cliArgs = @()
     foreach ($f in $mzmls) { $cliArgs += @('-i', $f) }

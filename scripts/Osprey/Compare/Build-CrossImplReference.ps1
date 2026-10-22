@@ -76,8 +76,8 @@ New-Item -ItemType Directory -Path $workDir -Force | Out-Null
 function Stage-Inputs {
     foreach ($f in $mzmls) { Copy-Item (Join-Path $datasetRoot $f) (Join-Path $workDir $f) -Force }
     Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $workDir $libraryName) -Force
-    $cache = Join-Path $datasetRoot ($libraryName + '.libcache')
-    if (Test-Path $cache) { Copy-Item $cache (Join-Path $workDir ($libraryName + '.libcache')) -Force }
+    $cache = Join-Path $datasetRoot ($libraryName + '.blib')
+    if (Test-Path $cache) { Copy-Item $cache (Join-Path $workDir ($libraryName + '.blib')) -Force }
 }
 
 function Run-Rust {

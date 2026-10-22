@@ -59,7 +59,7 @@
     Expect this to be slow and large: the source library is ~13 GB and each variant is a
     full copy, streamed. Check free space before building several.
 
-    A freshly built variant has no .libcache beside it; Osprey builds one on first use,
+    A freshly built variant has no derived .blib beside it; Osprey builds one on first use,
     which makes that first run slower than later ones against the same variant.
 #>
 #requires -Version 7

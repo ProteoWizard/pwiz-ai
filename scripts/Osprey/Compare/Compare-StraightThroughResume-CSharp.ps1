@@ -87,11 +87,11 @@ if ($Force -and (Test-Path $rootDir)) {
 }
 New-Item -ItemType Directory -Path $workDir -Force | Out-Null
 
-# Stage inputs (mzML + library + libcache) into the work dir.
+# Stage inputs (mzML + library + its derived .blib) into the work dir.
 foreach ($f in $mzmls) { Copy-Item (Join-Path $datasetRoot $f) (Join-Path $workDir $f) }
 Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $workDir $libraryName)
-$libcache = Join-Path $datasetRoot ($libraryName + '.libcache')
-if (Test-Path $libcache) { Copy-Item $libcache (Join-Path $workDir ($libraryName + '.libcache')) }
+$libcache = Join-Path $datasetRoot ($libraryName + '.blib')
+if (Test-Path $libcache) { Copy-Item $libcache (Join-Path $workDir ($libraryName + '.blib')) }
 
 function Invoke-Run {
     param([string]$LogName)

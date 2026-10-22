@@ -112,7 +112,7 @@ TDP-43 is Astral, so the runner uses `--resolution hram` (the Stellar regression
 * **Measured, 6 files, default settings, straight through**: PerFileScoring 1,698 s
   (~4.7 min/file) with cache hits, peak working set 29.1 GB, and Stage 5 entered on the
   counts-only projection path with no resident pool. The library alone is 4.4 GB managed.
-* **Library load is ~90 s** and writes a 2.2 GB `.libcache`. It lands in the **cache**
+* **Library load is ~90 s** and writes the derived `<lib>.blib` (the `.libcache` it replaced was 2.2 GB). It lands in the **cache**
   directory (`ResolveCacheDir`), so with the default layout it is written beside the raws
   and reused by every later run.
 * Disk budget for the full pipeline on this set is **~2,358 GB** (see

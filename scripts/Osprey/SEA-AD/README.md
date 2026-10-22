@@ -132,7 +132,7 @@ should be rebuilt. Each variant built since carries a `PROVENANCE.txt` (source, 
 tool revision).
 
 Budget for it: the source library is ~13 GB and each variant is a full streamed copy. A
-fresh variant has no `.libcache`, so Osprey builds one on its first use.
+fresh variant has no derived `<lib>.blib`, so Osprey builds one on its first use.
 
 ## Running
 

@@ -19,9 +19,9 @@ Input directory layout (the Carafe entrapment library drop):
     osprey_library_db_peptides.fasta   peptide FASTA (optional; filtered
                                        the same way when present)
 
-Anything else in the source directory (.libcache, PROVENANCE.txt, zips) is
-NOT copied: a .libcache describes the source library, not the variant, and
-Osprey rebuilds one on first use.
+Anything else in the source directory (the derived <lib>.blib, PROVENANCE.txt, zips)
+is NOT copied: a derived library describes the source library, not the variant,
+and Osprey builds one for the variant on first use.
 
 -------------------------------------------------------------------------
 Row classes. Determined ENTIRELY from the ProteinID column:

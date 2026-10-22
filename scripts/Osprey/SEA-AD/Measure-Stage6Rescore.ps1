@@ -300,7 +300,7 @@ foreach ($m in $mzmls) {
     $cache = Join-Path $dataDir ($m.BaseName + '.spectra.bin')
     if (Test-Path $cache) { Add-StagedFile -Src $cache -DestDir $phaseDir }
 }
-foreach ($p in @($libPath, ($libPath + '.libcache'), $manifestPath)) {
+foreach ($p in @($libPath, ($libPath + '.blib'), $manifestPath)) {
     if (Test-Path $p) { Add-StagedFile -Src $p -DestDir $phaseDir }
 }
 

@@ -207,9 +207,9 @@ function Invoke-PipelineRun {
         Copy-Item (Join-Path $datasetRoot $f) (Join-Path $workdir $f)
     }
     Copy-Item (Join-Path $datasetRoot $library) (Join-Path $workdir $library)
-    $libcache = Join-Path $datasetRoot ($library + '.libcache')
+    $libcache = Join-Path $datasetRoot ($library + '.blib')
     if (Test-Path $libcache) {
-        Copy-Item $libcache (Join-Path $workdir ($library + '.libcache'))
+        Copy-Item $libcache (Join-Path $workdir ($library + '.blib'))
     }
 
     # Build CLI args. Full pipeline (no --task), no diagnostic

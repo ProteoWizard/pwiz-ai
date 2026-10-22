@@ -7,7 +7,7 @@
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 before it; 4b merged 2026-10-21 as #4885; the clean-up PR merged 2026-10-21 as #4895; 4c (HPC addressing, task declarations, one chain shape) merged 2026-10-22 as #4898 (46af8ac754). Next: retire `.libcache` (small PR), then finish #4849 (Nick away two weeks), then 4d (Osprey as a download using #4849's libtorch runtime).
+- **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 before it; 4b merged 2026-10-21 as #4885; the clean-up PR merged 2026-10-21 as #4895; 4c (HPC addressing, task declarations, one chain shape) merged 2026-10-22 as #4898 (46af8ac754). `.libcache` retirement on `Skyline/work/20261022_osprey_retire_libcache` (2026-10-22, PR pending). Next: finish #4849 (Nick away two weeks), then 4d (Osprey as a download using #4849's libtorch runtime).
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
@@ -1312,3 +1312,32 @@ See "Second-pass levers" (above the PR plan) for the Mike discussion this raised
 PR #4898 merged as commit 46af8ac754 (squash approved by Brendan). All 17 checks green on d1df38fa29; TeamCity Perf/Regression 4230580 SUCCESS (triggered at Brendan's request). Shipped: `--task PredictTrainingLibrary|TrainModel|PredictLibrary`, `--training-search`, `--task-files`, completed stage declarations with the regression HPC chain staged from them, `--task FirstPassFDR` accepting one run and reconciliation off, regression mode 14, the folded workflow page. Not in 4c (moved on): installers and TeamCity artifacts (4d), and the CUDA build was measured rather than packaged (4d via #4849). The held pwiz-ai scripts (`Run-CarafeSharpWorkflow.ps1` reduced to one Osprey call, `OspreyDatasetRun.psm1 -LinkFrom` from `--task-files`) committed with this entry. This TODO stays active for the `.libcache` retirement, #4849 and 4d.
 
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261022_osprey_libcache_and_4849.md` before starting work (.libcache retirement PR, then finishing #4849, then 4d).
+
+### 2026-10-22 - `.libcache` retired (branch `Skyline/work/20261022_osprey_retire_libcache`, off 46af8ac754)
+
+The rule (Brendan, above): a cache is rebuilt from its source, never upgraded or imported in place, and a
+renamed cache format removes its predecessor. `Osprey.IO/LibraryCache.cs` deleted outright (`LoadCache`,
+`SaveCache`, the v6 format), with its 9 `IOTest` cases and 7 resx strings (en/ja/zh-Hans); `LibraryLoader`
+lost the honoured-first branch, `LogCachedPairingSummary`, `RecoverPairingStats`, and `LibraryCompositionHash`
+folded into `DerivedLibraryHash` (same hashed text, so every existing derived `.blib` stays valid). Once the
+derived library is in place - written by the load, or read by it - the loader deletes `<lib>.libcache` at
+exactly the cache-dir path the old writer used (`LibraryLoader.RETIRED_CACHE_EXT`), logs `Removed the library
+cache '<path>': the derived library replaces it.`, and touches nothing else; a failed delete is a warning.
+Pinned in `SubsetPipelineTest.TestLibraryLoadsIdenticallyFromTsvAndBlib` (`DerivedLibraryDifferences` plants
+one, asserts it gone and the line logged once, not on the second load). `regression.ps1`
+`Copy-LibraryDerivedInto` relays the `.blib` only; `regression.html` mode 3 row says nodes are staged from
+`--task-files` and a missing declared input or output fails the leg. Docs: P18 in `00-pipeline-architecture.md`
+("Eighteen rules"), `.libcache` rows and notes out of 00/01/13/14, the workflow page's stage-1 box and task
+header, and the code comments. pwiz-ai (uncommitted until the PR): the active `ai/scripts/Osprey` relays
+copy `<lib>.blib` where they copied `<lib>.libcache`; guide and README wording.
+Gates: Osprey Debug 642/642 (651 - 9 cache tests) + inspection 0 (first inspection run reported 50
+`CSharpErrors` in untouched files after "Roslyn Worker process exited unexpectedly"; the re-run was clean).
+`regression.ps1 -Dataset Stellar` PASS (mode 1 vs golden, 1c, 4, streamed join, 6; straight-through 02:59,
+warm 0.2 s). `/code-review medium`: 6 findings, 2 fixed (the round-trip test now plants the `.libcache` again
+before the read load and pins the read-arm delete; `RETIRED_CACHE_EXT`'s doc names its retirement point: after
+the first public release, which no `.libcache` will predate), 4 dropped - a cache with its source missing is
+not trusted, by the rule (`.spectra.bin` fails without its raw too; the derived path already required the
+source; HPC staging declares the library an input); a double "Removed" log when two workers race on one cache
+dir is harmless and the same race as the derived write; the `regression.html` mode 3 sentence is 4c's pending
+doc item, folded in on purpose; ja/zh-Hans pick new keys up in the translation pass, as the derived-library
+strings did.

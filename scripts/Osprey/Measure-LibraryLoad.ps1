@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-    Time Osprey's library load (the .tsv or .blib parse, or the .libcache read) in isolation.
+    Time Osprey's library load (the .tsv or .blib parse, or the derived .blib read) in isolation.
 
 .DESCRIPTION
     Runs `Osprey.exe -l <library> --export-library ... --perf-stats` once per rep, each rep in a
-    fresh work directory so no library cache is hit, and prints the `[TIMING] Library parse:` (or
-    `Library cache read:`) line of each rep. The export is the lightest command that loads a
-    library and nothing else; its own write is after the measured line and is not reported.
+    fresh work directory so no derived library is hit, and prints the `[TIMING] Library parse:`
+    line of each rep. The export is the lightest command that loads a library and nothing else;
+    its own write is after the measured line and is not reported.
 
     With -WarmCache, each rep's work directory is reused from a first unmeasured run, so the
-    reported line is the cache read (`.libcache`, or the derived .blib once that replaces it).
+    reported line is the derived .blib's read.
 
     Use for an A/B of two builds on one library: pass each build's snapshot as -Exe (see
     "Snapshot the exe first" in osprey-development-guide.md) and the same -OutDir root with a

@@ -189,7 +189,7 @@ A new long-running loop reports through the shared `ProgressReporter`
 
 Every DURABLE artifact -- anything a later step, a resume, or the user reads
 back (`calibration.json`, `reconciliation.json`, `.fdr_scores.bin`,
-`.osprey.task`, `.spectra.bin`, `.libcache`, `.scores.parquet`, `.blib`, the
+`.osprey.task`, `.spectra.bin`, the derived `<lib>.blib`, `.scores.parquet`, `.blib`, the
 `--fdrbench` input) -- is written through `SimpleFileSaver` (in `pwiz_tools/Shared/CommonUtil`),
 never straight to its final path:
 
@@ -1854,7 +1854,7 @@ still earns the hard failure.)
 ## Format changes before the first public release
 
 Osprey has not had its first public release. Until it does, the only readers of its
-on-disk intermediates (`.scores.parquet`, `.spectra.bin`, the FDR sidecars, `.libcache`)
+on-disk intermediates (`.scores.parquet`, `.spectra.bin`, the FDR sidecars, the derived `<lib>.blib`)
 are development sessions and the regression harness, so an incompatible artifact costs a
 **re-run, not a wrong answer shipped to a user** - and with the code moving this fast a
 fresh run is usually wanted anyway. For a format or semantics change, ask who reads the
