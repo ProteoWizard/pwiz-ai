@@ -176,7 +176,14 @@ param(
     [switch]$VendorReader = $false,
 
     [Parameter(Mandatory=$false)]
-    [string]$Culture = $null
+    [string]$Culture = $null,
+
+    # libtorch backend for the one command's in-process CarafeSharp prediction (--fasta):
+    # cpu (default) or cuda (CUDA 12.8), as Build-CarafeSharp.ps1 -Torch. The two backends ship
+    # identically named native files into the same bin folder, so switching cleans it first.
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("cpu", "cuda")]
+    [string]$Torch = "cpu"
 )
 
 # Coverage is meaningless without running the tests - imply -RunTests
@@ -316,8 +323,18 @@ try {
         "/p:Configuration=$Configuration",
         "/p:Platform=$Platform",
         "/nologo",
-        "/verbosity:$Verbosity"
+        "/verbosity:$Verbosity",
+        "/p:CarafeSharpTorch=$Torch"
     )
+
+    $backendStamp = Join-Path $ospreyRoot "Osprey/obj/torch-backend-$Configuration.txt"
+    if ((Test-Path $backendStamp) -and ((Get-Content $backendStamp -Raw).Trim() -ne $Torch)) {
+        Write-Host "libtorch backend changed to $Torch; cleaning the $Configuration output folders." -ForegroundColor Yellow
+        Get-ChildItem $ospreyRoot -Directory | ForEach-Object {
+            $out = Join-Path $_.FullName "bin/x64/$Configuration"
+            if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+        }
+    }
 
     if ($VendorReader -and 'net472' -notin $declaredTfms) {
         # ProteoWizard .NET 8 port (issue #4497): Osprey reads pwiz-sharp directly,
@@ -400,6 +417,8 @@ try {
         Write-Host "Build failed with exit code $LASTEXITCODE" -ForegroundColor Red
         exit $LASTEXITCODE
     }
+    New-Item -ItemType Directory -Force -Path (Split-Path $backendStamp) | Out-Null
+    Set-Content -Path $backendStamp -Value $Torch
 
     $buildDuration = (Get-Date) - $buildStart
     Write-Host ""

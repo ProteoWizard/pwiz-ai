@@ -46,6 +46,16 @@ ai/scripts/Osprey/
 
   SubsetData/                   regenerate Osprey.Test's small real-data zips (README.md)
 
+  Benchmark/                    Osprey vs DIA-NN on the Stellar / Astral test data, each tool
+                                predicting its own library from the FASTA
+    Run-DiannComparison.ps1     wall clock, library generation and search timed separately;
+                                each step waits for a quiet machine and logs contention
+    plot_diann_comparison.py    library and search timing figures (separate), ID overlap
+    Run-DiannEntrapment.ps1     both tools on the same target + natural-entrapment peptides
+    library_peptide_fasta.py    a predicted .blib's peptides as DIA-NN's peptide FASTA
+    plot_entrapment.py          IDs vs entrapment FDP; overlaps at matched FDP (run,
+                                experiment, protein)
+
   Compare/                      cross-impl bridge (used rarely now)
     README.md                   when/how to use the cross-impl gate
     Build-OspreyRust.ps1
@@ -71,6 +81,10 @@ pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests
 # Build + ReSharper inspection (zero-warning gate). Results go to
 # ai/.tmp/OspreyInspect-<checkout>.net10.0.xml, one file per checkout.
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunInspection
+
+# Build with CUDA libtorch, so the one command's library prediction (--fasta) runs on the GPU
+# (--device gpu); the default is CPU libtorch. Switching cleans the bin folders.
+pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Torch cuda
 
 # Unit tests under another culture (OSPREYDEV_TEST_CULTURE): ja-JP proves assertions read
 # resources, fr-FR proves program-read numbers are invariant
