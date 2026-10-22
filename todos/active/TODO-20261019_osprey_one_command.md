@@ -1222,3 +1222,6 @@ locator's stem rule names it; a duplicated scope-exit helper). Gates on 62b68b9c
 PR [#4898](https://github.com/ProteoWizard/pwiz/pull/4898) opened 02:15. Reduced `Run-CarafeSharpWorkflow.ps1` run for real: `-Mode Pretrained -Device cpu` on Stellar .raw with the branch exe (vendor build, snapshot
 `D:\test\osprey-runs\_bin\4c-62b68b9cfc-vendor`): one Osprey call, PredictLibrary 220 s and the four stages, 7.07 min, FDRBench input and pairing written (`D:\test\carafesharp-runs\4c-script-pretrained`); `-Task PredictLibrary` on
 the same folder skips (outputs valid). Commit it, `OspreyDatasetRun.psm1` (-LinkFrom from declarations) after #4898 merges.
+CI on #4898: all 16 checks green (Osprey Windows .NET build 4230347 and Linux .NET on 62b68b9cfc; TeamCity picked the
+PR up ~2 h after it opened). Left for Brendan: TeamCity Perf/Regression on pull/4898 (ask-first), review, merge.
+Morning handoff: `ai/.tmp/handoff-20261022_osprey_4c_morning.md`.
