@@ -149,3 +149,23 @@ three built ones) `TestAlphaPeptDeepBuildLibrary` (6 s) and `TestCarafeModelBuil
 on the CPU. Next: `/pw-review 4849` with Brendan; Mike's open question on the model chooser (grid with
 metadata - the "..." grid is the current answer) and Brendan's: the Use GPU checkbox stays enabled and explains
 itself (already the design).
+
+### 2026-10-22 - `/pw-review 4849` (Brendan's session)
+
+Verdict: ready for a human pass. Two concerns, two suggestions, two nits, three questions. Brendan: apply all
+but the translation nit (CarafeSharp's `Describe()` text reaches a Skyline status line in English; CarafeSharp
+gets translated later, not in this PR); the questions (uninstall removing all of `Tools\` and `user.config`;
+Java `CarafeLibraryBuilder` deleted; the model chooser shape against Mike's ask) raise no concern for him
+beyond wanting a working build to try. Applied and pushed: `LibTorchRuntimeInstaller.AddPackage` refuses an
+entry whose last part is not a plain file name (a backslash the `/` split leaves, or `..`) - the CodeQL Zip
+Slip alert; pinned in `LibTorchRuntimeInstallerTest` with two synthetic packages. `LibTorchRuntime` marks
+itself `Loaded` from the first library that loads rather than before loading, so a missing or empty
+`torch\cpu` reports its own error on every attempt instead of "already loaded ... restart Skyline".
+`BuildLibraryDlg.AddRecentCarafeModel` (now public) runs from `PeptideSettingsUI.BuildLibrary` after
+`CompleteLibraryBuild`, not from `ValidateBuilder`, so a model whose build failed or was cancelled does not
+head the recent list. `BuildLibraryDlg.UpdateUseGpu` finds the NVIDIA driver (`nvcuda` load + `cuInit`) on
+a background thread the first time, with the box disabled until it returns (`TorchRuntimes.IsCudaDriverFound`;
+tests set the driver, so they stay synchronous). `TorchRuntimes.CudaInstaller` is read once and invalidated
+by the folder setters. Dropped as not worth it: nothing else. Gates: CarafeSharp 106 + 8 skipped + inspection
+0; Skyline solution and TestPerf builds; the five branch tests pass. Next: Brendan's interactive UI testing
+on a Release build; then TeamCity, human review, merge.
