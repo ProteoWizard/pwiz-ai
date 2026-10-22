@@ -7,7 +7,7 @@
 - **Created**: 2026-10-22
 - **Status**: In Review
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4902](https://github.com/ProteoWizard/pwiz/pull/4902)
 
 ## Objective
 SeeMS failed to open any .wiff2 file: "Unable to find an entry point named 'sqlite3_config' in DLL
