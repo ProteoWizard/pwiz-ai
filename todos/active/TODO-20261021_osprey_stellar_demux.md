@@ -78,6 +78,25 @@ Osprey (stellar-base-vendor snapshot = #4710 head + build fixes), unit resolutio
 | 4Th acquired | 24,277 / 24,552 / 24,931 | 28,133 / 25,422 / 4,720 |
 | 50% `--demux auto`, current engine (10 ppm channels, one counts-per-ion) | 24,911 / 25,403 / 25,823 | 28,241 / 25,225 / 4,595 |
 
+| 50% tool, interpolation + 0.4 Th channels + fill-time ions (`50pct-interp-th`) | 25,137 / 25,875 / 25,432 | 29,521 / 26,423 / 4,706 |
+| 50% tool, elution fit (FWHM 5.1 s) + 0.4 Th channels + fill-time ions (`50pct-elution`) | 22,019 / 21,863 / 21,904 | 26,311 / 23,854 / 4,419 |
+
+**Why the elution fit loses on real data (2026-10-21 night).** Osprey's features, medians over the 19,912
+precursors every arm scores in TR01 (`feature_compare.py`): fragment_coelution_sum 4Th 9.95, 2Th 12.32,
+interp-th 8.61, elution 6.30, current 9.66; sg_weighted_cosine 0.917 / 0.926 / 0.879 / 0.803 / 0.896;
+xcorr 1.05 / 1.19 / 0.97 / 0.81 / 0.90. Each fragment channel is fitted on its own, so each fragment of a
+precursor gets its own pattern of shares in time (one keeps all its signal at a pass, another, sharing its
+unit-resolution channel with a neighbor's fragment, a third): demultiplexed fragments no longer co-elute,
+and the coelution and cosine scores fall. Per pass, near the apex, the elution fit keeps more of a
+precursor's own signal than interpolation (median share 0.99 vs 0.86; `diag_shares.py`) but zig-zags
+between the two offsets' passes; the peak width (5.1 / 4.2 / 3.5 s) does not change that. The synthetic
+tests scored each fragment alone and could not see it. Every demultiplexed arm is far below acquired 2Th
+(42,232), which ideal 2 Th bins at twice the fill time should exceed.
+**Next: couple a precursor's fragments** (spec §6.5): e.g. a factorization across windows - each window's
+(time x fragment) data as a sum of components with their own elution profile and fragment pattern, a
+component in bin b present in both windows covering b and absent elsewhere - so fragments are split by
+one elution and stay consistent.
+
 The current engine on 50% is no better than acquired 4Th: 54.4M fragment channels for 138k MS2 spectra
 (at unit resolution nearly every peak is its own 10 ppm channel) and 20% of the ions passed through unsolved.
 
