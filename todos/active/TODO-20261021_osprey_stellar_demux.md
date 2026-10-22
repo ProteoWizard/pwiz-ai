@@ -314,9 +314,23 @@ accuracy).
   caches, open items); `23-demultiplexing.md` "Stellar profile data (linear ion trap)" plus the DemuxTool option rows;
   `14` (the tagged cache), `20` (the CLI). Scripts: pwiz-ai `scripts/Osprey/Demux/eval_remux.py` (truth benchmark),
   `scripts/Osprey/Centrix/fwhm_peaks.py` (width distributions).
-- **ID arms (in progress, 2th profile, snapshot `_bin/stellar-centrix-osprey`, fixed sigma 0.2/0.33, before
-  calibration):** `2th-profile-vendor` (1,349 s), `2th-profile-cs-descent` (3,032 s; cache
-  `...TR01.centrix-f3aa677d.spectra.bin`), `2th-profile-cs-active` running.
+- **ID arms, 2Th profile runs read by Osprey** (snapshot `_bin/stellar-centrix-osprey`, fixed sigma 0.2 / 0.33, before
+  calibration; precursors TR01 / TR02 / TR03, experiment precursors / peptides / protein groups, 1% FDR):
+
+  | Arm | Precursors per run | Experiment |
+  |---|---|---|
+  | 2Th acquired centroided (`2Th-centroid`, the instrument's centroids) | 37,596 / 36,455 / 36,971 | 42,232 / 37,875 / 5,717 |
+  | 2Th profile, vendor centroiding on read (`2th-profile-vendor`) | 16,307 / 16,112 / 16,383 | 19,483 / 17,992 / 3,712 |
+  | 2Th profile, `--centroid centrix` (`2th-profile-cs-descent`) | 23,703 / 23,206 / 22,848 | 27,761 / 25,669 / 4,613 |
+  | 2Th profile, `--centroid centrix --centrix-solver active-set` (`2th-profile-cs-active`) | 23,457 / 23,147 / 22,644 | 27,673 / 25,591 / 4,603 |
+  | 2Th profile, DemuxTool + Rust Centrix in WSL (`2th-profile-centrix`) | 23,510 / 4,769 / 4,924 | 23,382 / 21,600 / 3,926 |
+
+  Centrix gives +42% over vendor centroiding of the same profile files; the two solvers are within 0.3%. Both are
+  far below the instrument-centroided acquisition (-35%): open question whether the profile acquisitions are
+  themselves worse or the centroiding is (compare matched spectra across the paired runs). The Rust Centrix arm's
+  TR02/TR03 collapse (4.8k) is that arm's alone (its TR02 calibration: 23,852 target matches vs 32,514 TR01); not
+  investigated. Times: vendor arm 1,349 s, descent 3,032 s (Centrix read 12-20 min a file, with other runs loading
+  the machine), cache `...TR01.centrix-f3aa677d.spectra.bin`.
 
 ## Plan
 
