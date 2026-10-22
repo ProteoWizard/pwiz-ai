@@ -1,6 +1,7 @@
 # TODO-20261019_osprey_one_command.md
 
 ## Branch Information
+- **Branch (4c)**: `Skyline/work/20261022_osprey_hpc_cuda` in `C:\proj\pwiz` (from master 22626556a4, 2026-10-22 night)
 - **Branch**: `Skyline/work/20261019_osprey_one_command` (PR 4a; later PRs get their own
   `Skyline/work/YYYYMMDD_...` branches off `master`, listed under their PR section as they start)
 - **Base**: `master`
@@ -21,7 +22,8 @@
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: folded into `pwiz_tools/Osprey/Osprey-workflow.html` as part 1 ("Building the
   library") in PR 4b (#4885); the draft `TODO-20261019_osprey_one_command-workflows.html` is deleted.
-  `Carafe-workflow.html` (the six-stage script view) still folds in with 4c
+  `Carafe-workflow.html` (the six-stage script view) folded in with 4c as part 1's sections 1.1-1.3
+  (on a cluster, inside the library phases, CarafeSharp and Carafe 2.2.0) and deleted
 - **Continues**: `TODO-20261014_osprey_carafe_integration.md` (completed with #4868's merge; its
   PR 4 - parts H, I, J - is this TODO) and `TODO-20261016_bibliospec_io_unification.md` (the BLIB
   sprint that ran between)
@@ -276,7 +278,8 @@ nodes, merged into one library) when the cluster has several GPUs - not a new ta
   harness that names the presets and the validation arm (`-Stages` goes; `--task` is the stage
   selector now).
 - `Carafe-workflow.html` folds into `Osprey-workflow.html` as the library-build chapter, which is
-  what the companion HTML of this TODO is the draft of.
+  what the companion HTML of this TODO is the draft of. (Done in 4c: part 1, sections 1.1-1.3; the
+  CarafeSharp page is deleted.)
 
 ## Decisions (Brendan, 2026-10-19)
 
@@ -345,7 +348,7 @@ nodes, merged into one library) when the cluster has several GPUs - not a new ta
 **4c split (Brendan, 2026-10-21 night):** 4c is HPC addressing and harness staging, the opt-in
 CUDA build (`Build-Osprey.ps1 -Torch cuda`; the default build stays CPU libtorch) with the one
 command measured on the GPU, `Run-CarafeSharpWorkflow.ps1` reduced, and `Carafe-workflow.html`
-folded. Installers and TeamCity artifacts move to **4d** (they need TeamCity configuration and
+folded (done: `Osprey-workflow.html` part 1, sections 1.1-1.3). Installers and TeamCity artifacts move to **4d** (they need TeamCity configuration and
 installer work a session cannot verify alone). The default-models `.model.zip` is not in 4c (it moves
 the MannLabs SHA-256 pin and needs the Carafe parity reference data).
 
@@ -1107,6 +1110,38 @@ deterministic-algorithms switch. Method: one seeded tuning on two CPUs, weights 
 step 1; the first differing tensor names the op; then whether pinned kernels remove it and the
 speed cost. Also check the prediction alone (pretrained models, no tuning) across the two.
 
+**Root cause (night session 2026-10-22, reproduced on this machine, no fix committed).** libtorch's
+intra-op thread count is never set (no `set_num_threads` in CarafeSharp or Osprey; Osprey's `--threads`
+does not reach torch), so it is the machine's core count (24 here, i9-14900K), and the large reductions
+split across threads sum in a thread-count-dependent order. The same seeded one-epoch tuning (test
+settings, seed 2024, Stellar _21 export): 8 vs 8 threads 0/66 RT and 0/96 MS2 tensors differ; 8 vs 4
+threads 27/66 and 73/96 (RT epoch-1 loss 0.0422 vs 0.0377, MS2 PCC 0.920 vs 0.936). First differing
+tensors: Chronologer Conv1d weight gradients (1e-9..1e-8); the forward is identical at 8 vs 4 (dropout
+mask included), differs at 16 vs 24. Thread-dependent ops: `sum`/`mean`, linear/layer_norm/conv1d
+weight backward; thread-invariant: linear/bmm/softmax/layer_norm forward, embedding backward, dropout.
+Prediction alone also varies (22 of 48,764 TSV lines, 4th-decimal intensities and near-tied fragment order).
+- A constant thread count removes core-count dependence: 8 torch threads in a process confined to 4
+  logical CPUs gives weights bitwise identical to unconfined 8 threads.
+- ISA is a second source, not testable here (AVX2, no AVX-512): at fixed 8 threads `MKL_CBWR=COMPATIBLE`
+  changes GEMM/bmm, `ONEDNN_MAX_CPU_ISA=SSE41` changes conv, `ATEN_CPU_CAPABILITY=default` changes nearly
+  everything. Pinning `MKL_CBWR=AVX2 ONEDNN_MAX_CPU_ISA=AVX2 ATEN_CPU_CAPABILITY=avx2` is bitwise identical
+  to default here (free on AVX2; unmeasured on AVX-512). In-process: on Windows .NET `SetEnvironmentVariable`
+  reaches MKL/oneDNN but not ATen (CRT copy; `_putenv_s` reaches all three); on Linux needs libc `setenv`;
+  must precede the first torch op. `torch.use_deterministic_algorithms` throws NotImplemented in TorchSharp 0.106.
+- Not removable by settings: Windows vs Linux libtorch builds, AMD vs Intel (MKL dispatch), libtorch version, GPU.
+- Speed: tuning does not scale with threads (4: 71 s, 8: 86 s, 16: 64 s, 24: 82 s; perturbed, one run
+  each); oversubscription is costly (8 threads on 4 CPUs 428 s vs 141 s); prediction scales (full
+  hela-filtered 548 s at 8, 347 s at 24), so pinning prediction low costs ~1.6x on big machines.
+- Choices for Brendan: (1) pin intra-op threads to a small constant (e.g. 4, min with cores) around all
+  of `ModelTrainer.Run` on the CPU (it includes the RT-alignment Chronologer prediction that feeds the
+  targets) - removes core-count dependence at no measured cost; (2) add the ISA pin before torch loads
+  (needs an AVX-512 machine to verify); (3) whatever 1-2 give, make the subset tuning tests not depend on
+  bitwise models across OS (a one-epoch tune turns tiny weight differences into a discrete outcome).
+- Harness and runs: `D:/test/cpudet/harness` (train.ps1, probe_chrono.ps1, Probe.cs, stcompare.py,
+  opscompare.py, envtest.ps1, speed.sh), `D:/test/cpudet/runs` (full_t8_a/b, full_t4_a, full_t8_pinavx2,
+  full_t8_atendefault, full_t8_aff4, full_t4_aff4, ops_*, pred_sub_t{4,8,24}, speed_*); log
+  `ai/.tmp/agent-cpudet-status.md`. Worktree `D:/Dev/pwiz-cpudet` unchanged at 22626556a4.
+
 ### 2026-10-21 night - Clean-up PR merged
 
 PR #4895 merged as commit 22626556a4 (squash message approved by Brendan). All 18 checks green on
@@ -1119,3 +1154,67 @@ earlier one removed), `.model.zip`, the rewritten help with the enzyme and modif
 deleted local + remote. This TODO stays active: 4c tonight, then 4d.
 
 **Night session handoff (4c)**: read `ai/.tmp/handoff-20261022_osprey_4c_night.md` before starting work.
+
+### 2026-10-22 night - PR 4c in progress (night session)
+
+Branch `Skyline/work/20261022_osprey_hpc_cuda`. fa48e766f9: `--task PredictTrainingLibrary|TrainModel|PredictLibrary`
+run one library phase (names in `LibraryBuildConfig.PHASES`, listed in `--task` after SpectraCache); with
+`--fasta` a stage task searches the analysis `LibraryBuildWorkflow.StageConfig` derives (the output's, or
+with `--training-search` the tuning runs'); `PredictLibrary` alone before `TrainModel` is refused; the
+`--fasta`+`--task` refusal is gone; `--task-files` prints a node's declared inputs/outputs and exits.
+`TestSubsetLibraryBuildTunedHpcChain`: the tuned command node by node (per-file stages one node per run)
+equals straight-through (both libraries' spectra, both searches' blibs), and each phase node re-run skips.
+Found while writing it: a `--task PerFileRescoring` node stamps `;libfrag=0` (no fragment release on that
+leg), so a later in-process run re-runs the rescoring over a node-built directory - pre-existing, with or
+without `--fasta`; content identical. f9f8f221d0: Carafe-workflow.html folded into Osprey-workflow.html
+(1.1 On a cluster, 1.2 Inside the library phases, 1.3 CarafeSharp vs Carafe 2.2.0).
+`Run-CarafeSharpWorkflow.ps1` reduced to one Osprey invocation (`-Mode Tuned|Pretrained`, `-Task`,
+`-TrainingSearch`, `-ExtraArgs`), held uncommitted in pwiz-ai until 4c merges; `-NoSimilarityGate` and
+Carafe's `--nm`/`--na`/`--fast`/`--itol`/`--rf` are gone (Osprey decides or has no spelling for them).
+In flight: declarations completed + regression HPC chain staged from `--task-files` (agent); GPU vs CPU
+timing (agent, worktree D:\Dev\pwiz-cuda); CPU-dependent tuning root cause (agent, D:\Dev\pwiz-cpudet).
+
+**GPU vs CPU, the one command on Stellar (RTX 4000 Ada, master 22626556a4, 2026-10-22 night).** Built
+with `Build-Osprey.ps1 -Torch cuda|cpu -VendorReader` in worktree `D:\Dev\pwiz-cuda`; snapshots
+`D:\test\osprey-runs\_bin\master-22626556a4-cuda` (4.3 GB) and `...-cpu` (482 MB). Runner
+`Run-DiannComparison.ps1 -Steps osprey-library,osprey-search` (gained `-LibraryMode tuned|pretrained`,
+uncommitted), 16 threads, `.raw` from `D:\Users\brendanx\Downloads\Perftests\osprey-testfiles-v2\stellar`,
+tuning run _21. Quiet runs (other CPU < 5%) except where noted:
+
+| arm | library | phases (s) | search | total |
+|---|---|---|---|---|
+| GPU, pretrained | 42.7 s | PredictLibrary 41.9 | 213 s | 4.3 min |
+| CPU, pretrained | 143.9 s | PredictLibrary 143.4 | 216 s | 6.0 min |
+| GPU, tuned | 5.7 min | PredictTrainingLibrary 64, tuning search 135, TrainModel 77, PredictLibrary 54 | ~230 s | ~9.6 min |
+| CPU, tuned | 24.8 min | PredictTrainingLibrary 263 (overlapped a build; 143 quiet), tuning search 191, TrainModel 855, PredictLibrary 178 | 246 s | 28.9 min |
+
+The GPU makes the fine-tune 11x faster (855 s to 77 s) and prediction 3.3x; the library build is 3.4x
+(pretrained) and 4.3x (tuned) faster, and the tuning run's search (CPU) is now the largest part of the
+GPU-tuned library. The search is the same 3.6-4.1 min in every arm. GPU use confirmed by nvidia-smi
+(Osprey.exe at 50-66%, 3.0-3.5 GB); no CPU-fallback warning. Run folders
+`D:\test\osprey-runs\cuda-4c\<arm>\` (gpu-pretrained, gpu-tuned [contended, 8.5 min], gpu-tuned-rerun,
+cpu-pretrained, cpu-tuned), each with osprey.log, contention.tsv, command.txt and timing.tsv.
+Gap: Osprey/CarafeSharp log no line naming the device a phase ran on; only the fallback warns.
+
+**Later the same night.** 7a7c451bc3 (agent): every stage task's `Inputs` completed to what it reads
+(library and manifest everywhere; FirstPassFDR + calibration; PerFileRescoring + spectra cache, scores,
+calibration, model, stratum under protein-compact, experiment and retained-ids sidecars; SecondPassFDR +
+reconciliation plans, model/stratum under protein-compact, pass-1 diagnostics with `--model-diagnostics`),
+and `regression.ps1`'s HPC chain stages each node from `--task-files` (`Get-DeclaredTaskFiles`,
+`Copy-DeclaredInputs`, `Invoke-HpcNode`; a missing declared input fails staging). Found by withholding:
+SecondPassFDR does not need `<stem>.calibration.json` (chain == straight at 1e-9 without it); the pass-1
+diagnostics JSON goes straight to phase 4. `OspreyDatasetRun.psm1 -LinkFrom` links declared files
+(held in pwiz-ai, uncommitted; dry runs of 8 shapes and one real link, no SEA-AD run). Limitation: under
+`--demux` the declaration names the plain `.spectra.bin`. a18192152d: `--training-search` with no
+`--task` is the tuning runs' whole search on one node - needed because `--task FirstPassFDR` refuses one
+input, and the lab tunes on one run; `regression.ps1` mode 14 (`-HpcOneCommand`, opt-in, Stellar): the
+tuned one command as 12 nodes in one directory, each node's declared inputs present before and outputs
+after, PASS against straight-through (node by node 19:21 wall, straight 21:01). `/code-review medium`:
+8 findings, 6 fixed in 62b68b9cfc (FASTA/model/foreign FASTA checked only where read, so a stage or
+TrainModel node staged from its declarations runs; tuned PredictLibrary declares the model file it
+requires; `--fasta` + stage task without `-o` reports `-o`; `--task-files` answers before `--log-file`
+and creates nothing; a dead test branch), 2 dropped (the TrainModel export path is built as the
+locator's stem rule names it; a duplicated scope-exit helper). Gates on 62b68b9cfc: Osprey Debug
+651/651 + inspection 0; CarafeSharp 105 + 8 NotExecuted (no Carafe reference data here) + inspection
+0; BiblioSpec 142/142; mode 14 PASS (on a18192152d; the fixes do not touch its path). `regression-parallel.ps1
+-Dataset All` on 62b68b9cfc: 48 PASS / 0 FAIL in 36:25 (`ai/.tmp/sessions/20261022-4c/reg-all.log`).

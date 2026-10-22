@@ -34,6 +34,11 @@
     (default: all four, in that order). osprey-search needs osprey-library's output, diann-search
     diann-library's.
 
+.PARAMETER LibraryMode
+    tuned (default): osprey-library is the one command with --training-input <middle run>, as above.
+    pretrained: the one command without --training-input, so the library is predicted once with the
+    pretrained models (no tuning search, no fine-tune) and -LibraryTasks defaults to 1 (PredictLibrary).
+
 .PARAMETER DataDir
     The dataset's folder of vendor files and FASTA. Default: $env:OSPREY_EXAMPLE_DATA_DIR\<dataset>,
     else D:\GitHub-Repo\maccoss\osprey\example_test_data\<dataset>.
@@ -62,6 +67,9 @@ param(
     # Tasks the tuned one command runs through PredictLibrary: PredictTrainingLibrary, the tuning
     # search's four stages, TrainModel, PredictLibrary. The step checks the log's stop line.
     [int]$LibraryTasks = 7,
+    # tuned: --training-input <middle run> (fine-tune, then predict). pretrained: predict with the
+    # pretrained models only; -LibraryTasks then defaults to 1 (PredictLibrary).
+    [ValidateSet('tuned', 'pretrained')] [string]$LibraryMode = 'tuned',
     # Steps that wait for a quiet machine before they start: total CPU below -QuietCpuPercent for
     # -QuietMinutes in a row. Between steps nothing of ours runs, so the total is everyone else's.
     # An idle i9-9900K reads 8-12% on this counter (system overhead the per-process times miss).
@@ -113,7 +121,10 @@ $fasta = Join-Path $DataDir $preset.Fasta
 $runs = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.raw" })
 $diannRuns = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.$($preset.DiannInput)" })
 $middleRun = $runs[1]
-foreach ($path in @($fasta, $OspreyExe, $DiannExe) + $runs + $diannRuns) {
+# DIA-NN and its inputs are required only when a diann step is requested.
+$required = @($fasta, $OspreyExe) + $runs
+if ($Steps -match 'diann') { $required += @($DiannExe) + $diannRuns }
+foreach ($path in $required) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Not found: $path" }
 }
 
@@ -244,11 +255,13 @@ $diannLibrary = Join-Path $WorkDir 'diann-library\library.predicted.speclib'
 foreach ($step in $validSteps | Where-Object { $stepList -contains $_ }) {
     switch ($step) {
         'osprey-library' {
+            $tuneArgs = if ($LibraryMode -eq 'tuned') { @('--training-input', $middleRun) + $ospreyTuning } else { @() }
+            $tasks = if ($LibraryMode -eq 'pretrained' -and -not $PSBoundParameters.ContainsKey('LibraryTasks')) { 1 } else { $LibraryTasks }
             $dir = Invoke-TimedStep $step $OspreyExe (@('-i') + $runs + @(
-                '--fasta', $fasta, '--training-input', $middleRun,
+                '--fasta', $fasta,
                 '-o', '{step}\osprey.blib', '--cache-dir', '{step}\cache',
-                '--log-file', '{step}\osprey.log') + $ospreyDigest + $ospreyTuning + $ospreySearch) `
-                -Environment @{ OSPREY_STOP_AFTER_TASKS = "$LibraryTasks" }
+                '--log-file', '{step}\osprey.log') + $ospreyDigest + $tuneArgs + $ospreySearch) `
+                -Environment @{ OSPREY_STOP_AFTER_TASKS = "$tasks" }
             $stop = Select-String -Path (Join-Path $dir 'osprey.log') -Pattern '\[TASK\] stop:after' |
                 Select-Object -Last 1
             if (-not $stop -or $stop.Line -notmatch 'PredictLibrary') {
