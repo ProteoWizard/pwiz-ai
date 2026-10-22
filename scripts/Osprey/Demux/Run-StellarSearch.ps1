@@ -19,6 +19,8 @@
 .EXAMPLE
     pwsh -File ai/scripts/Osprey/Demux/Run-StellarSearch.ps1 -Exe D:\test\osprey-runs\_bin\stellar-base-vendor\Osprey.exe -Method 2Th
     pwsh -File ai/scripts/Osprey/Demux/Run-StellarSearch.ps1 -Exe ... -Method 4Th-50pctOverlap -Demux auto -Arm 50pct-base
+    pwsh -File ai/scripts/Osprey/Demux/Run-StellarSearch.ps1 -Exe ... -Method 4Th-50pctOverlap -Arm 50pct-elution `
+        -InputDir D:\test\osprey-runs\stellar-demux\tool\50pct-elution -InputSuffix .demux.mzML
 #>
 param(
     [Parameter(Mandatory)] [string]$Exe,           # Osprey.exe snapshot (built -VendorReader)
@@ -34,6 +36,8 @@ param(
     [string]$Env = '',                             # extra environment, 'NAME=value,NAME=value'
     [string]$ExtraArgs = '',                       # extra Osprey arguments, space-separated
     [string]$Runs = 'TR01,TR02,TR03',
+    [string]$InputDir = '',                        # default <Root>\raw; e.g. Osprey.DemuxTool's output folder
+    [string]$InputSuffix = '.raw',                 # e.g. .demux.mzML for the tool's output
     [string]$Root = 'D:\test\osprey-runs\stellar-demux',
     [string]$Library = "$env:USERPROFILE\Downloads\Perftests\osprey-testfiles-mzML-v2\stellar\hela-filtered-SkylineAI_spectral_library.tsv"
 )
@@ -44,9 +48,9 @@ $suffix = if ($Kind -eq 'profile') { '_profile' } else { '' }
 if (-not $Arm) { $Arm = "$Method-$Kind" + $(if ($Demux -ne 'off') { "-demux" } else { '' }) }
 if (-not $CacheKey) { $CacheKey = "$Method-$Kind-$Demux" }
 
-$rawDir = Join-Path $Root 'raw'
+$rawDir = if ($InputDir) { $InputDir } else { Join-Path $Root 'raw' }
 $inputs = foreach ($r in $Runs -split ',' | Where-Object { $_ }) {
-    $path = Join-Path $rawDir "20261009_Stellar_WWopt_${Method}_400-900mz_24min${suffix}_$r.raw"
+    $path = Join-Path $rawDir "20261009_Stellar_WWopt_${Method}_400-900mz_24min${suffix}_$r$InputSuffix"
     if (-not (Test-Path $path)) { throw "Run not found: $path" }
     '-i'; $path
 }
@@ -66,7 +70,7 @@ foreach ($pair in $Env -split ',' | Where-Object { $_ }) {
 $extra = $ExtraArgs -split ' ' | Where-Object { $_ }
 
 $sw = [Diagnostics.Stopwatch]::StartNew()
-"[$(Get-Date -Format s)] START $Arm exe=$Exe method=$Method kind=$Kind demux=$Demux cache=$CacheKey env=$Env extra=$ExtraArgs" |
+"[$(Get-Date -Format s)] START $Arm exe=$Exe method=$Method kind=$Kind demux=$Demux cache=$CacheKey input=$rawDir\*$InputSuffix env=$Env extra=$ExtraArgs" |
     Tee-Object -FilePath $summary -Append
 & $Exe @inputs -l $Library -o (Join-Path $out 'output.blib') --resolution unit --fdr-level precursor `
     --protein-fdr 0.01 --demux $Demux --report (Join-Path $out 'report.tsv') `

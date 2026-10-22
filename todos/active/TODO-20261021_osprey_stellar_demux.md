@@ -53,7 +53,62 @@ One MS1 per full cycle (per 2 or 4 passes in the overlapped methods). Window cen
   intensity x fill time has a hard floor at 100 and median 2,600. With ~400 per ion for centroid
   heights, 4.4e6 is ~11,000 ions per spectrum, consistent with an AGC target of 1e4 charges.
 - **Unit resolution breaks the 10 ppm fragment channels.** The weighted engine matches channels in
-  ppm only (10 ppm), as docs/23 already says is not right for Stellar centroids.
+  ppm only (10 ppm), as docs/23 already says is not right for Stellar centroids. Vendor centroids are
+  never closer than 0.62 Th (median spacing 1.28 Th, ~533 per spectrum) and the search's MS2 error SD
+  is 0.22 Th: a centroid channel is essentially a nominal-mass channel (+/-0.4 Th), most with several
+  sources. The profile's 0.2 Th grid is the cleaner channel.
+- **Peaks are ~1.6 passes wide.** Chromatographic FWHM from Osprey's reference XICs of the 3,000
+  strongest targets: median 5.1 s (IQR 4.2-5.8) on 2Th TR01 and TR02 (cycle 3.3 s), 4.1 s on 4Th.
+  1.5 points per FWHM even in the acquired methods. MS1: Mike (2026-10-21) - DIA-NN runs with MS1
+  scoring off for Stellar, and Osprey does not use MS1, so SuperOverlap's sparse MS1 does not matter.
+
+## Results
+
+Osprey (stellar-base-vendor snapshot = #4710 head + build fixes), unit resolution, test library, 1% FDR:
+
+| Arm | Precursors TR01 / TR02 / TR03 | Experiment precursors / peptides / protein groups |
+|---|---|---|
+| 2Th acquired | 37,596 / 36,455 / 36,971 | 42,232 / 37,875 / 5,717 |
+| 4Th acquired | 24,277 / 24,552 / 24,931 | 28,133 / 25,422 / 4,720 |
+
+**Synthetic, noiseless** (`DemuxTest.TestDemuxPassRateMeasurement`, temporary; table in
+`D:\test\osprey-runs\stellar-demux\synthetic\passrate-elution.tsv`): apex error of single-source fragments,
+mean, by FWHM in passes. The current engine's per-window interpolation (`weighted`) against the elution fit:
+
+| FWHM (passes) | k=2 weighted / elution | k=4 weighted / elution |
+|---|---|---|
+| 1.5 | 8.6% / 0.0% (leak 13% / 3%) | 39% / 2.1% (leak 46% / 5.5%) |
+| 2 | 3.6% / 0% | 28% / 0.9% |
+| 3 | 1.0% / 0% | 12% / 0% |
+
+Weak spot of the elution fit: one fragment shared by four neighboring bins with broad overlapping peaks
+(FWHM >= 6 passes) is misassigned by 5-9% at the apex (interpolation < 5%) - outside Stellar's regime.
+Python prototype with Poisson noise (`ai/.tmp/sessions/20261021-stellar/passrate_proto.py`): at k=2 the
+greedy elution fit equals the oracle (apex error = counting noise, 9.5%; leak 0.1% vs 14% interpolated);
+at k=4 16.7% vs oracle 12.5% (leak 5.1% vs 39%): at FWHM 1.6 passes a source is seen strongly by only
+three consecutive offsets, which share two bins, so the 1 Th bin is ambiguous between neighbors unless
+tails decide. Fitting a precursor's fragments together (same bin, same apex) should resolve most of it.
+
+## Code (branch commits 74df92bbba, bea8a1e2cb; local, not pushed)
+
+- `ElutionDemultiplexer` (Osprey.Demux): per fragment channel and block, greedy sparse fit of Gaussian
+  chromatographic peaks (bin, apex on a sigma/2 grid) under Poisson weights, NNLS refit of the amplitudes,
+  stop when the weighted misfit drops by < 6; each observed peak apportioned at its own time. Tool:
+  `--elution-fwhm S`, `--elution-param Name=Value`; `DemuxParams.Elution` for `--demux` later.
+- `FragmentChannelFinder.FindLinear` (Th on a linear axis): tool `--channel-th T`; `DemuxParams` with
+  `ChannelToleranceIsPpm = false` now works in the weighted engine.
+- Fill-time ions: `DemuxSpectrumInfo.InjectionTime`, `ScanningDemuxOptions.FillTimeIonScale` (tool
+  `--fill-time-ions S`), output written back per spectrum.
+- `EventCentroider.CentroidLinear` and tool `--centroid-output SEP` for ion-trap profile output.
+- bea8a1e2cb: candidates rescored only where observations changed (output identical, checked on a real
+  slice); each new peak refits only the group of peaks sharing observations with it, warm-started, then
+  one final refit per group: the slice's solve 18.0 s -> 2.1 s, output moved by mean |log2| 0.035 with
+  synthetic accuracy unchanged or better; spectra described on the read threads when indexing (737 s
+  serially through the Thermo reader). 677/677 unit tests.
+- Inspection: 11 LocalizableElement warnings are #4710's own (DemuxCacheBuilder, SpectraCache,
+  Osprey/Program.cs, untouched here): resource strings needed before this goes into #4710.
+- Runners: `Run-StellarSearch.ps1` (Osprey on .raw or the tool's mzML), `Run-StellarTool.ps1`
+  (tool on the three replicates, then search).
 
 ## Plan
 
@@ -65,10 +120,17 @@ One MS1 per full cycle (per 2 or 4 passes in the overlapped methods). Window cen
 2. **Centroid domain, unit resolution:** fragment channels in Th (linear m/z histogram, tolerance
    from the peak width); ions per spectrum from fill time (counts per ion as above); the isolation
    edge measured from the SuperOverlap data (1 Th steps) if the quadrupole's edge is soft.
-3. **k=4 in time:** at k=4 a window set comes back every 12.5 s, so interpolating each window to
-   the target's time (makima) cannot follow a peak a few seconds wide. Fit each bin's elution as a
-   smooth function of time over all observations (spec §4.3), gated first on synthetic k=3/4 data
-   with known peak widths, then on SuperOverlap against 50% and the acquired methods.
+3. **k=4 in time. Goal (Mike): each 1 Th bin represented at the full sampling frequency**, one
+   demultiplexed spectrum per bin per pass (~3.1 s): 1 Th selectivity at a 4 Th acquisition's cycle
+   time. Every bin is observed every pass, through a different window each pass; only each *window*
+   repeats every 12.5 s. The current engine interpolates each overlapping window's own series
+   (12.5 s apart) to the target's time to get the shares, which misses an apex a few seconds wide.
+   Instead: take bin b's value at pass p from the window that observed it in pass p, and use the
+   other passes only for how that observation splits among its four bins, over the nearest +/-1-2
+   passes (one source bin per fragment: no split at all; several: a local fit, spec §4.3 in
+   spirit). Gate on synthetic k=3/4 runs with known 1 Th elution profiles (each bin's series
+   recovered at every pass, apex included), then SuperOverlap against acquired 4Th and 2Th.
+   Note MS1 comes once per 12.5 s in SuperOverlap.
 4. **Profile domain:** (a) per-grid-point demux (§5.4c) on the 0.2 Th grid, then centroid;
    (b) the joint demux and centroiding (§5.4d), generalizing `JointDemultiplexer`/`TofGrid` to a
    linear grid with the ion-trap peak and the staggered design with its time model. Argument for
