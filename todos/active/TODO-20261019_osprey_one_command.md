@@ -1254,6 +1254,20 @@ and as Skyline's download) uses the same runtime folder and installer - one CUDA
 AlphaPeptDeep and Osprey - and logs the device; then the untested cases (no driver, old driver, Linux).
 4d follows #4849's merge. Perf/Regression on pull/4898 triggered 2026-10-22 morning (Brendan): build 4230580.
 
+**Next, before #4849: retire `.libcache` completely (Brendan, 2026-10-22).** A cache is rebuilt from its
+source, never upgraded or imported in place - a `.spectra.bin` after a schema change is rebuilt from the
+raw file (and fails without it), not converted. The derived `<lib>.tsv.blib` was a cache-format change with a
+new name, so the "read-only for one release" path in `LibraryCache.cs` / `LibraryLoader` was wrong in
+principle, not just unneeded (Osprey was never released). Small PR after #4898: remove `LoadCache`,
+`SaveCache` and their `IOTest` tests, the loader's honoured-first branch and its unchanged-hash notes; once
+the derived `.blib` is written, delete `<library>.libcache` at exactly the path Osprey wrote it (no sweep),
+logging the file, as an overwrite would have; drop `Copy-LibraryDerivedInto`'s `.libcache` relay in
+`regression.ps1`; add the rule to `docs/00-pipeline-architecture.md` (a cache is rebuilt from its source; a
+renamed cache format removes its predecessor). Gates: Osprey Debug + inspection, `regression.ps1 -Dataset
+Stellar` (a .tsv library through this path). Also pending for 4c's docs: the mode 3 row of
+`regression.html` should say nodes are staged from `--task-files` and a missing declared input or output
+fails the leg.
+
 **Later the same night.** 7a7c451bc3 (agent): every stage task's `Inputs` completed to what it reads
 (library and manifest everywhere; FirstPassFDR + calibration; PerFileRescoring + spectra cache, scores,
 calibration, model, stratum under protein-compact, experiment and retained-ids sidecars; SecondPassFDR +
