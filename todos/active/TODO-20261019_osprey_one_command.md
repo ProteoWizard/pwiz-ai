@@ -18,7 +18,8 @@
   [#4876](https://github.com/ProteoWizard/pwiz/pull/4876) (merged 2026-10-20) (PR 4a);
   [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (doc sweep, merged 2026-10-20);
   [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) (PR 4b, merged 2026-10-21 as 7819a9b6ac);
-  [#4895](https://github.com/ProteoWizard/pwiz/pull/4895) (clean-up, merged 2026-10-21 as 22626556a4)
+  [#4895](https://github.com/ProteoWizard/pwiz/pull/4895) (clean-up, merged 2026-10-21 as 22626556a4);
+  [#4898](https://github.com/ProteoWizard/pwiz/pull/4898) (PR 4c, opened 2026-10-22 night)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: folded into `pwiz_tools/Osprey/Osprey-workflow.html` as part 1 ("Building the
   library") in PR 4b (#4885); the draft `TODO-20261019_osprey_one_command-workflows.html` is deleted.
