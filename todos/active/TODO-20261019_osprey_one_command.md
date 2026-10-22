@@ -1219,3 +1219,6 @@ locator's stem rule names it; a duplicated scope-exit helper). Gates on 62b68b9c
 651/651 + inspection 0; CarafeSharp 105 + 8 NotExecuted (no Carafe reference data here) + inspection
 0; BiblioSpec 142/142; mode 14 PASS (on a18192152d; the fixes do not touch its path). `regression-parallel.ps1
 -Dataset All` on 62b68b9cfc: 48 PASS / 0 FAIL in 36:25 (`ai/.tmp/sessions/20261022-4c/reg-all.log`).
+PR [#4898](https://github.com/ProteoWizard/pwiz/pull/4898) opened 02:15. Reduced `Run-CarafeSharpWorkflow.ps1` run for real: `-Mode Pretrained -Device cpu` on Stellar .raw with the branch exe (vendor build, snapshot
+`D:	est\osprey-runs\_binc-62b68b9cfc-vendor`): one Osprey call, PredictLibrary 220 s and the four stages, 7.07 min, FDRBench input and pairing written (`D:	est\carafesharp-runsc-script-pretrained`); `-Task PredictLibrary` on
+the same folder skips (outputs valid). Commit it, `OspreyDatasetRun.psm1` (-LinkFrom from declarations) after #4898 merges.
