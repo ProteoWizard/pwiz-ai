@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4899](https://github.com/ProteoWizard/pwiz/issues/4899)
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#4905](https://github.com/ProteoWizard/pwiz/pull/4905); seed PR [#4900](https://github.com/ProteoWizard/pwiz/pull/4900) (draft, never merged); website: ProteoWizard/web branch `release-channels` (PR after the job publishes)
 
 ## Objective
 
@@ -22,8 +22,9 @@ The issue body holds the full technical detail: how the website resolves downloa
 - [x] Seed PR #4900 (draft, never merged): `bt83.xml` from `2deb47a782` + `seed.commit` parameter + first step that fetches it by SHA and checks it out as `master` + artifacts limited to `build-nt-x86/*.msi` and `build-nt-x86/VERSION`
 - [x] Trial seed build for 2026-09 (`10aac2d`): build 4230560, `3.0.26272.10aac2d9`, 308/308 tests, pinned + tagged `release-2026-09`
 - [x] Remaining 7 seed builds; pin + tag each `release-YYYY-MM` with the seed commit in the pin comment
-- [ ] Monthly pin job (1st of the month): pin + tag the last successful default-branch bt83 build of the previous month
-- [ ] Archive metadata file uploaded to `htdocs/releases/` (builds tagged `release-*` on any branch)
+- [x] Monthly pin job written (uncommitted): `scripts/misc/publish_monthly_release.py` + `.teamcity/ProteoWizard/buildTypes/ProteoWizard_PublishMonthlyRelease.xml` (cron 06:00 server time on the 1st; pins/tags the previous month, writes and SFTPs `bt83-monthly.xml` + `bt83-archive.json`; dry run off the default branch)
+- [ ] After merge: run it manually with "Release the latest build now" (`--latest`; the mid-month October release, user decision 2026-10-22), confirm `pwiz-commit` can pin, and check both files at https://proteowizard.sourceforge.io/releases/
+- [x] Archive metadata covers every pinned SUCCESS bt83 build tagged `release-YYYY-MM` on any branch
 - [ ] Website in ProteoWizard/web (uncommitted, branch `release-channels` in `C:\dev\pwiz-web-help`): Monthly/Beta channel selector for the Windows installers + archive dropdown with a license-gated Download button. Merge only after the pin job publishes `releases/bt83-monthly.xml` and `releases/bt83-archive.json`
 - [ ] Commit-date versioning in `scripts/installer/build.ps1` (and `build-linux.sh`)
 
@@ -73,4 +74,7 @@ Researched and filed #4899. Key findings:
 
 * The first 2026-02 run (4230571, not pinned) built and passed everything but failed tcbuild.bat's clean-tree check: the Hardklor submodule stayed at the PR head's commit (its gitlink changed 2026-03-16, #4054). No submodule is in bt83's targets (BiblioSpec's `HardklorReader.cpp` is its own file reader), so Mar-Sep were unaffected. The seed step now runs `git submodule update --init --recursive --force --depth 1` (seed PR head `47e9787c39`).
 * Website design (ProteoWizard/web): Monthly reads `releases/bt83-monthly.xml` (same format as `bt83.xml`), Beta reads `releases/bt83.xml`; the selector shows only for the bt83 options, default Monthly. The archive dropdown reads `releases/bt83-archive.json` = `{"releases": [{"month", "version", "buildId", "commit", "artifacts": [file names]}]}`, newest first; the format is documented in `js/main.js`. Tested in Chrome against a scratch copy with sample release files.
+* Publish job design (final, user decision 2026-10-22: releases are permanent, never replaced): every release is tagged `release-YYYY-MM-DD` (its build's finish date, server time); seeds keep `release-YYYY-MM`. The scheduled run releases the previous month's last-finishing default-branch build unless it is already a release, the month has a seed, or that day already has a release (warning). "Release the latest build now" (`--latest`) makes a mid-month release; the month still gets its month-end release. The archive JSON field is `release` (YYYY-MM-DD or YYYY-MM), newest first; `bt83-monthly.xml` = newest release. Seeds are recognized by not being on the default branch (guests cannot see build parameters; a guest dry run leaves seed commits empty). The PR-branch dry run runs as a guest with no credentials. TeamCity auth is `pwiz-commit` / `%TeamCityAuthToken%` like the smart trigger; JSON bodies only; artifact content is read via `/guestAuth` because the S3 redirect rejects a forwarded Authorization header.
+* `/code-review xhigh` round 1: 15 findings, 14 fixed (empty `--month` arg, lookupLimit, last-finish consistency, typo, guest dry run, personal-build guard, version from installer-version.txt/VERSION, artifact filter, checkout rule `+:scripts/misc`, `%ci` + UTC fallback in the installer scripts, comments); the shared-version-computation refactor dropped. The replacement-related findings were then made moot by the permanent-release redesign.
+* Tests: end-to-end against a fake TeamCity (month-end after mid-month, already released, seed month, same-day clash, --latest, dry run, option conflict); real guest dry runs (scheduled: Sep released by its seed; --latest would release 4230758 as release-2026-10-22); pin+tag round-tripped for real on the unarchived failed build 4230571; website tested in Chrome with the new-format archive.
 * Uncommitted on the work branch: `scripts/installer/build.ps1` and `build-linux.sh` now take YYDOY from HEAD's committer date (matching `build/PwizVersion.targets`), falling back to today. Verified on `3f290fc` -> `4.0.26281-3f290fc`, the version TeamCity stamped that day.
