@@ -356,6 +356,25 @@ accuracy).
   MSFileReader/XRawfile?) is the open question. MS2 calibration: centroid acquisition mean -0.093 SD 0.216 (39,668
   matches); profile vendor +0.093 SD 0.273 (2,649); profile Centrix +0.146 SD 0.309 (20,920).
 
+**The Stellar profile m/z axis is 0.55 Th low (2026-10-22): the profile arms' loss and the SuperOverlap 2-of-3
+failure.** Scripts in `ai/.tmp/sessions/20261021-stellar`: `fragment_mz_error.py` (observed - theoretical for detected
+peptides' b/y ions at their apex scans, per centroid set), `profile_fragment_offset.py` (the same on the profile itself,
+no centroider), `probe_trailer.ps1`.
+- On the 2Th profile TR01 profile (1,062 peptides, 17,544 fragments), fragments peak at -0.44 to -0.60 Th from theoretical
+  at every m/z (200-1200). Vendor centroids and Centrix inherit it; the M+1 isotope then sits at +0.45, so error modes
+  flip from -0.55 to +0.45 above 600 m/z. Instrument centroids (centroid acquisition): modes -0.07 to -0.37, robust SD
+  0.28, 92% within 0.5 Th; profile-derived: robust SD 0.63, 63-71% within 0.5. Same scan, same window: base peak
+  524.80 (profile) vs 525.295 (centroid acquisition). Trailers identical; no offset field. Likely a scan-rate
+  dependent shift the instrument corrects when it centroids but not in the stored profile (0.5 Th = 2.5 us at
+  200 kTh/s; untested).
+- Osprey's calibration starts at +/-0.5 Th (unit default) and corrects only a mean: it sees mostly the isotope at
+  +0.45 and the tail of the monoisotopic peak, measures about +0.15, and corrects the wrong way. Which peak it latches
+  onto decides the file: SuperOverlap joint + Centrix TR02 (21.2k precursors) matches fragments at -0.53 (mono) below
+  800 m/z, median error -0.30; TR01 and TR03 (10.8k, 10.5k) match at +0.41 (isotope) from 400 m/z up, median +0.30.
+  Pass-1 calibration: TR01/TR03 8.4k / 8.3k fragment matches, mean +0.18; TR02 16.9k, mean +0.09.
+- Fix options: correct the profile axis at read (a per-scan-rate offset, or estimated per file), and/or make Osprey's
+  unit-resolution calibration robust (initial window past 0.55, offset from the intensity-weighted mode, not the
+  mean). Mike suggested opening the initial tolerance to about 0.6.
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
