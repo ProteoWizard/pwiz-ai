@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261015_skyline_single_build`
 - **Base**: `master` (6496d05222)
 - **Created**: 2026-10-15
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `pwiz` (was `skyline`; retitled 2026-10-16 when x64-everywhere was folded in)
-- **PR**: [#4850](https://github.com/ProteoWizard/pwiz/pull/4850) (draft)
+- **PR**: [#4850](https://github.com/ProteoWizard/pwiz/pull/4850) (merged 2026-10-22 as `a98f401f72`)
 - **Checkout**: `C:\Dev\BuildTrouble`
 
 ## Objective
@@ -43,7 +43,7 @@ Remove redundant work from the Skyline build that `build64.log` (a top-level `bu
 - [x] run3: `--no-tests` staging - all 9 staged
 - [x] Developer clean `bs.bat`: Skyline section 20.6 s (was ~141 s), 48 projects once each
 - [x] run4: Agilent extracted once with both consumers; run5: deleted fixture + stamp restored
-- [ ] Clean `bs.bat` after the extraction change (pwiz-sharp side: UIMF, BiblioSpec archives + reader tests)
+- [x] Clean `bs.bat` after the extraction change (pwiz-sharp side: UIMF, BiblioSpec archives + reader tests)
 - [x] `tc-perftests.bat` folded in via `-p:SkylineBuildProjects` (%3B-separated, Unescape'd in the proj);
       run6: 43 projects once each, all four staged (`SKYLINE_TEST_ARGS=test=NoSuchTest`, so TestRunner's
       "No tests found" exit 1 is expected). Note tc-perftests builds AnyCPU (no Platform=x64), unlike build.bat
@@ -132,3 +132,27 @@ pwiz-sharp is AnyCPU in the top-level build, installer and Osprey.sln (forced by
 `Platform=$(Platform)`) and Osprey's `package.ps1`. The two targets' comments each claim to share one build
 with the other; they do not. Every vendor SDK DLL in the AnyCPU output is x64-only (PE machine 0x8664),
 except Shimadzu CABINET.DLL (x86). (TODO-20260927_osprey_pwizsharp_one_config.md is completed - #4725.)
+RESOLVED: Matt chose x64 everywhere; done in this PR (see the 2026-10-16 entry above).
+
+### 2026-10-21 - TestEncyclopeDiaSearchTutorialDraft (not this PR)
+
+TeamCity perf #15673 on a9a592e42b failed it: expected <366, 698, 698, 4907>, actual <366, 699, 699, 4915>.
+It is INTERMITTENT, not a code change: locally 2 of 6 runs on identical code fail with exactly those counts, including
+back-to-back runs in one TestRunner process (-Loop 5: run 1 passed, run 2 failed). Nightly Performance Tests failed it
+the same way on BSPRATT-UW2 on 10-18 (master 23e870a9b). CORRECTION: I first blamed master's #4879 from a file-revert
+bisection; that was confounded by the flake (the first local run failed, later ones passed regardless) - #4879 is
+cleared, and the 10-18 nightly failure predates it. The test's comment claims the counts are bit-stable; they are not.
+Suspects (unverified): EncyclopeDIA/Percolator thread order, or the demultiplexer's parallel solve (#4813). Draft note
+to Brendan handed to the developer. Lesson: a file-revert bisection on a flaky test needs repeated runs per arm.
+
+### 2026-10-22 - Merged
+
+PR #4850 merged as commit a98f401f72. Shipped: pwiz-sharp x64 everywhere (Pwiz.sln remap, Platforms, build.bat,
+Run-Tests-Parallel, installer, tc-perftests, Osprey's out-of-solution target), so a clean build compiles pwiz-sharp once
+and its tests run on the shipped binaries; Skyline's build.bat and tc-perftests.bat build in one MSBuild session via
+SkylineBuild.proj (named All/Perf sets); tc-perftests' obj deletion removed (perf build ~9 s incremental); per-archive
+test-data extraction (no concurrent unpack); BiblioSpec tests find tools in their own platform layout; MSConvertGUI dev
+build detection accepts bin\x64; SkylineProcessRunner deploys via _DeployBundledToolOutputs (fixes clean-tree perf
+failure); CvGen added to Pwiz.sln. Not done here: Linux build.sh stays AnyCPU deliberately. Open elsewhere:
+TestEncyclopeDiaSearchTutorialDraft flakiness (Brendan); Skyline.sln missing BiblioSpec.IO/Bruker.PrmScheduling (VS
+restore NU1105, unverified prevention); the one-off Bruker Sample_1-A handle-release failure (not investigated).
