@@ -5,9 +5,9 @@
 - **Base**: `master`
 - **Module**: `pwiz`
 - **Created**: 2026-10-22
-- **Status**: In Review
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: [#4902](https://github.com/ProteoWizard/pwiz/pull/4902)
+- **PR**: [#4902](https://github.com/ProteoWizard/pwiz/pull/4902) (merged 2026-10-22)
 
 ## Objective
 SeeMS failed to open any .wiff2 file: "Unable to find an entry point named 'sqlite3_config' in DLL
@@ -24,7 +24,10 @@ native DLL, which lacks `sqlite3_config`.
 
 ## Fix
 `SeeMS.csproj` and `MsConvertGUI.csproj` get MsDiff's `StageWiff2NativeAssemblies` target plus the
-`VendorNativeCrt.targets` import.
+`VendorNativeCrt.targets` import. After Copilot review the target moved to
+`pwiz_tools/Shared/Lib/SciexWiff2Staging.targets`, imported by msconvert, MsDiff, SeeMS, MSConvertGUI
+and Sciex.Tests; it fails the build if `VendorNativeCrt.targets` is not also imported. Skyline gets
+`wiff2\` through its msconvert deployment and does not import it (noted in both files).
 
 ## Validation
 Test file: `ACO-CE-DKTGKN_2-332-Positive-2026-10-21-10-20-43.wiff2` (SCIEX ACO-CE optimization sample).
@@ -38,7 +41,18 @@ Test file: `ACO-CE-DKTGKN_2-332-Positive-2026-10-21-10-20-43.wiff2` (SCIEX ACO-C
   `ComponentLoader.CreateComponent` probes optional types by name during license/event-broker setup
   and tolerates the miss (msconvert prints it too and converts fine). Its "load error reported below is
   a consequence" line is misleading in this case.
-- The wiff2 SDK reports these ACO-CE product-ion experiments as experiment type `MS`, so
-  `TranslateAsSpectrumType` writes "MS1 spectrum" on ms level 2 spectra (cpp parity: the C++ reader
-  writes the same), and no collision energy is reported. Affects Skyline's `HasDeclaredMSnSpectra`.
-  Next item to work on.
+- The wiff2 SDK reports these ACO-CE experiments with triple-quad scan types ("ProductIon", "Q1MI")
+  that the reader's ZenoTOF-only mapping sent to MS, so product ion scans came out "MS1 spectrum" with
+  no collision energy, and the Q1MI point had m/z 0. Being fixed on
+  `Skyline/work/20261022_wiff2_scantypes` (C:\Dev\Quickee).
+
+## Progress Log
+
+### 2026-10-22 - Merged
+
+PR #4902 merged as commit fcc22b7f68. SeeMS and MSConvertGUI now stage the wiff2\ folder through the
+shared `SciexWiff2Staging.targets`, which replaced the per-project copies in msconvert, MsDiff and
+Sciex.Tests (Copilot review suggestion). Verified by rebuilding all five importers from a deleted
+`wiff2\` (identical 53-file folders) and opening/converting the ACO-CE .wiff2 in SeeMS, MSConvertGUI
+and msconvert. The squash commit's body landed with lines 2+ indented two spaces (cosmetic). Nothing
+deferred from this PR's scope; the scan type work above continues separately.
