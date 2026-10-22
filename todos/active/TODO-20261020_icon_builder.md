@@ -113,8 +113,9 @@ Fix written in the fork checkout (`Workspaces/ProteoWiz/developers`, branch
 frame, else smallest larger, else largest smaller), `DpiHelper.DrawIcon` (exact frame via
 DrawIcon, otherwise ToBitmap + bicubic), used by DrawDocumentTab, DrawToolWindowTab and the
 auto-hide strip (which passed `icon.ToBitmap()` of the 32 frame). Builds clean (one
-pre-existing CS0114 warning elsewhere). To be committed on PR #7 and the DLL rebuilt into
-#4602 with Build-DigitalRune.ps1. Visual check: Targets tab at 200% should show the 32 px frame.
+pre-existing CS0114 warning elsewhere). Committed on the PR #7 branch as f0204f7 (local, not
+pushed); next: push, rebuild the DLL into #4602 with Build-DigitalRune.ps1. Visual check:
+Targets tab at 200% should show the 32 px frame.
 
 ## Decision source
 
