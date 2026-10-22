@@ -1088,5 +1088,21 @@ against that threshold); re-runs not finding a tuned `<out>.carafemodel` (one-co
 the same day, so no user has one); `WriteProteinReport`/`WriteSummaryReport` always true
 (pre-existing); `CarafeModelFile.FilePatterns` unused (for #4849). Gates on be229fd949: Osprey 650 +
 inspection 0, CarafeSharp 105 (8 without data) + inspection 0, Stellar regression PASS.
+`regression-parallel.ps1 -Dataset All` 48 PASS / 0 FAIL in 35:24. Osprey Windows .NET 4229787 failed
+`TestSubsetLibraryBuildTuned`: its two-run resume step detected nothing at 1% on a cloud agent
+(105 first-pass passers, 0 reported - the single-hit protein defect above), which this PR now
+fails; d17e23f4f2 gives that step `--experiment-fdr 1` (it checks which tasks run).
+
+**Defect, its own item (Brendan, 2026-10-21): the tuned result depends on the CPU.** Required:
+the same command and seed give the same model on any machine; "which CPU" must never be needed
+to reproduce a result. Seen twice, both in the subset's one-epoch tuning: #4885's
+`TestSubsetLibraryBuildTunedHeldOut` (Windows pass, Linux fail) and 4229787 above (this machine
+pass, TeamCity Windows cloud agent fail). `-l` searches match their goldens at 1e-9 across this
+machine and the agent, so the variation most likely enters in CarafeSharp's libtorch training
+or prediction. Not verified: MKL/oneDNN choose kernels by ISA (AVX2 vs AVX-512) and reduce in a
+different order (`MKL_CBWR`, `ONEDNN_MAX_CPU_ISA`); thread count splitting reductions; libtorch's
+deterministic-algorithms switch. Method: one seeded tuning on two CPUs, weights compared after
+step 1; the first differing tensor names the op; then whether pinned kernels remove it and the
+speed cost. Also check the prediction alone (pretrained models, no tuning) across the two.
 
 **Night session handoff (4c)**: read `ai/.tmp/handoff-20261022_osprey_4c_night.md` before starting work.
