@@ -97,6 +97,25 @@ Contract: one call per icon,
 The three `DpiUtil` members are owned here; signature changes are coordinated, not made on
 the DPI branch.
 
+## Window icons on dock tabs (DigitalRune) - 2026-10-22
+
+The Targets, Files, Immediate, Find Results and Heat map tabs show their form's `Icon`
+(inline `$this.Icon` in the form resx; Immediate, Find Results and Heat map equal
+Resources\Immediate.ico, FindResults.ico and Cluster.ico). Targets carries 16/32/48 px frames
+and Heat map 16-64, so no new artwork; Files, Immediate and Find Results have only 16 px.
+
+The fork drew them wrong at every DPI: `Graphics.DrawIcon(icon, rect)` stretches the frame the
+`Icon` instance was created with (32x32 from the resx) with nearest-neighbor, and
+`new Icon(icon, size)` falls back to the next SMALLER frame (measured: 20 and 24 -> 16; 64 -> 48).
+Fix written in the fork checkout (`Workspaces/ProteoWiz/developers`, branch
+`DigitalRune/work/20261020_dpiScaling`, PR uw-maccosslab/developers #7), uncommitted, saved as
+`TODO-20261020_icon_builder-DigitalRune-IconFrames.patch`: `DpiHelper.SelectFrame` (exact
+frame, else smallest larger, else largest smaller), `DpiHelper.DrawIcon` (exact frame via
+DrawIcon, otherwise ToBitmap + bicubic), used by DrawDocumentTab, DrawToolWindowTab and the
+auto-hide strip (which passed `icon.ToBitmap()` of the 32 frame). Builds clean (one
+pre-existing CS0114 warning elsewhere). To be committed on PR #7 and the DLL rebuilt into
+#4602 with Build-DigitalRune.ps1. Visual check: Targets tab at 200% should show the 32 px frame.
+
 ## Decision source
 
 - Gallery: `ai/.tmp/icon-gallery/skyline-icons-2x.html` (bicubic / hq2x / hq2x at 150% /

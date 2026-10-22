@@ -1,0 +1,147 @@
+diff --git a/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/AutoHideStrip.cs b/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/AutoHideStrip.cs
+index b0a68c3..447dabc 100644
+--- a/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/AutoHideStrip.cs
++++ b/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/AutoHideStrip.cs
+@@ -212,7 +212,11 @@ namespace DigitalRune.Windows.Docking
+       string text = content.DockingHandler.TabText;
+       bool topDown = dockState == DockState.DockTopAutoHide || dockState == DockState.DockRightAutoHide;
+ 
+-      DockPanelManager.Renderer.DrawAutoHideTab(g, rectTabOrigin, icon.ToBitmap(), text, topDown);
++      // The renderer draws the image at its scaled 16-pixel auto-hide image size, so hand it
++      // the icon frame that fits that size rather than the instance's default 32x32 frame.
++      using (Icon frame = DpiHelper.SelectFrame(icon, DpiHelper.Scale(16)))
++      using (Bitmap image = frame.ToBitmap())
++        DockPanelManager.Renderer.DrawAutoHideTab(g, rectTabOrigin, image, text, topDown);
+     }
+ 
+ 
+diff --git a/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Helpers/DpiHelper.cs b/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Helpers/DpiHelper.cs
+index a745115..1b034f8 100644
+--- a/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Helpers/DpiHelper.cs
++++ b/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Helpers/DpiHelper.cs
+@@ -93,6 +93,94 @@ namespace DigitalRune.Windows.Docking
+     }
+ 
+ 
++    /// <summary>
++    /// Selects the frame of a multi-size icon for a square of the given pixel size: the
++    /// exact size when the icon has it, otherwise the smallest larger frame, which
++    /// downscales cleanly, and only when there is none the largest smaller frame. The
++    /// framework's own lookup (<see cref="Icon(Icon, int, int)"/>) falls back to the next
++    /// smaller frame, which at 150% stretches a 16-pixel frame to 24 although a 32-pixel
++    /// one exists. The caller owns the returned icon.
++    /// </summary>
++    public static Icon SelectFrame(Icon icon, int size)
++    {
++      Icon best = new Icon(icon, size, size);
++      if (best.Width >= size)
++        return best;
++      foreach (int candidate in FrameSizes)
++      {
++        if (candidate <= size)
++          continue;
++        Icon larger = new Icon(icon, candidate, candidate);
++        if (larger.Width >= size)
++        {
++          best.Dispose();
++          return larger;
++        }
++        if (larger.Width > best.Width)
++        {
++          best.Dispose();
++          best = larger;
++        }
++        else
++        {
++          larger.Dispose();
++        }
++      }
++      return best;
++    }
++
++
++    /// <summary>
++    /// Draws an icon into a rectangle with the frame that fits it best, resampled
++    /// bicubically when no frame matches exactly. <see cref="Graphics.DrawIcon(Icon, Rectangle)"/>
++    /// would stretch the frame the icon instance was created with (normally 32x32, even
++    /// into a 16-pixel tab) with nearest-neighbor sampling.
++    /// </summary>
++    public static void DrawIcon(Graphics graphics, Icon icon, Rectangle rectangle)
++    {
++      using (Icon frame = SelectFrame(icon, Math.Min(rectangle.Width, rectangle.Height)))
++      {
++        if (frame.Width == rectangle.Width && frame.Height == rectangle.Height)
++        {
++          graphics.DrawIcon(frame, rectangle);
++          return;
++        }
++        using (Bitmap bitmap = frame.ToBitmap())
++          DrawImage(graphics, bitmap, rectangle);
++      }
++    }
++
++
++    /// <summary>
++    /// Draws a bitmap into a rectangle with bicubic resampling, restoring the graphics
++    /// state afterwards.
++    /// </summary>
++    public static void DrawImage(Graphics graphics, Image image, Rectangle rectangle)
++    {
++      InterpolationMode interpolation = graphics.InterpolationMode;
++      PixelOffsetMode pixelOffset = graphics.PixelOffsetMode;
++      try
++      {
++        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
++        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
++        using (ImageAttributes attributes = new ImageAttributes())
++        {
++          attributes.SetWrapMode(WrapMode.TileFlipXY);
++          graphics.DrawImage(image, rectangle, 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, attributes);
++        }
++      }
++      finally
++      {
++        graphics.InterpolationMode = interpolation;
++        graphics.PixelOffsetMode = pixelOffset;
++      }
++    }
++
++
++    // Frame sizes icons commonly carry, probed in ascending order by SelectFrame.
++    private static readonly int[] FrameSizes = { 20, 24, 32, 48, 64, 128, 256 };
++
++
+     private static Bitmap Scale(Bitmap bitmap, InterpolationMode interpolation)
+     {
+       if (bitmap == null || !IsScaled)
+diff --git a/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Rendering/Professional/DockPanelProfessionalRenderer.cs b/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Rendering/Professional/DockPanelProfessionalRenderer.cs
+index 1b4c510..c0f8f3f 100644
+--- a/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Rendering/Professional/DockPanelProfessionalRenderer.cs
++++ b/skylinedev/DigitalRune-Docking-Windows/Source/DigitalRune.Windows.Docking/Rendering/Professional/DockPanelProfessionalRenderer.cs
+@@ -1387,7 +1387,7 @@ namespace DigitalRune.Windows.Docking
+         imageWidth = AutoHideImageWidth * (imageHeight / AutoHideImageHeight);
+       rectImage.Height = imageHeight;
+       rectImage.Width = imageWidth;
+-      graphics.DrawImage(image, rectImage);
++      DpiHelper.DrawImage(graphics, image, rectImage);
+ 
+       Rectangle rectText = rectangle;
+ 
+@@ -1761,7 +1761,7 @@ namespace DigitalRune.Windows.Docking
+           rectangle.Y + (rectangle.Height - DocumentIconHeight) / 2,
+           DocumentIconWidth, DocumentIconHeight);
+ 
+-        graphics.DrawIcon(icon, rectIcon);
++        DpiHelper.DrawIcon(graphics, icon, rectIcon);
+       }
+ 
+       Color color = (isActiveTab) ? ColorTable.ActiveDocumentText : ColorTable.InactiveDocumentText;
+@@ -1888,7 +1888,7 @@ namespace DigitalRune.Windows.Docking
+       TextRenderer.DrawText(graphics, text, font, rectText, color, ToolWindowTextFormat);
+ 
+       if (rectangle.Contains(rectIcon))
+-        graphics.DrawIcon(icon, rectIcon);
++        DpiHelper.DrawIcon(graphics, icon, rectIcon);
+     }
+ 
+ 
