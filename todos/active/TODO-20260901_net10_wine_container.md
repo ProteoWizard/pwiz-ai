@@ -233,15 +233,51 @@ echo "SWEEP done: converted=$ok failed=$fail"
 - [x] Port `msdiff` — `Tools/Commandline/MsDiff`, 13 tests. Container msconvert failures 45 -> 6.
 - [x] Record the index range in reference mzMLs and regenerate the 12 affected files.
 - [x] Add reference generation to pwiz-sharp (`PWIZ_GENERATE_REFERENCE_MZML=1`).
-- [ ] **Teach the container sweep to use the recorded index filter.** Nothing reads the userParam
-      yet, so those fixtures still fail. The step must parse the range out of the reference and
-      apply the matching `--filter "index [a,b]"` to the conversion before diffing.
-- [ ] **Anchor the sweep's grep on `"(0 spectra)"`.** Without it the check stays near-vacuous for
-      the other ~40 fixtures. Both edits are in the TeamCity step script, not the repo.
+- [x] **Move the sweep out of the TeamCity step and into the repo** — `scripts/container/tctest.sh`.
+      Runs locally: `bash scripts/container/tctest.sh [--vendor X] [--fixture GLOB] [--list]`.
+- [x] **Teach the container sweep to use the recorded index filter.** The comparison reads
+      `<userParam name="index filter" value="a-b"/>` off the reference and narrows the converted
+      mzML to the same range before diffing. All 5 index-limited fixtures now pass.
+- [x] **Anchor the sweep's grep on `"(0 spectra)"`**, and give each reference/output pair its own
+      verdict — anchoring alone leaves the multi-sample fixtures near-vacuous (below).
+- [x] **Point the TeamCity step at the script** — no longer a paste job. The config moved into the
+      `ProteoWizard_VersionedConfigs` subproject, whose Kotlin DSL lives in this repo at
+      `.teamcity/`, with `buildSettings = PREFER_VCS` against a settings VCS root whose branch
+      spec includes `+:refs/(pull/*)/head` — so a PR branch's own `.teamcity` governs its builds
+      and the step can be changed per branch. Step `RUNNER_337` is now an `exec` runner on
+      `scripts/container/tctest.sh` with `arguments = "--install-deps --teamcity"`.
+- [x] **Regenerate the vendor pins after committing the Agilent archive** — done; the Agilent pin
+      is `b589704e0668` / `14D0A84785C2B4BD...`. There is no pin commit:
+      `VendorSdkPins.generated.cs` is gitignored (`pwiz-sharp/.gitignore:27`) and rebuilt from git
+      history on every build.
+- [ ] **Push the branch before any installer or container build consumes the Agilent pin** — the
+      pin URL is a raw.githubusercontent.com link to `b589704e0668`, which exists only locally, so
+      an installer built now resolves nothing. See the 2026-09-11b entry for the whole trap.
+- [ ] **Add a dirty-archive check to `VendorPinsGenerator`** — it catches an archive with no git
+      history but not one that is modified-but-uncommitted, which is the case that silently emits
+      a broken pin.
 - [ ] **Swap master's six required status checks for the .NET contexts** — GitHub settings, and
       it blocks #4619 merging to master.
-- [ ] Bruker `Sample_1-A,1_01_985.d` fails in BOTH cpp and net10 ("Expected output file does not
-      exist"). Pre-existing, never diagnosed.
+- [x] Bruker `Sample_1-A,1_01_985.d` - diagnosed and fixed (`a303a39dd1`). **It was never
+      converted.** The fixture holds `Analysis.yep`, so it is Bruker's Esquire/HCT ion-trap format,
+      read through the CompassXtract COM server rather than the TDF/TSF/BAF stack; the sweep's
+      conversion is guarded by `if ! [ -e "$fixture/Analysis.yep" ] && [ "$fixture" != "diaPASEF.d" ]`
+      and skips it. But only `diaPASEF.d` had a matching branch in the verdict - YEP fell through
+      to "Expected output file does not exist" and was reported as a failed conversion. Same
+      script, same gap in cpp, which is why it "failed in cpp too" and looked like a reader
+      problem.
+
+      **The guard itself was obsolete - it converts.** Tried by hand in the modern container
+      (`8ebff835c0` replaces the skip `a303a39dd1` added): msconvert exits 0 on the .d in ~28 s,
+      and `msdiff -p 1e-5` against its reference gives `spectrumList (0 spectra)` /
+      `chromatogramList (0 chromatograms)`, 62 spectra both sides - the 5 remaining differences
+      are source-file locations, software list and command-line cvParams, none of which the sweep
+      looks at. CompassXtract activates fine under Wine: `BrukerCompassXtract-<sha>` is in the
+      vendor cache with `CompassXtractMS.dll` + `Interop.EDAL.SxS.manifest`, pre-extracted into
+      `C:\pwiz` by the `-WithVendorSdks` payload. So the `Analysis.yep` exclusion is gone entirely
+      and the fixture is swept like any other. **47 passed, 0 failed - in the container and
+      natively.** Lesson: the skip was the comfortable fix and the wrong one; converting it by
+      hand took two commands and showed the exclusion had outlived its reason.
 - [ ] Consider extending `Installer.Tests` beyond the per-user variant, and to the
       `-WithVendorSdks` artifact specifically — nothing currently gates that variant.
 
@@ -354,6 +390,18 @@ and Mobilion entirely.
 
 ## Harness traps (cost real time this session)
 
+- **Generate mode cannot update an override reference, and hides that it did not.**
+  `PWIZ_GENERATE_REFERENCE_MZML=1` writes to the path the harness RESOLVES, and for a
+  `<Vendor>.Tests/Reference/` override that is the **bin copy**, not the tracked source. The
+  csproj copies those references `PreserveNewest`, so the freshly written bin file is newer than
+  the source forever after and no build ever overwrites it. Every local run then passes against
+  an oracle that exists only on that machine; CI checks out clean, copies the stale tracked
+  source, and fails. Cost: `CoreWindowsNet` build #420 red on two Sciex tests
+  (`processingMethod count: 2 vs 1` / `3 vs 2`) while the same tests passed locally all day.
+  **After regenerating, diff `<Vendor>.Tests/Reference/*.mzML` against
+  `<Vendor>.Tests/bin/<cfg>/<tfm>/Reference/` and copy anything that differs back into git.**
+  Only the override suites are exposed - cpp-tree references are read in place, so there is no
+  bin indirection to drift.
 - **Do not copy a tree containing both `foo` and `foo.exe` with MSYS `cp`.** Git Bash maps
   `foo` <-> `foo.exe`, so `cp -r` silently overwrote the PE `msconvert.exe` with the Linux ELF
   apphost of the same stem. Use `robocopy` or PowerShell. This cost a whole misdiagnosed
@@ -539,11 +587,17 @@ Confirmed by reading the code, needing a decision:
   stderr before `WaitForExit`, so a full stderr pipe hangs it and the 3-minute timeout never
   fires. `VendorSdkLoader.ExtractArchive` already uses `BeginOutputReadLine` for this reason.
 
-Reported but **not verified** — do not treat as established: the Agilent Cecil-patch overlay
-missing from the default installer; `{commonappdata}` writes under `PrivilegesRequired=lowest`;
-`vendor-cache-root.txt` having no uninstall entry; `build.bat` making the installer a hard
-prerequisite of `Debug` builds; the size-inequality patch heuristic; `Interop.` prefix collision
-between ABI and BrukerCompassXtract; `Installer.Tests` silently dropping absent fixtures.
+The **Agilent Cecil-patch overlay missing from the staged tree is CONFIRMED and FIXED**
+(2026-09-11, see those log entries): `stage/` has no app-local `BaseDataAccess.dll` at all, and
+7 of 12 Agilent fixtures failed from there with `PlatformNotSupportedException` while converting
+cleanly from the build output. The archive now ships patched, so the cache the installer resolves
+through holds patched assemblies: 12/12 from `stage/`.
+
+Still reported but **not verified** — do not treat as established: `{commonappdata}` writes under
+`PrivilegesRequired=lowest`; `vendor-cache-root.txt` having no uninstall entry; `build.bat` making
+the installer a hard prerequisite of `Debug` builds; the size-inequality patch heuristic;
+`Interop.` prefix collision between ABI and BrukerCompassXtract; `Installer.Tests` silently
+dropping absent fixtures.
 
 Also unfixed: the shallow-clone pin version (CI collapses every vendor pin to the build SHA), and
 a pre-existing `Analysis.Tests`/`Waters.Tests` race over `ATEHLSTLSEK_profile.raw` — the suites
@@ -680,3 +734,392 @@ exists. Both passed in isolation. Two suites, one `.raw`, concurrent jobs, and a
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260904_vendor_resolution_fixes.md` before starting work.
+
+### 2026-09-11 — the sweep moved into the repo, and the check now has teeth
+
+The msconvert sweep lives in `scripts/container/tctest.sh` instead of inside TeamCity step
+`RUNNER_337`. The step is an `exec` runner on that path with `--install-deps --teamcity`, edited
+in the repo rather than the UI — see the checkbox above for how versioned settings make that a
+per-branch change.
+
+**Local result: 46 pass, 1 fail — the Bruker `Sample_1-A` that fails in cpp too.** The five
+index-limited fixtures that CI still reports (ABI `7600ZenoTOFMSMS` 0-20 and `swath.api`
+0-200, both Mobilion 0-100, Waters `QC_LCMS2` 0-9) all pass now.
+
+**Three defects, not one.** Reading the index filter was the known item; the other two were
+found while restructuring:
+
+1. **The recorded range is now honoured.** `reference_index_range` pulls
+   `<userParam name="index filter" value="a-b"/>` out of the reference and the converted mzML
+   is narrowed to the same range before diffing. The narrowing happens **after** the
+   conversion, on the file msconvert already wrote, not by adding `--filter "index [a,b]"` to
+   the conversion. Both select the same spectra, but filtering during conversion stops the
+   reader ever touching the rest of the file — and reading the whole file is most of what the
+   sweep exists to prove. Cost of the extra pass, measured: 0.4 s against a 19570-spectrum
+   Mobilion output.
+2. **The grep is anchored** on `"(0 spectra)"` / `"(0 chromatograms)"`.
+3. **Each reference/output pair gets its own verdict.** The old step appended every sample's
+   msdiff report into one file per fixture and grepped that, so on a multi-sample wiff the
+   first sample that matched vouched for all ten. Anchoring does not fix this; only per-pair
+   judging does. Proved on a synthetic data root (`--data-root`) with sample 05's reference
+   replaced by sample 06's: the fixture fails, and passed before the change.
+
+**`testFailed` now carries a message** — the differing summary lines. The old step emitted a
+bare `testFailed name='...'`, which is the other half of why all 45 failures showed empty
+details. Durations are milliseconds, which TeamCity can actually parse; `/usr/bin/time -f
+'%E'` produced `0:02.06` and the `time` package is no longer installed.
+
+**Confirms an open review finding: the Agilent Cecil patch does not reach the staged tree.**
+Running the sweep against `pwiz-sharp/installer/build/stage` fails **7 of 12** Agilent
+fixtures with `PlatformNotSupportedException` ("MassSpecDataReader uses delegate.BeginInvoke").
+The same fixtures convert cleanly using the msconvert under
+`Tools/Commandline/MsConvert/src/bin/Release/net10.0`. The difference is app-local
+`BaseDataAccess.dll` — present in the build output, rebuilt at 12:18 by `AgilentPatcher`,
+**absent from `stage/` entirely**. This was listed under "Open, from the same review" as
+reported-but-not-verified; it is verified now. It does NOT currently affect the container,
+whose payload is the `-WithVendorSdks` installer and which reports no Agilent failures.
+Workaround for local runs: `MSCONVERT=`/`MSDIFF=` pointed at the build output.
+
+`.gitignore` gained `/pwiz/data/vendor_readers/*/Reader*Test.data/output/`, which the sweep
+writes next to the fixtures. Test names are unchanged (`Convert <filename>`), so TeamCity
+history carries over.
+
+Full build + all 22 suites green before and after: Agilent 17, Analysis 177, Bruker 15+1,
+Mobilion 2, Sciex 8, Shimadzu 2, Thermo 15, UIMF 2, Waters 21, UNIFI 44, BiblioSpec 142,
+MsData 85, MsDiff 13, only the elevation-gated `Install_PerMachine` skip.
+
+### 2026-09-11c — the container's nine Skyline failures, and why cpp has no opinion on them
+
+Container build **#17** (`8a9831bc06`), the first to run `tctest.sh`:
+
+| step | run | passed | failed |
+|---|---|---|---|
+| msconvert sweep | 47 | 46 | **1** (Bruker `Sample_1-A`, fails in cpp too) |
+| Skyline `Test.dll` | 114 | 112 | 2 |
+| Skyline `TestData.dll` | 178 | 171 | 7 |
+
+**The nine Skyline failures are not a regression and not caused by the sweep work.** Identical
+set in #13, #14 and #17. Builds #12 and every one before it recorded **zero** tests - they died
+before the test steps - so #13 (2026-09-09) is the earliest container build that ran Skyline
+tests at all.
+
+**The cpp container has never run a single Skyline test.** Its `Run Skyline tests` step is
+enabled and does execute, but TestRunner dies on startup under Wine:
+
+```
+Unhandled Exception: System.IO.IOException: Invalid access.
+   at System.Console.set_OutputEncoding(Encoding value)
+   at TestRunner.Program.Main(String[] args) in ...\TestRunner\Program.cs:line 304
+```
+
+Both assemblies, every build. The step is logged at warning level, so **the build still reports
+SUCCESS** - build #17184 on master recorded 46 tests, which is the msconvert sweep and nothing
+else. Same family as the vacuous msconvert grep: a check that has been reporting green while
+doing nothing. It also means "does cpp pass these?" has no answer; there is no baseline anywhere,
+and the net10 container is the first thing to produce one. 283 of 292 passing on a first run.
+
+The nine fall into four groups, all plausibly environmental, none yet diagnosed:
+
+- **Sciex wiff false "in use" (4) - ROOT CAUSE FOUND, see below** - `TestQcTraces`,
+  `WiffResultsTest`, `TestWiffCommandLineImport`, `...SingleReplicate`.
+- **Vendor method builders (3)** - `TestCommandLineExportThermoMethod` (`BuildThermoMethod.exe`,
+  "could not be saved"), `TestExportMethodShimadzu` (`BuildShimadzuMethod.exe`, exit -1),
+  `ConsoleMethodTest` (Agilent). NOT a framework problem - all three are `net10.0-windows`, so
+  the old "method builders are still net472" note does not apply. They shell out to vendor method
+  SDKs, which is the part Wine is likeliest to be failing.
+- **BlibBuild and extended-length paths (1) - FIXED, `b55ef7fdc7`.**
+  `AlphapeptdeepLibraryBuilderUnitTest`: "Failed to create
+  `\\?\...\predict.speclib.redundant.blib`". Not the Wine drive mapping - it reproduces on a
+  `\\?\C:\` path too. Isolated in three runs inside the container:
+
+  | | result |
+  |---|---|
+  | `BlibBuild`, plain `C:` path | got past creation, failed later on the missing input |
+  | `BlibBuild`, `\\?\` path | `Failed to create '\\?\C:\blibtest\ext.blib'` |
+  | `wine cmd`, `\\?\` path | created the file fine |
+
+  So Wine handles the prefix and SQLite's Windows VFS does not - the managed layer is
+  platform-independent, so the divergence is in the native VFS. `SqliteRoutine.Open` now drops the
+  prefix when it is redundant (`WithoutRedundantExtendedPrefix`), keeping it past MAX_PATH, where
+  it is what makes the path openable on Windows, and for `\\?\UNC\...`, where removing it names a
+  different file. The callers are `AlphapeptdeepLibraryBuilder.ImportSpectralLibrary`, which runs
+  all three of its paths through `PathEx.ToLongPath` unconditionally.
+  Unit test: `CodeReviewRegressions.ExtendedLengthPrefix_DroppedOnlyWhenRedundant`.
+- **Document load (1) - FIXED, `80551f997e`.** `ConsoleArgumentInvalidValuesTest` feeds every
+  argument the bad value `"Bad:\Path\Value"` and asserts the output names it. Windows rejects that
+  path outright, so `new StreamReader(filePath)` throws and `ImportDocuments`' existing
+  `IOException | ArgumentException | NotSupportedException` catch reports it with the path in the
+  message. **Wine opens it**, so the failure arrives later as `XmlSerializer` wrapping
+  `XmlException` ("Data at the root level is invalid"), which that catch does not cover, and it
+  unwinds out of the import. Added a second catch, narrow on purpose -
+  `XmlException || (InvalidOperationException with an XmlException inner)` - reporting it the way
+  `OpenSkyFile` does, which names the file; a bare parse message does not contain the path and
+  would not satisfy the assertion.
+
+  **Windows verification is CI's, not local.** `TestCommandLineImportPeakBoundary` is unstable in
+  this local environment - it fails *with the change reverted* when run alongside another test,
+  and passes alone - so a local A/B cannot attribute anything:
+
+  | | alone | with a 2nd test |
+  |---|---|---|
+  | without the change | pass | **fail** |
+  | with the change | fail | fail |
+
+  It passes in CI (`ProteoWizard_SkylineWindowsNet` build 4174838, SUCCESS). I initially pinned the
+  failure on this change from the one clean-looking A/B before the control showed it failing
+  without it too. Watch that test on the next CI run.
+
+Worth fixing the cpp container's TestRunner crash regardless of the net10 work: until then that
+step is decoration.
+
+**The three method-builder tests are now skipped** in the Skyline step
+(`skip=CodeInspection,TestCommandLineExportThermoMethod` and
+`skip=TestInstallFromZip,ConsoleMethodTest,TestExportMethodShimadzu`). They drive vendor
+method-authoring SDKs nobody needs working under Wine, and a permanently red test is
+indistinguishable from a new one.
+
+### Sciex wiff "open for writing by another application" - reproduced, with a Windows control
+
+**Concurrent opens of one .wiff fail under Wine and succeed on Windows.** Two msconvert
+processes, same file, run at once:
+
+```
+# in the container (pwiz-net10:twopayload)
+(mywine msconvert PressureTrace1.wiff -o /tmp/a & mywine msconvert PressureTrace1.wiff -o /tmp/b & wait)
+  A: error converting PressureTrace1.wiff (aborting conversion of this file):
+     The file 'PressureTrace1.wiff' is open for writing by another application.
+  B: PressureTrace1-6500SysSuit1269.mzML          <- one wins, one loses
+
+# same two commands natively, staged msconvert.exe
+  A: PressureTrace1-6500SysSuit1269.mzML
+  B: PressureTrace1-6500SysSuit1269.mzML          <- both succeed
+```
+
+The SDK's `WiffStorageProviderDefaultImplementation.OpenFile` opens the .wiff in a share mode
+Windows grants to a second reader and Wine refuses; the SDK reports the refusal as
+`AcquiringInProcessInWiffException`, whose message names a writer that does not exist.
+
+**Why the sweep is green and Skyline is not.** msconvert opens a wiff once per process, and even
+a 10-sample file (`Enolase_repeats_AQv1.4.2.wiff`, sweep-green) is opened one sample at a time -
+*sequential* opens are fine. Skyline overlaps them:
+
+- `TestQcTraces` holds an `MsDataFileImpl` on `PressureTrace1.wiff` open in a `using` and imports
+  *the same file* inside that block - an explicit nested second open.
+- `WiffResultsTest` / `TestWiffCommandLineImport` import several samples of one wiff, which
+  Skyline processes concurrently.
+
+Each `WiffFile` constructs its own `new AnalystWiffDataProvider()` (`WiffFile.cs:146`), so N
+overlapping readers on one path means N providers and N OS handles. There is no per-path sharing
+anywhere in `WiffFile` / `AbstractWiffFile`.
+
+### THE FIX: build the provider through DataProviderFactory, as cpp does
+
+**`DataProviderFactory.CreateDataProvider("", true)` + `AnalystDataProviderFactory.CreateBatch` +
+`batch.GetSample(i)`, replacing `new AnalystWiffDataProvider()` + `CreateSample`.** Exactly the
+call pair pwiz cpp's `WiffFileImpl` ctor uses, which has `gcnew AnalystWiffDataProvider()`
+commented out beside it. `CreateSample` cannot stay: it is typed to `AnalystWiffDataProvider` and
+will not accept the base `DataProvider`, which is what forces the Batch route.
+
+Container A/B on `TestData.dll` (175 tests, same image, same fixtures, only the Skyline overlay
+differs):
+
+| | baseline (image bits) | with the fix |
+|---|---|---|
+| failures | **11** | **7** |
+| `left these temp files behind` | 0 | 0 |
+
+The delta is exactly the four target tests - `TestQcTraces`, `WiffResultsTest`,
+`TestWiffCommandLineImport`, `TestWiffCommandLineImportSingleReplicate` - and nothing else moved.
+
+The other 7 in both columns (`FileTypeTest`, `TestAgilentSourceType`, `TestInstrumentInfo`,
+`TestInstrumentSerialNumbers`, `TestScanDescription`, `TestTicChromatogram`, `Wiff2ResultsTest`)
+were a harness gap, not failures: they resolve vendor data as
+`TestZipFiles\..\..\pwiz\data\vendor_readers\...`, and Windows normalises `..` lexically, so from
+`C:\pwiz\skyline\TestZipFiles` that is always `C:\pwiz\pwiz\data\vendor_readers` no matter where
+the TestZipFiles symlink points. Mounting the tree there makes all 7 pass. Two of them
+(`FileTypeTest`, `Wiff2ResultsTest`) exercise the wiff path this change touches, so they matter:
+
+```
+docker run ... -v <repo>/pwiz/data/vendor_readers:/wineprefix64/drive_c/pwiz/pwiz/data/vendor_readers:ro
+```
+
+**Final gate before push: 11/11 green in the container** (the 4 targets plus those 7), no
+`left these temp files behind` in any run, and all 22 suites green on Windows.
+Committed as `7597c09459`.
+
+**I nearly threw this fix away.** The first time it was tried it was judged only against the
+TWO-PROCESS msconvert repro - which no in-process change can ever fix, since separate processes
+hold separate OS handles and share nothing - and written off as disproved. The note below is that
+wrong verdict, kept because the reasoning error is the reusable part: match the repro to the scope
+of the change before believing a negative result.
+
+**Was recorded as DISPROVED on an invalid test; it is in fact the fix.** cpp's `WiffFileImpl` ctor builds its
+provider with `DataProviderFactory::CreateDataProvider("", true)` and has
+`//provider = gcnew AnalystWiffDataProvider();` commented out beside it (since 2016), which looked
+like a deliberate switch away from the call pwiz-sharp still makes. Ported it -
+`DataProviderFactory.CreateDataProvider("", true)`, which also forces `CreateSample` ->
+`CreateBatch` + `batch.GetSample(i)` because `AnalystDataProviderFactory.CreateSample` is typed to
+`AnalystWiffDataProvider` and will not take the base `DataProvider`. All 22 suites stayed green on
+Windows, and **the Wine repro still failed** (with the full path in the message, confirming the new
+code ran). Reverted. The second factory argument is `sourcePathAnywhere`, per the parameter-name
+strings in `Clearcore2.Data.Client.dll` - it is about locating the wiff, not sharing it.
+
+**What cpp actually does differently: one WiffFile per FILE, not per sample.**
+`Reader_ABI::read(filename, head, vector<MSDataPtr>&, config)` - the multi-sample overload -
+creates a single `WiffFilePtr` and hands the *same* one to every sample's `SpectrumList_ABI` and
+`ChromatogramList_ABI` (`Reader_ABI.cpp:241-260`); `WiffFileImpl` carries mutable `currentSample`
+state and `setSample()` switches between them. So cpp reads all N samples of a wiff through ONE
+provider and ONE OS handle. pwiz-sharp's `WiffFile` takes `(wiffPath, sampleIndex0)` and builds a
+fresh `AnalystWiffDataProvider` per sample, so N samples means N handles - which is what Wine
+refuses.
+
+That also answers the thread-safety worry about sharing: cpp has shared one impl across a file's
+samples on Windows for years. It is not thread-SAFE (the `currentSample` field is unguarded, and
+msconvert reads samples sequentially), so a pwiz-sharp port of the same shape needs a lock around
+sample switching if Skyline can touch two samples of one file concurrently.
+
+**ATTEMPTED AND REVERTED: `ProviderLease`** (`00c164c987`, reverted by `4b88eea3f6`) - a
+refcounted `AnalystWiffDataProvider` per full path, closed when the last reader let go.
+
+It passed every gate available outside the container and was still a bad regression:
+
+- All 22 suites green on Windows.
+- An in-process A/B under Wine that looked decisive. `msdiff <file> <file>` opens one path twice
+  in one process - the same overlap Skyline creates, unlike the two-process repro above:
+  same path (lease shared) gave `spectrumList (0 spectra)`; two hardlinked paths to one file
+  (different keys, so two providers) still gave "open for writing by another application". The
+  only variable between pass and fail was whether the provider was shared.
+- **Container build #19: `TestData.dll` went from 171 passed / 7 failed to 60 passed / 116
+  failed**, and the four target tests still failed.
+
+The cascade signature: every downstream test reports
+`left these temp files behind: ...\TestResults\TestRunner results\CommandLineWiffTest`. The wiff
+stayed locked, `TestFilesDir` could not delete the directory, and each later test got blamed for
+it - the same shape as the pooled-stream cascade in MEMORY.md.
+
+**Leading hypothesis, NOT verified**: sharing made `EnumerateSampleNames`' release stop closing
+the provider whenever any `WiffFile` for that path was still alive - including one leaked and
+waiting on a finalizer. Before, that method always built and closed its OWN provider, which
+masked the leak. The lease turned a benign leak into a persistent lock.
+
+**Lesson for the next attempt: the msdiff A/B is not a sufficient gate.** It exercises open ->
+read -> dispose on one path and nothing about the lifecycle Skyline actually has (readers held
+across imports, readers abandoned to finalizers, a test framework that deletes the directory
+afterwards). Anything touching provider lifetime has to be tried in the container against
+`CommandLineWiffTest` / `SmallWiffTest` / `PwizFileInfoTest` before it goes near a push.
+
+### CONFIRMED REGRESSION: all four pass in the pre-break cpp container
+
+Ran the real tests, not msdiff, in
+`proteowizard/pwiz-skyline-i-agree-to-the-vendor-licenses:skyline_daily_25.1.1.270-67f3e15`
+(2025-09-28, before the Skyline step broke):
+
+```
+[18:03]   2.0   TestQcTraces                               (en)   0 failures, 2 sec.
+[18:03]   2.1   TestWiffCommandLineImport                  (en)   0 failures, 5 sec.
+[18:03]   2.2   TestWiffCommandLineImportSingleReplicate   (en)   0 failures, 2 sec.
+[18:03]   2.3   WiffResultsTest                            (en)   0 failures, 1 sec.
+# No failures.
+```
+
+cpp also survives the concurrent-open A/B that kills pwiz-sharp: `msdiff <file> <file>` in one
+process exits 0, and two hardlinked paths to one file give a diff report rather than a lock error.
+`grep -c 'open for writing'` is 0 in both cpp logs. **So concurrent in-process opens of one .wiff
+are fine under Wine for cpp and broken for pwiz-sharp - a port regression, not a Wine limit.**
+
+Also disproved along the way: cpp does NOT get this from sharing a handle across samples.
+`Reader_ABI.cpp` has two read overloads - the all-samples one (`:241`, msconvert's) shares a single
+`WiffFilePtr`, but the single-sample one (`:210`) creates its own per call, and Skyline uses that
+one (`FULL_READER_LIST.Read(path, _msDataFile, sampleIndex, _config)`). cpp has one provider per
+open sample there, exactly as pwiz-sharp does. The difference is elsewhere.
+
+### Container test loop (works, use it)
+
+`ai/.tmp/sessions/.../ctest.sh` + a `docker run`, which is how the four tests above were run:
+
+```
+docker run --rm -v <session>:/work -v <repo>/pwiz_tools/Skyline:/zips:ro \
+    [-v <repo>/pwiz-sharp/installer/build/stage:/newbits:ro] \
+    --entrypoint /bin/bash <image> /work/ctest.sh "Test1,Test2"
+```
+
+`/zips` restores `TestZipFiles`, which the image deletes; `/newbits` (optional) overlays a rebuilt
+`C:\pwiz` so a candidate fix can be tried without rebuilding the image. Gotchas:
+
+- Use plain `wine`, NOT `mywine`. The private prefix mywine builds makes the runner exit 255
+  having printed nothing. `WINEPREFIX=/wineprefix64` is already in the image env.
+- Do not filter the runner's output through `grep -v ...err:` while debugging - it hides wine
+  crash dumps and makes a dead runner look silent.
+- The locally-built `pwiz-net10:twopayload` image is NOT usable for Skyline tests: its Skyline
+  half is the **net472** SkylineTester (`TestRunner.exe.config`, no `TestRunner.dll`), which
+  cannot start in a container with no .NET Framework. Use the image CI built - every container
+  build publishes the whole thing as `pwiz-skyline-i-agree-to-the-vendor-licenses.tbz2` (~1.85 GB)
+  under its artifacts; download and `docker load` it.
+
+### 2026-09-11b — the Agilent archive now ships Cecil-patched, x64 only
+
+`pwiz_aux/msrc/utility/vendor_api_Agilent.7z` was repacked in place with the patched
+`BaseDataAccess.dll` + `BaseCommon.dll` and **no x86 half** (1.86 MB -> 1.22 MB, 17 files -> 9).
+`Agilent.csproj`'s `PatchAgilentBeginInvoke` target is gone; extraction is all that is left.
+
+**Why the build-time patch could never have been enough.** `installer/build.ps1` strips every
+vendor DLL out of the payload on purpose and relies on `VendorSdkLoader` fetching the pinned
+archive at run time. Patching the *extracted copy* therefore fixed only builds that keep the SDK
+app-local. Anything resolving through the cache - every install, and the container - got whatever
+the archive held, which was unpatched. Measured: `stage/msconvert.exe` failed 7 of 12 Agilent
+fixtures before, passes 12/12 after.
+
+`pwiz-sharp/build/AgilentPatcher` is kept as the **archive-authoring tool**; its header now
+carries the repack procedure. Nothing re-applies the patch at build time, so an SDK swapped in
+without running it ships unpatched - `Agilent.Tests` is the guard, since the fixtures it opens are
+exactly the ones that fail without the patch.
+
+**Dropping x86 does not break the cpp build**, it disables the cpp Agilent reader on x86:
+`Jamroot.jam`'s `mhdac-dll-location` picks `x86` off-x64 and then gates on
+`path.exists $(result)\MassSpecDataReader.dll`, so the sources are simply not compiled in.
+x64 cpp builds are unaffected.
+
+**`VendorPinsGenerator` has a gap that bites exactly this change.** It handles an archive with no
+git history (warns, skips the pin) but NOT an archive that is modified-but-uncommitted: the file
+has history, so `git log -1 -- path` returns the PREVIOUS commit while the SHA-256 is computed
+from the working tree. The pin it writes serves the old archive and records the new one's hash,
+which fails `VerifyHash` at run time with "SHA-256 mismatch ... Archive deleted; loader will
+re-download next call" - and the re-download gets the same old bytes, so it never converges.
+
+**There is no pin commit to make**: `VendorSdkPins.generated.cs` is gitignored
+(`pwiz-sharp/.gitignore:27`) and regenerated from git history on every build. That makes the rule
+sharper, not looser - **commit the archive before building anything from it**, because a build run
+against a dirty archive bakes the broken pin straight into the binary. The full-suite build here
+did exactly that at 12:47 and nothing noticed, since dev builds keep the SDK app-local and never
+consult the pin. Worth a dirty-check in the generator.
+
+**And the pinned commit has to be pushed.** The URL is a raw.githubusercontent.com link to a
+specific SHA, so a pin generated against a local-only commit resolves to nothing. Amending the
+archive commit re-rolls the SHA and stales the pin, which happened here once; regenerate after
+any history rewrite.
+
+`Installer.Tests` proves both halves of that. It is the only suite that installs the built
+artifact and converts through it, and with the archive committed but unpushed it failed with
+`404 (Not Found)` on the pinned URL - the whole vendor SDK unresolvable, not just the patch.
+Note what it does NOT catch: its Agilent smoke fixture is `Neg_MS_002_1scan.d`, one of the five
+that open fine unpatched, so it passed happily for as long as the archive shipped unpatched.
+`Agilent.Tests` is the suite that covers the fixtures the patch is for.
+
+**Verified end to end after pushing** (branch at `8a9831bc06`). The pinned URL returns HTTP 200
+and 1218147 bytes hashing to `14D0A84785C2B4BD...`, matching the pin exactly. With BOTH Agilent
+cache entries deleted, `installer/build/stage/msconvert.exe` - which carries no app-local Agilent
+assemblies - converted `MRM Neg C5.d`, one of the seven that failed before the repack: download,
+hash check, extract and convert, no hand-seeding anywhere. The extracted cache holds the 2821120-
+byte patched `BaseDataAccess.dll` carrying `Pwiz.AgilentPatch`, and no x86 directory.
+
+**Local gotcha after merging the parent branch**: the merged-in `PwizTargetPlatform.targets`
+adds a `PWIZ0002` guard that fails the Windows build when `$(TargetDir)` holds `*.so` files, and
+an incremental build does not remove them - 32 stale Linux natives from earlier builds had to be
+deleted by hand. It scans the output ROOT only, deliberately sparing `runtimes/<rid>/native/`,
+so delete only the flat ones. CI is immune: it checks out clean.
+
+Verification of the deployment path was done by putting the patched pair into the existing cache
+directory (`%LOCALAPPDATA%\ProteoWizard\vendor\Agilent-3d95b9617215`) so the loader's `.ok`
+marker short-circuits download+hash - i.e. the state the regenerated pin will produce. Originals
+saved under `ai/.tmp/sessions/20260911-02c3b05e/cache-backup/`. The pin plumbing itself is
+unexercised and still to do.
