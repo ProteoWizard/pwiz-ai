@@ -375,6 +375,24 @@ no centroider), `probe_trailer.ps1`.
 - Fix options: correct the profile axis at read (a per-scan-rate offset, or estimated per file), and/or make Osprey's
   unit-resolution calibration robust (initial window past 0.55, offset from the intensity-weighted mode, not the
   mean). Mike suggested opening the initial tolerance to about 0.6.
+**Root cause of the WSL-Centrix collapses: Rust Centrix mispairs spectra after an empty one (2026-10-22).** Mike: the
+mass axis cannot move 0.5 Th between adjacent runs, so it is our processing. Confirmed:
+- The raw profile axis (RawFileReader, no ProteoWizard, `raw_profile_offset.ps1` on 1,500 peptides common to all three
+  runs) is the same in SuperOverlap TR01 / TR02 / TR03: fragments at -0.42 to -0.56 Th in every m/z range, within 0.02.
+- The demultiplexed profile is right in all three. But the Rust Centrix output of TR01 at spectrum 278858 is exactly what
+  Rust Centrix gives spectrum 278859 alone (and 278859 holds 278860's, ...): every spectrum carries the next one's
+  centroids. The slip begins at the first empty spectrum (SuperOverlap TR01 index 20675, 0 points; 2Th TR02 index 754;
+  `find_centroid_slip.py`); TR02 SuperOverlap and 2Th TR01 have none. Cause: `ProfileReader::next` in Centrix's
+  `src/io/reader.rs` skips empty spectra (`Ok(None) => continue`) while the passthrough writer writes every spectrum,
+  so results shift by one per empty spectrum. In the demultiplexed files the next spectrum is the next 1 Th bin, whose
+  precursors include a 2+ peptide's M+2, so its fragments carry heavy isotopes: the +0.41 matches, calibration on the
+  wrong peaks, half the IDs.
+- Affected: every WSL-Centrix arm whose input has empty spectra (SuperOverlap joint TR01/TR03, SuperOverlap makima, 2Th
+  TR02/TR03, likely 50% thin2 TR01). Not affected: the in-process C# Centrix (centroids each spectrum in place).
+- Fix: SuperOverlap rerun in-process (`super-profile-joint-cscentrix`: `--profile --joint --fill-time-ions 1000
+  --centroid centrix --centrix-param Solver=active_set`, measured sigma; snapshots `_bin/stellar-cscentrix-*`). For Rust
+  Centrix: return an empty spectrum instead of skipping it, or pair results with spectra by native id (not filed yet).
+- The -0.55 Th profile axis offset itself is real and the same in every run; separate from this bug.
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
