@@ -7,11 +7,7 @@
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 (the
-  CarafeSharp option spelling, split out of it) before it. PR 4b (mode 2, the predicted-library
-  rename, stop-after-task resume) merged 2026-10-21 as #4885. The clean-up PR merged 2026-10-21 as
-  #4895. Next: 4c (HPC addressing, opt-in CUDA build; night session 2026-10-21), then 4d
-  (installers, TeamCity artifacts).
+- **Status**: In Progress - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 before it; 4b merged 2026-10-21 as #4885; the clean-up PR merged 2026-10-21 as #4895; 4c (HPC addressing, task declarations, one chain shape) merged 2026-10-22 as #4898 (46af8ac754). Next: retire `.libcache` (small PR), then finish #4849 (Nick away two weeks), then 4d (Osprey as a download using #4849's libtorch runtime).
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
@@ -19,7 +15,7 @@
   [#4878](https://github.com/ProteoWizard/pwiz/pull/4878) (doc sweep, merged 2026-10-20);
   [#4885](https://github.com/ProteoWizard/pwiz/pull/4885) (PR 4b, merged 2026-10-21 as 7819a9b6ac);
   [#4895](https://github.com/ProteoWizard/pwiz/pull/4895) (clean-up, merged 2026-10-21 as 22626556a4);
-  [#4898](https://github.com/ProteoWizard/pwiz/pull/4898) (PR 4c, opened 2026-10-22 night)
+  [#4898](https://github.com/ProteoWizard/pwiz/pull/4898) (PR 4c, merged 2026-10-22 as 46af8ac754)
 - **Checkout**: `C:\proj\pwiz`
 - **Companion**: folded into `pwiz_tools/Osprey/Osprey-workflow.html` as part 1 ("Building the
   library") in PR 4b (#4885); the draft `TODO-20261019_osprey_one_command-workflows.html` is deleted.
@@ -1310,3 +1306,7 @@ reconciliation-off refusal removed too (no option can turn reconciliation off; F
 ValidateSelection of its own now). Gates: Osprey 652/652 + inspection 0; mode 14 PASS on 8e6a3a7338 with
 15 nodes, Stellar's single tuning run as four stage nodes (node by node 20:26). Pushed; #4898 body updated.
 See "Second-pass levers" (above the PR plan) for the Mike discussion this raised.
+
+### 2026-10-22 - PR 4c merged
+
+PR #4898 merged as commit 46af8ac754 (squash approved by Brendan). All 17 checks green on d1df38fa29; TeamCity Perf/Regression 4230580 SUCCESS (triggered at Brendan's request). Shipped: `--task PredictTrainingLibrary|TrainModel|PredictLibrary`, `--training-search`, `--task-files`, completed stage declarations with the regression HPC chain staged from them, `--task FirstPassFDR` accepting one run and reconciliation off, regression mode 14, the folded workflow page. Not in 4c (moved on): installers and TeamCity artifacts (4d), and the CUDA build was measured rather than packaged (4d via #4849). The held pwiz-ai scripts (`Run-CarafeSharpWorkflow.ps1` reduced to one Osprey call, `OspreyDatasetRun.psm1 -LinkFrom` from `--task-files`) committed with this entry. This TODO stays active for the `.libcache` retirement, #4849 and 4d.

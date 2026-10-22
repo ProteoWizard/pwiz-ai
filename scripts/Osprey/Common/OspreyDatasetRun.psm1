@@ -822,203 +822,176 @@ function Invoke-OspreyDatasetRun {
             $env:OSPREY_VERSION_OVERRIDE = $distinct[0]
             Write-Host ("  LinkFrom: pinned OSPREY_VERSION_OVERRIDE={0} from the source run(s)" -f $distinct[0])
         }
-        # Per-file artifacts by the stage that PRODUCES them. Linking is cumulative up to the
-        # stage before -Task, so the task under test always regenerates its own outputs.
+        # WHAT to link comes from the tasks' own declarations (`--task-files`, which prints each
+        # task's Inputs and Outputs and runs nothing), not from a table kept here. The table this
+        # replaced linked every earlier stage's artifacts cumulatively and drifted twice: it
+        # once filed the per-run 2nd-pass sidecar under its old producer, so `-Task
+        # SecondPassFDR -LinkFrom` staged neither it nor its decoys and two Stage-7 A/B
+        # measurements both ran the same fallback; and it once omitted the analysis-wide
+        # experiment sidecar, which Osprey reads past with an [ERROR] and finishes
+        # success-shaped hours later. A declaration is the one list the pipeline itself owns,
+        # so this and regression.ps1's HPC chain stage from the same source
+        # (TODO-task_file_contract_from_declarations.md).
         #
-        # Stage 1-4 alone is right for the default (no -Task) and for -Task FirstPassFDR, but
-        # it is NOT enough for the later per-task modes: a --task SecondPassFDR node consumes
-        # the Stage 5 sidecars and the Stage 6 reconciled parquets, and with only the Stage 1-4
-        # set linked it finds no reconciled parquet, takes AnyReconciledParquet == false, and a
-        # frozen pass-2 mode (transfer-compete / protein-compact) then FAIL-FASTS with
-        # "could not run the frozen recompute". That reads as a code bug rather than as
-        # "you linked too little", which is why this is a table and not a single list.
-        $STAGE_ARTIFACTS = [ordered]@{
-            # Each artifact carries its validity stamp INSIDE itself (JSON first property,
-            # parquet footer, binary-sidecar trailer, blib metadata row), so linking the
-            # artifact links its stamp. There are no separate .osprey.task files to stage;
-            # those were retired when the stamps were embedded.
-            'PerFileScoring'   = @('.calibration.json', '.scores.parquet')
-            # The model, stratum and cross-run consensus are analysis-wide (see
-            # $ANALYSIS_ARTIFACTS). Each run's .reconciliation.json is PerFileRescoring's now:
-            # that task plans the run from the consensus and writes it.
-            'FirstPassFDR'     = @('.1st-pass.fdr_scores.bin')
-            # The per-run 2nd-pass sidecar and the decoy side of its competition are
-            # PerFileRescoring outputs since issue #4486 - the worker computes and writes them,
-            # and SecondPassFDR only folds them. This table still listed the sidecar under
-            # SecondPassFDR under its old producer, so `-Task SecondPassFDR -LinkFrom` staged
-            # NEITHER file and Stage 7 silently fell back to recomputing every file from the
-            # 1st-pass sidecars. Two Stage-7 A/B measurements were taken that way before anyone
-            # noticed: both arms ran the same fallback, so the comparison showed no difference
-            # and read as "verification is free".
-            #
-            # Safe for the modes that do NOT have a per-file half (transfer, the retrain modes):
-            # those never write a per-run 2nd-pass sidecar, so nothing matches and nothing
-            # links.
-            'PerFileRescoring' = @('.reconciliation.json',
-                                   '.scores-reconciled.parquet',
-                                   '.2nd-pass.fdr_scores.bin',
-                                   '.2nd-pass.fdr_decoys.bin')
-            # Analysis-wide outputs are not per-file, so there is nothing here to hard-link per
-            # input. They are NOT absent from the relay, though - see $ANALYSIS_ARTIFACTS below.
-            'SecondPassFDR'    = @()
-            # -Task ModelDiagnostics is not a pipeline stage that produces per-file artifacts;
-            # it sits at the END of the table so that "everything strictly before it" is the
-            # WHOLE analysis. That is exactly the bed a diagnostics re-entry needs: it re-enters
-            # on a completed run and must find every stage's outputs (stamps included, since
-            # each output carries its own).
-            'ModelDiagnostics' = @()
-        }
-        # Analysis-wide artifacts: ONE file for the whole cohort, named after the output blib's
-        # stem rather than an input stem, so the per-input loop below cannot see them.
-        #
-        # Leaving them out was a real defect, not a simplification. `-Task PerFileRescoring
-        # -LinkFrom` staged no `<stem>.1st-pass.fdr_experiment.bin`, and Osprey logs
-        # "[ERROR] failed to read the experiment-scope FDR sidecar" and CONTINUES - with a
-        # different retained set, ExitCode 1, and a run that finishes success-shaped hours
-        # later. The retained base_id summary joins it here because a linked task now REFUSES
-        # to run without it, which turns the same omission into an immediate, named failure
-        # instead of a silently different answer.
-        $ANALYSIS_ARTIFACTS = [ordered]@{
-            'PerFileScoring'   = @()
-            # EACH ARTIFACT'S STAMP NOW TRAVELS INSIDE IT (the binary-sidecar trailer), so
-            # linking the file is the whole job. When stamps were separate .osprey.task files
-            # this was the expensive kind of omission: a staged bed held
-            # out.1st-pass.fdr_experiment.bin without its stamp, so a task asking "is this
-            # output current?" got NO for an artifact that was in fact complete, declined to
-            # adopt the finished first pass, and re-ran it - 4h46m on a 446-run cohort, to
-            # produce a report identical to the one the fold produces in minutes. Nothing in
-            # the output says which of the two happened. A missing ARTIFACT still has exactly
-            # that effect, which is why both FirstPassFDR outputs are listed.
-            # retained_base_ids.bin is now a declared FirstPassFDR output with its own embedded
-            # stamp, so it is part of the "is every output current?" question too.
-            #
-            # The model and the protein-compact stratum are written once under the blib stem
-            # (pwiz doc 00, P1). Older beds wrote an identical copy beside every input; the glob
-            # below matches one of those copies too and links it under this run's blib name, so
-            # such a bed still stages. Omitting the stratum once staged a cohort that LOOKED
-            # complete and then failed 11 minutes into Stage 7 with "could not run the frozen
-            # recompute ... or protein stratum are absent", which reads as a code bug rather
-            # than as "the link set is one artifact short".
-            'FirstPassFDR'     = @('.1st-pass.fdr_experiment.bin',
-                                   '.1st-pass.retained_base_ids.bin',
-                                   '.1st-pass.consensus.json',
-                                   '.1st-pass.model.json',
-                                   '.1st-pass.stratum.json')
-            'PerFileRescoring' = @()
-            # The analysis-wide 2nd-pass experiment sidecar is SecondPassFDR's own end-of-join
-            # output, and it is how a later invocation learns a second pass EXISTS to describe
-            # (ModelDiagnosticsReport.HasCompletedSecondPass asks exactly this file). It was
-            # empty here because nothing downstream of Stage 7 used to be stageable; a
-            # -Task ModelDiagnostics re-entry is, and without this it concludes the cohort has
-            # no second pass and renders a pass-1-only page - complete, plausible, and half.
-            # The blib is SecondPassFDR's headline output, and a RE-ENTRY needs it present:
-            # the task declares it, so a diagnostics-only arm asking "is every other output
-            # current?" gets NO without it and re-runs the whole join. Only ever staged when
-            # -LinkThroughTask carries the loop through SecondPassFDR - a plain
-            # `-Task SecondPassFDR` re-measurement still stops before this row and regenerates
-            # its own blib, which is what that mode is for.
-            'SecondPassFDR'    = @('.2nd-pass.fdr_experiment.bin', '.blib')
-            'ModelDiagnostics' = @()
-        }
-        # Everything strictly BEFORE the task under test. No -Task keeps the historical
-        # Stage 1-4 behavior, so existing callers are unaffected.
-        #
-        # -LinkThroughTask makes it INCLUSIVE, which is what a re-entry needs rather than a
-        # re-measurement: the task's own (self-stamped) outputs have to be on disk for it to
-        # recognise that it has already run. See the parameter's own note for why getting this
-        # wrong is silent.
-        # -LinkUpTo wins over the -Task-derived default, and over -LinkThroughTask with it:
-        # it names the boundary directly, so "through the task" has no task to be relative
-        # to. Refused together rather than silently resolved, because the two would disagree
-        # by exactly one stage and the symptom - a whole stage re-running - reads as a
-        # caching bug rather than as an argument mistake.
+        # Two shapes:
+        #   * -Task <stage>: an HPC node. Link exactly that task's declared inputs, and with
+        #     -LinkThroughTask its declared outputs too - a re-entry has to find its own outputs
+        #     to see that it already ran. One --task-files call.
+        #   * an ordinary run resumed at a boundary (-LinkUpTo, else FirstPassFDR; -Task
+        #     ModelDiagnostics / TrainingExport, which re-enter a completed analysis, at the
+        #     end): the outputs of every stage before the boundary, which is what lets the
+        #     driver skip those stages, plus the boundary stage's own declared inputs - the
+        #     analysis-wide files FirstPassFDR writes without declaring them as outputs (the
+        #     model, the stratum) are inputs of the stages that read them. One call per stage.
+        # Only files that resolve into the output directory are linked: the library, the data
+        # files and their spectra caches are read where they are.
         if ($LinkUpTo -and $LinkThroughTask) {
             throw '-LinkUpTo names the boundary itself; drop -LinkThroughTask.'
         }
+        $PIPELINE = @('PerFileScoring', 'FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR')
+        $nodeTask = if (-not $LinkUpTo -and $Task -and ($PIPELINE -contains $Task)) { $Task } else { $null }
         $upTo = if ($LinkUpTo) { $LinkUpTo } elseif ($Task) { $Task } else { 'FirstPassFDR' }
-        $suffixes = @()
-        $analysisSuffixes = @()
-        foreach ($stage in $STAGE_ARTIFACTS.Keys) {
-            if ($stage -eq $upTo -and -not $LinkThroughTask) { break }
-            $suffixes += $STAGE_ARTIFACTS[$stage]
-            $analysisSuffixes += $ANALYSIS_ARTIFACTS[$stage]
-            if ($stage -eq $upTo) { break }
-        }
-        if ($suffixes.Count -eq 0) {
-            throw ("-Task $Task is the FIRST pipeline stage, so there is nothing earlier to link. " +
+        if ($upTo -eq 'SpectraCache' -or ($upTo -eq 'PerFileScoring' -and -not $LinkThroughTask)) {
+            throw ("-Task/-LinkUpTo $upTo is the FIRST pipeline stage, so there is nothing earlier to link. " +
                    "Drop -LinkFrom and run it against the raw input.")
         }
-        $linked = 0; $missing = 0
-        $missingBySuffix = @{}
+
+        # The declarations under THIS run's command line and pass-2 mode (the stratum is
+        # declared only under protein-compact), with --task <stage> in place of the run's own.
+        $printArgs = [System.Collections.Generic.List[string]]::new()
+        for ($i = 0; $i -lt $cliArgs.Count; $i++) {
+            if ($cliArgs[$i] -eq '--task') { $i++; continue }
+            $printArgs.Add($cliArgs[$i])
+        }
+        $printList = $null
+        if ($inputListPath -and -not (Test-Path $inputListPath)) {
+            # -WhatIf has not written the list yet; print from a temporary copy.
+            $printList = [IO.Path]::GetTempFileName()
+            Set-Content -Path $printList -Value $inputs -Encoding utf8
+            $printArgs[$printArgs.IndexOf($inputListPath)] = $printList
+        }
+        $outDirExisted = Test-Path $OutDir
+        $priorPass2 = $env:OSPREY_PASS2_QVALUE
+        $env:OSPREY_PASS2_QVALUE = $Pass2Mode
+        $declaredByStage = @{}
+        try {
+            $stagesToPrint = if ($nodeTask) { @($nodeTask) } else { $PIPELINE }
+            foreach ($stage in $stagesToPrint) {
+                $lines = @(& $ospreyExe @printArgs '--task' $stage '--task-files' 2>&1 | ForEach-Object { "$_" })
+                if ($LASTEXITCODE -ne 0) {
+                    throw ("-LinkFrom: Osprey --task $stage --task-files failed, so the declared files to " +
+                           "link are unknown: " + ($lines -join ' | '))
+                }
+                # The last three tab-separated fields: --timestamp / --memstamp prepend columns.
+                $declaredByStage[$stage] = @(foreach ($line in $lines) {
+                    $f = $line.Split("`t")
+                    if ($f.Count -ge 3 -and ($f[-3] -eq 'input' -or $f[-3] -eq 'output') -and $f[-2] -eq $stage) {
+                        [pscustomobject]@{ Kind = $f[-3]; Path = [IO.Path]::GetFullPath($f[-1].Trim()) }
+                    }
+                })
+            }
+        } finally {
+            $env:OSPREY_PASS2_QVALUE = $priorPass2
+            if ($printList) { Remove-Item $printList -ErrorAction SilentlyContinue }
+            # Printing resolves --output-dir and may create it; a dry run leaves no trace.
+            if ($WhatIf -and -not $outDirExisted -and (Test-Path $OutDir) -and
+                @(Get-ChildItem $OutDir -Force).Count -eq 0) {
+                Remove-Item $OutDir -ErrorAction SilentlyContinue
+            }
+        }
+        function Select-Declared([string]$Stage, [string]$Kind) {
+            @($declaredByStage[$Stage] | Where-Object { $_.Kind -eq $Kind } | ForEach-Object { $_.Path })
+        }
+        $wanted = [System.Collections.Generic.List[string]]::new()
+        if ($nodeTask) {
+            $own = Select-Declared $nodeTask 'output'
+            foreach ($p in (Select-Declared $nodeTask 'input')) { if ($own -notcontains $p) { $wanted.Add($p) } }
+            if ($LinkThroughTask) { foreach ($p in $own) { $wanted.Add($p) } }
+            $through = if ($LinkThroughTask) { "inputs and outputs of $nodeTask" } else { "inputs of $nodeTask" }
+        } else {
+            $b = [array]::IndexOf($PIPELINE, $upTo)
+            if ($b -lt 0) { $b = $PIPELINE.Count }   # ModelDiagnostics / TrainingExport: the whole analysis
+            for ($s = 0; $s -lt $b; $s++) {
+                foreach ($p in (Select-Declared $PIPELINE[$s] 'output')) { $wanted.Add($p) }
+            }
+            $boundaryStages = if ($b -lt $PIPELINE.Count) { @($PIPELINE[$b]) } else { $PIPELINE }
+            foreach ($stage in $boundaryStages) {
+                $own = if ($b -lt $PIPELINE.Count) { Select-Declared $stage 'output' } else { @() }
+                foreach ($p in (Select-Declared $stage 'input')) { if ($own -notcontains $p) { $wanted.Add($p) } }
+            }
+            $through = if ($b -lt $PIPELINE.Count) { "stages before $upTo, and its inputs" } else { 'whole analysis' }
+        }
+        $outFull = [IO.Path]::GetFullPath($OutDir).TrimEnd('\')
+        $wanted = @($wanted | Sort-Object -Unique |
+                    Where-Object { [IO.Path]::GetDirectoryName($_).TrimEnd('\') -eq $outFull })
+
+        # Analysis-wide files are named for the output blib's stem, which a source run need not
+        # share, so one not found under its own name is looked up under the SOURCE's blib stem,
+        # read off the analysis-wide file every source past Stage 4 has. Not a glob on the rest
+        # of the name: '*.blib' also matches the derived <library-leaf>.blib a run leaves beside
+        # its artifacts, and would link the library as the output.
+        $blibStem = [IO.Path]::GetFileNameWithoutExtension($blib)
+        $sourceStem = @{}
+        foreach ($src in $LinkFrom) {
+            foreach ($marker in '.1st-pass.fdr_experiment.bin', '.1st-pass.retained_base_ids.bin') {
+                $hit = Get-ChildItem (Join-Path $src ('*' + $marker)) -File -ErrorAction SilentlyContinue |
+                       Select-Object -First 1
+                if ($hit) { $sourceStem[$src] = $hit.Name.Substring(0, $hit.Name.Length - $marker.Length); break }
+            }
+        }
+        $linked = 0
+        $missingFiles = [System.Collections.Generic.List[string]]::new()
         # Per-source tally, so a leg that contributed NOTHING is visible. Silence there is the
         # expensive mistake: the join would just run short by that leg's files and report a
         # smaller cohort than the directory name claims.
         $linkedBySource = [ordered]@{}
         foreach ($src in $LinkFrom) { $linkedBySource[$src] = 0 }
-        foreach ($f in $inputs) {
-            $stem = [IO.Path]::GetFileNameWithoutExtension($f)
-            foreach ($suf in $suffixes) {
-                # First source holding this artifact wins; the legs are disjoint by construction
-                # (each scored a different plate), so order only matters if they overlap.
-                $s = $null
-                foreach ($src in $LinkFrom) {
-                    $cand = Join-Path $src ($stem + $suf)
-                    if (Test-Path $cand) { $s = $cand; $linkedBySource[$src]++; break }
-                }
-                $d = Join-Path $OutDir ($stem + $suf)
-                if (-not $s) {
-                    $missing++
-                    $missingBySuffix[$suf] = [int]$missingBySuffix[$suf] + 1
-                    continue
-                }
-                if (-not $WhatIf) {
-                    if (Test-Path $d) { Remove-Item $d -Force }
-                    New-Item -ItemType HardLink -Path $d -Target $s | Out-Null
-                }
-                $linked++
-            }
-        }
-        # Analysis-wide artifacts, once each rather than per input. Matched by GLOB on the
-        # suffix: the stem is the source run's output blib name, which need not match this
-        # run's, so binding to a literal name would work until someone renamed an output.
-        foreach ($suf in $analysisSuffixes) {
-            $found = $null
+        foreach ($d in $wanted) {
+            $leaf = Split-Path -Leaf $d
+            $s = $null
+            # First source holding this artifact wins; the legs are disjoint by construction
+            # (each scored a different plate), so order only matters if they overlap.
             foreach ($src in $LinkFrom) {
-                $found = Get-ChildItem (Join-Path $src ('*' + $suf)) -ErrorAction SilentlyContinue |
-                         Select-Object -First 1
-                if ($found) { break }
+                $cand = Join-Path $src $leaf
+                if (Test-Path -LiteralPath $cand) { $s = $cand; $linkedBySource[$src]++; break }
             }
-            if (-not $found) {
-                Write-Host ("  LinkFrom WARNING: no analysis-wide '{0}' in any source" -f $suf) `
-                    -ForegroundColor Yellow
+            if (-not $s -and $leaf.StartsWith($blibStem + '.')) {
+                $suffix = $leaf.Substring($blibStem.Length)
+                foreach ($src in $LinkFrom) {
+                    if (-not $sourceStem.ContainsKey($src)) { continue }
+                    $cand = Join-Path $src ($sourceStem[$src] + $suffix)
+                    if (Test-Path -LiteralPath $cand) { $s = $cand; $linkedBySource[$src]++; break }
+                }
+                if ($s) { Write-Host ("  analysis-wide: {0} <- {1}" -f $leaf, $s) }
+            }
+            if (-not $s) {
+                $missingFiles.Add($leaf)
                 continue
             }
-            # Named for THIS run's blib stem, since that is what Osprey will look for.
-            $destName = [IO.Path]::GetFileNameWithoutExtension($blib) + $suf
-            $d = Join-Path $OutDir $destName
             if (-not $WhatIf) {
-                if (Test-Path $d) { Remove-Item $d -Force }
-                New-Item -ItemType HardLink -Path $d -Target $found.FullName | Out-Null
+                if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Force }
+                New-Item -ItemType HardLink -Path $d -Target $s | Out-Null
             }
-            Write-Host ("  analysis-wide: {0} <- {1}" -f $destName, $found.FullName)
+            $linked++
         }
 
         $verb = if ($WhatIf) { 'WOULD hard-link' } else { 'hard-linked' }
-        $through = if ($LinkThroughTask) { 'through' } else { 'before' }
-        Write-Host ("LinkFrom: {0} {1} file(s) for stages {2} {3}, {4} missing, from {5} source(s)" -f
-                    $verb, $linked, $through, $upTo, $missing, @($LinkFrom).Count)
+        Write-Host ("LinkFrom: {0} {1} declared file(s), the {2}, from {3} source(s)" -f
+                    $verb, $linked, $through, @($LinkFrom).Count)
         foreach ($src in $LinkFrom) {
             $n = $linkedBySource[$src]
             $color = if ($n -eq 0) { 'Yellow' } else { 'Gray' }
             Write-Host ("  {0,7} from {1}" -f $n, $src) -ForegroundColor $color
         }
-        # A partially-linked stage is the failure that costs an hour and then reports something
-        # that reads like a code bug, so name WHICH artifact is short rather than only a total.
-        # Not fatal: a legitimately absent artifact exists (no reconciliation for a file with no
-        # rescore work), and only Osprey can judge that.
-        foreach ($suf in ($missingBySuffix.Keys | Sort-Object)) {
-            Write-Host ("  LinkFrom WARNING: {0} of {1} input(s) had no '{2}'" -f
-                        $missingBySuffix[$suf], @($inputs).Count, $suf) -ForegroundColor Yellow
+        # A declared file no source holds FAILS here, before the run. A short bed used to be a
+        # warning, because the table could not tell a legitimately absent artifact from a
+        # missing one; the declarations carry the conditions the task reads under, so a
+        # declared file is one the run needs, and an hour into the run is the wrong place to
+        # find that out.
+        if ($missingFiles.Count -gt 0) {
+            throw ("-LinkFrom: {0} declared file(s) are in none of the sources: {1}{2}" -f
+                   $missingFiles.Count, (($missingFiles | Select-Object -First 10) -join ', '),
+                   $(if ($missingFiles.Count -gt 10) { ', ...' } else { '' }))
         }
     }
 

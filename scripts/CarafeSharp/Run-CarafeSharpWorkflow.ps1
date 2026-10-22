@@ -1,78 +1,74 @@
 <#
 .SYNOPSIS
-    Build an Osprey spectral library end to end with CarafeSharp: digest a protein FASTA,
-    predict a generic library, search a training run with Osprey, fine-tune on Osprey's
-    training export, predict the final library, and search every run with it. Every library
-    is a .blib.
+    Build an Osprey spectral library from a protein FASTA and search every run with it, as ONE
+    Osprey command (--fasta): predict a library with CarafeSharp's models, search the training run
+    with it, fine-tune on Osprey's training export, predict the final library (with entrapment) and
+    search all runs. Every library is a .blib.
 
 .DESCRIPTION
-    The CarafeSharp counterpart of ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 (Mike
-    MacCoss's Carafe "Workflow 5"). It has the same stages, the same Carafe parameters and the
-    same presets, and differs in four ways:
+    The harness that names the dataset presets and the lab's validation arm (entrapment in the
+    final library, FDRBench input out) for Osprey's one command. The library build used to be six
+    stages of separate CarafeSharp and Osprey invocations; it is now the phases of one Osprey run
+    (pwiz_tools/Osprey/Osprey-workflow.html, part 1), so this script makes one invocation per
+    preset. The CarafeSharp counterpart of ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1
+    (Mike MacCoss's Carafe "Workflow 5"): the same presets and Carafe parameters, but
 
-      * CarafeSharp replaces Java Carafe and its Python venv; there is no JDK or peptdeep to
-        install.
-      * Libraries are .blib (with peak annotations and DecoyPairs), not DIA-NN TSV.
-      * CarafeSharp reads no spectra. Stage 3 runs Osprey with --training-export, and stage 4-5
-        trains on the <stem>.training.parquet it writes. Osprey's median polish and
-        shared-peak evidence feed Carafe's masking rules (pwiz_tools/CarafeSharp/docs/02-masking.md).
-      * Osprey writes its artifacts to per-stage folders and its spectra cache to one shared
-        folder (--output-dir / --cache-dir), so the data files are read in place and never copied.
-      * No mzML is needed. Osprey reads Thermo .raw directly, with vendor centroiding: on the
-        Stellar training run its spectra cache is byte-identical to one built from msconvert's
-        "peakPicking vendor msLevel=1-" mzML. That takes an Osprey built with
-        ai/scripts/Osprey/Build-Osprey.ps1 -VendorReader; preflight checks for it.
+      * CarafeSharp runs inside Osprey; there is no JDK, Python venv or CarafeSharp.exe step.
+      * Libraries are .blib (with peak annotations and DecoyPairs), not DIA-NN TSV, and the digest,
+        decoys and entrapment are made in memory: no peptide FASTA or pairing manifest between
+        phases (the FDRBench pairing manifest is still written, as <out>.predicted/pairing.tsv).
+      * CarafeSharp reads no spectra. The training run's search writes the training export and the
+        tuning reads it (pwiz_tools/CarafeSharp/docs/02-masking.md).
+      * No mzML is needed. Osprey reads Thermo .raw directly, with vendor centroiding; that takes an
+        Osprey built with ai/scripts/Osprey/Build-Osprey.ps1 -VendorReader. Preflight checks for it.
 
-    Stages (run a subset with -Stages):
-
-        1a    digest FASTA -> target+decoy training peptides   (entrapment-free)
-        1b    digest FASTA -> target+decoy+entrapment peptides (quartets)
-        2     CarafeSharp predicts a GENERIC library from the 1a peptides
-        3     Osprey searches ONE training run with it, writing the training export
-        4-5   CarafeSharp fine-tunes RT+MS2 on the export, then predicts the FINAL library
-              from the 1b entrapment peptides
-        6     Osprey searches ALL runs with the final library (+ FDRBench input)
-
-    Osprey must be a build with --training-export (the osprey_carafe_export branch until it
-    merges); -Preflight checks.
+    Every phase checkpoints in the file it writes, so a re-run resumes at the first phase whose
+    inputs or settings changed. To run one phase (or one stage of either search), pass -Task, as a
+    cluster node would: PredictTrainingLibrary, TrainModel, PredictLibrary, or a stage
+    (PerFileScoring, FirstPassFDR, PerFileRescoring, SecondPassFDR) with -TrainingSearch for the
+    training run's search. -Stages is gone: --task is the stage selector.
 
 .PARAMETER Dataset
-    Stellar or Astral; selects the FASTA, runs, training run and tolerances (see the Carafe
-    workflow script; the Astral prediction tolerance is unvalidated there too).
+    Stellar, Astral or ZTScan; selects the FASTA, runs, training run and tolerances.
 
-.PARAMETER InputFormat
-    raw (default) or mzML: the extension of the preset's runs when -MzmlNames is not given.
-    -MzmlSourceDir and -MzmlNames take vendor files as well as mzML despite their names.
+.PARAMETER Mode
+    Tuned (default; the lab's workflow: --training-input <training run>) or Pretrained (predict with
+    the pretrained models, no tuning).
+
+.PARAMETER Task
+    Run one task of the one command (Osprey --task) instead of all of them.
+
+.PARAMETER TrainingSearch
+    With a stage -Task: the stage of the training run's search (Osprey --training-search).
 
 .PARAMETER Device
-    gpu (default; a CPU-only CarafeSharp build falls back to the CPU) or cpu.
+    gpu (default; a CPU-libtorch Osprey falls back to the CPU with a warning) or cpu.
 
 .PARAMETER RtModel
-    chronologer (default, as CarafeSharp's) or alphapeptdeep (Carafe's): CarafeSharp's -rt_model for the
-    initial library (stage 2) and the fine-tuning and final library (stage 4/5). Always passed, so a run
-    names its RT model whatever the build's default; it needs a CarafeSharp with -rt_model.
+    chronologer (default, as CarafeSharp's) or alphapeptdeep (Carafe's).
 
 .EXAMPLE
     pwsh -File ./ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1 -Preflight `
         -MzmlSourceDir D:\GitHub-Repo\maccoss\osprey\example_test_data\stellar -OspreyExe <exe>
 
 .EXAMPLE
-    # Reuse stages 1-3 of an earlier run and redo only the fine-tune, library and search.
-    pwsh -File ./ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1 -Stages 4-5,6 -WorkDir D:\test\carafesharp-runs\stellar
+    # The tuning again with another seed: the training library and its search are current and skip.
+    pwsh -File ./ai/scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1 -ExtraArgs '--seed','7'
 
 .NOTES
-    Long runs lock both executables. Snapshot the build output first if you intend to keep
-    building (Osprey: D:\test\osprey-runs\_bin\<tag>; the same applies to CarafeSharp).
+    Long runs lock the executable. Snapshot the build output first if you intend to keep building
+    (D:\test\osprey-runs\_bin\<tag>). For the GPU, build Osprey with Build-Osprey.ps1 -Torch cuda.
 #>
 #requires -Version 7
 [CmdletBinding()]
 param(
     [ValidateSet('Stellar', 'Astral', 'ZTScan')] [string]$Dataset = 'Stellar',
-    [string]$Stages = '1a,1b,2,3,4-5,6',
+    [ValidateSet('Tuned', 'Pretrained')] [string]$Mode = 'Tuned',
+    [string]$Task,
+    [switch]$TrainingSearch,
     [string]$WorkDir,
 
-    [ValidateSet('shuffle', 'natural')] [string]$EntrapmentSource = 'shuffle',
-    [switch]$NoSimilarityGate,
+    [ValidateSet('shuffle', 'natural', 'none')] [string]$EntrapmentSource = 'shuffle',
     [string]$ForeignFasta,
     [double]$EntrapmentRatio = 1.0,
 
@@ -82,7 +78,6 @@ param(
     [ValidateSet('raw', 'mzML')] [string]$InputFormat = 'raw',
     [int]$TrainFileIndex = -1,
 
-    [string]$CarafeSharpExe,
     [string]$OspreyExe,
     [ValidateSet('gpu', 'cpu')] [string]$Device = 'gpu',
 
@@ -90,16 +85,16 @@ param(
     [string]$ProteinFdr = '0.01',
     [switch]$ModelDiagnostics,
     # Osprey's spectra cache, default <WorkDir>\spectra-cache. A .spectra.bin depends only on its input
-    # file, so a second round of the loop over the same runs can share the first round's.
+    # file, so a second run over the same runs can share the first one's.
     [string]$CacheDir,
     [ValidateSet('alphapeptdeep', 'chronologer')] [string]$RtModel = 'chronologer',
+    # More Osprey arguments, appended as given (e.g. '--seed','7' or '--entrapment-fasta',...).
+    [string[]]$ExtraArgs,
     [switch]$Preflight
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'Osprey/Dataset-Config.ps1')
-
-$guide = 'pwiz_tools/CarafeSharp/docs/02-masking.md'
 
 # ---------------------------------------------------------------------------
 # Dataset presets (as Run-CarafeOspreyWorkflow.ps1)
@@ -180,192 +175,113 @@ if (-not $WorkDir) {
     $base = if ($env:CARAFESHARP_WORKDIR) { $env:CARAFESHARP_WORKDIR }
             elseif ($IsLinux) { '/mnt/d/test/carafesharp-runs' }
             else { 'D:\test\carafesharp-runs' }
-    $WorkDir = Join-Path $base $Dataset.ToLowerInvariant()
+    $WorkDir = Join-Path $base "$($Dataset.ToLowerInvariant())-$($Mode.ToLowerInvariant())"
 }
 
 # ---------------------------------------------------------------------------
-# Tools
+# Osprey
 # ---------------------------------------------------------------------------
-$projectRoot = Get-ProjectRoot
-$carafeSharpName = if ($IsWindows) { 'CarafeSharp.exe' } else { 'CarafeSharp' }
-if (-not $CarafeSharpExe) {
-    if ($env:CARAFESHARP_EXE) {
-        $CarafeSharpExe = $env:CARAFESHARP_EXE
-    } else {
-        # build.ps1 puts a CUDA build in bin-cuda and a CPU build in bin: take the one -Device
-        # asks for, else the other (an older checkout keeps either kind in bin).
-        $carafeProject = Join-Path $projectRoot 'pwiz/pwiz_tools/CarafeSharp/CarafeSharp'
-        $binFolders = if ($Device -eq 'gpu') { @('bin-cuda', 'bin') } else { @('bin', 'bin-cuda') }
-        $candidates = @($binFolders | ForEach-Object { Join-Path $carafeProject "$_/x64/Release/net10.0/$carafeSharpName" })
-        $CarafeSharpExe = @($candidates | Where-Object { Test-Path -LiteralPath $_ }) + $candidates | Select-Object -First 1
-    }
-}
-if (-not (Test-Path $CarafeSharpExe)) {
-    throw ("CarafeSharp not found at '$CarafeSharpExe'. Build it: " +
-           'pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 (add -Torch cuda for the GPU), or pass -CarafeSharpExe')
-}
 if (-not $OspreyExe) { $OspreyExe = if ($env:OSPREYDEV_EXE) { $env:OSPREYDEV_EXE } else { Get-OspreyExe } }
 if (-not (Test-Path $OspreyExe)) {
     throw "Osprey.exe not found at '$OspreyExe'. Pass -OspreyExe or set `$env:OSPREYDEV_EXE."
 }
 $ospreyHelp = (& $OspreyExe --help 2>&1) -join "`n"
-if ($ospreyHelp -notmatch '--training-export') {
-    throw ("$OspreyExe has no --training-export. CarafeSharp trains on Osprey's training export; " +
-           'build Osprey from the osprey_carafe_export branch (or a later master) and pass -OspreyExe.')
+if ($ospreyHelp -notmatch '--training-search') {
+    throw ("$OspreyExe has no --training-search: this script runs the one command task by task with " +
+           '--task, which needs an Osprey from master after PR 4c. Pass -OspreyExe.')
 }
-# Osprey reads Thermo .raw only when built with the vendor readers; without them Stage 3 fails
-# minutes in with "Thermo .raw reading requires the vendor SDK".
+# Osprey reads Thermo .raw only when built with the vendor readers; without them the first search
+# fails minutes in with "Thermo .raw reading requires the vendor SDK".
 if (($MzmlNames | Where-Object { $_ -match '\.raw$' }) -and
     -not (Test-Path (Join-Path (Split-Path -Parent $OspreyExe) 'ThermoFisher.CommonCore.RawFileReader.dll'))) {
     throw ("$OspreyExe cannot read Thermo .raw: it was built without the vendor readers. Build Osprey with " +
            'ai/scripts/Osprey/Build-Osprey.ps1 -VendorReader, or pass -InputFormat mzML.')
 }
 $cudaLibrary = if ($IsWindows) { 'runtimes/win-x64/native/torch_cuda.dll' } else { 'runtimes/linux-x64/native/libtorch_cuda.so' }
-$cudaBuild = Test-Path -LiteralPath (Join-Path (Split-Path -Parent $CarafeSharpExe) $cudaLibrary)
+$cudaBuild = Test-Path -LiteralPath (Join-Path (Split-Path -Parent $OspreyExe) $cudaLibrary)
 
-# ---------------------------------------------------------------------------
-# Stages
-# ---------------------------------------------------------------------------
-$StageList = $Stages -split '\s*,\s*' | Where-Object { $_ }
-$validStages = @('1a', '1b', '2', '3', '4-5', '6')
-foreach ($s in $StageList) {
-    if ($validStages -notcontains $s) { throw "Unknown stage '$s' (valid: $($validStages -join ', '))." }
-}
 if ($EntrapmentSource -eq 'natural') {
     if (-not $ForeignFasta) { throw '-EntrapmentSource natural needs -ForeignFasta (the foreign-species proteome).' }
     if (-not (Test-Path $ForeignFasta)) { throw "ForeignFasta not found: $ForeignFasta" }
 }
-$needMzml = @('3', '6') | Where-Object { $StageList -contains $_ }
+if ($TrainingSearch -and $Mode -ne 'Tuned') { throw '-TrainingSearch needs -Mode Tuned (there is no training run to search).' }
 # @() keeps a single run an array: indexing a lone string would take its first character.
 $mzml = @($MzmlNames | ForEach-Object { Join-Path $MzmlSourceDir $_ })
-if ($needMzml) {
-    foreach ($m in $mzml) { if (-not (Test-Path $m)) { throw "Data file not found: $m (pass -MzmlSourceDir)" } }
+$cacheDir = if ($CacheDir) { $CacheDir } else { Join-Path $WorkDir 'spectra-cache' }
+# A run whose source is gone may be read from its spectra cache, as Osprey itself allows.
+foreach ($m in $mzml) {
+    $cached = Join-Path $cacheDir ([IO.Path]::GetFileNameWithoutExtension($m) + '.spectra.bin')
+    if (-not (Test-Path $m) -and -not (Test-Path $cached)) { throw "Data file not found: $m (pass -MzmlSourceDir)" }
 }
-if (($StageList -contains '1a' -or $StageList -contains '1b') -and -not (Test-Path $InputFasta)) {
-    throw "Input FASTA not found: $InputFasta"
-}
+if (-not (Test-Path $InputFasta)) { throw "Input FASTA not found: $InputFasta" }
 $trainMzml = $mzml[$TrainFileIndex]
 
-Write-Host "`n--- CarafeSharp/Osprey library workflow ---" -ForegroundColor Cyan
+Write-Host "`n--- Osprey one command: library from the FASTA, then the search ---" -ForegroundColor Cyan
 [PSCustomObject][ordered]@{
     Dataset          = $Dataset
-    Stages           = ($StageList -join ',')
+    Mode             = $Mode
+    Task             = if ($Task) { "$Task$(if ($TrainingSearch) { ' (training search)' })" } else { '(all)' }
     EntrapmentSource = $EntrapmentSource
     WorkDir          = $WorkDir
     InputFasta       = $InputFasta
     MzmlSourceDir    = $MzmlSourceDir
-    TrainingRun      = $trainMzml
-    CarafeSharp      = "$CarafeSharpExe  ($(if ($cudaBuild) { 'CUDA build' } else { 'CPU build' }), -device $Device)"
-    Osprey           = $OspreyExe
+    TrainingRun      = if ($Mode -eq 'Tuned') { $trainMzml } else { '(none)' }
+    Osprey           = "$OspreyExe  ($(if ($cudaBuild) { 'CUDA libtorch' } else { 'CPU libtorch' }), --device $Device)"
     Resolution       = "$($preset.Resolution) / $($preset.FragTol) $($preset.FragUnit)"
 } | Format-List
 if ($Device -eq 'gpu' -and -not $cudaBuild) {
-    Write-Warning 'CarafeSharp is a CPU build; -device gpu falls back to the CPU (fine-tuning takes hours). Build with -Torch cuda for the GPU.'
+    Write-Warning 'Osprey is a CPU-libtorch build; --device gpu falls back to the CPU (fine-tuning takes hours). Build with Build-Osprey.ps1 -Torch cuda for the GPU.'
 }
 if ($Preflight) {
     Write-Host 'Preflight only - stopping before any work.' -ForegroundColor Yellow
     return
 }
 
-function Invoke-Step([string]$Name, [string]$Exe, [string[]]$CliArgs) {
-    Write-Host "`n=== [START] $Name ===" -ForegroundColor Cyan
-    Write-Host "$Exe $($CliArgs -join ' ')" -ForegroundColor DarkGray
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    & $Exe @CliArgs
-    if ($LASTEXITCODE -ne 0) { throw "$Name FAILED (exit $LASTEXITCODE)" }
-    $sw.Stop()
-    Write-Host "=== [DONE] $Name ($([math]::Round($sw.Elapsed.TotalMinutes, 2)) min) ===" -ForegroundColor Green
-}
-
-New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
-
-# Carafe's library-generation parameters, identical for stage 2 and stage 4-5, with .blib output.
-# CarafeSharp reports the XIC options (--itol, --rf, ...) as Osprey's to decide when training.
-$libGen = @(
-    '--fdr', '0.01', '--itol', $preset.CarafeItol, '--itolu', $preset.CarafeItolU,
-    '--rf', '--rf-rt-win', 'auto', '--cor', '0.8', '--min-mz', '200',
-    '--n-ion-min', '2', '--c-ion-min', '2', '--mode', 'general', '--device', $Device,
-    '--enzyme', 'NoCut', '--miss-c', '1', '--fix-mod', '1', '--var-mod', '0', '--max-var', '1', '--clip-n-m',
+# ---------------------------------------------------------------------------
+# The one command
+# ---------------------------------------------------------------------------
+# Carafe's library parameters as CarafeSharp's sections of Osprey's help name them. The ones Osprey
+# decides are not given: the export's q-value (Carafe's --fdr), the XIC tolerances and refinement
+# (--itol, --rf, ...), the format (blib) and the search engine.
+$library = @(
+    '--enzyme', '2', '--miss-c', '1', '--fix-mod', '1', '--var-mod', '0', '--max-var', '1', '--clip-n-m',
     '--min-length', '7', '--max-length', '35',
     '--min-pep-mz', $preset.MinPepMz, '--max-pep-mz', $preset.MaxPepMz,
     '--min-pep-charge', '2', '--max-pep-charge', $maxCharge,
     '--lf-frag-mz-min', '200', '--lf-frag-mz-max', '1960', '--lf-top-n-frag', '20',
-    '--lf-min-n-frag', '2', '--lf-frag-n-min', '2', '--lf-type', 'blib',
-    '--se', 'Osprey', '--decoy-prefix', 'decoy_', '--nm', '--nf', '4', '--min-n', '4',
-    '--valid', '--na', '0', '--fast')
-if ($preset.CarafeExtra) { $libGen += $preset.CarafeExtra }
+    '--lf-min-n-frag', '2', '--lf-frag-n-min', '2',
+    '--rt-model', $RtModel)
+if ($preset.CarafeExtra) { $library += $preset.CarafeExtra }
+$tuning = @('--cor', '0.8', '--n-ion-min', '2', '--c-ion-min', '2', '--nf', '4', '--min-n', '4', '--valid', '--tf', 'all')
 
-$cacheDir = if ($CacheDir) { $CacheDir } else { Join-Path $WorkDir 'spectra-cache' }
-$ospreyCommon = @(
-    '--decoys-in-library',
+New-Item -ItemType Directory -Force -Path (Join-Path $WorkDir 'FDRBench') | Out-Null
+$osArgs = @('-i') + $mzml + @(
+    '--fasta', $InputFasta,
+    '-o', (Join-Path $WorkDir 'osprey.blib'), '--output-dir', $WorkDir, '--cache-dir', $cacheDir,
+    '--device', $Device,
     '--resolution', $preset.Resolution,
     '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
     '--run-fdr', '0.01', '--experiment-fdr', '0.01',
     '--fdr-level', 'precursor',
     '--shared-peptides', 'all', '--threads', "$Threads",
-    '--cache-dir', $cacheDir)
-if ($ProteinFdr) { $ospreyCommon += @('--protein-fdr', $ProteinFdr) }
-
-$trainFasta   = Join-Path $WorkDir 'osprey_train_db_peptides.fasta'
-$trainPairing = Join-Path $WorkDir 'osprey_train_db_pairing.tsv'
-$libFasta     = Join-Path $WorkDir 'osprey_library_db_peptides.fasta'
-$libPairing   = Join-Path $WorkDir 'osprey_library_db_pairing.tsv'
-$initialLib   = Join-Path $WorkDir 'osprey_initial_library'
-$trainDir     = Join-Path $WorkDir 'osprey_train'
-$trainBlib    = Join-Path $trainDir 'osprey.blib'
-$newLib       = Join-Path $WorkDir 'osprey_new_library'
-$projectDir   = Join-Path $WorkDir 'osprey_project'
-$libraryBlib  = 'carafe_spectral_library.blib'
-
-# Always passed: the RT model is the run's choice, not whatever the CarafeSharp build defaults to.
-$rtModelArgs = @('--rt-model', $RtModel)
-
-$digestCommon = @(
-    '--enzyme', '2', '--miss-c', '1', '--min-length', '7', '--max-length', '35',
-    '--min-pep-charge', '2', '--max-pep-charge', $maxCharge)
-
-if ($StageList -contains '1a') {
-    Invoke-Step 'Stage 1a: train FASTA (target+decoy)' $CarafeSharpExe (@(
-        '--build-entrapment-fasta', $trainFasta, '--db', $InputFasta, '--manifest', $trainPairing) + $digestCommon)
+    '--fdrbench', (Join-Path $WorkDir 'FDRBench\FDRBench-Input.tsv')) + $library
+if ($ProteinFdr) { $osArgs += @('--protein-fdr', $ProteinFdr) }
+if ($Mode -eq 'Tuned') { $osArgs += @('--training-input', $trainMzml) + $tuning }
+if ($EntrapmentSource -ne 'none') {
+    $osArgs += '--entrapment'
+    if ($EntrapmentRatio -ne 1.0) { $osArgs += "$EntrapmentRatio" }
+    if ($EntrapmentSource -eq 'natural') { $osArgs += @('--entrapment-fasta', $ForeignFasta) }
 }
+if ($ModelDiagnostics) { $osArgs += '--model-diagnostics' }
+if ($Task) { $osArgs = @('--task', $Task) + $osArgs }
+if ($TrainingSearch) { $osArgs += '--training-search' }
+if ($ExtraArgs) { $osArgs += $ExtraArgs }
 
-if ($StageList -contains '1b') {
-    $entrapArgs = @('--entrapment')
-    if ($EntrapmentSource -eq 'natural') { $entrapArgs += @('--entrapment-db', $ForeignFasta) }
-    if ($EntrapmentRatio -ne 1.0) { $entrapArgs += @('--entrapment-ratio', "$EntrapmentRatio") }
-    if ($NoSimilarityGate) { $entrapArgs += '--no-similarity-gate' }
-    Invoke-Step "Stage 1b: library FASTA ($EntrapmentSource entrapment)" $CarafeSharpExe (@(
-        '--build-entrapment-fasta', $libFasta, '--db', $InputFasta, '--manifest', $libPairing) + $digestCommon + $entrapArgs)
-}
-
-if ($StageList -contains '2') {
-    Invoke-Step 'Stage 2: initial library' $CarafeSharpExe (@(
-        '--db', $trainFasta, '--o', $initialLib, '--pairing-manifest', $trainPairing) + $libGen + $rtModelArgs)
-}
-
-if ($StageList -contains '3') {
-    New-Item -ItemType Directory -Force -Path $trainDir | Out-Null
-    Invoke-Step 'Stage 3: Osprey search training run (+ training export)' $OspreyExe (@(
-        '-i', $trainMzml, '-l', (Join-Path $initialLib $libraryBlib),
-        '-o', $trainBlib, '--output-dir', $trainDir,
-        '--decoy-pairing-manifest', $trainPairing, '--training-export') + $ospreyCommon)
-}
-
-if ($StageList -contains '4-5') {
-    Invoke-Step 'Stage 4/5: fine-tune + final library' $CarafeSharpExe (@(
-        '--db', $libFasta, '--i', $trainBlib, '--ms', $trainMzml, '--o', $newLib,
-        '--pairing-manifest', $libPairing) + $libGen + @('--tf', 'all') + $rtModelArgs)
-}
-
-if ($StageList -contains '6') {
-    New-Item -ItemType Directory -Force -Path (Join-Path $projectDir 'FDRBench') | Out-Null
-    $osArgs = @('-i') + $mzml + @(
-        '-l', (Join-Path $newLib $libraryBlib),
-        '-o', (Join-Path $projectDir 'osprey.blib'), '--output-dir', $projectDir,
-        '--fdrbench', (Join-Path $projectDir 'FDRBench\FDRBench-Input.tsv'),
-        '--decoy-pairing-manifest', $libPairing) + $ospreyCommon
-    if ($ModelDiagnostics) { $osArgs += '--model-diagnostics' }
-    Invoke-Step 'Stage 6: Osprey project search' $OspreyExe $osArgs
-}
-
-Write-Host "`n[SUCCESS] Requested stages complete. Work dir: $WorkDir" -ForegroundColor Green
+Write-Host "`n=== [START] Osprey ===" -ForegroundColor Cyan
+Write-Host "$OspreyExe $($osArgs -join ' ')" -ForegroundColor DarkGray
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+& $OspreyExe @osArgs
+if ($LASTEXITCODE -ne 0) { throw "Osprey FAILED (exit $LASTEXITCODE)" }
+$sw.Stop()
+Write-Host "=== [DONE] Osprey ($([math]::Round($sw.Elapsed.TotalMinutes, 2)) min) ===" -ForegroundColor Green
+Write-Host "`n[SUCCESS] Work dir: $WorkDir" -ForegroundColor Green
