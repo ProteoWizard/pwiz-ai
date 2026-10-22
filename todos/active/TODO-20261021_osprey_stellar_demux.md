@@ -261,6 +261,36 @@ the Stellar), so the caller gives sigma. `CentrixTest` ports Centrix's unit test
   stops unconverged; not done.
 - Rust Centrix in WSL took 808 s on one 4Th file and 2,329 s on one SuperOverlap file in the queued arms.
 
+**Rust golden, exact solver, and `--centroid centrix` in Osprey (2026-10-22).**
+- **Rust golden** (24bcfe51d1): `Osprey.Test/Data/Centrix` holds 30 Stellar profile spectra (14 MS2 + 2 MS1 as
+  converted from the `.raw`, 14 joint-split MS2) and the 4,836 centroids Rust Centrix 39370f1 (built in WSL from
+  `D:\Dev\centrix`, `~/centrix-golden`) gives them at sigma 0.2 / 0.33. `TestCentrixRustGolden` requires equal counts in
+  every spectrum and each centroid within 1e-3 Th and 1%, 99.9% within 1e-4; the port matches to 1e-11 Th, and a 1.7%
+  change to the lasso penalty fails it. Over the full 6,000-spectrum slice the port and Rust (old binary and new build
+  agree exactly with each other) differ in 0.02% of centroids, by up to 4e-4 Th and 0.4%. Scripts:
+  pwiz-ai `scripts/Osprey/Centrix` (slice, golden TSV, parity).
+- **Exact solver** (`CentrixParams.Solver = active_set`, `NonNegativeLasso.SolveActiveSet`): Lawson-Hanson active
+  set on `min 1/2 b'Gb - (A'y - lambda)'b, b >= 0` with Cholesky solves of the passive set; falls back to coordinate
+  descent if a pivot fails. `TestCentrixActiveSet`: on 300 random Stellar-like regions it meets the KKT conditions to
+  1e-9, its objective is never worse than coordinate descent's, and it reaches the same optimum from a warm start.
+  On the 6,000-spectrum slice: 18-31 s against 64-169 s for coordinate descent, I/O included (loaded machine);
+  deterministic. It moves 8.5% of centroids by more than 1e-4 and changes the count in 23% of spectra (net +0.13%):
+  the capped solves, and through pass-1 residuals the refined noise and so other regions' penalties. Truth benchmark,
+  joint + Centrix, either solver for the output and for the truth: identical to 0.001 at k=2/3/4 (k=2 0.982 / 0.985 /
+  0.926-0.927; k=3 0.959 / 0.967-0.968 / 0.798; k=4 0.930 / 0.942-0.943 / 0.683-0.684). The in-process k=3 and k=4
+  match the WSL joint + Centrix arms exactly.
+- **Peak sigma is not a measurement on these peaks.** Stellar MS2 fits: 3-point log-parabola 0.311, 5-point 0.363,
+  linear Gaussian over 5/7/9/11 points 0.36/0.43/0.51/0.61 (the last is Centrix's wavelet value), half-maximum width
+  0.40 (overlaps), isolated peaks only 0.25-0.31. MS1: 0.156 (3-point), 0.191 (5-point), 0.20 (half max). Narrow core,
+  broad wings: an automatic calibration was written and removed; sigma is a setting (Stellar defaults MS2 0.33,
+  MS1 0.2), to be chosen by its effect on IDs.
+- **Osprey `--centroid centrix`** (`--centrix-sigma-ms1/-ms2`, `--centrix-solver descent|active-set`): the reader
+  opens vendor files without vendor centroiding and centroids profile spectra with Centrix, 512 at a time in parallel
+  (`--threads`); centroided spectra pass through. The cache is `<stem>.centrix-<8 hex>.spectra.bin` (and
+  `.demux.spectra.bin`), the tag a hash of the settings and `CentrixCentroider.ALGORITHM_VERSION`, set once on
+  `ArtifactPaths`, so every reader of the cache finds it and vendor caches are never overwritten. The search hash
+  records the settings and the task validity key the descriptor; both empty for vendor, so defaults are unchanged.
+  `TestCentrixInOsprey` covers the CLI, the hash, the tag and the reader against the Rust golden.
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
