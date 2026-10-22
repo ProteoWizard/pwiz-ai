@@ -331,6 +331,30 @@ accuracy).
   TR02/TR03 collapse (4.8k) is that arm's alone (its TR02 calibration: 23,852 target matches vs 32,514 TR01); not
   investigated. Times: vendor arm 1,349 s, descent 3,032 s (Centrix read 12-20 min a file, with other runs loading
   the machine), cache `...TR01.centrix-f3aa677d.spectra.bin`.
+- **Profile arms through DemuxTool + Rust Centrix in WSL** (queues finished 2026-10-22; precursors per run, experiment):
+
+  | Arm | Precursors per run | Experiment |
+  |---|---|---|
+  | 4Th acquired centroided | 24,277 / 24,552 / 24,931 | 28,133 / 25,422 / 4,720 |
+  | 4Th profile + Centrix | 16,846 / 17,285 / 16,838 | 20,137 / 18,766 / 3,798 |
+  | 4Th profile + Centrix, thinned 2x | 14,521 / 15,208 / 14,859 | 18,031 / 16,828 / 3,448 |
+  | 50% profile, makima + Centrix | 21,329 / 21,144 / 20,605 | 25,180 / 23,276 / 4,267 |
+  | 50% profile, joint + Centrix | 21,604 / 22,415 / 20,690 | 25,464 / 23,504 / 4,273 |
+  | 50% profile, makima + Centrix, thinned 2x | 4,611 / 14,628 / 15,988 | 19,264 / 17,891 / 3,324 |
+  | SuperOverlap profile, makima + Centrix | 236 / 190 / 357 | 459 / 433 / 191 |
+  | SuperOverlap profile, joint + Centrix | 10,847 / 21,203 / 10,463 | 22,069 / 20,534 / 3,812 |
+
+  50% demultiplexed (21-22k a run) comes close to 2Th profile + Centrix (23.5k) and well above 4Th profile (16.8k).
+  Several WSL-Centrix runs collapse for no reason seen yet (super makima all runs; super joint TR01/TR03; 50% thin2
+  TR01; 2Th TR02/TR03): the C# in-process arms have shown none. Every profile arm is below its centroided acquisition.
+- **The profile files hold no centroids** (2026-10-22, RawFileReader probe `ai/.tmp/sessions/20261021-stellar/
+  probe_centroid_api.ps1` on 2Th profile TR01 scan 30052): packet LinearTrapProfile, 5,000 points; centroid stream
+  (with or without reference peaks), label data, simplified centroids and Scan.FromFile's CentroidScan all empty. The
+  vendor arm's peaks are CommonCore `Scan.ToCentroid` computed at read (identical to the cache), about 609 a spectrum,
+  off the profile apexes (209.49 vs 209.6) and with peaks where the profile is near baseline; Centrix 168 a spectrum,
+  cosine to the profile 0.96-0.985 vs 0.88-0.94. Mike: ITMS profile data does store centroids; how he sees them (FreeStyle?
+  MSFileReader/XRawfile?) is the open question. MS2 calibration: centroid acquisition mean -0.093 SD 0.216 (39,668
+  matches); profile vendor +0.093 SD 0.273 (2,649); profile Centrix +0.146 SD 0.309 (20,920).
 
 ## Plan
 
