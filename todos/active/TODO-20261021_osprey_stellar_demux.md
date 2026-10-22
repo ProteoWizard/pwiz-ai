@@ -204,6 +204,33 @@ cosine of the demultiplexed spectrum to the true one on a 0.05 Th grid blurred b
   0.706; k=4 0.917 / 0.934 / 0.603 (no demux: 0.735, 0.507, 0.389). Pessimistic on sampling: here a window
   returns every k x 2.4 s (9.6 s at k=4) against 4.7 s in the real SuperOverlap, and the windows are twice as wide.
 - Tool code committed: bc76e155e9 (`--remultiplex`), d31553c8ff (`--thin`).
+
+**The joint solve for Stellar (90a692b196, 2026-10-22 ~01:00).** Mike: the Stellar profile demux + centroiding
+was meant to be a joint solve borrowing the ZT Scan code, and the centroider Centrix-like (the stand-in
+`CentroidLinear` was removed, 6358ddfe99). `IProfileGrid` (`LinearGrid` beside `TofGrid`); staggered
+pseudo-sweeps: in each pass the windows not acquired are interpolated (makima, sample by sample, in rates) to the
+pass's time, all in ions at the pass's median fill time; `JointDemultiplexer` fits each bin's Gaussian peaks
+(sigma 0.33 Th = 1.65 samples). Three ways to use the fit, k=2 truth (scored against truth centroided the same way):
+
+| Output | Score |
+|---|---|
+| Fitted peaks as centroids (`--joint-fitted`) | 0.944 |
+| Measured profile split by the fitted peaks, centroided by the joint solve (default) | 0.954 |
+| Makima split, centroided by the joint solve | 0.944 |
+| Makima split + Centrix | 0.979 |
+| **Joint split + Centrix** (`--joint-profile`, then Centrix) | **0.982** |
+
+And by overlap, vs Centrix truth (median / ion-weighted / p10): joint split + Centrix k=2 0.982 / 0.985 / 0.926,
+k=3 0.959 / 0.967 / 0.798, k=4 0.930 / 0.942 / 0.684; makima split + Centrix 0.979 / 0.983 / 0.877, 0.950 /
+0.961 / 0.706, 0.917 / 0.934 / 0.603. Joint truth vs Centrix truth (centroiders on clean spectra): 0.981.
+- **Architecture:** the joint solve does the demultiplexing (its peak-shaped fit splits the measured profile;
+  writing the fit itself carries the interpolated windows' errors - the msconvert lesson again), and **Centrix**
+  does the centroiding: it is more stable than the joint solve's single-bin lasso on demultiplexed spectra (0.979
+  vs 0.944 on the same makima splits) although the two agree on clean spectra. One centroider = a C# port of
+  Centrix (spec M4), for Stellar after the joint split, and to try inside the ZT Scan path.
+- Full runs started 2026-10-22 ~01:05 (`-Threads 8`, beside the makima queue): `50pct-profile-joint-centrix`,
+  then `super-profile-joint-centrix` (`--profile --joint --joint-profile --ms1 joint --fill-time-ions 1000`,
+  then Centrix `--sigma-ms2 0.33`).
 - Pipeline now: tool (makima, `--profile --channel-th 0.09 --fill-time-ions 1000`) -> Centrix -> Osprey
   (`Run-StellarTool.ps1 -Centrix`). Arms queued 2026-10-22 00:00: 50% profile, 2Th and 4Th profile through the
   same pipeline (controls), 50% and 4Th thinned 2x, SuperOverlap profile.
