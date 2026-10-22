@@ -76,6 +76,7 @@ its output with DIA-NN, and hold the Python prototypes the C# was built from.
 | `Compare-ZtScanSlices.py --rt <lo> <hi> <arm>=<report.parquet> ...` | Targets at 1% and entrapment FDP per arm and run, then replicate CV per arm and on the shared set. For whole runs, `--rt 0 30`. |
 | `Region-Gains.py <base report> <arm report>` | Targets gained or lost by precursor m/z and RT. |
 | `Lost-Precursors.py` | Precursors one arm finds and another misses. |
+| `eval_remux.py <truth.mzML> <remux.mzML> <output.mzML> ...` | The Stellar truth benchmark: demultiplexed spectra of a run re-multiplexed with `Osprey.DemuxTool --remultiplex K` against its narrow-window spectra, by cosine on a 0.05 Th grid blurred by 0.3 Th (see `pwiz_tools/Osprey/docs/24-profile-centroiding.md`). |
 | `Compare-DemuxParity.py` | Spectrum-level agreement of two demultiplexed mzML files (keyed on scan and `demux=k`). |
 | `Measure-ZtScanKernel.py <run.mzML> <out_prefix> [rt_min rt_max]` | The quadrupole transmission from MS1 probes; writes the kernel the tool reads. |
 | `Measure-ZtScanEdges.py`, `Measure-ZtScanTransmission.py` | Checks of the kernel from identified precursors' fragments. |

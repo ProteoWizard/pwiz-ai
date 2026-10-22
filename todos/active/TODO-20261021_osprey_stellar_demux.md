@@ -291,6 +291,33 @@ the Stellar), so the caller gives sigma. `CentrixTest` ports Centrix's unit test
   `ArtifactPaths`, so every reader of the cache finds it and vendor caches are never overwritten. The search hash
   records the settings and the task validity key the descriptor; both empty for vendor, so defaults are unchanged.
   `TestCentrixInOsprey` covers the CLI, the hash, the tag and the reader against the Rust golden.
+**Peak-width calibration and documentation (4bb15ee69a, 2026-10-22).** Mike: the sigma is the instrument's resolution,
+set by the scan rate; Centrix's table gives each rate's broadest peak, and real peaks are narrower; a wider peak is
+usually unresolved species (what Centrix should separate); and it must not be tuned on IDs (those depend on mass
+accuracy).
+- `CentrixCalibration` / `CentrixSigmaCalibrator` (Osprey.Centroid): scan rate from the profile point spacing (1/30,
+  1/15, 1/8, 1/5 Th = 33, 67, 125, 200 kTh/s; broadest FWHM 0.5, 0.6, 0.8, 2.0), not from the filter code; isolated
+  intense peaks' FWHM (monotone to half max, apex from the log-parabola, no missing points); sigma = lower quartile /
+  2.3548, capped at the broadest; < 20 peaks: the broadest; 3,000 spectra sampled evenly across the run. Default in
+  Osprey (`--centrix-sigma-ms1/-ms2` absent), DemuxTool `--centroid centrix`, and the joint solve
+  (`LinearPeakSigmaTh` = 0).
+- Measured (truth slice): MS2 0.309 Th (FWHM 0.72; cap 0.85), MS1 0.170 (cap 0.25). Lower quartile flat across m/z
+  (0.71-0.74 Th), rises with intensity (0.63 weakest fifth, 0.81 strongest). Mode rejected: plateau 0.70-0.85, 6%
+  spread at 3,000 peaks vs 0.6% for the quartile. First spectra of a run read 4% wide. Summed windows read wider:
+  k=2 0.331, k=4 0.340 (what the joint solve measures). Benchmark cannot tell 0.31 from 0.34: within 0.003.
+- **Stellar "Z" (memory `stellar-zoom-scan-annotation`):** every DIA MS2 in these runs is `ITMS + c|p NSI Z ms2`
+  (2Th TR01: 142,317 MS2, all Z, all 2 m/z; MS1 `r Full ms`). The Stellar does no zoom scans and uses the Zoom
+  annotation for Adaptive RT spectra, but here it is on every DIA scan (method PDF shows no zoom scans). Do not drop
+  Z scans; Adaptive RT spectra are 20 or 50 m/z wide, so filter by isolation width > 10 m/z on a Stellar. Not done
+  yet (Osprey reader and the mzML written for Skyline); none in these runs.
+- **Docs:** `pwiz_tools/Osprey/docs/24-profile-centroiding.md` (Centrix: use, algorithm, sigma, Z, solvers, fidelity,
+  caches, open items); `23-demultiplexing.md` "Stellar profile data (linear ion trap)" plus the DemuxTool option rows;
+  `14` (the tagged cache), `20` (the CLI). Scripts: pwiz-ai `scripts/Osprey/Demux/eval_remux.py` (truth benchmark),
+  `scripts/Osprey/Centrix/fwhm_peaks.py` (width distributions).
+- **ID arms (in progress, 2th profile, snapshot `_bin/stellar-centrix-osprey`, fixed sigma 0.2/0.33, before
+  calibration):** `2th-profile-vendor` (1,349 s), `2th-profile-cs-descent` (3,032 s; cache
+  `...TR01.centrix-f3aa677d.spectra.bin`), `2th-profile-cs-active` running.
+
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
