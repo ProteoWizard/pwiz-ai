@@ -57,10 +57,16 @@ One MS1 per full cycle (per 2 or 4 passes in the overlapped methods). Window cen
   never closer than 0.62 Th (median spacing 1.28 Th, ~533 per spectrum) and the search's MS2 error SD
   is 0.22 Th: a centroid channel is essentially a nominal-mass channel (+/-0.4 Th), most with several
   sources. The profile's 0.2 Th grid is the cleaner channel.
-- **Peaks are ~1.6 passes wide.** Chromatographic FWHM from Osprey's reference XICs of the 3,000
-  strongest targets: median 5.1 s (IQR 4.2-5.8) on 2Th TR01 and TR02 (cycle 3.3 s), 4.1 s on 4Th.
-  1.5 points per FWHM even in the acquired methods. MS1: Mike (2026-10-21) - DIA-NN runs with MS1
-  scoring off for Stellar, and Osprey does not use MS1, so SuperOverlap's sparse MS1 does not matter.
+- **Sampling (corrected 2026-10-21 evening).** The cycle is NOT fixed: at the run's start every fill hits its
+  maximum and a pass takes 3.13 s, but from 4 to 22 min a pass takes 1.17-1.25 s (fills median 0.6-2 ms;
+  < 1% of MS2 reach 11.5 ms). Earlier notes here said "1.6 passes per FWHM" from the 3.1 s start-of-run pass:
+  wrong. Measured on each search's identified-precursor XICs (4-22 min): 2Th interval 2.39 s, FWHM 5.1 s
+  (inflated by the coarse sampling); 4Th, 50% and SuperOverlap interval 1.18 s per bin; true FWHM about
+  4.2 s (4Th, IQR 3.2-5.0) = 3.5 passes. So every bin is well sampled; what is sparse is each *window* at
+  k=4 (every 4.7 s, ~1 sample per FWHM), which the current engine interpolates. Its SuperOverlap XICs come
+  out 1.9 s wide (1.6 points), its 50% ones 3.5 s: the demultiplexing chops the elution.
+- MS1: Mike (2026-10-21) - DIA-NN runs with MS1 scoring off for Stellar, and Osprey does not use MS1, so
+  SuperOverlap's sparse MS1 does not matter.
 
 ## Results
 
@@ -84,6 +90,22 @@ so width mismatch drives the bin errors. The largest remaining loss is dropped o
 single-source apex observations have no fitted peak in their window (weak fragments below the gain
 threshold); the pooled fit as a fallback prior recovers part (5.0%). Next for k=4: how weak, unexplained
 signal is apportioned, and a peak-width dictionary (several sigmas).
+
+**Sampling model** (`sampling_model.py`, NB 32, NP 36, precursors at the 2Th search's identified density 0.25
+per bin per pass, 8 fragments over 1000 unit-resolution channels, Poisson counts, FWHM jitter 15%; tables
+`D:\test\osprey-runs\stellar-demux\synthetic\sampling_k{2,3,4}.tsv`). Interference = fraction of a bin's
+output from other bins' fragments (no demultiplexing: 46% / 61% / 69% at k = 2 / 3 / 4):
+
+| FWHM (passes) | k=2 interp / elution | k=3 interp / elution | k=4 interp / elution | k=4 area error elution / oracle |
+|---|---|---|---|---|
+| 1.65 | 13% / 0.1% | 30% / 1.2% | 43% / 6.6% | 13.4% / 9.6% |
+| 2.0 | 9% / 0.1% | 23% / 0.8% | 34% / 2.3% | 9.5% / 8.3% |
+| 3.0 | 4% / 0% | 12% / 0.2% | 21% / 0.6% | 6.9% / 6.6% |
+| 4.0 | 3% / 0% | 7% / 0.1% | 13% / 0.3% | 6.3% / 6.1% |
+
+The data sit at ~3.5 passes per FWHM: the elution fit should be near ideal even at k=4, the interpolating
+engine is not even at 4 passes (13% at k=4). The 50% elution arm runs with FWHM 5.1 s (harmless at k=2);
+SuperOverlap's with 4.2 s.
 
 **Synthetic, noiseless** (`DemuxTest.TestDemuxPassRateMeasurement`, temporary; table in
 `D:\test\osprey-runs\stellar-demux\synthetic\passrate-elution.tsv`): apex error of single-source fragments,
