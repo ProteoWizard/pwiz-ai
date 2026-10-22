@@ -1068,3 +1068,16 @@ accepts): `scripts/CarafeSharp/Run-CarafeSharpWorkflow.ps1` (documented `--hyphe
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261021_osprey_one_command_cleanup.md` before starting work.
+
+### 2026-10-21 night - Clean-up PR reviewed, fixed, opened
+
+`/code-review medium`: 10 findings, 6 fixed in be229fd949 (a search that writes no .blib removes an
+earlier run's .blib of that name; `--help <section>` brings the tables after the digest options;
+`--enzyme` errors name the option, an out-of-range index included; `--training-input-list` read only
+with `--fasta`; the stale `_report` Designer property; `.carafemodel` left in comments). Dropped:
+`--resolution` default `hram` (Brendan's decision, a behavior change the PR states); the "nothing
+passed" message naming only `--experiment-fdr` (every output gate is an experiment-level q-value
+against that threshold); re-runs not finding a tuned `<out>.carafemodel` (one-command tuning merged
+the same day, so no user has one); `WriteProteinReport`/`WriteSummaryReport` always true
+(pre-existing); `CarafeModelFile.FilePatterns` unused (for #4849). Gates on be229fd949: Osprey 650 +
+inspection 0, CarafeSharp 105 (8 without data) + inspection 0, Stellar regression PASS.
