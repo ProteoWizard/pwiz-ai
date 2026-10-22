@@ -16,7 +16,7 @@
 param(
     [Parameter(Mandatory)] [string]$Tool,          # Osprey.DemuxTool.exe snapshot (built -VendorReader)
     [Parameter(Mandatory)]
-    [ValidateSet('4Th-50pctOverlap', '4Th-SuperOverlap')]
+    [ValidateSet('2Th', '4Th', '4Th-50pctOverlap', '4Th-SuperOverlap')]   # 2Th/4Th: no overlap, for controls (--thin, own centroiding)
     [string]$Method,
     [Parameter(Mandatory)] [string]$Arm,
     [ValidateSet('centroid', 'profile')]

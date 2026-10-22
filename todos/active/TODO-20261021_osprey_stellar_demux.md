@@ -165,6 +165,18 @@ tails decide. Fitting a precursor's fragments together (same bin, same apex) sho
 - Runners: `Run-StellarSearch.ps1` (Osprey on .raw or the tool's mzML), `Run-StellarTool.ps1`
   (tool on the three replicates, then search).
 
+## Direction (Mike, 2026-10-21 22:40): demultiplex the PROFILE, not centroids
+
+Unit-resolution centroids cannot be demultiplexed well: a vendor centroid of overlapping fragments from
+different bins is one merged peak. Every searched demux arm up to 22:40 used the centroided acquisitions
+(current engine, interp-th, elution); they stay as references, and the centroid-domain SuperOverlap arms
+were cancelled. From here on, only the `_profile` acquisitions are demultiplexed, and we centroid ourselves.
+**Ion scale (checked):** a Thermo ion-trap vendor centroid's intensity is the profile peak's maximum point
+(ratio 1.000 on 30,637 isolated peaks); summed profile points are ~3.4x the height, and for the smallest
+peaks summed profile x fill time is ~951: ions = summed profile intensity x fill ms / 1000 (Mike), i.e.
+`--fill-time-ions 1000` for profile points (290 for centroid heights). The first profile arms used 380 and
+keep it for comparability; later arms use 1000.
+
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
