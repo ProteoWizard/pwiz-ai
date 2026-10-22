@@ -7,6 +7,10 @@
 - **Base**: `master` (merge master in after #4882 squash-merges; `CommandShell.cs` resolves trivially)
 - **Module**: `skyline`
 - **Created**: 2026-10-20
+- **PRs**: [#4896](https://github.com/ProteoWizard/pwiz/pull/4896) fixes + 218 accepted screenshots on
+  `Skyline/skyline_26_1_1` (branch `Skyline/work/20261021_screenshot_fixes_26_1_1`, `C:\proj\pwiz-work2`);
+  [#4897](https://github.com/ProteoWizard/pwiz/pull/4897) ImageComparer Accept (master);
+  [#4882](https://github.com/ProteoWizard/pwiz/pull/4882) SkylineTester hidden main window (master)
 - **Objective**: Validate auto-screenshots on master (.NET 10) at 100%, explain every changed screenshot,
   fix the regressions and accept the real UI changes - before any high-DPI screenshot work
   (`todos/backlog/TODO-high_dpi_tutorial_screenshots.md`).
@@ -32,6 +36,12 @@
 | Import Results Files dialog toolbar (AbsoluteQuant s-09) | New Refresh button | Real UI change: accept |
 | Full-Scan page title in English in ja/zh (DDASearch s-09) | #3819 (Matt, 2026-06-29) sets `ImportPeptideSearchDlg_ConfigureFullScanChromatogramExtraction` at run time for Run Peptide Search; English only | Leave for the translation pass |
 | DDA Search Settings controls 34 px lower (DDASearch s-11) | #3819: first commit put a preset combo at the top of `SearchSettingsControl` and moved 19 controls down 34 px; a later commit removed the combo without moving them back | Fixed: the 19 controls restored to their pre-#3819 positions (`SearchSettingsControl.resx`) |
+| Full-scan title missing on the first scan (DIA-QE s-22) | #4166's master title was set after the master layout ran, so the pane painted over it | Fixed: single-pane pane title; IM layouts lay out again when the master title needs room |
+| MethodEdit tip screenshots lose right/bottom border (s-21, s-22) | #4114 moved the tip shadow outside the window (OS CS_DROPSHADOW); the test still cropped 4 px for it | Fixed in the test |
+| AuditLog s-08 OK button highlighted | #4726 made OK the Accept/Cancel button of Audit Log Extra Information | Real UI change: accept |
+| ExistingQuant s-30/31 rdotp values and size 582x376 -> 784x512 | #4279 fixed rdotp indexing by display position (correct now); #4116 stopped moving an existing graph into the current pane, so it keeps its own pane (same size as s-23..26) | Accept |
+| PeakBoundaryImputation-DIA s-16 floating RT regression graph | #4116 again: the existing Score to Run graph reappears floating | Fixed in the test: hide it before s-16 |
+| ja/zh Full-Scan "and M-1" overlap (DDASearch s-09 etc.) | see the RESX sync note below | Fixed locally for 26.1.1 in #4896 (layout + Needs Review translation) |
 | AbsoluteQuant graphs (.NET 10 only): docked area ~1 px shorter, column splits 1 px off | Not yet explained - a control height or DigitalRune rounding change in .NET 10? | Open |
 | AbsoluteQuant s-05 grid empty area, s-15/16 calibration graph | Likely small .NET 4.7.2 -> 10 formatting changes | Open - confirm against the 26.1.1 run |
 
@@ -72,6 +82,8 @@ Worth telling Brian about the two ZedGraph regressions so they are not undone.
 
 - [x] PR #4882: SkylineTester main window hidden in screenshot modes
 - [x] ImageComparer Accept/Revert on the git index (branch `20261021_imagecomparer_accept`)
-- [ ] Confirm the four 26.1.1 fixes with a rerun in `pwiz-work2`
+- [x] Commit the 26.1.1 fixes and accepted screenshots (#4896)
+- [ ] Rerun the 20 tutorials with remaining changes in `pwiz-work2` (list in its
+      `SkylineTester test list.txt`; 9 are TestPerf - enable perf tests in SkylineTester)
 - [ ] Explain the remaining .NET 10 differences (docked-area 1 px, grid, calibration graph)
 - [ ] Move the fixes to this branch, rerun on master, accept, commit
