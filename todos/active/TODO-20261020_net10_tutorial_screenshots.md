@@ -87,3 +87,21 @@ Worth telling Brian about the two ZedGraph regressions so they are not undone.
       `SkylineTester test list.txt`; 9 are TestPerf - enable perf tests in SkylineTester)
 - [ ] Explain the remaining .NET 10 differences (docked-area 1 px, grid, calibration graph)
 - [ ] Move the fixes to this branch, rerun on master, accept, commit
+- [ ] Cherry-pick #4896's code commit to master (zh-CHS -> zh-Hans for the two Full-Scan layout
+      files; master's Legend.cs/GraphFullScan.cs are LF-normalized, so re-apply rather than pick)
+
+## Progress log
+
+### 2026-10-21 (end of day)
+
+- #4896 (26.1.1 fixes + 218 accepted screenshots) and #4897 (ImageComparer Accept) opened; TeamCity
+  runs overnight. #4882 still open.
+- Brendan reverted ~35 screenshots rather than fix them, and started an overnight retake of ALL
+  tutorial screenshots in `C:\proj\pwiz-work2` (branch `Skyline/work/20261021_screenshot_fixes_26_1_1`,
+  .NET 4.7.2) to see what is left and whether it is fixable.
+- 26.1.1 line endings are mixed in some files (Legend.cs: 145 of 1150 lines CRLF); master was
+  normalized in #4789. On 26.1.1 commit with `git -c core.autocrlf=false` and apply diffs to the
+  original blob so unchanged lines keep their endings.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261020_net10_tutorial_screenshots.md` before starting work.
