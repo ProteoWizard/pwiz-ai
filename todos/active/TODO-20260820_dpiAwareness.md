@@ -785,12 +785,15 @@ Fork source: uw-maccosslab/developers, skylinedev/DigitalRune-Docking-Windows
 Pushed ac129460e5 (developer request, 2026-10-20) and updated the PR description:
 Docking library bullet in the summary, DigitalRune gate/captures in the test plan,
 DigitalRune limitation removed (and the stale deferred-consolidation one).
-developers push BLOCKED: after SSO re-authorization the push still returns 403
-'Write access to repository not granted' - the account has pull-only permission
-on uw-maccosslab/developers. Developer asked Brendan for push access 2026-10-20;
-push 0cd2a44 from Workspaces/ProteoWiz/developers (local master, ahead 1) when it
-arrives. Fallback: patch file sessions/20260910-dpi/0001-Scaled-DigitalRune*.patch,
-or fork + PR (forking is allowed) if the developer prefers.
+developers repo: PUSHED 2026-10-22 as branch DigitalRune/work/20261020_dpiScaling
+(0cd2a44; moved off master because the team's merged PRs there all came from
+DigitalRune/work/* branches - the shallow clone had hidden that), PR
+https://github.com/uw-maccosslab/developers/pull/7 against master, for Brendan to
+merge. Access history: pull-only until Brendan granted push on 2026-10-21/22. The
+plain git push kept failing with the SAML-SSO 403 even afterwards because the git
+credential manager holds an older GitHub-CLI token; pushing with
+`git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push`
+(the CLI's freshly SSO-authorized token, one command only) went through.
 
 ### 2026-10-20 - TeamCity inspection findings fixed; master merged in (PR base is master now)
 
