@@ -11,7 +11,7 @@
   it) and on Brendan's three decisions in the PR body
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, opened 2026-10-23; head 52b62122e9)
+- **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, opened 2026-10-23; head b2622f64fc)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Phase History
@@ -233,5 +233,14 @@ than taken (the stale-file case, by planting torch_cpu.dll in both output folder
 them), 1 dropped (folding Skyline's and Osprey's reason switches into the base class: the two word and
 case the reasons differently and Osprey has a case Skyline lacks; the enum is the shared contract).
 Gates after the fixes: Osprey 643/643 and inspection clean, CarafeSharp 107/8, Skyline build and the
-five tests. Next: the PR, TeamCity (Osprey Windows and Linux .NET on the PR; Perf/Regression on
-`pull/<N>` with Brendan's okay).
+five tests.
+
+**TeamCity on #4909.** Two findings, both fixed: the Skyline inspection flagged an unused `using System;`
+in `TorchRuntimes.cs` (6df6ae6a07); Osprey Linux .NET failed `TestCommandLineHelpDocumentation` because the
+help embedded the download size read from the build's own package list, and the linux-x64 CUDA set is
+3.9 GB where win-x64's is 2.9 - the generated pages are checked in, so the size moved out of the help
+and into the log, where it is computed at run time (b2622f64fc). Osprey Windows .NET, Core Windows and
+the GitHub checks were green on the earlier head; the Linux run also showed `OspreyTorchRuntimesTest`
+loading the CPU runtime from `torch/cpu` on Linux - the `.so` path through `LibTorchRuntime` works.
+Next: TeamCity green on b2622f64fc; Perf/Regression on `pull/4909` with Brendan's okay; his three
+decisions.

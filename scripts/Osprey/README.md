@@ -84,7 +84,7 @@ pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunInspection
 
 # One build serves the CPU and the GPU: Osprey ships the CPU libtorch in torch\cpu and loads the
 # NVIDIA CUDA runtime from a folder of its own when it is installed. To predict on the GPU
-# (--device auto, the default, or gpu), download the runtime once (about 2.9 GB from nuget.org):
+# (--device auto, the default, or gpu), download the runtime once (about 3 GB on Windows, 4 GB on Linux):
 ./pwiz_tools/Osprey/Osprey/bin/x64/Debug/net10.0/Osprey.exe --install-cuda-runtime
 # The retired -Torch cuda switch built a second output with CUDA libtorch beside TorchSharp.dll,
 # which Osprey now refuses to run with; the script cleans such an output folder once.
