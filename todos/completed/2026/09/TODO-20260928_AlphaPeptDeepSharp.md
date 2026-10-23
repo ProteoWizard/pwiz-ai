@@ -181,6 +181,16 @@ Open for Nick: whether `Default (AlphaPeptDeep)` should be the wording (Brendan 
 "AlphaPeptDeep": it says what happens when you choose nothing); and whether the one-line display name
 suffices or the owner-drawn two-line rows should come back for the list items.
 
+## Bug Fixes
+
+### 2026-10-23 - Model combo above Use GPU (Brendan)
+
+Branch `Skyline/work/20261023_AlphaPeptDeepSharp-fix`. The original screenshots had the Model combo above
+the Use GPU checkbox; the order got swapped when the model became "(optional)". The model choice is the
+primary point of the Carafe Options group box and Use GPU a modifier that applies to any model, so Model
+goes back on top. Change: `BuildLibraryDlg.resx` locations and tab order (label 6,19; combo 9,35; checkbox
+9,63; the warning label and the group box size unchanged) and the designer's `Controls.Add` order.
+
 ## Progress Log
 
 ### 2026-10-22 - Adopted; master merged (Brendan's session, Nick away)
