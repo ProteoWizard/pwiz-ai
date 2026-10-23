@@ -42,6 +42,11 @@
 | ExistingQuant s-30/31 rdotp values and size 582x376 -> 784x512 | #4279 fixed rdotp indexing by display position (correct now); #4116 stopped moving an existing graph into the current pane, so it keeps its own pane (same size as s-23..26) | Accept |
 | PeakBoundaryImputation-DIA s-16 floating RT regression graph | #4116 again: the existing Score to Run graph reappears floating | Fixed in the test: hide it before s-16 |
 | ja/zh Full-Scan "and M-1" overlap (DDASearch s-09 etc.) | see the RESX sync note below | Fixed locally for 26.1.1 in #4896 (layout + Needs Review translation) |
+| Checkbox corners in CheckedListBox (AbsoluteQuant, DDASearch, GroupedStudies, LibraryExplorer, MS1Filtering) | Corner antialiasing blends over prior partial repaints of the item; color depends on repaint count | Fixed: `ScreenshotManager` repaints each CheckedListBox with erase before capture (single control-adjuster walk, `CONTROL_ADJUSTERS`) |
+| Replicates / Spectrum Match combo border or blank (CustomReports, iRT, DDASearch, ExistingQuant, LibraryExplorer, DIA) | Themed combo fades between visual states after the pre-capture WM_CHANGEUISTATE; capture 10 ms later caught a varying frame. Diagnostics: state identical, appearance settled within 500 ms | Fixed: screenshot runs turn off client-area animation and wait 500 ms after adjustments. CustomReports repeatable in en/ja/zh except the shadow below |
+| Floating-window shadow seams (CustomReports s-22) | Windows drop shadow over the main window differs by 1 gray level on 1-2 rows between runs; not position (pinned and still varied), not timing (stable within a run) | Flake: revert. Real fix later: capture windows separately and compose. Noted in `screenshot-update-workflow.md` |
+| DIA-TTOF and TTOF DIA-Umpire data changes (mProphet model s-14, mass error histogram s-24, RT residuals s-26, and following) | #4589 (Nick, 2026-09-23) keeps spectra with no peaks during chromatogram import instead of dropping them. The TTOF tutorial data is mzML (no WIFF, so no SCIEX reader), and 16% of its spectra are empty (13,065 of 81,704 in `collinsb_I180316_001_SW-A.mzML`), so it changed far more than other datasets. #4589 re-recorded `TestTtofData*.json`, `TestDiaTtofDiaUmpireTutorial*.json`, `TestQeDataDiaNN.json` and PRM-PASEF | Real software change: accept |
+| DIA s-17 dotp labels missing from Peak Areas replicate panes (top pane none, bottom only over the short bar; axis 0-2 instead of 0-2.5) | Latent since the headroom code (#3247, 2024): UpdateGraph reserves label space from the label height measured in a previous draw, so a new pane (here from `RestoreViewOnScreen` / `LoadLayout`) gets none. February's run got a second UpdateGraph from retention time alignment finishing after the first draw (`WaitForDocumentLoaded`); now it returns in 13 ms. Also the top pane's labels were never added: `IsRedrawRequired` returned early on the base class's redraw. Proven with a diagnostic log of UpdateGraph/Draw/AddDotProductLabels | Fixed in `AreaReplicateGraphPane`: IsRedrawRequired no longer short-circuits; the Y-axis is re-scaled (`ReformatYAxisForLabels`) when the measured label height changes. Verified: both panes match February at s-17 |
 | AbsoluteQuant graphs (.NET 10 only): docked area ~1 px shorter, column splits 1 px off | Not yet explained - a control height or DigitalRune rounding change in .NET 10? | Open |
 | AbsoluteQuant s-05 grid empty area, s-15/16 calibration graph | Likely small .NET 4.7.2 -> 10 formatting changes | Open - confirm against the 26.1.1 run |
 
@@ -102,6 +107,18 @@ Worth telling Brian about the two ZedGraph regressions so they are not undone.
 - 26.1.1 line endings are mixed in some files (Legend.cs: 145 of 1150 lines CRLF); master was
   normalized in #4789. On 26.1.1 commit with `git -c core.autocrlf=false` and apply diffs to the
   original blob so unchanged lines keep their endings.
+
+### 2026-10-22 / 23
+
+- Second full 26.1.1 retake (drafts renamed `...TutorialDraft`, so out of the Tutorial tests set). Every
+  remaining change explained in "Explained so far": checkbox corners, combo fades, window shadows (flake),
+  #4589 TTOF data, dotp labels, x-axis label skipping, DIA s-16 selection, IM full-scan three-pane text.
+- Pushed to #4896: `8c26943ee8` (code, tests, RESX, tutorial text) and `7ce48dce05` (113 screenshots).
+  Third overnight retake running 2026-10-23.
+- Next: if clean, squash-merge #4896 to `Skyline/skyline_26_1_1`, cherry-pick to master (zh-Hans RESX,
+  LF files, re-apply rather than pick; the local `Skyline/work/20261021_screenshot_fixes_master` in
+  `C:\proj\pwiz-work3` predates this round and should be rebuilt from the squash commit), then a
+  .NET 10 overnight retake on master.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261020_net10_tutorial_screenshots.md` before starting work.

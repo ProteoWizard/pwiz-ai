@@ -326,6 +326,14 @@ Unexpected dialog size changes often indicate a bug in AutoSize, MinimumSize, or
 ### Import Progress / Timing-Dependent Forms
 Forms like `AllChromatogramsGraph` (import progress monitor) show timing-dependent state that varies between runs. These are typically **reverted** and flagged for future consistency improvements.
 
+### Window Shadows in Overlaid Screenshots
+A screenshot of the main window with a floating window over it (e.g. CustomReports s-22) includes the drop shadow Windows draws around the floating window. That shadow cannot be captured reliably: a few pixels along one or two rows of the shadow gradient differ by one gray level from run to run (invisible at 1:1, found only with ImageComparer). The shadow is fixed once the window appears, but varies between runs even with identical window positions, sizes and Windows animation settings (tested October 2026). **Revert** these; they are a flake. The reliable fix is to capture each window separately and compose the image, as some cover shots do.
+
+### Checkbox Corners and Combo Box Borders
+Two former sources of run-to-run differences, now fixed in `ScreenshotManager` (October 2026), in case they reappear:
+- **Checked boxes in a CheckedListBox**: the antialiased corners of a checked box blended over whatever the list painted there before, so their color depended on how many partial repaints the item had had. Each CheckedListBox is now fully repainted, background erased, before capture.
+- **Drop-down combo boxes**: themed controls fade between visual states (bordered vs flat) for a few hundred milliseconds after the pre-capture adjustments make them repaint, and the capture caught the fade at a varying point. Screenshot runs now turn off Windows client-area animation (`DisableControlAnimations`) and wait 500 ms after the adjustments.
+
 ## Improving Screenshot Consistency
 
 When reverting screenshots, always consider whether the underlying cause can be fixed to prevent future false-positive changes. This is especially important when an entire class of screenshots needs reverting.
