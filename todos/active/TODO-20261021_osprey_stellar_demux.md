@@ -447,8 +447,10 @@ raws read by RawFileReader (`raw_calibrator_check.ps1`; `raw_peak_widths.ps1` fo
 changes on #4710 (2026-10-15): it is not to be merged; demultiplexing goes into ProteoWizard's demultiplexer
 (`pwiz/analysis/Demux`), which msconvert, Skyline (`MsDataFileImpl` option, #4815) and Osprey (`--demux auto`, #4818)
 all use. #4806, #4813, #4815, #4818 and #4827 (Poisson refit, makima) are merged. #4710 and this branch are the
-reference implementation that features are ported from, one focused pwiz PR at a time. Mike (2026-10-23): keep Centrix
-on this branch for now.
+reference implementation that features are ported from, one focused pwiz PR at a time. Mike (2026-10-23): our version
+will eventually become pwiz's demux code; pwiz's has been used for over a decade, and switching while everything else
+changes in the next release is a risk. So everything stays in our own PR, with the port PRs staged on it, in the order
+below. Keep Centrix on this branch for now.
 
 ProteoWizard's demultiplexer on master: overlap and MSX, centroid domain, opt-in Poisson weights (floor 100 counts, in
 intensity units: no ion scale, so wrong for rate data such as the Stellar's), makima, MSX fill-time weighting. Not
@@ -492,6 +494,19 @@ there: ZT Scan scanning demux, profile/joint solves, Centrix, profile grids.
    little used by Osprey on Stellar data; centroid it with Centrix directly rather than the joint solve. Speed: Stellar
    joint about 2.6x the acquisition. Rerun the WSL-corrupted arms in-process. centrix#1 and its compression-label
    follow-up.
+
+**Calibrator: peak width depends on ions per peak (2026-10-23, `width_vs_ions.ps1`).** FWHM lower quartile by ions in the
+peak (summed positive run x fill ms / 1000), 2Th TR01 / SuperOverlap TR01, identical in both: 0-3 ions 0.41 Th; 3-10
+0.50; 10-30 0.63; 30-100 0.75; 100-300 0.81-0.82; 300+ 0.88-0.91. No plateau. So sigma is set by which peaks count:
+current rule (99th pct of all points, 26% zeros) 0.269 / 0.286; 99th pct of nonzero points 0.305 / 0.310; >= 10 ions
+0.307 / 0.308; >= 30 ions 0.330 / 0.335 (the 0.33 the good arms used); >= 100 ions 0.352 / 0.361. Physics (agreed with
+Mike): few-ion peaks read narrow (each ion a short pulse); big ones wider (space charge, unresolved neighbors). Centrix's
+job is splitting a peak wider than one species, so sigma should be one species' width at the scan rate (200 kTh/s
+here); a fixed sigma is a compromise since single-species width grows with ions. Proposed: select calibration peaks by
+ion count (needs each spectrum's ion scale); choose the floor by a sigma sweep. Sweep running: 2Th profile, Osprey
+reader `--centroid centrix --centrix-solver active-set --centrix-sigma-ms1 0.2 --centrix-sigma-ms2 {0.33, 0.27, 0.30,
+0.36}`, arms `2th-profile-cs-sigma0NN`, snapshot `_bin/stellar-nofloor-osprey` (0.33 reproduces `2th-profile-cs-active`,
+23,457 / 23,147 / 22,644). Metrics: IDs, centroids per MS2 spectrum.
 
 ## Plan (2026-10-21, original)
 
