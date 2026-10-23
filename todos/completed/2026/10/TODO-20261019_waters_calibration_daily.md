@@ -5,7 +5,8 @@
 - **Base**: `Skyline/skyline_26_1_1` (.NET 4.7.2 Skyline-daily)
 - **Module**: `skyline`
 - **Created**: 2026-10-19
-- **Status**: In progress
+- **Status**: Completed
+- **PR**: [#4874](https://github.com/ProteoWizard/pwiz/pull/4874) (merged 2026-10-22)
 - **Source**: master commit `e7b02632bb` (#4782, the pwiz-sharp port) - but applied from its C++
   original, PR #4498 (`Skyline/work/20260727_Waters_dataconvert_mzml_import`, closed unmerged
   2026-10-06 when development moved to .NET 10). See TODO-20260727_Waters_dataconvert_mzml_import.md
@@ -27,7 +28,7 @@
 - [x] Skyline: TestWatersCalibrationSpectrum, TestTicChromatogram, WatersLockmassCmdlinePerfTest
 - [x] CodeInspectionTest
 - [x] Commit, push, PR against `Skyline/skyline_26_1_1` - [#4874](https://github.com/ProteoWizard/pwiz/pull/4874)
-- [ ] Review (developer adding reviewers), TeamCity green, merge
+- [x] Review (developer adding reviewers), TeamCity green, merge
 
 ## Progress Log
 ### 2026-10-19
@@ -50,3 +51,17 @@
 - TeamCity perf/tutorial build #567 (bt19762): only TestDiannSearchTutorial failed ("DIA-NN search did not
   produce a spectral library output") on MacCoss TeamCity Agent 1 - identical failure in #561 (`14c0cab0`,
   pre-PR) on the same agent. Pre-existing, agent-specific.
+- Copilot: 2 comments (param-group-referenced fileContent declaration; no cpp UIMF calibration-frame
+  fixture) declined with replies, threads resolved.
+- Wine docker build #1258 (on `d166ded0fb`) failed Bruker comma / Shimadzu unicode filename conversions
+  (recurring in #1248-#1251 on base-branch commits) and a SONAR_Short ShellExecuteEx launch failure;
+  #1256 on `a2e361057a` (same code) passed. Wine/agent flakiness, not this change.
+
+### 2026-10-23 - Merged
+
+PR #4874 merged to `Skyline/skyline_26_1_1` as commit `5d94319f4d` on 2026-10-22. Shipped the full
+C++ #4498 change set (waters_connect nativeID handling, SpectrumList_IgnoreCalibrationScans for mzML /
+mzMLb / mz5, UIMF and Waters TIC calibration exclusion) plus the comment-only review fix. Not done here:
+the UIMF cpp calibration-frame fixture gap and the referenced-param-group declaration (both declined,
+master parity). Candidate follow-up backports identified but not started: #4824 (MCP connector form
+visibility) and #4890 (library-load race in TestKoinaSkylineIntegration / TestAlphaPeptDeepBuildLibrary).
