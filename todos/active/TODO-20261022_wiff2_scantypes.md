@@ -39,3 +39,14 @@ scan types. The C# wiff2 reader only knew the ZenoTOF strings ("TOFMS", "TOFMSMS
 ### 2026-10-23
 Test data cleared for public use (already public via the support board). Code review findings
 triaged and fixed; tests green. Committed 9755573c3d and opened PR #4907.
+
+Copilot: SeeMS stick fallback now requires DefaultArrayLength == 1 (metadata-only Waters IMS
+reports 0) - 654edbd1ee. Matt's review:
+- Moved all Sciex test/Reference fixtures into Reader_Sciex_Test.data (no C++ tree left) - 93ed45a0dc
+- Q1MI -> SIM: SIM targets from isolation-window centres, SICs via SDK GetMrmXic (matches the
+  per-cycle points exactly); test runs default / simAsSpectra / simAsSpectra+peakPicking - 688d896142
+- That broke Skyline PRM: any SIM chromatogram makes MsDataFileImpl.HasChromatogramData true and
+  ChromCacheBuilder imports chromatograms only, dropping the MS2 spectra. wiff2 now omits SIM
+  chromatograms under simAsSpectra (legacy .wiff unchanged) - 1b1f3b0870. Re-verified with
+  SkylineCmd: identical peaks to pre-SIM (precursor + y3/y2/y1/b2)
+- ProductIon kept as spectra (scanned Q3, CE ramp one experiment per step); replied on the PR
