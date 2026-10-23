@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4899](https://github.com/ProteoWizard/pwiz/issues/4899)
 - **Module**: `pwiz`
-- **PR**: [#4905](https://github.com/ProteoWizard/pwiz/pull/4905); seed PR [#4900](https://github.com/ProteoWizard/pwiz/pull/4900) (draft, never merged); website: ProteoWizard/web branch `release-channels` (PR after the job publishes)
+- **PR**: [#4905](https://github.com/ProteoWizard/pwiz/pull/4905) (merged 2026-10-23), follow-up [#4910](https://github.com/ProteoWizard/pwiz/pull/4910) (month-end releases named YYYY-MM); seed PR [#4900](https://github.com/ProteoWizard/pwiz/pull/4900) (closed, never merged); website [ProteoWizard/web#28](https://github.com/ProteoWizard/web/pull/28)
 
 ## Objective
 
@@ -23,7 +23,7 @@ The issue body holds the full technical detail: how the website resolves downloa
 - [x] Trial seed build for 2026-09 (`10aac2d`): build 4230560, `3.0.26272.10aac2d9`, 308/308 tests, pinned + tagged `release-2026-09`
 - [x] Remaining 7 seed builds; pin + tag each `release-YYYY-MM` with the seed commit in the pin comment
 - [x] Monthly pin job written (uncommitted): `scripts/misc/publish_monthly_release.py` + `.teamcity/ProteoWizard/buildTypes/ProteoWizard_PublishMonthlyRelease.xml` (cron 06:00 server time on the 1st; pins/tags the previous month, writes and SFTPs `bt83-monthly.xml` + `bt83-archive.json`; dry run off the default branch)
-- [ ] After merge: run it manually with "Release the latest build now" (`--latest`; the mid-month October release, user decision 2026-10-22), confirm `pwiz-commit` can pin, and check both files at https://proteowizard.sourceforge.io/releases/
+- [x] (2026-10-23: first run 403'd - the server's customized Project developer role lacks pin_unpin_build/tag_build; after the user fixed pwiz-commit's permissions the rerun released build 4232279 as release-2026-10-23 and both files went live) After merge: run it manually with "Release the latest build now" (`--latest`; the mid-month October release, user decision 2026-10-22), confirm `pwiz-commit` can pin, and check both files at https://proteowizard.sourceforge.io/releases/
 - [x] Archive metadata covers every pinned SUCCESS bt83 build tagged `release-YYYY-MM` on any branch
 - [ ] Website in ProteoWizard/web (uncommitted, branch `release-channels` in `C:\dev\pwiz-web-help`): Monthly/Beta channel selector for the Windows installers + archive dropdown with a license-gated Download button. Merge only after the pin job publishes `releases/bt83-monthly.xml` and `releases/bt83-archive.json`
 - [ ] Commit-date versioning in `scripts/installer/build.ps1` (and `build-linux.sh`)
