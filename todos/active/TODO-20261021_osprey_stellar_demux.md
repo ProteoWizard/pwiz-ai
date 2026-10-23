@@ -553,6 +553,19 @@ mzMLb (2026-10-23, `mzmlb_test.ps1`): SuperOverlap TR02 demux centroids 0.63 GB 
 0.77 GB, raw 2.90 GB; reads 39-40 s vs 35-38 s (all 540,556 spectra, identical points and sums); written with pwiz's
 `MzMlbWriter` (the msconvert build here lacks `--mzMLb`).
 
+**Fine-tuned entrapment library (2026-10-23; Mike: entrapment with Osprey, fine-tune once, Chronologer for RT).**
+`Run-CarafeSharpWorkflow.ps1 -Dataset Stellar` on the 2Th centroid-mode runs (train TR01), `-EntrapmentSource natural
+-ForeignFasta ...\uniprot_arabidopsis_feb2023.fasta` (lab documents folder), `-InputFasta hela-filtered.fasta` (same
+target space as every arm), CPU build `D:\Dev\pwiz\...\CarafeSharp\bin\x64\Release` (the bin-cuda build of 10-01
+predates `-rt_model` and cannot run Chronologer), ~50 min. Work dir `D:\test\osprey-runs\stellar-demux\carafe-finetune`;
+library `osprey_new_library\carafe_spectral_library.blib` (969,337 precursors), pairing `osprey_library_db_pairing.tsv`.
+Held-out: Chronologer RT R2 0.9962 -> 0.9987, median |error| 0.21 -> 0.11 min; MS2 PCC 0.923 -> 0.974, cosine 0.928 ->
+0.975, SA 0.757 -> 0.859. Preset "Eclipse NCE 27" = Stellar HCD 20 (Mike). The workflow preset searches at 0.4 m/z
+(the "0.4" Mike remembered; Osprey's built-in unit default is 0.5). 2Th centroid runs with it: 37,070 / 35,876 /
+36,512 (47,405 experiment); combined entrapment FDP 0.49% at q 1% (116 entrapment / 47,289 targets), 0.78% at 2%.
+FDRBench jar not installed here; combined FDP computed directly (N_e x 2 / (N_t + N_e), r = 1).
+Sweep rerun with it: arms `2th-profile-cs-sigma0NN-ft` (Osprey default 0.5 m/z, cached Centrix spectra per sigma).
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
