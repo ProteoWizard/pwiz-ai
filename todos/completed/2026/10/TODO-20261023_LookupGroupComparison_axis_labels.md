@@ -5,7 +5,10 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-23
-- **Status**: In progress
+- **Status**: Completed
+- **PR**: [#4908](https://github.com/ProteoWizard/pwiz/pull/4908) (merged 2026-10-23)
+- **Test Name**: TestLookupGroupComparison
+- **Fix Type**: Test timing (UI race)
 
 ## Problem
 TestLookupGroupComparison failed 8 times on Nightly x64 between 2026-09-01 and 2026-10-23, on
@@ -30,4 +33,11 @@ reordering/regrouping, and that `TextLabels` can hold abbreviated labels.
 - [x] Fix applied, build + single run passed
 - [x] 20-loop run (0 failures), CodeInspection passed
 - [x] /code-review medium; revised to wait for expected labels; 20 loops x en/fr/ja (60/60 pass)
-- [ ] PR
+- [x] PR
+
+### 2026-10-23 - Merged
+
+PR #4908 merged as commit 89e5c6405c after TeamCity passed (Skyline: 1823 tests). Test-only
+fix: all four area graph label checks now wait for the expected labels instead of reading
+them once. Nothing deferred. Watch the next couple of weeks of Nightly x64 to confirm the
+intermittent failure is gone.
