@@ -11,7 +11,7 @@
   it) and on Brendan's three decisions in the PR body
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, opened 2026-10-23; head b2622f64fc)
+- **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, opened 2026-10-23; head e2bfa92441; Perf/Regression #343 SUCCESS, 116/116)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Phase History
