@@ -242,5 +242,10 @@ help embedded the download size read from the build's own package list, and the 
 and into the log, where it is computed at run time (b2622f64fc). Osprey Windows .NET, Core Windows and
 the GitHub checks were green on the earlier head; the Linux run also showed `OspreyTorchRuntimesTest`
 loading the CPU runtime from `torch/cpu` on Linux - the `.so` path through `LibTorchRuntime` works.
-Next: TeamCity green on b2622f64fc; Perf/Regression on `pull/4909` with Brendan's okay; his three
-decisions.
+**Decisions (Brendan, 2026-10-23, by phone).** 1: `auto` is the default device. 2: the install stays an
+explicit command, and `--device gpu` is a requirement: a run that cannot use the GPU fails before it
+starts and says why (no NVIDIA GPU, driver or GPU too old, runtime not installed with the install command
+named) - immediate failure beats a slow CPU run that needs troubleshooting. `OspreyTorchRuntimes.CheckGpu`,
+asked in Program after `--task-files` and before the log opens, for a run that will predict (no stage
+`--task`). 3: the default folder stays under local application data. Perf/Regression triggered on
+`pull/4909` (build 4232635).
