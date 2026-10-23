@@ -508,6 +508,20 @@ reader `--centroid centrix --centrix-solver active-set --centrix-sigma-ms1 0.2 -
 0.36}`, arms `2th-profile-cs-sigma0NN`, snapshot `_bin/stellar-nofloor-osprey` (0.33 reproduces `2th-profile-cs-active`,
 23,457 / 23,147 / 22,644). Metrics: IDs, centroids per MS2 spectrum.
 
+**Progress on the plan (2026-10-23).**
+- pwiz ffb9065228: `StaggeredJointDemuxTest` (synthetic Stellar-like run: 4 Th windows in two offset passes, 0.2 Th
+  profile with a baseline and 25% zeros, fill 0.2-20 ms, ions/s). Joint recovery on bins 2-17: m/z within 0.0005 Th,
+  rates 1.2% median / 1.8% worst, no crosstalk (the end bins are seen through one window: undetermined split). Joint
+  fill-time invariance (unpenalized, equal weights, before Centrix): 4.6e-4 of the largest, in elution tails (discrete
+  active-set and equal-split choices). 1 vs 4 threads identical; an all-zero spectrum gives empty outputs in place.
+  Note: `DemuxPipeline.Peaks` throws KeyNotFoundException for a pass-through (MS1) output; callers read those from
+  the source (the DemuxTool does).
+- pwiz 256ee8f199: **fixed the makima (per-channel) units bug.** Same rates at 100-fold fill times moved the output
+  by 37% of the largest; now 3.9e-4 (`TestStaggeredChannelFillTimeInvariance`, fails at 37% without the fix). With
+  `--ions`, peaks enter the unit at the run's median fill time and outputs go back to their own. Orbitrap/ZT untouched
+  (689/689 tests, Eclipse fixture included). Every makima arm before this carries the error: rerun 50% makima
+  (21.3k) and SuperOverlap makima (236 / 190 / 357, also hit by the Rust Centrix bug).
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
