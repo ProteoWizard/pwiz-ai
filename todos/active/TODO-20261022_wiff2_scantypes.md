@@ -50,3 +50,11 @@ reports 0) - 654edbd1ee. Matt's review:
   chromatograms under simAsSpectra (legacy .wiff unchanged) - 1b1f3b0870. Re-verified with
   SkylineCmd: identical peaks to pre-SIM (precursor + y3/y2/y1/b2)
 - ProductIon kept as spectra (scanned Q3, CE ramp one experiment per step); replied on the PR
+- Matt approved #4907 at 1b1f3b0870
+
+C++ backport to `Skyline/skyline_26_1_1` (checkout `C:\Dev\Backport`, branch
+`Skyline/work/20261023_wiff2_scantypes_26_1_1`): PR [#4912](https://github.com/ProteoWizard/pwiz/pull/4912).
+WiffFile2.ipp / SpectrumList_ABI.cpp / ChromatogramList_ABI.cpp + Reader_ABI_Test configs and
+references. Decoded C++ output matches the C# references (TIC ms-level array width aside, a
+pre-existing C#/C++ difference); SkylineCmd PRM import identical to master. Code review fixes
+in aac82ee46f. SpectrumList_ABI.cpp has mixed line endings - edit it byte-level, not with Edit.
