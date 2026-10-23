@@ -5,11 +5,13 @@
 - **Base**: `master`
 - **Created**: 2026-10-19
 - **Phase 2 started**: 2026-10-23
-- **Status**: In Progress - PR 4d: Osprey as a separate download for Skyline, sharing #4849's libtorch
-  runtime folder and CUDA installer, the device logged; installers and TeamCity artifacts
+- **Status**: In Progress - PR 4d open as #4909 (2026-10-23): Osprey chooses its libtorch runtime when
+  it runs, the CUDA runtime a download shared with Skyline's AlphaPeptDeep, the device logged. Waiting on
+  TeamCity (Osprey Windows and Linux .NET on the PR; Perf/Regression on `pull/4909` once Brendan okays
+  it) and on Brendan's three decisions in the PR body
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (none yet)
+- **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, opened 2026-10-23; head 52b62122e9)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Phase History
