@@ -5,7 +5,9 @@
   night session of 2026-10-23; master holds #4909 and #4911)
 - **Base**: `master`
 - **Created**: 2026-10-23
-- **Status**: Designed - Brendan's decisions below are open; the branch is cut when the night session starts
+- **Status**: Designed; Brendan's decisions taken 2026-10-23 (below). The night session of 2026-10-23 cuts
+  the branch and builds PR 1: the steel thread from a FASTA to a predicted library to the document, no
+  input library anywhere
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
 - **PR**: (none yet)
@@ -85,11 +87,15 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
    `SkylineWindow.ShowOspreySearchDlg` with an install gate that is `SimpleFileDownloader.
    DownloadRequiredFiles` under a `LongWaitDlg` (download size stated first) - no custom dialog.
 3. **`FileUI\PeptideSearch\OspreySearchDlg`** with `OspreySearchControl : SearchControl`, pages: DIA data
-   files; library source (a protein FASTA to predict from - the default - or an existing `.blib` for `-l`);
-   modifications (the document's, mapped to CarafeSharp's `--fixMod`/`--varMod`); search settings
-   (resolution unit|hram, fragment tolerance and unit, run and experiment FDR, protein FDR, threads, Use GPU
-   as `BuildLibraryDlg` offers it, with the CUDA install reused from there); run.
-4. **The command**: `-i <runs> --fasta <fasta> | -l <blib> -o <doc>.osprey.blib --torch-runtimes <Tools>
+   files; the protein FASTA to predict the library from (the only library source: the steel thread is
+   scenario 1 of the Osprey-Carafe integration, a predicted library and nothing else; no `-l`, no existing
+   `.blib`, in this PR or later - Import Peptide Search already serves a library plus runs); modifications
+   (the document's, mapped to CarafeSharp's `--fixMod`/`--varMod`); search settings (resolution unit|hram,
+   fragment tolerance and unit, run and experiment FDR, protein FDR, threads, Use GPU as `BuildLibraryDlg`
+   offers it, with the CUDA install reused from there); run. The library is predicted with the default
+   Carafe source and the pretrained AlphaPeptDeep model, as the Build Library form does when Carafe is the
+   source; a fine-tuned model and tuning on the runs are PR 2.
+4. **The command**: `-i <runs> --fasta <fasta> -o <doc>.osprey.blib --torch-runtimes <Tools>
    --device auto|cpu --enzyme/--miss-c from the FASTA page, --fixMod/--varMod from the modifications page,
    --resolution, --fragment-tolerance, --fragment-unit, --run-fdr, --experiment-fdr, --protein-fdr,
    --threads, --log-file`. The output name and the overwrite-or-append prompt follow
@@ -104,35 +110,34 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
    through the mirror zip otherwise (TeamCity); `TestRunnerFormLookup.csv` entries; the preset round-trip
    only if presets are in (Decision 4).
 
-## Decisions for Brendan
+## Decisions (Brendan, 2026-10-23)
 
-1. **Where the wizard lives**: its own **Search > Osprey Search...** wizard (DIA-NN's and EncyclopeDIA's
-   pattern; recommended - it is the seam that exists) versus Osprey as a choice inside the Import Peptide
-   Search DIA workflow (no DIA engine abstraction exists there today; a larger change).
-2. **Inputs in PR 1**: FASTA (mode 1, the one command) plus an existing `.blib` (`-l`), with tuning on the
-   runs (`--training-input`, mode 2) and saved models (`--model`) left for PR 2 - or tuning in PR 1 since
-   the options are CarafeSharp's declarations already hosted by Osprey.
-3. **The `.blib`'s role**: the document library (DIA-NN's choice, written to the document's library name,
-   with the overwrite/append prompt) or a non-document library added beside it (EncyclopeDIA's route,
-   what the existing-library overload does today). Recommended: the document library, since the search
-   result is the document's evidence, which means teaching the overload to make it so.
-4. **Presets and the `.cfg` import**: skip in PR 1 (Osprey has no settings file today); add a preset list
-   when the settings page has stabilized.
-5. **The download source**: start with the TeamCity artifact of the pinned Osprey build mirrored to
-   `ci.skyline.ms/skyline_tool_testing_mirror/Osprey-<version>-win-x64.zip` (the test path) and a release
-   URL to be named later; or publish the zip now to a `skyline.ms/home/software/Osprey` files folder as
-   the release site, the way ProteoWizard publishes its installer. Either way someone with access uploads
-   the zip - the PR cannot.
-6. **The package size**: the win-x64 zip carries `torch\cpu` (256 MB) and the models (25 MB), which
-   Skyline already installs for AlphaPeptDeep. PR 3 would add `--torch-cpu <folder>` beside
-   `--torch-runtimes` and a Skyline-bound package without them (a `package.ps1 -ForSkyline` leg), cutting
-   the download to the self-contained .NET runtime plus Osprey. Not for PR 1.
+1. **Where the wizard lives**: its own **Search > Osprey Search...** wizard, parallel to DIA-NN's and
+   EncyclopeDIA's - the seam that exists. Brendan's reservation, to return to later: from the user's side
+   the model feels off, with File > Search > Peptide Search serving several DDA engines (Comet, MS Amanda,
+   Tide, MS-GF+) while each DIA tool has a menu item of its own. EncyclopeDIA may go away eventually; its
+   workflow is the most particular (a library built with Koina first).
+2. **Inputs in PR 1**: a protein FASTA only. The library is predicted from it with the default Carafe
+   source and the pretrained AlphaPeptDeep model, as the Build Library form does when Carafe is selected -
+   scenario 1 of the Osprey-Carafe integration. No `-l`: this PR must not require an input library, and the
+   wizard does not take one. Tuning on the runs (`--training-input`) and a fine-tuned model (`--model`)
+   are PR 2.
+3. **The `.blib`'s role**: the document library, written to the document's library name with DIA-NN's
+   overwrite-or-append prompt; the existing-library route learns the document case.
+4. **Presets and the `.cfg` import**: not in PR 1.
+5. **The download source**: the pinned Osprey build's zip, mirrored to
+   `ci.skyline.ms/skyline_tool_testing_mirror/Osprey-<version>-win-x64.zip` for tests, with the release URL
+   named later (TeamCity artifacts can stand in, as ProteoWizard's installer did). Someone with access
+   uploads the zip; until then the functional test runs against a local Osprey.exe through the registered
+   tool path.
+6. **The package size**: PR 3 (`--torch-cpu` beside `--torch-runtimes` and a Skyline-bound package without
+   libtorch and the models). Not PR 1.
 
 ## PR plan
 
 | PR | Holds |
 |---|---|
-| **1 (tonight)** | `OspreyHelpers`, `SearchToolType.Osprey`, the menu item and install gate, `OspreySearchDlg` with the pages above, the hand-off through the existing-library overload, `OspreySearchTest` on the Stellar subset against a local Osprey.exe, resources, form lookup entries |
+| **1 (tonight)** | The steel thread: `OspreyHelpers`, `SearchToolType.Osprey`, the menu item and install gate, `OspreySearchDlg` with the pages above (FASTA the only library source), the hand-off making Osprey's `.blib` the document library, `OspreySearchTest` on the Stellar subset against a local Osprey.exe, resources, form lookup entries |
 | **2** | Tuning (`--training-input`, `--model`) and the saved-model list; presets; the GPU choice wired to `TorchRuntimes` with the CUDA install; the tutorial-style perf test on real data |
 | **3** | The Skyline-bound Osprey package without libtorch and the models (`--torch-cpu`), the release site, the mirror zip for TeamCity |
 
@@ -153,7 +158,7 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
 - [ ] `OspreyHelpers`: version, folders, download info, command line, `RunSearch`
 - [ ] `SearchToolType.Osprey`; menu item; `ShowOspreySearchDlg` with the download gate
 - [ ] `OspreySearchDlg` and `OspreySearchControl`: the five pages, validation, the overwrite prompt
-- [ ] The hand-off to `ImportPeptideSearchDlg` and, per Decision 3, the document-library behaviour
+- [ ] The hand-off to `ImportPeptideSearchDlg` with Osprey's `.blib` as the document library (Decision 3)
 - [ ] `OspreySearchTest` end to end on the Stellar subset; form lookup entries; resources
 - [ ] Gates; `/code-review medium`; PR
 
@@ -166,3 +171,12 @@ tests), the design above, and six decisions for Brendan. The CarafeSharp-in-Skyl
 Decision 6: `torch\cpu` 256 MB on disk (76 MB zipped), the models 25 MB, TorchSharp 3 MB; Osprey's own
 installer is 105 MB compressed, 393 MB installed, with the same libtorch and models plus a self-contained
 .NET runtime.
+
+### 2026-10-23 - Decisions taken; ready for the night session
+
+Brendan: FASTA only, no input library in the wizard, the default Carafe source with the pretrained
+AlphaPeptDeep model as Build Library offers it; tuning in PR 2; the separate wizard for now with the menu
+model to revisit. The night session starts here: cut `Skyline/work/20261023_skyline_osprey_search` from
+master, verify Osprey's progress lines through `ProcessRunner` first, then the tasks in order. Osprey.exe
+for the test loop: `pwiz_tools\Osprey\Osprey\bin\x64\Debug\net10.0\Osprey.exe` (master has #4909 and the
+icon PR #4911 may land first; either is fine).
