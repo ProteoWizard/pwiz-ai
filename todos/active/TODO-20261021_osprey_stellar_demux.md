@@ -591,6 +591,15 @@ generic at every sigma. Still 24% under the centroid acquisition (47,405), confo
 Fragment and RT agreement, TR01, 32,535 precursors identified with both libraries: median-polish cosine 0.983 -> 0.989
 (better for 63%), SG-weighted cosine 0.955 -> 0.961 (65%), |RT error| 0.20 -> 0.09 min (74%).
 
+**Narrow sigma (2026-10-23; arms `2th-profile-cs-sigma0{12,15,18}-ft`, fine-tuned library, `--model-diagnostics`).**
+sigma: experiment / combined-paired FDP at q 1% / calibrated SD-window / centroids per MS2: 0.12: 33,725 / 0.27-0.24% /
+0.093-0.29 / 367; 0.15: 34,604 / 0.34-0.31% / 0.090-0.28 / 424; 0.18: 34,621 / 0.32-0.30% / 0.101-0.31 / 414; 0.21:
+35,849 / 0.51-0.48% / 0.158-0.48 / 262 (peak). Below ~0.2 Th (one point) centroids jump to ~410 and close pairs triple;
+the calibrated window collapses to ~0.3 Th, likely Osprey's closest-centroid calibration reading a small SD from dense
+centroids (untested). IDs at matched true FDP are not readable from these curves (combined FDP stays < 1% until q 14-53%;
+the first points are noisy), so compare at q 1%. Pick for this data: sigma 0.21 Th (FWHM 0.49, ~one point spacing);
+whether the optimum tracks the spacing or the few-ion peak width needs other scan rates.
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
