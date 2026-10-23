@@ -393,6 +393,21 @@ mass axis cannot move 0.5 Th between adjacent runs, so it is our processing. Con
   --centroid centrix --centrix-param Solver=active_set`, measured sigma; snapshots `_bin/stellar-cscentrix-*`). For Rust
   Centrix: return an empty spectrum instead of skipping it, or pair results with spectra by native id (not filed yet).
 - The -0.55 Th profile axis offset itself is real and the same in every run; separate from this bug.
+**In-process rerun read sigma too narrow (2026-10-22, pwiz 88fef2dff3).** `super-profile-joint-cscentrix` gave 10.2k /
+10.8k / 11.5k precursors (13.9k experiment), consistent across runs but low: the calibrator measured MS2 sigma 0.213 Th
+(picker) / 0.230 (joint), 2-5 centroids per spectrum. Two causes, measured with Osprey's own `AddPeakWidths` on whole
+raws read by RawFileReader (`raw_calibrator_check.ps1`; `raw_peak_widths.ps1` for the split by points above half max):
+- 26% of profile points are zeros; peaks whose half-max walk ends on a zero are a few ions' spikes (an ion trap ejects
+  each ion at one instant), a third of the intense maxima. Counted: sigma 0.266 (2Th TR01) / 0.285 (SuperOverlap TR01);
+  left out: 0.305 / 0.310, the same as with the zeros removed. Now left out.
+- The calibrator stopped at 3,000 peaks, all from the run's first minutes (sample indices ascend): 0.174 / 0.213 with
+  spikes. Cap removed; every one of the 3,000 sampled spectra is used (10-15k peaks).
+- MS1 "0 isolated peaks" in the DemuxTool's joint branch is expected: MS1 is vendor-centroided there before the
+  calibrator sees it, and the Centrix MS1 picker passes centroided spectra through.
+- Also limiting: the earlier search calibrated MS2 to mean -0.21 Th (pass 2, ~5-6k matches): the +/-0.5 window sees the
+  tail of the monoisotopic peak at -0.55, so after the +0.21 correction the M+1 (+0.67) is inside the 0.73 tolerance.
+- Runs: `super-profile-joint-cscentrix-s033` (sigma fixed 0.33, old snapshot), `super-profile-joint-cscentrix-tol06`
+  (the 0.213 output searched with `--fragment-tolerance 0.6`); next `_bin/stellar-cscal2-*` (88fef2dff3, measured).
 ## Plan
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
