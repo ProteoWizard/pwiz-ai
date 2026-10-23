@@ -82,9 +82,12 @@ pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests
 # ai/.tmp/OspreyInspect-<checkout>.net10.0.xml, one file per checkout.
 pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunInspection
 
-# Build with CUDA libtorch, so the one command's library prediction (--fasta) runs on the GPU
-# (--device gpu); the default is CPU libtorch. Switching cleans the bin folders.
-pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Torch cuda
+# One build serves the CPU and the GPU: Osprey ships the CPU libtorch in torch\cpu and loads the
+# NVIDIA CUDA runtime from a folder of its own when it is installed. To predict on the GPU
+# (--device auto, the default, or gpu), download the runtime once (about 2.9 GB from nuget.org):
+./pwiz_tools/Osprey/Osprey/bin/x64/Debug/net10.0/Osprey.exe --install-cuda-runtime
+# The retired -Torch cuda switch built a second output with CUDA libtorch beside TorchSharp.dll,
+# which Osprey now refuses to run with; the script cleans such an output folder once.
 
 # Unit tests under another culture (OSPREYDEV_TEST_CULTURE): ja-JP proves assertions read
 # resources, fr-FR proves program-read numbers are invariant

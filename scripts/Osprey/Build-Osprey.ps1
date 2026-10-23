@@ -176,14 +176,7 @@ param(
     [switch]$VendorReader = $false,
 
     [Parameter(Mandatory=$false)]
-    [string]$Culture = $null,
-
-    # libtorch backend for the one command's in-process CarafeSharp prediction (--fasta):
-    # cpu (default) or cuda (CUDA 12.8), as Build-CarafeSharp.ps1 -Torch. The two backends ship
-    # identically named native files into the same bin folder, so switching cleans it first.
-    [Parameter(Mandatory=$false)]
-    [ValidateSet("cpu", "cuda")]
-    [string]$Torch = "cpu"
+    [string]$Culture = $null
 )
 
 # Coverage is meaningless without running the tests - imply -RunTests
@@ -323,16 +316,20 @@ try {
         "/p:Configuration=$Configuration",
         "/p:Platform=$Platform",
         "/nologo",
-        "/verbosity:$Verbosity",
-        "/p:CarafeSharpTorch=$Torch"
+        "/verbosity:$Verbosity"
     )
 
-    $backendStamp = Join-Path $ospreyRoot "Osprey/obj/torch-backend-$Configuration.txt"
-    if ((Test-Path $backendStamp) -and ((Get-Content $backendStamp -Raw).Trim() -ne $Torch)) {
-        Write-Host "libtorch backend changed to $Torch; cleaning the $Configuration output folders." -ForegroundColor Yellow
-        Get-ChildItem $ospreyRoot -Directory | ForEach-Object {
-            $out = Join-Path $_.FullName "bin/x64/$Configuration"
-            if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+    # One build serves the CPU and the GPU: Osprey ships the CPU libtorch in torch\cpu and downloads
+    # the CUDA runtime on request (Osprey --install-cuda-runtime), so there is no backend to choose
+    # here (the retired -Torch switch chose one at build time). An output folder that build left
+    # still holds a libtorch beside TorchSharp.dll, which Osprey refuses to run with; it is cleaned
+    # once, recognized by torch_cpu.dll under runtimes\, where only TorchSharp's own natives belong.
+    foreach ($project in @("Osprey", "Osprey.Test")) {
+        $out = Join-Path $ospreyRoot "$project/bin/x64/$Configuration"
+        if (Get-ChildItem -Path $out -Recurse -Filter torch_cpu.dll -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match '[\\/]runtimes[\\/]' } | Select-Object -First 1) {
+            Write-Host "Cleaning $out, which a previous build left with a libtorch beside TorchSharp.dll." -ForegroundColor Yellow
+            Remove-Item -Recurse -Force $out
         }
     }
 
@@ -417,9 +414,6 @@ try {
         Write-Host "Build failed with exit code $LASTEXITCODE" -ForegroundColor Red
         exit $LASTEXITCODE
     }
-    New-Item -ItemType Directory -Force -Path (Split-Path $backendStamp) | Out-Null
-    Set-Content -Path $backendStamp -Value $Torch
-
     $buildDuration = (Get-Date) - $buildStart
     Write-Host ""
     Write-Host "Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
