@@ -441,7 +441,59 @@ raws read by RawFileReader (`raw_calibrator_check.ps1`; `raw_peak_widths.ps1` fo
   tail of the monoisotopic peak at -0.55, so after the +0.21 correction the M+1 (+0.67) is inside the 0.73 tolerance.
 - Runs: `super-profile-joint-cscentrix-s033` (sigma fixed 0.33, old snapshot), `super-profile-joint-cscentrix-tol06`
   (the 0.213 output searched with `--fragment-tolerance 0.6`); next `_bin/stellar-cscal2-*` (88fef2dff3, measured).
-## Plan
+## Plan (2026-10-23)
+
+**Context that changes the route.** #4619 merged to master (2026-10-08) and #4658 retired the C++ tree. Brendan requested
+changes on #4710 (2026-10-15): it is not to be merged; demultiplexing goes into ProteoWizard's demultiplexer
+(`pwiz/analysis/Demux`), which msconvert, Skyline (`MsDataFileImpl` option, #4815) and Osprey (`--demux auto`, #4818)
+all use. #4806, #4813, #4815, #4818 and #4827 (Poisson refit, makima) are merged. #4710 and this branch are the
+reference implementation that features are ported from, one focused pwiz PR at a time. Mike (2026-10-23): keep Centrix
+on this branch for now.
+
+ProteoWizard's demultiplexer on master: overlap and MSX, centroid domain, opt-in Poisson weights (floor 100 counts, in
+intensity units: no ion scale, so wrong for rate data such as the Stellar's), makima, MSX fill-time weighting. Not
+there: ZT Scan scanning demux, profile/joint solves, Centrix, profile grids.
+
+1. **One strategy across Orbitrap staggered, ZT Scan and Stellar profile.**
+   - Shared model: windows into bins (scheme detection), cycles and passes, fill time in the design; spectra
+     combined in rates (intensity per fill time), ions only for thresholds and Poisson weights (constant counts per
+     ion on Orbitrap and ZenoTOF; intensity x fill time on the Stellar); RT interpolation (makima) in rates;
+     Poisson-weighted NNLS; no output floor unless shown to help; apportioned output where it wins (Eclipse +4.2%;
+     worse on ZT Scan).
+   - Profile domain: a grid in the analyzer's coordinate (linear m/z ion trap, sqrt m TOF; 1/sqrt m Orbitrap not
+     built) and a kernel (Gaussian of measured width, or a measured shape); one lasso engine for Centrix and the
+     joint solves.
+   - Order of ports into pwiz: (a) audit pwiz master vs the reference on Eclipse (IDs, time) and add an ion scale to
+     its Poisson weights; (b) Centrix as `peakPicking centrix` (issue drafted:
+     `ai/.tmp/sessions/20261021-stellar/issue-centrix-msconvert.md`); (c) Stellar profile demux (joint, linear grid,
+     passes, fill-time scale) into pwiz's demultiplexer; (d) ZT Scan. Agree the order with Brendan first.
+2. **Empty and missing spectra.** Measured (2026-10-23, `raw_empty_spectra.ps1`, `window_widths.ps1`): the raws are
+   complete. SuperOverlap TR01 is 270 cycles x 504 windows exactly, no empty scan; 2Th TR02 has one all-zero scan (scan
+   755, 0.17 min, 5,000 points, TIC 0). No Adaptive RT scans (every MS2 is a 2 or 4 m/z window). Empty spectra come
+   from downstream: an all-zero scan written without its zeros, and demultiplexed bins with no signal; Rust Centrix
+   dropped them (maccoss/centrix#1). To do: test the one-output-per-input invariant, empties in place with ids, in pwiz's
+   demultiplexer, the Osprey cache and the DemuxTool; an all-zero acquired scan is an observation of zero, a scan absent
+   from a cycle is missing (exclude the row, not zero-fill); keep the >10 m/z window guard for methods with Adaptive RT.
+3. **Tests and benchmarks.** Stellar joint path (no tests today): synthetic linear grid with 100x fill-time variation;
+   units invariance (intensity x k, fill time / k: same output); remultiplexed 2Th ground truth as a golden. Makima units
+   test (fails today). 1 vs N threads byte-identical per path. Empty-spectrum invariants. Benchmarks, one script, quiet
+   machine: demux wall time per file, phases, thread scaling, against read time and acquisition length; IDs at 1% FDR
+   with entrapment FDP and replicate CV against no demux, per type: Eclipse (msconvert, pwiz master, reference);
+   ZT Scan (DIA-NN on the .wiff vs demux); Stellar (4Th profile + Centrix, no demux, 20,137 vs 50% 25,464 and
+   SuperOverlap 26,468 with the same centroider; centroid acquisitions as references). Documented in docs/23.
+4. **Centrix on non-demultiplexed profile.** 2Th profile: Thermo `Scan.ToCentroid` (= msconvert `peakPicking vendor`)
+   19,483 vs Centrix 27,673 (+42%). Centroid acquisitions are higher still (2Th 42,232; 4Th 28,133 vs 4Th profile +
+   Centrix 20,137), likely the -0.55 Th profile axis and Osprey's mean-only calibration; separate injections, so
+   confounded. Today: acquire centroided for non-staggered methods; for profile data Centrix over vendor. Decide after
+   the axis fix: rerun 2Th/4Th profile + Centrix against the centroid acquisitions; add a 4Th profile vendor arm.
+   Documented in docs/24.
+5. **Also.** Profile axis offset and a robust unit-resolution calibration (largest lever on every profile arm).
+   Calibrator threshold over nonzero points, and correct 88fef2dff3's claim. Makima units bug. MS1: not multiplexed and
+   little used by Osprey on Stellar data; centroid it with Centrix directly rather than the joint solve. Speed: Stellar
+   joint about 2.6x the acquisition. Rerun the WSL-corrupted arms in-process. centrix#1 and its compression-label
+   follow-up.
+
+## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
    acquired 2Th and 4Th; `--demux auto` on 50% and SuperOverlap; the same on the profile acquisitions
