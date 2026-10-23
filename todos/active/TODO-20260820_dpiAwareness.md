@@ -713,6 +713,36 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-22 - Dock tab icon frames (other session's f0204f7) reviewed, finished and shipped (eee6eb420f, pushed)
+
+- Another Claude Code session committed f0204f7 on the DigitalRune branch: DpiHelper.SelectFrame /
+  DrawIcon / DrawImage; tool-window, document and auto-hide tabs draw the icon frame that fits
+  the tab instead of Graphics.DrawIcon's nearest-neighbor stretch of the frame the Icon
+  instance holds (32 px: Icon(Stream) picks SM_CXICON). Verified the framework lookup really
+  falls back to the next smaller frame (24 -> 16 on a 16/32/48 icon), so the ascending search
+  is needed. Review: correct; gaps were no DLL rebuild, no patch notes, and an undeclared
+  96-DPI change (the 16-px frame had never been shown in the tab).
+- Copilot (requested by the other session) found the legacy .NET Framework csproj lacked a
+  Compile entry for Helpers\DpiHelper.cs: real - 97 CS0103 without it. Fixed + patch notes in
+  a117881 (branch pushed, PR 7 thread answered and resolved). Legacy build script:
+  sessions/20260910-dpi/build-dr-net472.ps1 (isolated obj via MSBuildProjectExtensionsPath, or
+  the SDK project's assets file breaks it).
+- 96-DPI decision (developer): keep the real 16-px frame, but make the Targets icon
+  consistent across scales by replacing its hand-drawn 16-px frame with a bicubic downscale of
+  the 32-px artwork. First attempt used the 16-COLOR 32-px frame (PIL's default pick; the
+  .ico has 4-bit and 24-bit entries for 16 and 32) and looked saturated with a dark outline at
+  both DPIs; rebuilt from the 24-bit frames (ico.getimage(size, bpp)). New .ico: 16 (new), 32,
+  48, all 32-bit BMP frames, 14510 bytes, embedded in SequenceTreeForm.resx + ja + zh-Hans
+  (all three carried the identical blob). SkylineDoc.ico (same bytes originally) left alone -
+  developer's call, it is the Explorer file-type icon.
+- Verified: gate both modes (gate-dr6.log); MethodEdit-dr4/dr6 captures at 150% and 96 DPI
+  (tab-icon-final2.png in the session scratchpad): 150% = 32-px frame downscaled, 96 DPI =
+  matches the stock rendering. Other dockable windows use the app icon, whose 16-px frame now
+  shows in tabs (Windows' own title-bar frame) - noted in the PR's "Behavior to know about".
+- Commits: pwiz eee6eb420f (DLL 293376 bytes + PDB + 3 resx), developers f0204f7 + a117881 on
+  DigitalRune/work/20261020_dpiScaling, PR 7. PR #4602 description updated (docking bullet,
+  behavior note, test plan).
+
 ### 2026-10-20 - icon_builder handoff applied: DpiUtil.GetIcon + call sites (c358532cd3, pushed)
 
 Per TODO-20261020_icon_builder.md "Handoff" (the loader ships in #4602, the assets go to
