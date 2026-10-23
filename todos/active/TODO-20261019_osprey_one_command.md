@@ -5,14 +5,14 @@
 - **Base**: `master`
 - **Created**: 2026-10-19
 - **Phase 2 started**: 2026-10-23
-- **Status**: In Progress - PR 4d open as #4909 (2026-10-23): Osprey chooses its libtorch runtime when
-  it runs, the CUDA runtime a download shared with Skyline's AlphaPeptDeep, the device logged. All 18
-  checks green on e2bfa92441 (bt209 1823/1823, Osprey Windows and Linux .NET, Perf/Regression #343
-  116/116); Brendan's three decisions taken and coded. Next: Brendan's review and merge, then the
-  measurement that follows PR 4 (one command vs the four-step workflow on Stellar, Astral, ZT Scan)
+- **Status**: In Progress - PR 4d merged 2026-10-23 as #4909 (59f90882bd): Osprey chooses its libtorch
+  runtime when it runs, the CUDA runtime a download shared with Skyline's AlphaPeptDeep, the device
+  logged. PR 4 (parts H, I, J) is complete. Next: the measurement that follows PR 4 (one command vs the
+  four-step workflow on Stellar, Astral and ZT Scan; tuning on searched vs held-out runs), then the
+  second-pass levers with Mike and Osprey as Skyline's download
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, opened 2026-10-23; head e2bfa92441; Perf/Regression #343 SUCCESS, 116/116)
+- **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, merged 2026-10-23 as 59f90882bd)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Phase History
@@ -250,3 +250,17 @@ named) - immediate failure beats a slow CPU run that needs troubleshooting. `Osp
 asked in Program after `--task-files` and before the log opens, for a run that will predict (no stage
 `--task`). 3: the default folder stays under local application data. Perf/Regression triggered on
 `pull/4909` (build 4232635).
+
+### 2026-10-23 - PR 4d merged
+
+PR #4909 squash-merged by Brendan via `/pw-complete` as 59f90882bd (six branch commits; all 18 substantive
+checks green on e2bfa92441: bt209 1823/1823, Osprey Windows and Linux .NET, Perf/Regression #343 116/116;
+the Docker/Wine container status was still queued and was merged over). Shipped: one Osprey build with the
+CPU libtorch in `torch\cpu` and the CUDA package list (`LibTorchRuntimeLayout.targets`, shared with
+Skyline.csproj); `LibTorchRuntimes` in `CarafeSharp.Models` choosing and installing the runtime for both
+applications, Skyline's `TorchRuntimes` a wrapper; `--device auto|gpu|cpu` (auto default; gpu fails before
+the run starts when the GPU cannot be used), `--torch-runtimes`, `--install-cuda-runtime`; the device
+logged per library phase; `LibTorch.targets` removing a stale libtorch beside TorchSharp.dll; `Build-Osprey.ps1
+-Torch` retired. Not in 4d, on purpose: Skyline downloading Osprey into its Tools folder and a search UI (a
+Skyline PR, with the `--torch-runtimes` hand-off this PR defines); code signing; the old-driver case and a
+Linux GPU run remain untested. This TODO stays active for the measurement that follows PR 4.
