@@ -371,7 +371,8 @@ accuracy).
   MSFileReader/XRawfile?) is the open question. MS2 calibration: centroid acquisition mean -0.093 SD 0.216 (39,668
   matches); profile vendor +0.093 SD 0.273 (2,649); profile Centrix +0.146 SD 0.309 (20,920).
 
-**The Stellar profile m/z axis is 0.55 Th low (2026-10-22): the profile arms' loss and the SuperOverlap 2-of-3
+**This dataset's MS2 profile m/z axis is 0.55 Th low (2026-10-22). Mike (2026-10-23): a mass calibration problem on the
+instrument for these runs, not a property of the Stellar or of profile mode; do not hard-code it.** the profile arms' loss and the SuperOverlap 2-of-3
 failure.** Scripts in `ai/.tmp/sessions/20261021-stellar`: `fragment_mz_error.py` (observed - theoretical for detected
 peptides' b/y ions at their apex scans, per centroid set), `profile_fragment_offset.py` (the same on the profile itself,
 no centroider), `probe_trailer.ps1`.
@@ -387,8 +388,8 @@ no centroider), `probe_trailer.ps1`.
   onto decides the file: SuperOverlap joint + Centrix TR02 (21.2k precursors) matches fragments at -0.53 (mono) below
   800 m/z, median error -0.30; TR01 and TR03 (10.8k, 10.5k) match at +0.41 (isotope) from 400 m/z up, median +0.30.
   Pass-1 calibration: TR01/TR03 8.4k / 8.3k fragment matches, mean +0.18; TR02 16.9k, mean +0.09.
-- Fix options: correct the profile axis at read (a per-scan-rate offset, or estimated per file), and/or make Osprey's
-  unit-resolution calibration robust (initial window past 0.55, offset from the intensity-weighted mode, not the
+- Fix: recalibrate the instrument (the cause). In software, no axis correction or per-scan-rate table; only general
+  robustness: make Osprey's unit-resolution calibration robust (initial window past 0.55, offset from the intensity-weighted mode, not the
   mean). Mike suggested opening the initial tolerance to about 0.6.
 **Root cause of the WSL-Centrix collapses: Rust Centrix mispairs spectra after an empty one (2026-10-22).** Mike: the
 mass axis cannot move 0.5 Th between adjacent runs, so it is our processing. Confirmed:
@@ -485,15 +486,25 @@ there: ZT Scan scanning demux, profile/joint solves, Centrix, profile grids.
    SuperOverlap 26,468 with the same centroider; centroid acquisitions as references). Documented in docs/23.
 4. **Centrix on non-demultiplexed profile.** 2Th profile: Thermo `Scan.ToCentroid` (= msconvert `peakPicking vendor`)
    19,483 vs Centrix 27,673 (+42%). Centroid acquisitions are higher still (2Th 42,232; 4Th 28,133 vs 4Th profile +
-   Centrix 20,137), likely the -0.55 Th profile axis and Osprey's mean-only calibration; separate injections, so
-   confounded. Today: acquire centroided for non-staggered methods; for profile data Centrix over vendor. Decide after
-   the axis fix: rerun 2Th/4Th profile + Centrix against the centroid acquisitions; add a 4Th profile vendor arm.
+   Centrix 20,137); in this dataset the profile runs carry a mass calibration error (-0.55 Th MS2) and Osprey's
+   mean-only calibration latches onto the M+1, and they are separate injections: confounded. Today: acquire centroided for non-staggered methods; for profile data Centrix over vendor. Decide after
+   a run without the calibration error (or the robust calibration): rerun 2Th/4Th profile + Centrix against the centroid acquisitions; add a 4Th profile vendor arm.
    Documented in docs/24.
-5. **Also.** Profile axis offset and a robust unit-resolution calibration (largest lever on every profile arm).
+5. **Also.** A robust unit-resolution calibration in Osprey (offset from the peak of the error distribution, not the
+   mean), for any miscalibrated run; this dataset's offset is the instrument's mass calibration (Mike), fixed there.
    Calibrator threshold over nonzero points, and correct 88fef2dff3's claim. Makima units bug. MS1: not multiplexed and
    little used by Osprey on Stellar data; centroid it with Centrix directly rather than the joint solve. Speed: Stellar
    joint about 2.6x the acquisition. Rerun the WSL-corrupted arms in-process. centrix#1 and its compression-label
    follow-up.
+
+6. **Export for Skyline (Mike, 2026-10-23).** Skyline must see the spectra Osprey searched: demultiplexed, Centrix
+   centroids, ideally mass-calibrated. Today only the DemuxTool writes mzML; Osprey keeps them in its caches.
+   Skyline re-reading the raw would use Thermo centroiding and pwiz's demultiplexer (#4815), not ours. Proposal: a
+   per-run mzMLb (or mzML) written at the end of the run, a pwiz-sharp spectrum list over the original file (its
+   metadata) with peaks from Osprey's cache and the per-file MS1/MS2 calibration applied and recorded in
+   dataProcessing; one output per input, empties in place. Open (Mike asking Matt and Brendan): calibrated m/z vs raw
+   plus stored calibration, and where the tolerance lives (blib, sidecar, Skyline document). Depends on a robust
+   calibration (a mean-based offset would bake an error in). Check pwiz-sharp mzMLb write support.
 
 **Calibrator: peak width depends on ions per peak (2026-10-23, `width_vs_ions.ps1`).** FWHM lower quartile by ions in the
 peak (summed positive run x fill ms / 1000), 2Th TR01 / SuperOverlap TR01, identical in both: 0-3 ions 0.41 Th; 3-10
