@@ -324,7 +324,11 @@ try {
     # here (the retired -Torch switch chose one at build time). An output folder that build left
     # still holds a libtorch beside TorchSharp.dll, which Osprey refuses to run with; it is cleaned
     # once, recognized by torch_cpu.dll under runtimes\, where only TorchSharp's own natives belong.
+    # Only for a checkout on the run-time layout (the shared targets file is its marker): a checkout
+    # still on the build-time backend keeps its natives there on purpose.
+    $runtimeLayout = Join-Path $ospreyRoot "..\CarafeSharp\LibTorchRuntimeLayout.targets"
     foreach ($project in @("Osprey", "Osprey.Test")) {
+        if (-not (Test-Path $runtimeLayout)) { break }
         $out = Join-Path $ospreyRoot "$project/bin/x64/$Configuration"
         if (Get-ChildItem -Path $out -Recurse -Filter torch_cpu.dll -ErrorAction SilentlyContinue |
                 Where-Object { $_.FullName -match '[\\/]runtimes[\\/]' } | Select-Object -First 1) {
