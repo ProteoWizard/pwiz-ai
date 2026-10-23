@@ -122,6 +122,31 @@ The file system IS the context. That's the key insight for LLM-assisted developm
 2. Move with their TODO when transitioning between directories
 3. Be deleted or archived with their TODO
 
+### Splitting an Overgrown TODO
+
+A sprint TODO that carries several PRs grows past the point where a session can read it
+to pick up the work - around **1,000 lines** is the marker (the same limit the core docs
+use). When it gets there, split it by phase rather than trimming history:
+
+1. Move the current file to `todos/completed/YYYY/MM/` with a `-phaseN` suffix
+   (`TODO-20260409_osprey_sharp-phase1.md`, `-phase2.md`). Retitle it
+   `# TODO-... - Phase N`, set its Status to "Phase N complete" naming the PRs it covered,
+   and add a line pointing at the file that continues it. It is then a historical record
+   like any completed TODO.
+2. Start a fresh file **under the same name** in `todos/active/` headed `Phase N+1`, with a
+   **Phase History** section that links each earlier phase file and says in a few lines
+   what it holds (design, decisions, which PRs). Carry forward only what the next PR needs:
+   the goal, the standing gates, open questions, and the plan for the PR in hand. Design
+   and decisions stay in the phase file; link to them, do not copy them.
+
+The date prefix stays the sprint's start date, so the files sort together and
+`/pw-archivetodos` files every phase under the same month. Commit messages and PR
+descriptions keep referencing `TODO-YYYYMMDD_<slug>.md` - the active file.
+
+Whether a sprint instead gets a **new TODO** (new date, new name) is a judgment call: a
+phase split is right when the design and goal are unchanged and the next PRs are the
+same plan continued; a new TODO is right when the work has become a different thing.
+
 ### TODO File Structure (Active)
 
 For files **in ai/todos/active/** (work in progress):
