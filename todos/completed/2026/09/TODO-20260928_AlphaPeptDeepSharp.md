@@ -8,9 +8,9 @@
   again 2026-10-22 evening at f4f24aefad as 1be6a071bf)
 - **Base**: `master` (#4717 CarafeSharp squash-merged 2026-10-13 as 28c7b7ff03 and merged into this branch)
 - **Created**: 2026-09-28
-- **Status**: In Progress - Carafe model list, modification matching and fine-tuned modification support built and pushed 2026-10-22; next `/code-review medium`, TeamCity, Brendan's UI pass on a Release build, human review, merge
+- **Status**: Completed
 - **Module**: `skyline` (also carries CarafeSharp changes Skyline needs; the developer chose to keep them here)
-- **PR**: [#4849](https://github.com/ProteoWizard/pwiz/pull/4849) (draft; screenshots in nickshulman/pr-assets `pwiz/4849-alphapeptdeep`)
+- **PR**: [#4849](https://github.com/ProteoWizard/pwiz/pull/4849) (merged 2026-10-23 as 946a33909f; screenshots in nickshulman/pr-assets `pwiz/4849-alphapeptdeep`)
 
 ## Objective
 
@@ -372,3 +372,14 @@ with the two grammar-flip failures). Osprey Windows .NET Perf/Regression 4232024
 GitHub: 21/21 statuses green, mergeable. Nothing was committed to pwiz or pushed tonight. Next is Brendan's:
 approve, give Mike and Nick time to respond, merge, then PR 4d. The whitespace line wrap in
 `CommandLineParserTest.cs` is still uncommitted in `C:\proj\pwiz`; fold it into a later commit or discard.
+
+### 2026-10-23 - Merged
+
+PR #4849 squash-merged by Brendan via `/pw-complete` as commit 946a33909f on master. Shipped: AlphaPeptDeep
+library building predicts in process with CarafeSharp (the embedded Python, its installers and the Java
+CarafeLibraryBuilder removed), the Use GPU option with on-demand CUDA libtorch download, the optional
+fine-tuned Carafe model with the editable model list, CCS prediction, the modification matching work, and the
+process-owned command-line grammar (`ArgUsage.Install`). Deferred: moving `CarafeModelBuildLibraryTest.zip`
+(15.6 MB) to a server; isolating `CarafeCommandLine` so Skyline never loads it; possibly moving `ScopedAction`
+to CommonUtil; the "Add All..." email to Mike and Nick (Gmail draft). Next: PR 4d of the Osprey-Carafe sprint.
+The stray line wrap in `CommandLineParserTest.cs` was discarded.
