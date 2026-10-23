@@ -408,6 +408,17 @@ mass axis cannot move 0.5 Th between adjacent runs, so it is our processing. Con
   --centroid centrix --centrix-param Solver=active_set`, measured sigma; snapshots `_bin/stellar-cscentrix-*`). For Rust
   Centrix: return an empty spectrum instead of skipping it, or pair results with spectra by native id (not filed yet).
 - The -0.55 Th profile axis offset itself is real and the same in every run; separate from this bug.
+**In-process replica of the 21.2k arm recovers it in all three runs (2026-10-22).** `super-profile-jointprofile-cscentrix`
+(`--profile --joint --joint-profile --ms1 joint --fill-time-ions 1000 --peak-sigma-th 0.33 --centroid centrix
+--centrix-sigma 0.33 --centrix-sigma-ms1 0.255 --centrix-param Solver=active_set`, snapshot `_bin/stellar-cscal2-*`):
+21,079 / 22,159 / 22,368 precursors, experiment 26,468 / 24,537 peptides / 4,356 proteins (50% joint: 25,464). TR02
++4.5% over Rust Centrix. Demux 3,741-3,958 s a file with Centrix included (Rust arm: 4,583-5,290 s demux + ~41 min
+Centrix in WSL); search 415 s. MS2 calibration mean +0.07 to +0.08 Th, SD 0.33, tolerance ~1.0 m/z: still takes mono
+(-0.55) and M+1 (+0.45). The earlier `super-profile-joint-cscentrix` (10-11k) was NOT a replica: no `--joint-profile`
+(joint internal centroids, Centrix never ran on MS2), MS1 vendor-centroided, sigma 0.22.
+Rust Centrix fix: maccoss/centrix#1 (`fix/empty-spectrum-alignment`, reader yields empty spectra; writer checks ids;
+regression test fails on main).
+
 **In-process rerun read sigma too narrow (2026-10-22, pwiz 88fef2dff3).** `super-profile-joint-cscentrix` gave 10.2k /
 10.8k / 11.5k precursors (13.9k experiment), consistent across runs but low: the calibrator measured MS2 sigma 0.213 Th
 (picker) / 0.230 (joint), 2-5 centroids per spectrum. Two causes, measured with Osprey's own `AddPeakWidths` on whole
