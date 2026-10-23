@@ -176,6 +176,8 @@ were cancelled. From here on, only the `_profile` acquisitions are demultiplexed
 peaks summed profile x fill time is ~951: ions = summed profile intensity x fill ms / 1000 (Mike), i.e.
 `--fill-time-ions 1000` for profile points (290 for centroid heights). The first profile arms used 380 and
 keep it for comparability; later arms use 1000.
+Since pwiz bf1933d1a8 the option is the switch `--ions-per-second` (Mike: the intensity is ions/s, the 1000 only
+converts the fill time from ms to s); arms run before it say `--fill-time-ions 1000`, the same thing.
 
 ## Ground truth on real data: remultiplexed 2Th (2026-10-21 night)
 
