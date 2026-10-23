@@ -274,3 +274,21 @@ Only bt209 runs automatically on this PR; Perf and Tutorial
 (`ProteoWizard_SkylinePrPerfAndTutorialTestsWindowsX8664`, ~3.5 h) to trigger once bt209 is green. Brendan's
 plan after: approve, give Mike and Nick time to respond, merge, then a night session on PR 4d of the
 Osprey-Carafe integration.
+
+bt209 #22445 (31079d741b) passed: 1821 tests. Triggered Perf and Tutorial (build 4231741). Two statuses
+still red on the commit: "Skyline code inspection" (7 ReSharper warnings, 3 from today's commits: UniMod
+candidates enumerated twice, the memo lambda's `mod` hiding the method's, the two ambiguous `GetWarningMods`
+crefs, `LongWaitDlg` initialized outside its `using`, an unused using in `EditCarafeModelDlg`) and CodeQL
+(cs/zipslip at `LibTorchRuntimeInstaller.cs:103`, still open after 8c08464fe2's file-name check because the
+split part flowed into `Path.Combine` untouched). Fixed both: the extraction destination is
+`Path.GetFullPath` under the staging folder and checked to start with it - the form CodeQL's query knows as a
+sanitizer - alongside the plain-file-name refusal; `TestLibTorchRuntimeInstall` passes. Local gates: six
+tests (the five plus `CheckForMissingResources`) pass; `pwiz_tools/Skyline/tcinspect.ps1` run locally before
+the push: clean ("No build warnings and no inspections at WARNING or above"). Committed as 75355ed91b and
+pushed; the first Perf and Tutorial run (4231741, on 31079d741b) cancelled five minutes in, to re-trigger
+on 75355ed91b once TeamCity has queued bt209 for it: bt209 #22446 (4231753) and Perf and Tutorial
+4231761 running on 75355ed91b. On 75355ed91b CodeQL and the Skyline inspection both pass. Osprey Linux .NET
+had failed on every commit since 8c08464fe2 added the slip test: Linux's `Path.GetFileName` keeps a
+backslash, so the backslash entry was accepted; `AddPackage` now refuses a backslash explicitly
+(ece246eade; Windows test passes). Perf and Tutorial cancelled again and re-triggered on ece246eade as
+4231773; bt209 #22447 (4231765) and Osprey Linux .NET (4231764) run on it too.
