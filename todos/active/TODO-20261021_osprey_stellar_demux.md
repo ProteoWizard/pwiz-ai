@@ -414,8 +414,15 @@ mass axis cannot move 0.5 Th between adjacent runs, so it is our processing. Con
 21,079 / 22,159 / 22,368 precursors, experiment 26,468 / 24,537 peptides / 4,356 proteins (50% joint: 25,464). TR02
 +4.5% over Rust Centrix. Demux 3,741-3,958 s a file with Centrix included (Rust arm: 4,583-5,290 s demux + ~41 min
 Centrix in WSL); search 415 s. MS2 calibration mean +0.07 to +0.08 Th, SD 0.33, tolerance ~1.0 m/z: still takes mono
-(-0.55) and M+1 (+0.45). The earlier `super-profile-joint-cscentrix` (10-11k) was NOT a replica: no `--joint-profile`
-(joint internal centroids, Centrix never ran on MS2), MS1 vendor-centroided, sigma 0.22.
+(-0.55) and M+1 (+0.45). The earlier `super-profile-joint-cscentrix` (10-11k) was NOT a replica: without
+`--joint-profile` the joint solve runs Centrix itself on each bin's share (`JointApportion`/`JointCentroid`, default
+on) at the grid sigma, 0.22 there (the calibrator bug); MS1 was vendor-centroided. So it differed in sigma, MS1, and
+where Centrix ran (each share inside the solve vs the written profile), not in whether Centrix ran (corrected
+2026-10-23; the first note said Centrix never ran on MS2).
+**Calibrator fix 88fef2dff3 claims too much (2026-10-23):** re-measured on the whole 2Th TR01 with the current build,
+as read: 21,228 peaks, sigma 0.269 (was 21,509 / 0.266). The zero rule drops ~1%; the 0.305 comes from computing the
+99th-percentile threshold without the 26% zero points (readers that drop zeros), i.e. stronger peaks only. Fix
+pending Mike: threshold over positive points; then correct the commit's doc comments, docs/24 and this TODO.
 Rust Centrix fix: maccoss/centrix#1 (`fix/empty-spectrum-alignment`, reader yields empty spectra; writer checks ids;
 regression test fails on main).
 
