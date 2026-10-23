@@ -351,3 +351,18 @@ Brendan approves, Mike and Nick get time to respond, merge, PR 4d.
 `ai/.tmp/handoff-20260928_AlphaPeptDeepSharp_teamcity.md` before starting work. It is a night session:
 tend TeamCity to green; if something as involved as tonight's failure appears, root-cause it, design the
 fix, and stop before implementing anything major.
+
+### 2026-10-23 - Night session: TeamCity on 29b73ab380 (started 22:22)
+
+Perf and Tutorial 4231773 (ece246eade) had a second failure the handoff missed:
+`CommandlineCreateImsDbPerfTest` ("Error: Unexpected argument --in ...", test 2.27, right after
+`ConsoleTestDiaPasef` at 2.16). Same root cause: Carafe's grammar installed process-wide has no `--in`,
+so Skyline's own parser rejected it. Not broken on master (Perf 4230286 and 4229688 are SUCCESS). Verified
+the fix covers it: Release `TestCarafeModelBuildLibrary,CommandlineCreateImsDbPerfTest,ConsoleTestDiaPasef`
+in one process on 29b73ab380 passes 3/3 in 48 s (log in `pwiz_tools/Skyline/bin/staging/Release/`).
+bt209 #22449 (4232016) passed: 1823 tests (1821 + the two grammar tests). GitHub on 29b73ab380 at 23:40:
+16 of 18 statuses green including the Skyline inspection and CodeQL; Perf and Tutorial (4232023, started
+22:26, ~3.4 h) and Osprey Perf/Regression (4232024, queued behind Perf on MacCoss Agent 1) outstanding.
+The working tree holds one uncommitted whitespace-only line wrap in `CommonTest/CommandLineParserTest.cs`
+(line 105, 115 chars as committed); the committed form passes the inspection, so it was left alone and
+nothing was pushed - a push would re-queue the 3.4 h Perf run.
