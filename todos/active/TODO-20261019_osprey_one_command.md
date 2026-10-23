@@ -1,7 +1,7 @@
 # TODO-20261019_osprey_one_command.md  -  Phase 2
 
 ## Branch Information
-- **Branch (4d)**: to be cut from `master` (89648e66b5, 2026-10-23) as `Skyline/work/20261023_osprey_download`
+- **Branch (4d)**: `Skyline/work/20261023_osprey_download` in `C:projpwiz` (from master 89648e66b5, 2026-10-23)
 - **Base**: `master`
 - **Created**: 2026-10-19
 - **Phase 2 started**: 2026-10-23
@@ -64,20 +64,88 @@ RefSpectraPeaks are IDENTICAL to the CPU build's (484,908 spectra). Run:
 (a TeamCity cloud agent), a driver too old for CUDA 12.8, Linux, and pointing TorchSharp at a native folder
 chosen at run time.
 
-### Plan
+### Where things stand in the code (2026-10-23)
 
-(to be written after reading the code #4849 merged: `LibTorchRuntime`, `LibTorchRuntimeInstaller`,
-`CudaDriver`, Skyline's `Use GPU` path in `BuildLibraryDlg`, Osprey's lazy libtorch seam and `--device`,
-and how Skyline installs its other search engines as downloads)
+- **Skyline (#4849)** ships the CPU libtorch in `torch\cpu` (Skyline.csproj: both libtorch packages
+  referenced with `ExcludeAssets="all"`, the CPU natives linked as Content) and writes
+  `torch\libtorch-cuda-12.8-win-x64.packages.txt` through `CarafeSharp\LibTorchPackageSet.targets` (the
+  CUDA package's part packages with the SHA-512 NuGet recorded). `Model\Lib\AlphaPeptDeep\TorchRuntimes`
+  finds the driver (`CudaDriver.Find`), explains why the GPU cannot be used (localized), installs the CUDA
+  runtime into `ToolDescriptionHelpers.GetToolsDirectory()` with `HttpClientWithProgress` and
+  `LibTorchRuntimeInstaller`, and `Load(useCuda)` loads one `LibTorchRuntime` per process.
+  `LibTorchRuntime.Load` refuses when another libtorch sits beside TorchSharp.dll or under
+  `runtimes\<rid>\native` there.
+- **Osprey** today takes the other path: `UseLibTorch=true` (`CarafeSharp\LibTorch.targets`) references
+  the libtorch package for the backend chosen at build time (`Build-Osprey.ps1 -Torch cpu|cuda`), whose
+  natives land under `runtimes\win-x64\native` beside TorchSharp.dll, where TorchSharp loads them by itself
+  - exactly what `LibTorchRuntime` refuses. The same property copies the pretrained models and Chronologer
+  beside the executable. `--device gpu|cpu` reaches `TorchDevice.Resolve` in `LibraryGenerator` and
+  `ModelTrainer`, which log only the fallback ("No CUDA device is available to this build; running on the
+  CPU"); nothing names the device a phase ran on. `Osprey.Test` has `UseLibTorch=true` too, for
+  `SubsetPipelineTest`.
+- **Packaging** exists: Osprey's per-commit TeamCity build (`tcbuild.bat`) runs `package.ps1 -Rid win-x64
+  -Setup` and publishes `Osprey-<version>-win-x64.zip` and `Osprey-Setup-<version>.exe`; `tcpackage.bat`
+  adds linux-x64. Skyline has no Osprey code yet (DIA-NN and EncyclopeDIA are downloaded into the Tools
+  folder through `FileDownloadInfo` / `SimpleFileDownloaderDlg`; that UI is a later PR, not 4d).
+- `CarafeSharp.Models` references no CommonUtil; `CarafeSharp.Tasks` does (through Contracts), so the
+  shared runtime chooser with its download lives in Tasks, which Osprey references.
+
+### Plan (mine; the decisions are flagged for Brendan in the PR, as 4a's were)
+
+1. **One Osprey build, Skyline's runtime layout.** `LibTorch.targets` splits the natives from the models:
+   `UseLibTorch` keeps today's meaning for CarafeSharp.exe and its tests (TorchSharp loads the natives it
+   finds beside itself); a new `UseCarafeModels` copies only the models. Osprey.csproj and Osprey.Test.csproj
+   set `UseCarafeModels`, reference `libtorch-cpu-<rid>` and `libtorch-cuda-12.8-<rid>` with
+   `ExcludeAssets="all"`, link the CPU natives to `torch\cpu` and write `torch\<cuda package>.packages.txt`
+   through `LibTorchPackageSet.targets` - the RID chosen as `LibTorch.props` does (win-x64 or linux-x64).
+   `Build-Osprey.ps1 -Torch` is retired (the CUDA build stamp with it). `package.ps1` publishes the
+   `torch` folder with the rest (Content with `CopyToPublishDirectory`).
+2. **`TorchRuntimes` moves down** from Skyline to `CarafeSharp.Tasks` with the application and runtimes
+   folders as constructor arguments and the "why not the GPU" answer as data (no driver / driver version /
+   compute capability / no package list); Skyline's class becomes the thin wrapper that supplies the Tools
+   folder and the localized text. `InstallCuda` (the package-by-package download with segments) moves with
+   it; `HttpClientWithProgress` and `IProgressMonitor` are CommonUtil's already.
+3. **Osprey chooses and logs the device.** Before the first library phase (the lazy seam: a search of a
+   given library never touches libtorch) Osprey loads a runtime through `TorchRuntimes.Load`: the CUDA
+   runtime when the driver can run it and it is installed, else the CPU one. The log names what ran:
+   "Predicting on the GPU (<device name>, CUDA runtime <folder>)" or "Predicting on the CPU" with the reason
+   when a GPU was asked for. `--device` gains the default `auto` (GPU when present and installed, CPU
+   otherwise - Brendan's "one build, GPU when present"); `gpu` keeps falling back with the reason logged;
+   `cpu` forces the CPU. A new `--install-cuda-runtime` downloads the runtime on the console with progress
+   and exits (no prompt, so a script or an HPC login node can do it once); `--device gpu` without the
+   runtime says to run it. **Decision 1**: `auto` as the default, or keep CPU the default until Mike has
+   seen the GPU numbers. **Decision 2**: `--install-cuda-runtime` as an explicit step rather than a
+   download on first `--device gpu`.
+4. **Where the CUDA runtime lives: `--torch-runtimes <dir>`.** Default
+   `<LocalApplicationData>\Osprey\torch` (a per-machine install under Program Files is not writable;
+   on Linux it is `~/.local/share/Osprey/torch`). Skyline, when it hosts Osprey as a download, passes its
+   Tools folder, so one CUDA install serves AlphaPeptDeep and Osprey. An HPC job points it at a shared
+   folder. **Decision 3**: the default folder, and whether an environment variable
+   (`OSPREY_TORCH_RUNTIMES`) should stand in for the option on a cluster.
+5. **Tests.** `Osprey.Test` gets `torch\cpu` from the Osprey project's content and loads it where the
+   pipeline does, so `SubsetPipelineTest` runs the real path; a unit test drives `TorchRuntimes` with a set
+   `CudaDriver` (none, too old, GPU too old, runtime not installed) and asserts the choice and the reason
+   without loading anything. Skyline's tests are unchanged. The TeamCity Osprey Windows .NET agent has no
+   NVIDIA driver, so it is the "no driver" case; Osprey Linux .NET runs the same tests on the linux-x64 CPU
+   natives in `torch/cpu` - the `.so` path through `LibTorchRuntime`.
+6. **Gates**: the standing ones; `regression.ps1 -Dataset Stellar` byte-identical (the CPU natives are the
+   same files, loaded differently); a local mode-1 run on the RTX 4090 through the new download into a
+   fresh runtimes folder, its library compared with phase 1's `cuda-4c` GPU run; the package built with
+   `package.ps1 -Rid win-x64,linux-x64` and the ZIP's `torch` folder checked; TeamCity Perf/Regression on
+   `pull/<N>` (ask first).
+
+Not in 4d: Skyline's Osprey search UI and the download of Osprey itself into Skyline's Tools folder
+(a Skyline PR after this one, with the `--torch-runtimes` hand-off this PR defines); code signing.
 
 ### Tasks
 
-- [ ] Plan written and agreed with Brendan
-- [ ] Osprey loads libtorch through `LibTorchRuntime` from the shared runtime folder; the device is logged
-- [ ] Osprey offers the CUDA download through `LibTorchRuntimeInstaller` (standalone) and Skyline's prompt (hosted)
-- [ ] Osprey as a Skyline download (the search-engine tool pattern); installers and TeamCity artifacts
-- [ ] The untested cases: no driver, old driver, Linux
-- [ ] Gates below; `/code-review medium`; TeamCity Perf/Regression on `pull/<N>` (ask first)
+- [ ] Plan above read by Brendan; decisions 1-3 taken (coded as proposed until then)
+- [ ] 1. `LibTorch.targets` split; Osprey and Osprey.Test on Skyline's layout; `-Torch` retired; `package.ps1` carries `torch`
+- [ ] 2. `TorchRuntimes` in `CarafeSharp.Tasks`; Skyline's wrapper; Skyline gates green
+- [ ] 3. Osprey loads the runtime before the library phases; `--device auto|gpu|cpu`; `--install-cuda-runtime`; the device logged
+- [ ] 4. `--torch-runtimes`, its default and the Skyline hand-off documented (Osprey docs, `Osprey-workflow.html`)
+- [ ] 5. Tests: the runtime-choice unit test; `SubsetPipelineTest` on the new path; Linux on TeamCity
+- [ ] 6. Gates; `/code-review medium`; PR; TeamCity Perf/Regression on `pull/<N>` (ask first)
 
 ## Gates
 
