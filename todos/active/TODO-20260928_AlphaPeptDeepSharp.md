@@ -366,3 +366,9 @@ bt209 #22449 (4232016) passed: 1823 tests (1821 + the two grammar tests). GitHub
 The working tree holds one uncommitted whitespace-only line wrap in `CommonTest/CommandLineParserTest.cs`
 (line 105, 115 chars as committed); the committed form passes the inspection, so it was left alone and
 nothing was pushed - a push would re-queue the 3.4 h Perf run.
+
+**All green on 29b73ab380 (01:48).** Perf and Tutorial 4232023: 117/117 (the earlier 4231773 was 115/117
+with the two grammar-flip failures). Osprey Windows .NET Perf/Regression 4232024 (#342): 115/115, ~65 min.
+GitHub: 21/21 statuses green, mergeable. Nothing was committed to pwiz or pushed tonight. Next is Brendan's:
+approve, give Mike and Nick time to respond, merge, then PR 4d. The whitespace line wrap in
+`CommandLineParserTest.cs` is still uncommitted in `C:\proj\pwiz`; fold it into a later commit or discard.
