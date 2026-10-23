@@ -17,7 +17,7 @@
 .EXAMPLE
     pwsh -File ai/scripts/Osprey/Demux/Run-StellarTool.ps1 -Tool D:\test\osprey-runs\_bin\x\Osprey.DemuxTool.exe `
         -Method 4Th-50pctOverlap -Kind profile -Arm 50pct-profile-makima-centrix `
-        -ToolArgs '--profile --channel-th 0.09 --ions-per-second' -Centrix -CentrixArgs '--sigma-ms2 0.33' `
+        -ToolArgs '--profile --channel-th 0.09 --ions' -Centrix -CentrixArgs '--sigma-ms2 0.33' `
         -SearchExe D:\test\osprey-runs\_bin\stellar-base-vendor\Osprey.exe
 #>
 param(

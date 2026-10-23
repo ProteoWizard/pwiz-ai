@@ -176,8 +176,11 @@ were cancelled. From here on, only the `_profile` acquisitions are demultiplexed
 peaks summed profile x fill time is ~951: ions = summed profile intensity x fill ms / 1000 (Mike), i.e.
 `--fill-time-ions 1000` for profile points (290 for centroid heights). The first profile arms used 380 and
 keep it for comparability; later arms use 1000.
-Since pwiz bf1933d1a8 the option is the switch `--ions-per-second` (Mike: the intensity is ions/s, the 1000 only
-converts the fill time from ms to s); arms run before it say `--fill-time-ions 1000`, the same thing.
+Since pwiz bf1933d1a8 / 2a781c91ee the option is the switch `--ions` (Mike: the intensity is ions/s, the 1000 only
+converts the fill time from ms to s; precision is set by ions, so use ions): the solve and the written spectra are in
+ions, converted last, after Centrix (`IonCountSpectrumList`). Arms run before it used `--fill-time-ions 1000`: the same
+solve, output in ions/s. On the 2Th profile slice with Centrix, 13% of MS2 centroids are under 1 ion (0.5% of the
+ions) and 38% under 3; median 4.6 ions. MS1: none under 1.
 
 ## Ground truth on real data: remultiplexed 2Th (2026-10-21 night)
 
