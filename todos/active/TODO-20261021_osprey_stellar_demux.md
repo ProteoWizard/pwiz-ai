@@ -504,7 +504,14 @@ there: ZT Scan scanning demux, profile/joint solves, Centrix, profile grids.
    metadata) with peaks from Osprey's cache and the per-file MS1/MS2 calibration applied and recorded in
    dataProcessing; one output per input, empties in place. Open (Mike asking Matt and Brendan): calibrated m/z vs raw
    plus stored calibration, and where the tolerance lives (blib, sidecar, Skyline document). Depends on a robust
-   calibration (a mean-based offset would bake an error in). Check pwiz-sharp mzMLb write support.
+   calibration (a mean-based offset would bake an error in).
+   Direction (Mike, 2026-10-23): Skyline is given the offset and precision, not rewritten spectra (disk; data kept as
+   measured); the blib, which every run has, is the likely home. Three copies per run is too many: SuperOverlap TR02
+   raw 2.90 GB, demux centroid mzML 3.72 GB, Osprey demux cache 0.77 GB. Expensive demux (Stellar joint + Centrix,
+   ~1 h/file): store once as mzMLb, Osprey's cache rebuilt from it (disposable). Cheap demux (Orbitrap, ~1.5 min):
+   store nothing, Skyline demultiplexes at import with the same shared code (#4815 option, once ours is ported).
+   pwiz-sharp writes mzMLb (`MzMlbWriter`, `WriteFormat.MzMLb`) and reads it; other tools may not (convert with
+   msconvert). To measure: mzMLb size and read speed for TR02.
 
 **Calibrator: peak width depends on ions per peak (2026-10-23, `width_vs_ions.ps1`).** FWHM lower quartile by ions in the
 peak (summed positive run x fill ms / 1000), 2Th TR01 / SuperOverlap TR01, identical in both: 0-3 ions 0.41 Th; 3-10
