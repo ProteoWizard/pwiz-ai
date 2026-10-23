@@ -264,3 +264,17 @@ logged per library phase; `LibTorch.targets` removing a stale libtorch beside To
 -Torch` retired. Not in 4d, on purpose: Skyline downloading Osprey into its Tools folder and a search UI (a
 Skyline PR, with the `--torch-runtimes` hand-off this PR defines); code signing; the old-driver case and a
 Linux GPU run remain untested. This TODO stays active for the measurement that follows PR 4.
+
+### 2026-10-23 - Osprey icon; the skyline.ms Osprey pages brought up to date
+
+Brendan's `Osprey.ico` committed as Osprey.exe's application icon (`Osprey.csproj ApplicationIcon`) and the
+installer's own (`Installer\Setup.iss SetupIconFile`); the shortcuts and the Add/Remove Programs entry
+already pointed at Osprey.exe. Verified: a 32-pixel icon extracts from the Debug Osprey.exe and from
+`Osprey-Setup-26.1.1.296.exe` built with `package.ps1 -Rid win-x64 -Setup`. Branch
+`Skyline/work/20261023_osprey_icon`. The skyline.ms Osprey folder (`/home/software/Osprey`): the home
+page (`default`) rewritten for the one command, tuning, entrapment, the GPU and the cluster, with a
+pre-release status line Brendan approved; the two embedded documents in `@files` replaced with the repo's
+current `Osprey-workflow.html` (part 1, the library build) and `CommandLine.html` (today's options), their
+relative links rewritten to GitHub by `make_site_docs.py` in the session folder (the source files are
+untouched). Those two files lag the repo again after every change to the options or the workflow page;
+refreshing them is a two-call job with the same script.
