@@ -291,4 +291,63 @@ on 75355ed91b once TeamCity has queued bt209 for it: bt209 #22446 (4231753) and 
 had failed on every commit since 8c08464fe2 added the slip test: Linux's `Path.GetFileName` keeps a
 backslash, so the backslash entry was accepted; `AddPackage` now refuses a backslash explicitly
 (ece246eade; Windows test passes). Perf and Tutorial cancelled again and re-triggered on ece246eade as
-4231773; bt209 #22447 (4231765) and Osprey Linux .NET (4231764) run on it too.
+4231773; bt209 #22447 (4231765) and Osprey Linux .NET (4231764) run on it too. Both passed (Osprey Linux
+green for the first time on this PR); CodeQL, both code inspections, Core Windows/Linux, Osprey Windows,
+Ubuntu all green on ece246eade. Docker/Wine passed too: 19 of 20 statuses green on the head.
+
+**Open at 21:30: `ConsoleTestDiaPasef` failed in Perf and Tutorial 4231773** ("Error: There are no decoy
+peptides in the document. Failed to create scoring model" after "Added 30 decoy peptides"; the DIA import
+itself ran). Facts: no nightly failure history; it passed in Perf 4230300 on this branch at 2bcd8e5b this
+morning and in the master runs on 7819a9b6 and 22626556; every other recent Perf failure is master's old
+Python `TestAlphaPeptDeepBuildLibrary` (unable to open the .blib), which this PR replaces. Known-bad range is
+today's commits plus the two master merges; the only master commits no Perf run has covered are #4844,
+#4850 (tc-perftests.bat now builds x64 through SkylineBuild.proj; new test-data extraction), #4897, #4898,
+#4902, #4904. `CommandLine.CreateScoringModel` reports it when `GetPeakFeatures` yields no decoy groups, so
+the decoys had no chromatograms, suspect the library ion mobility lookup for decoys (only the PASEF test
+uses `--ims-library-res`; `ConsoleTestDiaQe` ran before it and passed). Steps taken: master Perf and
+Tutorial triggered as a control (4231992); local repro needs a vendor build (the no-vendor build rejects the
+.d as an isolation scheme; data is at `D:\Users\brendanx\Downloads\Tutorials\DIA-PASEF-small`), building
+with `-VendorLicenses`. If local reproduces on the branch, run it on master in `pwiz-scanmajor` to split
+branch vs master.
+
+**Root cause (22:40).** Alone the test passes 9/9 locally (Debug and Release); after
+`TestCarafeModelBuildLibrary` in the same process it fails every time (30 s cycle). Instrumentation, since
+reverted, walked it back: no group had peak features because the .skyd held only the 15 iRT standards;
+the others got no chromatograms because MS1 filtering was on (Count, TOF 30000) where the passing run
+has none; it was on because `CommandArgs` parsed `--full-scan-precursor-isotopes=Count ... =None` as
+Count. The shared `CommandLineParser` (master's #4885/#4898, merged this morning after the last green Perf
+run) reads its grammar from the process-wide `ArgUsage.Grammar`; `CarafeCommandLine`'s static constructor
+installed Carafe's grammar (`FirstValueWins`) and text there, and `CarafeModelFile` references that class
+for its messages, so reading a model in Build Library flipped Skyline's own parser. Master's control Perf
+run (4231992, cancelled after) passed the test: master runs no in-process Carafe before it. Fix, per Brendan
+(a scoped install, centralized): `ArgUsageSettings` declares what one argument model installs,
+`ArgUsage.Install(settings)` is the only setter (returns an `IDisposable` that restores the previous
+settings; the static setters are private), Skyline and Osprey install once in their static constructors,
+`CarafeCommandLine` installs around `Parse`, `BuildUsage` and `GenerateUsageHtml` and restores the host's
+after; Osprey's workaround that forced Carafe's initializer first is gone. `CommandArgsGrammarTest` (Test)
+runs a Carafe parse then a Skyline parse.
+
+**Final design (Brendan, 23:30), committed 29b73ab380 and pushed.** The running process owns the argument
+grammar and it does not change: `ArgUsageSettings` declares everything one argument model installs,
+`ArgUsage.Install(settings)` is the one way to set it (void, no IDisposable; the static setters are private;
+`ArgUsage.Current` snapshots for the tests that switch grammars), Skyline, Osprey and CarafeSharp.exe's
+`Main` install once at startup, and `CarafeCommandLine` installs nothing - hosted in Skyline and Osprey its
+declarations run under the host's grammar (Osprey parses the options it hosts under its own). Osprey's
+static-constructor workaround that forced Carafe's initializer first is gone. Tests: `CommandArgsGrammarTest`
+(Skyline Test: a Carafe parse, then a Skyline parse keeps its last value), CarafeSharp's `TestAssemblySetup`
+installs Carafe's settings once for its test process, `CommandLineParserTest` uses `ScopedAction` and
+`OspreyCommandArgsTests` reinstalls its snapshot. Gates on 29b73ab380: CarafeSharp build, inspection 0,
+106 passed / 8 skipped; Osprey build + 10 OspreyCommandArgs tests; Skyline Debug build + 8 tests
+(both grammar tests, five branch tests, CheckForMissingResources); Release `TestCarafeModelBuildLibrary,
+ConsoleTestDiaPasef` passes (the reproduction). Follow-ups Brendan raised, not for this PR: isolate
+`CarafeCommandLine` so Skyline never loads it (cut the message-text references in `CarafeModelFile`,
+`LibrarySettings`, `LibraryOutputs`, `EntrapmentPairingValidator`, `CarafeModelOrigin`, `LibraryGenerator`,
+`ModelTrainer`, then its own assembly for CarafeSharp.exe, its tests and Osprey); maybe move `ScopedAction`
+to CommonUtil. Next: TeamCity on 29b73ab380 - bt209, Perf and Tutorial, and Osprey Perf/Regression
+(`ProteoWizard_OspreyWindowsNetPerfRegressionTests`, `pull/4849`) since Osprey and CommonUtil changed; then
+Brendan approves, Mike and Nick get time to respond, merge, PR 4d.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260928_AlphaPeptDeepSharp_teamcity.md` before starting work. It is a night session:
+tend TeamCity to green; if something as involved as tonight's failure appears, root-cause it, design the
+fix, and stop before implementing anything major.
