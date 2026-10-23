@@ -176,11 +176,21 @@ were cancelled. From here on, only the `_profile` acquisitions are demultiplexed
 peaks summed profile x fill time is ~951: ions = summed profile intensity x fill ms / 1000 (Mike), i.e.
 `--fill-time-ions 1000` for profile points (290 for centroid heights). The first profile arms used 380 and
 keep it for comparability; later arms use 1000.
-Since pwiz bf1933d1a8 / 2a781c91ee the option is the switch `--ions` (Mike: the intensity is ions/s, the 1000 only
-converts the fill time from ms to s; precision is set by ions, so use ions): the solve and the written spectra are in
-ions, converted last, after Centrix (`IonCountSpectrumList`). Arms run before it used `--fill-time-ions 1000`: the same
-solve, output in ions/s. On the 2Th profile slice with Centrix, 13% of MS2 centroids are under 1 ion (0.5% of the
-ions) and 38% under 3; median 4.6 ions. MS1: none under 1.
+Since pwiz 6a48ae29dd the option is the switch `--ions` (the intensity is ions/s; the 1000 only converts the fill
+time from ms to s). Mike's rule: spectra are combined, and written, in ions/s, the only unit that compares across
+fill times; ions (intensity x each spectrum's fill time) set only the thresholds and Poisson weights. `--fill-time-ions
+1000` in earlier arms is the same thing. (2a781c91ee briefly wrote ions out; removed.)
+- Joint path follows the rule: reads each spectrum into its own ions, converts back to rates before interpolating
+  (`StaggeredDemuxPipeline.cs` ~439-448), each pass on one constant scale (median fill time), output in ions/s.
+- **Per-channel makima path breaks it on Stellar data (not fixed, awaiting Mike):** each window's series is built from
+  each spectrum's own ions and interpolated (`ScanningDemultiplexer.cs` ~591, 634); harmless at a constant
+  counts-per-ion (Orbitrap, ZT Scan), wrong with fill times varying 100x. Fix: interpolate in rates as the joint does.
+- **No output floor (6a48ae29dd):** `MinOutputIons` default 0 (was 0.2, never compared with none; on ZT Scan only a
+  1 ion floor was measured: +3-7% IDs, CV 0.099 -> 0.119). Values must be positive to be written. Noise-free joint
+  tests now write the solve's residue (5e-6 to 3e-3 ions) beside real peaks; the tests ignore under 0.01 ions.
+  The replica arm (`super-profile-jointprofile-cscentrix`) still runs with 0.2, as the 21.2k arm did.
+- With ions in view: on the 2Th profile slice with Centrix, 13% of MS2 centroids are under 1 ion (0.5% of the ions),
+  38% under 3; median 4.6 ions. MS1: none under 1.
 
 ## Ground truth on real data: remultiplexed 2Th (2026-10-21 night)
 
