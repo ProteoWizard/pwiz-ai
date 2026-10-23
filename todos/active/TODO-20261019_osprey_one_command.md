@@ -6,9 +6,10 @@
 - **Created**: 2026-10-19
 - **Phase 2 started**: 2026-10-23
 - **Status**: In Progress - PR 4d open as #4909 (2026-10-23): Osprey chooses its libtorch runtime when
-  it runs, the CUDA runtime a download shared with Skyline's AlphaPeptDeep, the device logged. Waiting on
-  TeamCity (Osprey Windows and Linux .NET on the PR; Perf/Regression on `pull/4909` once Brendan okays
-  it) and on Brendan's three decisions in the PR body
+  it runs, the CUDA runtime a download shared with Skyline's AlphaPeptDeep, the device logged. All 18
+  checks green on e2bfa92441 (bt209 1823/1823, Osprey Windows and Linux .NET, Perf/Regression #343
+  116/116); Brendan's three decisions taken and coded. Next: Brendan's review and merge, then the
+  measurement that follows PR 4 (one command vs the four-step workflow on Stellar, Astral, ZT Scan)
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4909](https://github.com/ProteoWizard/pwiz/pull/4909) (PR 4d, opened 2026-10-23; head e2bfa92441; Perf/Regression #343 SUCCESS, 116/116)
