@@ -20,10 +20,14 @@ Every failure is on the first call (test line 85), which runs right after
 The three later calls each follow `WaitForGraphs()` and never failed.
 
 ## Fix
-`GetAreaAxisLabels()` now calls `WaitForGraphs()`, then `WaitForConditionUI` until the pane
-exists and `TextLabels != null`, before reading the labels.
+All four label checks now call `WaitForAreaAxisLabels(expected)`, which waits until the pane
+exists and `GetOriginalXAxisLabels()` equals the expected labels, with expected/actual in the
+timeout message. The first version (wait for `TextLabels != null`) only covered the first call;
+`/code-review medium` pointed out that the later calls could still read stale labels after
+reordering/regrouping, and that `TextLabels` can hold abbreviated labels.
 
 ## Progress
 - [x] Fix applied, build + single run passed
 - [x] 20-loop run (0 failures), CodeInspection passed
-- [ ] /code-review, PR
+- [x] /code-review medium; revised to wait for expected labels; 20 loops x en/fr/ja (60/60 pass)
+- [ ] PR
