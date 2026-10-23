@@ -565,6 +565,15 @@ Held-out: Chronologer RT R2 0.9962 -> 0.9987, median |error| 0.21 -> 0.11 min; M
 36,512 (47,405 experiment); combined entrapment FDP 0.49% at q 1% (116 entrapment / 47,289 targets), 0.78% at 2%.
 FDRBench jar not installed here; combined FDP computed directly (N_e x 2 / (N_t + N_e), r = 1).
 Sweep rerun with it: arms `2th-profile-cs-sigma0NN-ft` (Osprey default 0.5 m/z, cached Centrix spectra per sigma).
+Results (combined entrapment FDP from each blib's reported precursors, r = 0.997; the per-arm FDRBench inputs were
+overwritten by a quoting slip, all six to one literal `stellar-demux$A` path; the blib count reproduces the reference's
+0.49% exactly). MS2 sigma: per run / experiment / FDP: 0.21: 30,318 / 30,372 / 30,964, 35,849, 0.51%; 0.24: 30,318 /
+30,497 / 30,561, 35,680, 0.52%; 0.27: 29,591 / 29,889 / 30,246, 35,116, 0.63%; 0.30: 28,900 / 29,051 / 29,497, 34,330,
+0.51%; 0.33: 27,609 / 27,970 / 27,648, 32,526, 0.53%; 0.36: 27,410 / 27,423 / 27,207, 32,297, 0.47%. FDP flat with
+sigma: narrower sigma's splitting does not add false matches; plateau 0.21-0.24. Fine-tuned library +15-18% over the
+generic at every sigma. Still 24% under the centroid acquisition (47,405), confounded by this dataset's calibration.
+Fragment and RT agreement, TR01, 32,535 precursors identified with both libraries: median-polish cosine 0.983 -> 0.989
+(better for 63%), SG-weighted cosine 0.955 -> 0.961 (65%), |RT error| 0.20 -> 0.09 min (74%).
 
 ## Plan (2026-10-21, original)
 
