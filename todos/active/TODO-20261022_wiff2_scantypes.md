@@ -7,7 +7,7 @@
 - **Created**: 2026-10-22
 - **Status**: In Progress
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4907](https://github.com/ProteoWizard/pwiz/pull/4907)
 
 ## Objective
 A SCIEX ACO-CE compound optimization .wiff2 (`ACO-CE-DKTGKN_2-332-Positive-2026-10-21-10-20-43.wiff2`,
@@ -38,4 +38,4 @@ scan types. The C# wiff2 reader only knew the ZenoTOF strings ("TOFMS", "TOFMSMS
 
 ### 2026-10-23
 Test data cleared for public use (already public via the support board). Code review findings
-triaged and fixed; tests green.
+triaged and fixed; tests green. Committed 9755573c3d and opened PR #4907.
