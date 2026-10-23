@@ -87,15 +87,17 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
    `SkylineWindow.ShowOspreySearchDlg` with an install gate that is `SimpleFileDownloader.
    DownloadRequiredFiles` under a `LongWaitDlg` (download size stated first) - no custom dialog.
 3. **`FileUI\PeptideSearch\OspreySearchDlg`** with `OspreySearchControl : SearchControl`, pages: DIA data
-   files; the protein FASTA to predict the library from (the only library source: the steel thread is
-   scenario 1 of the Osprey-Carafe integration, a predicted library and nothing else; no `-l`, no existing
-   `.blib`, in this PR or later - Import Peptide Search already serves a library plus runs); modifications
+   files; the protein FASTA to predict the library from - the default and what the page asks for, as a
+   DDA search asks for its FASTA, with Carafe closing the gap between the FASTA and the library Osprey
+   searches (scenario 1 of the Osprey-Carafe integration); an existing `.blib` (`-l`) is an allowed
+   alternative on the same page, secondary in the layout, in PR 1 if it costs little and PR 2 otherwise;
+   the steel thread the night session proves is the FASTA path; modifications
    (the document's, mapped to CarafeSharp's `--fixMod`/`--varMod`); search settings (resolution unit|hram,
    fragment tolerance and unit, run and experiment FDR, protein FDR, threads, Use GPU as `BuildLibraryDlg`
    offers it, with the CUDA install reused from there); run. The library is predicted with the default
    Carafe source and the pretrained AlphaPeptDeep model, as the Build Library form does when Carafe is the
    source; a fine-tuned model and tuning on the runs are PR 2.
-4. **The command**: `-i <runs> --fasta <fasta> -o <doc>.osprey.blib --torch-runtimes <Tools>
+4. **The command**: `-i <runs> --fasta <fasta> (or -l <blib>) -o <doc>.osprey.blib --torch-runtimes <Tools>
    --device auto|cpu --enzyme/--miss-c from the FASTA page, --fixMod/--varMod from the modifications page,
    --resolution, --fragment-tolerance, --fragment-unit, --run-fdr, --experiment-fdr, --protein-fdr,
    --threads, --log-file`. The output name and the overwrite-or-append prompt follow
@@ -117,11 +119,12 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
    the model feels off, with File > Search > Peptide Search serving several DDA engines (Comet, MS Amanda,
    Tide, MS-GF+) while each DIA tool has a menu item of its own. EncyclopeDIA may go away eventually; its
    workflow is the most particular (a library built with Koina first).
-2. **Inputs in PR 1**: a protein FASTA only. The library is predicted from it with the default Carafe
-   source and the pretrained AlphaPeptDeep model, as the Build Library form does when Carafe is selected -
-   scenario 1 of the Osprey-Carafe integration. No `-l`: this PR must not require an input library, and the
-   wizard does not take one. Tuning on the runs (`--training-input`) and a fine-tuned model (`--model`)
-   are PR 2.
+2. **Inputs in PR 1**: a protein FASTA is the default expectation, as in a DDA search, and Carafe closes
+   the gap between it and the library Osprey needs - that is what users now expect of a DIA search tool.
+   The library is predicted with the default Carafe source and the pretrained AlphaPeptDeep model, as the
+   Build Library form does when Carafe is selected. The PR must not require an input library; it may also
+   accept an existing `.blib` as an alternative, secondary in the page. Tuning on the runs
+   (`--training-input`) and a fine-tuned model (`--model`) are PR 2.
 3. **The `.blib`'s role**: the document library, written to the document's library name with DIA-NN's
    overwrite-or-append prompt; the existing-library route learns the document case.
 4. **Presets and the `.cfg` import**: not in PR 1.
@@ -174,9 +177,10 @@ installer is 105 MB compressed, 393 MB installed, with the same libtorch and mod
 
 ### 2026-10-23 - Decisions taken; ready for the night session
 
-Brendan: FASTA only, no input library in the wizard, the default Carafe source with the pretrained
-AlphaPeptDeep model as Build Library offers it; tuning in PR 2; the separate wizard for now with the menu
-model to revisit. The night session starts here: cut `Skyline/work/20261023_skyline_osprey_search` from
+Brendan: the FASTA is the default expectation, as in a DDA search, with Carafe closing the gap to the
+library Osprey searches; an existing library is an allowed alternative, never a requirement; the default
+Carafe source with the pretrained AlphaPeptDeep model as Build Library offers it; tuning in PR 2; the
+separate wizard for now with the menu model to revisit. The night session starts here: cut `Skyline/work/20261023_skyline_osprey_search` from
 master, verify Osprey's progress lines through `ProcessRunner` first, then the tasks in order. Osprey.exe
 for the test loop: `pwiz_tools\Osprey\Osprey\bin\x64\Debug\net10.0\Osprey.exe` (master has #4909 and the
 icon PR #4911 may land first; either is fine).
