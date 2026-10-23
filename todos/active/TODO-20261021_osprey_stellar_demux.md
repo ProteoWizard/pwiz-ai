@@ -540,6 +540,19 @@ reader `--centroid centrix --centrix-solver active-set --centrix-sigma-ms1 0.2 -
   (689/689 tests, Eclipse fixture included). Every makima arm before this carries the error: rerun 50% makima
   (21.3k) and SuperOverlap makima (236 / 190 / 357, also hit by the Rust Centrix bug).
 
+**Sigma sweep, 2Th profile + Centrix, no demux (2026-10-23; arms `2th-profile-cs-sigma0NN`).** MS2 sigma / experiment
+precursors / mean per run / centroids per MS2 spectrum (TR01) / pairs < 0.5 Th per spectrum:
+0.36: 27,619 / 22,855 / 159 / 7.8; 0.33: 27,673 / 23,083 / 172 / 13.9 (reproduces `2th-profile-cs-active` exactly);
+0.30: 29,760 / 24,895 / 189 / 23.8; 0.27: 30,375 / 25,609 / 209 / 38.5; 0.24: 31,218 / 26,048 / 231 / 63.1;
+0.21: 31,096 / 26,254 / 259 / 106.4. IDs flatten at 0.21-0.24 while splitting keeps rising: unit-resolution scoring
+barely penalizes over-splitting, so IDs alone cannot set sigma. Automatic sigma (proposal, 2026-10-23): measured per
+run and per scan rate (group by point spacing, not MS level), from the width-vs-ions curve at a reference point chosen
+with truth (simulated doublets with real ion statistics, remultiplexed 2Th, entrapment FDP), then checked on other
+scan rates / calibrations (asked Mike for Stellar data at 125 or 67 kTh/s MS2). Later: sigma by a peak's ion count.
+mzMLb (2026-10-23, `mzmlb_test.ps1`): SuperOverlap TR02 demux centroids 0.63 GB vs mzML 3.72 GB (17%), Osprey cache
+0.77 GB, raw 2.90 GB; reads 39-40 s vs 35-38 s (all 540,556 spectra, identical points and sums); written with pwiz's
+`MzMlbWriter` (the msconvert build here lacks `--mzMLb`).
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
