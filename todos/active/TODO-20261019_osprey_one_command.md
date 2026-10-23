@@ -218,6 +218,18 @@ folder), and the search ran through on the mzML copies (the Debug build has no v
 `D:\test\osprey-runs\4d\gpu-pretrained`. `package.ps1 -Rid win-x64 -NoZip` publishes `torch\cpu`
 (256 MB, 8 files), the package list and `models` (25 MB) into `Osprey-26.1.1.296-win-x64`, with only
 TorchSharp's own `LibTorchSharp.dll` beside `TorchSharp.dll`. Both CPU libtorch packages (win-x64 and
-linux-x64) are self-contained on nuget.org, so the Linux layout fills `torch/cpu` the same way. Next:
-`/code-review medium`, the PR, TeamCity (Osprey Windows and Linux .NET on the PR; Perf/Regression on
+linux-x64) are self-contained on nuget.org, so the Linux layout fills `torch/cpu` the same way.
+
+`/code-review medium`: 8 findings, 6 fixed (the tuned build's output library got no device - set with the
+other two; `--install-cuda-runtime` ignored `--log-file` - `Program.OpenOutput` now serves both paths; a
+stale libtorch beside TorchSharp.dll in an output folder built on the old layout - `LibTorch.targets`
+deletes torch_cpu/torch_cuda from `runtimes\<rid>\native` and the output root before every build, for
+agents and developers alike, so `Build-Osprey.ps1`'s cleanup went; a zero-size package list divided by
+zero - refused with the list named; the not-installed reason re-read the list - uses the installer in
+hand; the help's size was culture-formatted - invariant for the checked-in pages), 1 verified rather
+than taken (the stale-file case, by planting torch_cpu.dll in both output folders: the build removed
+them), 1 dropped (folding Skyline's and Osprey's reason switches into the base class: the two word and
+case the reasons differently and Osprey has a case Skyline lacks; the enum is the shared contract).
+Gates after the fixes: Osprey 643/643 and inspection clean, CarafeSharp 107/8, Skyline build and the
+five tests. Next: the PR, TeamCity (Osprey Windows and Linux .NET on the PR; Perf/Regression on
 `pull/<N>` with Brendan's okay).
