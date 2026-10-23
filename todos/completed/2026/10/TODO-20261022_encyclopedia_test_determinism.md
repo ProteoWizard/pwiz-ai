@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261022_encyclopedia_test_determinism`
 - **Base**: `master` (a98f401f72)
 - **Created**: 2026-10-22
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#4903](https://github.com/ProteoWizard/pwiz/pull/4903) (draft)
+- **PR**: [#4903](https://github.com/ProteoWizard/pwiz/pull/4903) (merged 2026-10-23)
 - **Checkout**: `C:\Dev\BuildTrouble`
 
 ## Objective
@@ -73,7 +73,7 @@ the thread count (32 -> 1, two places).
 - [x] No screenshot or tutorial text shows the thread count (it is an additional setting, not on the settings
       page; no tutorial HTML for this draft in the repo)
 - [x] Gates: build 0 warnings, CodeInspection passed, final normal-mode soak 3/3
-- [ ] PR
+- [x] PR
 
 ## Not changed (deliberately)
 
@@ -83,3 +83,13 @@ the thread count (32 -> 1, two places).
   it ever flakes, the same one-line `NumberOfThreadsUsed = 1` applies.
 - Upstream: the order-dependent KDE RT alignment (see Root cause) is worth reporting to the Searle lab, as
   #4840 did with MSAmanda#9, if Brendan agrees.
+
+## Progress Log
+
+### 2026-10-23 - Merged
+
+PR #4903 merged as commit 594767e47b. TestEncyclopeDiaSearchTutorialDraft now runs EncyclopeDIA on one thread,
+with all five tutorial audit-log baselines (en, fr, ja, tr, zh) expecting NumberOfThreadsUsed = "1". The root
+cause inside EncyclopeDIA (order-dependent float accumulation in the TwoDimensionalKDE RT alignment, fed in
+thread-completion order) is recorded above. Deferred: the upstream report to the Searle lab, pending Brendan's
+view; the functional TestEncyclopeDiaSearch stays unpinned by choice.
