@@ -2,7 +2,7 @@
 
 Phase 1 (2026-10-19 to 2026-10-22): the design, the decisions, PRs 4a-4c, the clean-up PR and the
 `.libcache` retirement. Phase 2 (PR 4d onward) continues in
-[todos/active/TODO-20261019_osprey_one_command.md](../../../active/TODO-20261019_osprey_one_command.md).
+[TODO-20261019_osprey_one_command.md](TODO-20261019_osprey_one_command.md).
 This file is the reference for everything below; it is no longer edited.
 
 ## Branch Information

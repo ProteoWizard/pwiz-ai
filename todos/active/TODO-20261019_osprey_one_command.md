@@ -14,7 +14,7 @@
 
 ## Phase History
 
-See [TODO-20261019_osprey_one_command-phase1.md](../completed/2026/10/TODO-20261019_osprey_one_command-phase1.md)
+See [TODO-20261019_osprey_one_command-phase1.md](TODO-20261019_osprey_one_command-phase1.md)
 for 2026-10-19 to 2026-10-22: the design (options, stages and the workflow layer, files, resume, libtorch
 and packaging, HPC), Brendan's decisions of 2026-10-19, the second-pass levers table for Brendan and Mike,
 the PR plans for 4a-4c, and the progress log through six merged PRs: #4877 (option spelling) and #4876

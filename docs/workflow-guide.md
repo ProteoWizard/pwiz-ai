@@ -128,11 +128,12 @@ A sprint TODO that carries several PRs grows past the point where a session can 
 to pick up the work - around **1,000 lines** is the marker (the same limit the core docs
 use). When it gets there, split it by phase rather than trimming history:
 
-1. Move the current file to `todos/completed/YYYY/MM/` with a `-phaseN` suffix
+1. Rename the current file in place, in `todos/active/`, with a `-phaseN` suffix
    (`TODO-20260409_osprey_sharp-phase1.md`, `-phase2.md`). Retitle it
    `# TODO-... - Phase N`, set its Status to "Phase N complete" naming the PRs it covered,
-   and add a line pointing at the file that continues it. It is then a historical record
-   like any completed TODO.
+   and add a line pointing at the file that continues it. It is no longer edited, but it
+   stays in `active/` beside its successor: the phase files move to `completed/` together,
+   when `/pw-complete` moves the active one, the way auxiliary files do.
 2. Start a fresh file **under the same name** in `todos/active/` headed `Phase N+1`, with a
    **Phase History** section that links each earlier phase file and says in a few lines
    what it holds (design, decisions, which PRs). Carry forward only what the next PR needs:
@@ -141,7 +142,10 @@ use). When it gets there, split it by phase rather than trimming history:
 
 The date prefix stays the sprint's start date, so the files sort together and
 `/pw-archivetodos` files every phase under the same month. Commit messages and PR
-descriptions keep referencing `TODO-YYYYMMDD_<slug>.md` - the active file.
+descriptions keep referencing `TODO-YYYYMMDD_<slug>.md` - the active file. That file is
+the head of a linked list: a reader starting from any commit message follows the name to
+the active TODO, and its Phase History back to the phase that holds what happened during
+that PR. The active file must therefore always link every earlier phase.
 
 Whether a sprint instead gets a **new TODO** (new date, new name) is a judgment call: a
 phase split is right when the design and goal are unchanged and the next PRs are the

@@ -278,7 +278,9 @@ cd C:/proj/ai
 git pull origin master                  # avoid colliding with another session
 mkdir -p todos/completed/YYYY/MM
 git mv todos/active/TODO-YYYYMMDD_<slug>.md todos/completed/YYYY/MM/   # YYYY/MM from the file name date
-git add todos/completed/YYYY/MM/TODO-YYYYMMDD_<slug>.md
+# A sprint split by phase has TODO-YYYYMMDD_<slug>-phase1.md, -phase2.md ... beside it, and
+# auxiliary files share the prefix too: move every todos/active/TODO-YYYYMMDD_<slug>* with it
+git add todos/completed/YYYY/MM/TODO-YYYYMMDD_<slug>*
 git commit -m "Completed TODO for #NNNN - <feature>"
 git push origin master
 ```
