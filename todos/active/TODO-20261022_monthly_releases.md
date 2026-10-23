@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4899](https://github.com/ProteoWizard/pwiz/issues/4899)
 - **Module**: `pwiz`
-- **PR**: [#4905](https://github.com/ProteoWizard/pwiz/pull/4905) (merged 2026-10-23), follow-up [#4910](https://github.com/ProteoWizard/pwiz/pull/4910) (month-end releases named YYYY-MM); seed PR [#4900](https://github.com/ProteoWizard/pwiz/pull/4900) (closed, never merged); website [ProteoWizard/web#28](https://github.com/ProteoWizard/web/pull/28)
+- **PR**: [#4905](https://github.com/ProteoWizard/pwiz/pull/4905) (merged 2026-10-23), follow-up [#4910](https://github.com/ProteoWizard/pwiz/pull/4910) (tags `release-[daily-]YYYY-MM-DD-sha` from the installer version; the 9 existing tags renamed 2026-10-23 - do not run the publish job on master until #4910 merges, then run it once to republish before merging web#28); seed PR [#4900](https://github.com/ProteoWizard/pwiz/pull/4900) (closed, never merged); website [ProteoWizard/web#28](https://github.com/ProteoWizard/web/pull/28)
 
 ## Objective
 
