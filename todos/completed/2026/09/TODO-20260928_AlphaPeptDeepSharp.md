@@ -185,7 +185,8 @@ suffices or the owner-drawn two-line rows should come back for the list items.
 
 ### 2026-10-23 - Model combo above Use GPU (Brendan)
 
-Branch `Skyline/work/20261023_AlphaPeptDeepSharp-fix`. The original screenshots had the Model combo above
+Branch `Skyline/work/20261023_AlphaPeptDeepSharp-fix`, PR [#4906](https://github.com/ProteoWizard/pwiz/pull/4906)
+(ede1b3c44f). The original screenshots had the Model combo above
 the Use GPU checkbox; the order got swapped when the model became "(optional)". The model choice is the
 primary point of the Carafe Options group box and Use GPU a modifier that applies to any model, so Model
 goes back on top. Change: `BuildLibraryDlg.resx` locations and tab order (label 6,19; combo 9,35; checkbox
