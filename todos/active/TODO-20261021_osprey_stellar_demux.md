@@ -371,6 +371,18 @@ accuracy).
   MSFileReader/XRawfile?) is the open question. MS2 calibration: centroid acquisition mean -0.093 SD 0.216 (39,668
   matches); profile vendor +0.093 SD 0.273 (2,649); profile Centrix +0.146 SD 0.309 (20,920).
 
+**RETRACTED (2026-10-23): there is no -0.55 Th offset.** Osprey's own matching on the same spectra: MS2 calibration
+of 2Th profile + Centrix is mean -0.003 Th, SD 0.16 at sigma 0.21 (centroid acquisition: -0.07, SD 0.20), and the
+per-identification mean fragment deviation has median -0.018 Th (quartiles -0.058 / +0.020) at sigma 0.21 against
+-0.079 for the instrument's centroids. The -0.55 came from my probes (`raw_profile_offset.ps1`,
+`fragment_mz_error.py`), which disagree with Osprey on identical spectra; their shared step, choosing the peptide's
+apex scan, is the suspect. The "mass calibration issue" conclusion and memory were built on it; both withdrawn.
+What did vary: Osprey's calibrated window with Centrix sigma (same with either library): sigma 0.21 mean -0.003 / SD
+0.16 / tolerance 0.48; 0.24 +0.009 / 0.19 / 0.59; 0.27 +0.04 / 0.24 / 0.75; 0.30 +0.09 (median +0.14) / 0.27 / 0.90;
+0.33 +0.14 (median +0.25) / 0.30 / 1.04; 0.36 +0.12 (median +0.28) / 0.35 / 1.16. A wide sigma merges a fragment with
+its M+1 into one centroid between them: positive bias and a wide window; the earlier arms' "isotope latching" is this.
+The notes below on the offset are kept as history.
+
 **This dataset's MS2 profile m/z axis is 0.55 Th low (2026-10-22). Mike (2026-10-23): a mass calibration problem on the
 instrument for these runs, not a property of the Stellar or of profile mode; do not hard-code it.** the profile arms' loss and the SuperOverlap 2-of-3
 failure.** Scripts in `ai/.tmp/sessions/20261021-stellar`: `fragment_mz_error.py` (observed - theoretical for detected
