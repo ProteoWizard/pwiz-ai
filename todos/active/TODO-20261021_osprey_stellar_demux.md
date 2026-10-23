@@ -563,7 +563,11 @@ Held-out: Chronologer RT R2 0.9962 -> 0.9987, median |error| 0.21 -> 0.11 min; M
 0.975, SA 0.757 -> 0.859. Preset "Eclipse NCE 27" = Stellar HCD 20 (Mike). The workflow preset searches at 0.4 m/z
 (the "0.4" Mike remembered; Osprey's built-in unit default is 0.5). 2Th centroid runs with it: 37,070 / 35,876 /
 36,512 (47,405 experiment); combined entrapment FDP 0.49% at q 1% (116 entrapment / 47,289 targets), 0.78% at 2%.
-FDRBench jar not installed here; combined FDP computed directly (N_e x 2 / (N_t + N_e), r = 1).
+Entrapment FDP from Osprey's own `--model-diagnostics` report (FDRBench-matching; Mike: no jar), regenerated for the
+finished runs with `--task ModelDiagnostics` (~20 s each); read with `ai/.tmp/sessions/20261021-stellar/report_fdp.py`.
+Pass 2, experiment-wide, q 1%: combined / paired: centroid acquisition 0.49 / 0.47%; profile + Centrix sigma 0.21
+0.51 / 0.48, 0.24 0.52 / 0.49, 0.27 0.63 / 0.58, 0.30 0.51 / 0.47, 0.33 0.53 / 0.49, 0.36 0.47 / 0.43 (same combined
+as the blib count).
 Sweep rerun with it: arms `2th-profile-cs-sigma0NN-ft` (Osprey default 0.5 m/z, cached Centrix spectra per sigma).
 Results (combined entrapment FDP from each blib's reported precursors, r = 0.997; the per-arm FDRBench inputs were
 overwritten by a quoting slip, all six to one literal `stellar-demux$A` path; the blib count reproduces the reference's
