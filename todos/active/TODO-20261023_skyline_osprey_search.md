@@ -11,7 +11,8 @@
   the commands and the PR body) and decides the mirror zip for TeamCity
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (none yet)
+- **PR**: #4913 (opened 2026-10-24; bt209, bt210, TestConnected and Code Inspection queued on it, Perf and
+  Tutorials deferred)
 - **Checkout**: `C:\proj\pwiz`
 - **Continues**: `TODO-20261019_osprey_one_command.md` (PR 4d, #4909, defined the `--torch-runtimes`
   hand-off this integration uses; its phase-1 file holds the Osprey-CarafeSharp design)
