@@ -297,6 +297,17 @@ that made 26.1.1.296 (build id 4234706), valid while that build is kept. The for
 was run once locally: the 156 MB download, unzip into Tools and the two wizard runs passed in 17 s.
 Search > Osprey Search... shows only when `Install.IsDeveloperInstall` (Decision 7).
 
+After the PR opened: TeamCity's first bt209 run passed `OspreySearchTest` through the TeamCity
+download path (24 s on Agent 1, Unicode Tools folder) and failed only the keyboard-shortcuts help
+document, regenerated in record mode for en/ja/zh-Hans (403da2656e). Brendan's SkylineTester run in
+French found the FDR boxes' resx default "0.01" refused by `ValidateDecimalTextBox`; the defaults are
+now set from a number through the current culture. Osprey's output was English in every language
+because a child process starts in the OS culture: the command line now carries `--culture <Skyline UI
+culture>` (813c0a6867; Osprey has ja and zh-Hans resources). bt210 could not resolve the `pull/4913`
+ref twice ("Invalid id: N/A" while freezing versioned settings) and its history is master-only, so it
+was not re-queued. The first Code Inspection run reported 570 unresolved-symbol errors in files the PR
+does not touch, having run without its dependency's outputs; re-queued.
+
 Left for Brendan (he will return to it): the release leg - a "Publish Osprey Release" TeamCity
 deployment config with the Deploy button that pins and tags an Osprey build, most cheaply by giving
 Matt's `publish_monthly_release.py` a build-type parameter; a download page or GitHub Release can
