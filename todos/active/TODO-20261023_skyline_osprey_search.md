@@ -156,14 +156,53 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
 
 ## Tasks (PR 1)
 
-- [ ] Verify Osprey's progress lines parse through `ProcessRunner` (a `NN%` line per update); if not, the
-      smallest Osprey change that makes them
-- [ ] `OspreyHelpers`: version, folders, download info, command line, `RunSearch`
-- [ ] `SearchToolType.Osprey`; menu item; `ShowOspreySearchDlg` with the download gate
-- [ ] `OspreySearchDlg` and `OspreySearchControl`: the five pages, validation, the overwrite prompt
-- [ ] The hand-off to `ImportPeptideSearchDlg` with Osprey's `.blib` as the document library (Decision 3)
-- [ ] `OspreySearchTest` end to end on the Stellar subset; form lookup entries; resources
+- [x] Verify Osprey's progress lines parse through `ProcessRunner` (a `NN%` line per update); if not, the
+      smallest Osprey change that makes them - by reading: `ProcessStreamReader` interleaves stderr (where
+      Osprey writes) with stdout, and `ProgressReporter` writes `"<indent>  NN%"` lines, which
+      `ProcessRunner.Run` parses from the last space-separated token. Confirmed empirically by the test's
+      progress-bar assertion
+- [x] `OspreyHelpers`: version, folders, download info, command line, `RunSearch`
+- [x] `SearchToolType.Osprey`; menu item; `ShowOspreySearchDlg` with the download gate
+- [x] `OspreySearchDlg` and `OspreySearchControl`: the five pages, validation, the overwrite prompt
+- [x] The hand-off to `ImportPeptideSearchDlg` with Osprey's `.blib` as the document library (Decision 3)
+- [x] `OspreySearchTest` end to end on the Stellar subset; form lookup entries; resources
 - [ ] Gates; `/code-review medium`; PR
+
+## Corrections to the design found while building (night of 2026-10-23)
+
+- **No `--log-file`.** Osprey's `--log-file` replaces its console writer entirely (`Program.OpenOutput`),
+  so the wizard would see nothing. `OspreyHelpers.RunSearch` tees Osprey's output itself to
+  `<doc>.osprey\osprey-skyline-stdout.log`, as the DIA-NN path does beside its `--out`.
+- **`--work-dir <doc>.osprey`.** Without it Osprey writes its `.spectra.bin` caches and scores parquets
+  beside the raw data files. The predicted library lands in that folder too (`<doc>.predicted.blib`).
+- **The Stellar subset has no FASTA.** `Osprey.Test\TestData\StellarSubset.zip` holds the three mzMLs and
+  the library TSVs, not `hela-filtered.fasta`. `TestFunctional\OspreySearchTest.zip` holds the mzMLs and a
+  synthetic `stellar-subset-proteins.fasta` built the way `SubsetPipelineTest.LibraryBuild` builds its
+  FASTA (each subset protein's tryptic peptides joined end to end), by
+  `ai/.tmp/sessions/20261023-osprey-search/New-OspreySearchTestZip.ps1`.
+- **Enzyme and modifications map by behavior, not name.** Skyline references `CarafeSharp.Proteome`
+  already, so `OspreyHelpers.GetCarafeEnzymeIndex` finds the Carafe enzyme whose cleavage decision
+  matches Skyline's over every residue pair (Skyline "Trypsin/P" is Carafe "Trypsin (no P rule)"), and
+  `GetCarafeModificationIds` matches `StaticMod.UnimodId` and site against `CarafeModification.
+  TopModifications`. Unsupported ones are refused on the page with their names.
+- **Document settings feed the digest.** Peptide length, precursor charges and the variable-mod limit
+  come from the document's filter and modification settings; the pages show resolution, fragment
+  tolerance and unit (defaults follow Osprey's: 10 ppm hram, 0.5 m/z unit), run, experiment and protein
+  FDR, and threads. `--device auto`, so a CUDA runtime Skyline already installed in Tools is used (the
+  Use GPU control is PR 2 as planned).
+- **The modifications page starts from the document's structural modifications**, and the ones the search
+  used are added to the document before the hand-off, because the existing-library route of
+  `ImportPeptideSearchDlg` skips the match-modifications page.
+- **The document case in `AddExistingLibrary`**: when the existing library's path is the document
+  library's (`<doc>.blib`), the spec is created with `ChangeDocumentLibrary(true)` and inserted at the head
+  of the spectral library list, as a BlibBuild result is.
+- **Overwrite, not append.** Osprey writes a whole `.blib`, so the prompt is Overwrite/Cancel, asked when
+  Run is pressed (before Osprey starts), and the deletion follows DIA-NN's recipe (close streams, release
+  the cached library, delete the `.blib` and `.redundant.blib`).
+- **The pinned version is a placeholder**: `OSPREY_VERSION = 26.1.1.296`, the local Debug build's; the
+  mirror zip `Osprey-26.1.1.296-win-x64.zip` does not exist yet (PR 3). The test finds Osprey through
+  `SKYLINE_TEST_OSPREY_EXE`, then a build at `pwiz_tools\Osprey\Osprey\bin\x64\{Debug,Release}\net10.0`,
+  then the mirror; on TeamCity the test will fail at the mirror step until the zip is uploaded.
 
 ## Progress Log
 
@@ -174,6 +213,27 @@ tests), the design above, and six decisions for Brendan. The CarafeSharp-in-Skyl
 Decision 6: `torch\cpu` 256 MB on disk (76 MB zipped), the models 25 MB, TorchSharp 3 MB; Osprey's own
 installer is 105 MB compressed, 393 MB installed, with the same libtorch and models plus a self-contained
 .NET runtime.
+
+### 2026-10-23/24 (night session) - PR 1 built, the steel thread passes end to end
+
+Branch cut at e0da8ae319. Every piece of PR 1 is in (see the table in `ai/.tmp/handoff-20261023.md`
+and the Corrections section above). `OspreySearchTest` passes in 8 s wall (Osprey's whole run on the
+subset is 2.6 s): the predicted library holds 341 target peptides / 1342 precursors (charges 2-3,
+decoys included); 127 / 116 / 125 precursors at 1% run FDR; 144 at 1% experiment FDR; 76 protein
+groups; the output `.blib` carries 144 spectra with 432 retention times over 3 runs; the finished
+document has 81 proteins, 141 peptides, 3 replicates, with the `.blib` as the document library. The
+progress bar moved, which is Osprey's `NN%` lines parsing through `ProcessRunner` unchanged.
+
+One product finding from the first (failing) run: a default document's transition filter has
+precursor charge 2 alone, so the library was predicted for 2+ only and the second pass had nothing at
+1% experiment FDR (0 of 124). `OspreySearchDlg.GetPrecursorCharges` now applies the rule the Import
+Peptide Search wizard's DIA transition settings page applies to a default document (charges 2 and
+3), so the predicted library covers what the document will look for after the hand-off; a document
+with its own charges keeps them. Osprey's `.blib` has no `IrtLibrary` table (checked in
+`BlibOutputWriter`/`BlibSchema`), so the existing-library route shows no predictor prompt.
+
+CodeInspection and CheckForMissingResources pass. `ai/scripts/fix-crlf.ps1` now also converts
+untracked files (its filter skipped `??` rows, so new files stayed LF).
 
 ### 2026-10-23 - Decisions taken; ready for the night session
 

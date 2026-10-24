@@ -48,7 +48,7 @@ function Get-ModifiedFiles {
 
   Push-Location $workDir
   try {
-    $files = git status --porcelain 2>$null | Where-Object { $_ -match '^( M|AM|A )' } |
+    $files = git status --porcelain 2>$null | Where-Object { $_ -match '^( M|AM|A |\?\?)' } |
              ForEach-Object { $_ -replace '^...','' }
     return $files
   } finally {
