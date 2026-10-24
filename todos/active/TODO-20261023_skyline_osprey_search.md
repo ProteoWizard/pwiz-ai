@@ -129,11 +129,18 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
 3. **The `.blib`'s role**: the document library, written to the document's library name with DIA-NN's
    overwrite-or-append prompt; the existing-library route learns the document case.
 4. **Presets and the `.cfg` import**: not in PR 1.
-5. **The download source**: the pinned Osprey build's zip, mirrored to
-   `ci.skyline.ms/skyline_tool_testing_mirror/Osprey-<version>-win-x64.zip` for tests, with the release URL
-   named later (TeamCity artifacts can stand in, as ProteoWizard's installer did). Someone with access
-   uploads the zip; until then the functional test runs against a local Osprey.exe through the registered
-   tool path.
+5. **The download source** (revised 2026-10-24): tests find Osprey the way SkylineNightly finds
+   SkylineTester - the latest successful `ProteoWizard_OspreyWindowsNet` build on a designated branch
+   (master for Skyline master), through TeamCity's REST API, which the Osprey project opens to guest
+   access (no token; checked 2026-10-24: build #1110 at e0da8ae319 lists
+   `Osprey-26.1.1.296-win-x64.zip`, 156 MB). The zip's version is read from the artifact name and the
+   download is addressed by build id. The shipping pin is the artifact of the pinned build until a
+   release process exists; the tool testing mirror is not used. The release process itself (a TeamCity
+   deployment config with the Deploy button that pins and tags an Osprey build, as Matt's monthly
+   ProteoWizard job and the Docker publish configs do) is for Brendan to return to.
+7. **The menu item is hidden outside developer builds** (Brendan, 2026-10-24): the wizard and its test
+   are fully present, but Search > Osprey Search... shows only when `Install.IsDeveloperInstall`, so this
+   PR merging to master does not decide Osprey's release.
 6. **The package size**: PR 3 (`--torch-cpu` beside `--torch-runtimes` and a Skyline-bound package without
    libtorch and the models). Not PR 1.
 
@@ -168,7 +175,8 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
 - [x] The hand-off to `ImportPeptideSearchDlg` with Osprey's `.blib` as the document library (Decision 3)
 - [x] `OspreySearchTest` end to end on the Stellar subset; form lookup entries; resources
 - [x] Gates; `/code-review medium` (9 findings, 8 fixed); tcinspect clean
-- [ ] Push, open the PR (body drafted), mirror zip or test skip for TeamCity (needs Brendan)
+- [x] Osprey resolved from TeamCity for tests; the menu item hidden outside developer builds
+- [ ] Push, open the PR (body drafted); the release leg (Deploy button) when Brendan returns to it
 
 ## Corrections to the design found while building (night of 2026-10-23)
 
@@ -264,6 +272,34 @@ Noted, not changed: `ImportResults` skips replicates already in the document, so
 peptides leaves them without chromatograms until results are re-imported (the DIA-NN path behaves the
 same); and a default document's `MaxMissedCleavages` is 0, so the wizard's default digest is fully
 tryptic where Osprey's own default is one missed cleavage - the FASTA page shows and controls it.
+
+### 2026-10-24 (morning) - Osprey from TeamCity; the menu item hidden until release
+
+Brendan's direction: tests should find Osprey as SkylineNightly finds SkylineTester (the latest
+successful build on a designated branch, guaranteed to stay available), and releases should work like
+the Docker publish configs (a Deploy button promoting a successful build), on the model of Matt's new
+monthly ProteoWizard releases (`TODO-20261022_monthly_releases.md`: a TeamCity job pins and tags
+`release-[daily-]YYYY-MM-DD-sha`, artifacts stay on TeamCity, an index goes to the website). Survey
+notes: SkylineNightly needs a Bearer token (`TEAMCITY_NIGHTLY_TEST_AUTH_TOKEN`) because guest access
+was withdrawn for its project; the Osprey project still allows guest access to the REST API and
+artifacts (checked 2026-10-24); the Osprey Windows build is `ProteoWizard_OspreyWindowsNet`, with no
+package or release config and no release branch; the Docker Deploy buttons are TeamCity deployment
+configs with a `latest.lastSuccessful` artifact dependency, not GitHub workflows; the tool testing
+mirror is an S3 bucket uploaded by hand.
+
+Done in this PR: `OspreyHelpers.GetLatestBuildDownloadInfo` resolves the latest successful master
+build through the guest REST API (the build by locator, then its artifact list, then the zip by build
+id so a build finishing in between cannot change the download). The test uses it when neither
+`SKYLINE_TEST_OSPREY_EXE` nor a sibling dev build exists, and checks the resolution (name, path, a
+HEAD on the artifact) on every run. The pinned package's URL is the artifact of the TeamCity build
+that made 26.1.1.296 (build id 4234706), valid while that build is kept. The forced TeamCity path
+was run once locally: the 156 MB download, unzip into Tools and the two wizard runs passed in 17 s.
+Search > Osprey Search... shows only when `Install.IsDeveloperInstall` (Decision 7).
+
+Left for Brendan (he will return to it): the release leg - a "Publish Osprey Release" TeamCity
+deployment config with the Deploy button that pins and tags an Osprey build, most cheaply by giving
+Matt's `publish_monthly_release.py` a build-type parameter; a download page or GitHub Release can
+point at the same pinned builds later.
 
 ### 2026-10-24 (night session) - the wizard's command line on real data
 
