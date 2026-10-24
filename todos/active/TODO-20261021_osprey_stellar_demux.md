@@ -6,12 +6,14 @@
   (2026-10-21): this work merges back into #4710, not into master. Pushed into #4710's branch 2026-10-24 (936b79994f ->
   a86c4b7ad5, 22 commits, fast-forward).
 - **Created**: 2026-10-21
-- **Status**: In Progress. #4710 updated 2026-10-24 (code, docs, description). Next: per-acquisition ion weights with
-  the instrument's ion response (alpha; Astral counts per ion), see "2026-10-24" below.
+- **Status**: In Progress. #4710 at 74c4a0ee34 (2026-10-24): per-acquisition ions from fill time x alpha, in DemuxTool
+  (`--ions`) and Osprey `--demux auto` (acquisition sidecar). Running: all seven Astral methods
+  (`astral-staggered/methods`), see "2026-10-24 (afternoon)" below.
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711) (M5: Stellar profile demux)
 - **Module**: `osprey`
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (draft, CHANGES_REQUESTED by Brendan 2026-10-15; this
-  branch is pushed into its branch)
+  branch is pushed into its branch). Mike (2026-10-24): everything goes into #4710; it becomes the demux code and is
+  reorganized for ProteoWizard later. The review is not a reason to stop pushing there.
 - **Checkout**: `D:\Dev\pwiz-osprey-demux` (this machine); scripts in `ai/scripts/Osprey/Demux`
 
 ## Objective
@@ -648,7 +650,9 @@ the same files for the port plan's step 1.
   origin/master conflicts in 26 files, nearly all where master's own `--demux auto` through ProteoWizard's demultiplexer
   (#4815, #4818) meets ours (CLI, SearchIdentity, SpectraCache, SpectraWindowIndex, docs, help). Brendan's change request
   (integrate with pwiz demux) is that question; Mike: ours becomes pwiz's in time.
-- **Astral counts per ion (Mike, 2026-10-24):** J. Proteome Res. 2025, 24, 5742 (Orbitrap Astral Zoom paper), Table 1:
+- **Astral counts per ion (Mike, 2026-10-24):** Hsu C, Shulman N, ..., MacCoss MJ, "Evaluation of a Prototype Orbitrap
+  Astral Zoom Mass Spectrometer for Quantitative Proteomics - Beyond Identification Lists", J. Proteome Res. 2025, 24,
+  5742-5754, doi:10.1021/acs.jproteome.5c00593, Table 1:
   I = alpha x N / t (t the fill time in s), alpha from fragment-ratio variance: Astral analyzer 1.53 (Astral Zoom
   prototype 1.31); Orbitrap 9.40-15.44 (Astral 10.62, Exploris 480 10.95, Ascend 9.40, Fusion 15.44); ion trap 0.97-1.09
   (Stellar 0.97). So ions = intensity x fill ms / 1000 / alpha. MS2 fill times (`astral_fill_times.ps1`, every 50th
@@ -659,6 +663,28 @@ the same files for the port plan's step 1.
   defaults (Mike: close to ions/s in another experiment). Rerun running: Osprey.DemuxTool `--counts-per-ion 153` on ME
   reps 1-3 (`astral-staggered/demux-cpi153`, `run_astral_cpi153.ps1`, snapshots `_bin/review-a86c4b7-*-vendor`), then
   the same search as `search-ME` (105,813 at 100) into `search-ME-cpi153`.
+
+**2026-10-24 (afternoon): fill-time ions in Osprey, cpi153 result, all-methods runs.**
+- **cpi153** (`search-ME-cpi153`; `summarize_searches.py`): 106,236 precursors / 94,119 peptides / combined FDP 0.50%
+  vs 105,813 / 93,792 / 0.49% at 100. The right constant scale is worth +0.4%, FDP unchanged.
+- **f7f7d937b6** (alpha table `IonResponse` with the citation; each observation's exposure = own fill / reference fill;
+  weights e / max(mu, floor / e); thresholds on counted ions; `JointDemuxParams.PoissonWeights`; DemuxTool `--ions`,
+  `--ion-response`). Fixes open item (1) above.
+- **74c4a0ee34**: Osprey `--demux auto` counts ions from fill time (`DemuxParams.IonsFromFillTime`, default on,
+  `ions_from_fill_time` in the descriptor). `SpectrumFileReader` records each MS2's fill time and analyzer;
+  `<stem>.acquisition.bin` (`Osprey.IO/AcquisitionSidecar.cs`) beside every `.spectra.bin`, fingerprinted like it, so
+  the cache format is unchanged; an old cache re-reads source metadata once (`SpectrumFileReader.ReadAcquisition`).
+  Developer overrides `OSPREY_DEMUX_MIN_CHANNEL_IONS`, `OSPREY_DEMUX_COUNTS_PER_ION`. The demux log/error literals moved
+  to RESX (inspection flagged 13). Docs 00, 14, 23. 691/691 tests, inspection clean. Pushed to #4710
+  (a86c4b7ad5..74c4a0ee34). Snapshot `_bin/fillions-74c4a0e-osprey-vendor`.
+- **All Astral methods** (Mike): downloaded MB, MD, MF, MG reps 1-3 (12 files, sizes verified). Runner
+  `run_astral_methods.ps1` -> `astral-staggered/methods/<name>` (one search at a time, 64 GB RAM): ME, ME-minions1
+  (`OSPREY_DEMUX_MIN_CHANNEL_IONS=1`, Mike: Hsu et al. saw many peptides at <10 ions), MA, MD, MB, MF, MG, MC; normal
+  `--demux off`, staggered `--demux auto`. Pairs by effective width: MA 2 Th vs MD/ME (4 Th stag), MB 3 Th vs MF
+  (6 Th), MC 4 Th vs MG (8 Th).
+- **Disk:** D was down to 64 GB. Moved to `R:\osprey-runs-archive` (Mike chose: September runs 553 GB, Stellar
+  DemuxTool outputs `stellar-demux\tool` 303 GB, `carafesharp-runs` 688 GB), copy + count/byte verify + remove; index
+  `D:\test\MOVED-TO-NAS.md`. Left on D: diann-compare, diann-entrapment, stellar-cache, _perfgate, _bin.
 
 ## Plan (2026-10-21, original)
 
