@@ -5,9 +5,10 @@
   night session of 2026-10-23; master holds #4909 and #4911)
 - **Base**: `master`
 - **Created**: 2026-10-23
-- **Status**: Designed; Brendan's decisions taken 2026-10-23 (below). The night session of 2026-10-23 cuts
-  the branch and builds PR 1: the steel thread from a FASTA to a predicted library to the document, no
-  input library anywhere
+- **Status**: PR 1 built and gated on the branch by the night session of 2026-10-23 (four commits, last
+  638c25cd65; test, CodeInspection, CheckForMissingResources, tcinspect, `/code-review medium` all
+  done; real-data run clean). Not pushed: the morning opens the PR (`ai/.tmp/handoff-20261023.md` has
+  the commands and the PR body) and decides the mirror zip for TeamCity
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
 - **PR**: (none yet)
@@ -166,7 +167,8 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
 - [x] `OspreySearchDlg` and `OspreySearchControl`: the five pages, validation, the overwrite prompt
 - [x] The hand-off to `ImportPeptideSearchDlg` with Osprey's `.blib` as the document library (Decision 3)
 - [x] `OspreySearchTest` end to end on the Stellar subset; form lookup entries; resources
-- [ ] Gates; `/code-review medium`; PR
+- [x] Gates; `/code-review medium` (9 findings, 8 fixed); tcinspect clean
+- [ ] Push, open the PR (body drafted), mirror zip or test skip for TeamCity (needs Brendan)
 
 ## Corrections to the design found while building (night of 2026-10-23)
 
@@ -234,6 +236,61 @@ with its own charges keeps them. Osprey's `.blib` has no `IrtLibrary` table (che
 
 CodeInspection and CheckForMissingResources pass. `ai/scripts/fix-crlf.ps1` now also converts
 untracked files (its filter skipped `??` rows, so new files stayed LF).
+
+Commits on the branch: 6eb2199654 (the wizard), beb52034c6 (review fixes: the install check and the
+download use the pinned path so a stale registration cannot pass for an install; an existing library
+may not be the document library or a non-.blib/.tsv file; FDR thresholds exclude 0; the
+document-library case comes before the library-list lookup; an N-terminal modification maps to
+Carafe's peptide N-term entry only; `ImportPeptideSearch.DeleteDocumentLibrary` shared with DIA-NN),
+74cd1be6d5 (below). `/code-review medium` returned 9 findings: 8 fixed, the container boilerplate
+copy left as the pattern the three DIA wizards share. `tcinspect.ps1` clean.
+
+**The existing-library and re-run leg** (74cd1be6d5). `OspreySearchTest` now runs the wizard a second
+time on the same document, with the first run's predicted library (`<doc>.osprey\<doc>.predicted.blib`)
+as the existing library and the Overwrite prompt accepted. Two defects it found, both fixed:
+- Osprey refuses a `.blib` whose precursors carry decoy accessions unless `--decoys-in-library` is given
+  (and refuses the flag for a library without a `DecoyPairs` table). The wizard passes the flag exactly
+  when the chosen `.blib` has that table (`OspreyHelpers.LibraryHasDecoyPairs`), which Osprey's own
+  predicted library does; a target-only library still gets Osprey's generated decoys.
+- On a re-run the window's document kept the `Library` object loaded from the deleted `.blib`:
+  `DeleteDocumentLibrary` evicts the manager's cache, but nothing reloads the document's object, and
+  `AddExistingLibrary` returns early because the spec is already in the document.
+  `OspreySearchDlg.ReloadDocumentLibrary` loads the rewritten file through the library manager and swaps
+  it into the document with no settings change, when the search finishes and again at Finish.
+Second-run numbers: Osprey reused the first run's valid stage outputs in the shared work dir and re-ran
+only the second pass (416 ms): 144 of 200 target peptides at 1% experiment FDR, 76 protein groups, 144
+spectra; the document ends with 83 proteins, 144 peptides, 3 replicates and one document library.
+Noted, not changed: `ImportResults` skips replicates already in the document, so a re-run that finds new
+peptides leaves them without chromatograms until results are re-imported (the DIA-NN path behaves the
+same); and a default document's `MaxMissedCleavages` is 0, so the wizard's default digest is fully
+tryptic where Osprey's own default is one missed cleavage - the FASTA page shows and controls it.
+
+### 2026-10-24 (night session) - the wizard's command line on real data
+
+A sub-agent ran the exact command line the wizard builds for a default document (charges 2-3,
+length 8-25, no missed cleavages, Carbamidomethyl fixed, unit resolution, 0.5 m/z) on the three real
+Stellar HeLa sDIA files with `hela-filtered.fasta`, detached, from a snapshot of the Debug build
+(v26.1.1.296): `D:\test\osprey-runs\skyline-wizard-stellar\run.log`, status
+`ai/.tmp/agent-osprey-realdata-status.md`. Exit 0, no warnings, **3 min 42 s end to end including the
+library prediction**. `--device auto` chose the GPU (RTX 4000 Ada) through the CUDA runtime in the
+user's `%LOCALAPPDATA%\Osprey\torch` cache: 97,829 target peptides digested, 385,206 precursors
+predicted in 24 s. Results: 23,559 / 24,010 / 24,372 precursors at 1% run FDR; 27,281 peptides at 1%
+experiment FDR; 4,608 protein groups; 29,884 spectra with 89,652 retention times in the `.blib`
+(verified with sqlite). Against the earlier one-command reference (`one-command-stellar\reference-6.log`,
+Osprey's own defaults and a tuned CarafeSharp library): -10% precursors and spectra, -0.5% protein
+groups, and faster overall (the reference's CPU prediction alone took 174 s). A cold Release rerun
+(`skyline-wizard-stellar-release\run.log`, v26.1.1.296 at 89648e66b5) gave bit-identical counts in
+**2 min 37 s** end to end: PredictLibrary 32.9 s, PerFileScoring 71.8 s, FirstPassFDR 64.1 s,
+PerFileRescoring 15.7 s, SecondPassFDR 5.4 s. The Debug run's 93 s first pass was mostly the build;
+the remaining 15 s over the reference's 49 s is not a regression claim (different library size,
+threads and version).
+
+Two things to carry into PR 2 and the PR description:
+- The wizard passes `--torch-runtimes <Skyline Tools>`, so in Skyline the GPU is used only once
+  Skyline's own CUDA install exists there (Build Library > Use GPU); the user's Osprey cache is not
+  consulted. That is the design (one CUDA download serving both), and the Use GPU control is PR 2.
+- The work folder beside the document is large: 4.34 GB here, of which 3.13 GB is the three
+  `.spectra.bin` caches and 467 MB the predicted library. Worth a note in the wizard or a cleanup option.
 
 ### 2026-10-23 - Decisions taken; ready for the night session
 
