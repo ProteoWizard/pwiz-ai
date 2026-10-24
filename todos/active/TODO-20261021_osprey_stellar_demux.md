@@ -2,13 +2,16 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261021_osprey_stellar_demux`
-- **Base**: `Skyline/work/20260923_osprey_demux` (PR [#4710](https://github.com/ProteoWizard/pwiz/pull/4710), head
-  936b79994f). Mike (2026-10-21): this work merges back into #4710, not into master.
+- **Base**: `Skyline/work/20260923_osprey_demux` (PR [#4710](https://github.com/ProteoWizard/pwiz/pull/4710)). Mike
+  (2026-10-21): this work merges back into #4710, not into master. Pushed into #4710's branch 2026-10-24 (936b79994f ->
+  a86c4b7ad5, 22 commits, fast-forward).
 - **Created**: 2026-10-21
-- **Status**: In Progress. Data downloaded and characterized; acquired baselines searching.
+- **Status**: In Progress. #4710 updated 2026-10-24 (code, docs, description). Next: per-acquisition ion weights with
+  the instrument's ion response (alpha; Astral counts per ion), see "2026-10-24" below.
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711) (M5: Stellar profile demux)
 - **Module**: `osprey`
-- **PR**: none; commits go to #4710's branch when ready
+- **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (draft, CHANGES_REQUESTED by Brendan 2026-10-15; this
+  branch is pushed into its branch)
 - **Checkout**: `D:\Dev\pwiz-osprey-demux` (this machine); scripts in `ai/scripts/Osprey/Demux`
 
 ## Objective
@@ -615,6 +618,47 @@ MA 101,337 / 100,851 / 102,502 per run, 118,341 experiment, FDP 0.43 / 0.41%; MC
 Demux 299-383 s per file on 16 threads, 1.1-1.6x the parse (under load), default counts_per_ion 100. Next: the other
 staggered conditions (MD, MF, MG), counts per ion for the Astral detector, and master's pwiz demultiplexer (#4818) on
 the same files for the port plan's step 1.
+
+**2026-10-24: sigma rule, code review, #4710 updated.**
+- **Sigma rule (pwiz 19ce5cdf42):** a linear ion trap's automatic Centrix sigma is 1.1 point spacings (0.22 Th at
+  200 kTh/s), MS1 too (0.073 Th at 67 kTh/s); other grids keep the measured width. Arms (fine-tuned library, entrapment,
+  q 1%, experiment precursors / combined FDP / calibrated MS2 window): sigma 0.20 (one spacing) 35,077 / 0.34% / 0.35 Th
+  (`2th-profile-cs-sigma020-ft`); 0.22 36,001 / 0.53% / 0.51 Th (`...sigma022-ft`, MS1 0.2); the default with no sigma
+  flags (MS1 0.073, MS2 0.22) exactly the same 36,001 / 0.53% (`...sigmaauto-ft`, snapshot
+  `_bin/stellar-sigma11-osprey-vendor`): MS1 sigma does not matter here. One spacing sits on the drop, hence 1.1.
+  ALGORITHM_VERSION raised to 2 (the auto sigma moves centroids). The calibrator overclaim (88fef2dff3) corrected.
+- **Joint sigma on the truth benchmark** (`synthetic/remux2/sigma-check`, `truth_sigma.sh`; each scored against truth
+  centroided at the same sigma): k=2 0.22 Th 0.985 / 0.988 / 0.940 vs 0.33 Th 0.982 / 0.986 / 0.927; k=4 0.939 / 0.950 /
+  0.719 vs 0.930 / 0.943 / 0.684. The 0.33 arm reproduces the documented numbers.
+- **Code review** (`/code-review max`, 10 finder angles + 6 verifiers + a gap sweep; candidates in
+  `ai/.tmp/sessions/20261021-stellar/review/candidates.md`). Fixed in a86c4b7ad5: staggered joint output now marked
+  centroided (was profile, so `--joint --centroid centrix` centroided MS2 twice); `--joint --centroid centrix` leaves MS1
+  profile for Centrix (was vendor); joint cycles end at pass starts (a pass straddling a block was written twice at
+  >= 4 threads on inputs starting mid-pass; whole runs were safe); PwizDemuxSource serializes reads (Thermo is not
+  thread-safe; only explicit --read-threads > 1 reached it); grid from the densest spectrum, and 32-bit m/z grids
+  detected; Centrix basis keyed on each spectrum's exact spacing; calibrator spacing from the densest sample; non-finite
+  sigma/m/z guarded; joint coefficients under ToleranceIons dropped; min_output_ions out of the weighted descriptor; the
+  solve closures no longer pin each batch's raw read; docs (--ions weights, --min-out scope, --ms1, ZT tables measured at
+  the old 0.2 floor). Left open: (1) **--ions weights are at a reference fill time** (run median, or the pass's), not
+  each spectrum's counted ions; docs now say so. (2) `--centroid centrix` does not refuse non-uniform (Orbitrap/TOF)
+  profiles. Also: the elution engine (DemuxTool `--elution-fwhm` only) duplicates ~75 lines of the per-channel loop;
+  remove or share it (Mike's call). 689/689 tests, inspection clean (11 pre-existing), regression Stellar PASSED.
+- **#4710 updated:** pushed a86c4b7ad5; description rewritten (three acquisition types, Centrix, results tables for
+  Eclipse/Astral/Stellar/ZT, sigma sweep, timing, open items). Not merged with master: a trial `git merge-tree` against
+  origin/master conflicts in 26 files, nearly all where master's own `--demux auto` through ProteoWizard's demultiplexer
+  (#4815, #4818) meets ours (CLI, SearchIdentity, SpectraCache, SpectraWindowIndex, docs, help). Brendan's change request
+  (integrate with pwiz demux) is that question; Mike: ours becomes pwiz's in time.
+- **Astral counts per ion (Mike, 2026-10-24):** J. Proteome Res. 2025, 24, 5742 (Orbitrap Astral Zoom paper), Table 1:
+  I = alpha x N / t (t the fill time in s), alpha from fragment-ratio variance: Astral analyzer 1.53 (Astral Zoom
+  prototype 1.31); Orbitrap 9.40-15.44 (Astral 10.62, Exploris 480 10.95, Ascend 9.40, Fusion 15.44); ion trap 0.97-1.09
+  (Stellar 0.97). So ions = intensity x fill ms / 1000 / alpha. MS2 fill times (`astral_fill_times.ps1`, every 50th
+  scan): ME and MC (10 ms max) p10 4.2-4.5, median 10.0 ms; MA (4 ms max) 4.0 ms. Counts per ion = alpha x 1000 / fill:
+  ME 153 at the median (339 at p10), MA 381. `--demux auto` used 100: ions overstated ~1.5x (3.4x at short fills).
+  Osprey's spectra cache keeps no fill times, so `--demux auto` can only take one constant; per-acquisition ions need the
+  fill time in the cache (or a sidecar) and alpha by analyzer, the same mechanism as fixing (1) above. ZT Scan keeps its
+  defaults (Mike: close to ions/s in another experiment). Rerun running: Osprey.DemuxTool `--counts-per-ion 153` on ME
+  reps 1-3 (`astral-staggered/demux-cpi153`, `run_astral_cpi153.ps1`, snapshots `_bin/review-a86c4b7-*-vendor`), then
+  the same search as `search-ME` (105,813 at 100) into `search-ME-cpi153`.
 
 ## Plan (2026-10-21, original)
 
