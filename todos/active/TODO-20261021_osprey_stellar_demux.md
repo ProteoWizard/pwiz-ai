@@ -600,6 +600,22 @@ centroids (untested). IDs at matched true FDP are not readable from these curves
 the first points are noisy), so compare at q 1%. Pick for this data: sigma 0.21 Th (FWHM 0.49, ~one point spacing);
 whether the optimum tracks the spacing or the few-ion peak width needs other scan rates.
 
+**Astral staggered demux (2026-10-23; Mike).** Panorama `/MacCoss/maccoss/2024-06 Astral Normal vs Staggered`
+(RawFiles; conditions from the names: MA 2 Th norm 4 ms, MB 3 Th norm 7, MC 4 Th norm 10, MD 4 Th stag 8, ME 4 Th
+stag 10, MF 6 Th stag 14, MG 8 Th stag 20; 6 reps each, mouse spleen, 400-900, ~240 GB). Downloaded MA, MC, ME reps
+1-3 to `D:\test\osprey-runs\astral-staggered\raw` (46 GB). Library: `Run-CarafeSharpWorkflow.ps1 -Dataset Astral` with
+CarafeSharp CUDA built from master in a detached worktree `D:\Dev\pwiz-carafe-gpu` (the 10-01 bin-cuda build predates
+`-rt_model`; master's CLI is GNU-style `--rt-model`, default Chronologer, and still takes the old options), GTX 1650,
+mouse `uniprot_mouse_may2025_contam_yeastENO1.fasta` + Arabidopsis natural entrapment, fine-tuned on MA Rep1: 6.17M
+precursors; RT R2 0.9963 -> 0.9986, MS2 PCC 0.966 -> 0.976, SA 0.838 -> 0.864. Stage 2 27 min, 3 24 min, 4/5 36 min.
+Searches with our snapshot `_bin/stellar-nofloor-osprey` (hram, 20 ppm, library decoys + pairing, --model-diagnostics):
+MA 101,337 / 100,851 / 102,502 per run, 118,341 experiment, FDP 0.43 / 0.41%; MC 85,153 / 83,943 / 83,843, 97,098,
+0.39 / 0.38%; ME (`--demux auto`: "2-fold overlap, 252 windows into 253 bins of 2.001 Th") 91,788 / 90,740 / 90,873,
+105,813, 0.49 / 0.48%. Staggered + demux +9% over 4 Th normal; MA (trained on, other fill time) still +12%.
+Demux 299-383 s per file on 16 threads, 1.1-1.6x the parse (under load), default counts_per_ion 100. Next: the other
+staggered conditions (MD, MF, MG), counts per ion for the Astral detector, and master's pwiz demultiplexer (#4818) on
+the same files for the port plan's step 1.
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
