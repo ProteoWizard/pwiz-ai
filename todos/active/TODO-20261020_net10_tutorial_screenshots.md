@@ -9,6 +9,8 @@
 - **Created**: 2026-10-20
 - **PRs**: [#4896](https://github.com/ProteoWizard/pwiz/pull/4896) fixes + 389 screenshots on
   `Skyline/skyline_26_1_1` (merged 2026-10-25 as `dc97cd311c`);
+  [#4915](https://github.com/ProteoWizard/pwiz/pull/4915) its cherry-pick to master (branch
+  `Skyline/work/20261025_cherry_pick_4896_to_master`, worktree `C:\proj\pwiz-work3`);
   [#4897](https://github.com/ProteoWizard/pwiz/pull/4897) ImageComparer Accept (master);
   [#4882](https://github.com/ProteoWizard/pwiz/pull/4882) SkylineTester hidden main window (master)
 - **Objective**: Validate auto-screenshots on master (.NET 10) at 100%, explain every changed screenshot,
@@ -126,6 +128,11 @@ Squash-merged to `Skyline/skyline_26_1_1` as `dc97cd311c` (admin merge; no revie
 29 tutorials plus 24 code/test/doc files, including the PopupPickList redraw fix (`0e9ca3f92f`) and the
 User32Test P/Invoke count. Work branch deleted locally and on GitHub. Next: cherry-pick `dc97cd311c` to
 master, then the .NET 10 review on master, then PR #4602 (high-DPI) at 100% and 150%.
+
+Cherry-picked to master as #4915 (one conflict: `DiannSearchPerfTest` keeps master's attributes, since
+`NoLeakTesting` does not exist there; zh-CHS RESX edits followed the rename to zh-Hans; LF kept). Built
+on .NET 10, CodeInspection passes. Next: full tutorial screenshot retake on master (.NET 10) in
+`C:\proj\pwiz-work3` (Release build for SkylineTester), and explain every change against the 26.1.1 set.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261020_net10_tutorial_screenshots.md` before starting work.
