@@ -202,6 +202,9 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
   28 min for the same two on the CPU (47 min for the old three).
 - Still open from the review of the run: an Open Log button on the run page, and a segmented progress bar
   driven by Osprey's `[TASK]` lines (the bar now restarts per phase and freezes through the fine-tune).
+- **Review pauses**: `OspreySearchTuningTest` scenario 1 has a `PauseTest` on every wizard page and on
+  three states of the Library Model page, for Brendan's on-screen review
+  (`Run-Tests.ps1 -TestName OspreySearchTuningTest -ShowUI`). No-ops offscreen; **remove them before the merge**.
 
 ## Progress Log
 
