@@ -7,7 +7,10 @@
   `git merge origin/master`, never a rebase (version-control guide, the squash-merged-parent case)
 - **Base**: PR #4913's branch, then `master`
 - **Created**: 2026-10-24
-- **Status**: Designed with Brendan 2026-10-24; the night session of 2026-10-24 builds it
+- **Status**: Built and gated by the night session of 2026-10-24 (commits 1576709ba2, a169605c1e; not
+  pushed). `OspreySearchTuningTest` passes in fr/ja/en; `OspreySearchPerfTest` passed its three scenarios
+  on the Stellar runs (44.7 min); `/code-review medium` findings triaged. The morning pushes and opens the
+  PR stacked on #4913 (`ai/.tmp/handoff-20261024.md` has the PR body)
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
 - **PR**: (none yet)
@@ -133,14 +136,61 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 
 ## Tasks
 
-- [ ] Branch; the Library Model page (designer, resx, resources) with the two radios and the combo
-- [ ] `OspreyConfig.ModelPath` / `TrainingInputs`; `BuildCommandLine` emits `--model` and `--training-input`
-- [ ] Register the tuned model in `CarafeModelList` after a successful tuning search
-- [ ] Validation (stems, name, files)
-- [ ] `OspreySearchTuningTest` scenarios 1-3; `OspreySearchPerfTest`
-- [ ] Gates; `/code-review medium`; stacked PR
+- [x] Branch; the Library Model page (designer, resx, resources) with the two radios and the combo
+- [x] `OspreyConfig.ModelPath` / `TrainingInputs`; `BuildCommandLine` emits `--model` and `--training-input`
+- [x] Register the tuned model in `CarafeModelList` after a successful tuning search
+- [x] Validation (stems, name, files)
+- [x] `OspreySearchTuningTest` scenarios 1-3; `OspreySearchPerfTest`
+- [x] Gates (fr/ja/en tests, CodeInspection, CheckForMissingResources); `/code-review medium` (9 findings, 2 fixed)
+- [ ] tcinspect verdict (ran at the end of the night; see the handoff); push; the stacked PR
+
+## Corrections to the design found while building (night of 2026-10-24)
+
+- **The subset cannot tune on the middle run alone.** Probed before writing the test
+  (`D:\test\osprey-runs\tuning-probe\run.log`): `--training-input <_21>` alone exits 1 with "0 precursors
+  at 1.0% run-level FDR" in the one-run first pass (the same reason `SubsetPipelineTest.LibraryTuning`
+  tunes on all three). So `OspreySearchTuningTest` tunes on all three runs in both tuning scenarios:
+  scenario 1 checks all three searched files; scenario 2 searches the outer two and browses all three
+  (the middle run held out of the search, the browsed-searched files listed once at the top). Tuning on
+  all three takes 17 s on the CPU (`run-all.log`), and two trainings gave identical ms2/rt safetensors
+  SHA-256, so the model-equality assertion holds between the two scenarios. The perf test keeps the
+  middle-run tuning, which works at full scale.
+- **Three documents, not one.** Osprey finds a model current when the tuning runs are unchanged, so a
+  second tuning on the same document would skip the training (and the equality would be trivial); and
+  the predicted library of a saved-model run on a document that already tuned might be found current
+  too. Each scenario gets its own document (same folder); the overwrite prompt stays covered by PR 1's test.
+- **The replace prompt is asked at Next, not at the end.** A model name already in the list is confirmed
+  (Yes/No) when leaving the Library Model page, before a run that can take an hour, and the answer is
+  remembered for that name; the registration after the run replaces the entry without asking again.
+- **The registered model is a copy named after the model** (`<work dir>\models\<name>.model.zip`,
+  `OspreyHelpers.GetRegisteredModelPath`), found by `/code-review`: Osprey writes every tuning of a
+  document to `<work dir>\<doc>.model.zip`, so a second tuning under another name would overwrite the
+  file the first listed model pointed to. The copy also lets a document tune further from its own saved
+  model, since Osprey refuses only `--model` equal to its own output path (the page still refuses that
+  path with its own message).
+- **Two searched runs with one file name are refused on the data files page** (also from the review):
+  the stem clash matters to every search, not only a tuning one.
+- The build gate: Build-Skyline.ps1 refused to run while an idle SkylineTester from this checkout was
+  open (started 15:48, no test running); the night session closed it with a normal window close.
 
 ## Progress Log
+
+### 2026-10-24 - Designed
+
+### 2026-10-24/25 (night session) - PR 2 built, gated, reviewed
+
+Branch cut at 813c0a6867 (PR 1's head). Two probes on the subset before any code (`D:\test\osprey-runs\
+tuning-probe`): one tuning run alone fails the first pass; all three tune in 17 s on the CPU with
+bit-identical safetensors across two runs. Commit 1576709ba2: the Library Model page, the command-line
+options, the registration, the validation, `OspreySearchTuningTest` (43 s), `OspreySearchTest` updated for
+the page. Gates: `OspreySearchTest,OspreySearchTuningTest,CodeInspection,CheckForMissingResources` in
+fr/ja/en all pass (163 s). A sub-agent wrote `OspreySearchPerfTest` on the shared Perftests Stellar data:
+tuned on `_21` from the searched files, 32,519 library spectra across 3 runs (untuned 29,884; model MS2
+PCC 0.9678 vs pretrained 0.9423, RT R2 0.9990, fine-tune 580 s on the CPU); `_21` held out, 30,780 across 2
+runs with tensors identical to the first model's; the saved model, 32,546. `/code-review medium`: 9
+findings, 2 fixed (commit a169605c1e: the registered model is a copy named after the model; the stem clash
+is refused on the data files page), 7 dropped as PR 1 code or outside the branch (listed in the handoff).
+The perf test was re-run on the consolidated code at the end of the night (verdict in the handoff).
 
 ### 2026-10-24 - Designed
 
