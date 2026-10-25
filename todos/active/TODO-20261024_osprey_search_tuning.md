@@ -202,9 +202,45 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
   28 min for the same two on the CPU (47 min for the old three).
 - Still open from the review of the run: an Open Log button on the run page, and a segmented progress bar
   driven by Osprey's `[TASK]` lines (the bar now restarts per phase and freezes through the fine-tune).
-- **Review pauses**: `OspreySearchTuningTest` scenario 1 has a `PauseTest` on every wizard page and on
-  three states of the Library Model page, for Brendan's on-screen review
-  (`Run-Tests.ps1 -TestName OspreySearchTuningTest -ShowUI`). No-ops offscreen; **remove them before the merge**.
+- **Fine-tuning starts from AlphaPeptDeep only** (Brendan, after the on-screen review): choosing the
+  Fine-tune radio sets the Model combo to "Default (AlphaPeptDeep)" and disables it, so the page states
+  what the tuning starts from; "Use this model" re-enables the combo and restores the earlier choice. Osprey
+  can tune a saved model further, but chained fine-tunes compound drift and are less tested, so that is not
+  offered until users ask (or more base models arrive). The "model this search writes" refusal went with it.
+- **No "Save as"** (Brendan): the fine-tuned model is a document support file like the document library,
+  copied beside the document as `<doc>.model.zip` (`OspreyHelpers.GetDocumentModelPath`), and nothing joins
+  the model list. A user who wants it for other documents adds it by name through the list's Add..., which
+  shows what the file was trained on. Fine-tuning is thus a straight-through choice: radio, runs, Next. When
+  the document already has a model, Next asks (OK/Cancel) before the run overwrites it, since a list entry
+  may point at the file; Cancel stays on the page. The default-name logic, the replace prompt and the
+  automatic registration went, with their strings. Why: a required name and a growing list for the basic
+  case would stop users at exactly the point they were told fine-tuning helps.
+- **Page titles** (Brendan): the Osprey and DIA-NN wizards now show the current page's name in a title panel
+  above the pages, the Import Peptide Search wizard's title region (which has one panel per page; here one
+  panel on the form, since `WizardPages` hides the tabs, so only the tab control moved down). EncyclopeDIA's
+  wizard already had per-page title panels.
+- **Review pauses moved to the perf test** (Brendan: pauses are not committed in functional tests, and
+  CodeInspection may flag them). `OspreySearchPerfTest` is now the lab's workflow, three Stellar runs
+  searched and tuned on the middle one chosen from the searched files, with a `PauseTest` on each page of
+  that search for Brendan's on-screen trial (`Run-Tests.ps1 -TestName OspreySearchPerfTest -ShowUI
+  -EnvironmentVariables "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey\torch"`); the saved
+  model is then added to the list by name and used for a second search. The held-out scenario stays in
+  the subset test. **Remove the pauses before the merge.** A pause is for looking: a click on a wizard
+  control that opens a dialog fails the run after 10 s (`CommonAlertDlg.ShowWithTimeout`), which is how
+  the first on-screen run ended (the Use GPU box, clicked by hand, offered the CUDA download).
+
+## Follow-ups for the next session (Brendan, after the on-screen review of 2026-10-25)
+
+- Progress bar: segments from Osprey's `[TASK]` lines, sub-progress from the `file N/M:` lines in the PerFile
+  tasks. The NN% lines are consumed by `ProcessRunner.Run` (set PercentComplete, never shown), so the log box
+  shows no percentages and the bar freezes through the fine-tune; no flag is passed to Osprey.
+- An "Open Log" button on the run page, right of "Show timestamps", for `<doc>.osprey\osprey-skyline-stdout.log`.
+- Remove `OspreySearchPerfTest`'s `PauseTest` calls before the merge.
+- The afternoon's changes (no Save as, title panels, combo snap, extension-less list) are built but not
+  committed or gated: see the handoff.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261024_osprey_search_tuning.md` before starting work.
 
 ## Progress Log
 
