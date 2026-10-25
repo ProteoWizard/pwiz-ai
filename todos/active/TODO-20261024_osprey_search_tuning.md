@@ -142,7 +142,8 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 - [x] Validation (stems, name, files)
 - [x] `OspreySearchTuningTest` scenarios 1-3; `OspreySearchPerfTest`
 - [x] Gates (fr/ja/en tests, CodeInspection, CheckForMissingResources); `/code-review medium` (9 findings, 2 fixed)
-- [ ] tcinspect verdict (ran at the end of the night; see the handoff); push; the stacked PR
+- [x] tcinspect clean on a169605c1e
+- [ ] Push; the stacked PR (body drafted in `ai/.tmp/sessions/20261024-osprey-tuning/pr-body.md`)
 
 ## Corrections to the design found while building (night of 2026-10-24)
 
@@ -190,7 +191,8 @@ PCC 0.9678 vs pretrained 0.9423, RT R2 0.9990, fine-tune 580 s on the CPU); `_21
 runs with tensors identical to the first model's; the saved model, 32,546. `/code-review medium`: 9
 findings, 2 fixed (commit a169605c1e: the registered model is a copy named after the model; the stem clash
 is refused on the data files page), 7 dropped as PR 1 code or outside the branch (listed in the handoff).
-The perf test was re-run on the consolidated code at the end of the night (verdict in the handoff).
+The perf test re-run on a169605c1e (the consolidated helpers and the model copy) passed again, 2805 s;
+tcinspect clean on a169605c1e after a first run that raced the builds (handoff).
 
 ### 2026-10-24 - Designed
 
