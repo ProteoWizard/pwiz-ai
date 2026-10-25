@@ -45,11 +45,19 @@ prefer it on the FASTA page). The page is skipped when an existing library is se
    Osprey's `--model` means in each case.
 2. Radio **Use existing model**: mode 3 (or mode 1 with Default). Command: `--model <path>` for a saved
    model; nothing for Default.
-3. Radio **Train a new model**: mode 2. Beneath it:
-   - **Train on**: (o) **selected search files** - a checked list of the data files from page 1;
-     (o) **other files** - a file list with Add/Remove (the `ImportResultsDIAControl` pattern) for runs
-     collected for the tuning, which are searched for the tuning only and are absent from the output.
-   - **Name**: the new model's list name, default `<document> tuned on <first tuning run>`.
+3. Radio **Fine-tune a new model on:** mode 2 (Brendan's design, 2026-10-24). Beneath it one checked
+   list of runs, which starts EMPTY, and two ways to fill it:
+   - **Browse...** (multi-select file dialog) adds runs collected for the tuning: they go to the TOP of
+     the list, checked. A browsed file that is also a searched file is listed once, at the top, checked.
+   - **[ ] Choose from searched files** (a checkbox below the list): checking it adds the search files
+     from page 1 after any browsed ones, unchecked, in search order; unchecking removes them and their
+     checks. Browsed files are untouched either way.
+   - The tuning set is the checked items. The 446-file case: leave the box off, Browse the four, done.
+     The middle-run case: check the box, check the run. A searched run tuned on is parsed once (shared
+     cache); a browsed run not in the search is searched for the tuning only and is absent from the
+     output. No Reset or Remove: nothing a control does discards a choice, and an unwanted browsed file
+     is unchecked.
+   - **Save as**: the new model's list name, default `<document> tuned on <first checked run>`.
    - Command: `--training-input <runs>` (plus `--model <path>` when the combo is a saved model, which
      tunes it further). Osprey writes `<work dir>\<doc>.model.zip` (`LibraryBuildWorkflow.ModelPath`:
      the output stem in the `--output-dir`, which is the wizard's `--work-dir`).
@@ -70,8 +78,8 @@ library as the output, the hidden menu item (Decision 7 of PR 1 stands until rel
 
 1. **`OspreySearchTuningTest`** (TestFunctional, the subset data of PR 1's test, seconds per run), one
    `[TestMethod]`, three wizard runs on one document:
-   - Scenario 1: search all three subset runs, train on the middle one (selected search files).
-   - Scenario 2: search the two outer runs, train on the middle one as an "other file" (held out).
+   - Scenario 1: search all three subset runs; "Choose from searched files" on; check the middle one.
+   - Scenario 2: search the two outer runs; Browse the middle one (held out; it arrives checked).
    - Scenario 3: search all three with the model scenario 1 saved (Use existing).
    Asserts: the command lines (`--training-input`, `--model`, no `-l`); the model from scenarios 1 and 2
    is the same model by the SHA-256 of its tensor entries in `manifest.json` (the manifest also carries
@@ -92,8 +100,10 @@ library as the output, the hidden menu item (Decision 7 of PR 1 stands until rel
 
 Taken (Brendan, 2026-10-24): radio buttons at the outer level, the standard `SettingsListComboDriver`
 combo unchanged (no "Train new model..." pseudo-item), the training section the only new UI; the tuning
-runs chosen as a subset of the search runs or a disjoint added set; the Stellar regression data for the
-perf test, downloaded to the shared Perftests folder; tune on the middle run.
+runs chosen in ONE checked list that starts empty, filled by Browse... (added runs on top, checked) and a
+"Choose from searched files" checkbox (search files below, unchecked), so a 446-file search with four
+tuning files never scrolls the search list; the Stellar regression data for the perf test, downloaded to
+the shared Perftests folder; tune on the middle run.
 
 Assumed by the night session unless Brendan says otherwise: a Library Model page of its own; the combo
 doubles as the tuning start point; `--device auto` for the night's runs; the model name default above;
