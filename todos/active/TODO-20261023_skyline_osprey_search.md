@@ -305,8 +305,20 @@ now set from a number through the current culture. Osprey's output was English i
 because a child process starts in the OS culture: the command line now carries `--culture <Skyline UI
 culture>` (813c0a6867; Osprey has ja and zh-Hans resources). bt210 could not resolve the `pull/4913`
 ref twice ("Invalid id: N/A" while freezing versioned settings) and its history is master-only, so it
-was not re-queued. The first Code Inspection run reported 570 unresolved-symbol errors in files the PR
-does not touch, having run without its dependency's outputs; re-queued.
+was not re-queued. The "Skyline code inspection" GitHub status on the PR went red from the LEGACY config
+`ProteoWizard_WindowsX8664msvcProfessionalSkylineResharperChecks` (TeamCity's bundled inspectcode
+2025.2.3 on .NET Framework 4.8 over Skyline.sln with Release|x64), which posts the SAME status
+context as bt209's maintained `tcinspect.ps1` step and overwrote the success bt209 posted at 14:55 on
+813c0a6867. Evidence it is broken independent of the PR: its last success anywhere was 2026-10-06 on a
+version bump, two days before the .NET 10 port merged (156dab478b, 2026-10-08); it ran on no PR since
+(none for pull/4849 or pull/4909; the smart trigger lists it only in a commented-out line of
+`vcs_trigger_and_paths_config.py`, so it runs by hand only); and a control run on master at e0da8ae319
+(build 4234918) failed with 576 unresolved-symbol errors in `MsDataFileImpl.cs` and `Export.cs`, the
+pattern of a tool that cannot load an SDK-style .NET 10 solution. The PR's runs: 4234772 (570 errors),
+4234911 and 4235020 (inspectcode exit code 4). Recommendation: pause the legacy config (one click, or
+`paused="true"` on its versioned-settings XML) so it cannot overwrite bt209's status, and re-run bt209
+on the PR to re-post success; bt209 4234909 on the head: "No build warnings and no inspections at
+WARNING or above".
 
 Left for Brendan (he will return to it): the release leg - a "Publish Osprey Release" TeamCity
 deployment config with the Deploy button that pins and tags an Osprey build, most cheaply by giving
