@@ -13,7 +13,7 @@
   PR stacked on #4913 (`ai/.tmp/handoff-20261024.md` has the PR body)
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (none yet)
+- **PR**: #4914 (opened 2026-10-25 against PR #4913's branch; retarget to master when #4913 merges)
 - **Checkout**: `C:\proj\pwiz`
 - **Continues**: `TODO-20261023_skyline_osprey_search.md` (PR 1: the FASTA path with the pretrained models,
   the existing-library alternative, Osprey from TeamCity, the menu item hidden outside developer builds)
@@ -143,7 +143,8 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 - [x] `OspreySearchTuningTest` scenarios 1-3; `OspreySearchPerfTest`
 - [x] Gates (fr/ja/en tests, CodeInspection, CheckForMissingResources); `/code-review medium` (9 findings, 2 fixed)
 - [x] tcinspect clean on a169605c1e
-- [ ] Push; the stacked PR (body drafted in `ai/.tmp/sessions/20261024-osprey-tuning/pr-body.md`)
+- [x] Pushed; PR #4914 opened stacked on #4913 (2026-10-25 morning, at Brendan's request)
+- [ ] Brendan reviews the UI; TeamCity green on #4914; retarget to master after #4913 merges
 
 ## Corrections to the design found while building (night of 2026-10-24)
 
