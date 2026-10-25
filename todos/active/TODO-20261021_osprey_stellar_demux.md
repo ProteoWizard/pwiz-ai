@@ -710,6 +710,15 @@ the same files for the port plan's step 1.
   centroids stay ZT's default. Why: splitting returns the counting noise, Centrix's Gaussian penalty fits counts
   poorly, and ZT's fit interpolates nothing (Stellar's split removed interpolation error). 693/693 tests, inspection
   clean. Standardization goes below the centroider: shared split, grid abstraction, varying sigma.
+- **Demux test tiers** (Mike, 2026-10-24: tier 1 first). Tier 1 done, 4b972cbaad: `DemuxFixtureTest`, one real-data
+  slice per path with a per-output-spectrum golden (scan, window, peaks exact; summed intensity and mean m/z to 1e-9):
+  Astral ME (344 MS2, 8 windows, via `EnsureSpectraCache` `--demux auto`, 3.4 MB), Stellar SuperOverlap profile (200
+  MS2, k=4, joint + Centrix, 4.1 MB), ZT Scan A1 profile (6 sweeps x 35 bins + MS1, joint, `centered:7`, 4.8 MB) plus
+  its kernel. Cut with the new DemuxTool `--filter` (msconvert syntax; Skyline's msconvert threw on the Astral .raw);
+  commands in `Osprey.Test/Data/Demux/README.md`; slices made in `D:	est\osprey-runsixtures`. Shared
+  `SpectraDemuxSource`. 696/696, inspection clean. A 1-ion threshold fails the Astral golden (463 -> 461 peaks).
+  Next tiers: truth runner (Stellar k=2-4 exists; Astral MA k=2/4 new), search gate runner (`Run-DemuxGate.ps1`;
+  TeamCity and data hosting are Brendan's / Mike's calls).
 - **Profile paths into Osprey** (Mike, 2026-10-24): Osprey writes `.demux.spectra.bin` for every path, plus optional
   mzML/mzMLb of the same spectra; a profile-path demux cache is rebuilt from the source or the mzMLb, not .spectra.bin.
 
