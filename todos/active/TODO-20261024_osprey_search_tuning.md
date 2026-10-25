@@ -193,8 +193,11 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 - **The perf test does one fine-tune**: the outer runs searched with `_21` browsed in and held out (the
   single-run tuning the subset cannot do), then the three runs with the saved model. Tuning on `_21` from
   the searched files was dropped (the same tuning through the other list, which the functional test
-  covers; it doubled the run to 47 min). `SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=<folder holding torch\>`
-  points the wizard at a CUDA runtime and checks Use GPU; `Run-Tests.ps1 -EnvironmentVariables` passes it.
+  covers; it doubled the run to 47 min). `SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=<runtimes folder>` (the
+  folder with `libtorch-cuda-12.8-win-x64.2.10.0` in it; Osprey's own is `%LOCALAPPDATA%\Osprey\torch`)
+  points the wizard at that CUDA runtime and checks Use GPU; `Run-Tests.ps1 -EnvironmentVariables` passes it.
+  The first try named `%LOCALAPPDATA%\Osprey` and failed the test's own precondition: the installer keeps
+  the runtime directly under the runtimes folder, with no `torch` segment of its own.
 - Still open from the review of the run: an Open Log button on the run page, and a segmented progress bar
   driven by Osprey's `[TASK]` lines (the bar now restarts per phase and freezes through the fine-tune).
 

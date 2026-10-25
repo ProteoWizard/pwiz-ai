@@ -234,7 +234,7 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string[]]$EnvironmentVariables = @()  # NAME=VALUE pairs set for TestRunner, for tests that read a switch
-                                           # from the environment, e.g. "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey"
+                                           # from the environment, e.g. "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey\torch"
 )
 
 # Script location: ai/scripts/Skyline/
