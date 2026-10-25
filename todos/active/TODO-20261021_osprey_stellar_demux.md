@@ -2,14 +2,15 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261021_osprey_stellar_demux`
-- **Base**: `Skyline/work/20260923_osprey_demux` (PR [#4710](https://github.com/ProteoWizard/pwiz/pull/4710)). Mike
+- **Base**: `Skyline/work/20260923_osprey_demux` (PR [#4710](https://github.com/ProteoWizard/pwiz/pull/4710), retargeted
+  from the port branch to master 2026-10-25, after #4619 merged on Oct 8). Mike
   (2026-10-21): this work merges back into #4710, not into master. Pushed into #4710's branch 2026-10-24 (936b79994f ->
   a86c4b7ad5, 22 commits, fast-forward).
 - **Created**: 2026-10-21
-- **Status**: In Progress. #4710 at 033c8c2e5a (2026-10-24): fill-time ions in `--demux auto`; Centrix on any grid and
-  the shared joint split (ZT Scan Centrix: no gain, joint centroids stay). Astral all-methods done: staggering beats
-  normal at the same quad width (+8.5-12%), see "2026-10-24 (evening)". Next: more isolation widths (Mike), the 1-ion
-  channel threshold as default after a second dataset, profile paths into Osprey (`.demux.spectra.bin` + mzML/mzMLb).
+- **Status**: In Progress. #4710 at d7d932a1d9 (2026-10-25): master merged in and the PR retargeted to master;
+  `--demux auto` runs Osprey.Demux, ProteoWizard's demultiplexer (#4818) kept as `OSPREY_DEMUX_ENGINE=pwiz` for
+  comparison. Next: more isolation widths (Mike), the 1-ion channel threshold as default after a second dataset,
+  profile paths into Osprey (`.demux.spectra.bin` + mzML/mzMLb), test tiers 2-3.
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711) (M5: Stellar profile demux)
 - **Module**: `osprey`
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (draft, CHANGES_REQUESTED by Brendan 2026-10-15; this
@@ -721,6 +722,27 @@ the same files for the port plan's step 1.
   TeamCity and data hosting are Brendan's / Mike's calls).
 - **Profile paths into Osprey** (Mike, 2026-10-24): Osprey writes `.demux.spectra.bin` for every path, plus optional
   mzML/mzMLb of the same spectra; a profile-path demux cache is rebuilt from the source or the mzMLb, not .spectra.bin.
+
+**2026-10-25: master merged into #4710.**
+
+- TeamCity's Skyline Perf/Tutorial run on 4b972cbaad failed TestAlphaPeptDeepBuildLibrary (library load raced by the
+  file-lock check, fixed on master by #4890) and TestDiaTtofDiaUmpireTutorial (14,094 vs 14,107: crux's printf
+  rounding on Server 2019 agents; master moved the test to MSFragger, #4834). #4710 was based on the port branch as of
+  Oct 8, which has neither. Mike chose to merge master into #4710 (the port merged into master Oct 8) and retarget.
+- d7d932a1d9 merges master (116 commits) into 4b972cbaad. Master had its own `--demux auto` from #4818 (Brendan,
+  Oct 12: ProteoWizard's SpectrumListDemux applied as the vendor file is read, makima + Poisson refit). Mike: #4710's
+  demux is the default, but keep pwiz's to compare. Resolution: `DemuxCacheBuilder` stays the pipeline's demux;
+  master's `DemuxCache` became `PwizDemuxCache`, selected by `OSPREY_DEMUX_ENGINE=pwiz` (now read per call, so a
+  test can set it); `ExpectedDescriptor` makes opening, checking and the validity key follow the engine, so
+  switching engines rebuilds the cache. pwiz engine refuses `--centroid centrix`. Kept from master: demux solve threads
+  shared across SpectraCache lanes, `GetLargestCachePath` sizing, the export's demux identity. Master's tests kept as
+  `PwizDemuxTest` (demux off now refuses the run, as on #4710). docs/24-profile-centroiding.md renumbered to 25
+  (master added 24-library-contract.md). Nothing outside `pwiz_tools/Osprey` differs from master.
+- Gates: 684/684 tests (master removed 21 test methods since Oct 8; #4710 adds 41), inspection clean, Stellar
+  regression PASS (`ai/.tmp/sessions/20261021-stellar/regression-stellar-merge.log`). Trap found: mid-merge,
+  Build-Osprey's fix-crlf.ps1 converted the `-text` Chronologer preprocessing.json to CRLF (SHA mismatch, six
+  TestSubsetLibraryBuild* failures); restored from the index and committed before building again. fix-crlf skips
+  `binary` and `eol=lf` but not `-text`: flagged as a separate task.
 
 ## Plan (2026-10-21, original)
 
