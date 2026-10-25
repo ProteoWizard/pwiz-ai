@@ -63,6 +63,10 @@ PowerShell wrapper for TestRunner.exe with natural language-style test execution
 
 # Run all tests in Test.dll
 .\ai\Run-Tests.ps1 -TestName Test.dll
+
+# Set a switch a test reads from its environment (NAME=VALUE pairs; TestRunner inherits them).
+# Here the Osprey perf test predicts on the GPU with the CUDA runtime Osprey installed:
+.\ai\Run-Tests.ps1 -TestName OspreySearchPerfTest -EnvironmentVariables "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey"
 ```
 
 **Intelligent error handling**: If you use a class name by mistake (e.g., "CodeInspectionTest"), the script searches for [TestMethod] annotations and suggests the correct method name.

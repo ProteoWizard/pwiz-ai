@@ -230,7 +230,11 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Auto", "Net472", "Net8")]
-    [string]$Framework = "Auto"  # Which build output to test. Auto detects it from Skyline.csproj.
+    [string]$Framework = "Auto",  # Which build output to test. Auto detects it from Skyline.csproj.
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$EnvironmentVariables = @()  # NAME=VALUE pairs set for TestRunner, for tests that read a switch
+                                           # from the environment, e.g. "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey"
 )
 
 # Script location: ai/scripts/Skyline/
@@ -832,6 +836,16 @@ try {
 
     Push-Location $outputDir
     try {
+        # Switches a test reads from its environment; TestRunner inherits this process's variables
+        foreach ($pair in $EnvironmentVariables) {
+            $name, $value = $pair -split '=', 2
+            if ([string]::IsNullOrWhiteSpace($name) -or $null -eq $value) {
+                throw "-EnvironmentVariables takes NAME=VALUE pairs, not '$pair'"
+            }
+            Set-Item -Path "Env:$name" -Value $value
+            Write-Host "  Environment: $name=$value" -ForegroundColor Gray
+        }
+
         # Build full command line for display
         # perftests=on ensures TestPerf tests are included (excluded by default)
         # runsmallmoleculeversions=on ensures small molecule test variants run (skipped by default)

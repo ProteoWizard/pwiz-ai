@@ -179,6 +179,25 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 - The build gate: Build-Skyline.ps1 refused to run while an idle SkylineTester from this checkout was
   open (started 15:48, no test running); the night session closed it with a normal window close.
 
+## Morning of 2026-10-25 (Brendan reviewing the perf run)
+
+- **Use GPU on the Library Model page** (Brendan): a checkbox beside the Model combo, since it applies to
+  both choices. It is Build Library's Use GPU, so the logic moved out of `BuildLibraryDlg` into
+  `SettingsUI\UseGpuDriver` and both forms drive it; the one difference is that Osprey predicts in its own
+  process, so the "runtime already loaded, restart Skyline" rule applies only in Build Library. The wizard
+  now sends `--device gpu` or `--device cpu` (Osprey's `gpu` is a requirement, so the box guards the CUDA
+  install first, as Build Library does) and `--torch-runtimes <TorchRuntimes.RuntimesDirectory>`; the
+  choice is remembered in `Settings.Default.AlphaPeptDeepUseGpu`, shared with Build Library. PR 1's
+  `--device auto` is gone. Note for the real Skyline on this machine: the CUDA runtime Osprey installed is in
+  `%LOCALAPPDATA%\Osprey\torch`, which Skyline's Tools folder does not see; Use GPU here offers the download.
+- **The perf test does one fine-tune**: the outer runs searched with `_21` browsed in and held out (the
+  single-run tuning the subset cannot do), then the three runs with the saved model. Tuning on `_21` from
+  the searched files was dropped (the same tuning through the other list, which the functional test
+  covers; it doubled the run to 47 min). `SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=<folder holding torch\>`
+  points the wizard at a CUDA runtime and checks Use GPU; `Run-Tests.ps1 -EnvironmentVariables` passes it.
+- Still open from the review of the run: an Open Log button on the run page, and a segmented progress bar
+  driven by Osprey's `[TASK]` lines (the bar now restarts per phase and freezes through the fine-tune).
+
 ## Progress Log
 
 ### 2026-10-24 - Designed
