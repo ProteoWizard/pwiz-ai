@@ -6,9 +6,10 @@
   (2026-10-21): this work merges back into #4710, not into master. Pushed into #4710's branch 2026-10-24 (936b79994f ->
   a86c4b7ad5, 22 commits, fast-forward).
 - **Created**: 2026-10-21
-- **Status**: In Progress. #4710 at 74c4a0ee34 (2026-10-24): per-acquisition ions from fill time x alpha, in DemuxTool
-  (`--ions`) and Osprey `--demux auto` (acquisition sidecar). Running: all seven Astral methods
-  (`astral-staggered/methods`), see "2026-10-24 (afternoon)" below.
+- **Status**: In Progress. #4710 at 033c8c2e5a (2026-10-24): fill-time ions in `--demux auto`; Centrix on any grid and
+  the shared joint split (ZT Scan Centrix: no gain, joint centroids stay). Astral all-methods done: staggering beats
+  normal at the same quad width (+8.5-12%), see "2026-10-24 (evening)". Next: more isolation widths (Mike), the 1-ion
+  channel threshold as default after a second dataset, profile paths into Osprey (`.demux.spectra.bin` + mzML/mzMLb).
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711) (M5: Stellar profile demux)
 - **Module**: `osprey`
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (draft, CHANGES_REQUESTED by Brendan 2026-10-15; this
@@ -685,6 +686,32 @@ the same files for the port plan's step 1.
 - **Disk:** D was down to 64 GB. Moved to `R:\osprey-runs-archive` (Mike chose: September runs 553 GB, Stellar
   DemuxTool outputs `stellar-demux\tool` 303 GB, `carafesharp-runs` 688 GB), copy + count/byte verify + remove; index
   `D:\test\MOVED-TO-NAS.md`. Left on D: diann-compare, diann-entrapment, stellar-cache, _perfgate, _bin.
+
+**2026-10-24 (evening): Astral all methods; ZT Scan Centrix.**
+- **Astral** (`astral-staggered/methods/<m>`, snapshot `_bin/fillions-74c4a0e-osprey-vendor`, fine-tuned mouse library,
+  reps 1-3, `summarize_searches.py`; experiment precursors / peptides / combined FDP):
+  MA 2 Th normal 4 ms 118,341 / 105,396 / 0.43%; MB 3 Th normal 7 ms 110,833 / 98,223 / 0.41%; MC 4 Th normal 10 ms
+  97,098 / 86,138 / 0.39% (identical to yesterday's build); MD 4 Th stag 8 ms 108,541 / 96,122 / 0.51%; ME 4 Th stag
+  10 ms 105,352 / 93,287 / 0.43%; ME with `OSPREY_DEMUX_MIN_CHANNEL_IONS=1` 107,989 / 95,597 / 0.47% (unsolved ions 2.4%
+  -> 0.5%, 49M vs 28M channels solved, 65 vs 62 min); MF 6 Th stag 14 ms 90,679 / 80,416 / 0.52%; MG 8 Th stag 20 ms
+  82,160 / 73,065 / 0.47%. Fill-time ions vs constants on ME: 105,352 vs 105,813 (100) and 106,236 (153), FDP 0.43 vs
+  0.49-0.50%.
+  **Mike's reading (agreed):** at the same quad width staggering wins: ME +8.5%, MD +11.8%, ME 1-ion +11.2% over MC
+  (same 4 Th, same fill and cycle). So when a longer fill forces a wider window, stagger it. At half the quad width
+  (MA vs MD/ME, MB vs MF, MC vs MG) normal wins by 8-18%, a different trade (half the fill; MA also trained the
+  library). Needed: data at more isolation widths (normal 6 and 8 Th against MF, MG).
+- **ZT Scan Centrix (033c8c2e5a)**: `CentrixCentroider` varying sigma and `MinNoiseSigma`; `GridCentroider` (Centrix on
+  any `IProfileGrid`'s sample index); `JointApportioner` (split by A[r,j] (B*beta_j)[k], Stellar's split moved onto it,
+  identical shares); `--joint-centrix` (split + Centrix) and `--joint-centrix-fit` (Centrix on each position's fitted
+  profile). Slice, one machine (`ztscan-centrix`, `run_zt_centrix_arms.ps1`, `..._fit*.ps1`; DIA-NN pinned):
+  joint 3,582 / 3,759 / 3,755, peptides 2,722 / 4,764; split + Centrix floor 1 count 3,459 / 3,234 / 3,480, CV +0.007;
+  floor 33 counts 3,466 / 3,467 / 3,539, +0.015; floor 100 2,934 / 2,832 / 2,903, +0.010; fitted + Centrix 3,587 /
+  3,792 / 3,670, 2,738 / 4,728, CV +0.010; the same merged within 2 sigma 3,701 / 3,674 / 3,618, +0.011. Joint
+  centroids stay ZT's default. Why: splitting returns the counting noise, Centrix's Gaussian penalty fits counts
+  poorly, and ZT's fit interpolates nothing (Stellar's split removed interpolation error). 693/693 tests, inspection
+  clean. Standardization goes below the centroider: shared split, grid abstraction, varying sigma.
+- **Profile paths into Osprey** (Mike, 2026-10-24): Osprey writes `.demux.spectra.bin` for every path, plus optional
+  mzML/mzMLb of the same spectra; a profile-path demux cache is rebuilt from the source or the mzMLb, not .spectra.bin.
 
 ## Plan (2026-10-21, original)
 
