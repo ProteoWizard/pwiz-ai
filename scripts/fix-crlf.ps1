@@ -30,6 +30,14 @@ function Test-BinaryFile {
     return $true
   }
 
+  # A file .gitattributes marks -text (text: unset) is kept byte-exact: git never converts its
+  # line endings, and a file pinned by checksum (e.g. a CarafeSharp model's preprocessing JSON)
+  # fails its hash check once converted.
+  $text = git check-attr text -- $filePath 2>$null
+  if ($text -match 'text:\s+unset') {
+    return $true
+  }
+
   # Check common binary file extensions
   $binaryExtensions = @('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.zip',
                         '.7z', '.gz', '.tar', '.skyd', '.mzml', '.mzxml', '.raw',
