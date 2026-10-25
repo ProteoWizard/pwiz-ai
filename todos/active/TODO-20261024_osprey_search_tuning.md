@@ -235,9 +235,9 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
   tasks. The NN% lines are consumed by `ProcessRunner.Run` (set PercentComplete, never shown), so the log box
   shows no percentages and the bar freezes through the fine-tune; no flag is passed to Osprey.
 - An "Open Log" button on the run page, right of "Show timestamps", for `<doc>.osprey\osprey-skyline-stdout.log`.
-- Remove `OspreySearchPerfTest`'s `PauseTest` calls before the merge.
-- The afternoon's changes (no Save as, title panels, combo snap, extension-less list) are built but not
-  committed or gated: see the handoff.
+- The afternoon's changes (no Save as, title panels, combo snap, extension-less list, the perf test as the
+  lab's workflow) are committed as c4032bf58b and pushed; the gate passed. The review pauses were removed
+  before the commit (CodeInspection forbids `PauseTest` in checked-in tests, including TestPerf).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261024_osprey_search_tuning.md` before starting work.
