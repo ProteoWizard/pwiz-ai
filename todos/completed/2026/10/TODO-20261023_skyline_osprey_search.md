@@ -5,14 +5,10 @@
   night session of 2026-10-23; master holds #4909 and #4911)
 - **Base**: `master`
 - **Created**: 2026-10-23
-- **Status**: PR 1 built and gated on the branch by the night session of 2026-10-23 (four commits, last
-  638c25cd65; test, CodeInspection, CheckForMissingResources, tcinspect, `/code-review medium` all
-  done; real-data run clean). Not pushed: the morning opens the PR (`ai/.tmp/handoff-20261023.md` has
-  the commands and the PR body) and decides the mirror zip for TeamCity
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: #4913 (opened 2026-10-24; bt209, bt210, TestConnected and Code Inspection queued on it, Perf and
-  Tutorials deferred)
+- **PR**: [#4913](https://github.com/ProteoWizard/pwiz/pull/4913) (merged 2026-10-25)
 - **Checkout**: `C:\proj\pwiz`
 - **Continues**: `TODO-20261019_osprey_one_command.md` (PR 4d, #4909, defined the `--torch-runtimes`
   hand-off this integration uses; its phase-1 file holds the Osprey-CarafeSharp design)
@@ -177,7 +173,8 @@ modifications in CarafeSharp's terms); `DiannProgressMonitor`.
 - [x] `OspreySearchTest` end to end on the Stellar subset; form lookup entries; resources
 - [x] Gates; `/code-review medium` (9 findings, 8 fixed); tcinspect clean
 - [x] Osprey resolved from TeamCity for tests; the menu item hidden outside developer builds
-- [ ] Push, open the PR (body drafted); the release leg (Deploy button) when Brendan returns to it
+- [x] Push, open the PR (body drafted)
+- [ ] The release leg (a TeamCity Deploy button that pins and tags an Osprey build) when Brendan returns to it - deferred, not part of this PR
 
 ## Corrections to the design found while building (night of 2026-10-23)
 
@@ -361,3 +358,15 @@ separate wizard for now with the menu model to revisit. The night session starts
 master, verify Osprey's progress lines through `ProcessRunner` first, then the tasks in order. Osprey.exe
 for the test loop: `pwiz_tools\Osprey\Osprey\bin\x64\Debug\net10.0\Osprey.exe` (master has #4909 and the
 icon PR #4911 may land first; either is fine).
+
+### 2026-10-25 - Merged
+
+PR #4913 merged as commit d476f8a120 (squash, administrator override of the required "Skyline code
+inspection" status). The status was an error only because the legacy standalone TeamCity configuration
+"Skyline Code Inspection" (`ProteoWizard_WindowsX8664msvcProfessionalSkylineResharperChecks`), still active
+and failing on master since 2026-10-14, posts under the same GitHub context as bt209's tcinspect step and
+ran after it; bt209's own inspection of the head commit passed twice. Matt was emailed to retire that
+configuration. Shipped: the whole PR 1 scope above. Deferred: the Osprey release leg (Deploy button) and
+the PR 3 items (the Skyline-bound package, the release site, the mirror zip). The review finding on a stale
+Osprey registration when the pinned package is installed (`SkylineFiles.EnsureOspreyInstalled`) is open for
+PR 3. PR 2 (#4914, the Library Model page) was retargeted from this branch to master.
