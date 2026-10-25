@@ -7,8 +7,8 @@
 - **Base**: `master` (merge master in after #4882 squash-merges; `CommandShell.cs` resolves trivially)
 - **Module**: `skyline`
 - **Created**: 2026-10-20
-- **PRs**: [#4896](https://github.com/ProteoWizard/pwiz/pull/4896) fixes + 218 accepted screenshots on
-  `Skyline/skyline_26_1_1` (branch `Skyline/work/20261021_screenshot_fixes_26_1_1`, `C:\proj\pwiz-work2`);
+- **PRs**: [#4896](https://github.com/ProteoWizard/pwiz/pull/4896) fixes + 389 screenshots on
+  `Skyline/skyline_26_1_1` (merged 2026-10-25 as `dc97cd311c`);
   [#4897](https://github.com/ProteoWizard/pwiz/pull/4897) ImageComparer Accept (master);
   [#4882](https://github.com/ProteoWizard/pwiz/pull/4882) SkylineTester hidden main window (master)
 - **Objective**: Validate auto-screenshots on master (.NET 10) at 100%, explain every changed screenshot,
@@ -119,6 +119,13 @@ Worth telling Brian about the two ZedGraph regressions so they are not undone.
   LF files, re-apply rather than pick; the local `Skyline/work/20261021_screenshot_fixes_master` in
   `C:\proj\pwiz-work3` predates this round and should be rebuilt from the squash commit), then a
   .NET 10 overnight retake on master.
+
+### 2026-10-25 - #4896 merged
+
+Squash-merged to `Skyline/skyline_26_1_1` as `dc97cd311c` (admin merge; no reviewer). 389 screenshots in
+29 tutorials plus 24 code/test/doc files, including the PopupPickList redraw fix (`0e9ca3f92f`) and the
+User32Test P/Invoke count. Work branch deleted locally and on GitHub. Next: cherry-pick `dc97cd311c` to
+master, then the .NET 10 review on master, then PR #4602 (high-DPI) at 100% and 150%.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261020_net10_tutorial_screenshots.md` before starting work.
