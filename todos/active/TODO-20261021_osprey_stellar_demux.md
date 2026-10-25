@@ -715,7 +715,7 @@ the same files for the port plan's step 1.
   Astral ME (344 MS2, 8 windows, via `EnsureSpectraCache` `--demux auto`, 3.4 MB), Stellar SuperOverlap profile (200
   MS2, k=4, joint + Centrix, 4.1 MB), ZT Scan A1 profile (6 sweeps x 35 bins + MS1, joint, `centered:7`, 4.8 MB) plus
   its kernel. Cut with the new DemuxTool `--filter` (msconvert syntax; Skyline's msconvert threw on the Astral .raw);
-  commands in `Osprey.Test/Data/Demux/README.md`; slices made in `D:	est\osprey-runsixtures`. Shared
+  commands in `Osprey.Test/Data/Demux/README.md`; slices made in `D:\test\osprey-runs\fixtures`. Shared
   `SpectraDemuxSource`. 696/696, inspection clean. A 1-ion threshold fails the Astral golden (463 -> 461 peaks).
   Next tiers: truth runner (Stellar k=2-4 exists; Astral MA k=2/4 new), search gate runner (`Run-DemuxGate.ps1`;
   TeamCity and data hosting are Brendan's / Mike's calls).
