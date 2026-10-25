@@ -197,7 +197,9 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
   folder with `libtorch-cuda-12.8-win-x64.2.10.0` in it; Osprey's own is `%LOCALAPPDATA%\Osprey\torch`)
   points the wizard at that CUDA runtime and checks Use GPU; `Run-Tests.ps1 -EnvironmentVariables` passes it.
   The first try named `%LOCALAPPDATA%\Osprey` and failed the test's own precondition: the installer keeps
-  the runtime directly under the runtimes folder, with no `torch` segment of its own.
+  the runtime directly under the runtimes folder, with no `torch` segment of its own. With the right
+  folder the test passed on the GPU (NVIDIA RTX 4000 Ada) in 818 s for its two scenarios, against about
+  28 min for the same two on the CPU (47 min for the old three).
 - Still open from the review of the run: an Open Log button on the run page, and a segmented progress bar
   driven by Osprey's `[TASK]` lines (the bar now restarts per phase and freezes through the fine-tune).
 
