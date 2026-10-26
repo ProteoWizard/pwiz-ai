@@ -23,22 +23,37 @@ Dump: `ai/.tmp/20261026-SkylineNightly.dmp`; dotnet-dump output in
 
 ## Tasks
 
-- [ ] Publish SkylineNightly self-contained (`SkylineTester.csproj` `_StageDistroZipPrereqs`, `SelfContained=true`)
-- [ ] At startup, detect an interrupted previous run (latest log lacks `Done.`) and record a cause from the event log (1074, WindowsUpdateClient 19/20, MsiInstaller 11707/1033, 6008/Kernel-Power 41, .NET Runtime 1026 / Application Error 1000)
-- [ ] If feasible, post the interrupted log so skyline.ms shows a short run with a reason
-- [ ] `AppDomain.UnhandledException` handler: full exception to the nightly log, note missing runtime directory
-- [ ] Log `SystemEvents.SessionEnding`
-- [ ] Optional: `LogFileMonitor` watches TestRunner's shared-framework folder and logs its disappearance
+- [x] Publish SkylineNightly self-contained (per-item `SelfContained` metadata; shim stays framework-dependent)
+- [x] At startup, detect an interrupted previous run (latest `SkylineNightly-*.log` lacks `Done.`) and diagnose from System/Application events (1074, 6008, Kernel-Power 41, WindowsUpdateClient 19, .NET Runtime 1026, Application Error 1000); logged to both logs and sent as a TestResults alert
+- [x] ~~Post the interrupted log to skyline.ms~~ - dropped: partial runs would pollute the statistics being retrained, and a truncated log reads as a hang. The existing TestResults alert email carries the cause instead
+- [x] `AppDomain.UnhandledException` handler logs the exception and the installed runtimes
+- [x] ~~Log `SystemEvents.SessionEnding`~~ - dropped: no message loop in `run` mode, so delivery is unreliable; event 1074 gives the restart time after the fact
+- [x] In-run `MachineStateMonitor`: logs .NET runtime changes and a pending restart (replaces the TestRunner-folder idea; covers every shared-framework process)
+- [x] `/code-review medium` - 10 findings; 9 fixed in `a4ed0c124f` (UTC times, update cutoff at run end, command logs excluded, FileShare.ReadWrite read, log lock, background alert, guarded diagnostics, RID restore before self-contained publish, non-vacuous runtimes assert); 1 dropped (open settings window counts as "still running": rare, and the window was already killed)
+- [ ] Push and open PR (awaiting developer go-ahead)
 
 ## Regression Test
 
-- **Test name**: (pending)
-- **Test project**: (pending - SkylineNightly has no test project; event-log classification logic should be factored for unit testing)
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
+- **Test name**: TestRunInterruption (`Test/RunInterruptionTest.cs`)
+- **Test project**: Test - `RunInterruption.cs` and `MachineState.cs` linked in (SkylineNightly is a WinExe with no test project)
+- **Fails on master**: n/a - new code. Teeth verified by mutation instead: removing the computer-name strip from the 1074 process path failed the test (`Expected:<windows_update_restart>. Actual:<restart>`)
+- **Passes on fix**: yes, `ee86d100f6`
+- **Not covered**: the Nightly.cs wiring (startup check, alert send) - exercised only by a real nightly run
 
 ## Progress Log
 
 ### 2026-10-26 - Session Start
 
 Root cause established from the dump with dotnet-dump (see issue). Starting implementation.
+
+Implemented and committed `ee86d100f6` (local). Verified:
+- TestRunInterruption passes; mutation check fails it as expected
+- The XPath event query returns real WindowsUpdateClient records on BRENDANX (`ai/.tmp/sessions/20261026-dump/xpath-check.ps1`)
+- `-DistroZips SkylineNightly.zip` builds: SkylineNightly.exe 124 MB self-contained, zip 49 MB (download cost per nightly run)
+- CodeInspection passes
+
+Environment fix: `pwiz_tools/Skyline/SkylineTester/Properties/AssemblyInfo.cs` was a gitignored
+.NET Framework leftover (9/24) that broke the SDK build with duplicate attributes; moved to
+`ai/.tmp/sessions/20261026-dump/SkylineTester-AssemblyInfo.cs.stale`. Other pre-port checkouts likely have it too.
+
+Unverified: 1074 insertion-string layout (no restart in this machine's 3-day System log); parser accepts the path with or without a trailing "(MACHINE)".
