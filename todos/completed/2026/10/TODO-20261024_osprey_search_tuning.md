@@ -7,15 +7,13 @@
   `git merge origin/master`, never a rebase (version-control guide, the squash-merged-parent case)
 - **Base**: PR #4913's branch, then `master`
 - **Created**: 2026-10-24
-- **Status**: Built and gated by the night session of 2026-10-24 (commits 1576709ba2, a169605c1e; not
-  pushed). `OspreySearchTuningTest` passes in fr/ja/en; `OspreySearchPerfTest` passed its three scenarios
-  on the Stellar runs (44.7 min); `/code-review medium` findings triaged. The morning pushes and opens the
-  PR stacked on #4913 (`ai/.tmp/handoff-20261024.md` has the PR body)
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: #4914 (opened 2026-10-25 against PR #4913's branch; retargeted to master the same morning after
-  #4913 merged as d476f8a120, with `git merge origin/master` resolved to the branch's side on the eight
-  shared files - merge commit 57584b8348, tree identical to a169605c1e)
+- **PR**: [#4914](https://github.com/ProteoWizard/pwiz/pull/4914) (merged 2026-10-26 as 4c866353b0; opened
+  2026-10-25 against PR #4913's branch; retargeted to master the same morning after #4913 merged as
+  d476f8a120, with `git merge origin/master` resolved to the branch's side on the eight shared files -
+  merge commit 57584b8348, tree identical to a169605c1e)
 - **Checkout**: `C:\proj\pwiz`
 - **Continues**: `TODO-20261023_skyline_osprey_search.md` (PR 1: the FASTA path with the pretrained models,
   the existing-library alternative, Osprey from TeamCity, the menu item hidden outside developer builds)
@@ -147,7 +145,7 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 - [x] tcinspect clean on a169605c1e
 - [x] Pushed; PR #4914 opened stacked on #4913 (2026-10-25 morning, at Brendan's request)
 - [x] Retargeted to master after #4913 merged (2026-10-25)
-- [ ] Brendan reviews the UI; TeamCity green on #4914 (the legacy "Skyline Code Inspection" config will
+- [x] Brendan reviews the UI; TeamCity green on #4914 (the legacy "Skyline Code Inspection" config will
   overwrite bt209's inspection status with its error on every new commit until Matt retires it)
 
 ## Corrections to the design found while building (night of 2026-10-24)
@@ -325,6 +323,18 @@ presets / `.cfg` import (Decision 4, optional), and OspreySearchPerfTest's 28 mi
 Stacked on #4914's branch until it merges; afterwards `git merge origin/master`, never rebase.
 
 ## Progress Log
+
+### 2026-10-26 - Merged
+
+PR #4914 merged as commit 4c866353b0 (squash, after every check went green on the skip-list commit
+f7731c2c1a, the Wine Docker status included). Shipped: the Library Model page (a saved model from the
+Build Library list, or a fine-tune of AlphaPeptDeep on checked runs from Browse... or the searched files,
+with Use GPU), the model copied beside the document as `<doc>.model.zip`, `--model` / `--training-input`
+on the command line, the task-segmented progress bar, Open Log, stamped log rollover for both engines,
+`--timestamp`, page titles, and `OspreySearchPerfTest` (excluded from the PR perf run, nightlies keep it).
+Deferred to PR 3 (`TODO-20261026_osprey_library_engine.md`): Osprey as the engine behind Build Library,
+the stale Osprey registration fix, and Skyline no longer shipping torch and the models. Still Brendan's:
+the Osprey release leg, Decision 7 (un-hiding the menu item), presets.
 
 ### 2026-10-26 (morning) - TeamCity results on b1cefa6ec1
 
