@@ -133,3 +133,5 @@ rather than winding down at the wake time; cite the on-disk path for every numbe
 
 Survey by a read-only agent (figures above); design discussed with Brendan after PR #4917. Queued for the
 night session of 2026-10-26.
+
+**Handoff from the session of 2026-10-26**: read `ai/.tmp/handoff-20261026_osprey_followups.md` first (build and test gotchas, what #4917 left in the code, the hidden cost of growing the one subset).

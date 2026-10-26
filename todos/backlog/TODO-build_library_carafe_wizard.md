@@ -156,3 +156,5 @@ comes from Add... pointing at the file, or from the editor route.
 ### 2026-10-26 - Written
 
 From the two slides and the state after PR #4917; discussed with Brendan.
+
+**Handoff from the session of 2026-10-26**: read `ai/.tmp/handoff-20261026_osprey_followups.md` first (build and test gotchas, the Osprey changes feature 1 needs, the code to reuse).
