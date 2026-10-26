@@ -56,12 +56,19 @@ Holds a pending signup between the initial request and email confirmation.
 | userid | SERIAL PK | |
 | email | VARCHAR(255) UNIQUE | one pending row per email |
 | firstname, lastname, organization | VARCHAR(255) | |
-| key | VARCHAR(64) | the confirmation token sent in the email |
+| key | VARCHAR(100) | SHA-256 hash (`sha256:` prefix) of the confirmation token sent in the email. NULL once the link is used. |
+| keyTimeout | TIMESTAMP | when the link expires, seven days after it was sent (`LoginManager.SETUP_LINK_TIMEOUT`) |
 | Container | EntityId | folder the signup happened in |
 | labkeyUserId | USERID | set once the account is created |
 
-The query view adds a computed `ConfirmationURL` column that renders the
-`ConfirmAction` URL (email + key) for admins.
+Only the hash is stored, so the emailed link cannot be rebuilt from the table. Expired keys stay in
+the row. The query view adds a computed `ConfirmationURL` column that renders the `ConfirmAction`
+URL for admins with the key masked, and is empty once the key is used or has expired. Exports and the
+JSON API return the same value, so the hash is not exported through that column.
+
+`signup-26.000-26.001.sql` converted the existing rows. It cleared the key on rows that already had a
+LabKey account, and hashed the remaining keys with an expiry seven days after the upgrade.
+`SignUpManager.hashKey()` must produce the same hash as that script.
 
 ### signup.movedusers
 
@@ -164,12 +171,22 @@ All four config actions write an audit event on success.
    JSP path.
 2. The handler verifies the Kaptcha (see "Abuse control"), validates the form,
    parses the email, and - if no account exists - calls `createUserAndSendEmail`.
-   That inserts a `temporaryuser` row and sends the LabKey registration email
-   containing a `ConfirmAction` link (email + key).
-3. The user clicks the link. `ConfirmAction` verifies the email+key against
-   `temporaryuser`, creates the real account, sets the password via
-   `DbLoginService.attemptSetPassword`, and - if the folder has a
+   That calls `SignUpManager.saveWithNewKey` and sends the LabKey registration email containing a
+   `ConfirmAction` link (email + key) and its expiration. `saveWithNewKey` inserts a `temporaryuser`
+   row, or, when the email already has a row, gives it a new key only. The name, organization and
+   folder from the first signup are kept, so someone else submitting the same email cannot change
+   them. The link sent earlier stops working.
+3. The user clicks the link. `ConfirmAction` verifies the email + key hash and that the link has not
+   expired against `temporaryuser`. On submit, inside one transaction, it clears the key with
+   `SignUpManager.clearKeyIfValid`, creates the real account, sets the password via
+   `DbLoginService.attemptSetPassword`, records the account with `setLabkeyUserId`, and - if the folder has a
    `SIGNUP_GROUP_NAME` configured - joins the new account to that group.
+
+   `clearKeyIfValid` clears the key only if it still matches and has not expired. It returns false when a repeat
+   signup replaced the key or another submit used it after the check, and `ConfirmAction` then rolls
+   back and shows the "could not be verified" message. A concurrent submit for the same key waits on
+   the row lock, then finds the key cleared. A rejected password rolls back the clear, so the link
+   still works.
 
 When the submitted email already has an account, both signup handlers return the
 same response as a brand-new signup. The existing-account path sends an
