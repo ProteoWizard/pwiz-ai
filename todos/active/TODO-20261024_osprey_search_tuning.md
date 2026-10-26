@@ -288,17 +288,40 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
   segment, its percentage and the overall percentage at each step, the skip-and-resume case, the growth case
   and the Japanese file line; `OspreySearchTest.RunSearch` asserts the button and its path after the run.
 
-## What remains toward full integration (assessed 2026-10-25 evening, for the next PR)
+## PR 3: Osprey's package is the engine package (decided with Brendan, 2026-10-26; ready to start)
 
-PR 3 per the PR plan (`TODO-20261023_skyline_osprey_search.md`) plus the deferrals: (1) `--torch-cpu` in Osprey
-beside `--torch-runtimes`, so Osprey runs on the CPU libtorch Skyline already ships for CarafeSharp and the
-models in Skyline's Tools; the first Osprey change in the series; (2) the Skyline-bound package without
-libtorch and the models (`pwiz_tools/Osprey/package.ps1` variant; `OspreyHelpers` download info); (3) the
-stale registration when the pinned package is installed (`SkylineFiles.EnsureOspreyInstalled`, PR 1 review
-finding); (4) presets / `.cfg` import (Decision 4, not done in PR 2; optional); (5) OspreySearchPerfTest's
-28 min on a CPU-only agent (Brendan's call). Not PR work: the Osprey release leg (Deploy button config), the
-TeamCity mirror zip, and Decision 7 (un-hiding the menu item), which decides the release. One more stacked
-PR covers the code; the release process stays with Brendan.
+**Why.** #4849 (2026-10-23) made AlphaPeptDeep library building run in process through CarafeSharp, which put
+`torch\cpu` (256 MB, 76 MB zipped), the models (25 MB) and TorchSharp into Skyline's bin; the new Inno
+installer stages the whole bin, so the daily zip goes from 94 MB (26.1.1.279, 2026-10-06) to about 195 MB
+for a feature most users never touch (bt209's SkylineTester.zip jumped 258 -> 384 MB at that commit).
+Osprey's own package already carries `torch\cpu` and the models, chooses its libtorch at run time and
+downloads the CUDA one (#4909), and exposes the library phases as `--task PredictLibrary` / `--task TrainModel`.
+
+**The refactor.**
+1. Build Library's Carafe/AlphaPeptDeep path downloads the Osprey package at first use, to the same Tools
+   location Osprey Search uses (`OspreyHelpers` download info, `SkylineFiles.EnsureOspreyInstalled`), and
+   builds the library by running `Osprey.exe --task PredictLibrary` (and `--task TrainModel` for tuning)
+   out of process, through the same ProcessRunner + log tee + rollover + `OspreyProgressMonitor` the wizard
+   uses. Device and CUDA handling are Osprey's (`--device`, `--torch-runtimes`), so Build Library's
+   "runtime already loaded, restart Skyline" rule goes.
+2. Skyline stops shipping `torch\cpu`, the models and TorchSharp: remove `LibTorchRuntimeLayout.targets`
+   and the model Content items from `Skyline.csproj`; `TorchRuntimes` keeps only what the wizard's Use GPU
+   still needs (the CUDA download into the shared folder Osprey is pointed at), or moves to Osprey entirely.
+   `CarafeSharp.Proteome` stays in process for reading `.model.zip` manifests (no torch).
+3. The Osprey package also carries `CarafeSharp.exe` (the Carafe-shaped CLI, `pwiz_tools\CarafeSharp\CarafeSharp`)
+   for scripts and parity testing; Skyline does not depend on it. Consider a framework-dependent publish
+   to cut the first-use download below the self-contained 156 MB, since Skyline's machine has .NET 10.
+4. The stale registration when the pinned package is installed (PR 1 review finding) is fixed in the shared
+   `EnsureOspreyInstalled`.
+5. Tests: TestAlphaPeptDeepBuildLibrary and the other in-process library tests move to the download seam
+   OspreySearchTest uses (`EnsureOsprey`, `SKYLINE_TEST_OSPREY_TORCH_RUNTIMES` for the GPU).
+The earlier PR 3 idea (`--torch-cpu`, Skyline-bound package without libtorch) is superseded: Osprey keeps
+its own libtorch and Skyline borrows nothing.
+
+**Still Brendan's, not PR work.** The Osprey release leg (a TeamCity deployment config with a Deploy button
+that pins and tags a build), the TeamCity mirror zip, Decision 7 (un-hiding Search > Osprey Search...),
+presets / `.cfg` import (Decision 4, optional), and OspreySearchPerfTest's 28 min on a CPU-only agent.
+Stacked on #4914's branch until it merges; afterwards `git merge origin/master`, never rebase.
 
 ## Progress Log
 
