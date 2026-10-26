@@ -118,8 +118,8 @@ Order, each step built and tested before its commit:
    `TestAlphaPeptDeepBuildLibrary`, `TestCarafeModelBuildLibrary`, `AlphaPeptDeepUseGpuTest`, `OspreySearchTest`,
    `OspreySearchTuningTest`, `OspreyProgressMonitorTest`, `CodeInspection`, `CheckForMissingResources`, fr/ja/en;
    tcinspect; `/code-review medium`.
-6. Optional, last: `CarafeSharp.exe` in the Osprey package (Brendan's item 3) - two self-contained publishes
-   in one folder need a look at the shared runtime files first.
+6. ~~Optional, last: `CarafeSharp.exe` in the Osprey package~~ - DROPPED (Brendan, 2026-10-26): Osprey.exe
+   wrapping what Osprey and Skyline need of the Carafe implementation is where this ends.
 
 ## Tasks
 
