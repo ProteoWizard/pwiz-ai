@@ -306,6 +306,17 @@ CodeInspection, CheckForMissingResources all pass. Commit b1cefa6ec1, pushed to 
 perf runs are already long; the lever is dropping its saved-model search (the functional test covers that
 path) or a smaller FASTA.
 
+**Perf budget investigation** (evening, findings in `ai/.tmp/diatosrm-perf-findings-20261025.md`):
+TestDiaToSrmTutorial is 141 s here steady-state (124 s of it the 35 GB chromatogram extraction, three files
+at a time under TestRunner's workstation GC), 163-472 s on BRENDANX-UW7, 1,185-1,231 s on disk-bound
+BSPRATT-UW2, and absent from the PR perf build; the 80-90 min memory was the screenshot-capture runs. The
+PR perf build (3 h 31 min) spends 34 min downloading test data to a fresh agent, 8 min of it the same
+zips again because the CI cleanup level deletes each zip after its test: keeping zips for the run and a
+same-region mirror are the 20-30 min cut, with no test changed. TestDiannSearchTutorial is the largest
+test there (36 min; 11.5 min here, CPU-bound in DIA-NN). Nightly: UW2 never finishes its perf-first pass
+in 12 h (98 tests, 695 min) while UW7 does it in 267 min and runs 4,784 tests; Brendan is considering
+moving overnight perf off the i7.
+
 ### 2026-10-24 - Designed
 
 ### 2026-10-24/25 (night session) - PR 2 built, gated, reviewed
