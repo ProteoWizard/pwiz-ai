@@ -331,8 +331,10 @@ Filed #4916 (SCIEX wiff reader in the .NET 10 port: ~4 s per open, every metadat
 centroids peaks; assigned to Matt) from the perf investigation. PR #4914 TeamCity: 16/18 green on
 b1cefa6ec1; TestManagingSearchTools failed once on a tools-folder Directory.Move access-denied in
 `SettingsImporter` (not this PR's code), the Wine build red only as its snapshot dependency. Queued bt209
-re-run 4235543 and the first Perf and Tutorial run 4235542 (includes OspreySearchPerfTest). Next session:
-read their results first, then PR 3 as above.
+re-run 4235543 and the first Perf and Tutorial run 4235542 (includes OspreySearchPerfTest). Then (2026-10-26,
+with Brendan) PR 3 was redefined after measuring the installer cost of in-process AlphaPeptDeep: Osprey's
+package becomes the engine for Build Library too, section "PR 3: Osprey's package is the engine package".
+Next session: read the two TeamCity results first, then start PR 3 from that section and the handoff.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261024_osprey_search_tuning.md` before starting work.
