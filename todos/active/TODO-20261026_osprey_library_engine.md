@@ -60,14 +60,72 @@ rollover and `OspreyProgressMonitor`; Skyline stops shipping `torch\cpu` (256 MB
 
 ## Design points (to settle with Brendan before coding)
 
-1. **The precursor-table input** - the one that decides the shape of the PR (open)
-2. **Use GPU and CUDA install without TorchSharp in Skyline** (open)
-3. **Framework-dependent vs self-contained package** (open)
-4. **Which tests move to the download seam** (open)
+1. **The precursor-table input** - DECIDED (Brendan, 2026-10-26): Osprey/CarafeSharp's library phase
+   accepts the precursor table Skyline writes, and Skyline runs it as a process the way the Python-era
+   builder ran `peptdeep cmd-flow` (`Skyline/skyline_26_1_1`'s `AlphapeptdeepLibraryBuilder`: prepare
+   input.tsv, run the process, `TransformPeptdeepOutput`, `ImportSpectralLibrary` with BlibBuild +
+   BlibFilter). Nick's in-process CarafeSharp calls are walked back: the prediction code that replaced
+   `ExecutePeptdeep` (`PredictSpectralLibrary`, `WriteSpectrum`, `GetModifiedPeptide`, the iRT fit) moves
+   OUT of Skyline into CarafeSharp, where Osprey's `--task PredictLibrary --precursors <input.tsv>` writes
+   the same peptdeep-shaped `predict.speclib.tsv`, so the transform, the blib import and the reference
+   blibs of `TestAlphaPeptDeepBuildLibrary` are unchanged.
+2. **Use GPU and CUDA install without TorchSharp in Skyline** - DECIDED (Brendan, 2026-10-26): the
+   detection and install classes (`CudaDriver`, `LibTorchRuntimes` minus its loader, `LibTorchRuntimeInstaller`,
+   `LibTorchPackageSet`; none uses TorchSharp, verified by their usings) move out of CarafeSharp.Models into
+   an assembly Skyline references without TorchSharp; `UseGpuDriver` keeps its behaviour (probe at open,
+   reason, download in a LongWaitDlg); the package list `torch\<id>.packages.txt` is read from the
+   downloaded Osprey install folder, so Skyline's CUDA version matches the Osprey it runs; the runtime
+   stays in Skyline's Tools folder, passed as `--torch-runtimes`; the "already loaded, restart" rule goes.
+   The aim: one set of dependencies for the two paths that build Carafe models and predict Carafe
+   libraries from Skyline.
+3. **Framework-dependent vs self-contained package** - DECIDED (Brendan, 2026-10-26): the one
+   self-contained package, as today (149 MB zipped, 35 MB of it the .NET runtime); a Skyline-only
+   variant is not worth a second packaging surface for a smallish, once-per-version download.
+4. **Which tests move to the download seam** - DECIDED (Brendan, 2026-10-26): `TestAlphaPeptDeepBuildLibrary`
+   and `TestCarafeModelBuildLibrary` obtain Osprey through the `EnsureOsprey` seam (env var, sibling build,
+   pinned download), moved from `OspreySearchTest` to a shared test helper; their reference blibs stay the
+   oracle. `AlphaPeptDeepUseGpuTest` keeps its fake driver against the moved detection classes and needs no
+   Osprey. The unit tests of the table, transform, import and modification support are unchanged. No
+   in-process path is kept: in-process CarafeSharp was a short detour, seen to be the wrong direction once
+   File > Search > Osprey Search existed.
+
+## Plan (2026-10-26, after the four decisions)
+
+Order, each step built and tested before its commit:
+1. **CarafeSharp.Core takes the runtime classes**: `CudaDriver`, `LibTorchPackageSet`, `LibTorchRuntimeInstaller`,
+   `LibTorchRuntimes` (minus `CpuRuntime`, `CanChooseRuntime`, `Load`) move from Models to Core (namespace
+   `pwiz.CarafeSharp.Core`); Models keeps `LibTorchRuntime` and gains the static
+   `LibTorchRuntime.Load(LibTorchRuntimes, bool useCuda)`. Osprey's `OspreyTorchRuntimes` and the tests follow.
+2. **The precursor-table prediction in CarafeSharp.Tasks**: `PrecursorTablePredictor` (the code of Skyline's
+   `PredictSpectralLibrary`, `OpenCarafeModel`, `ReadPrecursorInputFile`, `WriteSpectrum`, `GetModifiedPeptide`,
+   `GetPrecursorMz` and their constants, moved) writes the peptdeep-shaped `predict.speclib.tsv`; a
+   `PredictPrecursorTableTask : CarafeTask` under the name PredictLibrary wraps it with the stamp/resume contract.
+3. **Osprey `--precursors <input.tsv>`**: valid only with `--task PredictLibrary` and `-o` (plus `--model`,
+   `--device`, `--torch-runtimes`, `--output-dir`, `--timestamp`); refused with `-i`, `--fasta`,
+   `--training-input`, the entrapment and digest options. Writes `<out>.predicted.speclib.tsv` beside the
+   output (the FASTA phase's `<out>.predicted.blib` naming). Osprey.Test covers the grammar and a tiny table.
+4. **Skyline**: `AlphapeptdeepLibraryBuilder` runs Osprey through a `RunOsprey` factored out of
+   `OspreyHelpers.RunSearch` (ProcessRunner, tee, rollover, timestamp stripping, `OspreyProgressMonitor` with one
+   task); `TorchRuntimes` reads the package list from the installed Osprey folder; `UseGpuDriver` loses
+   `inProcess` and the restart rule; `EnsureOspreyInstalled` becomes shared with Build Library (called when the
+   AlphaPeptDeep source is chosen) and re-registers the pinned package when a registration is stale;
+   `Skyline.csproj` drops the torch layout import, the model Content items and the Models reference;
+   `OspreyTestUtil.EnsureOsprey` in TestUtil replaces the copies; the two TestPerf tests use it.
+5. Gates: `Build-CarafeSharp.ps1`, `Build-Osprey.ps1 -RunTests -RunInspection`, `Build-Skyline.ps1`,
+   `TestAlphaPeptDeepBuildLibrary`, `TestCarafeModelBuildLibrary`, `AlphaPeptDeepUseGpuTest`, `OspreySearchTest`,
+   `OspreySearchTuningTest`, `OspreyProgressMonitorTest`, `CodeInspection`, `CheckForMissingResources`, fr/ja/en;
+   tcinspect; `/code-review medium`.
+6. Optional, last: `CarafeSharp.exe` in the Osprey package (Brendan's item 3) - two self-contained publishes
+   in one folder need a look at the shared runtime files first.
 
 ## Tasks
 
-- [ ] Design settled (above)
+- [x] Design settled (above)
+- [ ] Step 1: runtime classes to CarafeSharp.Core
+- [ ] Step 2: PrecursorTablePredictor + task in CarafeSharp.Tasks
+- [ ] Step 3: Osprey --precursors
+- [ ] Step 4: Skyline builder, GPU, install seam, csproj, tests
+- [ ] Step 5: gates, review, PR
 
 ## Progress Log
 
