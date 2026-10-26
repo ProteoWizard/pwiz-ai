@@ -56,32 +56,51 @@ Use GPU, and Osprey predicts for Build Library through `--precursors` (#4917).
      library only; today `--fasta` and `--precursors` refuse each other), ending at PredictLibrary.
    - Skyline: the pages, the command line, the import of the tuned model into the list.
    - Exists end to end in Osprey today except the one combination; the cheapest feature.
+   - **Brendan (2026-10-26)**: this is the one imagined. It needs almost the whole Osprey Search wizard's
+     inputs - the FASTA to search with and any further search parameters - and ends not with a search
+     result but with a fine-tuned Carafe predictor that predicts spectra for all the document's precursors.
+     So the pages are the wizard's pages (data files, FASTA and digest, Library Model) reused inside
+     Build Library, minus the import of the search.
 2. **Predict from a full FASTA** instead of the document's precursors (what the Osprey Search wizard
    does). Page: a FASTA and the digest settings. Osprey: `--fasta` + `--task PredictLibrary` exists; the
    output is Carafe's `<out>.predicted.blib` with decoys and DecoyPairs, so Build Library would take that
    blib as it is (the wizard's document library already is one) rather than the peptdeep TSV path.
    - Skyline only, plus a decision on decoys in a Build Library library.
+   - **Brendan (2026-10-26)**: as placed, an additional choice on top of feature 1: predict the (or an)
+     entire FASTA rather than the document's precursors. Given feature 1, that may be the full searched
+     FASTA, as Osprey does, or a second FASTA with any relationship to the first (subset, superset,
+     intersection, disjoint), plus decoys and possibly entrapment. So "Predict for" has three answers:
+     this document's precursors, the searched FASTA, another FASTA.
 3. **Learn from Skyline results** (slide 2's first source). The document's own results, or a learning
    document's, become the training data: fragment chromatograms, peak boundaries and library ions are
    what the training export holds, and Skyline has them. Needs a Skyline writer of
    `TrainingExportParquet` records from a document's results, then CarafeSharp's TrainModel over those
    exports (no raw files read). The most valuable source for Skyline users, who curate their results;
    the largest piece of new work; a study of the export contract comes first.
+   - **Brendan (2026-10-26)**: still interesting, and it seems to take only writing from Skyline the
+     format Osprey writes for Carafe. A fully processed dataset imported into Skyline should be usable
+     as a fine-tuning dataset for Carafe. The study is of `TrainingExportParquet` (the record per
+     precursor per run: fragment matches, XICs, peak boundaries, q-value) against what a Skyline
+     document's results hold, and of which training rules (`-cor`, masking, `-fdr`) then apply.
 4. **Learn from libraries** (slide 2's second source). Measured spectral libraries (DDA) as MS2 training
    data, with library RTs for RT. Needs a library-to-export adapter in CarafeSharp and a look at how the
    training rules (XIC correlation, masking) apply without chromatograms. Research item.
+   - **Brendan (2026-10-26)**: the least interesting, especially now that a library's source may well be
+     Osprey, which could already have exported a fine-tuning file for Carafe. Lowest priority.
 
 ## Proposed shape of the PR (to settle with Brendan)
 
 - **Pages after AlphaPeptDeep is chosen**: page 2 **Model** - the shared Library Model control (Use this
   model / Fine-tune a new model, Use GPU) with **Learn from:** {Data files searched by Osprey, Skyline
-  results, Libraries} under the Fine-tune radio; page 3 the chosen source's inputs (the FASTA and runs;
-  the learning document; the library checklist); **Predict for:** {This document's precursors, A FASTA}
-  on page 2 or its own page. Finish builds.
-- **Scope for the first PR**: features 1 and 2, which Osprey already does; 3 and 4 as the two PRs after,
-  3 first. Or 1 alone if the pages themselves are the work.
-- The shared control between `OspreySearchDlg` and `BuildLibraryDlg` is a refactor to do before the new
-  pages, gated by the existing `OspreySearchTuningTest` and `AlphaPeptDeepUseGpuTest`.
+  results} under the Fine-tune radio (Libraries left out until wanted); then the source's pages: for
+  Osprey-searched runs the wizard's own pages reused (data files, FASTA and digest), for Skyline results
+  the learning document (this one, or another); then **Predict for:** {This document's precursors, The
+  searched FASTA, Another FASTA (+ decoys, entrapment)}. Finish builds; no search result is imported.
+- **Scope for the first PR**: features 1 and 2 together, since 2 is a choice on 1's last page and both
+  run on what Osprey does today; feature 3 as the PR after, once the export contract has been studied.
+- The reuse of the wizard's pages (the search files page, the FASTA page, the Library Model page) as
+  controls both `OspreySearchDlg` and `BuildLibraryDlg` host is the refactor to do first, gated by the
+  existing `OspreySearchTest`, `OspreySearchTuningTest` and `AlphaPeptDeepUseGpuTest`.
 
 ## Tests
 
@@ -92,11 +111,12 @@ Use GPU, and Osprey predicts for Build Library through `--precursors` (#4917).
 
 ## Open decisions (Brendan)
 
-1. Which features the first PR carries (1 and 2 proposed).
+1. Which features the first PR carries (1 and 2 together proposed; Brendan's notes above lean the same way).
 2. Whether the tuned model from feature 1 joins the saved-model list automatically (PR 2 decided no for
    the wizard: the model is a document support file beside the library, added to the list by name).
-3. Decoys in a Build Library library built from a FASTA (feature 2).
-4. Whether Learn from Skyline results (feature 3) is the next PR after this one.
+3. Decoys and entrapment in a Build Library library predicted from a FASTA (feature 2): Osprey's blib as it
+   is, or targets only.
+4. Feature 3 as the PR after this one (Brendan: still interesting; the study of the export contract first).
 
 ## Progress Log
 
