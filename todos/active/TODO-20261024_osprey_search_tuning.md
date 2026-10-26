@@ -288,7 +288,8 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
   segment, its percentage and the overall percentage at each step, the skip-and-resume case, the growth case
   and the Japanese file line; `OspreySearchTest.RunSearch` asserts the button and its path after the run.
 
-## PR 3: Osprey's package is the engine package (decided with Brendan, 2026-10-26; ready to start)
+## PR 3: Osprey's package is the engine package (direction agreed with Brendan 2026-10-26; the design below is
+## the session's proposal, to be walked through with him before coding, in an interactive session)
 
 **Why.** #4849 (2026-10-23) made AlphaPeptDeep library building run in process through CarafeSharp, which put
 `torch\cpu` (256 MB, 76 MB zipped), the models (25 MB) and TorchSharp into Skyline's bin; the new Inno
