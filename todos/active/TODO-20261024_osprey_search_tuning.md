@@ -288,9 +288,6 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
   segment, its percentage and the overall percentage at each step, the skip-and-resume case, the growth case
   and the Japanese file line; `OspreySearchTest.RunSearch` asserts the button and its path after the run.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261024_osprey_search_tuning.md` before starting work.
-
 ## What remains toward full integration (assessed 2026-10-25 evening, for the next PR)
 
 PR 3 per the PR plan (`TODO-20261023_skyline_osprey_search.md`) plus the deferrals: (1) `--torch-cpu` in Osprey
