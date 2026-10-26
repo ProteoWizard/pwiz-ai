@@ -2,18 +2,18 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261004_autoqc_find_inno_skyline`
-- **Base**: `master`
+- **Base**: `Skyline/skyline_26_1_1`
 - **Created**: 2026-10-04
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#4771](https://github.com/ProteoWizard/pwiz/pull/4771)
+- **PR**: [#4771](https://github.com/ProteoWizard/pwiz/pull/4771) (merged 2026-10-10)
 
 ## Objective
 
-Release AutoQC Loader from `master` (.NET Framework, ClickOnce) so that it finds a Skyline installed by the new
+Release AutoQC Loader from `Skyline/skyline_26_1_1` (.NET Framework, ClickOnce) so that it finds a Skyline installed by the new
 Inno Setup installer and runs that install's `SkylineCmd.exe`. Skyline Batch shares the code and gets the change too.
 
-It was decided to ship this as a ClickOnce update from `master`, before AutoQC itself moves to an Inno Setup
+It was decided to ship this as a ClickOnce update from `Skyline/skyline_26_1_1`, before AutoQC itself moves to an Inno Setup
 installer. It has to ship before the first .NET 10 Skyline, because a ClickOnce AutoQC takes an update only when it
 restarts.
 
@@ -74,8 +74,26 @@ restarts.
 - [x] Tested an AutoQC update on the VM with no Skyline AutoQC could find. AutoQC 26.1.1.279 showed the Find Skyline
       dialog, and `C:\SkylineCustom` was chosen. After the ClickOnce update to 26.1.1.280 the dialog did not appear,
       and the log and the configuration still used `C:\SkylineCustom\SkylineCmd.exe`
+- [x] Tested Skyline Batch on the `AutoQC-Test` VM (2026-10-08), at Brendan's request. The branch's Debug build
+      (`SkylineBatch\bin\Debug`, current with `50cbbba2df`) was copied to the VM and run from its folder. One
+      configuration imported two `QEP_2015_0424_RJ_*_prtc.raw` files into `QEP_2015_0424_RJ.sky`. Skyline Batch does
+      not log which Skyline it uses, so the running processes were listed during each run, and the `--version` line
+      in the Skyline Batch log identified the build
+
+  | Case | Skyline-daily installed | Skyline Batch used |
+  |---|---|---|
+  | ClickOnce only | ClickOnce 26.1.1.278 (checkpoint `AutoQC 279 + ClickOnce daily`) | `SkylineDailyRunner.exe`, then the ClickOnce `Skyline-daily.exe` (`--version` 26.1.1.278) |
+  | Both installed | Per-user Inno 26.1.2.280 installed directly over the ClickOnce one | Inno `SkylineCmd.exe` in `%LOCALAPPDATA%\Programs\Skyline-daily` (`--version` 26.1.2.280), after restarting Skyline Batch |
+  | Inno only | The ClickOnce one uninstalled from Settings | Inno `SkylineCmd.exe` (`--version` 26.1.2.280) |
+  | All-users install | All-users Inno 26.1.1.280 in `C:\Apps\Skyline-daily` (checkpoint `Case D`) | `C:\Apps\Skyline-daily\SkylineCmd.exe` (`--version` 26.1.1.280) |
+
+  Only the Skyline-daily option was enabled in every case, and every import finished. Nick's 26.1.2.280 build, from
+  his test folder `InstallTest/NewVersion`, offered at first start to import the ClickOnce Skyline-daily
+  26.1.1.278's settings, with the uninstall box enabled and unchecked. The import was accepted without uninstalling
 
 ### Remaining
+
+- [x] Add a Skyline Batch VM line to the PR description's Test plan (2026-10-08)
 
 ## Key Files
 
@@ -83,4 +101,13 @@ restarts.
 - `pwiz_tools/Skyline/Executables/SharedBatch/SharedBatch/SkylineSettings.cs` - order of installs
 - `pwiz_tools/Skyline/Executables/AutoQC/AutoQC/Program.cs` - startup, settings upgrade, log line
 - `pwiz_tools/Skyline/Executables/SkylineBatch/SkylineBatchTest/SkylineInstallationsTest.cs` - new test
+
+## Progress Log
+
+### 2026-10-10 - Merged
+
+PR #4771 merged into `Skyline/skyline_26_1_1` as commit `77d7b55f08`. AutoQC and Skyline Batch find a Skyline or
+Skyline-daily installed by the Inno Setup installer through its `InstallDir` registry record (HKCU, then HKLM), and
+use it before a ClickOnce or administrative install. AutoQC also runs its settings upgrade before asking for a
+Skyline folder, so a folder chosen after an update is no longer overwritten. Nothing was deferred.
 
