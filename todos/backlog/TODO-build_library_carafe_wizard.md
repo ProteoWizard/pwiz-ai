@@ -88,19 +88,33 @@ Use GPU, and Osprey predicts for Build Library through `--precursors` (#4917).
    - **Brendan (2026-10-26)**: the least interesting, especially now that a library's source may well be
      Osprey, which could already have exported a fine-tuning file for Carafe. Lowest priority.
 
-## Proposed shape of the PR (to settle with Brendan)
+## Proposed shape of the PR (Brendan's reframing, 2026-10-26)
 
-- **Pages after AlphaPeptDeep is chosen**: page 2 **Model** - the shared Library Model control (Use this
-  model / Fine-tune a new model, Use GPU) with **Learn from:** {Data files searched by Osprey, Skyline
-  results} under the Fine-tune radio (Libraries left out until wanted); then the source's pages: for
-  Osprey-searched runs the wizard's own pages reused (data files, FASTA and digest), for Skyline results
-  the learning document (this one, or another); then **Predict for:** {This document's precursors, The
-  searched FASTA, Another FASTA (+ decoys, entrapment)}. Finish builds; no search result is imported.
-- **Scope for the first PR**: features 1 and 2 together, since 2 is a choice on 1's last page and both
-  run on what Osprey does today; feature 3 as the PR after, once the export contract has been studied.
-- The reuse of the wizard's pages (the search files page, the FASTA page, the Library Model page) as
-  controls both `OspreySearchDlg` and `BuildLibraryDlg` host is the refactor to do first, gated by the
-  existing `OspreySearchTest`, `OspreySearchTuningTest` and `AlphaPeptDeepUseGpuTest`.
+Two separate things, joined by the model list:
+
+- **Fine-tuning is a wizard of its own, popped up over Build Library**, and its product is a new
+  `.model.zip` that appears in the Model combo and is selected when the wizard closes. The model list
+  (`Settings.Default.CarafeModelList`, the seam Build Library and the Osprey Search wizard already
+  share) is the integration point, so Build Library's pages never carry the tuning inputs. The tuning
+  wizard is the Osprey Search wizard's pages minus the import - data files, FASTA and digest, Library
+  Model with the tuning runs - ending at the model (feature 1); the Skyline-results source (feature 3)
+  is a second way into the same wizard later. How it is launched is open: an entry in the Model combo
+  (PR 2 declined a "Train new model..." pseudo-item in the standard `SettingsListComboDriver` combo), a
+  Fine-tune... button beside the combo, or Fine-tune... in the model list dialog.
+- **Build Library's page 2 is only "what to predict for"**, and Koina gets it too: **Document
+  precursors** (the default, today's behaviour) or **Provided FASTA**, with the FASTA, and in either case
+  the decisions about decoys and entrapment peptides. Skyline can digest the FASTA and add decoys and
+  entrapment in process with CarafeSharp.Proteome (`Digester`, `EntrapmentFastaBuilder`, TorchSharp-free
+  and already referenced), producing one precursor table that AlphaPeptDeep sends to Osprey's
+  `--precursors` and Koina sends to its service - the same table for both sources, so "Provided FASTA"
+  is one implementation. Decoys in the table need a marker the peptdeep TSV's Decoy column and the blib
+  carry (Osprey's own FASTA path writes DecoyPairs; detail to design).
+- **Scope for the first PR**: the predict-for page for both sources (feature 2 in its new form) and the
+  tuning wizard for Osprey-searched runs (feature 1); feature 3 as the PR after, once the export contract
+  has been studied.
+- The reuse of the wizard's pages as controls both `OspreySearchDlg` and the tuning wizard host is the
+  refactor to do first, gated by the existing `OspreySearchTest`, `OspreySearchTuningTest` and
+  `AlphaPeptDeepUseGpuTest`.
 
 ## Tests
 
@@ -111,11 +125,12 @@ Use GPU, and Osprey predicts for Build Library through `--precursors` (#4917).
 
 ## Open decisions (Brendan)
 
-1. Which features the first PR carries (1 and 2 together proposed; Brendan's notes above lean the same way).
-2. Whether the tuned model from feature 1 joins the saved-model list automatically (PR 2 decided no for
-   the wizard: the model is a document support file beside the library, added to the list by name).
-3. Decoys and entrapment in a Build Library library predicted from a FASTA (feature 2): Osprey's blib as it
-   is, or targets only.
+1. Which features the first PR carries (the predict-for page for both sources plus the tuning wizard
+   proposed; the page alone is a smaller first PR).
+2. How the tuning wizard is launched from Build Library (combo entry, a button beside the combo, or the
+   model list dialog); the tuned model joins the list and is selected when the wizard closes (decided).
+3. Decoys and entrapment for a Provided FASTA: who generates them (CarafeSharp.Proteome in Skyline, so
+   Koina gets them too) and how the library marks them.
 4. Feature 3 as the PR after this one (Brendan: still interesting; the study of the export contract first).
 
 ## Progress Log
