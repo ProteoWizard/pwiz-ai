@@ -291,7 +291,31 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261024_osprey_search_tuning.md` before starting work.
 
+## What remains toward full integration (assessed 2026-10-25 evening, for the next PR)
+
+PR 3 per the PR plan (`TODO-20261023_skyline_osprey_search.md`) plus the deferrals: (1) `--torch-cpu` in Osprey
+beside `--torch-runtimes`, so Osprey runs on the CPU libtorch Skyline already ships for CarafeSharp and the
+models in Skyline's Tools; the first Osprey change in the series; (2) the Skyline-bound package without
+libtorch and the models (`pwiz_tools/Osprey/package.ps1` variant; `OspreyHelpers` download info); (3) the
+stale registration when the pinned package is installed (`SkylineFiles.EnsureOspreyInstalled`, PR 1 review
+finding); (4) presets / `.cfg` import (Decision 4, not done in PR 2; optional); (5) OspreySearchPerfTest's
+28 min on a CPU-only agent (Brendan's call). Not PR work: the Osprey release leg (Deploy button config), the
+TeamCity mirror zip, and Decision 7 (un-hiding the menu item), which decides the release. One more stacked
+PR covers the code; the release process stays with Brendan.
+
 ## Progress Log
+
+### 2026-10-25 (late evening) - Issue #4916, TeamCity on PR 2, handoff
+
+Filed #4916 (SCIEX wiff reader in the .NET 10 port: ~4 s per open, every metadata request fetches and
+centroids peaks; assigned to Matt) from the perf investigation. PR #4914 TeamCity: 16/18 green on
+b1cefa6ec1; TestManagingSearchTools failed once on a tools-folder Directory.Move access-denied in
+`SettingsImporter` (not this PR's code), the Wine build red only as its snapshot dependency. Queued bt209
+re-run 4235543 and the first Perf and Tutorial run 4235542 (includes OspreySearchPerfTest). Next session:
+read their results first, then PR 3 as above.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261024_osprey_search_tuning.md` before starting work.
 
 ### 2026-10-25 (evening) - Progress bar by task, Open Log button
 
