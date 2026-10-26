@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4919](https://github.com/ProteoWizard/pwiz/issues/4919)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4920](https://github.com/ProteoWizard/pwiz/pull/4920)
 
 ## Objective
 
@@ -30,7 +30,8 @@ Dump: `ai/.tmp/20261026-SkylineNightly.dmp`; dotnet-dump output in
 - [x] ~~Log `SystemEvents.SessionEnding`~~ - dropped: no message loop in `run` mode, so delivery is unreliable; event 1074 gives the restart time after the fact
 - [x] In-run `MachineStateMonitor`: logs .NET runtime changes and a pending restart (replaces the TestRunner-folder idea; covers every shared-framework process)
 - [x] `/code-review medium` - 10 findings; 9 fixed in `a4ed0c124f` (UTC times, update cutoff at run end, command logs excluded, FileShare.ReadWrite read, log lock, background alert, guarded diagnostics, RID restore before self-contained publish, non-vacuous runtimes assert); 1 dropped (open settings window counts as "still running": rare, and the window was already killed)
-- [ ] Push and open PR (awaiting developer go-ahead)
+- [x] Pushed and opened PR #4920
+- [ ] TeamCity green, human review, merge
 
 ## Regression Test
 
