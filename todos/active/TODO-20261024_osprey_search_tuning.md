@@ -231,18 +231,80 @@ the review; the parent reads reports, synthesizes and commits; re-measure contex
 
 ## Follow-ups for the next session (Brendan, after the on-screen review of 2026-10-25)
 
-- Progress bar: segments from Osprey's `[TASK]` lines, sub-progress from the `file N/M:` lines in the PerFile
-  tasks. The NN% lines are consumed by `ProcessRunner.Run` (set PercentComplete, never shown), so the log box
-  shows no percentages and the bar freezes through the fine-tune; no flag is passed to Osprey.
-- An "Open Log" button on the run page, right of "Show timestamps", for `<doc>.osprey\osprey-skyline-stdout.log`.
+- [x] Progress bar: segments from Osprey's `[TASK]` lines, sub-progress from the `file N/M:` lines in the PerFile
+  tasks (evening of 2026-10-25, below). Before: the NN% lines were consumed by `ProcessRunner.Run` (set
+  PercentComplete, never shown), so the bar restarted at every phase that printed 100% and froze through the
+  fine-tune; no flag is passed to Osprey.
+- [x] An "Open Log" button on the run page, right of "Show timestamps", for `<doc>.osprey\osprey-skyline-stdout.log`.
 - The afternoon's changes (no Save as, title panels, combo snap, extension-less list, the perf test as the
   lab's workflow) are committed as c4032bf58b and pushed; the gate passed. The review pauses were removed
   before the commit (CodeInspection forbids `PauseTest` in checked-in tests, including TestPerf).
+- Still open: PR 1's stale Osprey registration when the pinned package is already installed
+  (`SkylineFiles.EnsureOspreyInstalled`), from the review; and Brendan's look at the new bar on a real run
+  (the fine-tune segment does not move while the epochs print: its `epoch N/M` lines are indented and come
+  in two series, RT then MS2, so they are left alone rather than guessed at).
+
+## Evening of 2026-10-25 - the progress bar and Open Log
+
+- **The bar follows Osprey's tasks** (`OspreyProgressMonitor` in `Model\Lib\OspreyHelpers.cs`). It wraps the
+  wizard's monitor as the one `ProcessRunner` reports to, with the runner's percent parsing OFF
+  (`updateProgressPercentage: false`, the DIA-NN path's arrangement), so every line arrives as a message and
+  the bar is decided from them: `[TASK] name:starting` opens a segment (`ChangeSegments`, rebuilt on every
+  line because the runner's own status never sees them), `:done` and `:skipping (outputs valid)` complete it.
+  The segment count is known up front from the config (4 for an existing library, 5 with a predicted library,
+  11 with tuning runs: training library + 4, TrainModel, PredictLibrary + 4) and widens if Osprey prints more.
+  Within PerFileScoring/PerFileRescoring the `file N/M:` lines set the segment to (N-1)/M (regex on
+  non-indented lines, no `\b`, so the Japanese `ファイル2/3を...` counts); within the other tasks Osprey's own
+  `NN%` lines do. A segment never moves backwards (Osprey's percentages restart at every step), and a later
+  N/M series that starts over (the training exports after the last re-scored file) or with another count is
+  ignored, the task's count being its first file line's. The bar's text is the task's name (LibResources,
+  seven strings) with the file `N/M` or the task's own percentage; the run page switches to `CustomText` for
+  the run and back to `Percentage` for the done/failed milestone. The log box keeps every line as Osprey
+  printed it, `[TASK]` lines included, so it never mixes translated and machine text. A cancel or error
+  status passes through untouched (`ChangePercentComplete` would reset it to running).
+- `/code-review medium` on the diff: 7 findings, 6 fixed (cancel pass-through, the file-count rule, the raw
+  `[TASK]` lines, the stale RunSearch summary, the DIA-NN path with an unsaved document, the test's static
+  recorder) and the stale-log point, first as a truncating tee, then at Brendan's request as the rollover
+  above for both engines.
+- **Open Log** is on the shared `SearchControl` (so DIA-NN's run page has it too, for `diann-skyline-stdout.log`
+  beside the document): `SetLogFilePath` shows the button, `OpenLog` shell-opens the file or says it has not
+  been written yet. The "Show timestamps" box moved left (157 from 238, in the ja and zh-Hans resx too, which
+  carry layout) to make room at the right edge. The tee is auto-flushed and shared for reading, so the file
+  opened in an editor (Notepad++ with Monitoring on) scrolls as the run goes, the command-line experience
+  Brendan wanted. **Log rollover** (Brendan, 2026-10-25 evening, for both engines): before a search starts,
+  an earlier log at the fixed name moves aside as `<name>_<yyyy-MM-dd_HH-mm-ss>.log` stamped with the OLD
+  file's last write (when that search ended), not with now; a same-second collision takes a `-N` suffix
+  (`FileTimeEx.RollWithTimeStamp` in `Util\UtilIO.cs`, the scripts' `run.log` convention from
+  `OspreyDatasetRun.psm1`). Osprey rolls in its tee (one process per search); DIA-NN rolls once at the top of
+  `DiannHelpers.RunSearch`, because its predictor and search are two processes appending to the one file.
+- **`--timestamp`** (Brendan, from the on-screen run): Osprey now stamps every line (`[yyyy/MM/dd HH:mm:ss]\t`,
+  `CommandStatusWriter`'s format) so the log on disk carries the time of each line, and the wizard strips
+  the stamp before display (`CommandStatusWriter.StripTimeStamp`, in the monitor), so the run page and its
+  own "Show timestamps" box are unchanged. `ProcessRunner` strips it too before its `Error:`/`Warning:`
+  first-word check, since Osprey's error lines go to stdout through the same stamped writer and would
+  otherwise drop out of a failed search's message.
+- Tests: `OspreyProgressMonitorTest` (Test.csproj) feeds the line shapes of the real logs
+  (`D:\test\osprey-runs\skyline-wizard-stellar-release\run.log`, `tuning-probe\run-all.log`) and checks the
+  segment, its percentage and the overall percentage at each step, the skip-and-resume case, the growth case
+  and the Japanese file line; `OspreySearchTest.RunSearch` asserts the button and its path after the run.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261024_osprey_search_tuning.md` before starting work.
 
 ## Progress Log
+
+### 2026-10-25 (evening) - Progress bar by task, Open Log button
+
+Brendan's two follow-ups from the on-screen review ("Evening of 2026-10-25" above): `OspreyProgressMonitor`
+segments the bar by Osprey's `[TASK]` lines with the per-file tasks advanced by their `file N/M:` lines, and
+the shared run page has an Open Log button (Osprey's working-folder log, DIA-NN's document-folder log).
+`OspreyProgressMonitorTest` added. Brendan reviewed the run page on screen (the perf test with temporary pauses,
+GPU) and asked for log rollover for both engines and `--timestamp` on Osprey's log, both added. Gate on the
+final code: OspreyProgressMonitorTest, OspreySearchTest, OspreySearchTuningTest, DiannSearchTest (3 tests),
+CodeInspection, CheckForMissingResources all pass. Commit b1cefa6ec1, pushed to PR #4914. Open concern
+(Brendan): OspreySearchPerfTest costs about 28 min on a CPU-only agent (14 min on this box's GPU), and the
+perf runs are already long; the lever is dropping its saved-model search (the functional test covers that
+path) or a smaller FASTA.
 
 ### 2026-10-24 - Designed
 
