@@ -7,10 +7,11 @@
   squash-merged-parent case)
 - **Base**: PR #4914's branch, then `master`
 - **Created**: 2026-10-26
-- **Status**: Design walk-through with Brendan (interactive session of 2026-10-26); no code yet
+- **Status**: Built, gated and reviewed in one day (2026-10-26); PR #4917 open against master, TeamCity
+  pending. Open: which Osprey package the PR's TeamCity perf run and the pinned download use (below)
 - **GitHub Issue**: (none)
 - **Module**: `skyline` (with an Osprey / CarafeSharp change for the precursor-table input)
-- **PR**: (pending)
+- **PR**: [#4917](https://github.com/ProteoWizard/pwiz/pull/4917) (opened 2026-10-26, commit e085895639)
 - **Checkout**: `C:\proj\pwiz`
 - **Continues**: `TODO-20261024_osprey_search_tuning.md` (PR 2), whose "PR 3" section is the agreed direction
 
@@ -129,7 +130,12 @@ Order, each step built and tested before its commit:
 - [x] Step 4: Skyline builder, GPU, install seam, csproj, tests. Gate in en: AlphaPeptDeepUseGpuTest,
       OspreyProgressMonitorTest, OspreySearchTest, OspreySearchTuningTest, TestAlphaPeptDeepBuildLibrary (answer
       files matched through Osprey), TestCarafeModelBuildLibrary, CodeInspection, CheckForMissingResources all pass
-- [ ] Step 5: fr/ja pass, CarafeSharp tests, tcinspect, commit, `/code-review medium`, PR
+- [x] Step 5: fr/ja pass, CarafeSharp tests, tcinspect, commit, `/code-review medium` (7 findings: 6 fixed - the
+      stale-registration rule narrowed to a missing file, ProcessRunner's own segment advance and the cancel path,
+      `--culture`, digest options refused with `--precursors`, the dead working-folder assignment and banner line;
+      1 dropped - the install prompt at source selection, which mirrors the Koina check in the same handler and
+      feeds the Use GPU box), PR #4917 opened
+- [ ] TeamCity on #4917; Brendan's review
 - [ ] **Pinned package for TeamCity** (open question for Brendan): `OspreyHelpers.OSPREY_BUILD_ID` 4234706 (26.1.1.296)
       has no `--precursors`, and `OspreyTestUtil.EnsureOsprey` downloads the latest master Osprey build, which lacks
       it until this PR merges. Locally the sibling build serves. On the PR, TestAlphaPeptDeepBuildLibrary and
@@ -166,6 +172,20 @@ Order, each step built and tested before its commit:
   keeps `VerifyLatestBuildOnTeamCity` and a const alias of the variable name.
 
 ## Progress Log
+
+### 2026-10-26 - Built, gated, reviewed, PR opened
+
+The four design points settled with Brendan in the morning (the precursor-table input, the TorchSharp-free
+detection classes, one self-contained package, the tests on the download seam), then steps 1-5 in one
+session: commit e085895639 (one commit, amended with the review fixes before the push), PR #4917. Gates:
+Osprey 645 tests + inspection + regenerated help pages, CarafeSharp 116 tests + inspection, Skyline's
+AlphaPeptDeepUseGpuTest, OspreyProgressMonitorTest, OspreySearchTest, OspreySearchTuningTest,
+TestAlphaPeptDeepBuildLibrary (answer files matched through Osprey), TestCarafeModelBuildLibrary,
+CodeInspection, CheckForMissingResources in en, the first four plus CheckForMissingResources in fr and ja,
+tcinspect clean. An hour went to a stale `TestPerf.dll`: `Build-Skyline.ps1`'s default target does not
+build TestPerf, so `-Target TestPerf` must precede `Run-Tests.ps1` after a perf-test edit (memory saved).
+Open: the pinned package question above (Brendan to decide); CarafeSharp.exe in the package (optional item 6)
+not done.
 
 ### 2026-10-26 - Branch cut, survey
 
