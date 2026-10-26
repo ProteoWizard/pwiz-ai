@@ -38,23 +38,73 @@ Root causes (C++ on `Skyline/skyline_26_1_1` vs the port):
 
 ## Tasks
 
-- [ ] Regression test first: 2,000 `GetMsLevel`-equivalent metadata calls on a wiff well under a second; open under a second
-- [ ] Build `WiffSpectrum` from `GetMassSpectrumInfo`; defer `GetMassSpectrum` and centroiding to `XValues`/`YValues`
-- [ ] Override `GetSpectrum(int, DetailLevel)` in `SpectrumList_Sciex` with the C++ gate (InstantMetadata returns before SDK peak work; FullData alone attaches arrays)
-- [ ] Trim per-open setup in `WiffFile` constructor (lazy sample/experiment load as in C++)
-- [ ] Audit other ported readers for the same `DetailLevel` collapse
-- [ ] Verify reference mzML output unchanged (Sciex.Tests)
-- [ ] Re-measure on `Hoofnagle_01_IDA.wiff` (open, 2,000 GetMsLevel plain/centroided)
+- [x] Regression test (deterministic peak-read counter instead of a timing threshold)
+- [x] Build `WiffSpectrum` from `GetMassSpectrumInfo`; defer `GetMassSpectrum` and centroiding to `XValues`/`YValues`
+- [x] Override `GetSpectrum(int, DetailLevel)` in `SpectrumList_Sciex` with the C++ gate (InstantMetadata returns before SDK peak work; FullData alone attaches arrays)
+- [x] Pass DetailLevel through `SpectrumList_PeakPicker` / `IVendorCentroidingSpectrumList` (the centroided path)
+- [x] Open cost: not the `WiffFile` ctor (0.05 s) - fixed by the lazy spectrum in CreateIndex's acceptZeroLengthSpectra branch; ctor left alone
+- [x] Wiff2Spectrum lazy, matching cpp Spectrum2Impl
+- [ ] Audit other ported readers for the same `DetailLevel` collapse - deferred, no measured cost
+- [x] Verify reference mzML output unchanged (Sciex.Tests)
+- [x] Re-measure on `Hoofnagle_01_IDA.wiff` (open, 2,000 InstantMetadata plain/centroided)
+- [x] /code-review medium (9 findings: 3 fixed, 6 dropped with reasons - see log)
+- [ ] Developer review of the diff, then commit + PR
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
-- **Test project**: Sciex.Tests (pwiz-sharp) and/or Skyline Test
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
+- **Test name**: SpectrumListSciexDetailLevelTests.Sciex_InstantMetadata_ReadsNoPeaks (counts SDK peak reads; no timing)
+- **Test project**: Sciex.Tests (pwiz/data/vendor_readers/Sciex/test)
+- **Fails on master**: yes - verified by disabling the InstantMetadata gate (4,592 peak reads; red-check.log). The counter is new, so master itself cannot compile the test.
+- **Passes on fix**: yes (sciex-tests-fix.log)
 
 ## Progress Log
 
 ### 2026-10-26 - Session Start
 
 Starting work on this issue. Branch created in `C:\dev\pwiz-net8` (C:\dev\pwiz is occupied by open PR #4851).
+
+Baseline on this machine (Hoofnagle_01_IDA.wiff, 59,441 spectra, default ReaderConfig; temporary
+bench test, not committed): AbstractWiffFile.Open 0.05-0.28 s; Reader_Sciex.Read 9.8 s warm / 78 s
+cold; 2,000 InstantMetadata reads 11-15 s plain, 126-131 s vendor-centroided (same as FullData).
+
+Findings:
+- The open cost is not the WiffFile constructor (0.05 s). Skyline's MsDataFileImpl defaults to
+  acceptZeroLengthSpectra=true, whose CreateIndex branch asks `GetSpectrum(...).HasPrecursorInfo`
+  for every Product cycle - on master a full GetMassSpectrum per MS2 cycle. cpp's getSpectrum there
+  reads only GetMassSpectrumInfo. The lazy WiffSpectrum fixes this without touching the ctor.
+- SpectrumList_PeakPicker (and every wrapper) collapsed DetailLevel to bool, so Skyline's centroided
+  path turned InstantMetadata into a full vendor centroid. Ported cpp's DetailLevel overload
+  (incl. minDetailLevel_ escalation) and added a DetailLevel overload to IVendorCentroidingSpectrumList
+  (default method keeps the other five vendors unchanged).
+- C++ wiff2 (Spectrum2Impl) was lazy too; Wiff2Spectrum now matches (precursor from a plain read only
+  when nothing has been read; SpectrumList_Sciex reads the peaks first above InstantMetadata so an MS2
+  spectrum still costs one SDK read).
+
+Changes: SpectrumList_Sciex (DetailLevel override + cpp :231 gate), WiffFile.cs (WiffExperiment.GetSpectrum
+reads info only; WiffSpectrum lazy), Wiff2File.cs (lazy Wiff2Spectrum), SpectrumList_PeakPicker,
+IVendorCentroidingSpectrumList, Sciex.csproj (InternalsVisibleTo Sciex.Tests for a peak-read counter).
+Regression test: Sciex.Tests SpectrumListSciexDetailLevelTests.Sciex_InstantMetadata_ReadsNoPeaks.
+
+Verified (logs in C:\dev\pwiz\ai\.tmp\sessions\20261026-sciex4916\):
+- Sciex.Tests 12/12 (all wiff + wiff2 reference mzMLs unchanged, wiff2 concurrency tests pass);
+  Analysis.Tests 206/206.
+- Red check: with the cpp :231 gate disabled the regression test fails (4,592 peak reads).
+- Hoofnagle_01_IDA.wiff, same machine, master -> fix:
+  - open in Skyline's config (acceptZeroLengthSpectra=true): 8.7-10.1 s -> 0.33-0.68 s
+  - 2,000 InstantMetadata reads: 11-15 s -> 0.01-0.02 s plain; 126-131 s -> 0.02 s centroided
+  - FullMetadata/FullData unchanged (11-13 s plain; centroided 91-107 s vs 108-132 s)
+  - default config (BPC index) open: 9.8 s -> 7.4-7.6 s; still the per-experiment BPC fetch, same as
+    cpp's createIndex, and not on Skyline's path
+
+/code-review medium fixes: removed the peak picker's below-FullMetadata early return (it labelled
+a full-metadata inner read's profile defaultArrayLength as centroid on the non-vendor path);
+_minDetailLevel only rises; regression test also compares instant vs full metadata on the ACO-CE
+wiff2. Dropped: unreadable cycles now get real metadata + empty arrays instead of the old
+null-spectrum form (cpp threw; msconvert's probe drops them); SDK exceptions surface from wiff2
+property getters to the same caller; CentroidMode stays true when GetPeakArray fails (only consumer
+already marks centroid); FastMetadata still reads peaks (cpp getDataSize does too); wiff2 plain-read
+reuse ignoring latched retry flags (only after SDK failures). Re-ran: Sciex.Tests 12/12,
+Analysis.Tests 206/206.
+
+Out of scope: auditing the other vendor readers' DetailLevel handling - none shows the cost (Thermo
+GetMsLevel is 0.02 ms/spectrum per the issue).
