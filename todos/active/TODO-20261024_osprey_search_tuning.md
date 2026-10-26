@@ -326,6 +326,26 @@ Stacked on #4914's branch until it merges; afterwards `git merge origin/master`,
 
 ## Progress Log
 
+### 2026-10-26 (morning) - TeamCity results on b1cefa6ec1
+
+Both builds the evening queued are green: bt209 re-run 4235543 (SUCCESS; the first run's
+TestManagingSearchTools failure did not recur) and the PR's first Perf and Tutorial run 4235542 (118/118).
+`TestOspreySearchPerf` took 1755 s (29m16s) on MacCoss TeamCity Agent 1; the nightly perf run 4235684 on an
+AWS agent took 3522 s (58m43s), 263 s of it downloading the 3-run Stellar zip. Library counts per run:
+32515/32482 and 32453/32628 spectra (first search / saved-model search), so the GPU-less fine-tune is not
+bit-stable across agents but lands within the asserted bands. The PR still shows one ERROR status: the
+Wine Docker build 4235175 failed at 17:05 as a snapshot dependency of the first bt209 run (4235169) and
+was never re-queued, so the status is stale, not a failure of this branch. Next: re-queue the Wine build
+to clear it, then start PR 3 from its section above (interactive, design points first).
+
+**TestOspreySearchPerf excluded from the TeamCity PR perf run** (Brendan, after reading the two runs: 29 min
+then 59 min, and the second Perf and Tutorial build took 4 h 20 min on the one heavily loaded agent that runs
+the config). Commit f7731c2c1a adds it to `pwiz_tools/Skyline/tc-perftests-skiplist.txt`, the file
+`tc-perftests.bat` passes as `skip=@`, next to TestDiaToSrmTutorial's entry; the lab's nightly perf runs
+(SkylineNightly, not this list) still run it. Longer term: split the perf set across configs and agents once
+the new equipment Brendan is ordering is in place, then remove the entry. This closes the perf-cost concern
+from the evening of 2026-10-25.
+
 ### 2026-10-25 (late evening) - Issue #4916, TeamCity on PR 2, handoff
 
 Filed #4916 (SCIEX wiff reader in the .NET 10 port: ~4 s per open, every metadata request fetches and
