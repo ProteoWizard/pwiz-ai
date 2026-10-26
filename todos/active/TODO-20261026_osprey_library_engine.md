@@ -138,6 +138,15 @@ Order, each step built and tested before its commit:
       1 dropped - the install prompt at source selection, which mirrors the Koina check in the same handler and
       feeds the Use GPU box), PR #4917 opened
 - [x] TeamCity on #4917: 18/18 green
+- [x] **Which Osprey a build installs** (Brendan, 2026-10-26 afternoon; second commit on the PR): a release
+      (Build 0) and the FEATURE COMPLETE dailies (Build 9) install the pinned package, whose pin is set at release
+      time (release-guide.md, Phase 1 step 6, plus a pointer at the branch-creation step: choose the build, pin it
+      on TeamCity so its artifacts survive cleanup, set `OSPREY_VERSION` / `OSPREY_BUILD_ID`, cherry-pick to master);
+      master dailies and developer builds take the last successful master Osprey build, found through the REST API
+      when Osprey is first needed (`OspreyHelpers.UsesPinnedPackage`, `GetPackageDownloadInfo`), so nothing is
+      updated by hand during development and the first daily after this merge gets an Osprey with `--precursors`.
+      `OspreyInstaller.EnsureInstalled` looks the package up behind a LongWaitDlg, re-registers an installed package
+      whose registration was lost, and names the found version in the prompt. Tests keep following last successful
 - [ ] Brendan's review and merge; then the first nightly perf run with master's new Osprey
 - [ ] **Pinned package for TeamCity** (open question for Brendan): `OspreyHelpers.OSPREY_BUILD_ID` 4234706 (26.1.1.296)
       has no `--precursors`, and `OspreyTestUtil.EnsureOsprey` downloads the latest master Osprey build, which lacks

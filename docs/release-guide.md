@@ -251,6 +251,10 @@ Pre-release stabilization period before official release.
 
 1. **Create release branch** from master: `Skyline/skyline_YY_N`
 
+   Then pin the Osprey package on the branch (step 6 of the release workflow's Phase 1 below):
+   FEATURE COMPLETE builds install the pinned package, where master dailies follow the last
+   successful Osprey build.
+
 2. **Copy tutorials for the new version** (can do immediately after branch creation):
    ```cmd
    xcopy /E /I <release folder>\pwiz_tools\Skyline\Documentation\Tutorials T:\www\site\skyline.ms\html\tutorials\26-0-9
@@ -668,6 +672,31 @@ branch via PR, then cherry-pick to master.
 
    > **Note**: This effectively moves the Phase 8 Jamfile update forward. Phase 8 no longer
    > needs a separate Jamfile change — it just confirms the daily release is working.
+
+6. **Pin the Osprey package** (release branch; do this when the release branch is cut, so the
+   FEATURE COMPLETE dailies install it too):
+
+   Skyline downloads Osprey into its Tools folder the first time a user opens Osprey Search or
+   builds a library with the AlphaPeptDeep source. Which package depends on the build
+   (`OspreyHelpers.UsesPinnedPackage`): a release (Build 0) and the FEATURE COMPLETE dailies
+   (Build 9) install the pinned package; master dailies and developer builds take the last
+   successful Osprey build on master, found through TeamCity's REST API when Osprey is first
+   needed, so nothing is updated by hand during development.
+
+   - Choose the Osprey build to ship: the last successful `Osprey Windows .NET`
+     (`ProteoWizard_OspreyWindowsNet`) build at the branch commit, and confirm its tests and the
+     Osprey Perf/Regression gate are green.
+   - **Pin that build on TeamCity** (build page > Actions > Pin) so its artifacts survive the
+     server's cleanup. An unpinned build's zip disappears after a few weeks, and with it the
+     download for every installed release.
+   - Set `OSPREY_VERSION` and `OSPREY_BUILD_ID` in `pwiz_tools/Skyline/Model/Lib/OspreyHelpers.cs`
+     to that build's version (the `Osprey-<version>-win-x64.zip` artifact name) and build id.
+     `OspreySearchTest` checks that the pinned name parses back to the pinned version.
+   - Commit on the release branch; cherry-pick to master like the rest of Phase 1, so master
+     carries the last shipped pin even though its own builds do not use it.
+
+   Durable hosting of the release zip outside TeamCity, as the installers are hosted on
+   skyline.ms, is not set up yet; until it is, the pinned TeamCity build is the download.
 
 #### Phase 2: Release-only changes (release branch only — NOT cherry-picked to master)
 
