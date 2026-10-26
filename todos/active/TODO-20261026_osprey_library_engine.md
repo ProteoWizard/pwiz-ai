@@ -7,8 +7,10 @@
   squash-merged-parent case)
 - **Base**: PR #4914's branch, then `master`
 - **Created**: 2026-10-26
-- **Status**: Built, gated and reviewed in one day (2026-10-26); PR #4917 open against master, TeamCity
-  pending. Open: which Osprey package the PR's TeamCity perf run and the pinned download use (below)
+- **Status**: Built, gated and reviewed in one day (2026-10-26); PR #4917 open against master, all 18
+  checks green (the two Linux builds after re-queuing past three unresponsive cloud agents). Settled with
+  Brendan: tests follow the latest successful master Osprey build, nothing is pinned to this PR's build; the
+  two Build Library perf tests are red on TeamCity until the merge gives master an Osprey with `--precursors`
 - **GitHub Issue**: (none)
 - **Module**: `skyline` (with an Osprey / CarafeSharp change for the precursor-table input)
 - **PR**: [#4917](https://github.com/ProteoWizard/pwiz/pull/4917) (opened 2026-10-26, commit e085895639)
@@ -135,7 +137,8 @@ Order, each step built and tested before its commit:
       `--culture`, digest options refused with `--precursors`, the dead working-folder assignment and banner line;
       1 dropped - the install prompt at source selection, which mirrors the Koina check in the same handler and
       feeds the Use GPU box), PR #4917 opened
-- [ ] TeamCity on #4917; Brendan's review
+- [x] TeamCity on #4917: 18/18 green
+- [ ] Brendan's review and merge; then the first nightly perf run with master's new Osprey
 - [ ] **Pinned package for TeamCity** (open question for Brendan): `OspreyHelpers.OSPREY_BUILD_ID` 4234706 (26.1.1.296)
       has no `--precursors`, and `OspreyTestUtil.EnsureOsprey` downloads the latest master Osprey build, which lacks
       it until this PR merges. Locally the sibling build serves. On the PR, TestAlphaPeptDeepBuildLibrary and
