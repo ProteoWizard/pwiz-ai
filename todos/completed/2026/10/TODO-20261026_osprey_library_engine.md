@@ -7,13 +7,11 @@
   squash-merged-parent case)
 - **Base**: PR #4914's branch, then `master`
 - **Created**: 2026-10-26
-- **Status**: Built, gated and reviewed in one day (2026-10-26); PR #4917 open against master, all 18
-  checks green (the two Linux builds after re-queuing past three unresponsive cloud agents). Settled with
-  Brendan: tests follow the latest successful master Osprey build, nothing is pinned to this PR's build; the
-  two Build Library perf tests are red on TeamCity until the merge gives master an Osprey with `--precursors`
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline` (with an Osprey / CarafeSharp change for the precursor-table input)
-- **PR**: [#4917](https://github.com/ProteoWizard/pwiz/pull/4917) (opened 2026-10-26, commit e085895639)
+- **PR**: [#4917](https://github.com/ProteoWizard/pwiz/pull/4917) (merged 2026-10-26 as fb75aff35b; opened the
+  same day at e085895639, then the package rule d68a5b6f23, the master merge 968d7d6f33, the test fix 2c7fcb5d3a)
 - **Checkout**: `C:\proj\pwiz`
 - **Continues**: `TODO-20261024_osprey_search_tuning.md` (PR 2), whose "PR 3" section is the agreed direction
 
@@ -150,9 +148,9 @@ Order, each step built and tested before its commit:
 - [x] Branch updated to master (merge commit 968d7d6f33, the squash-merged-parent case: seven files resolved to the
       branch's side after checking master's copies equal the branch base); the install-gate step of OspreySearchTest
       fixed for a Tools folder that already holds the latest package (2c7fcb5d3a); every check green, merge state CLEAN
-- [ ] Brendan's review and merge; then the first nightly perf run with master's new Osprey. After the merge: finalize
-      the three integration TODOs into completed/ (Brendan, 2026-10-26) and continue in `TODO-osprey_test_subsetting.md`
-      and `TODO-build_library_carafe_wizard.md`
+- [x] Brendan's review and merge (fb75aff35b). Still to watch: the first nightly perf run after master's next Osprey
+      build, which should turn TestAlphaPeptDeepBuildLibrary and TestCarafeModelBuildLibrary green; the work continues
+      in `TODO-osprey_test_subsetting.md` (tonight) and `TODO-build_library_carafe_wizard.md`
 - [ ] **Pinned package for TeamCity** (open question for Brendan): `OspreyHelpers.OSPREY_BUILD_ID` 4234706 (26.1.1.296)
       has no `--precursors`, and `OspreyTestUtil.EnsureOsprey` downloads the latest master Osprey build, which lacks
       it until this PR merges. Locally the sibling build serves. On the PR, TestAlphaPeptDeepBuildLibrary and
@@ -189,6 +187,21 @@ Order, each step built and tested before its commit:
   keeps `VerifyLatestBuildOnTeamCity` and a const alias of the variable name.
 
 ## Progress Log
+
+### 2026-10-26 - Merged
+
+PR #4917 merged as commit fb75aff35b, the same day the branch was cut. Shipped: Osprey's `--precursors`
+phase (the PredictLibrary task over Skyline's precursor table, the peptdeep TSV out, refusals for the
+one command's options), `PrecursorTablePredictor` and `PredictPrecursorTableTask` in CarafeSharp.Tasks
+with the model loading shared through `LibraryModels`, the CUDA detection and installer classes in
+CarafeSharp.Core, Build Library running Osprey through the shared `RunOsprey`, `OspreyInstaller` as the
+one install seam with the stale-registration fix, Skyline shipping no torch runtime, models or TorchSharp,
+the package rule (release and FEATURE COMPLETE builds pinned, master dailies and developer builds on the
+last successful master build) with its release-guide step, and `OspreyTestUtil` as the tests' seam.
+Deferred by decision: `CarafeSharp.exe` in the package (dropped). Follow-ups in the backlog:
+`TODO-osprey_test_subsetting.md` (the perf test's cost, queued for the night of 2026-10-26) and
+`TODO-build_library_carafe_wizard.md` (the pages after the AlphaPeptDeep source). The two Build Library
+perf tests on TeamCity go green with the first nightly after master's next Osprey build.
 
 ### 2026-10-26 - Built, gated, reviewed, PR opened
 
