@@ -121,11 +121,49 @@ Order, each step built and tested before its commit:
 ## Tasks
 
 - [x] Design settled (above)
-- [ ] Step 1: runtime classes to CarafeSharp.Core
-- [ ] Step 2: PrecursorTablePredictor + task in CarafeSharp.Tasks
-- [ ] Step 3: Osprey --precursors
-- [ ] Step 4: Skyline builder, GPU, install seam, csproj, tests
-- [ ] Step 5: gates, review, PR
+- [x] Step 1: runtime classes to CarafeSharp.Core (Build-CarafeSharp tests + inspection green)
+- [x] Step 2: PrecursorTablePredictor + task in CarafeSharp.Tasks; `PrecursorTable` (columns + reader) in Core;
+      `LibraryModels` factored out of `LibraryGenerator` (pure code motion); `PrecursorTablePredictorTest`
+- [x] Step 3: Osprey --precursors (grammar, workflow, refusals, help pages regenerated in en/ja/zh-Hans, docs);
+      `TestSubsetPrecursorTable`, `TestPrecursorsArg`; Build-Osprey Debug tests (645) + inspection green
+- [x] Step 4: Skyline builder, GPU, install seam, csproj, tests. Gate in en: AlphaPeptDeepUseGpuTest,
+      OspreyProgressMonitorTest, OspreySearchTest, OspreySearchTuningTest, TestAlphaPeptDeepBuildLibrary (answer
+      files matched through Osprey), TestCarafeModelBuildLibrary, CodeInspection, CheckForMissingResources all pass
+- [ ] Step 5: fr/ja pass, CarafeSharp tests, tcinspect, commit, `/code-review medium`, PR
+- [ ] **Pinned package for TeamCity** (open question for Brendan): `OspreyHelpers.OSPREY_BUILD_ID` 4234706 (26.1.1.296)
+      has no `--precursors`, and `OspreyTestUtil.EnsureOsprey` downloads the latest master Osprey build, which lacks
+      it until this PR merges. Locally the sibling build serves. On the PR, TestAlphaPeptDeepBuildLibrary and
+      TestCarafeModelBuildLibrary (PR perf config) would fail against master's Osprey; after the merge the nightly
+      Osprey build has it. Options: pin this PR's own Osprey TeamCity build id once it exists and let the tests
+      take the pinned package on a PR; or accept the one red PR perf run and merge Osprey first.
+
+## Notes from the build (2026-10-26)
+
+- **Build Library's run is one ProcessRunner call with percent parsing ON** (`OspreyHelpers.RunOsprey(..., true)`),
+  not the wizard's `OspreyProgressMonitor`: the builder keeps its four segments (5/85/90/100) and Osprey's
+  `NN%` lines move the prediction segment; the monitor would rewrite the segments to its own task count.
+  No `--timestamp` for the builder: its log in `<lib>\APD\<stamp>\osprey-skyline-stdout.log` is unstamped,
+  and the status messages carry Osprey's lines as they are.
+- **Osprey's output naming**: the builder passes `-o <work>\output_libs\predict.blib` and reads
+  `predict.predicted.speclib.tsv` beside it (`OspreyHelpers.GetPredictedTablePath`), the FASTA phase's
+  `<out>.predicted.blib` naming carried over; `TransformedOutputSpectraLibFilepath` is unchanged, so the
+  TestPerf tests' answer files still apply.
+- **CCS with a saved model**: the predictor loads the model folder's `ccs_model.pt` when the file has one
+  (`LibraryModels.LoadCcsModel`, as Osprey's own prediction does); the in-process code always took the
+  pretrained CCS model. A CarafeSharp `.model.zip` holds none, so only a legacy Carafe `.carafemodel` with a
+  CCS model would differ, and `TestCarafeModelBuildLibrary` asserts RT only.
+- **`OspreyInstaller.EnsureInstalled(parent)`** (SettingsUI) replaced `SkylineWindow.EnsureOspreyInstalled`:
+  called by the wizard's menu item, when Build Library's AlphaPeptDeep source is chosen (before the Use GPU
+  probe, which reads the CUDA package list from the installed Osprey folder), and again in
+  `CreateAlphaBuilder`. Its `DropStaleRegistration` forgets a registered Osprey under the Tools folder that
+  is not the pinned package (another version, or deleted), so the pinned one takes over; a registration
+  outside the Tools folder is a developer's build and is kept (the PR 1 review finding).
+- **`UseGpuDriver(owner, checkBox)`**: no in-process flag, no "restart Skyline" rule; the SettingsUI string
+  for it is gone, as are the builder's "Predicting on the CPU/GPU" and "fine-tuned model" strings
+  (ModelResources, English only, no translations existed). `TorchRuntimes_GetCudaUnavailableReason_This_build_of_Skyline...`
+  was renamed to say Osprey is not installed.
+- **`OspreyTestUtil`** (TestUtil) holds `EnsureOsprey` / `RegisterOsprey` / `ENV_OSPREY_EXE`; OspreySearchTest
+  keeps `VerifyLatestBuildOnTeamCity` and a const alias of the variable name.
 
 ## Progress Log
 
