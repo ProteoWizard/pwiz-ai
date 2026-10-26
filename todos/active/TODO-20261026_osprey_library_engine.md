@@ -147,7 +147,12 @@ Order, each step built and tested before its commit:
       updated by hand during development and the first daily after this merge gets an Osprey with `--precursors`.
       `OspreyInstaller.EnsureInstalled` looks the package up behind a LongWaitDlg, re-registers an installed package
       whose registration was lost, and names the found version in the prompt. Tests keep following last successful
-- [ ] Brendan's review and merge; then the first nightly perf run with master's new Osprey
+- [x] Branch updated to master (merge commit 968d7d6f33, the squash-merged-parent case: seven files resolved to the
+      branch's side after checking master's copies equal the branch base); the install-gate step of OspreySearchTest
+      fixed for a Tools folder that already holds the latest package (2c7fcb5d3a); every check green, merge state CLEAN
+- [ ] Brendan's review and merge; then the first nightly perf run with master's new Osprey. After the merge: finalize
+      the three integration TODOs into completed/ (Brendan, 2026-10-26) and continue in `TODO-osprey_test_subsetting.md`
+      and `TODO-build_library_carafe_wizard.md`
 - [ ] **Pinned package for TeamCity** (open question for Brendan): `OspreyHelpers.OSPREY_BUILD_ID` 4234706 (26.1.1.296)
       has no `--precursors`, and `OspreyTestUtil.EnsureOsprey` downloads the latest master Osprey build, which lacks
       it until this PR merges. Locally the sibling build serves. On the PR, TestAlphaPeptDeepBuildLibrary and
