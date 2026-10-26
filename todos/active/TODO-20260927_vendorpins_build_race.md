@@ -2,12 +2,12 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260927_vendorpins_build_race`
-- **Base**: `Skyline/work/20260612_net8_port` (45a7f00a03)
+- **Base**: `master` (the port branch merged into master; master merged in 2026-10-26)
 - **Created**: 2026-09-27
 - **Status**: In Progress
 - **Module**: `pwiz`
-- **PR**: [#4724](https://github.com/ProteoWizard/pwiz/pull/4724) (base: the port branch)
-- **Worktree**: `D:\Dev\pwiz-vendorpins`
+- **PR**: [#4724](https://github.com/ProteoWizard/pwiz/pull/4724) (retarget base to master)
+- **Worktree**: `D:\Dev\pwiz-vendorpins` (Mike); adopted 2026-10-26 by Matt in `C:\dev\pwiz-smallmol`
 
 ## Objective
 
@@ -75,3 +75,63 @@ targets started before either Exec finished). Log:
   (`TODO-20260927_osprey_pwizsharp_one_config.md`; it also removes the Debug same-folder double compile and the
   vendor-extraction race); a HEAD-keyed up-to-date skip for the generator (every build still pays one child
   `dotnet run`)
+
+## Scope expansion (2026-10-26): no-change builds skip the vendor steps
+
+Brendan and Brian timed no-change bs.bat/bo.bat after #4850 and found two per-build costs in the
+vendor projects; the scope of this PR now covers both.
+
+- **Extract*Assemblies never skipped.** 7-Zip gives extracted files the dates stored in the archive,
+  which predate a fresh checkout of the archive, so Inputs=archive / Outputs=extracted files was always
+  out of date. Their proposal touched the extracted DLLs; instead each of the 9 targets (Agilent,
+  Bruker x2, Mobilion, Sciex, Shimadzu, Thermo, Waters, Mascot in BiblioSpec) now has a stamp file in its
+  extraction folder as Outputs, touched at the end. Vendor files keep their real dates, and no
+  referenced DLL gets newer, which would re-run CoreCompile downstream.
+- **RunVendorPinsGenerator ran `dotnet run` every build (~2.6 s).** Now Inputs = vendor-archives
+  vendor_api_*.7z, vendor-sdk-pins.json, the generator's sources and csproj, the generated .cs (so
+  deleting it forces a run) and obj/VendorPins.head; Outputs = obj/VendorPins.stamp. VendorPins.head
+  holds `git rev-parse HEAD`, written only when it differs (RecordVendorPinsHead, ~60 ms), because the
+  pins' commit can change without any file changing. The generated .cs cannot be the Outputs: the
+  generator rewrites it only on a content change, so it would stay older than a new HEAD forever.
+  Chose rev-parse over the suggested .git/logs/HEAD: works in worktrees and without a reflog.
+
+### Verified
+
+- [x] No-change msconvert-sharp build (`dotnet build MsConvert.csproj -c Release
+      -p:IAgreeToVendorLicenses=true`): master 6.8 s (extract targets 0.1-0.9 s each, generator 2.67 s)
+      -> 3.2 s, all 8 extract targets + RunVendorPinsGenerator skipped
+- [x] Re-runs when needed: touched archive re-extracts (DLL keeps its archive date); generator re-runs
+      after deleting the .cs (file restored), a new commit, a reset back, and a touched archive, and
+      skips on the next build each time
+- [x] Fresh-generator (obj/bin deleted) `Build-Osprey.ps1 -Configuration Release -VendorReader`:
+      succeeded, generator run once; no-change rerun 14.0 s with all 9 skips
+- [x] Mascot (`dotnet build BiblioSpec.csproj -c Release -p:IAgreeToVendorLicenses=true`): first build
+      extracted (0.94 s) and wrote the stamp, no-change build skipped it (3.4 s total), touched
+      msparser archive re-extracted (headers keep 2021/2022 dates), next build skipped again
+
+### /code-review high (2026-10-26), 9 findings
+
+Fixed:
+- Bruker/Waters stamp shared across target OS (a Linux-target build after a Windows one skipped
+  extraction): stamp names now carry $(BrukerArchiveDir) / $(WatersNativeLibArchiveDir).
+- Stamp lost the old Outputs' self-healing (deleted/never-extracted DLL): the key extracted files are
+  back in Inputs; a missing input makes MSBuild run the target. Verified by deleting the Thermo
+  RawFileReader DLL.
+- Mascot stamp sat in the user-overridable $(MascotParserPath) (Touch fails if it does not exist):
+  moved to BiblioSpec obj/, header added to Inputs.
+- The repeated 3-line comment now lives once beside $(SevenZaExe) in Directory.Build.props.
+
+Dropped:
+- Archive replaced by an mtime-preserving copy: the archives come from make_*_7z.bat (fresh mtime)
+  and git checkout always writes a fresh mtime.
+- BuildMobilionShim ignores an SDK whose MBI_SDK.lib predates the built shim: pre-existing, and
+  adding the extraction stamp to its Inputs made it run every build (the inner vcxproj build
+  doesn't rewrite an up-to-date DLL) while the C++ link check would still skip the relink.
+  Needs a forced rebuild on SDK change if ever wanted.
+- Deleted pinned archive / deepened shallow clone leave stale pins: dev builds only; the installer
+  runs the generator directly, unconditionally, with --require-all-pins.
+- Concurrent extraction from multiple configurations: pre-existing; the stamp narrows it, and the
+  one-configuration Osprey follow-up removes it.
+
+After fixes: no-change msconvert-sharp build 3.2 s with all 8 extract targets, the generator and
+BuildMobilionShim skipped; BiblioSpec no-change skips Mascot.
