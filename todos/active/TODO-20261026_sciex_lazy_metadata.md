@@ -9,7 +9,7 @@
 - **GitHub Issue**: [#4916](https://github.com/ProteoWizard/pwiz/issues/4916)
 - **Module**: `pwiz`
 - **Other labels**: `performance`
-- **PR**: (pending)
+- **PR**: [#4921](https://github.com/ProteoWizard/pwiz/pull/4921)
 
 ## Objective
 
@@ -48,7 +48,10 @@ Root causes (C++ on `Skyline/skyline_26_1_1` vs the port):
 - [x] Verify reference mzML output unchanged (Sciex.Tests)
 - [x] Re-measure on `Hoofnagle_01_IDA.wiff` (open, 2,000 InstantMetadata plain/centroided)
 - [x] /code-review medium (9 findings: 3 fixed, 6 dropped with reasons - see log)
-- [ ] Developer review of the diff, then commit + PR
+- [x] /code-review high (10 findings, triage only on second cycle - none a shipped-behavior defect;
+      demux wrapper not forwarding DetailLevel is real but narrow and pre-existing, left out)
+- [x] AbIda perf test: pass, 685 s; centroided wiff leg outside open+GetSpectrum 1.7 s (Oct nightly 411 s, Sep cpp 2.6 s), open 968 ms
+- [x] Commit cfcd4469f7 + PR #4921
 
 ## Regression Test
 
