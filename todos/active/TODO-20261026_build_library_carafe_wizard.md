@@ -296,3 +296,12 @@ or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylin
    group box holds (candidates: the Model combo and Use GPU as before; one control that opens the
    advanced route, such as a "Fine-tune a new model on DIA runs..." choice or an Advanced... button
    leading to the pages) and which pages remain behind it.
+   Direction from the demo (2026-10-27): put the decisions on page 1 as expressions of intent in
+   the group box, each leading to its pages only when checked, e.g. "[ ] Digest external FASTA
+   sequences" and "[ ] Fine-tune the model" (wordings open). The FASTA choice may want a radio pair
+   or a combo (this document's precursors vs an external FASTA) rather than a checkbox, because the
+   form must say plainly what the default predicts for: with a full-FASTA DIA library now a
+   prominent use, a naive user looking at the form cannot tell that it builds a library of
+   predictions for the precursors in the document. "Use this model as it is" turning Next into
+   Finish is the pattern to keep. The Library Model page is fine as it is: Browse... is the only
+   way runs get into the list, which the top blurb already says.
