@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4923](https://github.com/ProteoWizard/pwiz/pull/4923) (PR A)
 - **Checkout**: `C:\dev\pwiz-inspect` (worktree switched from the clean, pushed PR #4769 branch)
 
 ## Objective
