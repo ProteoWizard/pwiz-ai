@@ -5,8 +5,10 @@
 - **Branch**: `fb_signup-hash-expire-key`
 - **Base**: `develop`
 - **Created**: 2026-10-25
-- **Status**: In Progress
-- **PR**: [#682](https://github.com/LabKey/MacCossLabModules/pull/682)
+- **Status**: Completed
+- **PR**: [#682](https://github.com/LabKey/MacCossLabModules/pull/682) (merged 2026-10-27)
+- **Platform PR**: [LabKey/platform#8241](https://github.com/LabKey/platform/pull/8241), branch
+  `fb_remove-unused-sendemail` in the vagisha/platform fork
 - **Objective**: Store SignUp confirmation keys as hashes, expire them after seven days, and make each
   link work once, the same way LabKey/platform#8211 changed core verification tokens.
 
@@ -56,12 +58,22 @@ signup. Module docs are in `ai/docs/labkey/signup/signup-module.md`.
       transaction. A second `/code-review high` led to keeping the first signup's details, the
       column fix, `Table.update` for updates by primary key and the integration-test registration.
       Committed as c0f06c79 and pushed. Reply posted and thread resolved.
-- [ ] Human review. The PR is marked ready for review.
-- [ ] At deploy on skyline.ms, check whether the registration email template is customized. A
-      customized template does not have the `^linkExpiration^` line, so the email would not mention
-      the expiry.
-- [ ] At deploy, check the `signup-form` wiki page in `/home/support` for text that tells users to use
-      the link from their first email. A repeat signup now sends a new link and the first one stops
-      working.
-- [ ] Tell Adam that the 5-argument `SecurityManager.sendEmail` has no callers left once this merges.
-      Its comment says only the SignUp module calls it.
+- [x] Human review. Approved by Adam (LabKey). His `@Nullable` suggestion for `verifyUser` is in 958be17f.
+- [x] Merged to `develop` on 2026-10-27
+- [x] Opened LabKey/platform#8241 to remove the 5-argument `SecurityManager.sendEmail`, which has no
+      callers left. Adam (LabKey) merges it.
+
+## Follow-ups
+
+- At deploy on skyline.ms, check whether the registration email template is customized. A customized
+  template does not have the `^linkExpiration^` line, so the email would not mention the expiry.
+- At deploy, check the `signup-form` wiki page in `/home/support` for text that tells users to use the
+  link from their first email. A repeat signup now sends a new link and the first one stops working.
+
+## Progress Log
+
+### 2026-10-27 - Merged
+
+PR #682 merged to `develop` as f9a0a629, after Adam (LabKey) approved it. The final commit, 958be17f,
+added his `@Nullable` suggestion for `SignUpManager.verifyUser`. LabKey/platform#8241, opened from the
+vagisha/platform fork, removes the `SecurityManager.sendEmail` overload that SignUp no longer calls.
