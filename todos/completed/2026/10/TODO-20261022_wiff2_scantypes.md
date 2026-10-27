@@ -5,10 +5,10 @@
 - **Base**: `master`
 - **Module**: `pwiz`
 - **Created**: 2026-10-22
-- **Status**: Master merged; 26.1.1 backport open
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **PR**: [#4907](https://github.com/ProteoWizard/pwiz/pull/4907) (merged 2026-10-26)
-- **Backport PR**: [#4912](https://github.com/ProteoWizard/pwiz/pull/4912) into `Skyline/skyline_26_1_1` (open)
+- **Backport PR**: [#4912](https://github.com/ProteoWizard/pwiz/pull/4912) into `Skyline/skyline_26_1_1` (merged 2026-10-27)
 
 ## Objective
 A SCIEX ACO-CE compound optimization .wiff2 (`ACO-CE-DKTGKN_2-332-Positive-2026-10-21-10-20-43.wiff2`,
@@ -71,3 +71,10 @@ chromatograms by default, single-point centroid SIM spectra with simAsSpectra, n
 chromatograms then so Skyline reads the product ion spectra), SeeMS single-point stick, Sciex
 fixtures moved into Reader_Sciex_Test.data. Nothing deferred. The TODO stays in active/ until the
 26.1.1 backport #4912 merges; move it to completed/2026/10/ then.
+
+### 2026-10-27 - Backport merged
+
+PR #4912 merged into `Skyline/skyline_26_1_1` as commit a2e5c6cc: the C++ wiff2 reader gets the
+same ProductIon -> Product and Q1MI -> SIM handling, omits wiff2 SIM chromatograms under
+simAsSpectra, and takes each request's sample ID from the experiment's own sample (Copilot
+finding); SeeMS single-point stick. Reported by Le. Nothing deferred.
