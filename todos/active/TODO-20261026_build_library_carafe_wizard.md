@@ -225,8 +225,19 @@ in the same checkout; alone it passed, so it is noted here rather than chased.
   states for one choice. The quick path (pretrained model, document precursors) is three Nexts.
 
 **Not done / next**
-- Run `AlphaPeptDeepUseGpuTest`, `OspreySearchTest`, `KoinaSkylineIntegrationTest`,
-  `BuildLibraryCarafeWizardTest`; fr/ja runs; the TestPerf tests touched; `CodeInspection`.
+- Run (all green at the end of the session): `AlphaPeptDeepUseGpuTest`, `OspreySearchTest`,
+  `KoinaSkylineIntegrationTest`, `BuildLibraryCarafeWizardTest` (en, fr, ja), `CodeInspection`,
+  and the TestPerf `AlphapeptdeepBuildLibraryTest` and `CarafeModelBuildLibraryTest` (with
+  `-EnableInternet`). Not run: `KoinaBuildLibraryTest` (TestConnected, needs the Koina server) and
+  `AcquisitionComparisonTutorialTest` (a tutorial with screenshots; its Build Library step gained a
+  Next click, so its screenshot and the tutorial text need Brendan's decision on Koina's routing).
 - Decoys and entrapment for a Provided FASTA (open decision 1); the editor's Build... route
   (decision 2); feature 3 (decision 3).
 - The Osprey `--training-search` HPC stage decomposition is still refused with `--precursors`.
+- `/code-review medium` ran on the branch (10 findings): 9 fixed in the fourth local commit, after
+  which `BuildLibraryCarafeWizardTest`, `OspreySearchTuningTest`, `AlphaPeptDeepUseGpuTest`,
+  `CodeInspection` and Osprey's `TestSubsetPrecursorTable` passed again;
+  dropped: the progress bar of a fine-tuned build jumps between the builder's four weighted
+  segments and `OspreyProgressMonitor`'s seven task segments (5% -> 0% -> ~95% -> 85% -> 100%).
+  Cosmetic; the fix is for the monitor to map task progress into the segment it is given rather
+  than redefining the segments.
