@@ -8,7 +8,7 @@
 - **Status**: In Progress
 - **Module**: `skyline`
 - **Support thread**: https://skyline.ms/home/support/announcements-thread.view?rowId=76102 (Rafael)
-- **PR**: (pending)
+- **PR**: [#4926](https://github.com/ProteoWizard/pwiz/pull/4926)
 
 ## Objective
 
@@ -24,7 +24,7 @@ Rafael's MS-DIAL and FragHub MSP examples:
 - [x] Read `PRECURSORTYPE:` as the adduct
 - [x] Async warning, once per assumed unit per file, with line number and entry name, when units are guessed
 - [x] Extend NistLoadLibrary (LibraryLoadTest.cs) with MS-DIAL, FragHub and RetentionTimeSecs entries and warning assertions
-- [ ] /code-review, PR
+- [x] /code-review medium (fixed stale-units flag and cache version; rest dropped), PR #4926
 
 ## Notes
 - matchms "riken" exports use the MS-DIAL field names with RETENTIONTIME in seconds; that is why the guess warns.
