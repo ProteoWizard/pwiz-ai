@@ -366,6 +366,34 @@ Also green, with `-EnableInternet`: `AlphapeptdeepBuildLibraryTest`, `CarafeMode
 `AcquisitionComparisonTutorialTest` (TestPerf, back on its master step count, so no screenshot
 change) and `KoinaBuildLibraryTest` (TestConnected), all on their master navigation; and
 `OspreySearchTest`. Every gate named in this TODO is green on the nine local commits; the branch
-is ready for `/code-review medium` and a PR when Brendan says so. Still open: the fine-tune progress
+is ready for `/code-review medium` and a PR when Brendan says so.
+
+**Text review and code review (2026-10-27, later)**: Brendan reviewed every new string through
+`Export-ResxChanges.ps1` (a CSV of the branch's added and changed resx strings, in
+`ai/scripts/Skyline`): no component named in user text (no Osprey, no DecoyPairs table), page
+descriptions that say what the page's settings do, the progress text naming the chosen model
+("Predicting the library with the {0} model"). UI review over the MCP-driven demo: done, no
+further change. `/code-review medium`: 8 findings; fixed 5 (a non-tuning rebuild deleted the
+saved model it predicted with; stale decoy and entrapment boxes drove a document build after the
+Predict For page was left; the hidden runs-page combo read every model file on a toggle; page 1
+validated twice on Finish; DecoyPairs written one parsed statement per row); dropped 2 (the
+progress bar cosmetic below; remote sources in the wizard control's Browse, from PR #4914); one
+left for Brendan: Osprey's hosted route never sets `ApplyTrainingRunMeta`, so after a fine-tune
+the training run's NCE, instrument, rt_max and precursor m/z range do not apply to the prediction
+(FASTA route and table route alike; `TestSubsetPrecursorTable` passes either way). One line in
+`LibraryBuildWorkflow` would set it, but it also lets the run's NCE override a user-given one.
+
+**Follow-up PRs named by Brendan (2026-10-27)**: expose the full engine settings in a name-value
+grid, as the other search engines do, for both the Osprey Search wizard and Build Library's
+fine-tune (it would also let a user choose peptdeep's RT model again).
+
+**Later on 2026-10-27**: b8503cf122 renames `AlphapeptdeepLibraryBuilder` to
+`CarafeLibraryBuilder` and keeps the AlphaPeptDeep name for the default models only (three user
+strings reworded and re-keyed, the ja/zh source captions read Carafe, the dialog's property is
+`Carafe`). 5307ed1ef7 drops the table route's override of Carafe's RT model: the pretrained
+Chronologer predicts RT (Mike: peptdeep's RT model is poor; Bo Wen's new base RT model comes
+later). **`AlphapeptdeepBuildLibraryTest` (TestPerf) now fails on its answer files' RT column and
+needs re-recording** (`IsRecordMode`, then the zip on the test data server): Brendan's step. The
+other gates are green on the twelve local commits. Still open: the fine-tune progress
 bar cosmetic (above), and the pause dialog truncates a long description to its first words
 (existing behavior, tooltip has the full text).
