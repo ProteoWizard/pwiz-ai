@@ -833,6 +833,41 @@ the same files for the port plan's step 1.
     - Intel's few corrupted chunks per run would slip past a startup self-test, so Intel GPUs would need a deny-list.
     - The RTX 4060 Ti was not run (it can't mount the NAS). Scaling the 1650 by SM count (14 -> 34) projects about 8 M/s
       on ZT and 1.5-2.5 M/s on Stellar, against 4-7.5 M/s on these CPUs: unmeasured.
+  - **GPU dropped for now (Mike, 2026-10-26).** The chunk-export code is saved as
+    `ai/.tmp/sessions/20261021-stellar/chunkdump-instrumentation.patch` and removed from the tree.
+
+**2026-10-27: CPU joint-solve options (uncommitted in `JointDemultiplexer.cs`, all off by default).**
+- Code: `--solve-profile` now reports each descent (rounds, passes, block solves, time, how many hit MaxRounds, and the
+  late additions: how many were active earlier and pruned, and what they would lower the objective by). Options, set
+  with `--joint-param`: `WarmStart` (start each sweep's chunks from the previous sweep's coefficients),
+  `StartActive`, `FirstRelativeTolerance`, `FirstMaxRounds`, `GrowRelativeTolerance` (stop growing when a round's
+  additions would lower the objective by at most this fraction). Defaults byte-identical (ZT slice vs e1b2446; Stellar
+  slice vs the build before the counters).
+- Runs: `D:\test\osprey-runs\demux-speed-20261026` (script `ai/.tmp/sessions/20261021-stellar/run-speedopts.ps1`),
+  16 threads, one at a time. Stellar SuperOverlap TR01 minutes 8-10 (`--filter "scanTime [480,600]"`, intensity / 100);
+  ZT A1 sweeps 400-435. Converged references: `RelativeTolerance=1e-8 MaxRounds=50 MaxPasses=2000`.
+- **Root cause of the rounds:** almost every descent ends at MaxRounds (5) still adding: Stellar 97% / 99.9%, ZT 80% /
+  71% (descent 1 / 2). The coefficients added after round 1 were active earlier in the same descent and pruned at zero
+  (Stellar 100% / 95%, ZT 100% / 68%): a block solve sets one to zero, neighbors' solves change the residual, and the
+  single-coefficient check (moves > 1e-3 ions) brings it back. Most late rounds promise <= 1e-4 of the objective
+  (Stellar 57% / 67%, ZT 58% / 84%).
+- **The default is far from converged:** converged needs 1,249 passes a chunk on Stellar (default 45.6) and 186 on ZT
+  (27.1). Distance from converged (intensity in unmatched peaks, intensity-weighted; `compare_arms.py`, Stellar 0.3 Th,
+  ZT 10 ppm): Stellar default 1.02%, ZT default 0.35%.
+- Stellar slice, wall s / distance from converged: default 362 / 1.02%; StartActive 358 / 1.02% (no effect: the first
+  check already activates nearly everything); **WarmStart 316 / 0.71%** (faster and closer); FirstRelativeTolerance 1e-3
+  321 / 1.14%; GrowRelativeTolerance 1e-4 332 / 1.16%, 1e-3 313 / 1.34%; warm + loose 292 / 0.82%; warm + grow 1e-4
+  302 / 0.84%; warm + grow 1e-3 279 / 0.98%; **warm + grow 1e-4 + loose 268 / 0.96%** (-26%, still closer than the
+  default); keep-active (no pruning) 481 / 1.06%; BlockPoints 2: 400 / 1.35%, 3: 480 / 0.61%.
+- ZT slice, wall s (about 230 s of it is the SCIEX open and index) / distance: default 581 / 0.35%; WarmStart 584 /
+  0.36% (no gain); FirstRelativeTolerance 1e-3 544 / 0.43%; FirstMaxRounds 2 523 / 0.49%; GrowRelativeTolerance 1e-4
+  510 / 0.67% (solve -15%), 1e-3 479 / 1.06% (solve -24%); keep-active 1,126; BlockPoints 2 630. On ZT every faster
+  option moves away from converged; all distances stay about 1% or less.
+- **ID validation running** (`run-speed-ids.ps1`, 2026-10-27 03:11): the three SuperOverlap profile replicates through
+  `--profile --joint --joint-profile --ions --peak-sigma-th 0.33 --centroid centrix --centrix-sigma 0.33
+  --centrix-sigma-ms1 0.255 --centrix-param Solver=active_set`, arms `super-speed-default` and `super-speed-fast` (+ warm,
+  grow 1e-4, first 1e-3), snapshots `_bin\speedopts2-{demuxtool,osprey}`. `--fill-time-ions` is now `--ions`, and
+  `--ms1 joint` is for scanning only, so the 10-22 arm's command no longer runs as written.
 
 ## Plan (2026-10-21, original)
 
