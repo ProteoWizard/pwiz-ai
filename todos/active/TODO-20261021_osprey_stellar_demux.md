@@ -788,6 +788,35 @@ the same files for the port plan's step 1.
     (`dump-chunks.ps1`).
   - The core solve: fixed support (the CPU's), block CD with exact warm-started NNLS, relaxation 1.5. Run on the CPU in
     double and float, then on each CUDA/OpenCL device: one 32-thread group per chunk, lane 0 runs the NNLS.
+  - **Results, blencathra** (`D:\test\osprey-runs\gpubench-data\bench-zt-3000.log`, `bench-stellar-1000.log`).
+    Throughput in block solves per second, kernel time only:
+
+    | | ZT, 3,000 chunks | Stellar, 1,000 chunks |
+    |---|---|---|
+    | CPU, 16 threads (FP32) | 3.4 M/s | 3.6 M/s |
+    | GTX 1650 | 3.0 M/s | 0.54 M/s (multicolor 0.98) |
+    | UHD 630 | 0.43 M/s | 0.14 M/s (0.53) |
+
+    - Transfers make the 1650 slower than the CPU end to end. The real design would send sparse points (about 36 KB a
+      ZT chunk, not 371 KB).
+    - Stellar is slow on the GPU because its 8x8 NNLS runs on one lane.
+    - Storing the residual and weights sample by sample (each lane's rows read together, 32 reads become one) and fixing
+      the 11-sample loop doubled the 1650 (2.0 -> 3.9 M/s on 500 ZT chunks).
+    - Multicolor on the GPU: about 12 of 32 lanes have a point per color, and the per-lane scratch spills to slow memory.
+  - **Repeatability:**
+    - CUDA: every run repeats exactly.
+    - UHD 630 (driver 27.20.100.9664): one launch of 100 chunks (0.34 s) corrupted 2-3 chunks per run, with differences
+      up to 49%. Launches of 10-48 chunks repeated exactly. On 3,000 chunks with launches sized to about 0.1 s, 5
+      chunks still differed between runs.
+    - The device needs a startup self-test (solve twice, compare bits) and an allow-list; the UHD 630 is slower than
+      the CPU anyway.
+  - **Agreement with the CPU in the same order** (position totals; median / 99th percentile):
+    - ZT: GPU 0.11% / 1.8%. CPU float vs double 0.003% / 1.1%.
+    - Stellar: GPU 0.017% / 0.47%.
+    - Visiting order alone, both in double (multicolor vs sequential): ZT 2.0% / 9.4%, Stellar 0.23% / 0.74%.
+    - So the solve stops path-dependent: FP32 matters less than the order, and "close to the CPU" means the same order.
+  - **Package for Mike's machines:** `D:\test\osprey-runs\gpubench-package`, `run-gpubench.cmd`. It contains a
+    self-contained exe, 3,000 ZT and 1,000 Stellar chunks, and writes `gpubench-{zt,stellar}-%COMPUTERNAME%.log`.
 
 ## Plan (2026-10-21, original)
 
