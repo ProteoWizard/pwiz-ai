@@ -259,6 +259,32 @@ See [ai/docs/style-guide.md](docs/style-guide.md) for detailed guidelines and ex
 
 ## User Interface Guidelines
 
+### Design Principle: Streamline the Default Case
+
+> "Streamline the default case as much as possible, enable greater flexibility off that path so
+> that users who are not ready for it don't even see it." (Brendan, 2026-10-27)
+
+This governs every new form, wizard page and option. When designing or reviewing UI:
+
+- **Keep the common path as short as it was.** A feature for advanced users must not add pages,
+  choices or reading to the path a naive user takes. If the default case needed one click before,
+  it needs one click after.
+- **Reach the advanced options through one control** on the default path: a checkbox or choice
+  that reveals more, an Advanced... button, or a wizard page that only the advanced choice leads
+  to. Users who are not ready for the option should not see it.
+- **Reveal controls when a choice needs them** (progressive disclosure): a method combo appears
+  under a checked box; a path box appears only for the method that takes a file. Do not ask up
+  front about a case the user has not chosen.
+- **Explanations go in tooltips, not long captions.** A caption names the choice; the tooltip says
+  what it does.
+- **A power-user option of unsettled value stays behind the advanced control**, where it costs
+  naive users nothing, rather than being promoted to the default page to make it discoverable.
+
+The case that produced the rule: a Build Library draft moved the model choice off the first page
+and asked every user, up front, about predicting for a FASTA, decoys and a separate entrapment
+FASTA. The default case (the pretrained model, the document's precursors) had become three pages
+of reading; the fix was to put the simple choices back on page 1 and reach the rest off that path.
+
 ### Menu Items
 - All items in `menuMain` should have mnemonics (e.g., `&File`)
 - Menu text uses title-case (e.g., "Keyboard Shortcuts")
