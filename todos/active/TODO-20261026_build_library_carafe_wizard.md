@@ -393,8 +393,10 @@ strings reworded and re-keyed, the ja/zh source captions read Carafe, the dialog
 `Carafe`). 5307ed1ef7 drops the table route's override of Carafe's RT model: the pretrained
 Chronologer predicts RT (Mike: peptdeep's RT model is poor; Bo Wen's new base RT model comes
 later). `AlphapeptdeepBuildLibraryTest`'s answer files were re-recorded for the Chronologer RTs
-(only the RT column changed) and its zip, which git tracks under TestPerf, replaced in place as
-PR #4849 did; green again. Every gate is green on the thirteen commits of PR #4925. Still open:
+(only the RT column changed), and its zip, which git tracks under TestPerf, became an
+`AlphapeptdeepBuildLibraryTest.data` folder (the harness looks for `.data` before `.zip` under
+the same name), so the next re-record diffs the answer lines; green again. Every gate is green on
+the fourteen commits of PR #4925. Still open:
 the fine-tune progress
 bar cosmetic (above), and the pause dialog truncates a long description to its first words
 (existing behavior, tooltip has the full text).
