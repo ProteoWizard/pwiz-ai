@@ -306,6 +306,14 @@ or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylin
    Finish is the pattern to keep. The Library Model page is fine as it is: Browse... is the only
    way runs get into the list, which the top blurb already says.
 
+8. **A wait verb for the MCP** (Brendan, 2026-10-27, after the first MCP-driven demo): the
+   session learned a pause had arrived by polling the open-forms list after a fixed sleep. The MCP
+   has no events (Nick's area; its verbs are request and response), and the shape that serves both
+   the test harness and a session driving a user's UI is a blocking verb, not a push event:
+   `skyline_wait_for_form(type, timeout)` returning when the form is up, the contract of the
+   harness's `WaitForOpenForm`. Belongs in the MCP, in production, not on this branch; proposal
+   for Nick.
+
 **Plan for the next session (Brendan, 2026-10-27)**: in this order.
 1. Revision 1 first: the test-runner flag that registers the test's Skyline with the MCP and
    pre-approves screen capture, so the session can drive a demo test itself (capture each page,
@@ -318,3 +326,45 @@ or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylin
    the rest of the list.
 The existing branch stays as the working implementation behind whatever page 1 becomes: the
 pages, the builder's one-job tune and predict, the DecoyPairs marking and the tests all remain.
+
+### 2026-10-27 - The MCP-driven demo, then page 1 redesigned (local commits, no push)
+
+All three steps of the plan above, in order, with Brendan at the keyboard.
+
+1. **`-AiConnector`** (pwiz d4e1433526; pwiz-ai 1bd96957): TestRunner `aiconnector=on` sets
+   `Program.AiConnector`; `Program.Main` then starts the JSON tool service and writes the
+   connection file as a Skyline set to connect at startup does, and the harness pre-approves
+   screen capture for the process. Verified by driving `BuildLibraryCarafeWizardTest`'s demo from
+   the session: instance listed, every page captured with no permission dialog, Continue clicked
+   on the pause dialog. Documented in the script README and `build-and-test-guide.md`.
+2. **The mockup**: page 1's Carafe tab with Model + Use GPU, a "Predict for" combo (the
+   precursors in this document / the peptides of a protein FASTA file...) and a "Fine-tune the
+   model on DIA runs..." box, shown live at the first pause. Brendan: "achieves the goal", with
+   the Model combo to be the settings-list combo (Add..., Edit current..., Edit list...).
+3. **The real code** (pwiz d4b08ea590): `CarafeModelCombo` (SettingsUI) is the model combo both
+   Build Library's page 1 and the wizard's Library Model control use; `UseGpuDriver` on page 1;
+   `OspreyLibraryModelControl.HideModelChoice()` leaves the runs list for Build Library's runs
+   page. Routing: the defaults finish from page 1; Predict for a FASTA leads to the Predict For
+   page; the fine-tune box to the runs, FASTA, modifications and search settings pages. Koina
+   has the Predict for combo on its tab (kept in step with Carafe's) and finishes from page 1
+   again. Predict For page per revisions 3 to 6: blank FASTA box, "Add decoy peptides" (reverse
+   decoys, DecoyPairs Method "reverse"), "Add entrapment peptides" revealing "Generation
+   method" (Shuffled sequences of the FASTA's peptides | A FASTA file of entrapment proteins)
+   and the FASTA box for the latter; captions in tooltips. The modification warning is back on
+   page 1 (the tab control grew 24 px for it). The five tests that had gained a Next click are
+   restored to their master versions. Brendan's wording, folded in: "Peptide sequence source:"
+   with "Shuffled target sequences" | "A FASTA file of entrapment proteins", and the page's
+   description "The FASTA file digested with the document settings to produce the peptide
+   precursors the library is predicted for." Green: `BuildLibraryCarafeWizardTest` (en, fr,
+   ja), `CodeInspection`, `AlphaPeptDeepUseGpuTest`, `KoinaSkylineIntegrationTest`,
+   `OspreySearchTuningTest`.
+   **Scope decision taken**: decoys and entrapment are offered on the FASTA route only; a
+   document that wants them holds them already (Refine > Add Decoys, an import). Said to
+   Brendan, no objection yet.
+
+**Not run this session, to run before the PR**: `AlphapeptdeepBuildLibraryTest`,
+`CarafeModelBuildLibraryTest`, `AcquisitionComparisonTutorialTest` (TestPerf) and
+`KoinaBuildLibraryTest` (TestConnected), all with `-EnableInternet`, now on their master
+navigation; `OspreySearchTest`. Also open: the fine-tune progress
+bar cosmetic (above), and the pause dialog truncates a long description to its first words
+(existing behavior, tooltip has the full text).
