@@ -214,6 +214,20 @@ in the same checkout; alone it passed, so it is noted here rather than chased.
   `KoinaBuildLibraryTest` (TestConnected), `AcquisitionComparisonTutorialTest`,
   `AlphapeptdeepBuildLibraryTest`, `CarafeModelBuildLibraryTest` (TestPerf, not run here).
 
+**Decoys and entrapment (open decision 1), answered in code in a commit of its own**: the Predict
+For page offers "Add shuffled-sequence decoys, one per peptide" and "Add entrapment peptides from a
+FASTA file", for the document route and the FASTA route, AlphaPeptDeep and Koina alike. Skyline
+generates the decoys (`RefinementSettings.GenerateDecoys`, shuffle) and digests the entrapment FASTA
+with the document settings, in the document the builder predicts for (the open document is never
+changed). The built library then gets Carafe's DecoyPairs table (`LibraryDecoyPairs`, Model/Lib):
+a row per target, a decoy's row pointing at its target's, IsEntrapment on the entrapment FASTA's
+peptides, Method "shuffle" - the one marking the blib format already has, which Osprey reads with
+`--decoys-in-library`. Spectra are matched by unmodified sequence and charge; one that is not unique
+gets no row. Not done: CarafeSharp's `EntrapmentFastaBuilder` (shuffled proteins at a ratio) as the
+entrapment source; the page takes a FASTA the user supplies. Drop the commit if the decision goes
+another way. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylineIntegrationTest`,
+`AlphaPeptDeepUseGpuTest` and `CodeInspection` pass.
+
 **Decisions taken in the session (Brendan to confirm)**
 - Koina goes through the Predict For page too (the spec says both sources), which adds a Next
   click before Finish and changes the Acquisition Comparison tutorial's Build Library step and
