@@ -411,6 +411,16 @@ after the Skyline tests reach the install step still falls back to master; rerun
 equality, redundant casts, qualifier, using). After the fixes: 14 of 15 checks green, the
 Skyline build pending.
 
+**The branch-aware lookup did not work, and was taken out** (2026-10-27, later): the PR's Osprey
+build finishes after the Skyline tests reach the install step (15:54 vs 15:43), and Osprey's
+package version is the commit's day of year, so same-day builds on any branch share a name and
+the agents' test download cache served master's zip. Brendan chose the local build:
+`tcbuild.bat` now builds `Osprey.csproj` (Release, x64) before `build.bat`, so
+`OspreyTestUtil.EnsureOsprey` finds the sibling build on TeamCity as it does on a developer's
+machine - everything Osprey needs is in the repo (committed models, NuGet torch runtime). The
+only consumer-side effect of the name collision that remains is pre-existing: a developer build
+that installed the first master package of a day does not pick up a second one that day.
+
 **Osprey gates on the Chronologer RT default (2026-10-27)**: `regression-parallel.ps1 -Dataset All`
 48 PASS / 0 FAIL in 38:23 (lane logs `pwiz_tools/Osprey/TestResults/regression-lane-*-20261027_153248.log`);
 `Test-PerfGate.ps1 -Dataset Stellar` PASSED, total +2.0% vs `pwiz-perfbase` (verdict
