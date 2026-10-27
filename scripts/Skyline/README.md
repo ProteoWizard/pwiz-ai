@@ -64,6 +64,10 @@ PowerShell wrapper for TestRunner.exe with natural language-style test execution
 # Run all tests in Test.dll
 .\ai\Run-Tests.ps1 -TestName Test.dll
 
+# Register the test's Skyline with the MCP, so this session can drive it at every PauseTest pause
+# (capture forms, read values, click Continue). Implies -ShowUI; launch it in the background.
+.\ai\Run-Tests.ps1 -TestName BuildLibraryCarafeWizardTest -AiConnector
+
 # Set a switch a test reads from its environment (NAME=VALUE pairs; TestRunner inherits them).
 # Here the Osprey perf test predicts on the GPU with the CUDA runtime Osprey installed:
 .\ai\Run-Tests.ps1 -TestName OspreySearchPerfTest -EnvironmentVariables "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey\torch"

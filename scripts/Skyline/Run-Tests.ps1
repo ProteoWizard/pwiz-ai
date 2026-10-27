@@ -42,6 +42,14 @@
     is then not run in further languages, so record its expected values in English first;
     see "Re-recording tutorial audit logs" in ai/docs/build-and-test-guide.md.
 
+.PARAMETER AiConnector
+    Register each test's Skyline with the MCP (aiconnector=on): the in-process JSON tool service
+    starts and writes its connection file to ~/.skyline-mcp, as a Skyline configured to connect at
+    startup does, and screen capture is pre-approved for the process. A Claude Code session then
+    sees the test's Skyline in skyline_get_instances and, at each PauseTest pause, can capture its
+    forms, read their values and click the pause dialog's Continue. Implies -ShowUI. Off by
+    default, so the tests of the MCP itself keep their own registration.
+
 .PARAMETER NoVendorReaders
     Run with vendor readers disabled (vendors=off), so tests take the same mzML/mzXML
     path they take in pass 0. Combine with -Loop and -Language fr to soak a pass-0-only
@@ -112,6 +120,12 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$TakeScreenshots = $false,  # Auto-capture tutorial screenshots (pause=-3, implies -ShowUI)
+
+    [Parameter(Mandatory=$false)]
+    [switch]$AiConnector = $false,  # aiconnector=on: register each test's Skyline with the MCP (~/.skyline-mcp)
+                                    # and pre-approve screen capture, so a Claude Code session can drive
+                                    # the test at its PauseTest pauses (capture forms, click Continue).
+                                    # Implies -ShowUI, since a test pauses only on screen.
 
     [Parameter(Mandatory=$false)]
     [switch]$EnableInternet = $false,
@@ -708,11 +722,18 @@ if ($TakeScreenshots) {
     $ShowUI = $true
 }
 
+# -AiConnector implies -ShowUI: a test pauses (PauseTest) only on screen, and the pause is
+# where the MCP client gets to look at and drive the test's Skyline
+if ($AiConnector) {
+    $ShowUI = $true
+}
+
 Write-Host "Running tests with TestRunner.exe" -ForegroundColor Cyan
 Write-Host "  Test: $TestName" -ForegroundColor Gray
 Write-Host "  Language(s): $languageParam" -ForegroundColor Gray
 Write-Host "  UI Mode: $(if ($ShowUI) { 'On-screen (visible)' } else { 'Offscreen (hidden)' })" -ForegroundColor Gray
 Write-Host "  Screenshots: $(if ($TakeScreenshots) { 'Auto-capture (pause=-3)' } else { 'Off' })" -ForegroundColor Gray
+Write-Host "  AI connector: $(if ($AiConnector) { 'On (aiconnector=on: the test''s Skyline registers with the MCP)' } else { 'Off' })" -ForegroundColor Gray
 Write-Host "  Internet: $(if ($EnableInternet) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Vendor readers: $(if ($NoVendorReaders) { 'Off (vendors=off, pass-0 data path)' } else { 'On' })" -ForegroundColor Gray
 Write-Host "  Loop: $(if ($Loop -le 1) { 'Once' } else { "$Loop iterations" })" -ForegroundColor Gray
@@ -915,6 +936,10 @@ try {
 
         if ($TakeScreenshots) {
             $runnerArgs += "pause=-3"
+        }
+
+        if ($AiConnector) {
+            $runnerArgs += "aiconnector=on"
         }
 
         if ($EnableInternet) {

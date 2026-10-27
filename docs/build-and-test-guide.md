@@ -286,6 +286,22 @@ ai/scripts/Skyline/Run-Tests.ps1 -TestName TestFilesTreeForm -ShowUI
 >
 > Without `-ShowUI`, tests run offscreen (hidden) which is faster but invisible.
 
+### Drive a Paused Test over the MCP
+```powershell
+# The test's Skyline registers with the MCP (~/.skyline-mcp) and screen capture is pre-approved
+ai/scripts/Skyline/Run-Tests.ps1 -TestName BuildLibraryCarafeWizardTest -AiConnector
+```
+
+`-AiConnector` (TestRunner `aiconnector=on`, implies `-ShowUI`) makes each test's Skyline start
+its JSON tool service and write a connection file, as a Skyline configured to connect at startup
+does. The Claude Code session then sees the test's Skyline in `skyline_get_instances` (the MCP
+accepts a TestRunner-hosted process) and, at each `PauseTest` pause, can capture its forms with
+`skyline_get_form_image`, read values with `skyline_get_form_value`, and resume the test by
+clicking the pause dialog's Continue with `skyline_click_form_button`. Launch the run detached
+(`run_in_background`), since it blocks at every pause until something clicks Continue. Off by
+default: the tests of the MCP itself (`McpConnectorTest`) register themselves and keep their
+behavior.
+
 ### Run Multiple Tests / Languages
 ```powershell
 # Comma-separate test method names and languages.
