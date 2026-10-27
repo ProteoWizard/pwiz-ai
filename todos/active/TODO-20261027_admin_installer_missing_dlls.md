@@ -7,7 +7,9 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: #4922 (into `Skyline/skyline_26_1_1`); master follow-up #4924
+  (`Skyline/work/20261027_installer_test_file_guard`, built in `C:\proj\pwiz`, which was then
+  switched back to `Skyline/work/20261026_nightly_runtime_servicing`)
 - **Checkout**: `C:\proj\daily`
 
 ## Objective
@@ -50,8 +52,11 @@ master as unused leftovers.
   and a `RuntimeIdentifier` define in place of duplicated x64/x86 blocks
 - [x] Build MSI (`b.bat pwiz_tools/Skyline/Executables/Installer//setup.exe`): 0 errors; file
   table vs the shipped 279 MSI is +10 files, -0 (279 has 351, matching Philip's count)
-- [ ] PR into `Skyline/skyline_26_1_1`
-- [ ] Master PR: guard in `build.ps1` against test files in the staged payload
+- [x] PR into `Skyline/skyline_26_1_1`: #4922
+- [x] Master PR #4924: `build.ps1` fails before staging when `$SkylineBinDir` holds test
+  assemblies, harnesses or MSTest platform DLLs; tested on a minimal fake bin (real exes +
+  test files) both ways; `/code-review medium` folded in (check before copy, single
+  enumeration, platform patterns so unlisted test projects are caught, clearer message)
 - [ ] Draft reply to Philip in Gmail Drafts (Brendan sends)
 
 ## Not done (by decision)
