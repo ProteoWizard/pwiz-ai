@@ -274,3 +274,15 @@ or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylin
    to the Library Model page. Brendan is not yet convinced; decide after seeing the Library Model
    page whether the combo comes back to page 1 for the quick path (page 2 then holding only the
    fine-tune choice), or the blurb stays.
+3. **Predict For: the FASTA box starts blank.** No prefilled path (the test's "missing.fasta" stays
+   in the box after its refusal check, which is what Brendan saw). Choosing the FASTA option and
+   clicking Browse starts in the last FASTA folder, else the document's; the box shows nothing
+   until a file is chosen.
+4. **Decoys: "[ ] Add decoy peptides"** with a tooltip saying what is added, and reverse-sequence
+   decoys (Skyline's reverse), not shuffled; the DecoyPairs Method recorded becomes "reverse".
+5. **Entrapment: "[ ] Add entrapment peptides"** with a tooltip; nothing more until it is checked.
+   Checked, it reveals "Generation method:" [Shuffled | From FASTA]; only "From FASTA" reveals the
+   path box and its own Browse.... Progressive disclosure: the naive user sees two checkboxes; the
+   separate-FASTA source is a power-user option whose value is not settled (conserved peptides can
+   pass the filters and be detected for real biological reasons).
+6. **Drop the long captions** on both checkboxes; the explanation lives in the tooltips.
