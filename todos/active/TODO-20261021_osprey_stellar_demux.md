@@ -815,8 +815,9 @@ the same files for the port plan's step 1.
     - Stellar: GPU 0.017% / 0.47%.
     - Visiting order alone, both in double (multicolor vs sequential): ZT 2.0% / 9.4%, Stellar 0.23% / 0.74%.
     - So the solve stops path-dependent: FP32 matters less than the order, and "close to the CPU" means the same order.
-  - **Package for Mike's machines:** `D:\test\osprey-runs\gpubench-package`, `run-gpubench.cmd`. It contains a
-    self-contained exe, 3,000 ZT and 1,000 Stellar chunks, and writes `gpubench-{zt,stellar}-%COMPUTERNAME%.log`.
+  - **Package for Mike's machines:** on the NAS at `Y:\test\gpubench` (`\\maccoss-nas\home\test\gpubench`),
+    run `run-gpubench.cmd` from the share. It contains a self-contained exe, 3,000 ZT and 1,000 Stellar chunks,
+    and writes `logs\gpubench-{zt,stellar}-%COMPUTERNAME%.log`. The local copy was removed.
 
 ## Plan (2026-10-21, original)
 
