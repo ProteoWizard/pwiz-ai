@@ -1,9 +1,12 @@
-# TODO-build_library_carafe_wizard.md
+# TODO-20261026_build_library_carafe_wizard.md
 
 ## Branch Information
-- **Branch**: Not yet created - will be `Skyline/work/YYYYMMDD_build_library_carafe_wizard` (from `master`,
-  after PR #4917 merges)
+- **Branch**: `Skyline/work/20261026_build_library_carafe_wizard`
+- **Base**: `master` (fb75aff35b, after PR #4917 merged)
+- **Created**: 2026-10-26
+- **Status**: In Progress
 - **Module**: `skyline` (with Osprey / CarafeSharp changes where a feature needs them)
+- **PR**: (pending)
 - **Objective**: After choosing the AlphaPeptDeep (Carafe) source in Build Library, Next leads to wizard
   pages that decide what the library is predicted FOR and what the model is tuned ON, the design of the
   June 2024 Skyline-Carafe integration spec (`ai/.tmp/Skyline-Carafe Integration - Google Slides.pdf`,
@@ -158,3 +161,66 @@ comes from Add... pointing at the file, or from the editor route.
 From the two slides and the state after PR #4917; discussed with Brendan.
 
 **Handoff from the session of 2026-10-26**: read `ai/.tmp/handoff-20261026_osprey_followups.md` first (build and test gotchas, the Osprey changes feature 1 needs, the code to reuse).
+
+### 2026-10-26 (evening, autonomous session) - Implemented, local commits only, no push
+
+Brendan's goal for the session: the full spec, plus a functional test that can pause on every page
+for a live demo; nothing pushed, no PR. The branch has one local commit (f770da6bb5) and the rest
+is in the working tree at the time of writing; see the session's handoff `ai/.tmp/handoff-20261026_carafe_wizard.md`.
+
+**Done**
+- Osprey: `--precursors` with `--training-input` and `--fasta`: the FASTA names the training library,
+  the tuning runs are searched against it, the models tuned, and the tuned models predict the table;
+  no `--task` needed and no `-i` inputs (the run searches nothing but the tuning runs). `Program.LibraryBuildError`,
+  `ValidateArgs`, `OspreyCommandArgs.InterpretLibraryBuild`, `LibraryBuildWorkflow.PhaseTask`; the usage
+  text of `--precursors`. `TestSubsetPrecursorTable` has the tuned leg (cold, warm, refusals) and passes.
+- CarafeSharp fix found by that test: `PrecursorTablePredictor` forced the AlphaPeptDeep RT model kind
+  for any model folder, so a tuned Chronologer RT model was swapped for the pretrained one and the
+  table came back with the pretrained RTs. The FASTA path's model-folder handling moved to
+  `LibraryModels.ApplyModelDirectoryMeta` and both paths use it.
+- Skyline refactor: the wizard's Library Model, Modifications and Search Settings pages are
+  `OspreyLibraryModelControl`, `OspreyModificationsControl`, `OspreySearchSettingsControl`
+  (FileUI/PeptideSearch), hosted by `OspreySearchDlg` with its public API delegating, so the existing
+  tests drive it unchanged. `OspreySearchTuningTest` passes on the refactor. `UseGpuDriver` takes a
+  `Control` owner. `WizardPages.AddPageControl` is the shared placement helper.
+- A compact `OspreyFastaControl` (FASTA path, enzyme, missed cleavages) for Build Library's FASTA
+  page: `ImportFastaControl` is laid out for a 425 px page and does not fit Build Library's 303 px
+  pages (its text box collapses and the DDA panel falls off the page); the wizard keeps
+  `ImportFastaControl` because Finish hands its `ImportSettings` on.
+- Build Library (`BuildLibraryDlg`): pages `properties, files, predict_for, library_model, fasta,
+  modifications, search_settings` with a history stack for Previous. Routes: Files -> files;
+  Koina -> predict_for -> Finish; AlphaPeptDeep -> predict_for -> library_model -> (Use this model:
+  Finish | Fine-tune: fasta -> modifications -> search_settings -> Finish). The Model combo and Use
+  GPU moved from page 1's Carafe tab to the Library Model page (page 1's tab is now a description);
+  the modification warning sits under the model page. Predict For: the document's precursors, or a
+  protein FASTA digested with the document settings into a document of its own
+  (`ImportPeptideSearch.ImportFasta`, under a LongWaitDlg at Finish) - one implementation for
+  AlphaPeptDeep and Koina. No decoys or entrapment yet (open decision 1).
+- `AlphapeptdeepLibraryBuilder.TuningConfig`: the fine-tune's one command through
+  `OspreyHelpers.BuildCommandLine` (now handles `PrecursorTablePath`, `Task`, `Timestamp`, and
+  omits the search settings when nothing is searched), run under `OspreyProgressMonitor` (7 tasks),
+  in `<lib dir>/<lib stem>/osprey/` (kept between builds, so the same runs tune once); the model is
+  copied to `<library>.model.zip` (`OspreyHelpers.GetLibraryModelPath`), not listed.
+- Tests: `BuildLibraryCarafeWizardTest` (TestFunctional, on `OspreySearchTest.zip`): the tuned
+  build with every page's refusals and Previous/Next, a build with the saved model added to the
+  list, a build for a FASTA. Set env `SKYLINE_BUILD_LIBRARY_DEMO=1` and run with `-ShowUI` to pause on
+  every page (`PauseTest`). Updated navigation in `KoinaSkylineIntegrationTest`,
+  `KoinaBuildLibraryTest` (TestConnected), `AcquisitionComparisonTutorialTest`,
+  `AlphapeptdeepBuildLibraryTest`, `CarafeModelBuildLibraryTest` (TestPerf, not run here).
+
+**Decisions taken in the session (Brendan to confirm)**
+- Koina goes through the Predict For page too (the spec says both sources), which adds a Next
+  click before Finish and changes the Acquisition Comparison tutorial's Build Library step and
+  screenshot; routing Koina straight to Finish is a one-line change in `GetNextPage`.
+- The Provided FASTA is digested by Skyline's own FASTA importer with the document's settings,
+  not by CarafeSharp's digester: the builders consume PeptideDocNodes, and the document's enzyme,
+  modifications and charges then apply exactly as "this document's precursors" do.
+- The Model combo left page 1: with the Library Model page carrying it, a second copy would be two
+  states for one choice. The quick path (pretrained model, document precursors) is three Nexts.
+
+**Not done / next**
+- Run `AlphaPeptDeepUseGpuTest`, `OspreySearchTest`, `KoinaSkylineIntegrationTest`,
+  `BuildLibraryCarafeWizardTest`; fr/ja runs; the TestPerf tests touched; `CodeInspection`.
+- Decoys and entrapment for a Provided FASTA (open decision 1); the editor's Build... route
+  (decision 2); feature 3 (decision 3).
+- The Osprey `--training-search` HPC stage decomposition is still refused with `--precursors`.
