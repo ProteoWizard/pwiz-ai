@@ -68,6 +68,10 @@ PowerShell wrapper for TestRunner.exe with natural language-style test execution
 # (capture forms, read values, click Continue). Implies -ShowUI; launch it in the background.
 .\ai\Run-Tests.ps1 -TestName BuildLibraryCarafeWizardTest -AiConnector
 
+# Review a branch's UI text as a translator would: every string the branch adds or changes in
+# the English resx files, as a CSV for Excel with a Revised column to fill in (then hand it back).
+.\ai\scripts\Skyline\Export-ResxChanges.ps1 -SourceRoot C:/proj/pwiz -BaseRef master
+
 # Set a switch a test reads from its environment (NAME=VALUE pairs; TestRunner inherits them).
 # Here the Osprey perf test predicts on the GPU with the CUDA runtime Osprey installed:
 .\ai\Run-Tests.ps1 -TestName OspreySearchPerfTest -EnvironmentVariables "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey\torch"
