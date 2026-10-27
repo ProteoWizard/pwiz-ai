@@ -4,11 +4,12 @@
 - **Branch**: `Skyline/work/20261027_admin_installer_missing_dlls`
 - **Base**: `Skyline/skyline_26_1_1` (.NET 4.7.2 Skyline-daily branch)
 - **Created**: 2026-10-27
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: #4922 (into `Skyline/skyline_26_1_1`); master follow-up #4924
-  (`Skyline/work/20261027_installer_test_file_guard`, built in `C:\proj\pwiz`, which was then
+- **PR**: [#4922](https://github.com/ProteoWizard/pwiz/pull/4922) (into `Skyline/skyline_26_1_1`, merged 2026-10-27);
+  master follow-up [#4924](https://github.com/ProteoWizard/pwiz/pull/4924) (merged 2026-10-27;
+  `Skyline/work/20261027_installer_test_file_guard`, built in `C:\proj\pwiz`, which was then
   switched back to `Skyline/work/20261026_nightly_runtime_servicing`)
 - **Checkout**: `C:\proj\daily`
 
@@ -57,7 +58,9 @@ master as unused leftovers.
   assemblies, harnesses or MSTest platform DLLs; tested on a minimal fake bin (real exes +
   test files) both ways; `/code-review medium` folded in (check before copy, single
   enumeration, platform patterns so unlisted test projects are caught, clearer message)
-- [ ] Draft reply to Philip in Gmail Drafts (Brendan sends)
+- [x] Draft reply to Philip in Gmail Drafts (Brendan sends): asks how urgent; fix ships in the
+  next 4.7.2 Skyline-daily only if a patch forces one, else the first .NET 10 Skyline-daily
+  (~mid-November); interim workaround is copying Sprache.dll from ClickOnce
 
 ## Not done (by decision)
 
@@ -67,3 +70,16 @@ master as unused leftovers.
   missing WebView2 assembly; pre-existing and the WiX path is gone on master
 - Build-time check of the .wxs against the build output: not worth it on the 4.7.2 branch;
   master's Inno installer ships the whole output
+
+## Progress Log
+
+### 2026-10-27 - Merged
+
+PR #4922 merged into `Skyline/skyline_26_1_1` as e54bea0699 and PR #4924 merged into master
+as c4275fc7ac, both with `--admin` at Brendan's direction. #4922 was blocked only by the
+manually started "Skyline Release Perf and Tutorial tests" required check, which never ran
+(all 10 reported checks green, 1674 Skyline tests passed). #4924 failed only
+TestNativeMessageBox in bt209 (a known intermittent form-lookup failure, 8 nightly failures on
+2026-08-23), and the Wine Docker build failed on that snapshot dependency; the change touches
+only `build.ps1`, which CI does not run. The admin MSI fix ships with the next 4.7.2
+Skyline-daily; no release was cut.
