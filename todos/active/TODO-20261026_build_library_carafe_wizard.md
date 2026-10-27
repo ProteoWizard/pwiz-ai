@@ -228,9 +228,10 @@ in the same checkout; alone it passed, so it is noted here rather than chased.
 - Run (all green at the end of the session): `AlphaPeptDeepUseGpuTest`, `OspreySearchTest`,
   `KoinaSkylineIntegrationTest`, `BuildLibraryCarafeWizardTest` (en, fr, ja), `CodeInspection`,
   and the TestPerf `AlphapeptdeepBuildLibraryTest` and `CarafeModelBuildLibraryTest` (with
-  `-EnableInternet`). Not run: `KoinaBuildLibraryTest` (TestConnected, needs the Koina server) and
-  `AcquisitionComparisonTutorialTest` (a tutorial with screenshots; its Build Library step gained a
-  Next click, so its screenshot and the tutorial text need Brendan's decision on Koina's routing).
+  `-EnableInternet`), and `KoinaBuildLibraryTest` (TestConnected, `-EnableInternet`).
+  `AcquisitionComparisonTutorialTest` passes too (381 s, `-EnableInternet`); its Build Library step
+  gained a Next click, so its screenshot and the tutorial text need Brendan's decision on Koina's
+  routing either way.
 - Decoys and entrapment for a Provided FASTA (open decision 1); the editor's Build... route
   (decision 2); feature 3 (decision 3).
 - The Osprey `--training-search` HPC stage decomposition is still refused with `--precursors`.
