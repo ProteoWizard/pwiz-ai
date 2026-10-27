@@ -260,3 +260,17 @@ or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylin
   segments and `OspreyProgressMonitor`'s seven task segments (5% -> 0% -> ~95% -> 85% -> 100%).
   Cosmetic; the fix is for the monitor to map task progress into the segment it is given rather
   than redefining the segments.
+
+## Revisions for the next session (collected in the review of 2026-10-27)
+
+1. **Drive demos over the Skyline MCP.** A test-runner argument (plumbed as a switch of the
+   `ai/scripts/Skyline` test script, e.g. `-AiConnector`) that, when the test creates its
+   SkylineWindow, registers the instance in `~/.skyline-mcp` as a normal Skyline does when "register
+   at startup" is set, and pre-approves the screen-capture permission for that process. Off by
+   default, so the tests of the MCP itself keep today's behavior. With it, a Claude Code session sees
+   the test's Skyline, captures its forms and clicks the pause dialog's Continue itself. Brendan,
+   2026-10-27: a flag, not "always when ~/.skyline-mcp exists".
+2. **The first page's Carafe tab.** It is now a description, since the Model combo and Use GPU moved
+   to the Library Model page. Brendan is not yet convinced; decide after seeing the Library Model
+   page whether the combo comes back to page 1 for the quick path (page 2 then holding only the
+   fine-tune choice), or the blurb stays.
