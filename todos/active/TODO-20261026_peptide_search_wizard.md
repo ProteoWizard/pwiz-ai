@@ -73,8 +73,44 @@ Three PRs (the original PR 1 and PR 2 were combined):
 
 ## Progress
 
-- [ ] PR A: pipeline extraction
-- [ ] PR A: wizard framework + Import/Run split
-- [ ] PR A: settings object replaces document stack
-- [ ] PR A: CLI on shared steps
-- [ ] PR A: build, full wizard test set green
+- [x] PR A: wizard framework - `PeptideSearchWizardDlg` base (designer + resx renamed from
+      ImportPeptideSearchDlg, dead never-parented controls removed) with a `WizardPage` list
+      (applies / leave / return-to); `NextPage` switch, `_pagesToSkip`, page ordinal arithmetic,
+      `LastPage` enum scan and index-based `ShowingFormView` gone
+- [x] PR A: `ImportPeptideSearchDlg` (Import + EncyclopeDIA/Osprey/DIA-NN hand-offs) and
+      `RunPeptideSearchDlg` (Run + feature detection, presets, search page) split
+- [x] PR A: back navigation pops the documents a page pushed (tracked per page) instead of
+      per-page `_xxxChanged` flags
+- [x] PR A: `LibraryIrtCalibration` (Model/Irt) shared by PeptideSettingsUI.AddIrts (wizard +
+      Peptide Settings) and the CLI `--import-search` iRT block
+- [x] PR A: model `ImportPeptideSearch.PrepareSearch` (engine/converter setup),
+      `AddDetectedFeatures` (feature detection document building; MessageDlg no longer shown
+      from the worker thread), `ChangeAutoTrain`; `ViewLibraryPepInfo.MakeCompareKey` moved to model
+- [x] PR A: tests retargeted (script, user-approved): nested types -> `PeptideSearchWizardDlg.*`,
+      Run/feature-detection tests -> `RunPeptideSearchDlg`; TestRunnerFormLookup.csv rows
+- [x] PR A: perf/tutorial wizard tests (DDA tutorial, DIA-Umpire TTOF, feature detection,
+      DIA-TTOF) - first run failed only because C: was full (4 GB free); green after space was freed
+- [x] PR A: code inspection (tcinspect.ps1) - 8 unused usings removed, then 0 findings
+- [x] PR A: user-reported bug - checked modifications lost on Back (Run): restored across
+      re-initialization; a preset re-applies its mods only once (`_modificationsPagePreset`);
+      saving a preset off the mods page reads the list box (pre-existing bug, fixed here)
+- [x] PR A: /code-review high (8 findings): fixed - page set fixed on leaving the first page
+      (a preset changing the workflow later stranded Back/Next or skipped the search); Back
+      restores the document stack depth instead of popping a count; form views named by the
+      declaring class everywhere (TryWaitForOpenForm now matches FormSeen/CodeInspection; CSV
+      rows are PeptideSearchWizardDlg.*); feature detection opens RunPeptideSearchDlg directly;
+      progress integer division; AI header removed from long-standing files. Dropped - null
+      return of ChangeAutoTrain/AddDetectedFeatures (documented, both callers check)
+
+### Deviation from the plan (to discuss)
+
+"Pages edit a settings object; one document change at the end" was NOT done in PR A. The Import
+wizard commits the library to the Skyline document on leaving page 1 (its own undo record and
+audit entry), and changing that changes undo/audit-log output that tutorial audit-log baselines
+record. It fits PR B, where the Run wizard's single end-of-run apply changes those baselines anyway.
+
+### Translation note
+
+The wizard's designer strings moved from ImportPeptideSearchDlg*.resx to
+PeptideSearchWizardDlg*.resx (git mv). ResourcesOrganizer keys include the file, so ~15 short
+heading strings will show as new in the next translation round.
