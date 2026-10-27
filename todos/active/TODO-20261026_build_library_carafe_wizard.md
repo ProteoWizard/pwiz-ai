@@ -305,3 +305,16 @@ or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylin
    predictions for the precursors in the document. "Use this model as it is" turning Next into
    Finish is the pattern to keep. The Library Model page is fine as it is: Browse... is the only
    way runs get into the list, which the top blurb already says.
+
+**Plan for the next session (Brendan, 2026-10-27)**: in this order.
+1. Revision 1 first: the test-runner flag that registers the test's Skyline with the MCP and
+   pre-approves screen capture, so the session can drive a demo test itself (capture each page,
+   click the pause dialog's Continue, read the form's values).
+2. Then mockups, not implementations: page 1's Carafe group box in its candidate shapes (the intent
+   checkboxes; a radio pair or combo naming the default, "the precursors in this document", against
+   an external FASTA; the fine-tune choice), walked through over the MCP with Brendan at the
+   demo pauses, revised until agreed.
+3. Real code behind the agreed shape only after that, with the Predict For revisions (3 to 6) and
+   the rest of the list.
+The existing branch stays as the working implementation behind whatever page 1 becomes: the
+pages, the builder's one-job tune and predict, the DecoyPairs marking and the tests all remain.
