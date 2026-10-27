@@ -134,5 +134,39 @@ Cherry-picked to master as #4915 (one conflict: `DiannSearchPerfTest` keeps mast
 on .NET 10, CodeInspection passes. Next: full tutorial screenshot retake on master (.NET 10) in
 `C:\proj\pwiz-work3` (Release build for SkylineTester), and explain every change against the 26.1.1 set.
 
+### 2026-10-26 - First .NET 10 retake on master (#4915 branch, `C:\proj\pwiz-work3`)
+
+Overnight SkylineTester run (Release, staged to `bin\staging\Release`, en/zh-Hans/ja) in `pwiz-work3`.
+Log: `pwiz-work3/pwiz_tools/Skyline/SkylineTester.log`. ~360 changed PNGs left uncommitted in the
+worktree for review.
+
+**Run failures (not UI): the frozen import-progress screenshot.** First failure TestGroupedStudies1
+(first test in the run order using `PauseForAllChromatogramsGraphScreenShot`): 360 s timeout in
+`WaitForConditionUI(IsReadyForScreenshot)`; thread dump shows the chromatogram loader blocked at
+`WaitIfProgressFrozen` (`Chromatogram.cs` FinishLoadSynch); file rows at 0% are the frozen display.
+`ReleaseFrozenProgress` was never called on failure, so every later test's import hung ("Expecting
+loaded document") until DriftTimePredictor hung outright. Uncommitted in `pwiz-work3`:
+`try/finally` around the wait+screenshot in `TestFunctional.PauseForAllChromatogramsGraphScreenShot`
+(keep), plus DIAG logging to `%LOCALAPPDATA%\SkylineAcgDiag.log` in `AllChromatogramsGraph.cs` and
+`Model/Results/Chromatogram.cs` (remove before commit; lines marked `// DIAG`). GroupedStudies1 alone
+(Debug, Run-Tests -TakeScreenshots) PASSED: freeze set at 0%, file0 reached 100%, froze, released.
+So the failure depends on earlier tests in the run (stale ACG window, a setting, timing). Next: rerun
+AbsoluteQuant..ExistingExperiments + GroupedStudies1 (3 languages) in Release with the logging.
+
+**UI differences (AbsoluteQuant en analyzed):**
+- Docking layout 1 px off on .NET 10: Targets tree content exactly 1 px right (s-06, s-10 tree region
+  matches with 0 px after dx=+1); chromatogram panes 1 px left and slightly different size, so ZedGraph
+  redraws curves sub-pixel differently (most of the 46k-95k px per image, looks like line colors).
+  Cause unknown: DigitalRune proportional-size rounding, WinForms .NET 10 client-size/frame metrics, or
+  `.view` layout restore. Goal (Brendan): tweak DigitalRune (source
+  `C:\proj\maccoss-developers\skylinedev\DigitalRune-Docking-Windows`) so .NET 10 places windows as
+  .NET 4.7.2 did, avoiding a mass screenshot replacement. Approach: log DockPanel/pane bounds at the
+  same AbsoluteQuant step on 26.1.1 (`pwiz-work2`, .NET 4.7.2) and master (`pwiz-work3`, .NET 10);
+  first differing bound shows where.
+- DataGridView grays (s-05, s-15): empty area `ABABAB`->`A0A0A0`, border `A0A0A0`->`646464`; likely a
+  WinForms default changed between .NET Framework and .NET 10 (unverified).
+- Tools in `ai/.tmp/sessions/20261021-night/`: `classify-diffs.ps1`, `pairs.ps1`, `crop-zoom.ps1`,
+  `best-shift.ps1` (finds the dx/dy shift that best matches a region; C# inner loop).
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20261020_net10_tutorial_screenshots.md` before starting work.
+`ai/.tmp/handoff-20261025_cherry_pick_4896_to_master.md` before starting work.
