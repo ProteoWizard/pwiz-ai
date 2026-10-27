@@ -396,7 +396,19 @@ later). `AlphapeptdeepBuildLibraryTest`'s answer files were re-recorded for the 
 (only the RT column changed), and its zip, which git tracks under TestPerf, became an
 `AlphapeptdeepBuildLibraryTest.data` folder (the harness looks for `.data` before `.zip` under
 the same name), so the next re-record diffs the answer lines; green again. Every gate is green on
-the fourteen commits of PR #4925. Still open:
+the fourteen commits of PR #4925.
+
+**TeamCity on #4925 (2026-10-27, first runs)**: three failures, all fixed in two more commits.
+(1) Both Osprey builds: `TestCommandLineHelpDocumentation`, the help HTML pages regenerated for
+the `--precursors` usage text and committed. (2) The Skyline build: `BuildLibraryCarafeWizardTest`
+failed because TeamCity's tests install the *last successful master* Osprey build, which predates
+this PR's Osprey change (`--fasta` with `--precursors`); locally the sibling Debug build hides
+this. Fix: `OspreyHelpers.GetLatestBuildDownloadInfo` reads `teamcity.build.branch` from the
+agent's build properties file and prefers that branch's latest successful Osprey build (the PR's
+own, once its Osprey build is green), falling back to master. A PR whose Osprey build finishes
+after the Skyline tests reach the install step still falls back to master; rerun then. (3) The
+"Skyline code inspection" step: five ReSharper warnings in the branch's files, fixed (SpectrumKey
+equality, redundant casts, qualifier, using). Still open:
 the fine-tune progress
 bar cosmetic (above), and the pause dialog truncates a long description to its first words
 (existing behavior, tooltip has the full text).
