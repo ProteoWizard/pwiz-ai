@@ -186,6 +186,9 @@ web server and it passed. Not confirmed in this session: the headless and no-Cla
 on the server's live logs, and `claude-sandboxed.sh` on the server. Still open: whether to
 run the report on a schedule with emailed results.
 
+After the merge, added a CLAUDE.md pointer to this TODO on maccosslab-agents `main`
+(`3e486a3`), as was done for PR #5.
+
 ## Next Steps (at merge)
 
 1. On the web server, as any account that can read `/var/log/syslog*` and
