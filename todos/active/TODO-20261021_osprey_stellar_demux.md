@@ -10,7 +10,8 @@
 - **Status**: In Progress. #4710 at d7d932a1d9 (2026-10-25): master merged in and the PR retargeted to master;
   `--demux auto` runs Osprey.Demux, ProteoWizard's demultiplexer (#4818) kept as `OSPREY_DEMUX_ENGINE=pwiz` for
   comparison. Next: more isolation widths (Mike), the 1-ion channel threshold as default after a second dataset,
-  profile paths into Osprey (`.demux.spectra.bin` + mzML/mzMLb), test tiers 2-3.
+  profile paths into Osprey (`.demux.spectra.bin` + mzML/mzMLb), test tiers 2-3. 2026-10-26: demux speed; a GPU joint
+  solve (ILGPU) is being benchmarked (see that day's entry); 926d5cbcae local, not pushed.
 - **GitHub Issue**: [#4711](https://github.com/ProteoWizard/pwiz/issues/4711) (M5: Stellar profile demux)
 - **Module**: `osprey`
 - **PR**: [#4710](https://github.com/ProteoWizard/pwiz/pull/4710) (draft, CHANGES_REQUESTED by Brendan 2026-10-15; this
@@ -743,6 +744,50 @@ the same files for the port plan's step 1.
   Build-Osprey's fix-crlf.ps1 converted the `-text` Chronologer preprocessing.json to CRLF (SHA mismatch, six
   TestSubsetLibraryBuild* failures); restored from the index and committed before building again. fix-crlf skips
   `binary` and `eol=lf` but not `-text`: flagged as a separate task.
+
+**2026-10-26: demux speed (Mike: speed up ZT Scan, Stellar and Astral demux; GPU if there is one, close to the CPU).**
+
+- Where the time goes (`DemuxTool --solve-profile`, e1b2446, 16 threads, i9-9900K; logs in
+  `D:\test\osprey-runs\ztscan-full-20261025\profile`):
+  - **ZT A1, sweeps 400-435:** solve 4,471 thread-s.
+    - Block passes 61%; add-coefficient gradient checks 28%; weights 9%.
+    - 196,138 chunks: 2,964 data points, 536 grid points, about 4 positions per block, 233 active, 27 passes each.
+    - Scales to about 87k thread-s per file, so ZT is limited by the solve throughout.
+  - **Stellar SuperOverlap TR01, whole file:** 58 min. `--cycles` is ignored by the staggered plan.
+    - Solve 36,485 thread-s, block passes 93%.
+    - 345,571 chunks: 15,198 data points, 524 grid points, 8 positions, 3,506 active (84%), 42 passes each.
+  - **SCIEX SDK reads:** CPU-bound inside the SDK, not file I/O. Reads saturate at 4 threads, about 0.8 ms a spectrum.
+    Opening takes 114 s and indexing 117 s. That is about 8 min per ZT file even if the solve were free.
+- **CPU changes with identical output:**
+  - Caching each grid point's block Hessian across passes, and then its NNLS warm-start factor: byte-identical, no
+    speedup (ZT 565 -> 573 s, Stellar 58 -> 60 min). Reverted.
+    - The Hessian sum is about 4% of a 4.8 us block solve. The profile's 16% "Gram" was time misattributed between
+      timer reads (13 ns each).
+    - The reused Hessians (57-66%) are the cheap blocks; the dense blocks change columns every pass.
+  - **Kept, 926d5cbcae (local):** Stellar's joint units are built in parallel. Whole file byte-identical; the first
+    batch's idle time drops from 132 s to 66 s.
+  - A real CPU gain needs an algorithm change, for example starting Stellar with all positions active (84% end
+    active, 9.6 growth rounds). That changes the output, so it needs IDs to validate.
+- **GPU, Mike's ground rules:**
+  - Windows and Linux only.
+  - Integrated GPUs count.
+  - Tell the user which device ran, fall back to the CPU on any failure, and use a GPU automatically with an option
+    to force the CPU.
+  - GPU output differs in the last bits, so the device goes into the demux cache identity.
+  - Stack: ILGPU 1.5.3 (Mike approved the NuGet fetch). CUDA for NVIDIA; OpenCL 2.0+ with generic address space for
+    Intel and AMD, integrated included. AMD APUs on Linux are the uncertain case.
+  - Test devices: here, GTX 1650 and UHD 630; Mike's Iris Xe, Radeon 890M, and work RTX 4060 Ti 16 GB with UHD 770.
+    All Windows 11.
+  - Consumer GPUs run FP64 at 1/32-1/64 speed, so the kernel is FP32. Each device repeats its own results run to run;
+    the results are close to the CPU's, not identical.
+  - If a GPU and the CPU share a run, the split must be decided up front from device properties, never by which device
+    is free. Older integrated GPUs (UHD 630/770) are slower than their CPUs.
+- **GPU benchmark (in progress):** `ai/.tmp/sessions/20261021-stellar/gpubench` (`GpuBench <file.chunks>`).
+  - Chunks are exported by `OSPREY_DUMP_JOINT_CHUNKS=<file>|<every>|<most>`, temporary and uncommitted in
+    `JointDemultiplexer.cs`, snapshot `_bin\chunkdump-demuxtool-vendor`, data in `D:\test\osprey-runs\gpubench-data`
+    (`dump-chunks.ps1`).
+  - The core solve: fixed support (the CPU's), block CD with exact warm-started NNLS, relaxation 1.5. Run on the CPU in
+    double and float, then on each CUDA/OpenCL device: one 32-thread group per chunk, lane 0 runs the NNLS.
 
 ## Plan (2026-10-21, original)
 
