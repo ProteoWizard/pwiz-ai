@@ -891,6 +891,52 @@ the same files for the port plan's step 1.
   `--fill-time-ions 1000` and `--ms1 joint`. The per-run counts are about 11% lower now while experiment peptides are
   about level; which of the three changes moves the per-run count is not yet separated.
 
+**2026-10-27 (later): committed, reviewed (`/code-review max`), and the time outside the solve.** Local commits on
+`Skyline/work/20261021_osprey_stellar_demux`, for #4710: 926d5cbcae (parallel unit building), e5e1c8d71c (the speed
+options, staggered default in DemuxTool), eab28e8141 (review fixes); the memory fix below is next.
+- Review: 15 findings, 11 fixed, 4 dropped (the warm start's 0.02-ion residue in the noiseless test, documented; the
+  screen off under warm start, which only costs ZT, where warm start is off; each unit's first pass solved cold, at
+  tolerance level; and the redundant-profiling cleanups folded into the fixes). Fixes: the staggered settings are a
+  library preset, `JointDemuxParams.UseStaggeredDefaults`, used by DemuxTool, the Stellar fixture (golden re-blessed:
+  total intensity -0.08%, per spectrum median 0.5%) and the staggered tests; not applied with `--joint-fitted`, nor
+  when `RelativeTolerance`, `MaxRounds` or `MaxPasses` is named; the looser first descent only with a lasso (at L1Z 0
+  nothing is refit, so it was the whole solve) and never tighter than `RelativeTolerance`; the growth stop solves its
+  last round's additions (they were dropped unsolved); the warm start rescaled by each pass's ion scale (consecutive
+  passes' median fills differ 6% median, 16% p90, up to 2.85x on TR01); the log names only settings that take effect.
+- Checks: with the three off the Stellar slice is byte-identical to the old cold solve; ZT slice byte-identical. Distance
+  from converged (`D:\test\osprey-runs\demux-speed-20261027-reviewfix\compare-st-vs-converged.txt`): fixed defaults
+  0.88% unmatched (total 0.9998), first fast version 0.96% (0.9984), old default 1.02%.
+- **`--joint-profile` serialized Centrix on the writer.** With it the joint solve writes each bin's share as profile and
+  DemuxTool's output wrapper centroids all 544,590 MS2 spectra on the one writer thread (~1.4 ms each); without it
+  Centrix runs on each share inside the parallel solve. Same settings (sigma 0.33, active set, the pass's units): on the
+  slice cosine 1.0000 at every percentile, 12 of 51,045 spectra differ in peak count (2e-5 of intensity; the written
+  profile is rounded to float32 first). Whole files, fast settings (`super-speed-insolve`): TR01 1,923 s vs 2,488 s with
+  `--joint-profile`; IDs 19,434 / 20,186 / 19,833 per run, 27,507 precursors, 25,471 peptides, 4,482 protein groups
+  (vs 19,003 / 19,919 / 19,803, 27,203, 25,196, 4,420). **Drop `--joint-profile` from the Stellar ID command.**
+- **Memory: DemuxTool paged.** TR01 peaked at 96.6 GB commit on the 64 GB box: every unit of a batch (each pass's
+  pseudo-sweep, ~7M points, ~170 MB; ~43 GB a batch) was built before its solves and kept until the batch's last solve
+  (`QueueBatch`'s tasks captured the whole work list), two batches at once. Batch 2-3 reads ran 10x slower than batch
+  1's. Fix (uncommitted, gate running): each unit is made on its solve's thread just before its solve
+  (`JointUnitSize` estimates the size for largest-first ordering), each task takes its work from a slot so the unit is
+  freed when solved, and `MakeJointUnit` sizes its lists once. Output byte-identical (fixture goldens unchanged).
+- **Final state (`super-speed-final`, 7115f1eb75 build, no `--joint-profile`): 1,574 / 1,712 / 1,623 s** (TR02 shared
+  the CPU with the gate) **and peak commit 21.1 / 20.9 / 20.5 GB** (`stellar-demux\speed-final-memory.log`), against
+  2,843 / 2,815 / 2,829 s for the old default with `--joint-profile` (-42% mean). IDs 18,959 / 20,047 / 19,530 per run,
+  26,739 precursors, 24,731 peptides, 4,413 protein groups: level with the old default (24,698 peptides) and 2.9% below
+  the in-solve arm before the review fixes (25,471); per-run counts move by up to ~2.5% between these arms on
+  near-identical outputs, so neither is a demonstrated difference. The 1,923 -> 1,574 s is the net of both unpushed
+  commits: the review fixes' solved last round adds ~7.5% block solves (~50 s a file).
+  Main thread now: index 102 s, read of the next batch ~160 s while the solves run (batch 1: 14 s; the source reads
+  under one lock), layout 2 s a batch, writing ~850 s (1.6 ms a spectrum; the last batch's ~260 s with nothing else
+  running). The writer is the next target.
+- Second `/code-review max` (eab28e8141 + 7115f1eb75): 15 findings, reported to Mike before fixing (second cycle).
+  Real but edge: FirstRelativeTolerance still loosens with `PoissonWeights=false` (nothing refit); a named
+  ToleranceIons is not taken as a convergence request. Trade to decide: the solved last round (+7.5% block solves for
+  0.96% -> 0.88% from converged). Tests pin neither the rescale direction, the first-descent gate nor the solved last
+  round (only the golden); the truth-based staggered test skips the defaults. The batch log's "units" no longer covers
+  unit building. docs/23's paragraph is stale (12.6%, warm chain restarts per unit, refit wording). Pre-existing: with
+  L1Z 0 the reweighted descent refits nothing (lambda-ratio test).
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
