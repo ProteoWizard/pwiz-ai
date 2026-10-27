@@ -6,7 +6,7 @@
 - **Created**: 2026-10-26
 - **Status**: In Progress
 - **Module**: `skyline` (with Osprey / CarafeSharp changes where a feature needs them)
-- **PR**: (pending)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4925 (opened 2026-10-27)
 - **Objective**: After choosing the AlphaPeptDeep (Carafe) source in Build Library, Next leads to wizard
   pages that decide what the library is predicted FOR and what the model is tuned ON, the design of the
   June 2024 Skyline-Carafe integration spec (`ai/.tmp/Skyline-Carafe Integration - Google Slides.pdf`,
