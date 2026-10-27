@@ -937,6 +937,19 @@ options, staggered default in DemuxTool), eab28e8141 (review fixes); the memory 
   fix (mutation-checked); the 0.05-ion warm residue allowance no longer needed (0.01 passes). Slice, idle machine
   (`demux-speed-20261027-review2`): new defaults 267 s vs 339 s all three off (-21%, solve work -37%); Stellar output
   identical to eab28e8141's, cold path and ZT byte-identical to before. Gate 687/687, inspection clean.
+- **The writer (2e26144263, pushed to #4710).** `--solve-profile` now splits the writing time (DemuxTool,
+  `D:\test\osprey-runs\demux-speed-20261027-writer\TR01*.log`). TR01 before: writing 1,450 s = re-reading each output's
+  acquired spectrum 702 s (1.29 ms a call under load, 0.32 ms alone; four outputs per acquired spectrum) + peaks 619 s
+  (the next batch's read, the waits for solves, layout) + the writer's own encoding 130 s. Fix: centroided outputs of
+  one acquired spectrum share one metadata read (shallow copies; the writer is serial). TR01 1,547 -> 1,337 s, output
+  byte-identical (slice and whole file). Profile outputs (--joint-profile, or per-channel on profile input) keep a read
+  each: the first version shared them too, and the outer Centrix picker's centroid mark on the shared params left
+  outputs 2-4 profile but labeled centroid (1.39 GB instead of 350 MB on the slice); caught in self-review, fixed and
+  checked byte-identical with and without --joint-profile.
+- **Now solve-bound.** TR01 (`TR01-gc.log`): the main thread waits 183-191 s for each batch's solves; GC paused
+  67.6 s in all (1,256 gen-2 collections); solve thread work ~13,500 thread-s (~845 s on 16 threads) against a solve
+  span of ~1,100 s. Outside the solve: indexing 92 s, the first read 13.5 s, the last batch's writing ~120 s.
+  Since this morning TR01 2,843 -> 1,337 s (-53%); peak commit 96.6 -> ~21 GB.
 - Second `/code-review max` (eab28e8141 + 7115f1eb75): 15 findings, reported to Mike before fixing (second cycle).
   Real but edge: FirstRelativeTolerance still loosens with `PoissonWeights=false` (nothing refit); a named
   ToleranceIons is not taken as a convergence request. Trade to decide: the solved last round (+7.5% block solves for
