@@ -929,6 +929,14 @@ options, staggered default in DemuxTool), eab28e8141 (review fixes); the memory 
   Main thread now: index 102 s, read of the next batch ~160 s while the solves run (batch 1: 14 s; the source reads
   under one lock), layout 2 s a batch, writing ~850 s (1.6 ms a spectrum; the last batch's ~260 s with nothing else
   running). The writer is the next target.
+- **Pushed to #4710 (2026-10-27): e1b2446b83..35bf44a0cd** (926d5cbcae, e5e1c8d71c, eab28e8141, 94f729c75f = the
+  memory fix with a corrected message, 35bf44a0cd = the second review's fixes, all of them, Mike's call, keeping the
+  solved last round). 35bf44a0cd: the reweighting compares curvature roots, so it refits without a lasso (pre-existing:
+  at L1Z 0 it refit nothing); FirstDescentTolerance/RefitsRelaxed shared by the solve and the log; PlanJointUnit; the
+  batch log's "units (and N s on the solve threads)"; ToleranceIons named = convergence; tests that fail without each
+  fix (mutation-checked); the 0.05-ion warm residue allowance no longer needed (0.01 passes). Slice, idle machine
+  (`demux-speed-20261027-review2`): new defaults 267 s vs 339 s all three off (-21%, solve work -37%); Stellar output
+  identical to eab28e8141's, cold path and ZT byte-identical to before. Gate 687/687, inspection clean.
 - Second `/code-review max` (eab28e8141 + 7115f1eb75): 15 findings, reported to Mike before fixing (second cycle).
   Real but edge: FirstRelativeTolerance still loosens with `PoissonWeights=false` (nothing refit); a named
   ToleranceIons is not taken as a convergence request. Trade to decide: the solved last round (+7.5% block solves for
