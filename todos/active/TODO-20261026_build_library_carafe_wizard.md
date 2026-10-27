@@ -223,8 +223,10 @@ changed). The built library then gets Carafe's DecoyPairs table (`LibraryDecoyPa
 a row per target, a decoy's row pointing at its target's, IsEntrapment on the entrapment FASTA's
 peptides, Method "shuffle" - the one marking the blib format already has, which Osprey reads with
 `--decoys-in-library`. Spectra are matched by unmodified sequence and charge; one that is not unique
-gets no row. Not done: CarafeSharp's `EntrapmentFastaBuilder` (shuffled proteins at a ratio) as the
-entrapment source; the page takes a FASTA the user supplies. Drop the commit if the decision goes
+gets no row. The entrapment source is either: CarafeSharp's `EntrapmentFastaBuilder` in process
+(the FASTA route with the entrapment box empty: the predicted FASTA's peptides shuffled, one per
+target, ratio 1, added as a peptide list), or a FASTA file the user supplies (required on the
+document route, which has no FASTA to shuffle from). Drop the commits if the decision goes
 another way. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylineIntegrationTest`,
 `AlphaPeptDeepUseGpuTest` and `CodeInspection` pass.
 
