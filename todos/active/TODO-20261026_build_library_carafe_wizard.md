@@ -362,9 +362,10 @@ All three steps of the plan above, in order, with Brendan at the keyboard.
    document that wants them holds them already (Refine > Add Decoys, an import). Said to
    Brendan, no objection yet.
 
-**Not run this session, to run before the PR**: `AlphapeptdeepBuildLibraryTest`,
-`CarafeModelBuildLibraryTest`, `AcquisitionComparisonTutorialTest` (TestPerf) and
-`KoinaBuildLibraryTest` (TestConnected), all with `-EnableInternet`, now on their master
-navigation; `OspreySearchTest`. Also open: the fine-tune progress
+Also green, with `-EnableInternet`: `AlphapeptdeepBuildLibraryTest`, `CarafeModelBuildLibraryTest`,
+`AcquisitionComparisonTutorialTest` (TestPerf, back on its master step count, so no screenshot
+change) and `KoinaBuildLibraryTest` (TestConnected), all on their master navigation; and
+`OspreySearchTest`. Every gate named in this TODO is green on the nine local commits; the branch
+is ready for `/code-review medium` and a PR when Brendan says so. Still open: the fine-tune progress
 bar cosmetic (above), and the pause dialog truncates a long description to its first words
 (existing behavior, tooltip has the full text).
