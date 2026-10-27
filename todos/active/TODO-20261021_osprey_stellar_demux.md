@@ -863,11 +863,33 @@ the same files for the port plan's step 1.
   0.36% (no gain); FirstRelativeTolerance 1e-3 544 / 0.43%; FirstMaxRounds 2 523 / 0.49%; GrowRelativeTolerance 1e-4
   510 / 0.67% (solve -15%), 1e-3 479 / 1.06% (solve -24%); keep-active 1,126; BlockPoints 2 630. On ZT every faster
   option moves away from converged; all distances stay about 1% or less.
-- **ID validation running** (`run-speed-ids.ps1`, 2026-10-27 03:11): the three SuperOverlap profile replicates through
-  `--profile --joint --joint-profile --ions --peak-sigma-th 0.33 --centroid centrix --centrix-sigma 0.33
-  --centrix-sigma-ms1 0.255 --centrix-param Solver=active_set`, arms `super-speed-default` and `super-speed-fast` (+ warm,
-  grow 1e-4, first 1e-3), snapshots `_bin\speedopts2-{demuxtool,osprey}`. `--fill-time-ions` is now `--ions`, and
-  `--ms1 joint` is for scanning only, so the 10-22 arm's command no longer runs as written.
+- **ID validation (2026-10-27): the fast combination loses no IDs and saves 12.6% of the wall time on whole files.**
+  The three SuperOverlap profile replicates through `--profile --joint --joint-profile --ions --peak-sigma-th 0.33
+  --centroid centrix --centrix-sigma 0.33 --centrix-sigma-ms1 0.255 --centrix-param Solver=active_set`, arms
+  `super-speed-default` and `super-speed-fast` (+ warm, grow 1e-4, first 1e-3), snapshots
+  `_bin\speedopts2-{demuxtool,osprey}`; scripts `run-speed-ids.ps1` and `run-speed-searches.ps1`. Tool output
+  `D:\test\osprey-runs\stellar-demux\tool\super-speed-*`, searches `...\stellar-demux\super-speed-*\search\osprey.log`.
+
+  | | default | fast |
+  |---|---|---|
+  | DemuxTool wall, TR01 / 02 / 03 (s) | 2,843 / 2,815 / 2,829 | 2,488 / 2,452 / 2,475 (-12.6%) |
+  | Solve pass time, summed over threads (s) | about 21,900 | about 12,070 (-45%) |
+  | Passes per chunk | 43.7 | 22.2 |
+  | Precursors per run at 1% | 18,959 / 19,809 / 19,859 | 19,003 / 19,919 / 19,803 |
+  | Experiment precursors (blib spectra) | 26,687 | 27,203 |
+  | Experiment peptides | 24,698 | 25,196 |
+  | Protein groups | 4,399 | 4,420 |
+
+  The solve phases fall from 2,205 to 1,504 s of TR01's wall time. Read, units, layout and writing (about 1,000 s a
+  file) are untouched and are now about 40% of the wall, which is why the whole-file saving is smaller than the slice's
+  26%. Fast's descent 1 hits MaxRounds in 4.0% of chunks (default 89.6%). The ID differences (+0.2% per run, +2% at
+  experiment level) are inside the stage-6 noise, so the claim is "no loss", not a gain.
+- Gotchas found on the way: `--fill-time-ions` is now `--ions`; `--ms1 joint` is for scanning only, so the 10-22 arm's
+  command no longer runs as written; Osprey #4895 removed `--report`, so `Run-StellarSearch.ps1` failed at startup
+  (fixed in pwiz-ai cf01827c); and this build writes no `output.stats.tsv`, so counts come from `osprey.log`.
+- Not comparable to the 10-22 arm (21,079 / 22,159 / 22,368 per run, 24,537 peptides): it ran an older Osprey with
+  `--fill-time-ions 1000` and `--ms1 joint`. The per-run counts are about 11% lower now while experiment peptides are
+  about level; which of the three changes moves the per-run count is not yet separated.
 
 ## Plan (2026-10-21, original)
 
