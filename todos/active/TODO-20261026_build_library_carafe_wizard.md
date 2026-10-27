@@ -408,7 +408,16 @@ agent's build properties file and prefers that branch's latest successful Osprey
 own, once its Osprey build is green), falling back to master. A PR whose Osprey build finishes
 after the Skyline tests reach the install step still falls back to master; rerun then. (3) The
 "Skyline code inspection" step: five ReSharper warnings in the branch's files, fixed (SpectrumKey
-equality, redundant casts, qualifier, using). Still open:
+equality, redundant casts, qualifier, using). After the fixes: 14 of 15 checks green, the
+Skyline build pending.
+
+**Osprey gates on the Chronologer RT default (2026-10-27)**: `regression-parallel.ps1 -Dataset All`
+48 PASS / 0 FAIL in 38:23 (lane logs `pwiz_tools/Osprey/TestResults/regression-lane-*-20261027_153248.log`);
+`Test-PerfGate.ps1 -Dataset Stellar` PASSED, total +2.0% vs `pwiz-perfbase` (verdict
+`ai/.tmp/perf-gate/20261027-231128Z/verdict.md`; stage1to4 +12% and stage6 +17% warn-only, stages
+5 and 7 faster - the baseline pin predates master's recent changes). The exe snapshot is
+`D:\test\osprey-runs\_bin\pr4925-d7c049bf70`. The TeamCity Perf/Regression run (manual) is still
+to be triggered with Brendan's okay. Still open:
 the fine-tune progress
 bar cosmetic (above), and the pause dialog truncates a long description to its first words
 (existing behavior, tooltip has the full text).
