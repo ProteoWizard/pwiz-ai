@@ -818,6 +818,21 @@ the same files for the port plan's step 1.
   - **Package for Mike's machines:** on the NAS at `Y:\test\gpubench` (`\\maccoss-nas\home\test\gpubench`),
     run `run-gpubench.cmd` from the share. It contains a self-contained exe, 3,000 ZT and 1,000 Stellar chunks,
     and writes `logs\gpubench-{zt,stellar}-%COMPUTERNAME%.log`. The local copy was removed.
+  - **Integrated GPUs (2026-10-26, logs in `Y:\test\gpubench\logs`)**, M block solves/s, CPU sequential float /
+    GPU sequential / GPU multicolor:
+
+    | Machine | ZT | Stellar | GPU result |
+    |---|---|---|---|
+    | SCARFELL, Iris Xe, 20 threads | 3.1 / 1.1 / 0.25 | 4.4 / failed | ZT: 4-6 of 3,000 chunks differ run to run. Stellar: CLException, no error code printed |
+    | SKIDDAW, UHD 770, 24 threads | 4.3 / 0.6 / 0.31 | 5.1 / failed | ZT sequential: 7-11 chunks differ; multicolor repeats. Stellar: CLException |
+    | SPEEDYGONZALES, Radeon 890M, 24 threads | 5.5 / (4.7) / (1.1) | 5.7 / (0.36) / (0.84) | Wrong: position totals off 86% (median) from the CPU, chunks all zero, hundreds to thousands of chunks differ run to run |
+
+    - No integrated GPU beats its own CPU. Every OpenCL device misbehaved in a different way; only CUDA is clean.
+    - The kernels use no warp or subgroup operations, so the 890M failure is not a wavefront-size assumption. Either a
+      race NVIDIA hides or the ILGPU OpenCL backend on these drivers; not debugged.
+    - Intel's few corrupted chunks per run would slip past a startup self-test, so Intel GPUs would need a deny-list.
+    - The RTX 4060 Ti was not run (it can't mount the NAS). Scaling the 1650 by SM count (14 -> 34) projects about 8 M/s
+      on ZT and 1.5-2.5 M/s on Stellar, against 4-7.5 M/s on these CPUs: unmeasured.
 
 ## Plan (2026-10-21, original)
 
