@@ -392,8 +392,9 @@ fine-tune (it would also let a user choose peptdeep's RT model again).
 strings reworded and re-keyed, the ja/zh source captions read Carafe, the dialog's property is
 `Carafe`). 5307ed1ef7 drops the table route's override of Carafe's RT model: the pretrained
 Chronologer predicts RT (Mike: peptdeep's RT model is poor; Bo Wen's new base RT model comes
-later). **`AlphapeptdeepBuildLibraryTest` (TestPerf) now fails on its answer files' RT column and
-needs re-recording** (`IsRecordMode`, then the zip on the test data server): Brendan's step. The
-other gates are green on the twelve local commits. Still open: the fine-tune progress
+later). `AlphapeptdeepBuildLibraryTest`'s answer files were re-recorded for the Chronologer RTs
+(only the RT column changed) and its zip, which git tracks under TestPerf, replaced in place as
+PR #4849 did; green again. Every gate is green on the thirteen commits of PR #4925. Still open:
+the fine-tune progress
 bar cosmetic (above), and the pause dialog truncates a long description to its first words
 (existing behavior, tooltip has the full text).
