@@ -165,8 +165,14 @@ From the two slides and the state after PR #4917; discussed with Brendan.
 ### 2026-10-26 (evening, autonomous session) - Implemented, local commits only, no push
 
 Brendan's goal for the session: the full spec, plus a functional test that can pause on every page
-for a live demo; nothing pushed, no PR. The branch has one local commit (f770da6bb5) and the rest
-is in the working tree at the time of writing; see the session's handoff `ai/.tmp/handoff-20261026_carafe_wizard.md`.
+for a live demo; nothing pushed, no PR. Three local commits: f770da6bb5 (Osprey, CarafeSharp, the wizard
+pages as controls), cdf21b2c55 (Build Library's pages, the builder, the test) and 86546e2461
+(CodeInspection fixes; CodeInspection green); see the session's
+handoff `ai/.tmp/handoff-20261026_carafe_wizard.md`. `BuildLibraryCarafeWizardTest` passes end to end
+(tuned build, saved-model build, FASTA build) in en-US, fr-FR and ja-JP, as do `AlphaPeptDeepUseGpuTest`,
+`OspreySearchTuningTest`, `OspreySearchTest` and `KoinaSkylineIntegrationTest`. One `OspreySearchTest`
+run timed out in its chromatogram import (720 s) while run paired with the Koina test and with git work
+in the same checkout; alone it passed, so it is noted here rather than chased.
 
 **Done**
 - Osprey: `--precursors` with `--training-input` and `--fasta`: the FASTA names the training library,
