@@ -5,8 +5,8 @@
 - **Branch**: `work/20261016_labkey_restarts_headless`
 - **Base**: `main`
 - **Created**: 2026-10-16
-- **Status**: PR open; waiting on verification on the web server
-- **PR**: [#6](https://github.com/uw-maccosslab/maccosslab-agents/pull/6)
+- **Status**: Completed
+- **PR**: [#6](https://github.com/uw-maccosslab/maccosslab-agents/pull/6) (merged 2026-10-27)
 - **Objective**: Run `/pw-labkey-restarts` from the command line in a secure way, with the
   permission mode set to manual and the Bash sandbox enabled, so that it can be run on the
   web server itself (panoramaweb.org) against its live syslog and labkey.log.
@@ -66,7 +66,7 @@ claude --permission-mode manual --model claude-haiku-5-5 \
       error if `module` is missing, a load fails, or `.venv` doesn't exist. `MODULES=` skips
       them. The venv Python's `sys.base_prefix` is added to `allowRead`. Failure paths tested
       with a fake `module` function; end-to-end runs passed with `MODULES=`
-- [ ] Verify on the server: run `server/verify-lockdown.sh` there (first real `module load`;
+- [x] Verify on the server: the developer ran `server/verify-lockdown.sh` on the web server and it passed (first real `module load`;
       confirm socat is on PATH, and that the module Python's shared libraries are under its
       `sys.base_prefix`, else add their directory to `allowRead`)
 - [x] Update README.md and CLAUDE.md; the skill and command needed no change. README keeps
@@ -86,7 +86,7 @@ claude --permission-mode manual --model claude-haiku-5-5 \
       developer asked to commit it as is) and pushed to PR #6; PR description updated
 - [x] Committed `14fedb4` (rename) and `9012eb3` (allow rules, plus the developer's README
       edit adding an `export $(grep ... | xargs)` way to load the env file) and pushed
-- [ ] After the server run: tick the last test plan item on PR #6, then merge
+- [x] After the server run: tick the last test plan item on PR #6, then merge
 - [x] Slide deck on the sandbox for a team talk: `docs/claude-code-sandbox.html`
       (standalone HTML, 4 slides: sandboxing approaches, how it works with Manual/Auto
       mode, the settings, our setup with example commands; speaker notes on `N`). The
@@ -174,7 +174,19 @@ claude --permission-mode manual --model claude-haiku-5-5 \
   Review" heading above "Service restarts"; the `export $(grep ... | xargs)` form breaks on
   values with spaces or quotes (fine for the token).
 
-## Next Steps
+### 2026-10-27 - Merged
+
+PR #6 merged as commit `a41bd6c`. Shipped: `server/labkey-restarts-claude.sh` (headless
+`/pw-labkey-restarts`, locked down with the sandbox required), `server/labkey-restarts.sh`
+(no Claude), `server/claude-sandboxed.sh` (interactive, sandbox required, access log MCP
+and scripts allowed), `server/server-env.sh` (modules and `.venv` checks),
+`server/verify-lockdown.sh`, the project sandbox settings, the sandbox slide deck, and the
+README section on running on the web server. The developer ran `verify-lockdown.sh` on the
+web server and it passed. Not confirmed in this session: the headless and no-Claude reports
+on the server's live logs, and `claude-sandboxed.sh` on the server. Still open: whether to
+run the report on a schedule with emailed results.
+
+## Next Steps (at merge)
 
 1. On the web server, as any account that can read `/var/log/syslog*` and
    `/data/labkey/logs`: clone the branch, `module load python/3.13.10`, create `.venv`, put
