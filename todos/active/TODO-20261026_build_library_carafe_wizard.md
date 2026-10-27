@@ -286,3 +286,13 @@ or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylin
    separate-FASTA source is a power-user option whose value is not settled (conserved peptides can
    pass the filters and be detected for real biological reasons).
 6. **Drop the long captions** on both checkboxes; the explanation lives in the tooltips.
+7. **Put the Carafe group box back on the first page** (settles 2) and populate it with a simple
+   set of choices that make the extra pages unnecessary for the default case: the pretrained (or a
+   listed) model and the document's precursors, Finish from page 1 as before the branch. The fuller
+   range (fine-tune on runs, a FASTA's precursors, decoys, entrapment) is reached off that path, so
+   users who are not ready for it do not see it. Brendan's design principle for Skyline, stated
+   2026-10-27: "Streamline the default case as much as possible, enable greater flexibility off that
+   path so that users who are not ready for it don't even see it." The next session designs what the
+   group box holds (candidates: the Model combo and Use GPU as before; one control that opens the
+   advanced route, such as a "Fine-tune a new model on DIA runs..." choice or an Advanced... button
+   leading to the pages) and which pages remain behind it.
