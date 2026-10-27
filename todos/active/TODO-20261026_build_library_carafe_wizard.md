@@ -143,12 +143,14 @@ PR must not add a second. A separate tuning dialog that a user must wait on befo
 - Perf: one tuned Build Library run on the perf subset, inside the 5-minute budget that TODO sets.
 - Osprey: `TestSubsetPrecursorTable` extended with the `--training-input` combination.
 
-## Open decisions (Brendan)
+## Decisions
 
-1. Decoys and entrapment for a Provided FASTA: who generates them (CarafeSharp.Proteome in Skyline, so
-   Koina gets them too) and how the library marks them.
-2. Whether the editor's Build... route is built in this PR, later, or not at all.
-3. Feature 3 as the PR after this one (Brendan: still interesting; the study of the export contract first).
+1. Decoys and entrapment for a Provided FASTA: decided and implemented in the session (see the
+   progress entry of 2026-10-26): Skyline generates the decoys and CarafeSharp's
+   `EntrapmentFastaBuilder` the entrapment peptides (or a FASTA the user supplies), for Koina too,
+   and the library marks them in Carafe's DecoyPairs table.
+2. The editor's Build... route: not in this PR, as the spec's "later or never" says.
+3. Feature 3 is the PR after this one (the study of the export contract first).
 
 Decided (2026-10-26): the tuning inputs live on Build Library's pages and run after Finish; the wizard's
 radio stays; the tuned model is `<library>.model.zip` beside the library, not listed; a named, saved model
@@ -226,11 +228,11 @@ peptides, Method "shuffle" - the one marking the blib format already has, which 
 gets no row. The entrapment source is either: CarafeSharp's `EntrapmentFastaBuilder` in process
 (the FASTA route with the entrapment box empty: the predicted FASTA's peptides shuffled, one per
 target, ratio 1, added as a peptide list), or a FASTA file the user supplies (required on the
-document route, which has no FASTA to shuffle from). Drop the commits if the decision goes
-another way. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylineIntegrationTest`,
+document route, which has no FASTA to shuffle from). Each is its own commit, so the review can take
+or replace it on its own. After it, `BuildLibraryCarafeWizardTest`, `KoinaSkylineIntegrationTest`,
 `AlphaPeptDeepUseGpuTest` and `CodeInspection` pass.
 
-**Decisions taken in the session (Brendan to confirm)**
+**Design decisions taken in the session**
 - Koina goes through the Predict For page too (the spec says both sources), which adds a Next
   click before Finish and changes the Acquisition Comparison tutorial's Build Library step and
   screenshot; routing Koina straight to Finish is a one-line change in `GetNextPage`.
