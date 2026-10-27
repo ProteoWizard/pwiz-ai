@@ -73,7 +73,7 @@ $sw = [Diagnostics.Stopwatch]::StartNew()
 "[$(Get-Date -Format s)] START $Arm exe=$Exe method=$Method kind=$Kind demux=$Demux cache=$CacheKey input=$rawDir\*$InputSuffix env=$Env extra=$ExtraArgs" |
     Tee-Object -FilePath $summary -Append
 & $Exe @inputs -l $Library -o (Join-Path $out 'output.blib') --resolution unit --fdr-level precursor `
-    --protein-fdr 0.01 --demux $Demux --report (Join-Path $out 'report.tsv') `
+    --protein-fdr 0.01 --demux $Demux `
     --cache-dir $cache --output-dir $out --timestamp --memstamp --verbose `
     --log-file (Join-Path $out 'osprey.log') @extra *> (Join-Path $out 'console.log')
 "[$(Get-Date -Format s)] END $Arm exit $LASTEXITCODE, $([math]::Round($sw.Elapsed.TotalSeconds)) s" |
