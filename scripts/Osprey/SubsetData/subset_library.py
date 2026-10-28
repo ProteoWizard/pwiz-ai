@@ -94,7 +94,9 @@ def main():
             if a.rt_min <= prt <= a.rt_max:
                 chosen_undet.append((key, prt))
     chosen_undet.sort(key=lambda e: (e[0][0], e[0][1]))
-    if 0 <= a.undetected_max < len(chosen_undet):
+    if a.undetected_max == 0:
+        chosen_undet = []
+    elif 0 < a.undetected_max < len(chosen_undet):
         step = len(chosen_undet) / float(a.undetected_max)
         chosen_undet = [chosen_undet[int(i * step)] for i in range(a.undetected_max)]
     keep = {e[0] for e in chosen_det} | {e[0] for e in chosen_undet}

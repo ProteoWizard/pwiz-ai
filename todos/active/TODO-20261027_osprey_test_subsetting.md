@@ -137,3 +137,35 @@ Survey by a read-only agent (figures above); design discussed with Brendan after
 night session of 2026-10-26.
 
 **Handoff from the session of 2026-10-26**: read `ai/.tmp/handoff-20261026_osprey_followups.md` first (build and test gotchas, what #4917 left in the code, the hidden cost of growing the one subset).
+
+### 2026-10-27/28 - Session on BRENDANX-UW6 (night lost to a blocking question; resumed 08:16)
+
+**Machine.** The paths above (`D:\test\osprey-runs`, `D:\Users\...\Downloads`) are another machine's. Here the
+data is `E:\Users\brendanx\Downloads\Perftests\osprey-testfiles-mzML-v2` (the relocated Downloads that
+`regression.ps1` and the Skyline perf test both resolve), runs go to `E:\test\osprey-runs`, the handoff
+`ai/.tmp/handoff-20261026_osprey_followups.md` and the 2026-10-23 session folder are not on this machine.
+A 21:03 AskUserQuestion about which machine to use blocked until 08:16 - the night produced nothing.
+
+**Full-run blib.** `regression.ps1 -Dataset Stellar -SkipResume -SkipWarmRerun -SkipHpcChain -KeepOutput`
+PASSED vs golden, straight-through 300 s (`ai/.tmp/sessions/20261027-subset/regression-stellar.log`);
+blib copied to `E:\test\osprey-runs\stellar-full\output.blib`. Measurement exe snapshot
+`E:\test\osprey-runs\_bin\subset-20261028` (v26.1.1.300, b68aa96d5f). This machine: 12 logical processors.
+
+**Tooling (pwiz-ai 39413684).** `subset_mzml.py --target-lo/--target-hi`; `subset_fasta.py` (real records, or
+`--concatenated` - reproduces the committed `stellar-subset-proteins.fasta` byte for byte, so it IS the
+OspreySearchTest.zip builder's FASTA step); `build_subset.py` candidate overrides + `--functional-zip`;
+`Measure-Subset.ps1`. Edits are output-neutral: HEAD scripts and edited scripts give byte-identical zips
+from the same blib (`ai/.tmp/sessions/20261027-subset/StellarSubset-{orig,rebuilt}.zip`).
+
+**Finding - regenerating the committed zip is not free even at the same geometry.** Rebuilt today, the
+mzMLs and README are byte-identical to `StellarSubset.zip` but the library files are not (detected RTs move
+~0.02 min, membership shifts: `manifest.tsv` 10,115 vs 10,047 bytes) - the full-run blib comes from today's
+Osprey, not the 2026-09-27 one. Any route-A regeneration moves the goldens for that reason alone.
+
+**Finding - the floor is the SECOND pass, not the first.** Control at the committed geometry (1 window,
+RT 7-13, `E:\test\osprey-runs\subset-control-w1-rt7-13\tuned\run.log`): the tuning search of `_21` alone
+passes 126 targets / 0 decoys at 1% in the FIRST pass (:92), but the second pass recomputes q only over the
+147 candidates of the 39 proteins with 2+ detections (:97, :117) - ~74 targets, so the best possible q is
+1/74 = 1.35% - and nothing passes: export 0 (:111), experiment level 0 of 183 (:124), exit 1 after 4.2 s.
+What a one-run subset needs is >~100 targets in the multi-detection-protein stratum of the tuning run.
+The pretrained 3-run search of the same data reports 368 (123/114/131 per run; `pretrained\run.log`).

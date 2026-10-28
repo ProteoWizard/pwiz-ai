@@ -23,16 +23,23 @@ param(
     [int]$Windows = 1,
     [double]$RtMin = 7.0,
     [double]$RtMax = 13.0,
-    [int]$UndetectedMax = 180,
+    # -2 = the preset's density, 30 per window-minute (180 over its 6 minutes, ~1:1 with detected);
+    # -1 keeps every undetected precursor, 0 none (real proteins then bring their own undetected
+    # peptides through the digest).
+    [int]$UndetectedMax = -2,
     [switch]$RealProteins,
     [switch]$Baseline,
+    # Also search with the tuned leg's saved model (--model), the second search of OspreySearchPerfTest.
+    [switch]$SavedModel,
     [string]$TrainingRun = 'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21',
     [string]$DataRoot,
     [string]$RunRoot = 'E:\test\osprey-runs',
     [string]$Exe,
     [int]$Threads = [Environment]::ProcessorCount,
     [int]$Enzyme = 1,
-    [switch]$Rebuild
+    [switch]$Rebuild,
+    # Re-read the logs of the legs already run and rewrite summary.txt; builds and runs nothing.
+    [switch]$SummaryOnly
 )
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
@@ -44,6 +51,7 @@ $target = 594.5201; $step = 4.0018; $halfWidth = 2.0
 $below = [math]::Floor(($Windows - 1) / 2); $above = $Windows - 1 - $below
 $mzLo = $target - $below * $step - $halfWidth
 $mzHi = $target + $above * $step + $halfWidth
+if ($UndetectedMax -eq -2) { $UndetectedMax = [int][math]::Round(30 * $Windows * ($RtMax - $RtMin)) }
 
 if (-not $DataRoot) {
     $downloads = if ($env:SKYLINE_DOWNLOAD_PATH) { $env:SKYLINE_DOWNLOAD_PATH } else {
@@ -59,7 +67,7 @@ $zip = Join-Path $runDir 'candidate.zip'
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 
 # --- Build the candidate (skipped when already built, unless -Rebuild) ---
-if ($Rebuild -or -not (Test-Path $zip)) {
+if (-not $SummaryOnly -and ($Rebuild -or -not (Test-Path $zip))) {
     Remove-Item $dataDir -Recurse -Force -ErrorAction SilentlyContinue
     $buildArgs = @((Join-Path $here 'build_subset.py'), 'stellar', '--data-root', $DataRoot, '--full-blib', $FullBlib,
                    '--keep-dir', $dataDir, '--out-zip', $zip, '--fasta', '--no-libdecoy',
@@ -75,7 +83,7 @@ $fasta = (Get-ChildItem $dataDir -Filter '*.fasta' | Select-Object -First 1).Ful
 $trainingMzml = $mzmls | Where-Object { [IO.Path]::GetFileNameWithoutExtension($_) -eq $TrainingRun }
 if (-not $trainingMzml) { throw "Training run $TrainingRun not among $($mzmls -join ', ')" }
 
-function Invoke-OneCommand([string]$Leg, [bool]$Tune) {
+function Invoke-OneCommand([string]$Leg, [bool]$Tune, [string]$Model) {
     $legDir = Join-Path $runDir $Leg
     if (Test-Path $legDir) { Remove-Item $legDir -Recurse -Force }
     New-Item -ItemType Directory -Path $legDir | Out-Null
@@ -83,6 +91,7 @@ function Invoke-OneCommand([string]$Leg, [bool]$Tune) {
     foreach ($m in $mzmls) { $cliArgs += @('-i', $m) }
     $cliArgs += @('--fasta', $fasta)
     if ($Tune) { $cliArgs += @('--training-input', $trainingMzml) }
+    if ($Model) { $cliArgs += @('--model', $Model) }
     $cliArgs += @('-o', (Join-Path $legDir 'output.blib'), '--work-dir', $legDir,
                   '--device', 'cpu', '--resolution', 'unit', '--protein-fdr', '0.01', '--threads', $Threads,
                   # The test's digest (SubsetPipelineTest.LibraryBuildArgs), window = the band.
@@ -104,14 +113,13 @@ function Invoke-OneCommand([string]$Leg, [bool]$Tune) {
 # belong to (the tuning search comes before TrainModel), totals, and the held-out metrics block.
 function Read-Leg($r) {
     $lines = Get-Content $r.Log
-    $tasks = [ordered]@{}; $runs = @(); $totals = @(); $heldOut = @(); $search = 'search'
-    $inHeld = $false
+    $tasks = [ordered]@{}; $runs = @(); $totals = @(); $heldOut = @(); $search = 'final'
     foreach ($l in $lines) {
         if ($l -match '\[TASK\] (\w+):done \(([\d.]+)s\)') {
             $key = $Matches[1]; $n = 2
             while ($tasks.Contains($key)) { $key = '{0}#{1}' -f $Matches[1], $n; $n++ }
             $tasks[$key] = [double]$Matches[2]
-            if ($Matches[1] -eq 'TrainModel') { $search = 'search' }
+            if ($Matches[1] -eq 'TrainModel') { $search = 'final' }
         }
         elseif ($l -match '\[TASK\] (\w+):starting' -and -not $tasks.Contains('TrainModel') -and $r.Leg -eq 'tuned') {
             $search = 'tuning'
@@ -122,20 +130,33 @@ function Read-Leg($r) {
         if ($l -match 'Total: ([\d,]+) precursors pass run-level FDR across (\d+) files') {
             $totals += [pscustomobject]@{ Search = $search; Precursors = [int]($Matches[1] -replace ',', ''); Files = [int]$Matches[2] }
         }
-        if ($l -match 'Held-out metrics') { $inHeld = $true; $heldOut += $l.Trim(); continue }
-        if ($inHeld) { if ($l -match '^\s+(MS2|RT):') { $heldOut += $l.Trim() } else { $inHeld = $false } }
+        # TrainModel's held-out comparison: 'RT pretrained (...): R2 ...', 'MS2 fine-tuned: PCC ...',
+        # and the verdict 'MS2: the fine-tuned model beats ...'.
+        if ($l -match '^(RT|MS2) (pretrained|fine-tuned).*\(n=\d+\)' -or $l -match '^(RT|MS2): ') { $heldOut += $l.Trim() }
     }
     $export = $lines | Where-Object { $_ -match '(?i)(export|training).*\d+ precursors|precursors.*(export|training)' } | Select-Object -First 3
     return [pscustomobject]@{ Tasks = $tasks; Runs = $runs; Totals = $totals; HeldOut = $heldOut; Export = $export }
 }
 
-$legs = @(Invoke-OneCommand 'tuned' $true)
-if ($Baseline) { $legs += Invoke-OneCommand 'pretrained' $false }
+if ($SummaryOnly) {
+    $legs = @(foreach ($leg in 'tuned', 'saved', 'pretrained') {
+        $log = Join-Path (Join-Path $runDir $leg) 'run.log'
+        if (Test-Path $log) {
+            $wall = (Select-String -Path $log -Pattern '^WALL ([\d.]+)s exit (-?\d+)' | Select-Object -Last 1).Matches
+            [pscustomobject]@{ Leg = $leg; Log = $log; Exit = [int]$wall.Groups[2].Value; Wall = [double]$wall.Groups[1].Value
+                               Dir = (Join-Path $runDir $leg) }
+        }
+    })
+} else {
+    $legs = @(Invoke-OneCommand 'tuned' $true)
+    if ($SavedModel) { $legs += Invoke-OneCommand 'saved' $false (Join-Path $runDir 'tuned\output.model.zip') }
+    if ($Baseline) { $legs += Invoke-OneCommand 'pretrained' $false }
+}
 
 $out = New-Object System.Collections.Generic.List[string]
 $out.Add("Candidate $Name : $Windows window(s) (precursor m/z $('{0:F2}' -f $mzLo)-$('{0:F2}' -f $mzHi)), RT $RtMin-$RtMax min, " +
          "undetected max $UndetectedMax, $(if ($RealProteins) { 'real' } else { 'synthetic' }) proteins, $Threads threads")
-$out.Add("  zip: {0:N1} MB  ({1})" -f ((Get-Item $zip).Length / 1MB), $zip)
+$out.Add(("  zip: {0:N1} MB  ({1})" -f ((Get-Item $zip).Length / 1MB), $zip))
 $out.Add("  data: " + ((Get-ChildItem $dataDir | ForEach-Object { '{0} {1:N1} MB' -f $_.Name, ($_.Length / 1MB) }) -join '; '))
 $out.Add("  build: " + ((Get-Content (Join-Path $runDir 'build.log') | Where-Object { $_ -match '^(library RT fit|detected|synthetic|proteins|concatenated|kept)' }) -join ' | '))
 foreach ($r in $legs) {
@@ -143,7 +164,7 @@ foreach ($r in $legs) {
     $out.Add("")
     $out.Add("[$($r.Leg)] exit $($r.Exit), wall $('{0:F0}' -f $r.Wall)s  ($($r.Log))")
     $out.Add("  tasks: " + (($p.Tasks.GetEnumerator() | ForEach-Object { '{0} {1:F1}s' -f $_.Key, $_.Value }) -join ', '))
-    foreach ($s in @('tuning', 'search')) {
+    foreach ($s in @('tuning', 'final')) {
         $rs = @($p.Runs | Where-Object Search -eq $s)
         if ($rs.Count) { $out.Add("  $s search, precursors at 1%: " + (($rs | ForEach-Object { '{0} {1}' -f ($_.Run -replace '^.*_(\d+)(\.mzML)?$', '_$1'), $_.Precursors }) -join ', ')) }
         $ts = @($p.Totals | Where-Object Search -eq $s)
