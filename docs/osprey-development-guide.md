@@ -162,6 +162,26 @@ When a new env var is needed in a project that the wrapper class doesn't
 yet live in, push the wrapper down to Core first (see "Sharing rule"
 above), then add the new field.
 
+### Adding a command-line argument: it is a Skyline setting too
+
+Every argument is declared once, in `pwiz_tools/Osprey/Osprey/OspreyCommandArgs.cs`, and
+`Osprey --help properties` exports the ones that are settings of a run as JSON, which Skyline's
+Additional Settings grid (the Osprey Search wizard and Build Library's Carafe source) reads from
+the installed Osprey - so an argument added here appears in Skyline with no Skyline change. A new
+declaration therefore says which it is, and `TestPropertiesExport` fails until it does:
+
+- A setting of a run: give it `Scope = OspreyPropertyScope.search` (or `library`, `digest`,
+  `tuning`: when it applies), a `PropertyType` for a number, integer or path (a flag and a listed
+  value are inferred), a `DefaultValue` when Osprey names one, `MinValue`/`MaxValue` for a range,
+  and its label in `OspreyCommandArgUsage.resx` under the usage key plus `_property`
+  (`_run_fdr_property`), with the usage text as its tooltip.
+- An input, an output, a command or an internal switch: no `Scope`, and its name added to the
+  not-a-property list in `TestPropertiesExport`.
+
+The CarafeSharp declarations Osprey hosts get theirs from `CarafeCommandLine.DeclareProperties()`
+and `CarafeCommandArgUsage.resx` (`_nce_property`). What Skyline's own pages bind is listed in
+`OspreyHelpers.FormBoundArguments` and stays out of the grid.
+
 ### User-visible output: one CommandStatusWriter, never raw Console.*
 
 All user-visible output goes through **one `CommandStatusWriter`**
