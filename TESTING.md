@@ -233,3 +233,13 @@ Use `SkylineTester.exe` or `TestRunner.exe /locale:ja-JP` to test in different l
 - [ai/CRITICAL-RULES.md](CRITICAL-RULES.md) - All critical testing constraints
 - [ai/MEMORY.md](MEMORY.md) - DRY principles in testing
 - [ai/WORKFLOW.md](WORKFLOW.md) - Build and test workflows
+
+## Demos Are Temporary
+
+Showing the developer UI under construction - the way an intern would, before any code is read - is
+done by dropping a `PauseTest()` (or `PauseForManualTutorialStep`) into the functional test, running
+it with the UI shown, and **removing the pause before the commit**. Do not add an environment
+variable, an `IsDemo` switch or a `PauseForDemo` helper to a test: the tree must not accumulate demo
+or diagnostic paths. `CodeInspection` flags a leftover `PauseTest()`, which is the reminder. For an
+LLM session the same mechanism is how to see the UI over the Skyline MCP (`Run-Tests.ps1
+-AiConnector`, then `skyline_get_form_image`), and the same rule applies: it does not get committed.
