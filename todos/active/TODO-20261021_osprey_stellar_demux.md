@@ -532,6 +532,11 @@ there: ZT Scan scanning demux, profile/joint solves, Centrix, profile grids.
    store nothing, Skyline demultiplexes at import with the same shared code (#4815 option, once ours is ported).
    pwiz-sharp writes mzMLb (`MzMlbWriter`, `WriteFormat.MzMLb`) and reads it; other tools may not (convert with
    msconvert). To measure: mzMLb size and read speed for TR02.
+   Deferred (Mike, 2026-10-28): Brendan is working on the Skyline integration. Found that day, for whoever picks it
+   up: Osprey's m/z offset is the mean error, and on ZT (`ztscan-full-20261027\osprey-search\*.calibration.json`) the
+   mean sits below the median in every file, MS1 by 1.3-1.9 ppm (n ~120) and MS2 by 0.6-0.7 ppm, so a calibrated
+   file needs a robust offset first. Osprey's cache holds what Skyline needs per spectrum (RT, precursor, isolation
+   window, 64-bit m/z, 32-bit intensity); ZT demux spectra do not map one-to-one onto the raw ones.
 
 **Calibrator: peak width depends on ions per peak (2026-10-23, `width_vs_ions.ps1`).** FWHM lower quartile by ions in the
 peak (summed positive run x fill ms / 1000), 2Th TR01 / SuperOverlap TR01, identical in both: 0-3 ions 0.41 Th; 3-10
@@ -957,6 +962,85 @@ options, staggered default in DemuxTool), eab28e8141 (review fixes); the memory 
   round (only the golden); the truth-based staggered test skips the defaults. The batch log's "units" no longer covers
   unit building. docs/23's paragraph is stale (12.6%, warm chain restarts per unit, refit wording). Pre-existing: with
   L1Z 0 the reweighted descent refits nothing (lambda-ratio test).
+
+**2026-10-27/28 (night): ZT Scan whole-run timing and IDs redone, then the ZT joint demux's memory.**
+
+- Redo of the 10-25 comparison with #4918 (24babd5e17, CarafeSharp GPU memory) and DemuxTool 2e26144263, timed
+  step by step on a quiet machine (`D:\test\osprey-runs\ztscan-full-20261027`, `run-demux.ps1`, `run-compare.ps1`,
+  `run-diann-demux.ps1`; `timing.tsv`, `timings.tsv`). Demux A1 / D1 / G1 5,241 / 5,035 / 5,361 s; all three outputs
+  byte-identical to 10-25's (`demux\cmp-vs-20261025.txt`). Figures: `analysis\timing_library.png`,
+  `analysis\timing_search.png`; D1's demux is charged to the library, A1+G1's to Osprey's search.
+  - Library: Osprey 150.3 min with D1's demux (10-25: 308.8; final prediction 30.5 vs 181.3 min).
+  - Search of 3 runs: Osprey 224.6 min, of it demux A1+G1 176.7; DIA-NN 2.3.2 on the .wiff 197.6 min; DIA-NN on our
+    mzMLs 97.3 min of search, 357.9 min with all three demuxes.
+  - IDs at 1% q, measured entrapment FDP (`analysis\summary.txt`, `analysis-diann-demux\summary.txt`): Osprey 39,006
+    precursors (0.40%); DIA-NN on the .wiff 50,627 (0.45%); **DIA-NN on our demuxed mzMLs 58,280 (0.43%), +15%**,
+    per run 53.1-53.5k (.wiff 45-47k), 4,937 protein groups (4,590). Same library and flags, `--scanning-swath`
+    dropped. Our demux helps DIA-NN; the Osprey-DIA-NN gap on the same mzMLs is in the search.
+- **ZT demux is main-thread bound and paged.** A1 peaked at 66.5 GB commit on the 64 GB box: each batch's 27 joint
+  units (~0.8 GB each, with 4 + 4 pad sweeps around 12 core sweeps) were built before the solves and held, two
+  batches at once. The main thread was busy ~4,100 of 5,236 s (reads 1,630 s, 11.5 s a batch unloaded -> 100-172 s
+  mid-run; layout 763 s, 5 -> 114 s; units 260 s; writing ~1,300 s) and waited 1,120 s, so a faster solve alone
+  gains at most 21%.
+- Memory fix, committed as f3beac1fcd: ZT units made on their solve's thread (as Stellar's,
+  94f729c75f); the joint solve's units copy only the core sweeps, since `JointDemultiplexer.DemuxUnit` skips the pad
+  (ZT units carry no sweep scale or row exposure, so the warm start is unchanged); `DemuxUnit` lists one sweep's
+  points at a time. The apportion and channel paths keep the pad.
+- GC test first (`D:\test\osprey-runs\ztscan-gc-20261027\summary.tsv`, slice 300:449, the 2e26144263 build): server
+  GC 1,688 s and 77.6 GB peak private; workstation GC 1,771 s, 81.9 GB, byte-identical; `DOTNET_GCHeapHardLimit`
+  24 GB ran out of memory in the first batch. The memory was live data, not GC slack.
+- Memory fix on the same slice (`D:\test\osprey-runs\ztscan-memfix-20261028\summary.tsv`): 1,548 s (-8%), 42.3 GB
+  peak private (-45%), working set equal to private (no paging), output byte-identical (sha256 79B66BB5...). Reads
+  per batch 75-78 s (were 87-106), layout 42-43 s (60-64), and the main thread now waits 138-140 s a batch for the
+  solves (80-89): the solve is the bottleneck.
+- Why the main thread cannot buy much more: the process used 19,388 s user CPU in the 1,688 s slice (11.9 of 16
+  logical cores), ~95% of it in the joint solve (10-25 profile). Mid-run the thread pool holds 17-18 threads with the
+  16 solve tasks on it, so the 4 read threads' `Parallel.For` gets 1-2 helpers: reads run almost serially (2.6 s a
+  sweep). Giving them threads would take CPU from the solves; the solve's own CPU is the lever.
+- Solve CPU, byte-identical candidates from a read of the hot path (`ai/.tmp/sessions/20261021-stellar/
+  agent-jointsolve-analysis.md`): (1a) the block Gram's diagonal is `_curvature`, the same products summed in the
+  same order by `FillWeights`; (1b) each grid point's Gram entries held until `FillWeights` changes v (a point is
+  re-solved ~13 times a descent with the same or a pruned block); (2) the gradient check's and weights' scratch
+  shrunk to a group's 54 x 4 (w r formed in the slide, the same rounded products; `FillWeights` loops by group).
+- Measured on A1 cycles 400:435, 16 threads, `--solve-profile` (`D:\test\osprey-runs\ztscan-memfix-20261028\
+  summary.tsv` and each run's `demux.log`); every run byte-identical (sha256 254D3F19...):
+
+  | build | wall | solve thread-s | gradient | weights | Gram |
+  |---|---|---|---|---|---|
+  | memfix (f3beac1fcd) | 562 s | 4,421 | 1,253.6 | 394.4 | 785.3 |
+  | + 1a + 1b | 562 s | 4,543 | 1,327.7 | 392.7 | 730.8 |
+  | + 1a + 1b + 2a/2b | 522 s | 4,014 | 936.2 | 376.2 | 724.7 |
+  | 1a + 2a/2b/2c, committed 618a65c96e | 512 s | 3,845 | 930.3 | 350.2 | 634.8 |
+
+  Run-to-run noise in a timer is about +/-6% (gradient 1,254 vs 1,328 with no change there). 1b gave nothing
+  measurable and was dropped. The gradient check's 25-30% is real: it was not the arithmetic but a full-row
+  `w*r` pass and 232 KB scratch arrays every call. At 8 threads (gram build) the batch took 541 s and 2,797 solve
+  thread-s: a hyperthread runs 1.62x slower, so 16 threads give 1.23x the solve throughput of 8.
+- Writing split (2d8b20835e, `--solve-profile`): MS1 centroiding 9.9-10.5 s of ~390-436 s writing for 36 surveys
+  (0.27 s a survey, ~190 s a whole A1); the writer itself 32 s. Neither is worth moving off the writer thread.
+- Where the solve's rounds go (StageSummary, `solve-400-435-sp\demux.log`): in descent 1, 79.8% of chunks stop at
+  MaxRounds (5) still growing, and all of the 863 coefficients a chunk adds after its first round were active
+  earlier and pruned: the active set cycles (a pass prunes a zero, the next check re-adds it). Levers, both
+  output-changing and settable without a build: `--joint-keep-active` (PruneActive false) and
+  `--joint-param GrowRelativeTolerance=1e-4`. Also output-changing: marking neighbors dirty by distance.
+- **Whole A1 with the three commits** (snapshot `D:\test\osprey-runs\_bin\ztsolve-demuxtool-vendor`, the 10-27
+  command; `D:\test\osprey-runs\ztscan-memfix-20261028\solve-a1-whole`): **4,119 s (10-27: 5,236 s, -21%), 45.1 GB
+  peak private (66.5 GB commit, -32%), working set 44.7 GB (no paging), output byte-identical to the 10-27 file**
+  (sha256 395065D0... both). Main thread: reads 1,008 s (1,630), layout 521 s (763), units 0 (260; 76 s now on the
+  solve threads), waiting on the solves 1,244 s (1,120), opening and indexing 242 s, writing ~1,100 s (~1,300).
+- **Pushed to #4710 2026-10-28** (2e26144263..618a65c96e), results comment
+  https://github.com/ProteoWizard/pwiz/pull/4710#issuecomment-6471333238. Stellar SuperOverlap 8-10 min slice
+  byte-identical between 2e26144263 and 618a65c96e (`st-base` / `st-solve`, sha 883557EF..., 257 / 260 s).
+- GrowRelativeTolerance 1e-4 on the committed build (`grow1e4-400-435-sp`; output changes): solve 3,605 thread-s
+  (-6%), batch wall unchanged (512 s: one batch's wall is set by 27 units over 16 threads). By descent: descent 1
+  4.40 -> 3.32 rounds but gradient 503.5 -> 494.6 s; descent 2 3.94 -> 2.24 rounds, gradient 426.8 -> 251.4 s.
+- Screening the reweighted (and warm-started) descent group by group, a byte-identical candidate, tried and dropped
+  (patch `ai/.tmp/sessions/20261021-stellar/screen-by-group.patch`): byte-identical on the ZT batch
+  (`screen-400-435-sp`, sha 254D3F19...) and the Stellar 8-10 min slice (`st-solve` / `st-screen`, sha 883557EF...),
+  but no gain: ZT descent-2 gradient 426.8 -> 412.3 s (noise), Stellar gradient 145.9 -> 178.1 s. Descent 2 checks
+  only the groups near points that moved, where the coefficients are near peaks and not screenable, so the extra
+  slide over the data buys nothing. The first descent's later checks are cheap for the same reason, not because of
+  its screen.
 
 ## Plan (2026-10-21, original)
 
