@@ -420,6 +420,9 @@ the agents' test download cache served master's zip. Brendan chose the local bui
 machine - everything Osprey needs is in the repo (committed models, NuGet torch runtime). The
 only consumer-side effect of the name collision that remains is pre-existing: a developer build
 that installed the first master package of a day does not pick up a second one that day.
+TeamCity's Skyline build of that head (bt209 #22514, d7b2e3ea60) is green: the wizard test
+passed against the tree's own Osprey. The Osprey Perf/Regression run was triggered with
+Brendan's okay on `pull/4925` (build 4238756, Agent 1).
 
 **Osprey gates on the Chronologer RT default (2026-10-27)**: `regression-parallel.ps1 -Dataset All`
 48 PASS / 0 FAIL in 38:23 (lane logs `pwiz_tools/Osprey/TestResults/regression-lane-*-20261027_153248.log`);
