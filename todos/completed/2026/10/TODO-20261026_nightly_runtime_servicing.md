@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261026_nightly_runtime_servicing`
 - **Base**: `master`
 - **Created**: 2026-10-26
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4919](https://github.com/ProteoWizard/pwiz/issues/4919)
 - **Module**: `skyline`
-- **PR**: [#4920](https://github.com/ProteoWizard/pwiz/pull/4920)
+- **PR**: [#4920](https://github.com/ProteoWizard/pwiz/pull/4920) (merged 2026-10-27)
 
 ## Objective
 
@@ -31,7 +31,7 @@ Dump: `ai/.tmp/20261026-SkylineNightly.dmp`; dotnet-dump output in
 - [x] In-run `MachineStateMonitor`: logs .NET runtime changes and a pending restart (replaces the TestRunner-folder idea; covers every shared-framework process)
 - [x] `/code-review medium` - 10 findings; 9 fixed in `a4ed0c124f` (UTC times, update cutoff at run end, command logs excluded, FileShare.ReadWrite read, log lock, background alert, guarded diagnostics, RID restore before self-contained publish, non-vacuous runtimes assert); 1 dropped (open settings window counts as "still running": rare, and the window was already killed)
 - [x] Pushed and opened PR #4920
-- [ ] TeamCity green, human review, merge
+- [x] TeamCity green, merge
 
 ## Regression Test
 
@@ -58,3 +58,14 @@ Environment fix: `pwiz_tools/Skyline/SkylineTester/Properties/AssemblyInfo.cs` w
 `ai/.tmp/sessions/20261026-dump/SkylineTester-AssemblyInfo.cs.stale`. Other pre-port checkouts likely have it too.
 
 Unverified: 1074 insertion-string layout (no restart in this machine's 3-day System log); parser accepts the path with or without a trailing "(MACHINE)".
+
+### 2026-10-27 - Merged
+
+PR #4920 merged as commit 59f3e523f6 with all 19 checks green. Shipped: self-contained
+SkylineNightly publish, startup diagnosis of an interrupted previous run with a TestResults
+alert, and in-run logging of runtime changes, pending restarts and unhandled exceptions.
+Still unverified: the 1074 insertion-string layout, until a real restart happens on a nightly
+machine. Noted in review: TestRunInterruption links SkylineNightly's `MachineState.cs` and
+`RunInterruption.cs` into Test.csproj (same pattern as AssortResources); a dedicated test
+project for the testing tools (SkylineTester, SkylineNightly, TestRunnerLib) would be their
+natural home if one is created.
