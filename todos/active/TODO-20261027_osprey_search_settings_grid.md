@@ -1,12 +1,10 @@
-# TODO-osprey_search_settings_grid.md
+# TODO-20261027_osprey_search_settings_grid.md
 
 ## Branch Information
-- **Branch**: (to create: `Skyline/work/YYYYMMDD_osprey_search_settings_grid`)
-- **Base**: `master` after PR #4925 merges (the Build Library Carafe wizard); until then, branch
-  from `Skyline/work/20261026_build_library_carafe_wizard` and retarget after the squash-merge
-  (`git merge origin/master`, the squash-merged-parent case in version-control-guide.md)
-- **Created**: (pending)
-- **Status**: Backlog, designed 2026-10-27 for a night session
+- **Branch**: `Skyline/work/20261027_osprey_search_settings_grid`
+- **Base**: `master` (PR #4925 merged 2026-10-27, b68aa96d5f)
+- **Created**: 2026-10-27
+- **Status**: In Progress (night session 2026-10-27)
 - **Module**: `skyline` (with an `osprey` piece if the declarations are exported from Osprey)
 - **PR**: (pending)
 - **Objective**: Expose the complete option set of Osprey and Carafe behind an "Additional
