@@ -317,3 +317,25 @@ work branch after a `-Target TestPerf` build, so every test the TODO names has r
   `Osprey --help properties --culture <Skyline's UI culture>` and caches per (exe, culture, file time);
   the JSON records the culture it was written in. Osprey does not emit all languages at once: the host
   asks in its own language, so a translation added to Osprey's resx reaches the grid with no host change.
+
+### 2026-10-28 morning - Property grid; the button leaves page 1
+
+- Brendan: show the additional settings in a property grid like the spectrum properties (grouping,
+  sorting, a help box). `OspreySettingsGridDlg` (FileUI/PeptideSearch) over `OspreySettingsObject`/
+  `OspreySettingDescriptor` (Model/Lib/OspreySettingsDescriptor.cs): one `PropertyDescriptor` per
+  setting of the run's scopes, DisplayName = label, Category = help section (ampersands doubled for the
+  grid's mnemonic drawing), Description = argument + usage text, bool for a flag, a `StringConverter`
+  with the list's values for a list; SetValue validates and refuses through the grid's own error box;
+  non-defaults bold, Reset restores Osprey's default; categorized/alphabetical remembered in
+  `Settings.Default.OspreyAdditionalSettingsSorted`; Cancel/Escape restore the opening values.
+  Categories are alphabetical (the control's rule); help order holds within a category. The DDA
+  engines keep `KeyValueGridDlg` (its group/tooltip parameters stay, unused by them).
+- Brendan: the button does not belong on Build Library's first page; the Carafe box is the quick
+  path and the Fine-tune box is the one way to more pages. Removed `btnCarafeAdditionalSettings` and
+  `ShowCarafeAdditionalSettings`; a build with the model as it is predicts with Osprey's defaults and
+  the last-used additional settings do not apply to it (`CarafeLibraryBuilder.AdditionalSettings`
+  removed; `BuildPredictLibraryCommandLine`'s optional parameter stays, unit-tested). Design 3 is
+  thereby settled: the grid is reached only from the Search Settings page, in both wizards.
+- Demo: `BuildLibraryCarafeWizardTest` with `SKYLINE_BUILD_LIBRARY_DEMO=1` now pauses with the dialog
+  open (a FormEx, unlike the old grid's ShowWithTimeout); seen over the MCP and shown to Brendan with
+  `-ShowUI`.
