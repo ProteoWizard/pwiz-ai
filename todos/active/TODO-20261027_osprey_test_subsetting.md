@@ -169,3 +169,96 @@ passes 126 targets / 0 decoys at 1% in the FIRST pass (:92), but the second pass
 1/74 = 1.35% - and nothing passes: export 0 (:111), experiment level 0 of 183 (:124), exit 1 after 4.2 s.
 What a one-run subset needs is >~100 targets in the multi-detection-protein stratum of the tuning run.
 The pretrained 3-run search of the same data reports 368 (123/114/131 per run; `pretrained\run.log`).
+
+#### Candidates measured (2026-10-28, BRENDANX-UW6, 12 threads, CPU; exe `E:\test\osprey-runs\_bin\subset-20261028`)
+
+Every number is from `E:\test\osprey-runs\subset-<name>\summary.txt`, which cites the `run.log` of each leg.
+Tuned = `--training-input _21` alone; pretrained = same command without it; saved = `--model <tuned>\output.model.zip`.
+Digest = SubsetPipelineTest's (trypsin, 7-35, z2-3, C+57) with `--min/max-pep-mz` = the band, except `-wiz`.
+
+| Candidate | Proteins | `_21` alone at 1% | Export | Final 3 runs tuned / pretrained | Held-out `_20`,`_22` tuned / pretrained | Held-out MS2 PCC pre -> tuned (n) | Tuned wall (TrainModel) | Saved wall | Zip |
+|---|---|---|---|---|---|---|---|---|---|
+| control w1 RT7-13 (committed geometry) | 103 syn | 126 1st pass, **0 after 2nd** | 0 | exit 1 / 368 | - | - | 4 s | - | 3.5 MB |
+| w1 RT0-24 | 309 syn | 271 | 168 | 993 / 908 | 311,321 / 311,287 | .965 -> .988 (7) | 32 s (18) | - | 11.0 MB |
+| **w2 RT6-18** | 354 syn | 460 | **345** | **1461 / 1383** | **481,506 / 455,455** | .914 -> .941 (22) | **43 s (31)** | - | 12.9 MB |
+| w3 RT7-14 | 319 syn | 443 | 340 | 1303 / 1281 | 424,434 / 428,423 | .928 -> .949 (21) | 42 s (31) | - | 11.9 MB |
+| w12 RT0-24 real, undetected 8640 | 5657 | 3475 | 2589 | 11160 / - | - | .944 -> .965 (236) | 281 s (181) | - | 127.9 MB |
+| w25 RT6-18 real, undetected 9000 | 5947 | 5431 | 4751 | 18033 / - | - | .942 -> .965 (445) | 448 s (273) | - | 159.3 MB |
+| w12 RT0-24 real u0 | 2360 | 3500 | 2716 | 11132 / - | - | .937 -> .958 (248) | 252 s (192) | 38 s | 125.0 MB |
+| **w8 RT0-24 real u0** | 1780 | 2345 | **1614** | 7300 / - | - | .941 -> .968 (139) | **157 s (118)** | **26 s** | **83.6 MB** |
+| w12 RT6-18 real u0 | 1900 | 2758 | 2050 | 8405 / - | - | .939 -> .972 (186) | 199 s (151) | 30 s | 75.7 MB |
+| w8 RT0-24 real u0 **-wiz** (no m/z bounds) | 1780 | 2334 | - | 7276 / - | - | - | **362 s** | **230 s** | 83.6 MB |
+
+- Target 1 is met by **w2 RT6-18** only: one run alone exports 345 (>300), the tuned model beats pretrained on
+  all four MS2 metrics (n=22) and on both held-out runs, the Osprey leg is 43 s. w1 RT0-24 exports 168; w3's
+  held-out `_20` drops (424 vs 428). Route-A sizes at w2 geometry (`subset-w2-rt6-18\routeA\`):
+  `StellarSubset.zip` 14.95 MB (now 4.1), `OspreySearchTest.zip` 13.2 MB (now 3.7) - the latter is the same
+  three mzMLs plus a 25 KB FASTA, so under route A the Skyline test should read the Osprey zip, not a copy.
+- TrainModel is ~70 ms per exported precursor at 12 threads (118 s / 1614, 192 s / 2716); it is the cost that
+  sizes Target 2. Undetected precursors cost nothing in TrainModel but drag their proteins into the FASTA
+  (5657 vs 2360 at w12) and double the prediction; with real proteins, keep undetected 0 - the proteins'
+  other in-band peptides are the realistic undetected targets.
+- Target 2 at the bounded digest: **w8 RT0-24 real u0**, Osprey 157 + 26 = 183 s, 3 x 67.7 MB mzML, 83.6 MB zip.
+
+**Finding - FASTA prediction ignores the runs' isolation range (an Osprey change, not this branch).**
+Through the wizard (no `--min/max-pep-mz`, `OspreyHelpers.AppendLibraryBuildArgs`) Carafe predicts its
+default 300-2000 m/z (`CarafeCommandLine.cs:83-84`) in PredictTrainingLibrary and in a saved-model or
+pretrained PredictLibrary; only the PredictLibrary right after a fine-tune is limited, because
+`CarafeModelDirectory.ApplyTrainingRunOverrides` sets the window from the training run's isolation range.
+w8-wiz: 289,552 precursors predicted in 212 s for the training library vs 12,124 in 10.6 s bounded
+(`subset-w8-rt0-24-real-u0-wiz\tuned\run.log` vs `subset-w8-rt0-24-real-u0\tuned\run.log`), and the saved
+leg 210.5 s ("Precursor m/z 300-2000 ... from the command line", `-wiz\saved\run.log:19`) - with no change in
+what is identified (7276 vs 7300). On the FULL hela-filtered.fasta, 400-900 holds 54.3% of the z2-3
+precursors in 300-2000 (219,110 of 403,786; `ai/.tmp/sessions/20261027-subset/mz_fraction.py`), so every
+wizard FASTA prediction on real Stellar does 1.84x the needed work. The training library is also predicted
+at NCE 27 / Eclipse rather than the training run's NCE 30 / Stellar. Defaulting the precursor window (and
+NCE/instrument) to the searched runs' isolation range would take Target 2 through the wizard from ~10 min
+to ~3 min of Osprey on w8 and cut the full-data perf test's prediction roughly in half.
+
+**Target 2 measured end to end.** `OspreySearchPerfTest` (branch change: `SKYLINE_TEST_OSPREY_PERF_ZIP` names a
+local zip of the regression layout) against `E:\test\osprey-runs\subset-w8-rt0-24-real-u0\perf\osprey-stellar-w8-rt0-24.zip`
+(87.3 MB: 3 x 71 MB mzML + 0.78 MB FASTA of 1,780 real proteins): **PASSED in 362 s** - tuning search, saved-model
+search and both Skyline imports, CPU, 12 threads; 2,523 / 2,535 library spectra
+(`ai/.tmp/sessions/20261027-subset/perftest-w8.log`; Osprey logs under
+`pwiz_tools\Skyline\TestResults\TestRunner results\osprey-stellar-w8-rt0-24\*.osprey\osprey-skyline-stdout.log`).
+Tuning search 09:35:13-09:38:41, saved search 09:39:11-09:40:45. Of the 362 s, PredictTrainingLibrary 79.3 s and the
+saved PredictLibrary 78.5 s each predict 130,796 precursors over 300-2000 m/z where the post-tune PredictLibrary
+(bounded by the training run) predicts 9,106 in 6.6 s - ~145 s is the isolation-range finding above. With that
+Osprey fix the perf test would be ~3.6 min. (The wizard's digest is 66,704 peptide forms vs Measure-Subset's
+148,661 - the document's defaults are tighter than SubsetPipelineTest's 7-35 / 1 missed cleavage.)
+
+**Target 1 test changes verified on the w2 data (swapped into the working tree, then restored; not committed).**
+`ai/.tmp/sessions/20261027-subset/run-tuning-tests-w2.ps1`: `TestOspreySearchTuning` PASSED 128 s tuning on the
+middle run alone (scenario 2 browses that run held out of the outer runs' search, plus a browsed searched run
+unchecked, so "never listed twice" keeps its coverage); `TestOspreySearch` PASSED 30 s
+(`tuning-tests-w2.log`). Osprey `-TestName Tuned` PASSED all four - Tuned 55 s, HeldOut 24 s, Stepwise 27 s,
+HpcChain 26 s (`osprey-tuned-w2.log`) - after widening `WINDOW_MAX_MZ` 596.6 -> 600.6 (the first try predicted
+only window 1 and exported 118). Osprey inspection zero warnings; Skyline CodeInspection 0 failures.
+Route A's hidden cost: all 28 Osprey `Subset` tests 2.26 -> 4.56 min (2.02x; `osprey-subset-tests-{baseline,w2}.log`),
+4 tests failing on data-specific expectations (UnusableDecoys, NothingPasses, BlibLibrary, LibraryDecoysAndReports).
+
+**Local commits on the branch, NOT pushed:** 74c83b911c (perf-test `SKYLINE_TEST_OSPREY_PERF_ZIP` override -
+independent, pushable) and ff47137b36 (one-run tuning - passes only with the w2 zips; push only with them).
+
+## Proposal (for Brendan)
+
+**The numbers support route B, with the Git subset growing once.** Target 1 cannot be met without growing the
+committed subset - nothing smaller than 2 windows x 12 min lets one run export >300 (w1 RT0-24: 168) - so
+"stays as it is" is off the table under either route; and the grown subset is far too small to be a perf test.
+
+1. **Target 1 - grow `StellarSubset.zip` to w2 RT6-18** (`build_subset.py stellar --windows 2 --rt-min 6
+   --rt-max 18 --undetected-max 720`): 4.1 -> 14.95 MB. Make the Skyline functional tests read it (or a
+   mzML+FASTA zip cut from the same build, `--functional-zip`, 13.2 MB) instead of keeping both. Costs:
+   regenerate the goldens and the 4 data-specific expectations; Osprey Subset tests 2x (partly won back by
+   moving the stepwise/HPC tuned tests to one run, not done). Gains: no workaround left in either tuning test;
+   the held-out scenario becomes a real held-out-run check.
+2. **Target 2 - route B: `osprey-stellar-w8-rt0-24.zip` (87.3 MB) on Panorama** beside the regression data
+   (8 windows x the full gradient, real proteins of the detected peptides). `OspreySearchPerfTest` on it: 362 s
+   on a 12-thread CPU today, both searches and both imports; back into the PR perf run (remove the
+   `tc-perftests-skiplist.txt` entry) once the zip is up and the test's URL points at it.
+3. **Separate Osprey change (biggest single lever):** default the FASTA prediction's precursor window (and
+   NCE/instrument) to the searched runs' isolation range. ~145 of the perf test's 362 s, and ~46% of every
+   wizard FASTA prediction on full Stellar, is precursors no run can measure. Perf test -> ~3.6 min.
+
+Not done, for the morning: the Panorama upload, replacing the committed zips and goldens, the URL constant,
+the skiplist line, and the Osprey prediction-window issue.
