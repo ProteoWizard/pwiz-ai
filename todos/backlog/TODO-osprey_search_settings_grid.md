@@ -133,4 +133,9 @@ timestamp. The form pages: Search Settings (resolution, tolerance, three FDRs, t
 
 ### 2026-10-27 - Written
 
-From the precedent study of 2026-10-27 (files and counts above), with Brendan.
+From the precedent study of 2026-10-27 (files and counts above), with Brendan. PR #4925, the
+Build Library Carafe wizard this builds on, merged the same day (b68aa96d5f), so the work
+branches from master.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261027_night_osprey_settings_grid.md` before starting work.
