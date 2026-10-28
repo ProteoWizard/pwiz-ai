@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261026_build_library_carafe_wizard`
 - **Base**: `master` (fb75aff35b, after PR #4917 merged)
 - **Created**: 2026-10-26
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline` (with Osprey / CarafeSharp changes where a feature needs them)
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4925 (opened 2026-10-27)
+- **PR**: [#4925](https://github.com/ProteoWizard/pwiz/pull/4925) (merged 2026-10-27)
 - **Objective**: After choosing the AlphaPeptDeep (Carafe) source in Build Library, Next leads to wizard
   pages that decide what the library is predicted FOR and what the model is tuned ON, the design of the
   June 2024 Skyline-Carafe integration spec (`ai/.tmp/Skyline-Carafe Integration - Google Slides.pdf`,
@@ -435,3 +435,18 @@ to be triggered with Brendan's okay. Still open:
 the fine-tune progress
 bar cosmetic (above), and the pause dialog truncates a long description to its first words
 (existing behavior, tooltip has the full text).
+
+### 2026-10-27 - Merged
+
+PR #4925 merged as commit b68aa96d5f, squash of 18 commits. Shipped: features 1 and 2 of the
+June 2024 design with Brendan's page 1 principle (the defaults finish from the first page; a
+FASTA's precursors and a fine-tune on DIA runs lead to their pages), decoys and entrapment
+peptides marked in the library, Osprey's precursor-table prediction with a tuned model, the
+Chronologer RT default on the table route, the shared wizard page controls, the
+CarafeLibraryBuilder rename, the test runner's AI connector flag, the Skyline TeamCity build
+compiling Osprey from its tree, and the AlphaPeptDeep perf test's answers re-recorded into a
+.data folder. Deferred, by design: feature 3 (Skyline results as training data, the export
+contract study first), the editor's Build... route, the fine-tune progress bar cosmetic, and
+the full engine settings grid (`ai/todos/backlog/TODO-osprey_search_settings_grid.md`). Left
+for Mike: Osprey's hosted route does not apply the training runs' NCE, instrument and rt_max
+after a fine-tune (`ApplyTrainingRunMeta`), noted in the PR body.
