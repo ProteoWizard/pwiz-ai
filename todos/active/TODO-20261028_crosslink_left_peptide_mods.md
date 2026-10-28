@@ -31,9 +31,21 @@ Library Explorer hits it every time because its matcher settings differ from the
 - [x] Fix in `EnsureMods`: keep static mods explicit on crosslinked peptides
 - [x] Related tests green: crosslink unit + functional, CopyPaste, ImportDoc, Paste,
       ModificationMatcher, LibraryExplorer, RescoreImportDocument, PasteMolecules
-- [ ] Demonstrate on Alessio's tutorial data (IFX_TNF_XLMS_q_0_05.blib): Library Explorer
-      Add of e.g. AC[+57]EVTHQGLSSPVTKSF-KVEPK keeps CAM and matches its spectrum
-- [ ] CodeInspection + /code-review, then PR
+- [x] Demonstrate on Alessio's tutorial data: replayed the tutorial's Library Explorer Add All
+      (tutorial PDF pp. 11-13, which documents this as "IMPORTANT BUG") on the 26.1.1 release
+      branch in C:\Dev\Backport with a throwaway functional test:
+      - without fix: 4829 transitions, 152/488 XL peptides missing left CAM, 9 pyro-Glu dropped
+      - with fix: 3650 transitions, 0 missing CAM, all 9 pyro-Glu kept
+- [ ] CodeInspection + /code-review, then PR with `Cherry pick to release` label
+
+## Master vs release
+
+The tutorial recipe does NOT reproduce on master (.NET 10): the matcher's mods happen to equal
+the document's, so EnsureMods returns early. The .NET Framework release build (26.1.x, what users
+run) reaches the defective path. EnsureMods is identical on both; the unit test reproduces the
+defect on master by making matcher and document mods differ. Candidate runtime difference:
+AbstractModificationMatcher.SearchPartialModMatches (Dictionary -> List change on master for the
+.NET Core empty-array singleton) - not traced.
 
 ## Notes
 
