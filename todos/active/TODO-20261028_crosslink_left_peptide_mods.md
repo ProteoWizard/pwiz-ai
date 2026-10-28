@@ -36,7 +36,13 @@ Library Explorer hits it every time because its matcher settings differ from the
       branch in C:\Dev\Backport with a throwaway functional test:
       - without fix: 4829 transitions, 152/488 XL peptides missing left CAM, 9 pyro-Glu dropped
       - with fix: 3650 transitions, 0 missing CAM, all 9 pyro-Glu kept
-- [ ] CodeInspection + /code-review, then PR with `Cherry pick to release` label
+- [x] CodeInspection + /code-review medium (3 fixed: comment scope, exact-count asserts,
+      null assert; 3 dropped: guard placement equivalent, variable-path rewrite is existing
+      behavior, extra variable-path coverage)
+- [x] PR #4929 opened with `skyline` + `Cherry pick to release` labels
+- [ ] Decide on a separate cherry-pick to Skyline/skyline_26_1_1 (.NET 4.7.2 daily) - the
+      label targets skyline_26_1 only
+- [ ] Reply to Juan/Alessio once merged; tutorial "IMPORTANT BUG" section can go
 
 ## Master vs release
 
