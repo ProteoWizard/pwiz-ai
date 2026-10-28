@@ -31,7 +31,15 @@ python build_subset.py stellar --data-root $R --full-blib <regression Stellar st
 python build_subset.py astral  --data-root $R --full-blib <regression Astral straight>/output.blib  --out-zip $T/AstralSubset.zip
 python build_subset.py stellar --data-root $R --full-blib <regression Stellar straight>/output.blib --no-libdecoy \
     --functional-zip C:/proj/pwiz/pwiz_tools/Skyline/TestFunctional/OspreySearchTest.zip
+# The Skyline perf test's data (Panorama perftests, not Git): 8 windows x the whole gradient, the real
+# proteins of the detected peptides, in the regression layout <stem>/stellar/
+python build_subset.py stellar --data-root $R --full-blib <regression Stellar straight>/output.blib --no-libdecoy \
+    --windows 8 --rt-min 0 --rt-max 24 --undetected-max 0 --real-proteins --perf-zip osprey-stellar-subset-v1.zip
 ```
+
+`StellarSubset.zip` and `OspreySearchTest.zip` must come from the same build (same geometry), since the
+Osprey and Skyline tests assert on the same runs; a Skyline test cannot read the Osprey zip, because
+SkylineTester's zip installer collects test data from the Skyline tree only.
 
 `$R` is wherever `regression.ps1` extracted the data: `<Downloads>\Perftests`, where Downloads
 honours `SKYLINE_DOWNLOAD_PATH` and a relocated Downloads folder (on some machines that is

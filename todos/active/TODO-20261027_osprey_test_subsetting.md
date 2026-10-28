@@ -262,3 +262,67 @@ committed subset - nothing smaller than 2 windows x 12 min lets one run export >
 
 Not done, for the morning: the Panorama upload, replacing the committed zips and goldens, the URL constant,
 the skiplist line, and the Osprey prediction-window issue.
+
+### 2026-10-28 (day) - Brendan accepted the proposal; scaling back what went to large data
+
+**Why tests went to large data (from completed TODOs).** `OspreySearchPerfTest`'s single-run tune existed at
+scale because it was "the single-run tuning the subset cannot do" (`completed/2026/10/TODO-20261024_osprey_search_tuning.md:192`);
+`OspreySearchTuningTest` and `SubsetPipelineTest.LibraryTuning` tuned on three runs for the same reason (:153-158);
+`BuildLibraryCarafeWizardTest` likewise (`TODO-20261026_build_library_carafe_wizard.md:141`, "feature 1 needs
+one-run tuning on the subset"); `CarafeModelBuildLibraryTest.zip` (15.6 MB, a pre-tuned Astral model) was already
+flagged "move to a server" (`completed/2026/09/TODO-20260928_AlphaPeptDeepSharp.md:77`). `regression.ps1` modes 13/14
+were opt-in demonstrations of the tuned one command at scale, their subset twins already the gates.
+
+**Moved / cut (all verified on the w2 data swapped into the working tree, not committed):**
+- `BuildLibraryCarafeWizardTest` tunes on the middle run, and now carries `CarafeModelBuildLibraryTest`'s coverage:
+  Edit list (empty grid, Add shows what the model was trained on, a duplicate name refused), combo Add... and Remove,
+  the display name's instrument and gradient, `CarafeModelChoice` (1 run, NCE 30, Chronologer, RT R2 > 0.99) and the
+  saved model's RTs in the tuning run's minutes (8 peptides measured in `_21`, within 1 min). Its entrapment check
+  was exact on the small data only: CarafeSharp drops a pair whose target or decoy has too few fragments
+  (`LibraryGenerator.cs:241-249`) - 5,332 of 5,334 on w2 - so it now counts the precursors the library holds.
+- `SubsetPipelineTest`: HeldOut (search `_20`,`_22`, tune `_21`), Stepwise, HpcChain (own `tuningRuns`) and the
+  precursor-table tuned leg tune on one run. `TestSubsetNothingPasses`' empty-stratum leg used to rely on the
+  small data passing nothing in the second pass (a cut library probe: window 1 x RT 7-13 fails calibration; window 1
+  at full RT passes 263/run - `E:\test\osprey-runs\nothing-probe*`); it now sets `--experiment-fdr 0` and also
+  asserts PerFileRescoring ran, which is what the test is about. `TestSubsetBlibLibrary`'s typing check now
+  requires `Differ == 0` (library-choice isobars, e.g. YDSIDSYLSK b8^2 vs b4, are the library's prerogative per
+  `FragmentTypeCheck`'s own doc) instead of `StatedPrimary == Agree`.
+- `OspreySearchPerfTest`: one tuned search + import (the saved-model search, Add... and both lists are
+  `OspreySearchTuningTest`'s), defaulting to `osprey-stellar-subset-v1.zip`; **268 s** on the w8 data
+  (`ai/.tmp/sessions/20261027-subset/verify-all.log:1673`); removed from `tc-perftests-skiplist.txt`.
+- `regression.ps1` modes 13/14 removed (206 lines, the matrix entry and the two html rows); `-Dataset Stellar`
+  PASSED after (`verify-all.log:1738-1754`).
+- `build_subset.py --perf-zip`. Perf zip built: `E:\test\osprey-runs\perf-zip\osprey-stellar-subset-v1.zip`,
+  87,264,860 bytes, SHA-256 f9fd2d9f6e2b9dc6ee8786de8c47477ee2ff567cf456c66893d425302a267f9f.
+
+**Blocked: the Panorama upload.** PUT to `MacCoss/software/@files/perftests` returns 502 from the proxy; the listing
+says this machine's key has `canUpload: False` (Reader). Needs an Editor key in `.netrc` or Brendan's upload.
+
+**Git zips:** a Skyline test cannot read Osprey's zip - SkylineTester's zip installer (what SkylineNightly runs)
+collects test zips from the Skyline tree only (`SkylineTester/CreateZipInstallerWindow.cs:465-481`) - so both
+`StellarSubset.zip` and `OspreySearchTest.zip` are regenerated from one build; `CarafeModelBuildLibraryTest.zip` is deleted.
+
+**Osprey defect found by the larger subset (fixed on this branch, Brendan's call).** On w2, `TestSubsetLibraryDecoysAndReports`
+reported 63 (floor 100) though 1,356 passed run level; the old subset kept 169 of 390. Root cause (investigation scratch in
+`E:\test\osprey-runs\libdecoy-investigation\`, status `ai/.tmp/agent-libdecoy-status.md`): Stage 6 re-scoring of override
+peaks kept the scan nearest the consensus apex RT (`PeakDataExtractor.cs` override branch skipped the ref-XIC max re-pick,
+to match Rust `pipeline.rs` ~9522), so some re-scored rows had peak_apex = 0 with a normal peak_area - interior zero-apex
+rows exist only in `*.scores-reconciled.parquet` (19 of 24, 21 decoys), never in the first-pass parquets (all at the end
+boundary). The w2 first-pass SVM weights peak_apex about -1.6, so those decoys scored ~+14 and every protein-stratum
+pass-2 q landed at 2.26%. Fix: override peaks get the same apex re-pick (ref-XIC max within the override bounds) in C# and
+Rust. All 645 Osprey tests pass on w2 with it (`candidate-zip-fix.log:703`). Rust branch `override-apex-from-ref-xic`
+(ef86cd0, `C:\proj\osprey`, cloned today): fmt + clippy -D warnings + all tests green (`build-rust.log`). Cross-impl
+end-to-end Stellar 3-file: PASS at 1e-9, 32,705 precursors both sides (`crossimpl-Stellar.log`). Goldens regenerating
+(`regression.ps1 -Dataset All -CreateGolden`, `regression-golden.log`). This machine needed rustup (1.99.1) and vcpkg
+openblas/openssl installed (`setup-rust.log`).
+
+**Final verification (2026-10-28 afternoon, `ai/.tmp/sessions/20261027-subset/final-verify.log`).** Cross-impl Astral 3-file
+PASS at 1e-9, 118,292 both sides (`crossimpl-Astral.log`). Goldens remade (`regression-golden.log`): Stellar 32,082 ->
+32,705, StellarLibDecoy 31,076 -> 31,215, StellarGenDecoyEntrap 32,287 -> 32,174, Astral 118,314 -> 118,292.
+`regression-parallel.ps1 -Dataset All` vs the new goldens: PASSED, every mode on every dataset, entrapment FDR sanity
+bounds (mode 1b) included. With the FINAL zips in the tree (`E:\test\osprey-runs\final-zips`, from the preset alone;
+README.txt is the only difference from the tested candidate): Osprey 644 passed, 1 skipped (the build-stamp test,
+inconclusive under OSPREY_VERSION_OVERRIDE left set by regression-parallel), 0 failed; TestBuildLibraryCarafeWizard 103 s,
+TestOspreySearchTuning 142 s, TestOspreySearch 38 s, TestOspreySearchPerf 242 s downloading the Panorama zip (Brendan
+uploaded it; size and SHA-256 verified by an anonymous download). maccoss/osprey PR #74 (Rust apex change). pwiz commit
+126d2183eb; /code-review medium running before the PR.

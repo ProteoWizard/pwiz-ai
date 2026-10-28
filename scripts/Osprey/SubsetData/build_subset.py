@@ -29,8 +29,8 @@ PRESETS = {
         subset_library='stellar-subset-library.tsv', subset_fasta='stellar-subset-proteins.fasta', readme='StellarSubset-README.txt',
         runs=['Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20', 'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21',
               'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_22'],
-        target=594.5201, half_width=2.0, window_step=4.0018, fasta='hela-filtered.fasta', rt_min=7.0, rt_max=13.0, rt_pad=0.5, ms1_lo=590.5, ms1_hi=600.5,
-        undetected_max=180, mz_drop_bits=8, inten_drop_bits=12,
+        target=594.5201, half_width=2.0, window_step=4.0018, windows=2, fasta='hela-filtered.fasta', rt_min=6.0, rt_max=18.0, rt_pad=0.5, ms1_lo=590.5, ms1_hi=600.5,
+        undetected_max=720, mz_drop_bits=8, inten_drop_bits=12,
         libdecoy='stellar-libdecoy/stellar-libdecoy-v3', libdecoy_prefix='stellar-subset-libdecoy'),
     # HRAM: m/z keeps all but 3 mantissa bits (~0.5 ppm). Two runs, not three, to stay under
     # 5 MB zipped - three-run reconciliation is the Stellar subset's job.
@@ -38,7 +38,7 @@ PRESETS = {
         folder='astral', library='SkylineAI_spectral_library.tsv',
         subset_library='astral-subset-library.tsv', subset_fasta='astral-subset-proteins.fasta', readme='AstralSubset-README.txt',
         runs=['Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49', 'Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55'],
-        target=479.9681, half_width=1.5, window_step=None, fasta='uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta', rt_min=7.0, rt_max=9.0, rt_pad=0.5, ms1_lo=476.5, ms1_hi=484.5,
+        target=479.9681, half_width=1.5, window_step=None, windows=1, fasta='uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta', rt_min=7.0, rt_max=9.0, rt_pad=0.5, ms1_lo=476.5, ms1_hi=484.5,
         undetected_max=200, mz_drop_bits=3, inten_drop_bits=16,
         libdecoy=None, libdecoy_prefix=None),
 }
@@ -56,6 +56,20 @@ def write_zip(path, work, extensions):
     print('wrote %s (%d bytes)' % (path, os.path.getsize(path)))
 
 
+def write_perf_zip(path, work, folder):
+    # The regression data's layout, <zip stem>/<dataset folder>/..., which OspreySearchPerfTest extracts
+    # in place beside the zip; same fixed timestamps as the committed zips.
+    stem = os.path.splitext(os.path.basename(path))[0]
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        for f in sorted(os.listdir(work)):
+            if f.endswith(('.mzML', '.fasta')):
+                zi = zipfile.ZipInfo('%s/%s/%s' % (stem, folder, f), date_time=(2026, 9, 27, 0, 0, 0))
+                zi.compress_type = zipfile.ZIP_DEFLATED
+                with open(os.path.join(work, f), 'rb') as fh:
+                    z.writestr(zi, fh.read(), compresslevel=6)
+    print('wrote %s (%d bytes)' % (path, os.path.getsize(path)))
+
+
 def run(args):
     print(' '.join(args))
     subprocess.check_call([sys.executable] + args)
@@ -69,7 +83,7 @@ def main():
     ap.add_argument('--out-zip', default=None, help='omit with --keep-dir to leave only the files')
     ap.add_argument('--keep-dir', default=None, help='leave the unzipped files here')
     # Candidate overrides (Measure-Subset.ps1). Without them the preset is cut exactly as committed.
-    ap.add_argument('--windows', type=int, default=1,
+    ap.add_argument('--windows', type=int, default=None,
                     help='contiguous isolation windows centred on the preset target (extra one goes above)')
     ap.add_argument('--rt-min', type=float, default=None, help='override the preset RT slice start (min)')
     ap.add_argument('--rt-max', type=float, default=None, help='override the preset RT slice end (min)')
@@ -82,6 +96,8 @@ def main():
     ap.add_argument('--functional-zip', default=None,
                     help='also write the Skyline functional-test zip (mzMLs + FASTA; implies --fasta), '
                          'as Skyline TestFunctional/OspreySearchTest.zip')
+    ap.add_argument('--perf-zip', default=None,
+                    help='also write the Skyline perf-test zip (<stem>/<dataset folder>/ mzMLs + FASTA; implies --fasta)')
     a = ap.parse_args()
     p = dict(PRESETS[a.dataset])
     if a.rt_min is not None:
@@ -92,18 +108,20 @@ def main():
         p['undetected_max'] = a.undetected_max
     if a.no_libdecoy:
         p['libdecoy'] = None
-    if a.functional_zip:
+    if a.windows is not None:
+        p['windows'] = a.windows
+    if a.functional_zip or a.perf_zip:
         a.fasta = True
-    if a.out_zip is None and a.functional_zip is None and not a.keep_dir:
-        ap.error('--keep-dir is required without --out-zip or --functional-zip')
+    if a.out_zip is None and a.functional_zip is None and a.perf_zip is None and not a.keep_dir:
+        ap.error('--keep-dir is required without --out-zip, --functional-zip or --perf-zip')
 
     data_dir = os.path.join(a.data_root, p['folder'])
-    below = (a.windows - 1) // 2
-    above = a.windows - 1 - below
+    below = (p['windows'] - 1) // 2
+    above = p['windows'] - 1 - below
     t_lo, t_hi = p['target'] - below * p['window_step'], p['target'] + above * p['window_step']
     mz_lo, mz_hi = t_lo - p['half_width'], t_hi + p['half_width']
     ms1_lo, ms1_hi = p['ms1_lo'] - (p['target'] - t_lo), p['ms1_hi'] + (t_hi - p['target'])
-    target_args = ['--target', str(p['target'])] if a.windows == 1 else \
+    target_args = ['--target', str(p['target'])] if p['windows'] == 1 else \
         ['--target-lo', '%.4f' % t_lo, '--target-hi', '%.4f' % t_hi]
     work = a.keep_dir or tempfile.mkdtemp(prefix='osprey-subset-')
     os.makedirs(work, exist_ok=True)
@@ -148,6 +166,8 @@ def main():
             write_zip(a.out_zip, work, ('.mzML', '.tsv', '.txt', '.fasta') if a.fasta else ('.mzML', '.tsv', '.txt'))
         if a.functional_zip:
             write_zip(a.functional_zip, work, ('.mzML', '.fasta'))
+        if a.perf_zip:
+            write_perf_zip(a.perf_zip, work, p['folder'])
     finally:
         if not a.keep_dir:
             shutil.rmtree(work, ignore_errors=True)
