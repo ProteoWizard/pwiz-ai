@@ -31,6 +31,9 @@ param(
     [switch]$Baseline,
     # Also search with the tuned leg's saved model (--model), the second search of OspreySearchPerfTest.
     [switch]$SavedModel,
+    # The Skyline wizard's digest: no precursor m/z bounds (OspreyHelpers.AppendLibraryBuildArgs passes
+    # none), so Carafe predicts its default m/z range rather than only the band.
+    [switch]$WizardDigest,
     [string]$TrainingRun = 'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21',
     [string]$DataRoot,
     [string]$RunRoot = 'E:\test\osprey-runs',
@@ -97,8 +100,8 @@ function Invoke-OneCommand([string]$Leg, [bool]$Tune, [string]$Model) {
                   # The test's digest (SubsetPipelineTest.LibraryBuildArgs), window = the band.
                   '--enzyme', $Enzyme, '--miss-c', '1', '--min-length', '7', '--max-length', '35',
                   '--fix-mod', '1', '--var-mod', '0', '--max-var', '1',
-                  '--min-pep-charge', '2', '--max-pep-charge', '3',
-                  '--min-pep-mz', ('{0:F1}' -f $mzLo), '--max-pep-mz', ('{0:F1}' -f $mzHi))
+                  '--min-pep-charge', '2', '--max-pep-charge', '3')
+    if (-not $WizardDigest) { $cliArgs += @('--min-pep-mz', ('{0:F1}' -f $mzLo), '--max-pep-mz', ('{0:F1}' -f $mzHi)) }
     $log = Join-Path $legDir 'run.log'
     "Osprey.exe $($cliArgs -join ' ')" | Set-Content $log
     $sw = [Diagnostics.Stopwatch]::StartNew()
