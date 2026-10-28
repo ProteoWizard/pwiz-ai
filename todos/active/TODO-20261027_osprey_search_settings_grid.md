@@ -299,3 +299,9 @@ Presets (`OspreySearchSettingsControl.cs`), all low severity, for a later commit
    SelectedIndexChanged (hand-edited/imported .skyosp only).
 4. ~227: `SaveSettingsPreset` calls `Settings.Default.SaveWithoutExceptions()` mid-wizard (DDA/DIA-NN
    presets persist at exit) - a design choice to confirm, not a defect.
+
+### 2026-10-27 night - Closed (23:27)
+
+`OspreySearchPerfTest` (full Stellar data through the tuning route; 1522 s, 0 failures) passed on the
+work branch after a `-Target TestPerf` build, so every test the TODO names has run green. Session
+21:02-23:27 PDT; the handoff is `ai/.tmp/handoff-20261028_osprey_settings_grid.md`.
