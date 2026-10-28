@@ -40,8 +40,10 @@ Library Explorer hits it every time because its matcher settings differ from the
       null assert; 3 dropped: guard placement equivalent, variable-path rewrite is existing
       behavior, extra variable-path coverage)
 - [x] PR #4929 opened with `skyline` + `Cherry pick to release` labels
-- [ ] Decide on a separate cherry-pick to Skyline/skyline_26_1_1 (.NET 4.7.2 daily) - the
-      label targets skyline_26_1 only
+- [x] Manual cherry-pick to Skyline/skyline_26_1_1 (.NET 4.7.2 daily): PR #4930 from
+      C:\Dev\Backport, branch Skyline/work/20261028_crosslink_left_peptide_mods_release.
+      PeptideDocNode.cs is CRLF-stored there (pre-#4789), so re-committed with a CRLF blob
+- [ ] Watch that the #4929 label's auto cherry-pick to skyline_26_1 succeeds after merge
 - [ ] Reply to Juan/Alessio once merged; tutorial "IMPORTANT BUG" section can go
 
 ## Master vs release
