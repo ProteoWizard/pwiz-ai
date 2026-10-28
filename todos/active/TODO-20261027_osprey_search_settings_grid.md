@@ -6,7 +6,7 @@
 - **Created**: 2026-10-27
 - **Status**: In Progress (night session 2026-10-27)
 - **Module**: `skyline` (with an `osprey` piece if the declarations are exported from Osprey)
-- **PR**: (pending)
+- **PR**: [#4927](https://github.com/ProteoWizard/pwiz/pull/4927)
 - **Objective**: Expose the complete option set of Osprey and Carafe behind an "Additional
   settings..." button, as the other search engines do, in both places that run Osprey: the Osprey
   Search wizard and Build Library's Carafe source (the fine-tune pages and the pretrained route).
