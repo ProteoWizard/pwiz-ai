@@ -1,7 +1,8 @@
 """Cut a small rectangle of DIA data out of an mzML.
 
 Keeps:
-  * MS2 spectra whose isolation-window target is within 0.01 of --target, with RT in [rt-min, rt-max]
+  * MS2 spectra whose isolation-window target is within 0.01 of --target (one window), or within
+    0.01 of the band [--target-lo, --target-hi] (a contiguous run of windows), with RT in [rt-min, rt-max]
   * MS1 spectra with RT in [rt-min, rt-max], peaks trimmed to [ms1-lo, ms1-hi]
 
 Writes a plain (non-indexed) mzML with spectrum indices renumbered and the
@@ -10,6 +11,7 @@ are recomputed so the header agrees with the trimmed arrays.
 
 Usage:
   python subset_mzml.py IN OUT --target 602.52 --rt-min 10 --rt-max 13 --ms1-lo 598 --ms1-hi 610
+  python subset_mzml.py IN OUT --target-lo 574.51 --target-hi 614.53 --rt-min 0 --rt-max 25 ...
 """
 import argparse
 import base64
@@ -124,7 +126,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('inp')
     ap.add_argument('out')
-    ap.add_argument('--target', type=float, required=True)
+    tgt = ap.add_mutually_exclusive_group(required=True)
+    tgt.add_argument('--target', type=float, help='the one isolation-window target to keep')
+    tgt.add_argument('--target-lo', type=float, help='with --target-hi: keep every window target in the band')
+    ap.add_argument('--target-hi', type=float)
     ap.add_argument('--rt-min', type=float, required=True)
     ap.add_argument('--rt-max', type=float, required=True)
     ap.add_argument('--ms1-lo', type=float, required=True)
@@ -134,6 +139,12 @@ def main():
     ap.add_argument('--inten-drop-bits', type=int, default=0,
                     help='with --float32: mantissa bits rounded off intensity')
     a = ap.parse_args()
+    if (a.target_lo is None) != (a.target_hi is None):
+        ap.error('--target-lo and --target-hi go together')
+    if a.target is not None:
+        t_lo = t_hi = a.target
+    else:
+        t_lo, t_hi = a.target_lo, a.target_hi
 
     header = []
     kept = []
@@ -157,7 +168,7 @@ def main():
                 n_ms1 += 1
             else:
                 t = RE_TGT.search(s)
-                if not t or abs(float(t.group(1)) - a.target) > 0.01:
+                if not t or not (t_lo - 0.01 <= float(t.group(1)) <= t_hi + 0.01):
                     continue
                 n_ms2 += 1
             if a.float32:

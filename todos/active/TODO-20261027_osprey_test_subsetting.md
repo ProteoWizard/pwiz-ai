@@ -1,8 +1,10 @@
 # TODO-osprey_test_subsetting.md
 
 ## Branch Information
-- **Branch**: Not yet created - will be `Skyline/work/YYYYMMDD_osprey_test_subsetting` (from `master`,
-  after PR #4917 merges; no code dependency on it beyond the tests it touches)
+- **Branch**: `Skyline/work/20261027_osprey_test_subsetting` (from `master` at b68aa96d5f, after #4917
+  and #4925 merged), checkout `C:\proj\pwiz`
+- **Created**: 2026-10-27
+- **Status**: In progress
 - **Module**: `skyline` (the tests and their data; `osprey` for `Osprey.Test` and the subset scripts)
 - **Objective**: Cut the cost of Skyline-Osprey integration testing to what the test data warrants: the
   functional tests tune on ONE run at 1% FDR without workarounds, and `OspreySearchPerfTest` runs in
