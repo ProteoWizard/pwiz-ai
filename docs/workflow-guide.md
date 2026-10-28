@@ -55,7 +55,7 @@ ai/todos/active/TODO-*.md created, linked to issue
     |
     | work completes, PR merges
     v
-ai/todos/completed/TODO-*.md (moved)
+ai/todos/completed/YYYY/MM/TODO-*.md (moved; year/month of the file name date)
 GitHub Issue closed with link to completed TODO
 ```
 
@@ -89,7 +89,7 @@ The file system IS the context. That's the key insight for LLM-assisted developm
 |-------|----------|------------|
 | **Backlog** | GitHub Issues | pwiz |
 | **Active TODOs** | `ai/todos/active/` | pwiz-ai |
-| **Completed TODOs** | `ai/todos/completed/` | pwiz-ai |
+| **Completed TODOs** | `ai/todos/completed/YYYY/MM/` | pwiz-ai |
 
 ### GitHub Issue Labels
 

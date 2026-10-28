@@ -1,14 +1,16 @@
 ---
 description: Archive old completed TODOs into year/month subfolders
 ---
-Archive completed TODO files from ai/todos/completed/ into year/month subfolders (e.g., 2025/12/).
+File any completed TODO left loose in ai/todos/completed/ into its year/month subfolder (e.g., 2025/12/).
 
-Since 2026-10-07 `/pw-complete` and `/pw-uptodos-complete` move a TODO straight to its
-`completed/YYYY/MM/` folder when the PR merges, so that the link in the PR description
-(rewritten to that path) never breaks. This command remains for the files that were left
-loose under `completed/` before then, and as a safety net. A file loose at the root is
-not wrong, only not yet filed; moving it does break any PR link that still names the
-root path, which is why the link is written to the final folder in the first place.
+**A completed TODO's home is `completed/YYYY/MM/`** (year and month of its file name date),
+from the moment its PR merges. `/pw-complete`, `/pw-uptodos-complete` and `/pw-startissue`
+move it there directly, so the PR-description link (rewritten to that path) never breaks
+and nothing needs filing later. There is no holding period at the root. This command is
+the safety net for files that still land loose under `completed/`: older ones from before
+the policy, or a hand move that skipped the year/month folder. Filing one breaks any link
+that still names the root path, so search `ai/` for its name and fix those references in
+the same commit.
 
 Run the archive script:
 
@@ -16,8 +18,8 @@ Run the archive script:
 pwsh -File './ai/scripts/Archive-CompletedTodos.ps1'
 ```
 
-This keeps the most recent 2 months of TODOs at the root level and moves everything older into ai/todos/completed/YYYY/MM/ subfolders using git mv.
+By default this moves every dated TODO at the root into ai/todos/completed/YYYY/MM/ using git mv.
 
 After the script runs, commit and push the moves.
 
-If the user provides arguments (like `-KeepMonths 1`), pass them through to the script. Use `-DryRun` first if unsure what will be moved.
+If the user provides arguments (like `-KeepMonths 1` to leave the current month at the root), pass them through to the script. Use `-DryRun` first if unsure what will be moved.

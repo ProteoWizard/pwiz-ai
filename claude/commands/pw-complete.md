@@ -22,7 +22,7 @@ Only a **CLOSED-not-merged** PR is a hard stop.
 done; never propose this command unprompted (see "PR size and when a PR is done"
 in `ai/docs/version-control-guide.md`).
 
-Finalizing = write the final TODO, move it to `ai/todos/completed/`, sync
+Finalizing = write the final TODO, move it to `ai/todos/completed/YYYY/MM/`, sync
 the local checkout so the work branch is gone and `master` is the merged
 state. It is safe by construction: no merge happens without the user's
 explicit approval of the exact subject + body, and the local branch is never

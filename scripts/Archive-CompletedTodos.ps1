@@ -6,28 +6,29 @@
     Moves TODO files from ai/todos/completed/ into ai/todos/completed/YYYY/MM/
     subfolders based on the date in their filename (TODO-YYYYMMDD_...).
 
-    By default, keeps the most recent 2 months at the root level and archives
-    everything older. Uses git mv so the moves are tracked in version control.
+    A completed TODO belongs in completed/YYYY/MM/ from the moment its PR merges
+    (/pw-complete files it there directly), so by default every dated file at the
+    root is moved. Uses git mv so the moves are tracked in version control.
 
 .PARAMETER KeepMonths
-    Number of recent months to keep at root level. Default: 2.
+    Number of recent months to leave at root level. Default: 0 (file everything).
 
 .PARAMETER DryRun
     Show what would be moved without actually moving anything.
 
 .EXAMPLE
-    # Archive with defaults (keep 2 months)
+    # File every dated TODO at the root
     ./ai/scripts/Archive-CompletedTodos.ps1
 
-    # Preview what would be archived
+    # Preview what would be filed
     ./ai/scripts/Archive-CompletedTodos.ps1 -DryRun
 
-    # Keep only the current month at root
+    # Leave the current month at root
     ./ai/scripts/Archive-CompletedTodos.ps1 -KeepMonths 1
 #>
 
 param(
-    [int]$KeepMonths = 2,
+    [int]$KeepMonths = 0,
     [switch]$DryRun
 )
 

@@ -72,7 +72,7 @@ ai/docs/{topic-name}.md
 | Commands | `.claude/commands/` | pwiz-ai (ai/) |
 | Guides | `ai/docs/` | pwiz-ai (ai/) |
 | TODOs (active) | `ai/todos/active/` | pwiz-ai (ai/) |
-| TODOs (completed) | `ai/todos/completed/` | pwiz-ai (ai/) |
+| TODOs (completed) | `ai/todos/completed/YYYY/MM/` | pwiz-ai (ai/) |
 
 ## Key Principle
 

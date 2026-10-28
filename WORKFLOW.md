@@ -65,7 +65,7 @@ fast-forwards. Full rule in
 |-------|----------|------------|
 | **Backlog** | GitHub Issues | pwiz |
 | **Active TODOs** | `ai/todos/active/` | pwiz-ai |
-| **Completed TODOs** | `ai/todos/completed/` | pwiz-ai |
+| **Completed TODOs** | `ai/todos/completed/YYYY/MM/` | pwiz-ai |
 
 ### Key Labels (GitHub Issues in pwiz)
 
