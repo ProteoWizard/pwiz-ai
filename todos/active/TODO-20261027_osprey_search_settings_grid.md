@@ -236,3 +236,19 @@ osprey-development-guide note on adding an argument.
   `DdaSearchTest` (an existing user of the grid) stayed green.
 - Still open: design 5 (audit log; note the search's full command line, additional settings included, is
   recorded in the .blib's metadata by Osprey), design 4's named presets, translations of the new labels.
+
+### 2026-10-27 night - Older Osprey tolerated; presets on a side branch
+
+- Commit 3 `438616321a`: an Osprey from before `--help properties` (what a developer build downloads
+  from TeamCity master until this merges, and the release-pinned 26.1.1.296) is reported once and the
+  wizards run without additional settings, as before the grid; `ValidatePage` and `CreateCarafeBuilder`
+  no longer block on it. **Before a release pins Osprey**, the pin must move past this PR's Osprey
+  build, or the grid reports that message on every machine with the pinned package.
+- No Osprey pipeline change (declarations' metadata and help text only): the default command lines
+  Skyline writes are unchanged, so `regression.ps1` was not run; the Osprey gate (646 tests +
+  inspection) was.
+- Design 4 (named presets) is being built by a sub-agent on the local branch
+  `nightlywork/osprey_settings_presets` (from commit 3), mirroring the DIA-NN wizard's preset combo:
+  `OspreySettingsPreset`/`OspreySettingsPresetList` in `Settings.Default.OspreySettingsPresets`, a
+  "Settings preset:" combo on the Search Settings page. Take it (merge the branch into the work
+  branch) or leave it; the work branch does not depend on it. Its report is in the handoff.
