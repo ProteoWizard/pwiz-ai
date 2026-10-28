@@ -131,3 +131,39 @@ counts are compared at the same entrapment-estimated FDP instead. `Run-DiannEntr
 - Entrapment accessions are Osprey's FDRBench naming, the paired target's protein + `_p_target`
   (`sp|P55011_p_target|S12A2_HUMAN_p_target`), not the foreign proteome's. Stellar r = 0.9947.
 - FDP = N_e (1 + 1/r) / (N_t + N_e) (combined estimator); each tool's q threshold moved to the same FDP.
+- Osprey's FDRBench export is a fair sample only to q ~0.015 (past it the pass-1 compaction has dropped
+  most entrapment: 72 entrapment of 35,364 at q 1%, 748 of 167,807 at q 1.0), so its curve is cut there.
+  Its run q-values exist only for experiment-passing precursors, so DIA-NN's run level is filtered to
+  Global.Q.Value <= 1% too. Its protein groups all report q = 0 (fixed by draft #4823).
+
+Results (`D:\test\osprey-runs\diann-entrapment\figures`: fdp_curves, overlap_experiment/run/protein,
+summary.txt):
+
+| Experiment-level precursors at FDP | 0.3% | 0.5% | highest both reach |
+|---|---|---|---|
+| Stellar Osprey / DIA-NN 2.6.1 | 34,752 / 32,388 (+7.3%) | 36,156 / 34,274 (+5.5%) | 0.65%: 37,045 / 35,342 (+4.8%) |
+| Astral Osprey / DIA-NN 2.6.1 | 100,103 / 136,434 (-26.6%) | 111,778 / 142,619 (-21.6%) | 0.75%: 120,566 / 146,371 (-17.6%) |
+
+- FDP each tool delivers at its own q <= 1% (precursors): Osprey 0.41% / 0.55%, DIA-NN 0.37% / 0.50%
+  (Stellar / Astral) - both about half the nominal rate; Osprey is not markedly more conservative.
+- Per run at q <= 1%: Stellar Osprey 29,951-30,579 (FDP 0.16-0.26%) vs DIA-NN 30,046-30,923
+  (0.18-0.23%); Astral Osprey 97,666-99,494 (0.28-0.30%) vs DIA-NN 137,741-138,105 (0.28-0.32%), -28%.
+- Protein groups at q <= 1%: Osprey 4,501 at 2.98% FDP / 7,911 at 6.60%; DIA-NN 4,859 at 0.70% / 8,702
+  at 1.30% (Stellar / Astral).
+- Astral, what Osprey misses (`figures\missed`): not RT any more (Chronologer). Of the 32,739 DIA-NN-only
+  precursors at matched FDP, 98.4% were scored by Osprey at DIA-NN's peak (only 5.2% fall outside its
+  +/-0.5 min window; the miss rate is flat along the gradient). They are low-abundance (median DIA-NN
+  quantity ~40x below shared) and Osprey ranks them just under the line (10,853 at q 0.015-0.05; 4,937
+  never reach the export). At matched abundance their peak intensity matches shared precursors but
+  their fragment evidence is decoy-like (consecutive_ions, fragment_coelution_sum, sg_weighted_cosine,
+  xcorr AUC vs decoys 0.66-0.74 against 0.79-0.93). MS1 is not it: Osprey's MS1 zeros track DIA-NN's
+  own missing MS1 area by abundance. The library is not it either: DIA-NN gains with a fine-tuned
+  Carafe library (ZT Scan, demux TODO).
+- Classifier vs features (run 55 first pass, offline, scikit-learn): gradient-boosted trees +14-19%
+  targets over a linear model at matched FDP, a small MLP +10-13%, but either recovers <5% of the
+  DIA-NN-only precursors - the features lack what DIA-NN uses for them. Full Osprey pipeline with
+  `OSPREY_FDR_MODEL=gbdt` (`astral\osprey-gbdt`): first pass 268,320 vs 256,272 targets at 1% (+4.7%);
+  experiment level at FDP 0.3 / 0.5 / 0.7%: 104,975 / 116,209 / 120,813 vs SVM 100,103 / 111,778 /
+  118,446 (+4.9 / +4.0 / +2.0%), per run +1%; DIA-NN 136,434 / 142,619 / 145,801. Protein FDP 5.86%.
+- DIA-NN's Stellar counts move with its automatic per-run MS2 accuracy (199-707 ppm between searches;
+  run _21 26,009 at 599 ppm vs 30,536 at 199 ppm), so its Stellar numbers carry about +/-15% of noise.

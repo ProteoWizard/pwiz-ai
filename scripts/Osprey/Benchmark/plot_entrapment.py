@@ -2,24 +2,25 @@
 
 Both tools searched the same target + natural-entrapment peptides. A discovery is entrapment when every
 protein of its peptide is an entrapment accession: Osprey names them after the paired target's protein
-with FDRBench's _p_target suffix. The FDP of a discovery list is
-the combined entrapment estimate (Wen et al. 2025, FDRBench):
+with FDRBench's _p_target suffix. The FDP of a discovery list is the combined entrapment estimate
+(Wen et al. 2025, FDRBench):
 
     FDP = N_e * (1 + 1/r) / (N_t + N_e)
 
-with r the entrapment-to-target ratio of the searched peptides (precursors) or proteins. Each tool's
-q-value threshold is then moved until its estimated FDP equals the chosen level, so the two are
-compared at the same error rate rather than at the same nominal q-value.
+with r the entrapment-to-target ratio of the searched peptides (precursors) or protein accessions.
 
-Levels:
-  experiment  precursors over the 3 runs: Osprey's FDRBench export (experiment precursor q), DIA-NN's
-              Global.Q.Value
-  run         precursors per run: Osprey's RetentionTimes run q (of its reported precursors), DIA-NN's
-              Q.Value
-  protein     protein groups over the 3 runs: Osprey's Proteins.QValue, DIA-NN's Global.PG.Q.Value
+Levels, and what each can support:
+  experiment  precursors over the 3 runs: Osprey's FDRBench export (experiment precursor q, a fair
+              sample of its candidates up to q 0.015, --osprey-max-q), DIA-NN's Global.Q.Value. Each
+              tool's q threshold is moved until its FDP equals the matched level - the highest FDP both
+              curves reach, at most 1% - so the two are compared at the same error rate.
+  run         precursors per run at q <= 1%, labeled with the FDP each delivers: Osprey reports run q
+              only for precursors that passed the experiment level, so its run curve stops early.
+  protein     protein groups at q <= 1%, labeled with their FDP: in this Osprey build every group
+              reports q = 0 (fixed by pwiz #4823), so its groups cannot be moved to a matched FDP.
 
 Usage:
-  plot_entrapment.py <entrapment dir> <out dir> [--fdp 0.01] [--suffix _ARATH]
+  plot_entrapment.py <entrapment dir> <out dir> [--suffix _p_target] [--osprey-max-q 0.015]
 writes fdp_curves.png, overlap_experiment.png, overlap_run.png, overlap_protein.png and summary.txt.
 """
 import argparse
@@ -39,8 +40,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from plot_diann_comparison import draw_upset, run_label, INK, MUTED, GRID  # noqa: E402
 
 DATASETS = ('stellar', 'astral')
-OSPREY_COLOR = '#e08a3c'
-DIANN_COLOR = '#4a6fb0'
+# Arms: DIA-NN, then each Osprey search folder that exists (label -> folder under the dataset dir).
+OSPREY_ARMS = (('Osprey', 'osprey'), ('Osprey gbdt', 'osprey-gbdt'))
+COLORS = {'DIA-NN': '#4a6fb0', 'Osprey': '#e08a3c', 'Osprey gbdt': '#2b8a6c'}
+NOMINAL = 0.01
+TABLE_LEVELS = (0.002, 0.003, 0.004, 0.005, 0.0075, 0.01)
 
 
 def stripped(seq):
@@ -50,8 +54,8 @@ def stripped(seq):
 # --- the searched space --------------------------------------------------------------------------
 
 def load_space(peptide_fasta, suffix):
-    """peptide -> is_entrapment, and the protein-level entrapment ratio, from the peptide FASTA both
-    tools searched (one entry per peptide and accession)."""
+    """peptide -> is_entrapment, and the precursor and protein entrapment ratios, from the peptide FASTA
+    both tools searched (one entry per peptide and accession)."""
     proteins = {}
     accession = None
     with open(peptide_fasta) as f:
@@ -140,7 +144,10 @@ def diann_tables(report, entrap, suffix):
     df['key'] = list(zip(df['Stripped.Sequence'], df['Precursor.Charge'].astype(int)))
     df['seq'] = df['Stripped.Sequence']
     exp = df.groupby('key', as_index=False).agg(q=('Global.Q.Value', 'min'), seq=('seq', 'first'))
-    rt = pd.DataFrame({'run': df['Run'].map(run_label), 'key': df['key'], 'seq': df['seq'], 'q': df['Q.Value']})
+    # Per run, only precursors that pass the experiment level, as Osprey reports run q-values only for them.
+    passing = df['Global.Q.Value'] <= NOMINAL
+    rt = pd.DataFrame({'run': df.loc[passing, 'Run'].map(run_label), 'key': df.loc[passing, 'key'],
+                       'seq': df.loc[passing, 'seq'], 'q': df.loc[passing, 'Q.Value']})
     prot = df.groupby('Protein.Group', as_index=False).agg(q=('Global.PG.Q.Value', 'min'))
     prot = prot.rename(columns={'Protein.Group': 'grp'})
     return finish(exp, rt, prot, entrap, suffix)
@@ -155,35 +162,56 @@ def finish(exp, rt, prot, entrap, suffix):
 
 # --- analysis ----------------------------------------------------------------------------------------
 
-def analyze(edir, suffix, level):
+def analyze(edir, suffix, osprey_max_q):
     entrap, r_pep, r_prot = load_space(os.path.join(edir, 'peptides', 'target_entrapment_peptides.fasta'), suffix)
-    tools = {'Osprey': osprey_tables(os.path.join(edir, 'osprey'), entrap, suffix),
-             'DIA-NN': diann_tables(os.path.join(edir, 'diann-search', 'report.parquet'), entrap, suffix)}
+    tools = {'DIA-NN': diann_tables(os.path.join(edir, 'diann-search', 'report.parquet'), entrap, suffix)}
+    for label, folder in OSPREY_ARMS:
+        if os.path.exists(os.path.join(edir, folder, 'FDRBench-Input.tsv')):
+            tools[label] = osprey_tables(os.path.join(edir, folder), entrap, suffix)
+            # Osprey's FDRBench export samples its candidates fairly only up to about q 0.015: past that
+            # the pass-1 compaction has already dropped most entrapment, so its FDP curve flattens falsely.
+            exp = tools[label]['experiment']
+            tools[label]['experiment'] = exp[exp['q'] <= osprey_max_q]
     res = {'r_pep': r_pep, 'r_prot': r_prot, 'tools': {}}
     for tool, tables in tools.items():
-        out = {}
-        exp = tables['experiment']
-        out['experiment'] = curve_info(exp, r_pep, level)
-        out['run'] = {run: curve_info(g, r_pep, level) for run, g in tables['run'].groupby('run')}
-        out['protein'] = curve_info(tables['protein'], r_prot, level, key='grp')
-        res['tools'][tool] = out
+        res['tools'][tool] = {
+            'experiment': curve_info(tables['experiment'], r_pep),
+            'run': {run: curve_info(g, r_pep) for run, g in tables['run'].groupby('run')},
+            'protein': curve_info(tables['protein'], r_prot, key='grp'),
+        }
+    # The matched level: the highest FDP both experiment-level curves reach, rounded down to 0.05%.
+    reach = min(res['tools'][t]['experiment']['curve'][2].max() for t in tools)
+    res['matched'] = min(NOMINAL, np.floor(reach * 2000) / 2000)
+    for tool in tools:
+        inf = res['tools'][tool]['experiment']
+        inf['matched'] = select(inf, res['matched'])
+        inf['levels'] = {lv: at_fdp(inf['curve'], lv) for lv in TABLE_LEVELS if lv <= reach}
     return res
 
 
-def curve_info(table, r, level, key='key'):
+def curve_info(table, r, key='key'):
     table = table.dropna(subset=['q'])
     curve = fdp_curve(table['q'].values, table['entrap'].values, r)
-    q_thr, n, fdp = at_fdp(curve, level)
-    n_nominal, fdp_nominal = at_q(curve, level)
-    chosen = table[(table['q'] <= q_thr) & ~table['entrap']][key] if not np.isnan(q_thr) else []
+    n, fdp = at_q(curve, NOMINAL)
+    return {'curve': curve, 'table': table, 'key': key,
+            'nominal': {'q': NOMINAL, 'n': n, 'fdp': fdp, 'ids': ids_at(table, NOMINAL, key)}}
+
+
+def select(info, level):
+    q_thr, n, fdp = at_fdp(info['curve'], level)
+    return {'q': q_thr, 'n': n, 'fdp': fdp, 'ids': ids_at(info['table'], q_thr, info['key'])}
+
+
+def ids_at(table, q_thr, key):
     ids = set()
-    for k in chosen:
+    if np.isnan(q_thr):
+        return ids
+    for k in table[(table['q'] <= q_thr) & ~table['entrap']][key]:
         if key == 'grp':
             ids.update(accessions(k))   # accessions, so the two tools' groupings compare
         else:
             ids.add(k)
-    return {'curve': curve, 'q': q_thr, 'n': n, 'fdp': fdp, 'n_nominal': n_nominal,
-            'fdp_nominal': fdp_nominal, 'ids': ids}
+    return ids
 
 
 # --- plots -------------------------------------------------------------------------------------------
@@ -196,66 +224,86 @@ def style(ax):
     ax.tick_params(colors=MUTED, labelsize=8.5)
 
 
-def plot_curves(results, level, out_png):
+def plot_curves(results, out_png):
     cols = [('experiment', 'Precursors, experiment level'), ('run', 'Precursors per run'),
-            ('protein', 'Protein groups, experiment level')]
+            ('protein', 'Protein groups')]
     fig, axes = plt.subplots(len(results), 3, figsize=(14, 4 * len(results)), facecolor='white', squeeze=False)
     for row, (dataset, res) in zip(axes, results.items()):
         for ax, (lvl, title) in zip(row, cols):
             style(ax)
-            for tool, color in (('DIA-NN', DIANN_COLOR), ('Osprey', OSPREY_COLOR)):
+            xmax = 0.0
+            for tool, color in ((t, COLORS[t]) for t in res['tools']):
                 info = res['tools'][tool][lvl]
                 infos = info.values() if lvl == 'run' else [info]
                 for k, inf in enumerate(infos):
                     q, n_t, fdp = inf['curve']
-                    keep = fdp <= 0.05
-                    ax.plot(fdp[keep] * 100, n_t[keep], color=color, linewidth=1.6,
-                            label=tool if k == 0 else None, alpha=0.9)
-                    ax.plot([inf['fdp_nominal'] * 100], [inf['n_nominal']], marker='o', color=color,
-                            markersize=5, markerfacecolor='white', zorder=4)
-            ax.axvline(level * 100, color=INK, linestyle='--', linewidth=0.9)
-            ax.set_xlim(0, 3)
+                    # Past q 5%, and below 30% of the curve's count, where a few IDs swing the FDP.
+                    keep = (q <= 0.05) & (n_t >= 0.3 * n_t.max())
+                    ax.plot(fdp[keep] * 100, n_t[keep], color=color, linewidth=1.6, alpha=0.9,
+                            label=tool if k == 0 else None, marker='o' if keep.sum() == 1 else None)
+                    nom = inf['nominal']
+                    ax.plot([nom['fdp'] * 100], [nom['n']], marker='o', color=color, markersize=6,
+                            markerfacecolor='white', markeredgewidth=1.6, zorder=4)
+                    xmax = max(xmax, nom['fdp'] * 100)
+            if lvl == 'experiment':
+                ax.axvline(res['matched'] * 100, color=INK, linestyle='--', linewidth=0.9)
+            ax.set_xlim(0, max(1.2, xmax * 1.15))
             ax.set_xlabel('Entrapment-estimated FDP (%)', fontsize=9, color=MUTED)
             ax.set_ylabel('Target IDs', fontsize=9, color=MUTED)
             ax.set_title(f'{dataset.capitalize()}: {title}', fontsize=10.5, color=INK, loc='left')
         row[0].legend(frameon=False, fontsize=9, loc='lower right')
-    fig.text(0.01, 0.005, 'Open circles: each tool at its own q <= 1% (the FDP it actually delivers there). '
-             'Dashed line: the matched FDP the overlaps use.', fontsize=8.5, color=MUTED)
-    fig.tight_layout(rect=(0, 0.02, 1, 1))
+    fig.text(0.01, 0.005, 'Open circles: each tool at its own q <= 1%, placed at the FDP it actually delivers. '
+             'Dashed line: the matched FDP of the experiment-level overlap.\nOsprey reports run q-values only '
+             'for precursors that passed the experiment level, so its run curves stop early; its protein '
+             'groups all report q = 0 in this build (pwiz #4823), so they are one point.',
+             fontsize=8.5, color=MUTED)
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(out_png, dpi=200, facecolor='white')
 
 
-def plot_overlaps(results, level, lvl, out_png, title):
+def plot_overlaps(results, lvl, out_png):
     panels = []
     for dataset, res in results.items():
         sets = {}
-        for tool in ('DIA-NN', 'Osprey'):
+        for tool in res['tools']:
             info = res['tools'][tool][lvl]
             if lvl == 'run':
                 for run, inf in sorted(info.items()):
-                    sets[f'{tool} {run}'] = inf['ids']
+                    sets[f"{tool} {run} ({inf['nominal']['fdp'] * 100:.2f}%)"] = inf['nominal']['ids']
+            elif lvl == 'experiment':
+                sets[f"{tool} (q {info['matched']['q']:.4f})"] = info['matched']['ids']
             else:
-                sets[tool] = info['ids']
-        panels.append((dataset, sets))
-    fig = plt.figure(figsize=(9 * len(panels), 6 if lvl == 'run' else 4.5), facecolor='white')
+                sets[f"{tool} ({info['nominal']['fdp'] * 100:.2f}%)"] = info['nominal']['ids']
+        name = dataset.capitalize()
+        if lvl == 'experiment':
+            title = f'{name} - precursors, experiment level, at matched {res["matched"] * 100:g}% FDP'
+        elif lvl == 'run':
+            title = f'{name} - precursors per run at q <= 1% (estimated FDP)'
+        else:
+            title = f'{name} - protein accessions in groups at q <= 1% (estimated FDP)'
+        panels.append((title, sets))
+    fig = plt.figure(figsize=(9.5 * len(panels), 6 if lvl == 'run' else 4.5), facecolor='white')
     areas = fig.subfigures(1, len(panels), squeeze=False)[0]
-    for area, (dataset, sets) in zip(areas, panels):
-        draw_upset(area, sets, f'{dataset.capitalize()} - {title} at {level * 100:g}% entrapment FDP')
+    for area, (title, sets) in zip(areas, panels):
+        draw_upset(area, sets, title, ylabel='Protein accessions' if lvl == 'protein' else 'Precursors')
     fig.savefig(out_png, dpi=200, facecolor='white', bbox_inches='tight')
 
 
-def summarize(results, level):
+def summarize(results):
     lines = []
     for dataset, res in results.items():
-        lines.append(f'{dataset}: r (precursors) = {res["r_pep"]:.4f}, r (proteins) = {res["r_prot"]:.4f}')
+        lines.append(f'{dataset}: r (precursors) = {res["r_pep"]:.4f}, r (protein accessions) = {res["r_prot"]:.4f}; '
+                     f'matched experiment FDP {res["matched"] * 100:g}%')
         for tool, out in res['tools'].items():
-            for lvl in ('experiment', 'protein'):
-                inf = out[lvl]
-                lines.append(f'  {tool:7s} {lvl:10s} q<=1%: {inf["n_nominal"]:7d} at FDP {inf["fdp_nominal"] * 100:5.2f}% | '
-                             f'at FDP {level * 100:g}%: {inf["n"]:7d} (q {inf["q"]:.4f})')
+            e = out['experiment']
+            lines.append(f'  {tool:7s} experiment  q<=1%: {e["nominal"]["n"]:7d} at FDP {e["nominal"]["fdp"] * 100:5.2f}% | '
+                         f'matched: {e["matched"]["n"]:7d} (q {e["matched"]["q"]:.4f})')
+            lines.append('  ' + ' ' * 20 + ' | '.join(f'FDP {lv * 100:g}%: {v[1]}' for lv, v in e['levels'].items()))
+            p = out['protein']['nominal']
+            lines.append(f'  {tool:7s} protein     q<=1%: {p["n"]:7d} groups at FDP {p["fdp"] * 100:5.2f}%')
             for run, inf in sorted(out['run'].items()):
-                lines.append(f'  {tool:7s} run {run:6s} q<=1%: {inf["n_nominal"]:7d} at FDP {inf["fdp_nominal"] * 100:5.2f}% | '
-                             f'at FDP {level * 100:g}%: {inf["n"]:7d} (q {inf["q"]:.4f})')
+                n = inf['nominal']
+                lines.append(f'  {tool:7s} run {run:7s} q<=1%: {n["n"]:7d} at FDP {n["fdp"] * 100:5.2f}%')
     return '\n'.join(lines)
 
 
@@ -263,28 +311,27 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('entrapment_dir')
     ap.add_argument('out_dir')
-    ap.add_argument('--fdp', type=float, default=0.01)
     ap.add_argument('--suffix', default='_p_target')
+    ap.add_argument('--osprey-max-q', type=float, default=0.015,
+                    help="the last q-value at which Osprey's FDRBench export samples its candidates fairly")
     a = ap.parse_args()
     results = {}
     for dataset in DATASETS:
         edir = os.path.join(a.entrapment_dir, dataset)
         if os.path.exists(os.path.join(edir, 'diann-search', 'report.parquet')) and \
                 os.path.exists(os.path.join(edir, 'osprey', 'FDRBench-Input.tsv')):
-            results[dataset] = analyze(edir, a.suffix, a.fdp)
+            results[dataset] = analyze(edir, a.suffix, a.osprey_max_q)
     if not results:
         sys.exit(f'No complete datasets under {a.entrapment_dir}')
     os.makedirs(a.out_dir, exist_ok=True)
-    text = summarize(results, a.fdp)
+    text = summarize(results)
     print(text)
     with open(os.path.join(a.out_dir, 'summary.txt'), 'w') as f:
         f.write(text + '\n')
-    plot_curves(results, a.fdp, os.path.join(a.out_dir, 'fdp_curves.png'))
-    plot_overlaps(results, a.fdp, 'experiment', os.path.join(a.out_dir, 'overlap_experiment.png'),
-                  'precursors, experiment level')
-    plot_overlaps(results, a.fdp, 'run', os.path.join(a.out_dir, 'overlap_run.png'), 'precursors per run')
-    plot_overlaps(results, a.fdp, 'protein', os.path.join(a.out_dir, 'overlap_protein.png'),
-                  'protein accessions in passing groups')
+    plot_curves(results, os.path.join(a.out_dir, 'fdp_curves.png'))
+    plot_overlaps(results, 'experiment', os.path.join(a.out_dir, 'overlap_experiment.png'))
+    plot_overlaps(results, 'run', os.path.join(a.out_dir, 'overlap_run.png'))
+    plot_overlaps(results, 'protein', os.path.join(a.out_dir, 'overlap_protein.png'))
     print(f'Wrote figures to {a.out_dir}')
 
 

@@ -22,6 +22,7 @@ import matplotlib
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker  # noqa: E402
 import pandas as pd  # noqa: E402
 
 DATASETS = ('stellar', 'astral')
@@ -362,7 +363,7 @@ def run_label(path):
     return m.group(1) if m else os.path.basename(str(path))
 
 
-def draw_upset(fig_area, sets, title, max_bars=14):
+def draw_upset(fig_area, sets, title, max_bars=14, ylabel='Precursors'):
     names = list(sets)
     universe = set().union(*sets.values())
     membership = {}
@@ -375,13 +376,14 @@ def draw_upset(fig_area, sets, title, max_bars=14):
     ax_bar = fig_area.add_subplot(gs[0, 1])
     ax_dots = fig_area.add_subplot(gs[1, 1], sharex=ax_bar)
     ax_size = fig_area.add_subplot(gs[1, 0], sharey=ax_dots)
-    colors = ['#4a6fb0' if n.startswith('DIA') else '#e08a3c' for n in names]
+    colors = ['#4a6fb0' if n.startswith('DIA') else '#2b8a6c' if 'gbdt' in n else '#e08a3c' for n in names]
 
     xs = range(len(combos))
     ax_bar.bar(xs, [c for _, c in combos], color='#4c9f9f', width=0.7)
     for x, (_, c) in zip(xs, combos):
         ax_bar.text(x, c, f'{c}', ha='center', va='bottom', fontsize=7, rotation=90, color=INK)
-    ax_bar.set_ylabel('Precursors', fontsize=9, color=INK)
+    ax_bar.set_ylabel(ylabel, fontsize=9, color=INK)
+    ax_bar.set_ylim(0, max(c for _, c in combos) * 1.18)   # room for the counts under the title
     ax_bar.set_title(title, fontsize=10.5, color=INK)
     for side in ('top', 'right'):
         ax_bar.spines[side].set_visible(False)
@@ -406,6 +408,8 @@ def draw_upset(fig_area, sets, title, max_bars=14):
     ax_size.barh(range(len(names)), [len(sets[n]) for n in names], color=colors)
     ax_size.invert_xaxis()
     ax_size.set_xlabel('Set size', fontsize=9)
+    ax_size.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(3))
+    ax_size.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v / 1000:g}k' if v else '0'))
     ax_size.tick_params(axis='y', left=False, labelleft=False)
     for side in ('top', 'left'):
         ax_size.spines[side].set_visible(False)

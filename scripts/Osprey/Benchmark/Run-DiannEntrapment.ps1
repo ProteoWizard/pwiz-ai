@@ -113,7 +113,9 @@ if ($stepList -contains 'osprey') {
     Invoke-Step 'osprey' $OspreyExe (@('-i') + $runs + @(
         '--fasta', $fasta, '--model', $Model,
         '--entrapment', "$EntrapmentRatio", '--entrapment-fasta', $EntrapmentFasta,
-        '-o', (Join-Path $ospreyDir 'osprey.blib'), '--cache-dir', (Join-Path $ospreyDir 'cache'),
+        # --output-dir: without it the per-run artifacts (calibration, scores parquet) land beside the
+        # runs, in the shared test-data folder.
+        '-o', (Join-Path $ospreyDir 'osprey.blib'), '--output-dir', $ospreyDir, '--cache-dir', (Join-Path $ospreyDir 'cache'),
         '--fdrbench', (Join-Path $ospreyDir 'FDRBench-Input.tsv'),
         '--log-file', (Join-Path $ospreyDir 'osprey.log'),
         '--enzyme', '2', '--miss-c', '1', '--minLength', '7', '--maxLength', '35', '--clip-n-m',
@@ -124,6 +126,26 @@ if ($stepList -contains 'osprey') {
         '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
         '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
         '--threads', "$Threads", '--timestamp')) $ospreyDir
+}
+
+# Osprey again on the 'osprey' step's predicted library (-l; its DecoyPairs pair the decoys), with
+# gradient-boosted trees in place of the linear SVM (OSPREY_FDR_MODEL=gbdt): only the classifier differs.
+if ($stepList -contains 'osprey-gbdt') {
+    if (-not (Test-Path $predicted)) { throw "Run the 'osprey' step first: no $predicted" }
+    $gbdtDir = Join-Path $WorkDir 'osprey-gbdt'
+    $env:OSPREY_FDR_MODEL = 'gbdt'
+    try {
+        Invoke-Step 'osprey-gbdt' $OspreyExe (@('-i') + $runs + @(
+            '-l', $predicted, '--decoys-in-library',
+            '-o', (Join-Path $gbdtDir 'osprey.blib'), '--output-dir', $gbdtDir,
+            '--cache-dir', (Join-Path $ospreyDir 'cache'),
+            '--fdrbench', (Join-Path $gbdtDir 'FDRBench-Input.tsv'), '--log-file', (Join-Path $gbdtDir 'osprey.log'),
+            '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
+            '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
+            '--threads', "$Threads", '--timestamp')) $gbdtDir
+    } finally {
+        Remove-Item Env:OSPREY_FDR_MODEL -ErrorAction SilentlyContinue
+    }
 }
 
 if ($stepList -contains 'peptides') {
@@ -149,4 +171,50 @@ if ($stepList -contains 'diann-search') {
         '--qvalue', '0.05', '--matrices', '--pg-level', '0', '--fasta', $peptideFasta, '--cut', '', '--duplicate-proteins',
         '--individual-mass-acc', '--individual-windows', '--reanalyse', '--rt-profiling') +
         $preset.DiannSearch + $digest) $diannSearchDir
+}
+
+# --- Library swap: Osprey searches DIA-NN's predictions for the same peptides --------------------
+# Every peptide of Osprey's library - targets, entrapment and decoys - predicted by DIA-NN's predictor,
+# exported, and searched by Osprey with the 'osprey' step's settings, spectra cache and pairing manifest.
+# The decoys are predicted, as in Osprey's own library (DIA-NN's own searches derive decoys from their
+# targets' spectra instead), so only the predictor differs - and DIA-NN keeps 12 fragments a precursor
+# where Osprey's library keeps 20.
+$swapPeptides = Join-Path $WorkDir 'swap-peptides'
+$swapLibrary = Join-Path $WorkDir 'swap-library'
+$swapExport = Join-Path $WorkDir 'swap-export'
+$swapOsprey = Join-Path $WorkDir 'swap-osprey'
+$swapTool = Join-Path $PSScriptRoot 'diann_library_swap.py'
+
+if ($stepList -contains 'swap-fasta') {
+    New-Item -ItemType Directory -Force -Path $swapPeptides | Out-Null
+    python $swapTool fasta $predicted (Join-Path $swapPeptides 'all_peptides.fasta') (Join-Path $swapPeptides 'peptide_map.tsv')
+    if ($LASTEXITCODE -ne 0) { throw 'diann_library_swap.py fasta failed' }
+}
+
+if ($stepList -contains 'swap-library') {
+    Invoke-Step 'swap-library' $DiannExe (@(
+        '--fasta', (Join-Path $swapPeptides 'all_peptides.fasta'), '--cut', '', '--fasta-search', '--predictor',
+        '--gen-spec-lib', '--out-lib', (Join-Path $swapLibrary 'library.parquet')) + $digest) $swapLibrary
+}
+
+if ($stepList -contains 'swap-convert') {
+    $lib = Get-ChildItem $swapLibrary -Filter '*.predicted.speclib' | Select-Object -First 1
+    if (-not $lib) { throw "No predicted .speclib in $swapLibrary" }
+    Invoke-Step 'swap-export' $DiannExe @('--lib', $lib.FullName, '--gen-spec-lib',
+        '--out-lib', (Join-Path $swapExport 'library.parquet'), '--threads', "$Threads") $swapExport
+    python $swapTool convert (Join-Path $swapExport 'library.parquet') (Join-Path $swapPeptides 'peptide_map.tsv') `
+        (Join-Path $swapExport 'diann_predicted.tsv')
+    if ($LASTEXITCODE -ne 0) { throw 'diann_library_swap.py convert failed' }
+}
+
+if ($stepList -contains 'swap-osprey') {
+    Invoke-Step 'swap-osprey' $OspreyExe (@('-i') + $runs + @(
+        '-l', (Join-Path $swapExport 'diann_predicted.tsv'), '--decoys-in-library',
+        '--decoy-pairing-manifest', (Join-Path $ospreyDir 'osprey.predicted\pairing.tsv'),
+        '-o', (Join-Path $swapOsprey 'osprey.blib'), '--output-dir', $swapOsprey,
+        '--cache-dir', (Join-Path $ospreyDir 'cache'),
+        '--fdrbench', (Join-Path $swapOsprey 'FDRBench-Input.tsv'), '--log-file', (Join-Path $swapOsprey 'osprey.log'),
+        '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
+        '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
+        '--threads', "$Threads", '--timestamp')) $swapOsprey
 }
