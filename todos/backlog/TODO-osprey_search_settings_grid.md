@@ -64,20 +64,26 @@ timestamp. The form pages: Search Settings (resolution, tolerance, three FDRs, t
 
 ## Design
 
-1. **One source of truth, no hand-listed table.** Derive the grid's `Setting`s from Osprey's
-   declarations: name, kind, valid values, default, group, and the localized usage text as the
-   tooltip (KeyValueGridDlg has no tooltip today; add one, the usage text is the point). How
-   Skyline reads the declarations is the first decision of the session, with these candidates:
-   - (a) Osprey exports a machine-readable table beside the help pages, e.g.
-     `Documentation/Help/<culture>/CommandLine.json`, regenerated and checked by the same
-     Osprey test that keeps the HTML current; Skyline reads it from the installed Osprey
-     package (check that the package ships `Documentation/Help`; `package.ps1`), falling back to
-     a copy committed in Skyline. Localized text comes for free per culture folder.
-   - (b) `Osprey.exe --help` with a machine-readable format flag, run once at first use and
-     cached in the Tools folder beside the package.
-   - (c) Reference the Osprey assembly from Skyline: rejected unless it is TorchSharp-free
-     (Osprey.csproj sets `UseCarafeModels`; CarafeSharp.Proteome/Core are already referenced).
-   Prefer (a): no process launch, works offline, versioned with the package.
+1. **One source of truth: the declared Arguments, extended** (Brendan, 2026-10-27). The
+   `Argument<TContext>` declarations (`pwiz_tools/Shared/CommonUtil/CommandLine/Argument.cs`,
+   used by `OspreyCommandArgs` and the CarafeSharp declarations Osprey hosts) already carry a
+   list of acceptable values. Extend them with:
+   - a **property name**, the label the grid shows, stored in RESX so it localizes (beside the
+     usage text in `OspreyCommandArgUsage.resx` and CarafeSharp's);
+   - a **property type** (number with range, boolean flag, listed values, path, text), which
+     decides the grid's control and validation;
+   - **whether the argument is exposed** on the Additional settings page: not every argument is
+     (`--help`, the inputs and outputs the form binds), but everything a user could want access
+     to should be, through the Argument instances themselves, so an argument added to Osprey
+     appears in the grid without Skyline work.
+   Skyline then **enumerates the exposed declarations** - either in code, by sharing the
+   declarations (only if that pulls no torch dependency into Skyline), or by asking the
+   installed Osprey, for example `Osprey --help properties`, which prints the exposed arguments
+   with their localized property names, types, values and defaults in a machine-readable form
+   that Skyline parses once per package and caches beside it. The session decides between
+   the two by what each costs: the in-code route needs the declarations in a TorchSharp-free
+   assembly; the `--help properties` route needs a stable format and a parse on the Skyline side.
+   The usage text is the tooltip either way (KeyValueGridDlg has no tooltip today; add one).
 2. **Form-bound arguments stay out of the grid** (as `SearchSettingsControl` leaves its form
    fields out): everything `OspreyConfig` sets from a control is excluded or shown read-only;
    the grid holds the rest. A grid value for a form-bound name is refused with a message naming
