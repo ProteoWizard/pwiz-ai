@@ -114,10 +114,10 @@ timestamp. The form pages: Search Settings (resolution, tolerance, three FDRs, t
       unit tests in `OspreyHelpersTest` (or the existing command-line test)
 - [x] The button on `OspreySearchSettingsControl` and the grid, with tooltip support in
       `KeyValueGridDlg`; the Build Library pretrained-route entry (design 3)
-- [ ] Persistence (design 4) and audit log (design 5)
-- [ ] Functional tests: open the grid from both wizards, set a value, assert the command line
+- [ ] Persistence (design 4: last-used done, named presets open) and audit log (design 5: open)
+- [x] Functional tests: open the grid from both wizards, set a value, assert the command line
       carries it, a refused value, a form-bound name refused, persistence round trip, fr/ja
-- [ ] Docs: the wizard's help text, the TODO, `ai/docs/osprey-development-guide.md` if the
+- [x] Docs: the wizard's help text (tooltips), the TODO, `ai/docs/osprey-development-guide.md` if the
       export changes how arguments are added (an argument added to Osprey must appear in the grid
       without Skyline work - say so where arguments are declared)
 
@@ -210,3 +210,29 @@ either (ImportPeptideSearchDlg:487 is the preset serialization); design 4's name
 only); group header rows in the grid (flat, help order within the export order); `entrapment` and
 `export-library` left unexposed (Skyline handles entrapment itself; export-library is an output); the
 osprey-development-guide note on adding an argument.
+
+### 2026-10-27 night - Committed, reviewed, grouped
+
+- Commit 1 `cc871c53e0`: everything in the entry above (31 files). Gates before it: Osprey build +
+  646 tests + inspection green; Skyline build; `OspreyAdditionalSettingsTest`; `OspreySearchTest` (0
+  failures, 11 s - the subset searches take seconds); `BuildLibraryCarafeWizardTest` (30 s);
+  `CodeInspection`; `OspreySearchTest` in all five languages (the `--culture ja-JP` export path).
+- Visual check over the MCP demo: page 1's `Additional Settings...` sits right of "Predict for:" in the
+  Carafe box; the Search Settings page's under Threads. The grid itself cannot be paused on in the demo
+  (`MultiButtonMsgDlg.ShowWithTimeout` fails a test after 10 s), so it was not captured; it is the DDA
+  engines' `KeyValueGridDlg`.
+- `/code-review medium`: 10 findings, 9 fixed in commit 2, 1 dropped (the synchronous process start on
+  the first Next: measured ~100 ms, once per session). Fixed: a text property with a default cleared to
+  blank was emitted as a bare switch (blank now always leaves the argument out); stdout+stderr both
+  redirected and read in sequence (deadlock; stderr no longer redirected); the paramName overload of
+  `ArgumentOutOfRangeException`; raw grid text persisted (a `0,05` typed under fr-FR; `SetValue` now
+  stores numbers invariant); `SaveLastUsed` as a side effect of `ApplyTo` (moved to `ValidatePage`, the
+  run); the refusal message's reason and its MessageDlg from a getter (now from the UI thread, reworded);
+  `FormBoundArguments` mixing prefixes (now `FORM_BOUND_ARGUMENTS`, bare names); a list default outside
+  its values (offered first); the properties cache keyed on the path alone (now the file's write time too).
+- Commit 2: group headers in the grid (a sub-agent's change): `KeyValueGridDlg.Show(..., groupForValue)`
+  keeps the dictionary's order and introduces each help section with a bold spanning label; without the
+  callback the grid is unchanged (alphabetical). `OspreySearchTest` asserts the header and the order;
+  `DdaSearchTest` (an existing user of the grid) stayed green.
+- Still open: design 5 (audit log; note the search's full command line, additional settings included, is
+  recorded in the .blib's metadata by Osprey), design 4's named presets, translations of the new labels.
