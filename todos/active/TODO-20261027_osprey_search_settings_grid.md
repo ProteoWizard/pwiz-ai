@@ -252,3 +252,19 @@ osprey-development-guide note on adding an argument.
   `OspreySettingsPreset`/`OspreySettingsPresetList` in `Settings.Default.OspreySettingsPresets`, a
   "Settings preset:" combo on the Search Settings page. Take it (merge the branch into the work
   branch) or leave it; the work branch does not depend on it. Its report is in the handoff.
+
+### 2026-10-27 night - Presets landed on the side branch (22:35)
+
+`nightlywork/osprey_settings_presets` @ `523b2bd319` (local, from commit 3; 8 files, +741/-30), all gates
+green there (new `OspreySettingsPresetTest`, `OspreySearchTest`, `BuildLibraryCarafeWizardTest`,
+`CodeInspection`). The shape mirrors the DIA-NN wizard: a "Settings preset:" combo driven by
+`SettingsListComboDriver` over `OspreySettingsPresetList : SerializableSettingsList` (so `<Edit list...>`,
+with import/export as `.skyosp`), a "Save..." button that names the current page through `PresetNameDlg`
+(overwrite confirmed with the existing string), the page opening with no preset chosen. A preset holds
+resolution, tolerance + unit, the three FDRs and the additional settings' XML (not Threads); choosing one
+resets the additional settings to Osprey's defaults and applies the preset's. `OspreyAdditionalSettings`
+gained `ResetToDefaults()`. Not reviewed by `/code-review` (the work branch's three commits were). To
+take it: `git merge nightlywork/osprey_settings_presets` on the work branch (a fast-forward).
+
+Open for the morning: whether to take the presets branch; design 5 (audit log); the ja/zh-Hans labels
+(English fallback); the Osprey pin before a release; opening the PR (not pushed overnight).
