@@ -108,13 +108,14 @@ The fork drew them wrong at every DPI: `Graphics.DrawIcon(icon, rect)` stretches
 `Icon` instance was created with (32x32 from the resx) with nearest-neighbor, and
 `new Icon(icon, size)` falls back to the next SMALLER frame (measured: 20 and 24 -> 16; 64 -> 48).
 Fix written in the fork checkout (`Workspaces/ProteoWiz/developers`, branch
-`DigitalRune/work/20261020_dpiScaling`, PR uw-maccosslab/developers #7), uncommitted, saved as
+`DigitalRune/work/20261020_dpiScaling`, PR uw-maccosslab/developers #7), also saved as
 `TODO-20261020_icon_builder-DigitalRune-IconFrames.patch`: `DpiHelper.SelectFrame` (exact
 frame, else smallest larger, else largest smaller), `DpiHelper.DrawIcon` (exact frame via
 DrawIcon, otherwise ToBitmap + bicubic), used by DrawDocumentTab, DrawToolWindowTab and the
 auto-hide strip (which passed `icon.ToBitmap()` of the 32 frame). Builds clean (one
-pre-existing CS0114 warning elsewhere). Committed on the PR #7 branch as f0204f7 (local, not
-pushed); next: push, rebuild the DLL into #4602 with Build-DigitalRune.ps1. Visual check:
+pre-existing CS0114 warning elsewhere). On PR #7 as f0204f7 (pushed by the DPI session, which
+added a117881 listing DpiHelper.cs in the legacy .NET Framework project); next: rebuild the DLL
+into #4602 with Build-DigitalRune.ps1. Visual check:
 Targets tab at 200% should show the 32 px frame.
 
 ## Decision source
@@ -162,6 +163,13 @@ Targets tab at 200% should show the 32 px frame.
       `Skyline/work/20261020_icon_assets`, commit f74a028bf2, PR #4887 against master. Build +
       IconResourcesTest green on master's tree. The test is self-contained (own size list and
       suffix lookup) because master has no DpiUtil yet
+- [x] Inline designer glyphs centralized (2026-10-27, 83134adcc1 on the assets branch, pushed):
+      the five binding-navigator bitmaps, the EditPepModsDlg/EditSpectrumFilterDlg combo chevron
+      and the ConfigureToolsDlg macro arrow moved from base64 in 15 form resx files to
+      Resources/*.png + Resources.resx entries; designers assign the typed properties; the
+      navigator delete buttons reuse Resources.Delete; vectors, manifest lines and 20/24/32 px
+      outputs added (127 manifest entries). Left as is: 12 uses of the WinForms designer
+      placeholder image across 10 controls (see inline-icons.csv in ai/.tmp/icon-gallery)
 - [ ] Address review on #4887 (artwork); drawing fixes go through the gallery -> XAML ->
       IconBuilder re-run -> commit on the assets branch
 - [ ] After #4602 and #4887 are both on master: point IconResourcesTest at
