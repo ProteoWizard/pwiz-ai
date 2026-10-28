@@ -672,7 +672,7 @@
     // Always-visible. Updated on every frame; the final frame's state is
     // the natural "punchline" — no popup to dismiss.
     const SUMMARY_TITLE = "PWIZ-AI";
-    const SUMMARY_TOTAL_LINES = 88890;
+    const SUMMARY_TOTAL_LINES = 320478;
     function humanSpan(firstDate, lastDate) {
       if (!firstDate || !lastDate) return null;
       const a = new Date(firstDate), b = new Date(lastDate);
@@ -715,29 +715,104 @@
 
     // --- Compact-snapshot expansion ----------------------------------
     // Input snapshot: {h, d, m, r, n:[regIdx,...], e:[[src,tgt,kind],...]}
+    //   or, delta-encoded after the first: {h, d, m, r, a, x, ea, ex} -
+    //   nodes added/removed and edges added/removed since the previous one.
     // Registry:       window.__REGISTRY__ = [[id, type, group, label], ...]
     // kind: 0 = ref, 1 = contains.
-    function expandSnapshot(s) {
-      if (s.nodes) return;   // already expanded
+    //
+    // A long history would cost commits x nodes objects if every snapshot
+    // were expanded up front, so the timeline is decoded once into keyframes
+    // and each snapshot's nodes/edges are built when first read, keeping only
+    // the few most recently read. Node objects are shared per registry entry.
+    const KEYFRAME_EVERY = 64;
+    let _decoded = null;   // {keyframes, sharedNodes}
+    const _expandCache = new Map();
+
+    function decodeTimeline() {
       const reg = window.__REGISTRY__;
-      const nodes = [];
-      for (const i of s.n) {
-        const r = reg[i];
-        nodes.push({
-          id: r[0], type: r[1], group: r[2], label: r[3],
-          script: 0, line: 1, endLine: 1, file: r[0],
+      const sharedNodes = reg.map(r => ({
+        id: r[0], type: r[1], group: r[2], label: r[3],
+        script: 0, line: 1, endLine: 1, file: r[0],
+      }));
+      const keyframes = new Map();
+      const n = new Set(), e = new Map();
+      const ekey = p => p[0] + ',' + p[1] + ',' + p[2];
+      timeline.forEach((s, idx) => {
+        if (s.n) {
+          n.clear(); e.clear();
+          s.n.forEach(i => n.add(i));
+          s.e.forEach(p => e.set(ekey(p), p));
+        } else {
+          (s.x || []).forEach(i => n.delete(i));
+          (s.a || []).forEach(i => n.add(i));
+          (s.ex || []).forEach(p => e.delete(ekey(p)));
+          (s.ea || []).forEach(p => e.set(ekey(p), p));
+        }
+        n.forEach(i => {
+          if (sharedNodes[i].firstSeen === undefined) sharedNodes[i].firstSeen = idx;
         });
+        if (idx % KEYFRAME_EVERY === 0) {
+          keyframes.set(idx, {n: Array.from(n), e: Array.from(e.values())});
+        }
+        s.nodeCount = n.size;
+        s.edgeCount = e.size;
+      });
+      _decoded = {keyframes, sharedNodes};
+    }
+
+    function snapshotMembers(idx) {
+      const s = timeline[idx];
+      if (s.n) return {n: s.n, e: s.e};
+      const base = idx - idx % KEYFRAME_EVERY;
+      const kf = _decoded.keyframes.get(base);
+      const n = new Set(kf.n);
+      const e = new Map(kf.e.map(p => [p.join(','), p]));
+      for (let i = base + 1; i <= idx; i++) {
+        const d = timeline[i];
+        if (d.n) {
+          n.clear(); e.clear();
+          d.n.forEach(j => n.add(j));
+          d.e.forEach(p => e.set(p.join(','), p));
+          continue;
+        }
+        (d.x || []).forEach(j => n.delete(j));
+        (d.a || []).forEach(j => n.add(j));
+        (d.ex || []).forEach(p => e.delete(p.join(',')));
+        (d.ea || []).forEach(p => e.set(p.join(','), p));
       }
-      const edges = [];
-      for (const p of s.e) {
-        edges.push({
-          source: reg[p[0]][0],
-          target: reg[p[1]][0],
-          type: p[2] === 1 ? 'contains' : 'refs',
-        });
+      return {n: Array.from(n), e: Array.from(e.values())};
+    }
+
+    function expandedMembers(idx) {
+      let hit = _expandCache.get(idx);
+      if (!hit) {
+        const reg = window.__REGISTRY__;
+        const m = snapshotMembers(idx);
+        hit = {
+          nodes: m.n.map(i => _decoded.sharedNodes[i]),
+          edges: m.e.map(p => ({
+            source: reg[p[0]][0],
+            target: reg[p[1]][0],
+            type: p[2] === 1 ? 'contains' : 'refs',
+          })),
+        };
+        _expandCache.set(idx, hit);
+        if (_expandCache.size > 4) {
+          _expandCache.delete(_expandCache.keys().next().value);
+        }
       }
-      s.nodes = nodes;
-      s.edges = edges;
+      return hit;
+    }
+
+    function expandSnapshot(s, idx) {
+      if (s.hash !== undefined) return;   // already expanded
+      if (!_decoded) decodeTimeline();
+      Object.defineProperty(s, 'nodes', {
+        get: () => expandedMembers(idx).nodes, configurable: true,
+      });
+      Object.defineProperty(s, 'edges', {
+        get: () => expandedMembers(idx).edges, configurable: true,
+      });
       s.hash = s.h;
       s.date = s.d;
       s.message = s.m;
@@ -749,8 +824,6 @@
       s.codexCoauthored  = false;
       s.lineCount = s.l ?? 0;
       s.testCount = s.t ?? 0;
-      s.nodeCount = nodes.length;
-      s.edgeCount = edges.length;
     }
 
     
@@ -765,7 +838,7 @@
     let overcrowdCheckTimeout = null;
 
     // Playback-speed cycle: persists selection across play/pause.
-    const PLAYBACK_SPEEDS = [0.5, 1, 2, 4];
+    const PLAYBACK_SPEEDS = [0.5, 1, 2, 4, 8, 16];
     let playbackSpeedIdx = 1;  // 1× default
     // Current interval in ms — needed so the post-frame "release fx/fy"
     // timeout can scale with speed. At 4× the frame interval is 50 ms;
@@ -934,25 +1007,9 @@
       // loading text so it doesn't linger as "Loading N/N..." forever.
       document.getElementById('stats').textContent = '';
 
-      // Expand compact-encoded snapshots in place
+      // Expand compact-encoded snapshots in place (lazily; this also
+      // records each node's first-seen index)
       timeline.forEach(expandSnapshot);
-
-      // Track when each node first appeared
-      const nodeFirstSeen = new Map();
-      timeline.forEach((snapshot, idx) => {
-        snapshot.nodes.forEach(node => {
-          if (!nodeFirstSeen.has(node.id)) {
-            nodeFirstSeen.set(node.id, idx);
-          }
-        });
-      });
-
-      // Attach first-seen index to all nodes
-      timeline.forEach(snapshot => {
-        snapshot.nodes.forEach(node => {
-          node.firstSeen = nodeFirstSeen.get(node.id);
-        });
-      });
 
       // Setup timeline slider
       const slider = document.getElementById('timeline');
@@ -1597,6 +1654,6 @@
   </script>
   <!-- JSONP data load - works with file:// URLs -->
   <!-- Load manifest first, which then triggers loading of chunk files -->
-  <script src="callgraph-manifest.js" onerror="document.getElementById('stats').textContent='Run: npm run callgraph'"></script>
+  <script src="callgraph-2026-10-27-manifest.js" onerror="document.getElementById('stats').textContent='Run: npm run callgraph'"></script>
 </body>
 </html>

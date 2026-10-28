@@ -104,6 +104,11 @@ class ProjectConfig:
     # Default: lines (if available), files, folders, tests. Customize when
     # the project's meaningful counts don't map to those defaults.
     stats_rows_js: Optional[str] = None
+    # Speeds the speed button cycles through (1 = 200 ms per commit), and the
+    # one playback starts at. Long histories want the faster settings.
+    playback_speeds: list[float] = field(
+        default_factory=lambda: [0.5, 1, 2, 4, 8, 16])
+    default_speed: float = 1
 
 
 # ---------------------------------------------------------------------------
@@ -163,15 +168,58 @@ def build_registry_and_timeline(
             nmeta.get("name", fid.split("/")[-1]),
         ])
 
+    # Sweep the commits, keeping the set of live nodes/edges current from
+    # their first_idx/last_idx events rather than rescanning every node and
+    # edge per commit (which is commits x everything on a long history).
+    # Output order matches a full scan: nodes in nodes_sorted order, edges in
+    # all_edges order.
+    node_entries = [(pos, friend_id(full_id, nmeta), nmeta)
+                    for pos, (full_id, nmeta) in enumerate(nodes_sorted)]
+    edge_entries = []
+    for pos, e in enumerate(all_edges):
+        s_meta = all_nodes.get(e["from"])
+        t_meta = all_nodes.get(e["to"])
+        if not s_meta or not t_meta:
+            continue
+        s_fid = friend_id(e["from"], s_meta)
+        t_fid = friend_id(e["to"], t_meta)
+        if s_fid == t_fid:
+            continue
+        kind = 1 if e.get("kind") == "contains" else 0
+        edge_entries.append((pos, s_fid, t_fid, kind, e))
+
+    def events(entries, meta_of):
+        starts: dict[int, list] = {}
+        ends: dict[int, list] = {}
+        for ent in entries:
+            m = meta_of(ent)
+            starts.setdefault(m["first_idx"], []).append(ent)
+            if m["last_idx"] is not None:
+                ends.setdefault(m["last_idx"], []).append(ent)
+        return starts, ends
+
+    n_starts, n_ends = events(node_entries, lambda ent: ent[2])
+    e_starts, e_ends = events(edge_entries, lambda ent: ent[4])
+    live_nodes: dict[int, tuple] = {}
+    live_edges: dict[int, tuple] = {}
+
     timeline: list[dict] = []
     for idx, c in enumerate(commits):
+        for ent in n_ends.get(idx, []):
+            live_nodes.pop(ent[0], None)
+        for ent in n_starts.get(idx, []):
+            if ent[2]["last_idx"] is None or ent[2]["last_idx"] > idx:
+                live_nodes[ent[0]] = ent
+        for ent in e_ends.get(idx, []):
+            live_edges.pop(ent[0], None)
+        for ent in e_starts.get(idx, []):
+            if ent[4]["last_idx"] is None or ent[4]["last_idx"] > idx:
+                live_edges[ent[0]] = ent
+
         alive_idx: list[int] = []
         alive_set: set[str] = set()
-        for full_id, nmeta in nodes_sorted:
-            if not (nmeta["first_idx"] <= idx
-                    and (nmeta["last_idx"] is None or nmeta["last_idx"] > idx)):
-                continue
-            fid = friend_id(full_id, nmeta)
+        for pos in sorted(live_nodes):
+            fid = live_nodes[pos][1]
             if fid in alive_set:
                 continue
             alive_set.add(fid)
@@ -179,25 +227,15 @@ def build_registry_and_timeline(
 
         edge_pairs: list[list[int]] = []
         seen: set[tuple[int, int, int]] = set()
-        for e in all_edges:
-            if not (e["first_idx"] <= idx
-                    and (e["last_idx"] is None or e["last_idx"] > idx)):
+        for pos in sorted(live_edges):
+            _p, s_fid, t_fid, kind, _e = live_edges[pos]
+            if s_fid not in alive_set or t_fid not in alive_set:
                 continue
-            s_meta = all_nodes.get(e["from"])
-            t_meta = all_nodes.get(e["to"])
-            if not s_meta or not t_meta:
-                continue
-            s_fid = friend_id(e["from"], s_meta)
-            t_fid = friend_id(e["to"], t_meta)
-            if s_fid not in alive_set or t_fid not in alive_set or s_fid == t_fid:
-                continue
-            s_i, t_i = id_to_reg_idx[s_fid], id_to_reg_idx[t_fid]
-            kind = 1 if e.get("kind") == "contains" else 0
-            key = (s_i, t_i, kind)
+            key = (id_to_reg_idx[s_fid], id_to_reg_idx[t_fid], kind)
             if key in seen:
                 continue
             seen.add(key)
-            edge_pairs.append([s_i, t_i, kind])
+            edge_pairs.append(list(key))
 
         snap = {
             "h": c["sha"][:7],
@@ -220,18 +258,65 @@ def build_registry_and_timeline(
 # Output writers
 # ---------------------------------------------------------------------------
 
+MANIFEST_NAME = "callgraph-manifest.js"
+
+
+def data_prefix(stamp: Optional[str] = None) -> str:
+    """'callgraph' or 'callgraph-YYYY-MM-DD' - the stem of the data files."""
+    return f"callgraph-{stamp}" if stamp else "callgraph"
+
+
+def manifest_name(stamp: Optional[str] = None) -> str:
+    return f"{data_prefix(stamp)}-manifest.js" if stamp else MANIFEST_NAME
+
+
+def delta_encode(timeline: list) -> list:
+    """Replace each snapshot's full n/e lists (after the first) with what
+    changed since the previous snapshot: a/x = nodes added/removed,
+    ea/ex = edges added/removed. Empty lists are omitted. The page decodes
+    either form (see expandSnapshot)."""
+    out = []
+    prev_n: set = set()
+    prev_e: set = set()
+    for i, s in enumerate(timeline):
+        n = set(s["n"])
+        e = {tuple(p) for p in s["e"]}
+        if i == 0:
+            out.append(s)
+        else:
+            d = {k: v for k, v in s.items() if k not in ("n", "e")}
+            for key, vals in (("a", sorted(n - prev_n)), ("x", sorted(prev_n - n)),
+                              ("ea", sorted(e - prev_e)), ("ex", sorted(prev_e - e))):
+                if vals:
+                    d[key] = [list(v) if isinstance(v, tuple) else v for v in vals]
+            out.append(d)
+        prev_n, prev_e = n, e
+    return out
+
+
 def write_data_files(out_dir: Path, registry: list, timeline: list,
-                     chunk_count: int = 1) -> None:
+                     chunk_count: int = 1, stamp: Optional[str] = None,
+                     delta: bool = False) -> None:
     """Write callgraph-manifest.js + callgraph-data-*.js.
 
     One chunk by default. For very large projects, pass chunk_count >= 2 to
     split the timeline. The registry is always emitted in chunk 0.
+
+    With a stamp the files are callgraph-<stamp>-manifest.js and
+    callgraph-<stamp>-data-*.js, so each dated HTML keeps its own data and a
+    later generation does not change an earlier snapshot.
+
+    delta=True writes each snapshot as changes from the previous one (see
+    delta_encode) - far smaller for a long history, where most commits touch
+    a file or two.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
+    if delta:
+        timeline = delta_encode(timeline)
     chunk_count = max(1, chunk_count)
-    files = [f"callgraph-data-{i}.js" for i in range(chunk_count)]
+    files = [f"{data_prefix(stamp)}-data-{i}.js" for i in range(chunk_count)]
     manifest = {"chunkCount": chunk_count, "files": files}
-    (out_dir / "callgraph-manifest.js").write_text(
+    (out_dir / manifest_name(stamp)).write_text(
         f"loadCallgraphManifest({json.dumps(manifest)});", encoding="utf-8",
     )
 
@@ -245,22 +330,36 @@ def write_data_files(out_dir: Path, registry: list, timeline: list,
         (out_dir / files[i]).write_text(prefix + body, encoding="utf-8")
 
 
-def write_dated_html(out_dir: Path, html: str, project_name: str) -> Path:
+def write_dated_html(out_dir: Path, html: str, project_name: str,
+                     stamp: Optional[str] = None, latest: bool = True) -> Path:
     """Write callgraph-YYYY-MM-DD.html + a callgraph-latest.html copy.
 
     Returns the path to the dated file. The latest copy gives a stable URL
     that always points at the most recent generation; the dated file is the
-    git-tracked snapshot.
+    git-tracked snapshot. With a stamp (see write_data_files) both load the
+    stamped data files and the dated file is named by the stamp.
+    latest=False leaves callgraph-latest.html alone (reproducing an older
+    generation).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = stamp or datetime.now().strftime("%Y-%m-%d")
+    if stamp:
+        html = point_html_at_data(html, stamp)
     dated = out_dir / f"callgraph-{today}.html"
-    latest = out_dir / "callgraph-latest.html"
     dated.write_text(html, encoding="utf-8")
     # latest is the stable shareable name (served via raw.githack / Pages).
     # dated is the git-tracked snapshot for history. Commit either or both.
-    latest.write_text(html, encoding="utf-8")
+    if latest:
+        (out_dir / "callgraph-latest.html").write_text(html, encoding="utf-8")
     return dated
+
+
+def point_html_at_data(html: str, stamp: str) -> str:
+    """Make a generated page load callgraph-<stamp>-manifest.js."""
+    old = f'<script src="{MANIFEST_NAME}"'
+    if old not in html:
+        raise ValueError("manifest <script> not found - template drift?")
+    return html.replace(old, f'<script src="{manifest_name(stamp)}"', 1)
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +376,25 @@ def patch_html(base_html: str, config: ProjectConfig) -> str:
     """Apply every common patch. Order matters: earlier anchors must survive
     later replacements."""
     html = base_html
+
+    # --- Playback speeds -------------------------------------------------
+    speeds = config.playback_speeds
+    default_idx = speeds.index(config.default_speed)
+    speed_label = f"{config.default_speed:g}×"
+    html = _replace_once(
+        html,
+        "    const PLAYBACK_SPEEDS = [0.5, 1, 2, 4];\n"
+        "    let playbackSpeedIdx = 1;  // 1× default",
+        f"    const PLAYBACK_SPEEDS = {json.dumps(speeds)};\n"
+        f"    let playbackSpeedIdx = {default_idx};  // {speed_label} default",
+        "playback speeds",
+    )
+    html = _replace_once(
+        html,
+        'title="Playback speed (click to cycle)">1×</button>',
+        f'title="Playback speed (click to cycle)">{speed_label}</button>',
+        "speed button label",
+    )
 
     # --- Inline d3 so the HTML is self-contained (no CDN dependency) ------
     html = _replace_once(
@@ -472,12 +590,30 @@ def patch_html(base_html: str, config: ProjectConfig) -> str:
     )
 
     # --- Expand compact snapshots before any use --------------------------
+    # Expanding also sets firstSeen on the shared node objects, so the
+    # template's two passes over every snapshot's nodes are dropped.
     html = _replace_once(
         html,
-        "      // Track when each node first appeared",
-        "      // Expand compact-encoded snapshots in place\n"
-        "      timeline.forEach(expandSnapshot);\n\n"
-        "      // Track when each node first appeared",
+        """      // Track when each node first appeared
+      const nodeFirstSeen = new Map();
+      timeline.forEach((snapshot, idx) => {
+        snapshot.nodes.forEach(node => {
+          if (!nodeFirstSeen.has(node.id)) {
+            nodeFirstSeen.set(node.id, idx);
+          }
+        });
+      });
+
+      // Attach first-seen index to all nodes
+      timeline.forEach(snapshot => {
+        snapshot.nodes.forEach(node => {
+          node.firstSeen = nodeFirstSeen.get(node.id);
+        });
+      });
+""",
+        "      // Expand compact-encoded snapshots in place (lazily; this also\n"
+        "      // records each node's first-seen index)\n"
+        "      timeline.forEach(expandSnapshot);\n",
         "expandSnapshot wiring",
     )
 
@@ -899,29 +1035,104 @@ _INJECTION_TEMPLATE = r"""
 
     // --- Compact-snapshot expansion ----------------------------------
     // Input snapshot: {{h, d, m, r, n:[regIdx,...], e:[[src,tgt,kind],...]}}
+    //   or, delta-encoded after the first: {{h, d, m, r, a, x, ea, ex}} -
+    //   nodes added/removed and edges added/removed since the previous one.
     // Registry:       window.__REGISTRY__ = [[id, type, group, label], ...]
     // kind: 0 = ref, 1 = contains.
-    function expandSnapshot(s) {{
-      if (s.nodes) return;   // already expanded
+    //
+    // A long history would cost commits x nodes objects if every snapshot
+    // were expanded up front, so the timeline is decoded once into keyframes
+    // and each snapshot's nodes/edges are built when first read, keeping only
+    // the few most recently read. Node objects are shared per registry entry.
+    const KEYFRAME_EVERY = 64;
+    let _decoded = null;   // {{keyframes, sharedNodes}}
+    const _expandCache = new Map();
+
+    function decodeTimeline() {{
       const reg = window.__REGISTRY__;
-      const nodes = [];
-      for (const i of s.n) {{
-        const r = reg[i];
-        nodes.push({{
-          id: r[0], type: r[1], group: r[2], label: r[3],
-          script: 0, line: 1, endLine: 1, file: r[0],
+      const sharedNodes = reg.map(r => ({{
+        id: r[0], type: r[1], group: r[2], label: r[3],
+        script: 0, line: 1, endLine: 1, file: r[0],
+      }}));
+      const keyframes = new Map();
+      const n = new Set(), e = new Map();
+      const ekey = p => p[0] + ',' + p[1] + ',' + p[2];
+      timeline.forEach((s, idx) => {{
+        if (s.n) {{
+          n.clear(); e.clear();
+          s.n.forEach(i => n.add(i));
+          s.e.forEach(p => e.set(ekey(p), p));
+        }} else {{
+          (s.x || []).forEach(i => n.delete(i));
+          (s.a || []).forEach(i => n.add(i));
+          (s.ex || []).forEach(p => e.delete(ekey(p)));
+          (s.ea || []).forEach(p => e.set(ekey(p), p));
+        }}
+        n.forEach(i => {{
+          if (sharedNodes[i].firstSeen === undefined) sharedNodes[i].firstSeen = idx;
         }});
+        if (idx % KEYFRAME_EVERY === 0) {{
+          keyframes.set(idx, {{n: Array.from(n), e: Array.from(e.values())}});
+        }}
+        s.nodeCount = n.size;
+        s.edgeCount = e.size;
+      }});
+      _decoded = {{keyframes, sharedNodes}};
+    }}
+
+    function snapshotMembers(idx) {{
+      const s = timeline[idx];
+      if (s.n) return {{n: s.n, e: s.e}};
+      const base = idx - idx % KEYFRAME_EVERY;
+      const kf = _decoded.keyframes.get(base);
+      const n = new Set(kf.n);
+      const e = new Map(kf.e.map(p => [p.join(','), p]));
+      for (let i = base + 1; i <= idx; i++) {{
+        const d = timeline[i];
+        if (d.n) {{
+          n.clear(); e.clear();
+          d.n.forEach(j => n.add(j));
+          d.e.forEach(p => e.set(p.join(','), p));
+          continue;
+        }}
+        (d.x || []).forEach(j => n.delete(j));
+        (d.a || []).forEach(j => n.add(j));
+        (d.ex || []).forEach(p => e.delete(p.join(',')));
+        (d.ea || []).forEach(p => e.set(p.join(','), p));
       }}
-      const edges = [];
-      for (const p of s.e) {{
-        edges.push({{
-          source: reg[p[0]][0],
-          target: reg[p[1]][0],
-          type: p[2] === 1 ? 'contains' : 'refs',
-        }});
+      return {{n: Array.from(n), e: Array.from(e.values())}};
+    }}
+
+    function expandedMembers(idx) {{
+      let hit = _expandCache.get(idx);
+      if (!hit) {{
+        const reg = window.__REGISTRY__;
+        const m = snapshotMembers(idx);
+        hit = {{
+          nodes: m.n.map(i => _decoded.sharedNodes[i]),
+          edges: m.e.map(p => ({{
+            source: reg[p[0]][0],
+            target: reg[p[1]][0],
+            type: p[2] === 1 ? 'contains' : 'refs',
+          }})),
+        }};
+        _expandCache.set(idx, hit);
+        if (_expandCache.size > 4) {{
+          _expandCache.delete(_expandCache.keys().next().value);
+        }}
       }}
-      s.nodes = nodes;
-      s.edges = edges;
+      return hit;
+    }}
+
+    function expandSnapshot(s, idx) {{
+      if (s.hash !== undefined) return;   // already expanded
+      if (!_decoded) decodeTimeline();
+      Object.defineProperty(s, 'nodes', {{
+        get: () => expandedMembers(idx).nodes, configurable: true,
+      }});
+      Object.defineProperty(s, 'edges', {{
+        get: () => expandedMembers(idx).edges, configurable: true,
+      }});
       s.hash = s.h;
       s.date = s.d;
       s.message = s.m;
@@ -933,8 +1144,6 @@ _INJECTION_TEMPLATE = r"""
       s.codexCoauthored  = false;
       s.lineCount = s.l ?? 0;
       s.testCount = s.t ?? 0;
-      s.nodeCount = nodes.length;
-      s.edgeCount = edges.length;
     }}
 
     {extra_init_js}

@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
-Generate the pwiz-ai callgraph HTML from snapshots.json.
+Generate the pwiz-ai callgraph HTML from git history.
 
-Shared pipeline lives in ai/scripts/callgraph/core.py. This file supplies
-the pwiz-ai-specific data mapping: group colors, kind→type, group x-bias,
-and the dual-repo commit link resolver (pwiz vs pwiz-ai).
+Shared pipeline lives in ai/scripts/callgraph/: extract.py walks the commit
+history, core.py renders it. This file supplies the pwiz-ai specifics: which
+repos and files, groups and labels, group colors and biases, and the
+dual-repo commit link resolver (pwiz vs pwiz-ai).
 
 Usage:
-    python build.py [path/to/snapshots.json]
+    python build.py [--end SHA|YYYY-MM-DD] [--stamp YYYY-MM-DD]
 
-Default snapshots.json path is ai/.tmp/pwiz-ai-timeline/out/snapshots.json.
-Writes callgraph-YYYY-MM-DD.html + callgraph-latest.html alongside this script.
+--end stops the timeline at a pwiz-ai commit or at the end of a day, to
+reproduce an earlier generation. --stamp names the output (default: the end
+date, else today). Writes callgraph-<stamp>.html with its own
+callgraph-<stamp>-manifest.js / -data-0.js; without --end it also copies
+the page to callgraph-latest.html. Needs clones of pwiz-ai and pwiz side by side.
 """
 
 from __future__ import annotations
 
-import json
+import argparse
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # --- Locate the shared core -------------------------------------------------
@@ -28,12 +33,9 @@ HERE = Path(__file__).resolve().parent
 SHARED = HERE.parent.parent / "scripts"
 sys.path.insert(0, str(SHARED))
 
-from callgraph import core  # noqa: E402
+from callgraph import core, extract  # noqa: E402
 
 
-DEFAULT_SNAPSHOTS = (
-    HERE.parent.parent / ".tmp" / "pwiz-ai-timeline" / "out" / "snapshots.json"
-)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +177,84 @@ CONFIG = core.ProjectConfig(
 )
 
 
+# ---------------------------------------------------------------------------
+# Extraction: which commits and files make up the pwiz-ai history.
+#
+# ai/ began as a folder in pwiz (master, plus the ai-context branch used for
+# weekly syncs) and became the pwiz-ai repo on 2026-01-10. Both histories are
+# walked and merged by commit time.
+# ---------------------------------------------------------------------------
+
+AI_REPO   = HERE.parent.parent                 # C:/proj/ai           (pwiz-ai)
+PWIZ_REPO = AI_REPO.parent / "pwiz"            # C:/proj/pwiz          (sibling)
+
+NODE_EXTS = (".md", ".ps1", ".py", ".json")
+H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.M)
+FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.S)
+FM_NAME_RE = re.compile(r"^name:\s*(.+)$", re.M)
+MAX_TITLE = 60      # longer H1s fall back to the file name
+
+
+def classify(path: str) -> tuple[str, str]:
+    """(kind, group) for a file. Archive TODOs are split out later."""
+    if "/" not in path:
+        return "doc", "core"
+    for prefix, kind, group in (
+        ("claude/commands/", "command", "commands"),
+        ("claude/skills/",   "skill",   "skills"),
+        ("claude/",          "doc",     "claude-meta"),
+        ("todos/active/",    "todo",    "todos-active"),
+        ("todos/backlog/",   "todo",    "todos-backlog"),
+        ("todos/completed/", "todo",    "todos-completed"),
+        ("todos/",           "todo",    "todos-meta"),
+        ("scripts/",         "script",  "scripts"),
+        ("mcp/",             "mcp",     "mcp"),
+    ):
+        if path.startswith(prefix):
+            return kind, group
+    return "doc", "docs"
+
+
+def parent_folder(path: str):
+    """Skill folders hold one SKILL.md each; hang it directly off skills/."""
+    parts = path.split("/")
+    if len(parts) == 4 and parts[:2] == ["claude", "skills"] \
+            and parts[3].lower() == "skill.md":
+        return "claude/skills"
+    return "/".join(parts[:-1]) or None
+
+
+def label(path: str, text) -> str:
+    """Skill name, else a short H1, else the file name."""
+    base = path.split("/")[-1]
+    if text is None or not path.endswith(".md"):
+        return base
+    fm = FRONTMATTER_RE.match(text) if classify(path)[0] == "skill" else None
+    if fm:
+        n = FM_NAME_RE.search(fm.group(1))
+        if n:
+            return n.group(1).strip().strip("\"'")
+    h = H1_RE.search(text)
+    if h:
+        title = h.group(1).strip()
+        if len(title) <= MAX_TITLE:
+            return title
+    return base
+
+
+EXTRACT = extract.ExtractConfig(
+    sources=[
+        extract.Source(PWIZ_REPO, "pwiz",
+                       ["origin/master", "origin/ai-context"], prefix="ai/"),
+        extract.Source(AI_REPO, "pwiz-ai", ["origin/master"]),
+    ],
+    include=lambda p: p.endswith(NODE_EXTS),
+    classify=classify,
+    parent_folder=parent_folder,
+    label=label,
+)
+
+
 def friend_id(full_id: str, _nmeta: dict) -> str:
     """pwiz-ai uses the path as the node id (already unique)."""
     return full_id
@@ -211,8 +291,6 @@ def reclassify_archive_nodes(nodes: dict) -> int:
 #      blob. Sum per-commit blob-line-counts for the final totals.
 # ---------------------------------------------------------------------------
 
-AI_REPO   = HERE.parent.parent                 # C:/proj/ai           (pwiz-ai)
-PWIZ_REPO = AI_REPO.parent / "pwiz"            # C:/proj/pwiz          (sibling)
 COUNT_EXTS = (".md", ".py", ".ps1", ".sh")
 
 
@@ -327,15 +405,28 @@ def apply_pwiz_ai_patches(html: str) -> str:
 # Entry point
 # ---------------------------------------------------------------------------
 
-def main():
-    src = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SNAPSHOTS
-    if not src.exists():
-        print(f"snapshots.json not found at {src}")
-        sys.exit(1)
+def resolve_end(end: str) -> tuple[int, str]:
+    """(committer timestamp, YYYY-MM-DD) for a pwiz-ai SHA or a date."""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", end):
+        ts = int(datetime.strptime(end, "%Y-%m-%d").timestamp()) + 86399
+        return ts, end
+    out = subprocess.run(["git", "-C", str(AI_REPO), "show", "-s",
+                          "--format=%ct", end],
+                         capture_output=True, text=True, check=True).stdout
+    ts = int(out.strip())
+    return ts, datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
 
-    data = json.loads(src.read_text(encoding="utf-8"))
-    p = data["projects"]["pwiz-ai"]
-    print(f"Reading {src}")
+
+def main():
+    ap = argparse.ArgumentParser(description="Generate the pwiz-ai callgraph.")
+    ap.add_argument("--end", help="last pwiz-ai commit (SHA) or day (YYYY-MM-DD)")
+    ap.add_argument("--stamp", help="output date stamp (default: end date or today)")
+    args = ap.parse_args()
+
+    end_ts, end_day = resolve_end(args.end) if args.end else (None, None)
+    stamp = args.stamp or end_day or datetime.now().strftime("%Y-%m-%d")
+    print(f"Extracting pwiz-ai history{f' through {end_day}' if end_day else ''}")
+    p = extract.extract(EXTRACT, end_ts=end_ts)
 
     moved = reclassify_archive_nodes(p["nodes"])
     if moved:
@@ -357,14 +448,16 @@ def main():
     print(f"  {len(p['commits'])} commits, {len(registry)} unique nodes, "
           f"{len(timeline)} snapshots")
 
-    core.write_data_files(HERE, registry, timeline, chunk_count=1)
+    core.write_data_files(HERE, registry, timeline, chunk_count=1, stamp=stamp,
+                          delta=True)
 
     base = core.BASE_HTML.read_text(encoding="utf-8")
     html = core.patch_html(base, CONFIG)
     html = apply_pwiz_ai_patches(html)
-    dated = core.write_dated_html(HERE, html, CONFIG.name)
-    total = sum(f.stat().st_size for f in HERE.iterdir() if f.is_file())
-    print(f"  wrote {dated.name} ({total:,} bytes total)")
+    dated = core.write_dated_html(HERE, html, CONFIG.name, stamp=stamp,
+                                  latest=not args.end)
+    data = HERE / f"{core.data_prefix(stamp)}-data-0.js"
+    print(f"  wrote {dated.name} + {data.name} ({data.stat().st_size:,} bytes)")
 
 
 if __name__ == "__main__":
