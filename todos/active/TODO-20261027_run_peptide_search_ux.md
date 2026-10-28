@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4928](https://github.com/ProteoWizard/pwiz/pull/4928) (stacked on #4923)
 - **Checkout**: `C:\dev\pwiz-inspect`
 
 ## Objective
