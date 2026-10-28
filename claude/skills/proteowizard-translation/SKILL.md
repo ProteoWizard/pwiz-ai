@@ -47,7 +47,7 @@ localization CSV conversion, reviewer package, blind evaluation, brief and promp
   `DevTools/TutorialLocalization`
 - Osprey: `Osprey.Test/OspreyLocalizedResourcesTest.cs`, `docs/21-user-facing-text.md`
   ("Resources"), `CodeInspectionTest.TestArgumentTextComesFromArguments`
-- First Claude-drafted round: `ai/todos/completed/TODO-20260928_osprey_resx_translation.md`
+- First Claude-drafted round: `ai/todos/completed/2026/09/TODO-20260928_osprey_resx_translation.md`
 
 ## Related skills
 

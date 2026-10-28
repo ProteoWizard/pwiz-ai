@@ -206,8 +206,8 @@ Requesters" below.
 **The TODO reference in a commit carries no path, on purpose.** A TODO moves from
 `todos/active/` to its final home `todos/completed/YYYY/MM/` (year and month of its file name
 date) when the PR merges: `/pw-complete` and `/pw-uptodos-complete` make that move in one
-step as of 2026-10-07, and `/pw-archivetodos` now only sweeps up the older files that were
-left loose under `todos/completed/`. So an `active/` path is wrong from the merge onward -
+step. There is no holding period loose under `todos/completed/`; the last of those files
+were filed on 2026-10-27. So an `active/` path is wrong from the merge onward -
 the message is wrong shortly after it is written and stays wrong forever in a public log.
 (The PR description is different: it is editable, so it links the file at its current path
 and `/pw-complete` repoints the link to the final one; see "PR Description Format".) Measured on 2026-08-22: of 204 TODOs referenced by recent pwiz

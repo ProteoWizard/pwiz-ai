@@ -166,7 +166,6 @@ Slash commands for specific workflows. Invoke with /<command-name>.
 | Command | Description | Chars |
 |---------|-------------|------:|
 | [pw-adopt.md](claude/commands/pw-adopt.md) | Adopt a PR branch from another developer | 489 |
-| [pw-archivetodos.md](claude/commands/pw-archivetodos.md) | Archive old completed TODOs into year/month subfolders | 1,148 |
 | [pw-auditdocs.md](claude/commands/pw-auditdocs.md) | Audit Claude Code documentation and configuration | 4,242 |
 | [pw-checkrules.md](claude/commands/pw-checkrules.md) | Verify changes against critical rules | 236 |
 | [pw-cleanup-memory.md](claude/commands/pw-cleanup-memory.md) | Review this machine's Claude Code auto-memory against ai/ - delete what is redundant, move what is team-wide into the docs, interview the developer on conflicts | 999 |

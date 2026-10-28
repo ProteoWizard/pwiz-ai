@@ -3,7 +3,7 @@
 How a Claude session drafts Japanese and Chinese (Simplified) translations of ProteoWizard
 `.resx` text so that it can go straight to the native-speaker expert reviewers, without a
 translation company. The process was established on Osprey's first translation (PR #4752,
-`ai/todos/completed/TODO-20260928_osprey_resx_translation.md`), and the steps below are written
+`ai/todos/completed/2026/09/TODO-20260928_osprey_resx_translation.md`), and the steps below are written
 to apply to any ProteoWizard project.
 
 **Companion guide**: `ai/docs/translation-guide.md` covers the ResourcesOrganizer pipeline
@@ -332,9 +332,9 @@ repo is public.
 - `pwiz_tools/Shared/Translation/`: glossary and style guide
 - `pwiz_tools/Osprey/docs/21-user-facing-text.md` ("Resources"): rules for writing
   English that is safe to translate, with Osprey's guards
-- `ai/todos/completed/TODO-20260926_osprey_resx.md`: moving a project's text to RESX
+- `ai/todos/completed/2026/09/TODO-20260926_osprey_resx.md`: moving a project's text to RESX
   (scope, culture split, enforcement), following Skyline
-- `ai/todos/completed/TODO-20260928_osprey_resx_translation.md`: the full record of the first round
-- `ai/todos/completed/TODO-20260929_translation_tooling_zh_hans.md`: the zh-Hans tooling migration
+- `ai/todos/completed/2026/09/TODO-20260928_osprey_resx_translation.md`: the full record of the first round
+- `ai/todos/completed/2026/09/TODO-20260929_translation_tooling_zh_hans.md`: the zh-Hans tooling migration
 - `ai/todos/backlog/TODO-pwiz_translation_expansion.md`: tooling for all of pwiz, target projects,
   and where the reviewer-acceptance result gets recorded

@@ -2144,7 +2144,7 @@ Overall Assessment: 1 critical gap found requiring attention.
 7. Assess risk and add tests if needed
 8. Document coverage in PR description
 
-**Example:** See `todos/completed/TODO-20251023_panorama_webclient_replacement.md` for a real-world example of this methodology validating a complete WebClient → HttpClientWithProgress migration.
+**Example:** See `todos/completed/2025/10/TODO-20251023_panorama_webclient_replacement.md` for a real-world example of this methodology validating a complete WebClient → HttpClientWithProgress migration.
 
 #### Use Case 2: Validating New Feature
 
@@ -2293,7 +2293,7 @@ See: TestResults/PanoramaClientCoverage.json
 - **`ai/WORKFLOW.md`** - Build, test, and commit workflows (includes AI agent guidelines)
 - **`ai/STYLEGUIDE.md`** - Coding conventions and style guidelines
 - **`ai/MEMORY.md`** - DRY principles in testing, translation-proof testing, common patterns
-- **`ai/todos/completed/TODO-20251010_webclient_replacement.md`** - Detailed WebClient → HttpClient migration patterns
+- **`ai/todos/completed/2025/10/TODO-20251010_webclient_replacement.md`** - Detailed WebClient → HttpClient migration patterns
 
 ### Source Code
 - **`AssertEx.cs`** (`pwiz_tools/Skyline/TestUtil/`) - Full assertion library source

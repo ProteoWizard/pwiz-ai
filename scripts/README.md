@@ -33,7 +33,6 @@ This directory contains PowerShell scripts for maintaining code quality, automat
 
 | Script | Description |
 |--------|-------------|
-| `Archive-CompletedTodos.ps1` | Archive old completed TODOs into year/month subfolders |
 | `Clean-TmpFiles.ps1` | Clean stale transient files from `ai/.tmp/` |
 | `Move-DailyReports.ps1` | Move daily report files into per-date folders under `ai/.tmp/daily/` |
 | `Invoke-DailyReport.ps1` | Run Claude Code daily report in non-interactive mode |

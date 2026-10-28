@@ -685,7 +685,7 @@ a correctness proof. Two decisive precedents:
   (30674 = 30674, stage-7 + blib @ 1e-9) yet **degraded** entrapment
   FDP on Stellar library-decoy from 0.82% to 1.46% (above the line).
   It was held back rather than shipped to match Rust -- see
-  the gendecoy salvage record (ai/todos/completed/TODO-20260725_osprey_gendecoy_salvage_or_deadend.md) and
+  the gendecoy salvage record (ai/todos/completed/2026/07/TODO-20260725_osprey_gendecoy_salvage_or_deadend.md) and
   "Treating both patched sides agree as the fix is a no-op" in debugging-principles.md. Rust HEAD was simply anti-conservative
   there too.
 - **The pass-2 protein-FDR investigation:** the oracle showed the
@@ -815,7 +815,7 @@ things the retrain does are visible on a plain run with NO `--protein-fdr`:
    2026-07-09 on the #4395 binary, no `--protein-fdr`). This is now the DEFAULT,
    with no committed off-switch; the fix + a kill-switch
    (`OSPREY_PASS2_QVALUE`) are tracked in
-   ai/todos/completed/TODO-20260710_osprey_pass2_recalibration_fix.md. Compare the two via the report's
+   ai/todos/completed/2026/07/TODO-20260710_osprey_pass2_recalibration_fix.md. Compare the two via the report's
    Pass 1 vs Pass 2 selector within a single run -- no need to toggle
    `--protein-fdr`. (Its interaction with #4390's best-of-runs q-clamp, formerly
    ~5% ID drop, now happens by default too; re-measure its post-#4395 ID effect.)
@@ -851,7 +851,7 @@ science explanation, not just a green build:
   Historically measured as 0.92% (2nd pass off) -> 1.57% (on); carrying
   the full 1st-pass score->q null to Stage 7 and transferring q through it
   (TRIC-style) restores 0.86%. Fix + kill-switch:
-  ai/todos/completed/TODO-20260710_osprey_pass2_recalibration_fix.md.
+  ai/todos/completed/2026/07/TODO-20260710_osprey_pass2_recalibration_fix.md.
 
 ### Caveats
 
@@ -1896,7 +1896,7 @@ Skyline (a document, a reported q-value) is not covered by this latitude.
 - `ai/todos/active/TODO-20260423_osprey_sharp.md` -- Osprey
   Phase 4 sprint (Stages 6-8 cross-impl parity walk). Bisection
   methodology + Stage 5 resolution documented in
-  `ai/todos/completed/TODO-20260422_ospreysharp_stage5_diagnostics.md`.
+  `ai/todos/completed/2026/04/TODO-20260422_ospreysharp_stage5_diagnostics.md`.
 - `ai/scripts/Osprey/` -- cross-impl test tooling (C# side):
   `Test-Features.ps1` (Stages 1-4 parity), `Compare-Diagnostic.ps1`
   (row-wise dump diff), `Compare-Percolator.ps1` (hash-joined

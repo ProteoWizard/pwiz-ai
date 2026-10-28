@@ -115,7 +115,7 @@ The file system IS the context. That's the key insight for LLM-assisted developm
 
 **Examples**:
 - `ai/todos/active/TODO-20251227_filestree_deadlock.md` - Active branch created 2025-12-27
-- `ai/todos/completed/TODO-20251010_webclient_replacement.md` - Recently merged work
+- `ai/todos/completed/2025/10/TODO-20251010_webclient_replacement.md` - Recently merged work
 
 **Auxiliary files** (non-markdown files associated with a TODO) must:
 1. Use the TODO filename as a prefix (e.g., `TODO-20251227_feature-coverage.txt`)
@@ -141,7 +141,7 @@ use). When it gets there, split it by phase rather than trimming history:
    and decisions stay in the phase file; link to them, do not copy them.
 
 The date prefix stays the sprint's start date, so the files sort together and
-`/pw-archivetodos` files every phase under the same month. Commit messages and PR
+`/pw-complete` files every phase under the same month. Commit messages and PR
 descriptions keep referencing `TODO-YYYYMMDD_<slug>.md` - the active file. That file is
 the head of a linked list: a reader starting from any commit message follows the name to
 the active TODO, and its Phase History back to the phase that holds what happened during

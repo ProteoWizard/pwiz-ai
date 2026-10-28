@@ -1,7 +1,7 @@
 # Translation scripts (ja / zh-Hans)
 
 Scripts for translating ProteoWizard `.resx` text into Japanese and Chinese. Most come from the
-first Claude-drafted round (Osprey, PR #4752, `todos/completed/TODO-20260928_osprey_resx_translation.md`).
+first Claude-drafted round (Osprey, PR #4752, `todos/completed/2026/09/TODO-20260928_osprey_resx_translation.md`).
 They were written during that session and made into parameterized scripts afterwards. Read
 `ai/docs/translation-drafting-guide.md` for the process and `ai/docs/translation-guide.md` for the
 ResourcesOrganizer pipeline. This README only says which script does which step.

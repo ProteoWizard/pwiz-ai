@@ -203,7 +203,7 @@ if ($unexpectedBoms.Count -gt 0) {
     Write-Host "  3. If any files MUST have BOM, add them to the approved list in this script" -ForegroundColor Yellow
     Write-Host "     (and remove them from $fileListPath if needed)" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "For more information, see ai/scripts/README.md or ai/todos/completed/TODO-20251019_utf8_no_bom.md" -ForegroundColor Yellow
+    Write-Host "For more information, see ai/scripts/README.md or ai/todos/completed/2025/10/TODO-20251019_utf8_no_bom.md" -ForegroundColor Yellow
     Write-Host ""
     exit 1
 }

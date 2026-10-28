@@ -270,7 +270,7 @@ were filed.>
 
 Only if the TODO is still in `todos/active/`. The file goes straight to its final home,
 `todos/completed/YYYY/MM/` where `YYYY` and `MM` come from the `TODO-YYYYMMDD_` prefix
-of the file name (the same folder `/pw-archivetodos` would file it under later), so the
+of the file name (a completed TODO is never left loose under `completed/`), so the
 PR link rewritten below never breaks again:
 
 ```bash

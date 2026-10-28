@@ -162,7 +162,7 @@ and read the results with `../SEA-AD/tools/`.
 ## The recommended configuration
 
 The learned pick with `-Pass2Mode protein-compact` is the pairing Mike MacCoss recommends,
-recorded in `ai/todos/completed/TODO-20260715_osprey_pass2_transfer_compete.md`. Both are now
+recorded in `ai/todos/completed/2026/07/TODO-20260715_osprey_pass2_transfer_compete.md`. Both are now
 the DEFAULT here: Osprey's own pick default is the learned model, and this runner no longer
 overrides it (the former `-PickLda` switch is gone; `-PickProduct` selects the legacy arm).
 
