@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20261027_osprey_test_subsetting` (from `master` at b68aa96d5f, after #4917
   and #4925 merged), checkout `C:\proj\pwiz`
 - **Created**: 2026-10-27
-- **Status**: In progress
+- **Status**: PR open
+- **PR**: [#4931](https://github.com/ProteoWizard/pwiz/pull/4931); Rust: maccoss/osprey#74
 - **Module**: `skyline` (the tests and their data; `osprey` for `Osprey.Test` and the subset scripts)
 - **Objective**: Cut the cost of Skyline-Osprey integration testing to what the test data warrants: the
   functional tests tune on ONE run at 1% FDR without workarounds, and `OspreySearchPerfTest` runs in
