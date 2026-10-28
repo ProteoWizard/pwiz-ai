@@ -369,3 +369,17 @@ work branch after a `-Target TestPerf` build, so every test the TODO names has r
   sections; no fine-tune section, since no tuning runs) and of the existing-library run (search alone,
   the flag kept from the first run). The Build Library demo (`SKYLINE_BUILD_LIBRARY_DEMO=1`) shows the
   fine-tune case with every section. Both stepped through by Brendan on 2026-10-28.
+
+### 2026-10-28 - Demo pauses dropped, second review, PR
+
+- Brendan: no demo pauses or env var in the code. The Osprey Search test's pauses (one commit) were
+  dropped; the pause added to the Build Library test's grid step removed. (That test's own
+  `SKYLINE_BUILD_LIBRARY_DEMO` mechanism came with #4925 and is not in this branch's diff.)
+- `/code-review medium` on the whole branch (second cycle): 9 findings, 7 fixed in the next commit
+  (a failed `OspreyProperties.Load` re-ran Osprey on every Next/preset; `--ms-instrument` as a
+  Choice under the token builder; the wizard's scopes rebuilt by hand instead of `GetSearchConfig()`;
+  `BuildPredictLibraryCommandLine`'s unused parameter; the plain grid's dead tooltip/group code and
+  the model helpers only it used; case-sensitive list validation; Edit list... not re-applying the
+  preset; a doubled doc comment), 2 dropped (the refusal message already says "or are not valid for
+  the installed Osprey"; the parser does not reject unlisted list values under Carafe's grammar,
+  and the instrument list is now documentation-only on the command line anyway).
