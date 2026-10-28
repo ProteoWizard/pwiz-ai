@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260927_vendorpins_build_race`
 - **Base**: `master` (the port branch merged into master; master merged in 2026-10-26)
 - **Created**: 2026-09-27
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `pwiz`
-- **PR**: [#4724](https://github.com/ProteoWizard/pwiz/pull/4724) (retarget base to master)
+- **PR**: [#4724](https://github.com/ProteoWizard/pwiz/pull/4724) (merged 2026-10-27)
 - **Worktree**: `D:\Dev\pwiz-vendorpins` (Mike); adopted 2026-10-26 by Matt in `C:\dev\pwiz-smallmol`
 
 ## Objective
@@ -135,3 +135,15 @@ Dropped:
 
 After fixes: no-change msconvert-sharp build 3.2 s with all 8 extract targets, the generator and
 BuildMobilionShim skipped; BiblioSpec no-change skips Mascot.
+
+### 2026-10-27 - Merged
+
+PR #4724 merged as commit f4efbd4f21, all checks green (Core Windows/Linux, no-vendor, Osprey
+Windows .NET, Skyline, Perf/Tutorial, Wine container). Shipped: one VendorPinsGenerator run per build
+(MSBuild-task call with fixed global properties, skipped in design-time builds); the 9
+Extract*Assemblies targets skip via per-target stamps, with the key extracted files kept in Inputs
+and per-OS stamps for Bruker and Waters; RunVendorPinsGenerator skips unless the archives, pins JSON,
+generator, generated file or HEAD commit changed. No-change msconvert-sharp build 6.8 s -> 3.2 s.
+The Osprey one-configuration follow-up already shipped separately (#4725). Not done: relinking
+MobilionShim when a new SDK's MBI_SDK.lib predates the built shim (dropped review finding). No
+issues filed.
