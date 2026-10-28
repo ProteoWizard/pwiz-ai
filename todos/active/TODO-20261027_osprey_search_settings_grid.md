@@ -305,3 +305,15 @@ Presets (`OspreySearchSettingsControl.cs`), all low severity, for a later commit
 `OspreySearchPerfTest` (full Stellar data through the tuning route; 1522 s, 0 failures) passed on the
 work branch after a `-Target TestPerf` build, so every test the TODO names has run green. Session
 21:02-23:27 PDT; the handoff is `ai/.tmp/handoff-20261028_osprey_settings_grid.md`.
+
+### 2026-10-28 morning - Presets taken; --culture shown
+
+- Brendan: take the presets, mirroring DIA-NN. `nightlywork/osprey_settings_presets` fast-forwarded into
+  the work branch (b2049ae4a1) and deleted. The four polish notes from its review stand.
+- `--culture` is now in Osprey's help (`_culture` usage text; pages regenerated), as Skyline's was
+  unhidden for a user in a translated locale who wanted English output. Osprey's numbers are read in
+  the invariant culture whatever the language, which the text says.
+- How Skyline reads the properties: one language per call. `OspreyProperties.Load(exe, culture)` runs
+  `Osprey --help properties --culture <Skyline's UI culture>` and caches per (exe, culture, file time);
+  the JSON records the culture it was written in. Osprey does not emit all languages at once: the host
+  asks in its own language, so a translation added to Osprey's resx reaches the grid with no host change.
