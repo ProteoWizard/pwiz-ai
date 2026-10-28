@@ -5,11 +5,11 @@
 - **Checkout**: `C:\dev\pwiz-net8`
 - **Base**: `master`
 - **Created**: 2026-10-26
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4916](https://github.com/ProteoWizard/pwiz/issues/4916)
 - **Module**: `pwiz`
 - **Other labels**: `performance`
-- **PR**: [#4921](https://github.com/ProteoWizard/pwiz/pull/4921)
+- **PR**: [#4921](https://github.com/ProteoWizard/pwiz/pull/4921) (merged 2026-10-28)
 
 ## Objective
 
@@ -111,3 +111,14 @@ Analysis.Tests 206/206.
 
 Out of scope: auditing the other vendor readers' DetailLevel handling - none shows the cost (Thermo
 GetMsLevel is 0.02 ms/spectrum per the issue).
+
+### 2026-10-28 - Merged
+
+PR #4921 merged as commit 406fd374c0. Shipped: SpectrumList_Sciex honors DetailLevel with the cpp
+SpectrumList_ABI instant-metadata gate; WiffSpectrum and Wiff2Spectrum read peaks on first use (cpp
+SpectrumImpl / Spectrum2Impl); SpectrumList_PeakPicker and IVendorCentroidingSpectrumList carry the
+detail level to the vendor list; regression test Sciex_InstantMetadata_ReadsNoPeaks. On
+Hoofnagle_01_IDA.wiff the Skyline-config open went 8.7-10.1 s to 0.33-0.68 s and instant-metadata
+reads became effectively free; AbIda perf test's metadata overhead fell to the cpp level. Deferred:
+DetailLevel pass-through in SpectrumListWrapper (demux wrapper; pre-existing, narrow) and the other
+vendors' DetailLevel audit. Note: the squash subject landed without the `pwiz: ` module prefix.
