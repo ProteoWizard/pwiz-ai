@@ -1911,6 +1911,29 @@ Skyline (a document, a reported q-value) is not covered by this latitude.
 - `pwiz_tools/Osprey/Osprey.Scoring/XcorrScratchPool.cs`
   -- per-window buffer reuse pattern Batch 2a will mirror
 
+## Skyline's tests run the tree's own Osprey - pinning and downloading are release work
+
+Skyline's Osprey-dependent tests (`OspreyTestUtil.EnsureOsprey`: the Osprey Search wizard,
+Build Library's Carafe source) run the **sibling build** in the same checkout -
+`pwiz_tools/Osprey/Osprey/bin/x64/{Debug,Release}/net10.0/Osprey.exe` - on a developer's
+machine and on TeamCity alike. `pwiz_tools/Skyline/tcbuild.bat` builds `Osprey.csproj`
+(Release, x64) before the Skyline build for exactly that reason (PR #4925, 2026-10-27). The
+same rule as BlibBuild.exe and BlibFilter.exe, which Skyline also runs as external processes
+from the tree's own build even though an installed Skyline ships them.
+
+Why not the downloaded package, which is what a user gets: a change to Osprey and Skyline
+together can only be tested against the Osprey built from the same change. The alternatives
+were tried and failed on the first attempt (the TODO of PR #4925 has the record): a lookup of
+the PR's own TeamCity Osprey build loses the race with the Skyline build's tests, and
+Osprey's package version is the commit's day of year, so same-day builds on any branch share
+a package name and the agents' download cache serves the wrong one.
+
+**Pinning and downloading belong to the release process and release testing** (release-guide.md,
+Phase 1 step 6: pin the build, set `OSPREY_VERSION` / `OSPREY_BUILD_ID`), not to the per-commit
+tests. Brendan, 2026-10-27: "Let pinning and downloading be part of the release process and
+release testing process." The download path itself is still exercised by `OspreySearchTest`'s
+install-gate step, against the last successful master build.
+
 ## TeamCity Perf/Regression gate (manual - ask, then trigger)
 
 The **Osprey Windows .NET Perf/Regression Tests** config
