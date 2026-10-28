@@ -5,8 +5,8 @@
 - **Checkout**: `C:\Dev\mz5` (moved from `C:\Dev\master_clean` 2026-10-12)
 - **Module**: `pwiz`
 - **Base**: `origin/master`
-- **Status**: In progress. C# port committed locally, not pushed; MsData.Tests (89) and
-  MsConvert.Tests (18) green. Next: `/code-review`, push, PR.
+- **Status**: In progress. C# port committed locally (4 commits), not pushed; MsData.Tests (92)
+  and MsConvert.Tests (18) green. Follow-ups settled 2026-10-28. Next: `/code-review`, push, PR.
 - **GitHub Issue**: (none yet)
 - **PR**: (none)
 - **Cherry-pick to release**: undecided
@@ -278,13 +278,32 @@ writer reads `Broadcast`'s status, and cancellation arrives as `OperationCancele
 New test `..._ContinueOnError_StillReportProgressForTheSkippedSpectrum` (red for mzML first, then
 MSn). MsData.Tests 92/92, MsConvert.Tests 18/18.
 
-**Follow-ups, not in this change**
+**Follow-ups** (all settled 2026-10-28)
 
-- mzML chromatogram loop has the same index gap (`MzmlWriter.cs` WriteChromatogramInner writes
-  `chrom.Index` verbatim after a skip). Same fix shape; needs an unreadable-chromatogram fixture.
-- The eager mzXML reader never sets `Spectrum.Index` (always -1, `MzxmlReader.cs` ReadOneScan).
-  Unrelated to skipping; found because the index assertion first ran over mzXML.
-- `<spectrumList count>` still states the input count after a skip (same as cpp `IO.cpp:2975`).
+- ~~mzML chromatogram loop has the same index gap~~ - fixed in `ad1d298026`, with an
+  `UnreadableChromatogramList` fixture.
+- ~~The eager mzXML reader never sets `Spectrum.Index`~~ - fixed in `d51c6e2924`, see below.
+- `<spectrumList count>` still states the input count after a skip - **won't fix**, see below.
+
+### 2026-10-28 - follow-ups settled
+
+**Eager mzXML index** (`d51c6e2924`). `MzxmlReader.ReadInternal` added each `ReadOneScan` result
+without numbering it, so every spectrum read eagerly had `Index == -1`, while the lazy
+`SpectrumList_Mzxml` sets `spec.Index = index`. Now numbered by position. Test first: extended
+`MzxmlRoundTripTests.Lazy_RoundTripUsesSpectrumListMzxml_AndServesSpectraOnDemand` (already the
+two-spectrum test) to read the same output eagerly and assert `Index` on both the spectrum and its
+identity, plus the lazy `Index`. Red (`-1` vs `0`), then green. The `WriterIterationListenerTests`
+index check stays mzML-only: mzXML stores no index, so the read-back numbering proves nothing about
+the writer. Other eager callers checked: the vendor harness mzXML leg (`DescribeSpectraDataOnly`,
+data-only) and `DiaUmpireParityTests` (2/2 green). MsData.Tests 92/92, MsConvert.Tests 18/18.
+
+**`<spectrumList count>` after a skip - won't fix.** The count is written before the loop, from
+`list.Count`, so a correct value needs either a second pass (re-reading every spectrum through the
+vendor SDK just to count failures) or patching the attribute after the fact, which the output does
+not allow: it may be gzip or mzMLb, and indexed mzML hashes the bytes as they stream into the
+`<fileChecksum>`. cpp writes the input count too (`IO.cpp:2975`). The cost of leaving it is small:
+our `MzmlReader` reads `count` only in lazy mode, into `LazySpectrumCount`, which nothing consumes -
+the lazy list is sized from the `<indexList>` footer, which lists only the spectra written.
 
 ## Notes
 
