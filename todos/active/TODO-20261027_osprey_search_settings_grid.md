@@ -339,3 +339,25 @@ work branch after a `-Target TestPerf` build, so every test the TODO names has r
 - Demo: `BuildLibraryCarafeWizardTest` with `SKYLINE_BUILD_LIBRARY_DEMO=1` now pauses with the dialog
   open (a FormEx, unlike the old grid's ShowWithTimeout); seen over the MCP and shown to Brendan with
   `-ShowUI`.
+
+### 2026-10-28 morning - Pruned and reworded, from Brendan's look at the grid
+
+- Removed from the grid (Osprey declarations, no `Scope`; pinned in `TestPropertiesExport`): decoy
+  pairing manifest, random seed (Carafe's, so its `DeclareProperties` line and label went), write
+  training export (the fine-tune writes it itself), claimant q-value and training export XICs
+  (developer knobs), diagnostic dump files (Rust comparison), performance statistics (script lines).
+  Training export maximum q-value stays, scoped `tuning` (the run q a precursor must reach to be
+  trained on; Osprey refuses it on a plain search). Found on the way: a hosted CarafeSharp argument
+  without a label still counted as a property (Osprey's label fallback applied to it); fixed.
+- Help pane: the usage text only (`OspreyProperty.HelpText`); the `--argument` line confused a user
+  who need not know a command line runs under the page. `Tooltip` keeps it for a plain grid.
+- Instrument: now a list. AlphaPeptDeep's pretrained MS2 model knows five instrument groups (QE,
+  Lumos, timsTOF, SciexTOF, ThermoTOF) and peptdeep maps names to them (Eclipse, Astral, Stellar ->
+  Lumos; Exploris -> QE); that table moved from `CarafeSharp.Models.PeptdeepConstants` to
+  `CarafeSharp.Core.PeptdeepInstruments` so the declaration in `CarafeSharp.Proteome` can list the
+  names. Activation (beam-CID: HCD and Sciex/Bruker CID; reCID: ion-trap resonance CID) and MS2
+  analyzer (Orbitrap, LIT, ToF) say what the values mean; the "Not in Java Carafe" note left these
+  four texts (also rt-select, pretrained) - it is for CLI users, and the usage text is the grid's help.
+- CarafeSharp's own `CommandArgsTest` (not in the Osprey gate; run with
+  `ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests`) had been red since the labels landed:
+  its orphan-key check did not know `_property` keys. Taught it, as Osprey's was.
