@@ -114,7 +114,7 @@ timestamp. The form pages: Search Settings (resolution, tolerance, three FDRs, t
       unit tests in `OspreyHelpersTest` (or the existing command-line test)
 - [x] The button on `OspreySearchSettingsControl` and the grid, with tooltip support in
       `KeyValueGridDlg`; the Build Library pretrained-route entry (design 3)
-- [ ] Persistence (design 4: last-used done, named presets open) and audit log (design 5: open)
+- [x] Persistence (design 4: last-used on the branch, named presets on nightlywork/osprey_settings_presets) and audit log (design 5: commit 4)
 - [x] Functional tests: open the grid from both wizards, set a value, assert the command line
       carries it, a refused value, a form-bound name refused, persistence round trip, fr/ja
 - [x] Docs: the wizard's help text (tooltips), the TODO, `ai/docs/osprey-development-guide.md` if the
@@ -268,3 +268,22 @@ take it: `git merge nightlywork/osprey_settings_presets` on the work branch (a f
 
 Open for the morning: whether to take the presets branch; design 5 (audit log); the ja/zh-Hans labels
 (English fallback); the Osprey pin before a release; opening the PR (not pushed overnight).
+
+### 2026-10-27 night - Design 5 done (22:50)
+
+Commit 4 `b9b0c8e94d`: the precedent search found that no DDA engine logs its AdditionalSettings, but the
+DIA-Umpire converter's non-default `Setting`s are `[Track]`ed inside the import wizard's
+`imported_peptide_search` entry (`ConverterSettingsControl.DdaConverterSettings`). Osprey follows that:
+`OspreySearchSettings` (resolution, tolerance + unit, three FDRs, threads, the non-default additional
+settings in the run's scopes), built from the config the search ran with, is handed to
+`ImportPeptideSearchDlg` by the Osprey wizard and `[TrackChildren]`ed in `ImportPeptideSearchSettings`
+(null for every other route). The entry reads "Import Peptide Search > Osprey search settings > Osprey
+non-default settings : contains nce = 30 / verbose = True"; 9 `PropertyNames` entries added (English;
+ja/zh trail as the file's practice). `OspreySearchTest` checks the entry for both runs (the
+library-scope `nce` is logged only with the predicted library); `TestAuditLogLocalization`,
+`DdaSearchTest` (10 tests), `BuildLibraryCarafeWizardTest`, `CodeInspection` green.
+
+Every designed item is now built except the morning decisions: take the presets side branch
+(`nightlywork/osprey_settings_presets`, based on commit 3, so merging it is a merge, not a fast-forward;
+both touch `OspreySearchTest.cs` in different places), the Osprey pin before a release, the ja/zh-Hans
+labels, and opening the PR.
