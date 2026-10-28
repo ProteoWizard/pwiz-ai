@@ -361,3 +361,11 @@ work branch after a `-Target TestPerf` build, so every test the TODO names has r
 - CarafeSharp's own `CommandArgsTest` (not in the Osprey gate; run with
   `ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests`) had been red since the labels landed:
   its orphan-key check did not know `_property` keys. Taught it, as Osprey's was.
+
+### 2026-10-28 morning - Demos
+
+- `OspreySearchTest` gained demo pauses (`SKYLINE_OSPREY_SEARCH_DEMO=1`, run with `-ShowUI
+  -AiConnector`): every page, the dialog of the predicted-library run (search, digest and prediction
+  sections; no fine-tune section, since no tuning runs) and of the existing-library run (search alone,
+  the flag kept from the first run). The Build Library demo (`SKYLINE_BUILD_LIBRARY_DEMO=1`) shows the
+  fine-tune case with every section. Both stepped through by Brendan on 2026-10-28.
