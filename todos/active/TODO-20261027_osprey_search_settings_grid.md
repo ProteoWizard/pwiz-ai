@@ -287,3 +287,15 @@ Every designed item is now built except the morning decisions: take the presets 
 (`nightlywork/osprey_settings_presets`, based on commit 3, so merging it is a merge, not a fast-forward;
 both touch `OspreySearchTest.cs` in different places), the Osprey pin before a release, the ja/zh-Hans
 labels, and opening the PR.
+
+## Findings-only review of commit 4 + the presets commit (agent, 23:05)
+Verdict: merge the presets branch as is; nothing blocking. The audit-log commit: no findings.
+Presets (`OspreySearchSettingsControl.cs`), all low severity, for a later commit if taken:
+1. ~285-293: after Edit list... removes/replaces the chosen preset, the combo re-selects index 0 while
+   the page still holds the old values (`SettingsPresetName` then misreports).
+2. ~259-268: `ApplyPreset` sets the page's controls before `TryGetAdditionalSettings`; when Osprey
+   cannot be asked, the page is half-applied and the dialog repeats on each selection.
+3. ~261: a preset's FragmentTolerance outside the NumericUpDown's 0.01-1000 throws in the combo's
+   SelectedIndexChanged (hand-edited/imported .skyosp only).
+4. ~227: `SaveSettingsPreset` calls `Settings.Default.SaveWithoutExceptions()` mid-wizard (DDA/DIA-NN
+   presets persist at exit) - a design choice to confirm, not a defect.
