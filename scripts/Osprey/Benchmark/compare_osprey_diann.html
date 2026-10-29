@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<script>__PLOTLY__</script>
+<style>
+:root {
+  --bg: #ffffff; --panel: #f6f8fb; --ink: #18202e; --muted: #5a6475; --rule: #dde3ec;
+  --both: #6b7a90; --osprey: #2b8a6c; --diann: #c4504d; --same: #3a6fb0; --diff: #e08a3c; --one: #9aa3b0;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1b212b; --ink: #e6eaf0; --muted: #9aa5b5; --rule: #2d3644;
+    --both: #8b9ab0; --osprey: #4cc29a; --diann: #e9726e; --same: #6c9ee0; --diff: #f0a45c; --one: #6d7684;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1b212b; --ink: #e6eaf0; --muted: #9aa5b5; --rule: #2d3644;
+  --both: #8b9ab0; --osprey: #4cc29a; --diann: #e9726e; --same: #6c9ee0; --diff: #f0a45c; --one: #6d7684;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 17px; margin: 32px 0 6px; border-top: 1px solid var(--rule); padding-top: 18px; }
+p.note, .src { color: var(--muted); margin: 4px 0 10px; max-width: 900px; }
+.src { font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 14px 0; }
+.card { background: var(--panel); border-radius: 8px; padding: 10px 12px; }
+.card b { display: block; font-size: 22px; }
+.card span { color: var(--muted); font-size: 12px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+.plot { width: 100%; height: 380px; }
+.tabs button, .controls select, .controls input {
+  font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 5px 10px;
+}
+.tabs button.on { border-color: var(--ink); font-weight: 600; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
+.tablewrap { overflow: auto; max-height: 640px; border: 1px solid var(--rule); border-radius: 6px; }
+table { border-collapse: collapse; font-size: 12px; width: 100%; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; text-align: right; }
+th { position: sticky; top: 0; background: var(--panel); cursor: pointer; user-select: none; }
+td.t, th.t { text-align: left; }
+tr.diff td.pk { color: var(--diff); font-weight: 600; }
+tr.same td.pk { color: var(--same); }
+</style>
+</head>
+<body>
+<main>
+<h1 id="title"></h1>
+<div class="src" id="src"></div>
+<p class="note">An ID is run q &le; 1% and experiment q &le; 1% in that tool (DIA-NN: Q.Value and Global.Q.Value).
+Precursors match on modified sequence (UniMod) and charge. Peaks match by Skyline's Compare Peak Picking rules:
+either apex inside the other's boundaries, or overlap of at least half the mean width.</p>
+<div class="cards" id="cards"></div>
+
+<h2>IDs per run</h2>
+<div id="perrun" class="plot" style="height:300px"></div>
+
+<h2>Where each tool put the other's IDs</h2>
+<p class="note">For precursors only one tool identifies, the q-value the other tool gave its own best peak.
+"Dropped at compaction": Osprey scored it in the first pass but it did not reach the second.
+"Not reported": Osprey did not score it, or DIA-NN's q was above 50%.</p>
+<div class="grid2"><div id="where-d" class="plot"></div><div id="where-o" class="plot"></div></div>
+
+<h2>Confidence in one tool vs the other</h2>
+<p class="note">Run-level &minus;log10 q for every precursor either tool identifies (log color scale). The strip
+below 0 holds precursors the tool did not report. The off-diagonal corners are the disagreements tabled below.</p>
+<div id="heat" class="plot" style="height:520px"></div>
+
+<h2>Retention time</h2>
+<div class="grid2"><div id="rtbins" class="plot"></div><div id="rtdis" class="plot"></div></div>
+<h2>Retention time agreement where both tools report a peak</h2>
+<p class="note" id="fitnote"></p>
+<div class="grid2"><div id="rtscatter" class="plot" style="height:420px"></div><div id="rtresid" class="plot" style="height:420px"></div></div>
+<div class="grid2"><div id="rtdelta" class="plot" style="height:420px"></div><div id="rtresidwide" class="plot" style="height:420px"></div></div>
+
+<h2>Disagreements</h2>
+<p class="note" id="disnote"></p>
+<div class="tabs controls" id="tabs"></div>
+<div class="controls">
+  <input id="filter" placeholder="Filter: sequence, protein or run" size="34">
+  <select id="peakfilter"><option value="">All peaks</option><option>same peak</option><option>different peak</option><option>one tool only</option></select>
+  <span id="count" class="note"></span>
+</div>
+<div class="tablewrap"><table id="table"><thead></thead><tbody></tbody></table></div>
+</main>
+<script>
+const D = __DATA__;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = { both: css('--both'), osprey: css('--osprey'), diann: css('--diann'), same: css('--same'), diff: css('--diff'), one: css('--one') };
+const STATUS_COLOR = { 'both': C.both, 'Osprey only': C.osprey, 'DIA-NN only': C.diann };
+const PEAK_COLOR = { 'same peak': C.same, 'different peak': C.diff, 'one tool only': C.one };
+const layout = (extra) => Object.assign({
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: css('--ink'), size: 12 }, margin: { l: 60, r: 20, t: 36, b: 50 },
+  legend: { orientation: 'h', y: -0.2 },
+  xaxis: { gridcolor: css('--rule'), zerolinecolor: css('--rule') },
+  yaxis: { gridcolor: css('--rule'), zerolinecolor: css('--rule') },
+}, extra);
+const cfg = { responsive: true, displaylogo: false };
+const fmt = n => n.toLocaleString();
+
+document.getElementById('title').textContent = D.title;
+document.getElementById('src').textContent = D.source;
+
+const e = D.experiment;
+const card = (v, l) => `<div class="card"><b>${fmt(v)}</b><span>${l}</span></div>`;
+const sum = a => a.reduce((x, y) => x + y, 0);
+document.getElementById('cards').innerHTML =
+  card(e.osprey, 'Osprey precursors (any run)') + card(e.diann, 'DIA-NN precursors (any run)') +
+  card(e.union, 'Union') +
+  card(D.disagree_counts.diann, `precursor-run pairs (${D.runs.length} runs): DIA-NN q ≤ ${D.confident}, Osprey > ${D.weak} or missing`) +
+  card(D.disagree_counts.osprey, `precursor-run pairs (${D.runs.length} runs): Osprey q ≤ ${D.confident}, DIA-NN > ${D.weak} or missing`);
+
+Plotly.newPlot('perrun', ['both', 'Osprey only', 'DIA-NN only'].map(s => ({
+  type: 'bar', name: s, x: D.runs, y: D.per_run[s], marker: { color: STATUS_COLOR[s] }
+})), layout({ barmode: 'stack', yaxis: { title: { text: 'Precursors' }, gridcolor: css('--rule') } }), cfg);
+
+const ORDER = ['q <= 0.1%', '0.1-1%', '1-5%', '1-5% (dropped at compaction)', '5-20%', '5-20% (dropped at compaction)',
+  '> 20%', '> 20% (dropped at compaction)', 'q <= 0.1% (dropped at compaction)', '0.1-1% (dropped at compaction)', 'not reported'];
+function whereBar(id, obj, title, color) {
+  const keys = ORDER.filter(k => k in obj).concat(Object.keys(obj).filter(k => !ORDER.includes(k)));
+  const total = sum(keys.map(k => obj[k]));
+  Plotly.newPlot(id, [{ type: 'bar', orientation: 'h', y: keys, x: keys.map(k => 100 * obj[k] / total), marker: { color },
+    text: keys.map(k => `${(100 * obj[k] / total).toFixed(1)}% (${fmt(obj[k])})`), textposition: 'auto',
+    hovertemplate: '%{y}: %{text}<extra></extra>' }],
+    layout({ title: { text: `${title}<br><sub>${fmt(total)} precursor-run pairs over ${D.runs.length} runs, about ${fmt(Math.round(total / D.runs.length))} per run</sub>` },
+      margin: { l: 230, r: 20, t: 60, b: 40 }, xaxis: { title: { text: '% of pairs' }, gridcolor: css('--rule') },
+      yaxis: { autorange: 'reversed' } }), cfg);
+}
+whereBar('where-d', D.diann_only_in_osprey, 'DIA-NN-only IDs: Osprey run q', C.diann);
+whereBar('where-o', D.osprey_only_in_diann, 'Osprey-only IDs: DIA-NN run q', C.osprey);
+
+const mid = D.heat.edges.slice(0, -1).map((v, i) => (v + D.heat.edges[i + 1]) / 2);
+Plotly.newPlot('heat', [{ type: 'heatmap', x: mid, y: mid, z: D.heat.z, customdata: D.heat.n,
+  colorscale: 'Viridis', hovertemplate: 'Osprey %{x:.2f}<br>DIA-NN %{y:.2f}<br>n=%{customdata}<extra></extra>',
+  colorbar: { title: { text: 'log10 n' } } }],
+  layout({ xaxis: { title: { text: 'Osprey −log10 run q' }, range: [-0.8, 6.2], gridcolor: css('--rule') }, yaxis: { title: { text: 'DIA-NN −log10 run q' }, range: [-0.8, 6.2], gridcolor: css('--rule') },
+    shapes: [-Math.log10(D.weak), -Math.log10(D.confident)].flatMap(v => [
+      { type: 'line', x0: v, x1: v, y0: -0.8, y1: 6.2, line: { dash: 'dot', width: 1, color: css('--muted') } },
+      { type: 'line', y0: v, y1: v, x0: -0.8, x1: 6.2, line: { dash: 'dot', width: 1, color: css('--muted') } }]) }), cfg);
+
+Plotly.newPlot('rtbins', ['both', 'Osprey only', 'DIA-NN only'].map(s => ({
+  type: 'bar', name: s, x: D.rt_bins, y: D.rt_hist[s], marker: { color: STATUS_COLOR[s] }
+})), layout({ title: { text: 'IDs by retention time (1 min bins)' }, barmode: 'stack', bargap: 0,
+  xaxis: { title: { text: 'RT (min)' }, gridcolor: css('--rule') } }), cfg);
+Plotly.newPlot('rtdis', [
+  { type: 'histogram', name: 'DIA-NN confident, Osprey not', x: D.disagree_rt.diann, xbins: { size: 1 }, marker: { color: C.diann }, opacity: 0.7 },
+  { type: 'histogram', name: 'Osprey confident, DIA-NN not', x: D.disagree_rt.osprey, xbins: { size: 1 }, marker: { color: C.osprey }, opacity: 0.7 }],
+  layout({ title: { text: 'Disagreements by retention time' }, barmode: 'overlay', xaxis: { title: { text: 'RT (min)' }, gridcolor: css('--rule') } }), cfg);
+
+const rs = D.rt_scatter, fit = D.rt_fit;
+const PEAKS = ['same peak', 'different peak'];
+const byPeak = (p, col) => rs.peak.map((v, i) => v === p ? rs[col][i] : null).filter(v => v !== null);
+const xr = [Math.min(...rs.x), Math.max(...rs.x)];
+const fitText = `Osprey = ${fit.slope.toFixed(4)} × DIA-NN ${fit.intercept >= 0 ? '+' : '−'} ${Math.abs(fit.intercept).toFixed(3)} min, ` +
+  `fit to ${fmt(fit.n)} same-peak pairs; residual SD ${(fit.sd * 60).toFixed(1)} s, robust SD ${(fit.mad * 60).toFixed(1)} s`;
+document.getElementById('fitnote').textContent = fitText + '. Plots show a sample of 30,000 pairs; the histogram uses every pair.';
+Plotly.newPlot('rtscatter', PEAKS.map(p => ({ type: 'scattergl', mode: 'markers', name: p, x: byPeak(p, 'x'), y: byPeak(p, 'y'),
+    marker: { size: 3, color: PEAK_COLOR[p], opacity: 0.5 } })).concat([{ type: 'scatter', mode: 'lines', name: 'fit',
+    x: xr, y: xr.map(v => fit.slope * v + fit.intercept), line: { color: css('--ink'), width: 1 } }]),
+  layout({ title: { text: 'Regression: Osprey apex vs DIA-NN RT' },
+    xaxis: { title: { text: 'DIA-NN RT (min)' }, gridcolor: css('--rule') }, yaxis: { title: { text: 'Osprey apex RT (min)' }, gridcolor: css('--rule') } }), cfg);
+const residPlot = (id, title, range) => Plotly.newPlot(id, PEAKS.map(p => ({ type: 'scattergl', mode: 'markers', name: p,
+    x: byPeak(p, 'x'), y: byPeak(p, 'resid').map(v => v * 60), marker: { size: 3, color: PEAK_COLOR[p], opacity: 0.4 } })),
+  layout({ title: { text: title }, xaxis: { title: { text: 'DIA-NN RT (min)' }, gridcolor: css('--rule') },
+    yaxis: { title: { text: 'Residual (s)' }, range, gridcolor: css('--rule'), zerolinecolor: css('--muted') } }), cfg);
+residPlot('rtresid', 'Residuals from the fit, ±30 s (zoom out for the different-peak spread)', [-30, 30]);
+residPlot('rtresidwide', 'Residuals from the fit, full range', null);
+const de = D.delta_edges, dmid = de.slice(0, -1).map((v, i) => (v + de[i + 1]) / 2);
+Plotly.newPlot('rtdelta', PEAKS.map(p => {
+  const h = D.delta_hist[p];
+  return { type: 'bar', name: `${p}: n ${fmt(h.n)}, median ${h.median.toFixed(1)} s, beyond ±60 s ${fmt(h.beyond)}`,
+    x: dmid, y: h.counts, marker: { color: PEAK_COLOR[p] }, opacity: 0.75 };
+}), layout({ title: { text: 'ΔRT, Osprey apex − DIA-NN RT<br><sub>1 s bins; beyond ±60 s piles in the end bins</sub>' },
+  barmode: 'overlay', bargap: 0, xaxis: { title: { text: 'ΔRT (s)' }, gridcolor: css('--rule') },
+  yaxis: { title: { text: 'Pairs' }, type: 'log', gridcolor: css('--rule') }, legend: { orientation: 'h', y: -0.25 } }), cfg);
+
+// Disagreement tables
+const TABS = { diann: `DIA-NN confident, Osprey weak (${fmt(D.disagree_counts.diann)})`,
+               osprey: `Osprey confident, DIA-NN weak (${fmt(D.disagree_counts.osprey)})` };
+const pk = D.disagree_peak;
+document.getElementById('disnote').textContent =
+  `Rows and counts are precursor-run pairs (a precursor appears once per run). Confident: run q ≤ ${D.confident}. Weak: run q > ${D.weak} or not reported. Peaks — DIA-NN confident: ` +
+  Object.entries(pk.diann).map(([k, v]) => `${k} ${fmt(v)}`).join(', ') + '; Osprey confident: ' +
+  Object.entries(pk.osprey).map(([k, v]) => `${k} ${fmt(v)}`).join(', ') + `. Tables list the first ${fmt(D.tables.diann.length)} rows by the confident tool's q.`;
+let tab = 'diann', sortCol = null, sortDir = 1;
+const tabsEl = document.getElementById('tabs');
+for (const [k, label] of Object.entries(TABS)) {
+  const b = document.createElement('button');
+  b.textContent = label; b.onclick = () => { tab = k; sortCol = null; render(); };
+  b.dataset.k = k; tabsEl.appendChild(b);
+}
+const TEXT_COLS = new Set([0, 1, 2, 4, 14]);
+const thead = document.querySelector('#table thead'), tbody = document.querySelector('#table tbody');
+thead.innerHTML = '<tr>' + D.table_cols.map((c, i) => `<th class="${TEXT_COLS.has(i) ? 't' : ''}" data-i="${i}">${c}</th>`).join('') + '</tr>';
+thead.onclick = ev => { const i = +ev.target.dataset.i; if (isNaN(i)) return; sortDir = sortCol === i ? -sortDir : 1; sortCol = i; render(); };
+document.getElementById('filter').oninput = render;
+document.getElementById('peakfilter').onchange = render;
+const cell = (v, i) => {
+  if (v === null) return '';
+  if (i === 3 || i === 5 || i === 6) return v < 1e-4 ? v.toExponential(1) : v.toFixed(4);
+  if (typeof v === 'number') return v.toFixed(2);
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+};
+function render() {
+  for (const b of tabsEl.children) b.classList.toggle('on', b.dataset.k === tab);
+  const f = document.getElementById('filter').value.toLowerCase();
+  const p = document.getElementById('peakfilter').value;
+  let rows = D.tables[tab].filter(r => (!p || r[14] === p) && (!f || (r[0] + ' ' + r[1] + ' ' + r[2]).toLowerCase().includes(f)));
+  if (sortCol !== null) rows = rows.slice().sort((a, b) => {
+    const x = a[sortCol], y = b[sortCol];
+    if (x === null) return 1; if (y === null) return -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+  document.getElementById('count').textContent = `${fmt(rows.length)} rows`;
+  tbody.innerHTML = rows.slice(0, 2000).map(r => `<tr class="${r[14] === 'different peak' ? 'diff' : r[14] === 'same peak' ? 'same' : ''}">` +
+    r.map((v, i) => `<td class="${TEXT_COLS.has(i) ? 't' : ''}${i === 14 ? ' pk' : ''}">${cell(v, i)}</td>`).join('') + '</tr>').join('');
+}
+render();
+</script>
+</body>
+</html>
