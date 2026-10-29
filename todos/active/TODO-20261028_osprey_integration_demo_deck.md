@@ -129,3 +129,19 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
   once the deck is final).
 - The fine-tune slides (Library Model, the run page during and after tuning) were recaptured with
   the branch build, so their off-screen renders now carry the repainted boundary too.
+
+### 2026-10-29 - Guide, skill, and the first feature walkthrough page
+
+- `ai/docs/feature-demo-guide.md` and the `feature-demo` skill: how to capture screens at
+  temporary pauses over the Skyline MCP, build the deck, and publish a feature walkthrough page for
+  the release notes (modeled on EncyclopeDiaSearch), with the traps from this TODO.
+- LabKey MCP: `create_wiki_page`, `attach_wiki_files`, and `update_wiki_page` with a
+  `show_attachments` argument that otherwise keeps the page's setting (it used to force it on);
+  `scripts/wiki_publish.py` runs the same code until the MCP server restarts with the new tools.
+  The attach call posts `formFiles[N]` to `wiki-attachFiles.api` with the page's entityId.
+- The page: `CarafeLibraryBuild` in `/home/software/Skyline-dev-private`, Markdown, "Building a
+  Spectral Library with Carafe", the library-build half of the deck as nine steps with seven
+  attached screenshots (native size, repainted borders), Show attachments off. Verified: the
+  rendered page's images all resolve to the page's own `wiki-download.view` URLs. No release
+  version in the intro yet; it moves to `/home/software/Skyline` when the feature is released.
+  Link: https://skyline.ms/home/software/Skyline-dev-private/wiki-page.view?name=CarafeLibraryBuild
