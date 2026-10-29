@@ -72,3 +72,22 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
 - The Build Library demo run was ended deliberately after its last screen (the grid cancelled under
   the test), so its failure is not a test result. The Osprey Search demo run was stepped through to
   the end and passed (0 failures, 826 s with the pauses; log in the session folder).
+
+### 2026-10-28 night - Brendan's corrections, and the fine-tune route in the search wizard
+
+- Timeline corrected on Brendan's review: all Osprey/CarafeSharp work is 2026 (OspreySharp begun
+  April 2026); 2025 got AlphaPeptDeep in with the Python and Java installation solved (PR #3527, in
+  Skyline 26.1) but Carafe's fine-tune, dependent on DIA-NN, stalled (PR #3549 closed unmerged); and
+  #4927 is merged to master, not shipped. Every "shipped" on the cover, arc and closing slides is
+  now "merged to master" / "not yet released".
+- The point of the deck is the Carafe fine-tune, so the Osprey Search wizard's own fine-tune route
+  is now shown: `OspreySearchTuningTest` scenario 1 with temporary pauses (`add_tuning_pauses.py` in
+  the session folder) gave the Library Model page with "Fine-tune a new model on these runs" and the
+  three searched runs checked, the grid on that route (every section), and the run page during the
+  tuning (RT tuned, MS2 epochs) and after it. Two new slides (the fine-tune choice; the tuned
+  model's result) and the three-grid comparison re-based on the search wizard alone. Now 23 slides.
+- The tuned search kept 158 of 205 target peptides at 1% FDR on the subset against 11 for the
+  pretrained run earlier in the day; the slide says so, with the caveat in its notes that the subset
+  is tiny and the pretrained run carried the test's NCE 30.
+- Test files reverted and TestFunctional rebuilt again; the tuning run was cut short after its last
+  screen (not a test result).
