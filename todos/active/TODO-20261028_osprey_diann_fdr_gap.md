@@ -574,6 +574,23 @@ classified against pass 1: absent = gap-fill, same score = unchanged, else moved
   would trust them. Options: report gap-fills as quantified-because-identified-elsewhere (flagged, no identification
   q), or give them a run q from a competition among gap-fills and their gap-filled decoys only.
 
+**Run-level PEP (commit f01eea37fe, `OSPREY_DUMP_RUN_PEP`; Astral best config, transfer, attached library;
+`run_pep_calibration.py`):** each replicate's first-pass score-to-PEP curve read at every survivor's score. Gap fills
+mean run PEP 0.82 (17,483 of 18,456 at 0.5-0.9 - "not in this sample"); moved 0.81; unchanged 0.21. Of the 728 gap
+fills passing run q <= 1%, 117 carry PEP 0.2-0.5. No PEP exceeds ~0.86 (the model's pi0 ceiling).
+
+**PEP fails the q-PEP identity - Osprey's PEP is 4-8x too pessimistic (found 2026-10-29).** q at a threshold is the
+mean PEP of everything passing it (PEP_k ~ d(k q_k)/dk). Run level: the 304,566 peaks at run q <= 1% average PEP 5.6%
+(entrapment FDP 0.93%). Experiment level, the `.blib`'s `RefSpectra.PrecursorPep` (shipped since #4848): mean PEP at
+experiment q <= 1% is 0.039 (Astral default), 0.059 (Astral best), 0.038 (Stellar) - 4-8x the identity at 0.1%, 0.5%
+and 1% alike. Suspected cause, `PepEstimator.Fit`: `PEP = pi0 fD / (pi0 fD + (1 - pi0) fT)` with pi0 = decoy winners /
+target winners and fT the density of ALL target winners - a false+true mixture used as if it were the true-match
+density. With paired competition the expected false target winners at s equal the decoy winners there, so
+`PEP(s) = (D/T) fD(s) / fT(s)` (capped at 1, monotone). The current form overstates PEP by ~1/(1 - pi0) where true
+matches dominate: ~6.7x at a run-level pi0 ~0.85, ~4x at experiment level - the size of the gap. Not yet fixed; it is
+shared code (experiment PEP, #4848 / Nick) - fix behind a switch, verify the identity and entrapment on the full
+first-pass population, then raise with Nick and Brendan.
+
 **Stellar (the three test runs; tune on `_21`: MS2 PCC 0.966 -> 0.984, RT R2 0.9976 -> 0.9989; DIA-NN on mzML
 with `--no-ms1 --mass-acc-cal 900`, mass accuracy 707 / 264 / 506 / 219 ppm across its passes):**
 
