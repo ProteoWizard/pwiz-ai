@@ -118,3 +118,13 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
   Astral HeLa runs in `D:\test\osprey-runs\astral` against the predicted library beside them
   (`add_astral_pause.py`: a temporary block in `OspreySearchTuningTest` after scenario 1; the
   search plus the chromatogram import take about an hour).
+- Done (deck version 9): the search took 12 min 10 s on 32 threads (104,543 of 571,917 target
+  peptides at 1% FDR, 8,936 protein groups, 118,314 library spectra), the import about 10 minutes.
+  The result slide shows histone H4's VFLENVIR in replicate 49, product ions only, idotp and dotp
+  0.99, every transition green. The document is kept for re-captures:
+  `pwiz_tools/Skyline/TestResults/TestRunner results/OspreySearchTest-tuning/AstralDemo.sky`
+  (with its 4.9 GB .skyd and, under `AstralDemo.osprey`, the three 6 GB spectra caches Osprey
+  wrote there and the 0.7 GB .blib it converted the .tsv library to - about 25 GB in all, to delete
+  once the deck is final).
+- The fine-tune slides (Library Model, the run page during and after tuning) were recaptured with
+  the branch build, so their off-screen renders now carry the repainted boundary too.
