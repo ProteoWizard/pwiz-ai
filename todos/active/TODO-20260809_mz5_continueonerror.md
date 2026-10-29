@@ -5,8 +5,9 @@
 - **Checkout**: `C:\Dev\mz5` (moved from `C:\Dev\master_clean` 2026-10-12)
 - **Module**: `pwiz`
 - **Base**: `origin/master`
-- **Status**: In progress. C# port committed locally (4 commits), not pushed; MsData.Tests (92)
-  and MsConvert.Tests (18) green. Follow-ups settled 2026-10-28. Next: `/code-review`, push, PR.
+- **Status**: In progress. C# port committed locally (6 commits), not pushed; MsData.Tests (95)
+  and MsConvert.Tests (18) green. `/code-review medium` run 2026-10-29 and triaged; one finding
+  (writers ignore a listener's Cancel) waiting on the developer. Next: settle that, push, PR.
 - **GitHub Issue**: (none yet)
 - **PR**: (none)
 - **Cherry-pick to release**: undecided
@@ -283,7 +284,8 @@ MSn). MsData.Tests 92/92, MsConvert.Tests 18/18.
 - ~~mzML chromatogram loop has the same index gap~~ - fixed in `ad1d298026`, with an
   `UnreadableChromatogramList` fixture.
 - ~~The eager mzXML reader never sets `Spectrum.Index`~~ - fixed in `d51c6e2924`, see below.
-- `<spectrumList count>` still states the input count after a skip - **won't fix**, see below.
+- ~~`<spectrumList count>` still states the input count after a skip~~ - fixed in `6bce1216de`,
+  see 2026-10-29 below. (First recorded as won't fix; the developer asked for it to be corrected.)
 
 ### 2026-10-28 - follow-ups settled
 
@@ -297,13 +299,35 @@ index check stays mzML-only: mzXML stores no index, so the read-back numbering p
 the writer. Other eager callers checked: the vendor harness mzXML leg (`DescribeSpectraDataOnly`,
 data-only) and `DiaUmpireParityTests` (2/2 green). MsData.Tests 92/92, MsConvert.Tests 18/18.
 
-**`<spectrumList count>` after a skip - won't fix.** The count is written before the loop, from
-`list.Count`, so a correct value needs either a second pass (re-reading every spectrum through the
-vendor SDK just to count failures) or patching the attribute after the fact, which the output does
-not allow: it may be gzip or mzMLb, and indexed mzML hashes the bytes as they stream into the
-`<fileChecksum>`. cpp writes the input count too (`IO.cpp:2975`). The cost of leaving it is small:
-our `MzmlReader` reads `count` only in lazy mode, into `LazySpectrumCount`, which nothing consumes -
-the lazy list is sized from the `<indexList>` footer, which lists only the spectra written.
+### 2026-10-29 - list counts corrected; `/code-review medium` triaged
+
+**`<spectrumList count>` / `<chromatogramList count>` after a skip** (`6bce1216de`). The count is
+written before the loop and cannot be patched afterwards (gzip, mzMLb, and indexed mzML hashing the
+bytes into `<fileChecksum>`). The developer chose to **rewrite on skip**: no cost unless something
+fails, at the price of a second pass (progress restarts) when it does. A pre-pass or temp-file spool
+would cost every MSConvertGUI conversion, since the GUI always sets `ContinueOnError`
+(`ProgressForm.cs:207`).
+- `ContinueOnErrorPolicy.WriteUntilNothingNewIsSkipped` runs passes; each pass leaves out the
+  indices earlier passes skipped (not fetched or logged again) and counts only the rest. Capped at
+  3 passes against a reader that fails differently each time.
+- `MzmlWriter.Write(Stream)` rewinds a seekable stream; `MSDataFile.Write(path)` reopens the file
+  per pass, which covers `.gz`; `MzMlbWriter` opens a new HDF5 file per pass, because rewinding the
+  mzML dataset alone would leave the first pass's arrays in the binary datasets (same reason the
+  stream overload refuses to rewind when `ExternalBinarySink` is set).
+- Output that cannot be rewritten (non-seekable stream), or the pass cap, keeps the overstated
+  count and writes a warning to `SkipLog` - the developer asked for the message.
+- `MzMlbWriter` gained a `SkipLog` to forward (also a review finding).
+- Tests (red first): count asserts in the skip and chromatogram tests; gzip + mzMLb through
+  `MSDataFile.Write(path)`; non-seekable warning; pass cap (proved it fails with the cap raised to 4).
+
+**Review findings fixed**: the list count (above); mzMLb `SkipLog`; mzXML and MGF broadcasting
+after the fetch (`711fe346b9`) - a failing spectrum was never reported, and mzXML had four copies of
+the broadcast. Test: without `ContinueOnError`, the last update names the failing index in every
+format (red for mzXML with the fix set aside).
+
+**Open**: writers ignore `Broadcast`'s `IterationStatus.Cancel`. MSConvertGUI's Stop returns it
+(`MainLogic.cs:488`), so Stop does not interrupt a write. Waiting on the developer for scope and for
+break-like-cpp vs throw `OperationCanceledException`.
 
 ## Notes
 
