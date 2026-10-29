@@ -90,6 +90,17 @@ halves travel separately.
    `GetIconResourceName` instead of its private copies.
 4. Icon corrections keep flowing through this branch's gallery and manifest; the DPI branch
    never edits drawings.
+5. **Trial capture with the new icons, requested 2026-10-29 (for the DPI session).** The
+   assets branch `Skyline/work/20261020_icon_assets` is pushed through 0fbf5d3536 (PR #4887;
+   381 PNGs in `Resources/Icons`, manifest at 112 vector / 16 raster). In pwiz1 make a
+   throwaway branch from the DPI tip, `git merge origin/Skyline/work/20261020_icon_assets`
+   (expect a small conflict in `Skyline.csproj`, both branches touch it; nothing else should
+   overlap), build, and run the capture sweep at 100/125/150/200% on the forms that show
+   icons: the main window toolbar and SequenceTree, FilesTree, FindResults, Immediate,
+   ViewLibraryDlg, the spectrum and chromatogram graph toolbars, DocumentGrid. Only references
+   already routed through `DpiUtil.GetIcon` / `ImageListScaler.PrepareForDpi` show the new
+   sizes; the sweep doubles as the list of still-unwired references. Nothing from the
+   throwaway branch is pushed; drawing fixes come back through this TODO's gallery.
 
 Contract: one call per icon,
 `DpiUtil.GetIcon(this, nameof(Resources.Save), Resources.Save, Color.Magenta)`, returning a
@@ -192,7 +203,7 @@ Targets tab at 200% should show the 32 px frame.
       Gallery rows FilesTreeForm__Icon, FindResultsForm__Icon, ImmediateWindow__Icon now show the
       FilesTree, FindResults and Immediate vectors (alias table in Build-IconGallery.ps1)
 - [x] Round 5 one-by-one fixes from marked-up screenshots (2026-10-29) and the commit of rounds
-      3-5: 0fbf5d3536 on the assets branch (138 files; not pushed yet). Print, FindResults'
+      3-5: 0fbf5d3536 on the assets branch (138 files; pushed 2026-10-29). Print, FindResults'
       binoculars, Find, FindNext and the new FilesTree folder are traced from the native pixels
       on the 2-unit grid (`Trace-Pixels.py` + `Dump-Pixels.ps1` in the session folder turn a
       bitmap into merged rectangle runs); Immediate's mark on rows 6-11/13-14 with the window one
