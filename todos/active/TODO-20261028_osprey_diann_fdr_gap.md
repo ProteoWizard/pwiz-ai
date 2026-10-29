@@ -71,6 +71,16 @@ the Stellar presets of `Run-DiannComparison.ps1` and `Run-DiannEntrapment.ps1`. 
 Stellar .raw even with them (20 ppm, 0 IDs in 2.2-2.6.1, TODO-20261021), so DIA-NN reads the msconvert mzML on
 Stellar while Osprey reads the .raw - the one exception to the raw-files rule.
 
+**Root cause of the Stellar .raw failure (2026-10-28 night).** Re-tested: DIA-NN 2.6.1 on the three test .raw with
+`--no-ms1 --mass-acc-cal 900` (acknowledged: "MS1 information will be ignored") reads the same structure as from the
+mzML (97,500 MS2 scans, 780 cycles, 0 MS1), then cannot calibrate, falls back to 20 ppm, 0 IDs
+(`fdr-gap\stellar\diann-search-raw\step.log`). Thermo RawFileReader on `_21` (scratchpad `rawscan.ps1`): every MS2
+scan is `IsCentroidScan=True`, analyzer ITMS, 236-1,144 peaks in the SEGMENTED scan and **0 peaks in the centroid
+stream**. Orbitrap/Astral data carry a centroid stream; Stellar ion-trap scans keep their peaks only in the segmented
+scan. A reader that takes the centroid stream (inferred for DIA-NN; closed source) sees empty spectra - which fits
+every symptom. msconvert reads the segmented scan. Worth reporting to DIA-NN's developer (fall back to the segmented
+scan for centroid scans without a centroid stream); until then DIA-NN needs mzML on Stellar.
+
 ## What we already know (from TODO-20261021_osprey_diann_timing.md, Osprey of 2026-10-21)
 
 These measurements predate two weeks of master, so Phase 1 repeats them. They also shape the plan:
@@ -509,6 +519,10 @@ XICs + GBDT, attached library):**
   PerFileRescoring still requires it ("Cannot resume: 3 of 3 runs still need re-scoring, but the cross-run
   reconciliation data they need is not available"). The config-only switch is not runnable end to end on
   master; not patched (pipeline code, diagnostic only).
+- `default-symdecoy` (default config): re-picks 187,956; reported q 1% -> 102,360 at FDP 1.29% (current 102,443 at
+  1.36%); at FDP 0.5% 89,133 (88,604). Same ~0.07-point improvement as the best config: the decoy asymmetry is real
+  and the fix is worth keeping, but the bulk of the drift is the stratum competition. `default-reconoff` stopped
+  (would fail like `best-reconoff`).
 - `best-transfer` (OSPREY_PASS2_QVALUE=transfer: no >= 2-peptide stratum, every precursor competes alike):
   **112,206 at reported q 1%, FDP 1.04% / 0.52% - calibrated**; 102,232 at FDP 0.5%, 111,899 at FDP 1.0%. Against
   Osprey today (102,443 at q 1% but FDP 1.36%): ~10% more at a reported 1% that now means 1%. DIA-NN 142,538 at

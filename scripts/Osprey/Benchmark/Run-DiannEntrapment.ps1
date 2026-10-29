@@ -64,7 +64,10 @@ param(
     [int]$TopFragments = 20,
     [switch]$LibraryOnly,
     # The 'diann-search' step without --reanalyse (no MBR second pass), into diann-search-nombr.
-    [switch]$DiannNoMbr
+    [switch]$DiannNoMbr,
+    # The file type DIA-NN searches, when not the preset's (Stellar: mzML; Astral: raw). A search of the other
+    # type goes into diann-search-<type>, so it sits beside the preset's diann-search.
+    [ValidateSet('', 'raw', 'mzML')] [string]$DiannInput = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -96,7 +99,8 @@ if (-not $WorkDir) { $WorkDir = Join-Path 'D:\test\osprey-runs\diann-entrapment'
 if (-not $Model) { $Model = "D:\test\osprey-runs\diann-compare\$name\osprey-library\osprey.model.zip" }
 $fasta = Join-Path $DataDir $preset.Fasta
 $runs = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.raw" })
-$diannRuns = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.$($preset.DiannInput)" })
+$diannType = if ($DiannInput) { $DiannInput } else { $preset.DiannInput }
+$diannRuns = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.$diannType" })
 foreach ($path in @($fasta, $OspreyExe, $DiannExe, $Model, $EntrapmentFasta) + $runs + $diannRuns) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Not found: $path" }
 }
@@ -110,7 +114,9 @@ $predicted = Join-Path $ospreyDir 'osprey.predicted.blib'
 $stepDir = Join-Path $WorkDir $OspreyStepDir
 $peptideFasta = Join-Path $WorkDir 'peptides\target_entrapment_peptides.fasta'
 $diannLibDir = Join-Path $WorkDir 'diann-library'
-$diannSearchDir = Join-Path $WorkDir $(if ($DiannNoMbr) { 'diann-search-nombr' } else { 'diann-search' })
+$diannSearchName = if ($DiannNoMbr) { 'diann-search-nombr' } else { 'diann-search' }
+if ($diannType -ne $preset.DiannInput) { $diannSearchName += '-' + $diannType.ToLowerInvariant() }
+$diannSearchDir = Join-Path $WorkDir $diannSearchName
 
 function Invoke-Step {
     param([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Dir)
