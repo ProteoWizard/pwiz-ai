@@ -6,8 +6,8 @@ Panorama Public reviewer passwords must pass the site password rule.
 - **Branch**: `26.7_fb_reviewer-password-site-rule` in MacCossLabModules only (release-branch enlistment)
 - **Base**: `release26.7-SNAPSHOT`
 - **Created**: 2026-10-27
-- **Status**: In review, [PR #683](https://github.com/LabKey/MacCossLabModules/pull/683). Test failed before the fix and passes after it.
-  All 63 PanoramaPublic unit tests pass
+- **Status**: Completed
+- **PR**: [#683](https://github.com/LabKey/MacCossLabModules/pull/683)
 - **GitHub Issue**: (pending)
 - **Module**: `panoramapublic`
 
@@ -44,6 +44,8 @@ accounts on a server using the Good rule. Display-name sequences add to this.
 - The password is valid whichever rule the site uses at login, including after an admin changes the rule
 - No dependency on `DbLoginService`
 - The generator is passed in as a `Supplier<String>` so the unit test can supply fixed passwords
+- After 100 rejected passwords, `createPassword()` throws `SecurityManager.UserManagementException`.
+  `assignReviewer()` wraps it as "Error creating a new account for reviewer"
 
 ## Tasks
 
@@ -58,6 +60,16 @@ accounts on a server using the Good rule. Display-name sequences add to this.
 - [x] `/code-review high`
 - [x] Commit `8ab1e9d7` (the fix and its unit test), pushed to origin
 - [x] Opened [PR #683](https://github.com/LabKey/MacCossLabModules/pull/683) against `release26.7-SNAPSHOT`
+- [x] Review feedback - limit `createPassword()` to 100 attempts (`23c309c7`), then throw
+      `UserManagementException` instead of `IllegalStateException` (`0d0274c2`). Added
+      `testCreatePasswordStopsAfterMaxAttempts`, which failed before each change and passes after it
+- [x] All 64 PanoramaPublic unit tests pass
+
+## Completion summary
+
+Reviewer passwords are kept only if every `PasswordRule` accepts them, so a reviewer can log in with the
+emailed password whichever rule the site uses. Password generation stops after 100 rejected passwords
+and fails the copy job with a reviewer account error.
 
 ## Related, not in scope
 
