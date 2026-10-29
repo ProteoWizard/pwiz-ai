@@ -480,6 +480,35 @@ Pass 1 calibrated (1.00% at q 1%). SVM fold-mean standardized weights: `peak_can
 fewer competing peaks is target-like), `context_precursor_mz` +0.292 (7th); the two margins +0.015 / +0.030 (the
 linear model already has that from the coelution features), length +0.026, charge -0.011.
 
+**Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
+- What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
+  single best peptide, target vs decoy paired by base id, scored from the first pass's pre-compaction
+  experiment records; plus a second-pass peptide-level competition and peptide / protein-group PEPs (moved from
+  #4848). Fixes three real defects: decoys found by `DECOY_` name (none with library decoys -> every q = 0), only
+  detected proteins competing, decoys scored from the compacted pool.
+- No 2-peptide gate: a one-peptide protein competes on its best peptide like any other (Nick confirmed in the
+  thread after Mike's 2026-10-11 comment).
+- Reproduced on current master + the tuned library (`astral\pr4823`): 6,848 groups at q 1%, FDP 0.73% (PR:
+  6,815 / 0.82%); precursors unchanged. Every group at q 1% has a precursor at q 1%.
+- **Single-peptide groups carry nearly all the error**, in both tools - inherent to a global protein FDR:
+
+| groups at reported q <= 1% | #4823 n | #4823 FDP | DIA-NN n | DIA-NN FDP |
+|---|---|---|---|---|
+| 1 detected peptide | 201 | ~22% (22 entrapment) | 439 | 11.4% |
+| >= 2 detected peptides | 6,672 | ~0.1% (3) | 8,247 | 0.5% |
+| no passing precursor | 0 | - | 73 | 30.1% |
+| all | 6,873 | 0.73% | 8,759 | 1.30% |
+
+- Concerns: (1) the new second-pass peptide competition runs over the protein-compact stratum survivors, so it
+  inherits the >= 2-peptide stratum (single-peptide requirement) and the asymmetric decoy reconciliation;
+  (2) validated on 3 runs only - Mike's thread point that protein-level false discoveries accumulate with many
+  files needs a large-cohort check (82-file SEA-AD); (3) conflicts with master in `FdrScoresSidecar.cs` (resolved
+  locally by keeping both assignments) and its protein_fdr.tsv goldens predate two weeks of master; (4) the
+  first-pass protein FDR (compaction rescue, stratum) is unchanged.
+- Opinion: merge the picked-protein competition (rebased via merge onto master); hold or split out the
+  second-pass peptide competition until the second pass itself is fixed; decide how to report one-peptide groups
+  honestly (a separate q for them would not block detection, only make their q mean what it says).
+
 **Finding 6 - Osprey's first-step pick finds DIA-NN's peak 91% of the time for the precursors it misses**
 (Mike's question: are we choosing the wrong peak before the 21 features ever see it?). `peak_agreement.py`
 against DIA-NN without MBR (its own single-run peak), run q <= 1%, real targets, the 3 runs pooled
