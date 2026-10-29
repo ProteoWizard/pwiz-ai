@@ -69,5 +69,6 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
 - The Artifact tool in this session has no asset upload, so the screenshots are published as the
   deck's own files under `project/ds/shots/` and referenced by that path. If they do not render in
   the page, that is the first thing to revisit.
-- Both demo test runs ended in a deliberate failure (the grid cancelled under the test) once the last
-  screen was captured; neither was a test result.
+- The Build Library demo run was ended deliberately after its last screen (the grid cancelled under
+  the test), so its failure is not a test result. The Osprey Search demo run was stepped through to
+  the end and passed (0 failures, 826 s with the pauses; log in the session folder).
