@@ -109,8 +109,9 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
     test's Windows 10 branch, no repaint on a docked pane, the doc comment, a try/catch so a repaint
     failure keeps the capture), 2 dropped (TakeShot keeps its own docked-pane rule by design; the
     TestRunner Windows 11 check has no CommonBaseUI to call), 1 was the uncommitted pauses. The
-    fixes build and the gates run once the Astral test below has exited (the build script refuses
-    while a TestRunner is alive).
+    fixes built green with ScreenshotBorderTest and CodeInspection passing, and the branch is
+    PR [#4934](https://github.com/ProteoWizard/pwiz/pull/4934) (two commits, label skyline),
+    awaiting TeamCity and Brendan's review.
 - Mike: slide 22's data is terrible. Root cause: the Stellar sDIA subset has three or four points
   across a peak and most transitions carry the red "no peak" overlay, whatever peptide is chosen.
   The completed OspreySearchPerfTest documents on this machine (Stellar, full HeLa FASTA) look the
