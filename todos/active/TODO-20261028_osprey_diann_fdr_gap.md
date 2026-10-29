@@ -574,8 +574,22 @@ with `--no-ms1 --mass-acc-cal 900`, mass accuracy 707 / 264 / 506 / 219 ppm acro
   entrapment-design artifact as on Astral. Default reported q is calibrated on Stellar (0.98%).
 - The best Astral configuration HURTS on Stellar (per run -11%, matched FDP -2%): suspect 12 XICs at unit
   resolution (0.4 Da windows collect much more interference per weak fragment); GBDT or the features possible.
-  Ablation queued (`stellar-ablate.ps1`: xic12 / gbdt / feat / feat+gbdt, all transfer). Settings this
-  instrument-sensitive have to be resolution-keyed, not global defaults.
+  Settings this instrument-sensitive have to be resolution-keyed, not global defaults.
+- **Stellar ablation (transfer, attached library) - 12 XICs is the culprit; without it Osprey beats DIA-NN:**
+
+| Stellar | per run at q 1% | at q 1% (FDP) | at FDP 0.3% | at FDP 0.5% |
+|---|---|---|---|---|
+| default | 27,168-27,944 | 31,693 (0.71%) | 28,395 | 30,012 |
+| 12 XICs | 20,826-21,582 | 26,313 (0.65%) | 24,300 | 25,413 (-15%) |
+| GBDT | 28,052-28,326 | 32,960 (0.88%) | 29,827 | 31,657 (+5%) |
+| new features, SVM | 28,379-29,074 | 33,120 (0.77%) | 29,720 | 31,542 (+5%) |
+| **new features + GBDT, 6 XICs** | **31,409-32,343** | **37,971 (0.97%)** | **34,005** | **35,562 (+18%)** |
+| all + 12 XICs + GBDT | 24,168-25,055 | 31,000 (1.00%) | 28,434 | 29,516 |
+| DIA-NN | - | 32,701 (0.37%) | 32,388 | 34,274 |
+
+  At 0.4 Da the extra fragments add mostly interference (the opposite of Astral at 20 ppm). Features + GBDT help on
+  both instruments. **XIC count must be resolution-keyed: 12 for HRAM, 6 for unit resolution.** On Stellar,
+  features + GBDT (6 XICs) under transfer beat DIA-NN at matched FDP (+3.8% at 0.5%, +5% at 0.3%), calibrated.
 - DIA-NN raw: see the NOTE above (root cause found).
 - Stellar protein level, #4823 + transfer (original library): default 4,246 groups at FDP 0.89% (1-peptide 660 at
   5.2%); best config 4,400 at 1.59% (1-peptide 812 at 8.6%); DIA-NN 4,876 at 0.70% (1-peptide 870 at 1.4%, plus 173
