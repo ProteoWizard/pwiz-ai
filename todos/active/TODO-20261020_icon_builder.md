@@ -190,7 +190,18 @@ Targets tab at 200% should show the 32 px frame.
       `Scan-Alignment.py <VectorDir>` (session folder) lists off-grid edges: 70 of 129 files
       still have some, mostly gradient/1-unit-stroke art that cannot be crisp at 1x anyway.
       Gallery rows FilesTreeForm__Icon, FindResultsForm__Icon, ImmediateWindow__Icon now show the
-      OpenFolder, FindResults and Immediate vectors (alias table in Build-IconGallery.ps1)
+      FilesTree, FindResults and Immediate vectors (alias table in Build-IconGallery.ps1)
+- [x] Round 5 one-by-one fixes from marked-up screenshots (2026-10-29) and the commit of rounds
+      3-5: 0fbf5d3536 on the assets branch (138 files; not pushed yet). Print, FindResults'
+      binoculars, Find, FindNext and the new FilesTree folder are traced from the native pixels
+      on the 2-unit grid (`Trace-Pixels.py` + `Dump-Pixels.ps1` in the session folder turn a
+      bitmap into merged rectangle runs); Immediate's mark on rows 6-11/13-14 with the window one
+      row shorter; ViewFile and IrtCalculator carry the native's 10% interior tint; the Wand ends
+      in a squared-off point in the corner; MoleculeList's fluorene points left; OpenFolder's
+      arrow lowered off the top edge. Manifest resynced to `choices-round5.txt`: 112 vector,
+      16 raster (Find, FindNext, MethodFile, Open, magnifier_zoom_in -> vector; Pinleftlight,
+      UIModeMixed -> raster). 381 outputs verified square 32-bit ARGB at their named sizes; no C#
+      changed, so no build was run for this commit
 - [ ] Window icons (FindResults, Immediate, FilesTree): an .ico output kind in IconBuilder and a
       DpiUtil path for Form.Icon before their vectors can ship; gallery choices still open
 - [ ] After #4602 and #4887 are both on master: point IconResourcesTest at
