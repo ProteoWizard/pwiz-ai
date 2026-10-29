@@ -70,13 +70,50 @@ $batchToolOverrides = @(
 $pwizOverrides = @(
     @{ Pattern = '^(<wpf:ResourceDictionary[^\r\n]*(\r?\n))'; Replacement = "`$1`t<s:String x:Key=`"/Default/CodeEditing/Localization/Localizable/@EntryValue`">No</s:String>`$2" }
 )
+# Pwiz.sln: the gate is for code that may be wrong, not for tidiness, so inspections that only
+# flag style or redundancy are hidden. Everything else keeps Skyline's severity.
+$pwizHiddenInspections = @(
+    'TabsAreDisallowed', 'ArrangeNamespaceBody', 'CheckNamespace', 'InvalidXmlDocComment', 'InheritdocInvalidUsage',
+    'RedundantUsingDirective', 'RedundantNameQualifier', 'RedundantCast', 'RedundantDelegateCreation',
+    'RedundantExplicitArrayCreation', 'RedundantExplicitArraySize', 'RedundantArgumentDefaultValue',
+    'RedundantDefaultMemberInitializer', 'RedundantCatchClause', 'RedundantLambdaParameterType',
+    'RedundantEmptyFinallyBlock', 'RedundantJumpStatement', 'RedundantEmptySwitchSection',
+    'RedundantBaseConstructorCall', 'RedundantExplicitTupleComponentName', 'RedundantSwitchExpressionArms',
+    'RedundantExtendsListEntry', 'RedundantUnsafeContext', 'RedundantTernaryExpression',
+    'RedundantStringToCharArrayCall', 'RedundantOverriddenMember', 'RedundantSuppressNullableWarningExpression',
+    'NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract',
+    'ConditionalAccessQualifierIsNonNullableAccordingToAPIContract',
+    'ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract',
+    'ReturnTypeCanBeNotNullable', 'VariableCanBeNotNullable', 'ConvertTypeCheckPatternToNullCheck',
+    'NotAccessedField.Local', 'NotAccessedOutParameterVariable', 'PrivateFieldCanBeConvertedToLocalVariable',
+    'AccessToStaticMemberViaDerivedType', 'UnusedMethodReturnValue.Local', 'UnusedTupleComponentInReturnValue',
+    'OutParameterValueIsAlwaysDiscarded.Local', 'UnusedType.Local', 'EnumUnderlyingTypeIsInt',
+    'CollectionNeverQueried.Local', 'CollectionNeverUpdated.Local'
+)
+$pwizSeverities = @{}
+foreach ($id in $pwizHiddenInspections) { $pwizSeverities[$id] = 'DO_NOT_SHOW' }
+
+# Sets an inspection's severity in DotSettings text: rewrites the key if present, otherwise adds
+# it after the opening element. ReSharper escapes key characters other than letters, digits and
+# '_' as _00XX ('.' becomes _002E).
+function Set-InspectionSeverity([string] $text, [string] $id, [string] $severity) {
+    $escaped = [Regex]::Replace($id, '[^A-Za-z0-9_]', { param($m) '_{0:X4}' -f [int][char]$m.Value })
+    $key = "/Default/CodeInspection/Highlighting/InspectionSeverities/=$escaped/@EntryIndexedValue"
+    $existing = '(<s:String x:Key="' + [Regex]::Escape($key) + '">)[^<]*(</s:String>)'
+    if ([Regex]::IsMatch($text, $existing)) {
+        return [Regex]::Replace($text, $existing, "`${1}$severity`${2}")
+    }
+    return [Regex]::Replace($text, '^(<wpf:ResourceDictionary[^\r\n]*(\r?\n))',
+                            "`$1`t<s:String x:Key=`"$key`">$severity</s:String>`$2")
+}
 
 # Requires: a file that must exist for the target to apply; checkouts older than Pwiz.sln skip it.
+# Severities: inspection id => severity, applied after Overrides.
 $targets = @(
     @{ Name = 'SkylineBatch'; Path = Join-Path $skylineRoot 'Executables/SkylineBatch/SkylineBatch.sln.DotSettings'; Overrides = $batchToolOverrides },
     @{ Name = 'AutoQC';       Path = Join-Path $skylineRoot 'Executables/AutoQC/AutoQC.sln.DotSettings';             Overrides = $batchToolOverrides },
     @{ Name = 'SkylineMcp';   Path = Join-Path $skylineRoot 'Executables/Tools/SkylineMcp/SkylineMcp.sln.DotSettings'; Overrides = $batchToolOverrides },
-    @{ Name = 'Pwiz';         Path = Join-Path $pwizRoot 'Pwiz.sln.DotSettings'; Overrides = $pwizOverrides; Requires = Join-Path $pwizRoot 'Pwiz.sln' }
+    @{ Name = 'Pwiz';         Path = Join-Path $pwizRoot 'Pwiz.sln.DotSettings'; Overrides = $pwizOverrides; Severities = $pwizSeverities; Requires = Join-Path $pwizRoot 'Pwiz.sln' }
 )
 
 $baselineContent = Get-Content -LiteralPath $baselinePath -Raw
@@ -86,6 +123,10 @@ foreach ($t in $targets) {
     $name = $t.Name
     $desired = $baselineContent
     foreach ($ov in $t.Overrides) { $desired = [Regex]::Replace($desired, $ov.Pattern, $ov.Replacement) }
+    if ($t.ContainsKey('Severities')) {
+        # Sorted, so the generated file does not depend on hashtable order.
+        foreach ($id in ($t.Severities.Keys | Sort-Object)) { $desired = Set-InspectionSeverity $desired $id $t.Severities[$id] }
+    }
     if ($t.ContainsKey('Requires') -and -not (Test-Path $t.Requires)) {
         Write-Skip "$(Split-Path -Leaf $t.Requires) absent ($name) - skipping"
         continue
