@@ -97,6 +97,9 @@ Details in [`screenshot-update-workflow.md`](screenshot-update-workflow.md).
 
 ## Related docs
 
+- [`tutorial-test-authoring-guide.md`](tutorial-test-authoring-guide.md) —
+  creating a tutorial and its test: draft vs published naming, the
+  `IsTranslationRequired` guard, publishing, translation (authoritative).
 - [`webinar-to-tutorial-draft-guide.md`](webinar-to-tutorial-draft-guide.md) —
   converting a webinar into a draft tutorial whose test drives Skyline through
   the connector (`McpTutorialTest`) and generates the screenshots.

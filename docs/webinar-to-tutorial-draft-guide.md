@@ -5,6 +5,14 @@ functional test that *performs* the tutorial through the in-process
 `IJsonToolService` (the same connector an external MCP client drives) and
 *generates* the tutorial screenshots.
 
+**Read `tutorial-test-authoring-guide.md` first.** It holds the rules every tutorial
+test must follow, and a webinar draft breaks all of them by default: the test method is
+named `Test<Name>TutorialDraft` (not `...Tutorial`) until the tutorial is published, it
+starts with the `if (IsTranslationRequired) return;` guard until ja and zh-CHS HTML exist,
+it keeps its screenshots in `Tutorial-Drafts`, and its run time is part of everyone's
+nightly budget. This guide covers only what is specific to drafting from a webinar
+through the connector.
+
 This is a newer alternative to the classic, `ShowDialog`/`RunUI`-driven tutorial
 tests described in `tutorial-workflow-guide.md`. Driving through the connector
 both reproduces the tutorial and continuously proves the connector is capable
@@ -16,7 +24,7 @@ First example, used as the reference throughout: **DIAtoSRM** (Webinar 22,
 A second, much smaller one — **DiaFragPipe**, `TestPerf/DiaFragPipeTutorialTest.cs`
 — is worth reading first if you want the shape without the volume.
 
-Note that `TestDiaToSrmTutorial` is listed in `scripts/misc/tc-perftests-skiplist.txt`:
+Note that `TestDiaToSrmTutorial` is listed in `pwiz_tools/Skyline/tc-perftests-skiplist.txt`:
 it imports ~36 GB and assembles a second copy, which needs more free disk than the
 PR perf agent has. It runs fine where there is room; the skiplist entry is a
 disk-space accommodation, not a disabled test. A new tutorial test is picked up by
@@ -130,8 +138,12 @@ public class DiaToSrmTutorialTest : McpConnectorTest
     public override bool AuditLogCompareLogs => false;   // no recorded audit log yet for a draft
 
     [TestMethod]
-    public void TestDiaToSrmTutorial()
+    public void TestDiaToSrmTutorialDraft()    // "...Tutorial" only once published
     {
+        // Not yet translated
+        if (IsTranslationRequired)
+            return;
+
         // IsPauseForScreenShots = true;  // uncomment to look at screenshots
         CoverShotName = "DIAtoSRM";       // == the Tutorial-Drafts/<Name> folder name
         TestFilesZip = "https://skyline.ms/webinars/Webinar22_DIAtoSRM.zip";   // the repackaged ZIP
@@ -151,18 +163,18 @@ public class DiaToSrmTutorialTest : McpConnectorTest
 
 Notes:
 - The test **method name must contain "Tutorial"** (the framework keys
-  `IsTutorial` off the test name), and `CoverShotName` must equal the
+  `IsTutorial` off the test name) and, as a draft, **end in `TutorialDraft`** so it
+  stays out of SkylineTester's "Tutorial tests" set. `CoverShotName` must equal the
   `Tutorial-Drafts/<Name>` folder so screenshots land next to the HTML.
-- `TestTutorial.csproj` / `TestPerf.csproj` are **old-style projects that list
-  `.cs` files explicitly** — add your test with `<Compile Include=...>`.
-  `McpConnectorTest.cs` lives in **`TestUtil`** (already compiled there), so a test
+- `McpConnectorTest.cs` lives in **`TestUtil`** (already compiled there), so a test
   project only needs its normal `TestUtil` reference plus a **`SkylineTool` project
   reference** (for `IJsonToolService`, `ActionResult`, `UiElementPath`,
   `ControlInfo` — the wire types the connector speaks). No `StandaloneWindow` — the
   test never touches it (neither does an MCP client).
 - `TutorialDocumentationFolder` is a `virtual` on `AbstractFunctionalTest`
   returning `"Tutorials"`; the draft override returns `"Tutorial-Drafts"`. To
-  **publish**, delete the override and move the HTML folder.
+  **publish**, follow "Publishing" in `tutorial-test-authoring-guide.md` (move the
+  folder, delete the override, rename the method to `...Tutorial`).
 
 ### Base-class helpers (`McpConnectorTest`, in `TestUtil`)
 
@@ -575,9 +587,10 @@ harvest a dialog's captions and paths. A few extras:
 1. Download the tutorial-notes `.docx` + data ZIP URLs from the `begin.view` page.
 2. Extract the notes text; list the steps and the screenshot points.
 3. Create `Tutorial-Drafts/<Name>/en/index.html` from the notes (placeholders s-01…).
-4. Add `<Name>TutorialTest.cs` extending `McpConnectorTest` (in `TestUtil`);
-   register it in `TestTutorial.csproj` (or `TestPerf.csproj` for a data-heavy
-   tutorial); set `CoverShotName`, `TestFilesZip`, the draft overrides.
+4. Add `<Name>TutorialTest.cs` extending `McpConnectorTest` (in `TestUtil`) to
+   `TestTutorial` (or `TestPerf` for a data-heavy tutorial), with the method named
+   `Test<Name>TutorialDraft` and the `IsTranslationRequired` guard; set
+   `CoverShotName`, `TestFilesZip`, the draft overrides. Measure its run time.
 5. Build, then write the steps with the `PauseTest()` + MCP loop (top of this guide),
    addressing every step through the connector (file connector gaps you hit).
 6. Localize every caption and menu path with `GetLocalizedText<T>` (buttons,

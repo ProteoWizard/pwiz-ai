@@ -9,8 +9,12 @@ description: Use this skill when working on Skyline tutorials or tutorial tests.
 
 Before working on tutorials, read:
 
-1. **ai/docs/tutorial-doc-style-guide.md** - Complete style guide for tutorial HTML, screenshots, and test patterns
-2. **ai/docs/build-and-test-guide.md** - Building and running tutorial tests
+1. **ai/docs/tutorial-test-authoring-guide.md** - Tutorial lifecycle (draft, published, translated) and the
+   rules every tutorial test follows. Before creating or renaming a tutorial test:
+   only a published tutorial's test ends in `Tutorial` (drafts end in `TutorialDraft`), and an
+   untranslated tutorial's test starts with `if (IsTranslationRequired) return;`
+2. **ai/docs/tutorial-doc-style-guide.md** - Complete style guide for tutorial HTML, screenshots, and test patterns
+3. **ai/docs/build-and-test-guide.md** - Building and running tutorial tests
 
 ## File Locations
 
