@@ -43,7 +43,28 @@ param(
     [string]$EntrapmentSuffix = '_p_target',
     [double]$EntrapmentRatio = 1.0,
     [ValidateSet('cpu', 'gpu')] [string]$Device = 'gpu',
-    [int]$Threads = 16
+    [int]$Threads = 16,
+    # Which FDRBench exports the Osprey steps write: 1 (pre-compaction first pass), 2 (second pass)
+    # or both (FDRBench-Input.pass1.tsv and FDRBench-Input.pass2.tsv).
+    [ValidateSet('1', '2', 'both')] [string]$FdrBenchPass = 'both',
+    # The 'osprey-arm' step: Osprey again on the 'osprey' step's predicted library and spectra cache,
+    # into <WorkDir>\<Arm>, with -OspreyExtraArgs added to the command line (whitespace-separated, e.g.
+    # '--reconciliation-compaction-fdr 0.05') and -OspreyEnv set for the run ('NAME=value;NAME=value',
+    # e.g. 'OSPREY_PASS2_QVALUE=transfer'). One arm per call, so a sweep is a loop over calls.
+    [string]$Arm = 'osprey-arm',
+    # The library an arm searches, when not the 'osprey' step's predicted one: e.g. a copy with the
+    # entrapment rows filed under their paired targets' accessions, so protein-informed FDR can reach them.
+    [string]$ArmLibrary,
+    [string]$OspreyExtraArgs = '',
+    [string]$OspreyEnv = '',
+    # The 'osprey' step into another folder (<WorkDir>\<OspreyStepDir>), with -TopFragments library fragments per
+    # precursor (Osprey's --lf-top-n-frag; DIA-NN keeps 12), and with -LibraryOnly stopped after PredictLibrary.
+    # Every Osprey step reads and writes the one spectra cache, <WorkDir>\osprey\cache.
+    [string]$OspreyStepDir = 'osprey',
+    [int]$TopFragments = 20,
+    [switch]$LibraryOnly,
+    # The 'diann-search' step without --reanalyse (no MBR second pass), into diann-search-nombr.
+    [switch]$DiannNoMbr
 )
 
 $ErrorActionPreference = 'Stop'
@@ -71,7 +92,8 @@ if (-not $DataDir) {
     $DataDir = Join-Path $root $name
 }
 if (-not $WorkDir) { $WorkDir = Join-Path 'D:\test\osprey-runs\diann-entrapment' $name }
-if (-not $Model) { $Model = "D:\test\osprey-runs\diann-compare\$name\osprey-library\osprey.carafemodel" }
+# Osprey writes the tuned model as <output stem>.model.zip (#4895; .carafemodel before it).
+if (-not $Model) { $Model = "D:\test\osprey-runs\diann-compare\$name\osprey-library\osprey.model.zip" }
 $fasta = Join-Path $DataDir $preset.Fasta
 $runs = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.raw" })
 $diannRuns = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.$($preset.DiannInput)" })
@@ -81,11 +103,14 @@ foreach ($path in @($fasta, $OspreyExe, $DiannExe, $Model, $EntrapmentFasta) + $
 if ($WorkDir -match '--') { throw "DIA-NN cuts a path at '--': choose a -WorkDir without it ($WorkDir)." }
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 
+$cacheDir = Join-Path $WorkDir 'osprey\cache'
+# The arms, the gbdt step and the swap read the 'osprey' step's library; -OspreyStepDir moves only the osprey step.
 $ospreyDir = Join-Path $WorkDir 'osprey'
 $predicted = Join-Path $ospreyDir 'osprey.predicted.blib'
+$stepDir = Join-Path $WorkDir $OspreyStepDir
 $peptideFasta = Join-Path $WorkDir 'peptides\target_entrapment_peptides.fasta'
 $diannLibDir = Join-Path $WorkDir 'diann-library'
-$diannSearchDir = Join-Path $WorkDir 'diann-search'
+$diannSearchDir = Join-Path $WorkDir $(if ($DiannNoMbr) { 'diann-search-nombr' } else { 'diann-search' })
 
 function Invoke-Step {
     param([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Dir)
@@ -110,22 +135,29 @@ $digest = @('--min-pr-mz', '400', '--max-pr-mz', '900', '--min-pr-charge', '2', 
 $stepList = $Steps -split '\s*,\s*'
 
 if ($stepList -contains 'osprey') {
-    Invoke-Step 'osprey' $OspreyExe (@('-i') + $runs + @(
-        '--fasta', $fasta, '--model', $Model,
-        '--entrapment', "$EntrapmentRatio", '--entrapment-fasta', $EntrapmentFasta,
-        # --output-dir: without it the per-run artifacts (calibration, scores parquet) land beside the
-        # runs, in the shared test-data folder.
-        '-o', (Join-Path $ospreyDir 'osprey.blib'), '--output-dir', $ospreyDir, '--cache-dir', (Join-Path $ospreyDir 'cache'),
-        '--fdrbench', (Join-Path $ospreyDir 'FDRBench-Input.tsv'),
-        '--log-file', (Join-Path $ospreyDir 'osprey.log'),
-        '--enzyme', '2', '--miss-c', '1', '--minLength', '7', '--maxLength', '35', '--clip-n-m',
-        '--fixMod', '1', '--varMod', '0', '--maxVar', '1',
-        '--min-pep-mz', '400', '--max-pep-mz', '900', '--min-pep-charge', '2', '--max-pep-charge', '3',
-        '--lf-frag-mz-min', '200', '--lf-frag-mz-max', '1960', '--lf-top-n-frag', '20',
-        '--lf-min-n-frag', '2', '--lf-frag-n-min', '2', '--rt-model', 'chronologer', '--device', $Device,
-        '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
-        '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
-        '--threads', "$Threads", '--timestamp')) $ospreyDir
+    $exports = if ($LibraryOnly) { @() } else {
+        @('--fdrbench', (Join-Path $stepDir 'FDRBench-Input.tsv'), '--fdrbench-pass', $FdrBenchPass, '--model-diagnostics') }
+    # -LibraryOnly: the one command's first task is PredictLibrary when the model is given (--model).
+    if ($LibraryOnly) { $env:OSPREY_STOP_AFTER_TASKS = '1' }
+    try {
+        Invoke-Step $OspreyStepDir $OspreyExe (@('-i') + $runs + @(
+            '--fasta', $fasta, '--model', $Model,
+            '--entrapment', "$EntrapmentRatio", '--entrapment-fasta', $EntrapmentFasta,
+            # --output-dir: without it the per-run artifacts (calibration, scores parquet) land beside the
+            # runs, in the shared test-data folder.
+            '-o', (Join-Path $stepDir 'osprey.blib'), '--output-dir', $stepDir, '--cache-dir', $cacheDir) + $exports + @(
+            '--log-file', (Join-Path $stepDir 'osprey.log'),
+            '--enzyme', '2', '--miss-c', '1', '--minLength', '7', '--maxLength', '35', '--clip-n-m',
+            '--fixMod', '1', '--varMod', '0', '--maxVar', '1',
+            '--min-pep-mz', '400', '--max-pep-mz', '900', '--min-pep-charge', '2', '--max-pep-charge', '3',
+            '--lf-frag-mz-min', '200', '--lf-frag-mz-max', '1960', '--lf-top-n-frag', "$TopFragments",
+            '--lf-min-n-frag', '2', '--lf-frag-n-min', '2', '--rt-model', 'chronologer', '--device', $Device,
+            '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
+            '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
+            '--threads', "$Threads", '--timestamp')) $stepDir
+    } finally {
+        if ($LibraryOnly) { Remove-Item Env:OSPREY_STOP_AFTER_TASKS -ErrorAction SilentlyContinue }
+    }
 }
 
 # Osprey again on the 'osprey' step's predicted library (-l; its DecoyPairs pair the decoys), with
@@ -138,7 +170,7 @@ if ($stepList -contains 'osprey-gbdt') {
         Invoke-Step 'osprey-gbdt' $OspreyExe (@('-i') + $runs + @(
             '-l', $predicted, '--decoys-in-library',
             '-o', (Join-Path $gbdtDir 'osprey.blib'), '--output-dir', $gbdtDir,
-            '--cache-dir', (Join-Path $ospreyDir 'cache'),
+            '--cache-dir', $cacheDir,
             '--fdrbench', (Join-Path $gbdtDir 'FDRBench-Input.tsv'), '--log-file', (Join-Path $gbdtDir 'osprey.log'),
             '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
             '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
@@ -146,6 +178,37 @@ if ($stepList -contains 'osprey-gbdt') {
     } finally {
         Remove-Item Env:OSPREY_FDR_MODEL -ErrorAction SilentlyContinue
     }
+}
+
+# Osprey again on the 'osprey' step's predicted library and spectra cache, with one setting changed
+# (-OspreyExtraArgs, -OspreyEnv): a compaction gate, a pass-2 q-value mode, a per-run export. The
+# library is the same file, so the arms differ from the 'osprey' step only by what was changed and by
+# reading the library with -l instead of predicting it.
+if ($stepList -contains 'osprey-arm') {
+    $armLib = if ($ArmLibrary) { $ArmLibrary } else { $predicted }
+    if (-not (Test-Path $armLib)) { throw "No library for the arm: $armLib (run the 'osprey' step first)" }
+    $armDir = Join-Path $WorkDir $Arm
+    $extra = @($OspreyExtraArgs -split '\s+' | Where-Object { $_ })
+    $envPairs = @($OspreyEnv -split ';' | Where-Object { $_ } | ForEach-Object {
+        $kv = $_ -split '=', 2
+        if ($kv.Count -ne 2) { throw "-OspreyEnv entry '$_' is not NAME=value" }
+        , $kv
+    })
+    foreach ($kv in $envPairs) { Set-Item -Path "Env:$($kv[0])" -Value $kv[1] }
+    try {
+        Invoke-Step $Arm $OspreyExe (@('-i') + $runs + @(
+            '-l', $armLib, '--decoys-in-library',
+            '-o', (Join-Path $armDir 'osprey.blib'), '--output-dir', $armDir,
+            '--cache-dir', $cacheDir,
+            '--fdrbench', (Join-Path $armDir 'FDRBench-Input.tsv'), '--fdrbench-pass', $FdrBenchPass,
+            '--log-file', (Join-Path $armDir 'osprey.log'),
+            '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
+            '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
+            '--threads', "$Threads", '--timestamp') + $extra) $armDir
+    } finally {
+        foreach ($kv in $envPairs) { Remove-Item -Path "Env:$($kv[0])" -ErrorAction SilentlyContinue }
+    }
+    "Library: $armLib`nOspreyExtraArgs: $OspreyExtraArgs`nOspreyEnv: $OspreyEnv" | Set-Content -Path (Join-Path $armDir 'arm.txt') -Encoding utf8
 }
 
 if ($stepList -contains 'peptides') {
@@ -169,7 +232,7 @@ if ($stepList -contains 'diann-search') {
     Invoke-Step 'diann-search' $DiannExe ($fileArgs + @(
         '--lib', $lib.FullName, '--temp', $diannSearchDir, '--out', (Join-Path $diannSearchDir 'report.parquet'),
         '--qvalue', '0.05', '--matrices', '--pg-level', '0', '--fasta', $peptideFasta, '--cut', '', '--duplicate-proteins',
-        '--individual-mass-acc', '--individual-windows', '--reanalyse', '--rt-profiling') +
+        '--individual-mass-acc', '--individual-windows') + @(if (-not $DiannNoMbr) { '--reanalyse' }) + @('--rt-profiling') +
         $preset.DiannSearch + $digest) $diannSearchDir
 }
 
@@ -212,8 +275,9 @@ if ($stepList -contains 'swap-osprey') {
         '-l', (Join-Path $swapExport 'diann_predicted.tsv'), '--decoys-in-library',
         '--decoy-pairing-manifest', (Join-Path $ospreyDir 'osprey.predicted\pairing.tsv'),
         '-o', (Join-Path $swapOsprey 'osprey.blib'), '--output-dir', $swapOsprey,
-        '--cache-dir', (Join-Path $ospreyDir 'cache'),
-        '--fdrbench', (Join-Path $swapOsprey 'FDRBench-Input.tsv'), '--log-file', (Join-Path $swapOsprey 'osprey.log'),
+        '--cache-dir', $cacheDir,
+        '--fdrbench', (Join-Path $swapOsprey 'FDRBench-Input.tsv'), '--fdrbench-pass', $FdrBenchPass,
+        '--log-file', (Join-Path $swapOsprey 'osprey.log'),
         '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
         '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
         '--threads', "$Threads", '--timestamp')) $swapOsprey

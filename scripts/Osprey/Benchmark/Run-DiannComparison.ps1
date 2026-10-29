@@ -259,7 +259,9 @@ foreach ($step in $validSteps | Where-Object { $stepList -contains $_ }) {
             $tasks = if ($LibraryMode -eq 'pretrained' -and -not $PSBoundParameters.ContainsKey('LibraryTasks')) { 1 } else { $LibraryTasks }
             $dir = Invoke-TimedStep $step $OspreyExe (@('-i') + $runs + @(
                 '--fasta', $fasta,
-                '-o', '{step}\osprey.blib', '--cache-dir', '{step}\cache',
+                # --output-dir: without it the tuning search writes its per-run artifacts beside the
+                # runs, in the shared test-data folder.
+                '-o', '{step}\osprey.blib', '--output-dir', '{step}', '--cache-dir', '{step}\cache',
                 '--log-file', '{step}\osprey.log') + $ospreyDigest + $tuneArgs + $ospreySearch) `
                 -Environment @{ OSPREY_STOP_AFTER_TASKS = "$tasks" }
             $stop = Select-String -Path (Join-Path $dir 'osprey.log') -Pattern '\[TASK\] stop:after' |
