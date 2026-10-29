@@ -5,11 +5,12 @@
 - **Checkout**: `C:\Dev\mz5` (moved from `C:\Dev\master_clean` 2026-10-12)
 - **Module**: `pwiz`
 - **Base**: `origin/master`
-- **Status**: In progress. C# port committed locally (10 commits), not pushed; MsData.Tests (96),
-  Util.Tests (42), MsConvert.Tests (18) and MsConvertGUI.Tests (7) green. Two `/code-review medium`
-  rounds settled. Next: inspection (see 2026-10-29 second round), push, PR.
+- **Status**: PR open. 10 commits plus a master merge (2026-10-29, 97 commits, no conflicts);
+  after the merge MsData.Tests (112), Util.Tests (42), MsConvert.Tests (23) and MsConvertGUI.Tests
+  (9) green, and the developer's clean `Pwiz.sln` build succeeded (the 3 earlier errors are gone).
+  Two `/code-review medium` rounds settled. Next: TeamCity, review.
 - **GitHub Issue**: (none yet)
-- **PR**: (none)
+- **PR**: [#4937](https://github.com/ProteoWizard/pwiz/pull/4937) (opened 2026-10-29)
 - **Cherry-pick to release**: undecided
 - **Obsolete C++ branch**: `Skyline/work/20260809_mz5_continueonerror` (`30e25b3e57`,
   `6fb292297c`, never pushed) deleted 2026-10-17 after its last unported fix (progress before
@@ -361,8 +362,8 @@ is not primed for a Skyline build. The applicable gate for pwiz-sharp is a warni
 build (#4810 made warnings fail it). Release build 2026-10-29: 0 warnings; every touched project
 built. 3 errors, all in projects the branch does not touch, cause not yet established: BiblioSpec's
 MascotShim cmake step, SeeMS `SpectrumList_LockmassRefiner` (CS0246) and Thermo.Tests
-`GetInstrumentConfigurationComponents` (CS0117; both symbols exist). Developer is doing a clean
-build to see whether they persist.
+`GetInstrumentConfigurationComponents` (CS0117; both symbols exist). After merging master, the
+developer's clean build succeeded, so they did not come from this branch.
 
 ## Notes
 
