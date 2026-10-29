@@ -130,6 +130,35 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
 - The fine-tune slides (Library Model, the run page during and after tuning) were recaptured with
   the branch build, so their off-screen renders now carry the repainted boundary too.
 
+### 2026-10-29 afternoon - The Koina and AlphaPeptDeep drafts
+
+- `KoinaLibraryBuild` and `AlphaPeptDeepLibraryBuild` published in `/home/software/Skyline-dev-private`
+  (Markdown, attachments hidden, titles "Build a Koina Library" and "Build an AlphaPeptDeep Library"),
+  in the Carafe draft's numbered-step shape with each public page's framing kept: the Koina page keeps
+  Tools > Options and the mirror-plot steps and gains the new first page, the FASTA route and an Explore
+  step; the AlphaPeptDeep page is Build Library with Carafe and the Default (AlphaPeptDeep) model, the
+  FASTA route with decoys, enable and Explore, citing Zeng et al., Nat Commun 13, 7238 (2022) (verify).
+  Koina: 15 attachments (k-01..k-04 of the morning, the public page's s-01, s-02, s-06..s-10 and the gif
+  renamed, the Carafe draft's generic three). AlphaPeptDeep: 8 (a-01..a-05 of a new capture round with
+  `add_apd_pauses.py`, plus the generic three). Both rendered pages' images resolve.
+  Links: https://skyline.ms/home/software/Skyline-dev-private/wiki-page.view?name=KoinaLibraryBuild and
+  https://skyline.ms/home/software/Skyline-dev-private/wiki-page.view?name=AlphaPeptDeepLibraryBuild
+- The Koina draft's FASTA step documents the intended behavior; on master the Koina builder ignores the
+  Predict For choices (the defect above). If the control is hidden instead, drop step 5.
+- Capture mechanics learned: Peptide Settings enables Explore only when it loads, so a library built in
+  the dialog cannot be explored from it; the explorer pause opens it from the main window
+  (`SkylineWindow.ViewSpectralLibraries`). The explorer's toolbar buttons are not reachable over the MCP;
+  its graph's right-click menu is (`Ion Types > B`, `Charges > 2` on `MsGraphExtension`). The forms
+  listing shows a PauseAndContinueForm but not its description, and the test log writes the pause line
+  late, so which pause is current can only be read from a capture of the pause form itself; Brendan
+  asked for the description in the Message column (an IDetailedMessage the pause form implements,
+  since deriving it from CommonFormEx would enlist it in CheckAllFormsDisposed). Not done yet.
+- The LabKey MCP's new `create_wiki_page` and `attach_wiki_files` tools returned a coroutine error
+  (the wrappers shadowed the module functions they call); fixed and pushed to pwiz-ai (c64a7da9).
+- The pretrained Build Library route showed "BlibBuild completed successfully": Osprey wrote peptdeep's
+  TSV and Skyline rebuilt the blib from it. Fixed on its own branch, see
+  `TODO-20261029_carafe_predict_blib.md`.
+
 ### 2026-10-29 - The other library prediction pages (in progress)
 
 - Brendan: "Build AlphapeptDeep Library" and "Build Koina Library" in `/home/software/Skyline` must
