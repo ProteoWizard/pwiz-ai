@@ -68,10 +68,12 @@ About 3-4 minutes on a built tree.
 - [ ] Decide: enable at zero, or enable now with a shrinking per-project exclude list
 
 ### Step 4 - drift and loose ends
-- [ ] Keep `Pwiz.sln.DotSettings` in step with Skyline's: add it as a target of
-  `ai/scripts/Skyline/scripts/Sync-DotSettings.ps1` (override: the `Localizable=No` line), or a
-  test asserting it equals Skyline's plus that line. Osprey and CarafeSharp copies have already
-  drifted (only Skyline has the `Boolean.ToString` SSR pattern).
+- [x] Keep `Pwiz.sln.DotSettings` in step with Skyline's: now a target of
+  `ai/scripts/Skyline/scripts/Sync-DotSettings.ps1` (per-target overrides; Pwiz's inserts the
+  `Localizable=No` line; skipped where `Pwiz.sln` is absent). Runs on every Build-Skyline.ps1.
+  Verified: regenerates the committed file byte-for-byte.
+- [ ] Osprey and CarafeSharp copies have already drifted from Skyline's (only Skyline has the
+  `Boolean.ToString` SSR pattern) and are not sync targets - separate decision
 - [ ] `pwiz/utility/test/CodeInspectionTests.cs` walks `pwiz/` and `Tools/`; `Tools/` was
   removed by the hoist (#4658), so its rules no longer cover the ported `pwiz_tools/` projects
 

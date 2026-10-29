@@ -1,15 +1,16 @@
 <#!
 .SYNOPSIS
-    Synchronize ReSharper .DotSettings across Skyline, SkylineBatch, and AutoQC.
+    Synchronize ReSharper .DotSettings from Skyline to SkylineBatch, AutoQC, SkylineMcp and Pwiz.sln.
 
 .DESCRIPTION
-    Copies Skyline.sln.DotSettings as the canonical baseline to SkylineBatch.sln.DotSettings and AutoQC.sln.DotSettings
-    applying intentional severity overrides (currently LocalizableElement: WARNING -> HINT) for batch tools.
+    Copies Skyline.sln.DotSettings as the canonical baseline to each target's .sln.DotSettings,
+    applying that target's intentional overrides: LocalizableElement WARNING -> HINT for the batch
+    tools, and localization off by default for Pwiz.sln.
     Skips rewrite if target already matches intended content to avoid unnecessary Git diffs.
 
 .NOTES
     Run early in each build script to keep inspection configuration aligned.
-    Extend $overrides map for future tool-specific severity adjustments.
+    Give a target its own Overrides list for tool-specific adjustments.
     Safe for repeated invocation.
 
 #>
@@ -58,16 +59,24 @@ if (-not (Test-Path $baselinePath)) {
     exit 1
 }
 
-$targets = @(
-    @{ Name = 'SkylineBatch'; Path = Join-Path $skylineRoot 'Executables/SkylineBatch/SkylineBatch.sln.DotSettings'; ApplyOverrides = $true },
-    @{ Name = 'AutoQC';       Path = Join-Path $skylineRoot 'Executables/AutoQC/AutoQC.sln.DotSettings';             ApplyOverrides = $true },
-    @{ Name = 'SkylineMcp';   Path = Join-Path $skylineRoot 'Executables/Tools/SkylineMcp/SkylineMcp.sln.DotSettings'; ApplyOverrides = $true }
+# Overrides (regex pattern => replacement) applied to the baseline for a target.
+# Batch tools: lower localization noise (treat as HINT rather than WARNING).
+$batchToolOverrides = @(
+    @{ Pattern = '(?m)(<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=LocalizableElement/@EntryIndexedValue">)WARNING(<[/]s:String>)'; Replacement = '$1HINT$2' }
+)
+# Pwiz.sln: projects are not localizable unless they opt in with their own *.csproj.DotSettings
+# Localizable=Yes (CommonUtil, CommonMsData and MSGraph do). Inserted after the opening element,
+# reusing the file's own line ending.
+$pwizOverrides = @(
+    @{ Pattern = '^(<wpf:ResourceDictionary[^\r\n]*(\r?\n))'; Replacement = "`$1`t<s:String x:Key=`"/Default/CodeEditing/Localization/Localizable/@EntryValue`">No</s:String>`$2" }
 )
 
-# Map of overrides (regex pattern => replacement) applied only when ApplyOverrides = $true
-# Intent: Lower localization noise for batch tools (treat as HINT rather than WARNING)
-$overrides = @(
-    @{ Pattern = '(?m)(<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=LocalizableElement/@EntryIndexedValue">)WARNING(<[/]s:String>)'; Replacement = '$1HINT$2' }
+# Requires: a file that must exist for the target to apply; checkouts older than Pwiz.sln skip it.
+$targets = @(
+    @{ Name = 'SkylineBatch'; Path = Join-Path $skylineRoot 'Executables/SkylineBatch/SkylineBatch.sln.DotSettings'; Overrides = $batchToolOverrides },
+    @{ Name = 'AutoQC';       Path = Join-Path $skylineRoot 'Executables/AutoQC/AutoQC.sln.DotSettings';             Overrides = $batchToolOverrides },
+    @{ Name = 'SkylineMcp';   Path = Join-Path $skylineRoot 'Executables/Tools/SkylineMcp/SkylineMcp.sln.DotSettings'; Overrides = $batchToolOverrides },
+    @{ Name = 'Pwiz';         Path = Join-Path $pwizRoot 'Pwiz.sln.DotSettings'; Overrides = $pwizOverrides; Requires = Join-Path $pwizRoot 'Pwiz.sln' }
 )
 
 $baselineContent = Get-Content -LiteralPath $baselinePath -Raw
@@ -75,22 +84,26 @@ $baselineContent = Get-Content -LiteralPath $baselinePath -Raw
 foreach ($t in $targets) {
     $targetPath = $t.Path
     $name = $t.Name
+    $desired = $baselineContent
+    foreach ($ov in $t.Overrides) { $desired = [Regex]::Replace($desired, $ov.Pattern, $ov.Replacement) }
+    if ($t.ContainsKey('Requires') -and -not (Test-Path $t.Requires)) {
+        Write-Skip "$(Split-Path -Leaf $t.Requires) absent ($name) - skipping"
+        continue
+    }
     if (-not (Test-Path $targetPath)) {
-        Write-Skip "Target missing ($name) - creating from baseline"
-        $newContent = $baselineContent
-        if ($t.ApplyOverrides) {
-            foreach ($ov in $overrides) { $newContent = [Regex]::Replace($newContent, $ov.Pattern, $ov.Replacement) }
+        # A release branch predates some tools; without the project directory there is nothing to configure.
+        $targetDir = Split-Path -Parent $targetPath
+        if (-not (Test-Path $targetDir)) {
+            Write-Skip "Project absent ($name) - skipping"
+            continue
         }
-        [System.IO.File]::WriteAllText($targetPath, $newContent)
+        Write-Skip "Target missing ($name) - creating from baseline"
+        [System.IO.File]::WriteAllText($targetPath, $desired)
         Write-Change "Created $name DotSettings"
         continue
     }
 
     $current = Get-Content -LiteralPath $targetPath -Raw
-    $desired = $baselineContent
-    if ($t.ApplyOverrides) {
-        foreach ($ov in $overrides) { $desired = [Regex]::Replace($desired, $ov.Pattern, $ov.Replacement) }
-    }
 
     if ($current -eq $desired) {
         if ($VerboseOutput) { Write-Skip "No change needed for $name" }
