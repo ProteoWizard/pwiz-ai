@@ -130,6 +130,43 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
 - The fine-tune slides (Library Model, the run page during and after tuning) were recaptured with
   the branch build, so their off-screen renders now carry the repainted boundary too.
 
+### 2026-10-29 - The other library prediction pages (in progress)
+
+- Brendan: "Build AlphapeptDeep Library" and "Build Koina Library" in `/home/software/Skyline` must
+  also match master: building an AlphaPeptDeep library is now Build Library with Carafe as the
+  source and its default model; and both the Carafe and the Koina source offer **Predict for**
+  (the document's precursors, or a protein FASTA, the Predict For page with decoys and entrapment
+  options). Confirmed in `BuildLibraryDlg`: `comboCarafePredictFor` and `comboKoinaPredictFor`,
+  and `GetNextPage` sends either source to `predict_for` when the FASTA is chosen. Koina's FASTA
+  route is untested by hand; EncyclopeDIA Search builds a whole-FASTA Koina library, so the
+  prediction path itself is exercised.
+- `add_koina_pauses.py` (session folder) drives it in `BuildLibraryCarafeWizardTest` with
+  `-AiConnector -EnableInternet`: Koina page 1 for the document, page 1 with Predict for a FASTA,
+  the Predict For page, a real Koina build for the subset FASTA, the library in Peptide Settings,
+  then the Carafe source's Predict For page with decoys. Captures go to `shots/`; clean with
+  `clean_borders.py` (not needed with the branch build's repaint).
+- **Run on 2026-10-29 morning, finding**: Koina's first page offers Predict for (NCE above it) and
+  reaches the Predict For page with the decoy and entrapment boxes (captures `k-01`..`k-04` in
+  `shots/`), and the Koina build for the FASTA ran and produced a 720-precursor library; but 720 is
+  also the document's count, because the test document is that same FASTA digested with the same
+  settings, so the count proves nothing. The code does: `CreateKoinaBuilder` never reads
+  `PredictForDocument`, `PredictForFastaPath`, `PredictEntrapment` or `EntrapmentFastaPath`; it
+  predicts the open document's peptides (`BuildLibraryDlg.cs` ~829, `doc.Peptides.Where(pep =>
+  PredictDecoys || !pep.IsDecoy)`), and `PredictDecoys` there only admits decoys the document
+  already has. The FASTA digest, decoy generation and entrapment (lines ~420-450) belong to
+  `CreateCarafeBuilder` alone. So on master the Koina route shows the FASTA, decoy and entrapment
+  choices and ignores them. Fix options: share the Carafe builder's document-building block with
+  the Koina builder, or hide Predict for on the Koina tab until it does. Brendan also wants the
+  decoy and entrapment algorithms consistent with Carafe's recent work: centralize them, or have
+  Skyline use Carafe's improved versions. Repeat the check with a document that differs from the
+  FASTA (an empty document gives the "Add peptide precursors to the document" refusal if the FASTA
+  is ignored). The test file is reverted; `TestFunctional` must be rebuilt once the run exits.
+- Drafts to write in Skyline-dev-private, same framing as their public pages: "Build AlphapeptDeep
+  Library" becomes a short page (Carafe source, default model, Finish; the Predict For page for a
+  FASTA; Explore) pointing to the Carafe page for fine-tuning; "Build Koina Library" keeps its
+  Tools > Options and mirror-plot steps and gains the new first page and the FASTA route. The
+  public pages' s-NN screenshots that are still right can be reused the way the Carafe draft does.
+
 ### 2026-10-29 - Guide, skill, and the first feature walkthrough page
 
 - `ai/docs/feature-demo-guide.md` and the `feature-demo` skill: how to capture screens at
