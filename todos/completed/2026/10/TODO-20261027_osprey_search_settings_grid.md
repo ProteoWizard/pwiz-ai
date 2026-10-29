@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261027_osprey_search_settings_grid`
 - **Base**: `master` (PR #4925 merged 2026-10-27, b68aa96d5f)
 - **Created**: 2026-10-27
-- **Status**: In Progress (night session 2026-10-27)
+- **Status**: Completed
 - **Module**: `skyline` (with an `osprey` piece if the declarations are exported from Osprey)
-- **PR**: [#4927](https://github.com/ProteoWizard/pwiz/pull/4927)
+- **PR**: [#4927](https://github.com/ProteoWizard/pwiz/pull/4927) (merged 2026-10-28)
 - **Objective**: Expose the complete option set of Osprey and Carafe behind an "Additional
   settings..." button, as the other search engines do, in both places that run Osprey: the Osprey
   Search wizard and Build Library's Carafe source (the fine-tune pages and the pretrained route).
@@ -383,3 +383,16 @@ work branch after a `-Target TestPerf` build, so every test the TODO names has r
   preset; a doubled doc comment), 2 dropped (the refusal message already says "or are not valid for
   the installed Osprey"; the parser does not reject unlisted list values under Carafe's grammar,
   and the instrument list is now documentation-only on the command line anyway).
+
+### 2026-10-28 - Merged
+
+PR #4927 merged as commit 15c39798df. Shipped: the Argument declarations extended with property
+name, type, default, range and (Osprey) scope; `Osprey --help properties`; Skyline's
+`OspreyProperties`/`OspreyAdditionalSettings`/`OspreySettingsDescriptor`; the property-grid dialog
+behind Additional Settings... on the Search Settings page of the Osprey Search wizard and of Build
+Library's fine-tune (never on Build Library's first page, which stays the quick path); last-used
+persistence and named presets mirroring the DIA-NN wizard; the search's settings in the import's
+audit-log entry; `--culture` in Osprey's help; tolerance of an Osprey from before the export.
+Deferred: ja/zh-Hans labels (English fallback until the translation pass); the Osprey pin must move
+past this PR's Osprey build before a release. The TeamCity Osprey Perf/Regression gate was not run
+(declarations and help text only, no pipeline change).
