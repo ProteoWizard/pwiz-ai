@@ -6,7 +6,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4933](https://github.com/ProteoWizard/pwiz/pull/4933)
 - **Checkout**: `C:\proj\pwiz-tccov` (sparse worktree: `pwiz_tools/Osprey/*.ps1`, `*.bat`)
 
 ## Objective
@@ -40,6 +40,6 @@ Per-test attribution from the TeamCity REST API (builds #767-#1141):
 
 - [x] Helper verified against simulated property files (master / PR / missing / outside TeamCity)
 - [x] tcbuild.bat dry-run with pwsh stand-ins: PR runs all three steps without -Coverage, master with
-- [ ] PR build on TeamCity logs "Not the default branch: running tests without coverage." and the
-      Osprey test time drops to ~2 min
+- [x] PR build #1144 (EC2) logged "Not the default branch: running tests without coverage."; build 10.4 min
+      (was 27.6 median on EC2), Osprey.Test 2.3 min, CarafeSharp.Test 3.4 min, 762 tests, 0 failed
 - [ ] After merge: first master build still imports both .dcvr snapshots (Code Coverage tab populated)
