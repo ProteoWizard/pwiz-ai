@@ -528,6 +528,60 @@ XICs + GBDT, attached library):**
   Osprey today (102,443 at q 1% but FDP 1.36%): ~10% more at a reported 1% that now means 1%. DIA-NN 142,538 at
   q 1% (FDP 0.50%). This is the configuration that satisfies both the FDR-control and single-peptide requirements.
 
+**#4823 + transfer, protein level (original library, local merge c30bcbb9e1; `protein_split.py`):**
+
+| Astral | protein groups at q 1% (FDP) | 1-peptide groups (FDP) | >= 2-peptide (FDP) | precursors at q 1% (FDP) |
+|---|---|---|---|---|
+| default config, protein-compact (`pr4823`) | 6,873 (0.73%) | 201 (~22%) | 6,672 (0.1%) | 100,423 peptides |
+| default config, transfer | 6,890 (1.13%) | 355 (~20%) | 6,535 (0.1%) | 93,528 (1.03%) |
+| best config, transfer | 7,879 (1.55%) | 482 (~24%) | 7,397 (0.1%) | 112,206 (1.03%) |
+
+The protein q-values come from the first pass in every mode; what changes is which groups reach the output. The
+>= 2-peptide stratum dropped many one-peptide proteins' only peptide in pass 2, which HID the miscalibration of
+single-peptide groups (~20-24% FDP at a reported 1%) rather than fixing it. Under the single-peptide requirement
+this must be fixed at the protein level: candidate - a separate picked-protein competition (own q) for groups
+detected by one peptide, which holds them to their own error rate without blocking them.
+
+**Run-level q of reconciled peaks under transfer (`astralest-transfer-perrun`, `--fdrbench-per-run`; pass-2 rows
+classified against pass 1: absent = gap-fill, same score = unchanged, else moved):**
+
+| run-level rows | rows | at run q <= 1% | FDP comb / lower |
+|---|---|---|---|
+| unchanged | 386,472 | 301,219 | 0.90% / 0.45% |
+| moved | 50,214 | 2,619 | 0.76% / 0.38% |
+| gap-filled | 18,456 | 728 | **11.6% / 5.8%** |
+| all | 455,142 | 304,566 | 0.93% / 0.46% |
+
+- Moved peaks are calibrated: the re-mapped run q holds. A move raises run q in 50.2% of rows and lowers it in 49.5%
+  (reconciliation finds a better peak about as often as it forces a worse one).
+- Gap-filled peaks are NOT: a gap fill happens only where the precursor is missing from the run, and false IDs are
+  disproportionately the one-run ones, so the gap-fill population has a far higher prior of being false than the
+  run-wide null the q comes from. Small share (728 of 304,566 passing rows), but per-run filtering for quantification
+  would trust them. Options: report gap-fills as quantified-because-identified-elsewhere (flagged, no identification
+  q), or give them a run q from a competition among gap-fills and their gap-filled decoys only.
+
+**Stellar (the three test runs; tune on `_21`: MS2 PCC 0.966 -> 0.984, RT R2 0.9976 -> 0.9989; DIA-NN on mzML
+with `--no-ms1 --mass-acc-cal 900`, mass accuracy 707 / 264 / 506 / 219 ppm across its passes):**
+
+| Stellar, attached library | per run at q 1% | at q 1% (FDP) | at FDP 0.3% | at FDP 0.5% |
+|---|---|---|---|---|
+| DIA-NN 2.6.1 | - | 32,701 (0.37%) | 32,388 | 34,274 |
+| Osprey default, protein-compact | 27,168-27,944 | 32,910 (0.98%) | 29,007 | 30,869 (-10%) |
+| Osprey default, transfer | 27,168-27,944 | 31,694 (0.71%) | 28,395 | 30,013 |
+| best Astral config, transfer | 24,168-25,055 | 31,000 (1.00%) | 28,440 | 29,523 |
+
+- Valid measurement: Osprey trails DIA-NN on Stellar by ~10% at matched FDP; the 10-21 "+5-7%" was the same
+  entrapment-design artifact as on Astral. Default reported q is calibrated on Stellar (0.98%).
+- The best Astral configuration HURTS on Stellar (per run -11%, matched FDP -2%): suspect 12 XICs at unit
+  resolution (0.4 Da windows collect much more interference per weak fragment); GBDT or the features possible.
+  Ablation queued (`stellar-ablate.ps1`: xic12 / gbdt / feat / feat+gbdt, all transfer). Settings this
+  instrument-sensitive have to be resolution-keyed, not global defaults.
+- DIA-NN raw: see the NOTE above (root cause found).
+- Stellar protein level, #4823 + transfer (original library): default 4,246 groups at FDP 0.89% (1-peptide 660 at
+  5.2%); best config 4,400 at 1.59% (1-peptide 812 at 8.6%); DIA-NN 4,876 at 0.70% (1-peptide 870 at 1.4%, plus 173
+  groups with no passing peptide at 12.7%). Precursors: default 31,693 at q 1% (0.70%), best 31,000 (0.99%).
+  DIA-NN reports ~30% more single-peptide proteins at a quarter of Osprey's error there - the clearest target.
+
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
   single best peptide, target vs decoy paired by base id, scored from the first pass's pre-compaction
