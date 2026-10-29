@@ -219,8 +219,9 @@ churn against CRLF blobs); they were restored from the branch and the one-line e
 the commit is 473/231 lines (a `System.Drawing` reference for CommonTest was the last adaptation).
 Built green on the branch (solution, TestPerf, ScreenshotBorderTest, CodeInspection) and opened as
 PR [#4936](https://github.com/ProteoWizard/pwiz/pull/4936) against `Skyline/skyline_26_1_1`, label
-skyline, awaiting TeamCity and Brendan's approval; complete it with `/pw-complete 4936` (this TODO
-stays active, so record the merge here rather than moving it). TeamCity's release-branch code
+skyline, merged 2026-10-29 as badae7ab73 on `Skyline/skyline_26_1_1` (with `--admin`: the branch
+policy wanted a second reviewer); the work branch is deleted locally and on GitHub. This TODO stays
+active, so the merge is recorded here rather than by moving it. TeamCity's release-branch code
 inspection flagged one warning in `ScreenshotBorderTest.AssertCorner`
 (`PossiblyImpureMethodCallOnReadonlyVariable`: `ToArgb()` on the readonly `BORDER_COLOR`); fixed on
 the PR branch by taking the expected color into a local first. **Master has the same line** (merged
