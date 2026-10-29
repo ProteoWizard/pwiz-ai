@@ -713,6 +713,21 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-29 - developers PR 7 (DigitalRune DPI fork) MERGED: 09d061d on uw-maccosslab/developers master
+
+- Last untested path before merge was the auto-hide strip (f0204f7 changed its icon draw).
+  Probed with a local-only test (pwiz1 TestFunctional/DpiAutoHideProbeTest.cs, untracked,
+  never commit): pins Targets + Files closed and screenshots the strip, run DPI-aware and
+  DPI-unaware (ai/.tmp/dpi-sweep/autohide/<phase>/). Both fine: scaled tabs, Targets icon
+  from the 32-px frame, Files icon upscaled smoothly; 96 DPI = stock look. The fly-out did
+  not open from ActiveAutoHideContent, so that frame is identical to the strip one.
+- Developer looked at the DPI-aware staging build (bin/staging/Release/Skyline-daily.exe)
+  live, then approved. Squash-merged like the repo's earlier PRs (single-parent merge commit,
+  title + (#7)), branch deleted; local developers checkout reset to origin/master.
+- pwiz PR #4602 already ships the DLL built from this exact source (fad33ce79a97).
+  Remaining #4602 items: Copilot re-request (optional), human review/merge; the file-type
+  icon SkylineDoc.ico still has the old hand-drawn 16-px frame (developer's call).
+
 ### 2026-10-22 - Dock tab icon frames (other session's f0204f7) reviewed, finished and shipped (eee6eb420f, pushed)
 
 - Another Claude Code session committed f0204f7 on the DigitalRune branch: DpiHelper.SelectFrame /
