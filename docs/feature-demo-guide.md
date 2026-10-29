@@ -131,6 +131,14 @@ stable across republishing; a changed slide is one file.
 feature is released, the page moves to `/home/software/Skyline` and the release notes link to it
 by name: `https://skyline.ms/home/software/Skyline/wiki-page.view?name=<PageName>`.
 
+**When a paper already links to a page, the draft replaces that page's body.** The Carafe paper's
+Code availability points at `https://skyline.ms/carafe.url`, which redirects to the public
+"Build Carafe Library" page written for a preview build that never shipped. The page name is
+what the paper's link resolves to, so it never changes: the draft in Skyline-dev-private keeps
+that page's framing (its downloads, its first and last steps, its pointers to sibling pages),
+cites the paper, and at release is written over the public page with `update_wiki_page` and
+`attach_wiki_files`. Check where a short link lands with `curl -sI https://skyline.ms/<name>.url`.
+
 **Name and title.** The page name is CamelCase with no spaces (`CarafeLibraryBuild`,
 `EncyclopeDiaSearch`); it is the `name=` in the URL and never changes. The title is the feature in
 words, with the release once it is known ("EncyclopeDIA Search from Skyline 23.1").

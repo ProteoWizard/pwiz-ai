@@ -142,6 +142,24 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
 - The page: `CarafeLibraryBuild` in `/home/software/Skyline-dev-private`, Markdown, "Building a
   Spectral Library with Carafe", the library-build half of the deck as nine steps with seven
   attached screenshots (native size, repainted borders), Show attachments off. Verified: the
-  rendered page's images all resolve to the page's own `wiki-download.view` URLs. No release
-  version in the intro yet; it moves to `/home/software/Skyline` when the feature is released.
+  rendered page's images all resolve to the page's own `wiki-download.view` URLs.
   Link: https://skyline.ms/home/software/Skyline-dev-private/wiki-page.view?name=CarafeLibraryBuild
+- **The page is the draft replacement for the public "Build Carafe Library" page**, which the
+  Carafe paper cites: its Code availability says "The Skyline version with Carafe integrated is
+  available at https://skyline.ms/carafe.url", and that short link redirects to
+  `/wiki/home/software/Skyline/page.view?name=Build%20Carafe%20Library`. That page (Markdown,
+  version 32, 17 `s-NN.png` attachments) walks through the never-merged PR #3549's wizard with a
+  DIA-NN report and links a preview installer; Bo wanted the paper to point at Carafe working in
+  Skyline, and the plan has always been to replace it when the feature is truly released. The
+  draft now keeps that page's framing (the same-proteins FASTA and Carafe Test Data downloads,
+  the Import FASTA and Peptide Settings steps, the Explore step, the Koina and AlphaPeptDeep
+  pointers), reuses five of its generic screenshots, and opens with the citation:
+  Wen B, Hsu C, Shteynberg D, Zeng W-F, Riffle M, Chang A, Mudge MC, Nunn BL, MacLean BX,
+  Berg MD, Villén J, MacCoss MJ, Noble WS. Nature Communications 16, 9815 (2025),
+  doi:10.1038/s41467-025-64928-4. Title "Build a Carafe Library", 12 attachments, hidden.
+- **At release**: fill the "[version to be filled in at release]" placeholder in the intro, then
+  `update_wiki_page("Build Carafe Library", body_file=<the draft body>, title="Build a Carafe
+  Library", show_attachments=False)` and `attach_wiki_files("Build Carafe Library", <the 12 png>)`
+  in `/home/software/Skyline`. The page name, and so the paper's link, never changes. The old
+  `s-NN.png` attachments stay until deleted in the LabKey UI (no delete tool). The release notes
+  link the same page.
