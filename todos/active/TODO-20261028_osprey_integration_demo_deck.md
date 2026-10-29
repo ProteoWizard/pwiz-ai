@@ -91,3 +91,30 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
   is tiny and the pretrained run carried the test's NCE 30.
 - Test files reverted and TestFunctional rebuilt again; the tuning run was cut short after its last
   screen (not a test result).
+
+### 2026-10-28 late - Screen dirt, and a real dataset for the result slide
+
+- Brendan: the captures carry Windows 11 "screen dirt" (what lay behind the rounded corners and the
+  blended frame); the ScreenshotManager's border repaint should apply. Done both ways:
+  - Deck: `clean_borders.py` (session folder) repaints the on-screen captures the way
+    `CleanupBorder11` does (white outside an 8 px rounded boundary, #707070 border, the capture
+    pasted back clipped at radius 12); republished as version 7.
+  - pwiz branch `Skyline/work/20261028_mcp_screenshot_border` (commit a6e149ef6e):
+    `ScreenshotBorder` in `pwiz.Common.GUI` (CommonBaseUI; there is no project named CommonUtilUI,
+    CommonBaseUI is CommonUtil's WinForms counterpart) holds the cleanup moved out of TestUtil;
+    `ScreenCapture.GetFormImage` repaints every capture, screen copy or off-screen render; a
+    `ScreenshotBorderTest` on a synthetic capture; ten callers take the class from its new home.
+    Verified over the MCP: a dialog rendered off-screen now comes back with white corners and the
+    standard border. `/code-review medium`: 7 findings, 4 fixed in the working tree (the unit
+    test's Windows 10 branch, no repaint on a docked pane, the doc comment, a try/catch so a repaint
+    failure keeps the capture), 2 dropped (TakeShot keeps its own docked-pane rule by design; the
+    TestRunner Windows 11 check has no CommonBaseUI to call), 1 was the uncommitted pauses. The
+    fixes build and the gates run once the Astral test below has exited (the build script refuses
+    while a TestRunner is alive).
+- Mike: slide 22's data is terrible. Root cause: the Stellar sDIA subset has three or four points
+  across a peak and most transitions carry the red "no peak" overlay, whatever peptide is chosen.
+  The completed OspreySearchPerfTest documents on this machine (Stellar, full HeLa FASTA) look the
+  same. So the result slide is being recaptured from an Osprey Search wizard run on the three
+  Astral HeLa runs in `D:\test\osprey-runs\astral` against the predicted library beside them
+  (`add_astral_pause.py`: a temporary block in `OspreySearchTuningTest` after scenario 1; the
+  search plus the chromatogram import take about an hour).
