@@ -51,6 +51,26 @@ single peptides."
 - The fix direction is a second pass that treats every precursor alike (`transfer`-like), plus reconciliation
   made symmetric for decoys; protein inference must report one-peptide groups (#4823's picked-protein FDR can).
 
+## REQUIREMENT: reconciliation stays, with accurate FDR (Mike, 2026-10-28)
+
+"Reconciliation is essential for quantification. The reconciliation is essential to ensure we are picking the
+same signal across different replicates. We need to figure out a way to get accurate FDR control for this."
+
+- Never trade reconciliation away for calibration. The `transfer` second pass keeps it in full (re-picks,
+  forced integrations, gap fills) and takes experiment q from the calibrated first pass: identify on the first
+  pass, quantify on the reconciled peaks.
+- Still to show: that the RUN-level q of a reconciled or gap-filled peak (re-mapped through the run's
+  score-to-q table) is accurate, since per-run filtering feeds quantification.
+
+## NOTE: DIA-NN on the Stellar (unit resolution) - always these flags (Mike, 2026-10-28)
+
+`--no-ms1 --mass-acc-cal 900` on every DIA-NN search of Stellar data. `--no-ms1`: unit-resolution data does not
+work well with DIA-NN's MS1 scoring. `--mass-acc-cal 900`: DIA-NN's default starting calibration (100 ppm) is far
+too tight for the Stellar; from 900 it calibrates itself to ~400-550 ppm (leave `--mass-acc` unset). Both are in
+the Stellar presets of `Run-DiannComparison.ps1` and `Run-DiannEntrapment.ps1`. DIA-NN still cannot calibrate the
+Stellar .raw even with them (20 ppm, 0 IDs in 2.2-2.6.1, TODO-20261021), so DIA-NN reads the msconvert mzML on
+Stellar while Osprey reads the .raw - the one exception to the raw-files rule.
+
 ## What we already know (from TODO-20261021_osprey_diann_timing.md, Osprey of 2026-10-21)
 
 These measurements predate two weeks of master, so Phase 1 repeats them. They also shape the plan:
@@ -479,6 +499,20 @@ errors and the margins small.
 Pass 1 calibrated (1.00% at q 1%). SVM fold-mean standardized weights: `peak_candidate_count` -0.415 (5th largest;
 fewer competing peaks is target-like), `context_precursor_mz` +0.292 (7th); the two margins +0.015 / +0.030 (the
 linear model already has that from the coelution features), length +0.026, charge -0.011.
+
+**FDR-control arms (2026-10-28 night, commit ceaab31b0d `OSPREY_RECONCILIATION`; best config = all features + 12
+XICs + GBDT, attached library):**
+- `best-symdecoy` (decoy consensus only from runs where its target's peptide qualified): re-picks 185,343
+  (current 193,841); reported q 1% -> 119,429 at FDP 1.43% / 0.72% (current 119,512 at 1.50% / 0.75%); at FDP
+  0.5% 107,150 (106,630). Real but small - the decoy asymmetry is not the main cause of the pass-2 drift.
+- `best-reconoff` FAILED: with `Reconciliation.Enabled = false` the first pass writes no reconciliation data but
+  PerFileRescoring still requires it ("Cannot resume: 3 of 3 runs still need re-scoring, but the cross-run
+  reconciliation data they need is not available"). The config-only switch is not runnable end to end on
+  master; not patched (pipeline code, diagnostic only).
+- `best-transfer` (OSPREY_PASS2_QVALUE=transfer: no >= 2-peptide stratum, every precursor competes alike):
+  **112,206 at reported q 1%, FDP 1.04% / 0.52% - calibrated**; 102,232 at FDP 0.5%, 111,899 at FDP 1.0%. Against
+  Osprey today (102,443 at q 1% but FDP 1.36%): ~10% more at a reported 1% that now means 1%. DIA-NN 142,538 at
+  q 1% (FDP 0.50%). This is the configuration that satisfies both the FDR-control and single-peptide requirements.
 
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
