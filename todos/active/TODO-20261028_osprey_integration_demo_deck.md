@@ -191,7 +191,12 @@ the commit is 473/231 lines (a `System.Drawing` reference for CommonTest was the
 Built green on the branch (solution, TestPerf, ScreenshotBorderTest, CodeInspection) and opened as
 PR [#4936](https://github.com/ProteoWizard/pwiz/pull/4936) against `Skyline/skyline_26_1_1`, label
 skyline, awaiting TeamCity and Brendan's approval; complete it with `/pw-complete 4936` (this TODO
-stays active, so record the merge here rather than moving it).
+stays active, so record the merge here rather than moving it). TeamCity's release-branch code
+inspection flagged one warning in `ScreenshotBorderTest.AssertCorner`
+(`PossiblyImpureMethodCallOnReadonlyVariable`: `ToArgb()` on the readonly `BORDER_COLOR`); fixed on
+the PR branch by taking the expected color into a local first. **Master has the same line** (merged
+in #4934; its ReSharper check did not fail on it, but the nightly inspection may): apply the same
+one-line change on a small master PR.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261029_library_pages_drafts.md` before starting work.
