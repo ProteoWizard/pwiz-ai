@@ -330,6 +330,12 @@ def attach_wiki_files(
     }
 
 
+# The MCP wrappers below carry the same names as the module functions they call, so inside a
+# wrapper the bare name is the wrapper itself (a coroutine); the wrappers call these aliases.
+_create_wiki_page = create_wiki_page
+_attach_wiki_files = attach_wiki_files
+
+
 def register_tools(mcp):
     """Register wiki tools."""
 
@@ -480,7 +486,7 @@ def register_tools(mcp):
             if not file_path.exists():
                 return f"body_file not found: {body_file}"
             body = file_path.read_text(encoding="utf-8")
-            created = create_wiki_page(page_name, body, title, renderer_type, show_attachments, server, container_path)
+            created = _create_wiki_page(page_name, body, title, renderer_type, show_attachments, server, container_path)
             return (
                 f"Wiki page created successfully:\n"
                 f"  page_name: {page_name}\n"
@@ -504,7 +510,7 @@ def register_tools(mcp):
     ) -> str:
         """[D] Attach files to a wiki page (replaces same-named ones). CAUTION: Modifies live wiki. → wiki.md"""
         try:
-            attached = attach_wiki_files(page_name, file_paths, server, container_path)
+            attached = _attach_wiki_files(page_name, file_paths, server, container_path)
             lines = [
                 f"Attached {len(attached['uploaded'])} file(s) to wiki page '{page_name}':",
                 *[f"  - {name}" for name in attached["uploaded"]],
