@@ -83,7 +83,9 @@ stricter; pwiz must not get a giant change set. So:
 
 ### Step 1 - settings
 - [x] `Sync-DotSettings.ps1` Pwiz target with risk-only severities; generated `Pwiz.sln.DotSettings`
-- [ ] Commit `Pwiz.sln.DotSettings` on the branch; verify inspection count (~206)
+- [x] Commit `Pwiz.sln.DotSettings` on the branch; verified 206 findings. `ArrangeNamespaceBody`
+  needed `resharper_arrange_namespace_body_highlighting = none` in `.editorconfig`: the
+  editorconfig's `csharp_style_namespace_declarations = file_scoped:warning` outranks DotSettings
 
 ### Step 2 - the ~206 risk findings
 - [ ] Review each by hand; fix real bugs, suppress deliberate cases with a comment
