@@ -167,6 +167,9 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
   Tools > Options and mirror-plot steps and gains the new first page and the FASTA route. The
   public pages' s-NN screenshots that are still right can be reused the way the Carafe draft does.
 
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261029_library_pages_drafts.md` before starting work.
+
 ### 2026-10-29 - Guide, skill, and the first feature walkthrough page
 
 - `ai/docs/feature-demo-guide.md` and the `feature-demo` skill: how to capture screens at
