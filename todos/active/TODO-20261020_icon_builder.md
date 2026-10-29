@@ -172,6 +172,27 @@ Targets tab at 200% should show the 32 px frame.
       placeholder image across 10 controls (see inline-icons.csv in ai/.tmp/icon-gallery)
 - [ ] Address review on #4887 (artwork); drawing fixes go through the gallery -> XAML ->
       IconBuilder re-run -> commit on the assets branch
+- [x] Gallery review round 3 (2026-10-27/28, `choices-round3.txt`): 21 vectors revised (thinner
+      plus signs, square-cut red X, stepped chromatogram peaks, Note gradient, Panorama rings
+      right-shifted, Open arrow, Print turned, ProtDB cylinder, UIModeProteomic wavy ribbon with
+      hq2x chosen so the manifest flips it to raster) and FindResults, Immediate,
+      magnifier_zoom_in traced for the gallery only. Uncommitted in pwiz2 with round 4
+- [x] Gallery review round 4 (2026-10-29, `choices-round4.txt`): the 1x blur has one cause,
+      WPF draws a Rectangle's stroke inside its box, so a 2-unit frame at Left 5 covers units
+      5..7 and straddles two device pixels at 1x (one pixel = two units); Trash was sharp because
+      it uses Paths and filled rectangles. Frames moved onto even units in IrtCalculator (sharp
+      corners, transparent interior), MethodFile, ViewFile, AuditLog, Comment, Copy_Bitmap, OptDB;
+      Immediate's exclamation mark and FindResults' binoculars (shorter, specular column, equal
+      text rows) retraced on the pixel grid; TransitionGroupDecoy/LibDecoy traced from the native
+      pixels (stepped, native colors); TransitionGroupLib's glyph bars aligned with FragmentLib's;
+      MoleculeList shows fluorene; Open's arrow curls around the page corner; Print at 90%; the
+      Wand's white end cap; Panorama rings toward 255,211,63; UIModeProteomic ribbon highlights.
+      `Scan-Alignment.py <VectorDir>` (session folder) lists off-grid edges: 70 of 129 files
+      still have some, mostly gradient/1-unit-stroke art that cannot be crisp at 1x anyway.
+      Gallery rows FilesTreeForm__Icon, FindResultsForm__Icon, ImmediateWindow__Icon now show the
+      OpenFolder, FindResults and Immediate vectors (alias table in Build-IconGallery.ps1)
+- [ ] Window icons (FindResults, Immediate, FilesTree): an .ico output kind in IconBuilder and a
+      DpiUtil path for Form.Icon before their vectors can ship; gallery choices still open
 - [ ] After #4602 and #4887 are both on master: point IconResourcesTest at
       DpiUtil.GetIconSizes / GetIconResourceName (ten-line cleanup)
 - [ ] README for the tool is written; mention in ai/docs/github-repo-guide.md if a script
