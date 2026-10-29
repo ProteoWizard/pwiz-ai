@@ -141,6 +141,7 @@ def _get_wiki_page_metadata(
     row_match = re.search(r'rowId:\s*(\d+)', html)
     version_match = re.search(r'pageVersionId:\s*(\d+)', html)
     parent_match = re.search(r'parent:\s*(\d+)', html)
+    show_attachments_match = re.search(r'showAttachments:\s*(true|false)', html)
 
     # Attachment names appear in LABKEY._wiki.setAttachments([{name: '...', ...}])
     # on every LabKey server, unlike the corex schema list_wiki_attachments prefers
@@ -160,9 +161,173 @@ def _get_wiki_page_metadata(
             "pageVersionId": int(version_match.group(1)),
             "rendererType": db_renderer,  # From database, not HTML
             "attachments": attachment_names,
+            "showAttachments": show_attachments_match.group(1) == "true" if show_attachments_match else True,
         }, session)
 
     raise Exception(f"Could not find wiki metadata in edit page for '{page_name}'")
+
+
+def _normalize_body(body: str) -> str:
+    """LF-only line endings: LabKey adds its own CR before each LF, so CRLF would become CR CR LF."""
+    return body.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _post_save_wiki(session: LabKeySession, server: str, container_path: str, page_name: str, payload: dict) -> tuple:
+    """POST a wiki-saveWiki payload with the headers the editor sends. Returns (status, result)."""
+    encoded_path = quote(container_path, safe="/")
+    encoded_page_name = quote(page_name, safe="")
+    headers = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": _server_url(server),
+        "Referer": f"{_server_url(server)}{container_path}/wiki-edit.view?name={encoded_page_name}",
+    }
+    return session.post_json(f"{_server_url(server)}{encoded_path}/wiki-saveWiki.view", payload, headers=headers)
+
+
+def _save_error(result) -> str:
+    """LabKey's standard error response uses `exception`; fall back to `error`, then a dump."""
+    if isinstance(result, dict):
+        return result.get("exception") or result.get("error") or str(result)[:500]
+    return str(result)[:500]
+
+
+def _wiki_page_url(server: str, container_path: str, page_name: str) -> str:
+    return f"{_server_url(server)}{container_path}/wiki-page.view?name={quote(page_name, safe='')}"
+
+
+def save_wiki_page(
+    page_name: str,
+    body: str,
+    title: str = None,
+    show_attachments: bool = None,
+    server: str = DEFAULT_SERVER,
+    container_path: str = DEFAULT_WIKI_CONTAINER,
+) -> dict:
+    """Save a new version of an existing wiki page.
+
+    Keeps the page's renderer, parent and (unless show_attachments is given) its
+    showAttachments setting. Returns a dict with old_version, new_version, title and url;
+    raises on failure.
+    """
+    metadata, session = _get_wiki_page_metadata(page_name, server, container_path)
+    if not metadata.get("entityId"):
+        raise Exception(f"Could not find wiki page '{page_name}' in {container_path}")
+    page_title = title if title is not None else metadata["title"]
+    payload = {
+        "entityId": metadata["entityId"],
+        "rowId": metadata["rowId"],
+        "name": metadata["name"],
+        "title": page_title,
+        "body": encode_waf_body(_normalize_body(body)),
+        "parent": metadata.get("parent", ""),
+        "pageVersionId": metadata["pageVersionId"],
+        "rendererType": metadata.get("rendererType", "HTML"),
+        "webPartId": 0,
+        "showAttachments": metadata.get("showAttachments", True) if show_attachments is None else show_attachments,
+        "shouldIndex": True,
+        "isDirty": False,
+        "useVisualEditor": False,
+    }
+    logger.info(f"Saving wiki page: {page_name}")
+    status_code, result = _post_save_wiki(session, server, container_path, page_name, payload)
+    if status_code != 200:
+        raise Exception(f"HTTP {status_code}: {_save_error(result)}")
+    return {
+        "old_version": metadata.get("pageVersionId", "?"),
+        "new_version": result.get("pageVersionId", "?"),
+        "title": page_title,
+        "url": _wiki_page_url(server, container_path, page_name),
+    }
+
+
+def create_wiki_page(
+    page_name: str,
+    body: str,
+    title: str,
+    renderer_type: str = "MARKDOWN",
+    show_attachments: bool = True,
+    server: str = DEFAULT_SERVER,
+    container_path: str = DEFAULT_WIKI_CONTAINER,
+) -> dict:
+    """Create a wiki page, as the editor's New Page does: no entityId, rowId or parent, pageVersionId -1.
+
+    Refuses a name that exists (use save_wiki_page). Returns a dict with entityId (when the
+    server reports it), version, title and url; raises on failure.
+    """
+    existing = _query_current_wiki_versions(server, container_path, "Name", page_name=page_name, max_rows=1)
+    if existing and existing.get("rows"):
+        raise Exception(f"Wiki page '{page_name}' already exists in {container_path}; use update_wiki_page")
+    renderer_type = renderer_type.upper()
+    if renderer_type not in ("HTML", "MARKDOWN", "RADEOX", "TEXT_WITH_LINKS"):
+        raise Exception(f"Unknown renderer type '{renderer_type}'; use HTML, MARKDOWN, RADEOX or TEXT_WITH_LINKS")
+    session, _ = get_labkey_session(server)
+    payload = {
+        "entityId": None,
+        "rowId": None,
+        "name": page_name,
+        "title": title,
+        "body": encode_waf_body(_normalize_body(body)),
+        "parent": None,
+        "pageVersionId": -1,
+        "rendererType": renderer_type,
+        "webPartId": 0,
+        "showAttachments": show_attachments,
+        "shouldIndex": True,
+        "isDirty": False,
+        "useVisualEditor": False,
+    }
+    logger.info(f"Creating wiki page: {page_name} in {container_path}")
+    status_code, result = _post_save_wiki(session, server, container_path, page_name, payload)
+    if status_code != 200 or (isinstance(result, dict) and result.get("success") is False):
+        raise Exception(f"HTTP {status_code}: {_save_error(result)}")
+    return {
+        "entityId": result.get("entityId") if isinstance(result, dict) else None,
+        "version": result.get("pageVersionId", "?") if isinstance(result, dict) else "?",
+        "title": title,
+        "url": _wiki_page_url(server, container_path, page_name),
+    }
+
+
+def attach_wiki_files(
+    page_name: str,
+    file_paths: list,
+    server: str = DEFAULT_SERVER,
+    container_path: str = DEFAULT_WIKI_CONTAINER,
+) -> dict:
+    """Attach files to a wiki page through wiki-attachFiles.api, as the editor's Attach a file does.
+
+    A file whose name the page already has is replaced. Returns a dict with the page's
+    attachment names after the upload and the server's response; raises on failure.
+    """
+    paths = [Path(p) for p in file_paths]
+    missing = [str(p) for p in paths if not p.exists()]
+    if missing:
+        raise FileNotFoundError("File(s) not found: " + ", ".join(missing))
+    metadata, session = _get_wiki_page_metadata(page_name, server, container_path)
+    entity_id = metadata.get("entityId")
+    if not entity_id:
+        raise Exception(f"Could not find wiki page '{page_name}' in {container_path}")
+    encoded_path = quote(container_path, safe="/")
+    encoded_page_name = quote(page_name, safe="")
+    headers = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": _server_url(server),
+        "Referer": f"{_server_url(server)}{container_path}/wiki-edit.view?name={encoded_page_name}",
+    }
+    files = [(f"formFiles[{i}]", str(p)) for i, p in enumerate(paths)]
+    logger.info(f"Attaching {len(files)} file(s) to wiki page {page_name}")
+    status_code, result = session.post_multipart(
+        f"{_server_url(server)}{encoded_path}/wiki-attachFiles.api",
+        {"entityId": entity_id}, files, headers=headers)
+    if status_code != 200 or (isinstance(result, dict) and result.get("success") is False):
+        raise Exception(f"HTTP {status_code}: {_save_error(result)}")
+    after, _ = _get_wiki_page_metadata(page_name, server, container_path, session=session)
+    return {
+        "uploaded": [p.name for p in paths],
+        "attachments": after.get("attachments", []),
+        "response": result,
+        "url": _wiki_page_url(server, container_path, page_name),
+    }
 
 
 def register_tools(mcp):
@@ -274,98 +439,83 @@ def register_tools(mcp):
         page_name: str,
         body_file: str,
         title: Optional[str] = None,
+        show_attachments: Optional[bool] = None,
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
         """[D] Update wiki page. CAUTION: Modifies live wiki. → wiki.md"""
         try:
-            # Read body content from file
             file_path = Path(body_file)
             if not file_path.exists():
                 return f"body_file not found: {body_file}"
             new_body = file_path.read_text(encoding="utf-8")
             logger.info(f"Read {len(new_body)} chars from {body_file}")
-
-            # Step 1: Get current page metadata (also returns the session to reuse)
-            logger.info(f"Getting metadata for wiki page: {page_name}")
-            metadata, session = _get_wiki_page_metadata(page_name, server, container_path)
-
-            if not metadata.get("entityId"):
-                return f"Could not find wiki page '{page_name}' in {container_path}"
-
-            old_version = metadata.get("pageVersionId", "?")
-            logger.info(f"Current page version: {old_version}")
-
-            # Step 2: Reuse the same session (same CSRF token) for the save
-
-            # Step 3: Build the save request
-            encoded_path = quote(container_path, safe="/")
-            save_url = f"{_server_url(server)}{encoded_path}/wiki-saveWiki.view"
-
-            # Normalize line endings to LF-only
-            # LabKey adds its own CR before each LF, so sending CRLF results in CR CR LF
-            normalized_body = new_body.replace("\r\n", "\n").replace("\r", "\n")
-
-            # Encode the body using WAF format
-            encoded_body = encode_waf_body(normalized_body)
-
-            # Use provided title or keep existing
-            page_title = title if title is not None else metadata["title"]
-
-            # Build payload matching the captured request
-            payload = {
-                "entityId": metadata["entityId"],
-                "rowId": metadata["rowId"],
-                "name": metadata["name"],
-                "title": page_title,
-                "body": encoded_body,
-                "parent": metadata.get("parent", ""),
-                "pageVersionId": metadata["pageVersionId"],
-                "rendererType": metadata.get("rendererType", "HTML"),
-                "webPartId": 0,
-                "showAttachments": True,
-                "shouldIndex": True,
-                "isDirty": False,
-                "useVisualEditor": False,
-            }
-
-            encoded_page_name = quote(page_name, safe="")
-            headers = {
-                "X-Requested-With": "XMLHttpRequest",
-                "Origin": _server_url(server),
-                "Referer": f"{_server_url(server)}{container_path}/wiki-edit.view?name={encoded_page_name}",
-            }
-
-            logger.info(f"Saving wiki page: {page_name}")
-            status_code, result = session.post_json(save_url, payload, headers=headers)
-
-            # Check response
-            if status_code == 200:
-                new_version = result.get("pageVersionId", "?")
-                return (
-                    f"Wiki page updated successfully:\n"
-                    f"  page_name: {page_name}\n"
-                    f"  container: {container_path}\n"
-                    f"  old_version: {old_version}\n"
-                    f"  new_version: {new_version}\n"
-                    f"  title: {page_title}\n"
-                    f"\nView at: {_server_url(server)}{container_path}/wiki-page.view?name={encoded_page_name}"
-                )
-            else:
-                # LabKey's standard error response uses `exception`; fall back to
-                # `error` and finally to a truncated dump of the raw response.
-                if isinstance(result, dict):
-                    error_msg = result.get("exception") or result.get("error") or str(result)[:500]
-                else:
-                    error_msg = str(result)[:500]
-                return (
-                    f"Wiki update failed with status {status_code}:\n"
-                    f"  Response: {error_msg}"
-                )
-
+            saved = save_wiki_page(page_name, new_body, title, show_attachments, server, container_path)
+            return (
+                f"Wiki page updated successfully:\n"
+                f"  page_name: {page_name}\n"
+                f"  container: {container_path}\n"
+                f"  old_version: {saved['old_version']}\n"
+                f"  new_version: {saved['new_version']}\n"
+                f"  title: {saved['title']}\n"
+                f"\nView at: {saved['url']}"
+            )
         except Exception as e:
             logger.error(f"Error updating wiki page: {e}", exc_info=True)
             return f"Error updating wiki page: {e}"
+
+    @mcp.tool()
+    async def create_wiki_page(
+        page_name: str,
+        body_file: str,
+        title: str,
+        renderer_type: str = "MARKDOWN",
+        show_attachments: bool = True,
+        server: str = DEFAULT_SERVER,
+        container_path: str = DEFAULT_WIKI_CONTAINER,
+    ) -> str:
+        """[D] Create wiki page (MARKDOWN or HTML). CAUTION: Modifies live wiki. → wiki.md"""
+        try:
+            file_path = Path(body_file)
+            if not file_path.exists():
+                return f"body_file not found: {body_file}"
+            body = file_path.read_text(encoding="utf-8")
+            created = create_wiki_page(page_name, body, title, renderer_type, show_attachments, server, container_path)
+            return (
+                f"Wiki page created successfully:\n"
+                f"  page_name: {page_name}\n"
+                f"  container: {container_path}\n"
+                f"  title: {title}\n"
+                f"  renderer: {renderer_type.upper()}\n"
+                f"  show_attachments: {show_attachments}\n"
+                f"  entityId: {created.get('entityId') or '(not reported)'}\n"
+                f"\nView at: {created['url']}"
+            )
+        except Exception as e:
+            logger.error(f"Error creating wiki page: {e}", exc_info=True)
+            return f"Error creating wiki page: {e}"
+
+    @mcp.tool()
+    async def attach_wiki_files(
+        page_name: str,
+        file_paths: list[str],
+        server: str = DEFAULT_SERVER,
+        container_path: str = DEFAULT_WIKI_CONTAINER,
+    ) -> str:
+        """[D] Attach files to a wiki page (replaces same-named ones). CAUTION: Modifies live wiki. → wiki.md"""
+        try:
+            attached = attach_wiki_files(page_name, file_paths, server, container_path)
+            lines = [
+                f"Attached {len(attached['uploaded'])} file(s) to wiki page '{page_name}':",
+                *[f"  - {name}" for name in attached["uploaded"]],
+                "",
+                f"The page now has {len(attached['attachments'])} attachment(s): " + ", ".join(attached["attachments"]),
+                f"\nView at: {attached['url']}",
+            ]
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Error attaching wiki files: {e}", exc_info=True)
+            return f"Error attaching wiki files: {e}"
 
     @mcp.tool()
     async def list_wiki_attachments(

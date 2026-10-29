@@ -42,8 +42,14 @@ See ai/docs/mcp/wiki.md (Other LabKey Servers) for the differences.
 **MCP tools available**:
 - `list_wiki_pages()` - All pages with metadata
 - `get_wiki_page(page_name)` - Full content to ai/.tmp/
-- `update_wiki_page(page_name, body_file, title)` - Update content
+- `update_wiki_page(page_name, body_file, title, show_attachments)` - Update content
+- `create_wiki_page(page_name, body_file, title, renderer_type, show_attachments)` - Create a page (Markdown or HTML)
+- `attach_wiki_files(page_name, file_paths)` - Attach files (screenshots) to a page
 - `list_wiki_attachments(page_name)` - List attached files
 - `get_wiki_attachment(page_name, filename)` - Download attachment
+
+Before the MCP server restarts with new tools, `ai/mcp/LabKeyMcp/scripts/wiki_publish.py` runs
+the same create / update / attach code. A feature walkthrough page with screenshots:
+ai/docs/feature-demo-guide.md (skill `feature-demo`).
 
 **Renderer types**: HTML, MARKDOWN, RADEOX, TEXT_WITH_LINKS

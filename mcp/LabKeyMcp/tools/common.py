@@ -476,6 +476,61 @@ class LabKeySession:
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode("utf-8", errors="replace")[:500]
 
+    def post_multipart(self, url: str, fields: dict, files: list, headers: dict = None, timeout: int = 300) -> tuple:
+        """Make a multipart/form-data POST, as a browser form with file inputs does.
+
+        Args:
+            url: The action URL
+            fields: Plain form fields (name -> string value)
+            files: A list of (field_name, file_path) tuples; each is sent with its file name
+                and a content type guessed from the extension
+
+        Returns:
+            (status_code, response_data): the JSON body parsed when it is JSON, else
+            {"error": <text>} as post_json does
+        """
+        import mimetypes
+        import uuid
+
+        boundary = f"----LabKeyMcp{uuid.uuid4().hex}"
+        body = bytearray()
+        for name, value in fields.items():
+            body += f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n".encode("utf-8")
+        for field_name, file_path in files:
+            path = Path(file_path)
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            body += (
+                f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field_name}\"; "
+                f"filename=\"{path.name}\"\r\nContent-Type: {content_type}\r\n\r\n"
+            ).encode("utf-8")
+            body += path.read_bytes()
+            body += b"\r\n"
+        body += f"--{boundary}--\r\n".encode("utf-8")
+
+        request = urllib.request.Request(url, data=bytes(body), method="POST")
+        request.add_header("Authorization", self.auth_header)
+        request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+        if self.csrf_token:
+            request.add_header("X-LABKEY-CSRF", self.csrf_token)
+        if headers:
+            for key, value in headers.items():
+                request.add_header(key, value)
+
+        try:
+            with self.opener.open(request, timeout=timeout) as response:
+                text = response.read().decode("utf-8", errors="replace")
+                status = response.status
+        except urllib.error.HTTPError as e:
+            text = e.read().decode("utf-8", errors="replace")
+            status = e.code
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return status, parsed
+        except (ValueError, json.JSONDecodeError):
+            pass
+        return status, {"error": text[:500]}
+
 
 def get_labkey_session(server: str) -> tuple:
     """Create an authenticated session with CSRF token for LabKey POST requests.

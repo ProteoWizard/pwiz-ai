@@ -47,6 +47,7 @@ This directory contains comprehensive, detailed documentation for LLM-assisted d
 ### Tutorials
 
 - **[tutorial-doc-style-guide.md](tutorial-doc-style-guide.md)** - Style conventions for Skyline tutorial HTML
+- **[feature-demo-guide.md](feature-demo-guide.md)** - Demo decks and feature walkthrough wiki pages from screenshots captured over the Skyline MCP
 - **[translation-guide.md](translation-guide.md)** - Updating localized RESX files and translation tables
 - **[translation-drafting-guide.md](translation-drafting-guide.md)** - Claude-drafted ja / zh-Hans translations for expert review
 

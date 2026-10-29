@@ -56,9 +56,23 @@ get_wiki_page("DeployToDockerHub", container_path="/home/development")
 |------|-------------|
 | `list_wiki_pages(container_path)` | List all pages with metadata (no body) |
 | `get_wiki_page(page_name)` | Get full page content, save to `ai/.tmp/wiki-{host}--{container}--{page}.md` |
-| `update_wiki_page(page_name, body_file, title)` | Update page content from local file (optional title change) |
+| `update_wiki_page(page_name, body_file, title, show_attachments)` | Update page content from local file (optional title change; keeps the page's "Show attachments" setting unless given) |
+| `create_wiki_page(page_name, body_file, title, renderer_type, show_attachments)` | Create a page (MARKDOWN by default, or HTML); refuses a name that exists |
+| `attach_wiki_files(page_name, file_paths)` | Attach files to a page (a same-named attachment is replaced) |
 | `list_wiki_attachments(page_name)` | List attachments for a wiki page |
 | `get_wiki_attachment(page_name, filename)` | Download attachment from wiki page |
+
+The three writing tools share their implementation with `ai/mcp/LabKeyMcp/scripts/wiki_publish.py`
+(`create`, `update`, `attach` subcommands), for a session whose MCP server started before a tool
+existed - new tools appear only after Claude Code restarts - and for scripted publishing. From Git
+Bash prefix it with `MSYS_NO_PATHCONV=1` (see Gotchas).
+
+**A page with screenshots** (a feature walkthrough for the release notes, see
+[feature-demo-guide.md](../feature-demo-guide.md)): write the body as Markdown with
+`![alt](file-name.png)` references, `create_wiki_page(..., show_attachments=False)` so the file
+list does not repeat under the body, `attach_wiki_files` with the images, then fetch
+`wiki-page.view` and check every `<img>` points at `wiki-download.view?entityId=...&name=<file>`.
+Draft in `/home/software/Skyline-dev-private`; the page moves to `/home/software/Skyline` at release.
 
 ## Usage Examples
 
@@ -124,9 +138,11 @@ What differs from skyline.ms:
   account without the script and style permission gets
   `400 Illegal element <style>` from `update_wiki_page`. Inline `style="..."`
   attributes are allowed, so write styles inline.
-- **There is no create tool.** `update_wiki_page` only changes existing pages.
-  Create a page in the LabKey UI, or POST to `wiki-saveWiki.view` with the editor's
-  new-page defaults (`entityId`, `rowId` and `parent` null, `pageVersionId` -1).
+- **`create_wiki_page` posts the editor's new-page defaults** (`entityId`, `rowId` and
+  `parent` null, `pageVersionId` -1) to `wiki-saveWiki.view`, and `attach_wiki_files` posts a
+  multipart form to `wiki-attachFiles.api` with the page's `entityId` and the files as
+  `formFiles[N]`, as the editor's Attach a file does. Both need the same update permission in
+  the container as `update_wiki_page`.
 
 ## Permissions
 
@@ -290,4 +306,4 @@ elements change.
 ## Future Enhancements
 
 - Tutorial sync workflow (`pw-tutorial-sync`, proposed) for coordinating Git and wiki updates
-- Attachment upload capability
+- Deleting an attachment (`attach_wiki_files` can replace one, not remove it)
