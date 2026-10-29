@@ -187,10 +187,11 @@ predates the CommonUtil/CommonBaseUI split, so CommonUtil is the WinForms projec
 projects), the C# 9 `not` pattern rewritten for the branch's LangVersion 8.0, and two `using`
 conflicts resolved. The cherry-pick had rewritten five tutorial tests with LF endings (4,069-line
 churn against CRLF blobs); they were restored from the branch and the one-line edits re-applied, so
-the commit is 472/231 lines. Not yet built or pushed: the build waits for the Koina test instance to
-exit (`build-cp-*.log`, `test-cp-*.log` in the session folder), then push and
-`gh pr create --base Skyline/skyline_26_1_1 --label skyline --title "skyline: Cherry-pick: Moved the
-screenshot border cleanup to pwiz.Common.GUI and applied it to MCP form images"`.
+the commit is 473/231 lines (a `System.Drawing` reference for CommonTest was the last adaptation).
+Built green on the branch (solution, TestPerf, ScreenshotBorderTest, CodeInspection) and opened as
+PR [#4936](https://github.com/ProteoWizard/pwiz/pull/4936) against `Skyline/skyline_26_1_1`, label
+skyline, awaiting TeamCity and Brendan's approval; complete it with `/pw-complete 4936` (this TODO
+stays active, so record the merge here rather than moving it).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261029_library_pages_drafts.md` before starting work.
