@@ -5,9 +5,9 @@
 - **Checkout**: `C:\Dev\mz5` (moved from `C:\Dev\master_clean` 2026-10-12)
 - **Module**: `pwiz`
 - **Base**: `origin/master`
-- **Status**: In progress. C# port committed locally (6 commits), not pushed; MsData.Tests (95)
-  and MsConvert.Tests (18) green. `/code-review medium` run 2026-10-29 and triaged; one finding
-  (writers ignore a listener's Cancel) waiting on the developer. Next: settle that, push, PR.
+- **Status**: In progress. C# port committed locally (7 commits), not pushed; MsData.Tests (95),
+  Util.Tests (42) and MsConvert.Tests (18) green, MSConvertGUI builds. `/code-review medium` run
+  2026-10-29 and every finding settled. Next: push, PR.
 - **GitHub Issue**: (none yet)
 - **PR**: (none)
 - **Cherry-pick to release**: undecided
@@ -325,9 +325,18 @@ after the fetch (`711fe346b9`) - a failing spectrum was never reported, and mzXM
 the broadcast. Test: without `ContinueOnError`, the last update names the failing index in every
 format (red for mzXML with the fix set aside).
 
-**Open**: writers ignore `Broadcast`'s `IterationStatus.Cancel`. MSConvertGUI's Stop returns it
-(`MainLogic.cs:488`), so Stop does not interrupt a write. Waiting on the developer for scope and for
-break-like-cpp vs throw `OperationCanceledException`.
+**Listener Cancel ignored** (`f789cfac05`). Writers discarded `Broadcast`'s
+`IterationStatus.Cancel`. MSConvertGUI returns it once its progress window is closed
+(`ProgressForm_FormClosing` -> `ForceExit` -> `MainLogic.update`), so a running write carried on to
+completion in the background. The developer chose throwing `OperationCanceledException` over cpp's
+`break` (which would leave a short file with overstated counts). New
+`IterationListenerRegistry.BroadcastOrCancel`, used by all five writer loops; the exception passes
+through `ContinueOnErrorPolicy` and the rewrite driver unwrapped. MSConvertGUI now deletes the
+partly written output on cancel (msconvert CLI already deletes its `partial` file on any
+exception). User experience: the GUI listener is on a 1 s timer, so the write stops within about a
+second; the job's row and log are already frozen once the window closes (`ProgressForm` drops
+updates for a canceled job), so nothing new is shown. Tests: every format throws on a listener's
+Cancel and fetches nothing past it (red before); `BroadcastOrCancel` in `IterationListenerTests`.
 
 ## Notes
 
