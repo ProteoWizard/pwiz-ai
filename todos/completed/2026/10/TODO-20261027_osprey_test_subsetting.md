@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20261027_osprey_test_subsetting` (from `master` at b68aa96d5f, after #4917
   and #4925 merged), checkout `C:\proj\pwiz`
 - **Created**: 2026-10-27
-- **Status**: PR open
-- **PR**: [#4931](https://github.com/ProteoWizard/pwiz/pull/4931); Rust: maccoss/osprey#74
+- **Status**: Completed
+- **PR**: [#4931](https://github.com/ProteoWizard/pwiz/pull/4931) (merged 2026-10-29); Rust: maccoss/osprey#74 (open)
 - **Module**: `skyline` (the tests and their data; `osprey` for `Osprey.Test` and the subset scripts)
 - **Objective**: Cut the cost of Skyline-Osprey integration testing to what the test data warrants: the
   functional tests tune on ONE run at 1% FDR without workarounds, and `OspreySearchPerfTest` runs in
@@ -349,3 +349,17 @@ held-out search reports 10 (first-pass floor), so those legs - which check what 
 (`rework-osprey-2.log`); TestBuildLibraryCarafeWizard 56 s, TestOspreySearchTuning 83 s, TestOspreySearch 22 s,
 CodeInspection (`rework-verify.log`). pwiz-ai `build_subset.py` preset and `StellarSubset-README.txt` back to the committed
 geometry; the candidate tooling (`--windows`, `--perf-zip`, `Measure-Subset.ps1`, `subset_fasta.py`) stays.
+
+### 2026-10-29 - Merged
+
+PR #4931 merged as commit 67a8134716. Shipped: `OspreySearchPerfTest` as one tuned search on the Panorama subset
+`perftests/osprey-stellar-subset-v1.zip` (~4 min on TeamCity) and off `tc-perftests-skiplist.txt`; the Osprey
+override-peak apex fix (re-scored peaks take the reference-XIC apex) with the regression goldens remade and a
+zero-apex-under-area invariant in `TestSubsetStraightThroughAndReruns`; `CarafeModelBuildLibraryTest` and its 15.6 MB
+zip removed with its coverage in `BuildLibraryCarafeWizardTest`; `regression.ps1` modes 13/14 removed; the
+size-independent subset test fixes. Before merge, master was merged in (one conflict: #4927 removed the Carafe
+wizard test's demo pauses) and a redundant cast from #4927 in `OspreyCommandArgs.cs` was removed to keep Osprey's
+inspection at zero warnings; all 646 Osprey tests, the Osprey wizard and perf tests passed locally on the merged tree.
+Not shipped, by decision: the grown committed subset (+25 min per covered Osprey build). Still open: maccoss/osprey#74,
+the matching Rust change, for its maintainers to merge. The Skyline PR Perf and Tutorial check ran green on bde31bed1b
+but was not re-triggered on the final head.
