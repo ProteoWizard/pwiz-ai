@@ -178,6 +178,20 @@ differences he saw in the deck are from the Pillow repaint on the 16 pre-branch 
 code (only three slide images came from the branch build). The deck's 16 images can be recaptured
 with the merged build in one pause round if wanted. This TODO stays active for the wiki drafts.
 
+**Cherry-pick to `Skyline/skyline_26_1_1`** (Brendan teaches on the next .NET 4.7.2 release in
+Barcelona the week of November 9): branch `Skyline/work/20261029_screenshot_border_26_1_1` in
+`C:\proj\skyline_26_1_1`, commit 4294c8add3 (amended), `git cherry-pick -x b914f854fc` plus the
+branch's adaptations: the new class lives in `pwiz_tools/Shared/CommonUtil/GUI/` (that branch
+predates the CommonUtil/CommonBaseUI split, so CommonUtil is the WinForms project there), with
+`<Compile Include>` entries added to `CommonUtil.csproj` and `CommonTest.csproj` (old-style
+projects), the C# 9 `not` pattern rewritten for the branch's LangVersion 8.0, and two `using`
+conflicts resolved. The cherry-pick had rewritten five tutorial tests with LF endings (4,069-line
+churn against CRLF blobs); they were restored from the branch and the one-line edits re-applied, so
+the commit is 472/231 lines. Not yet built or pushed: the build waits for the Koina test instance to
+exit (`build-cp-*.log`, `test-cp-*.log` in the session folder), then push and
+`gh pr create --base Skyline/skyline_26_1_1 --label skyline --title "skyline: Cherry-pick: Moved the
+screenshot border cleanup to pwiz.Common.GUI and applied it to MCP form images"`.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261029_library_pages_drafts.md` before starting work.
 
