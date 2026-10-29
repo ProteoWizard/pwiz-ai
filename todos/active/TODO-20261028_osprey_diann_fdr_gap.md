@@ -12,7 +12,8 @@
   conservative - that was an entrapment-design artifact (Finding 2/3); compaction has no effect (Finding 5); the
   real gap is single-run scoring (38-40% at matched FDP). On the branch, 12 XICs + 20 new features + GBDT close a
   third of it (106,630 vs 142,619 at FDP 0.5%; was 88,604) but GBDT's reported q runs ~1.5x anti-conservative.
-  #4823 fixes protein FDR. Next: the summary table under "Where it stands", then choose what to make default
+  #4823 fixes protein FDR. REQUIREMENT (Mike): single-peptide proteins must be detectable, so the default
+  >= 2-peptide stratum competition must go (section below). Next: transfer-mode arms, symmetric decoy reconciliation
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: (none)
@@ -31,6 +32,24 @@ same entrapment-measured FDP, and fix what is Osprey's to fix. The specific ques
    that the later stages could have rescued?
 3. Is protein-group FDR controlled, with and without Nick's fix (#4823)?
 4. What change closes the gap without breaking FDR control?
+
+## REQUIREMENT: single-peptide proteins must be detectable (Mike, 2026-10-28)
+
+"Absolutely not to limiting proteins to multiple peptides. Unless you can detect proteins with only a single
+peptide in the protein sequence the method doesn't work for proteomics. Small proteins less than 100 amino acids
+are some of the most important in proteomics these days. We absolutely must be able to detect proteins with
+single peptides."
+
+- No FDR, compaction or scoring scheme may require, or give an easier competition to, proteins with >= 2
+  detected peptides.
+- The default second pass violates this: `OSPREY_PASS2_QVALUE=protein-compact` runs its own target-decoy
+  competition over the stratum of proteins with >= 2 first-pass peptides. It does not drop single-peptide
+  proteins outright - their peptides survive with their pass-1 q - but they need stronger evidence for the
+  same q. The +6% pass-2 gain at matched FDP (Finding 3) IS that bias, so it is not a gain we may keep.
+- Every protein-informed change gets judged by what it does to single-peptide proteins: report their counts and
+  FDP beside the totals.
+- The fix direction is a second pass that treats every precursor alike (`transfer`-like), plus reconciliation
+  made symmetric for decoys; protein inference must report one-peptide groups (#4823's picked-protein FDR can).
 
 ## What we already know (from TODO-20261021_osprey_diann_timing.md, Osprey of 2026-10-21)
 
@@ -193,8 +212,17 @@ predictions does slightly worse), peak choice (91% of DIA-NN-only precursors pic
 12-fragment library cap.
 
 Open:
-- [ ] GBDT pass-2 calibration: reported q 1% measures 1.45-1.59% (combined; lower bound 0.73-0.79%) where the
-      SVM measures 1.29-1.37%. Find whether it is the frozen-model pass 2 or the GBDT score scale
+- [ ] **Single-peptide requirement (above): replace the >= 2-peptide stratum competition.** Measure every arm
+      in `transfer` mode (no stratum) as well; the stratum's +6% is not ours to keep. Count single-peptide
+      proteins at matched FDP for each arm, Osprey and DIA-NN
+- [ ] Pass-2 calibration: reported q 1% measures 1.29-1.37% (SVM) and 1.45-1.59% (GBDT) under protein-compact,
+      ~1.03% under `transfer`. Mechanism found with Mike (2026-10-28): reconciliation is asymmetric for decoys.
+      `ConsensusRts` builds a TARGET's consensus RT only from its qualifying (FDR-passing) detections, so a false
+      target's best run is never moved, but its paired DECOY's consensus from ALL its picks (median), so the
+      decoy's best noise peak can be moved away - the decoy is weakened exactly where it stands in for a false
+      target, and re-competing those scores makes q optimistic. Fix to test: build the decoy's consensus from its
+      picks in the runs where its target qualified (or never move a pair's best run); measure against
+      reconciliation off
 - [ ] Ablate with OSPREY_FEATURE_MASK: which of the 20 new features carry the gain (SVM weights say
       peak_spectrum_cosine_mean/sd, peak_candidate_count, context_precursor_mz, the intensity shares)
 - [ ] Stellar check that 12 XICs + features + GBDT do not cost IDs where Osprey already leads
