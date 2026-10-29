@@ -4,7 +4,9 @@
 - **Branch**: `Skyline/work/20261028_crosslink_left_peptide_mods`
 - **Base**: `master`
 - **Created**: 2026-10-28
-- **Status**: In Progress
+- **Status**: Completed
+- **PR**: [#4929](https://github.com/ProteoWizard/pwiz/pull/4929) (merged 2026-10-28),
+  release cherry-pick [#4930](https://github.com/ProteoWizard/pwiz/pull/4930) (merged 2026-10-28)
 - **Module**: `skyline`
 - **Checkout**: `C:\Dev\UIbug`
 
@@ -45,7 +47,8 @@ Library Explorer hits it every time because its matcher settings differ from the
       PeptideDocNode.cs is CRLF-stored there (pre-#4789), so re-committed with a CRLF blob
 - [x] `Cherry pick to release` label removed from #4929 (no auto pick to skyline_26_1);
       #4930 is the only release-line change
-- [ ] Reply to Juan/Alessio once merged; tutorial "IMPORTANT BUG" section can go
+- [ ] Reply to Juan/Alessio (draft written in session; Brian sends); tutorial "IMPORTANT BUG"
+      section can go once a daily with the fix ships
 
 ## Master vs release
 
@@ -62,3 +65,13 @@ AbstractModificationMatcher.SearchPartialModMatches (Dictionary -> List change o
   implicit (CAM / N-term pyro-Glu) and would lose them; 14 involve pyro-Glu.
 - The shipped IFX_TNF_XLMS.sky already has the left mods corrected by hand, so it cannot
   show the bug; start from a fresh document with the same modifications.
+
+## Progress Log
+
+### 2026-10-28 - Merged
+
+PR #4929 merged to master as commit 346c41a009; cherry-pick #4930 merged to
+Skyline/skyline_26_1_1 as fa8b808116. `EnsureMods` now keeps static mods explicit on
+crosslinked peptides, so the first peptide keeps Carbamidomethyl / pyro-Glu when added
+from Library Explorer, pasted, or imported. Left open: the reply to Juan and Alessio, and
+retiring the tutorial's "IMPORTANT BUG" workaround.
