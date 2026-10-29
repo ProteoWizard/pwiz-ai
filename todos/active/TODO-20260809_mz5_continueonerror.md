@@ -359,9 +359,10 @@ Triaged and reported before fixing, per the second-cycle rule. Fixed, each test-
 none of this branch's files (`pwiz/data/msdata`, `pwiz/utility`, MSConvertGUI) are in it, and C:\Dev\mz5
 is not primed for a Skyline build. The applicable gate for pwiz-sharp is a warning-free `Pwiz.sln`
 build (#4810 made warnings fail it). Release build 2026-10-29: 0 warnings; every touched project
-built. 3 errors, all outside the branch and from the unprimed checkout: BiblioSpec's MascotShim
-cmake step (msparser library absent), SeeMS `SpectrumList_LockmassRefiner` and Thermo.Tests
-`GetInstrumentConfigurationComponents` (both symbols exist; vendor-mode build differences).
+built. 3 errors, all in projects the branch does not touch, cause not yet established: BiblioSpec's
+MascotShim cmake step, SeeMS `SpectrumList_LockmassRefiner` (CS0246) and Thermo.Tests
+`GetInstrumentConfigurationComponents` (CS0117; both symbols exist). Developer is doing a clean
+build to see whether they persist.
 
 ## Notes
 
