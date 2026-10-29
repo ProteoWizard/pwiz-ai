@@ -5,9 +5,9 @@
 - **Checkout**: `C:\Dev\mz5` (moved from `C:\Dev\master_clean` 2026-10-12)
 - **Module**: `pwiz`
 - **Base**: `origin/master`
-- **Status**: In progress. C# port committed locally (7 commits), not pushed; MsData.Tests (95),
-  Util.Tests (42) and MsConvert.Tests (18) green, MSConvertGUI builds. `/code-review medium` run
-  2026-10-29 and every finding settled. Next: push, PR.
+- **Status**: In progress. C# port committed locally (10 commits), not pushed; MsData.Tests (96),
+  Util.Tests (42), MsConvert.Tests (18) and MsConvertGUI.Tests (7) green. Two `/code-review medium`
+  rounds settled. Next: inspection (see 2026-10-29 second round), push, PR.
 - **GitHub Issue**: (none yet)
 - **PR**: (none)
 - **Cherry-pick to release**: undecided
@@ -337,6 +337,31 @@ exception). User experience: the GUI listener is on a 1 s timer, so the write st
 second; the job's row and log are already frozen once the window closes (`ProgressForm` drops
 updates for a canceled job), so nothing new is shown. Tests: every format throws on a listener's
 Cancel and fetches nothing past it (red before); `BroadcastOrCancel` in `IterationListenerTests`.
+
+### 2026-10-29 - second `/code-review medium` round
+
+Triaged and reported before fixing, per the second-cycle rule. Fixed, each test-first:
+- **Chromatogram loop ignored a cancel** (`b0127d1191`): an SRM-only conversion could not be stopped
+  from the GUI. The loop now broadcasts "writing chromatograms" progress through `BroadcastOrCancel`.
+- **MSConvertGUI lost everything written to `Console.Error`** (`7cb0d4c9b8`): nothing installed a
+  redirect (the comment claiming "MainForm level" was wrong), and the GUI always sets
+  `ContinueOnError`, so skips - and vendor SDK errors - went unreported. `Program.CaptureStderr()`
+  forwards to `StderrCaptured`, which `ProgressForm` already shows per job; handler failures are
+  swallowed so logging cannot abort a conversion, and the form unsubscribes on close. Test in
+  `MainLogicTest` (proved it fails with the redirect made a no-op).
+- **mzXML `msRun scanCount` overstated after a skip** (`7741e9f4e5`): mzXML now uses the same
+  rewrite as mzML, including `.mzXML.gz` via `MSDataFile.Write(path)`. The rewind / reopen wrappers
+  moved into `ContinueOnErrorPolicy` (`WriteToStream`, `WriteToFreshStreams`) and the warning names
+  each format's counts. scanCount still includes scans the writer filters on purpose (Thermo non-MS,
+  foreign source file) - pre-existing, not touched.
+
+**Inspection scope**: `tcinspect.ps1` and CodeInspectionTest both cover `Skyline.sln` projects only;
+none of this branch's files (`pwiz/data/msdata`, `pwiz/utility`, MSConvertGUI) are in it, and C:\Dev\mz5
+is not primed for a Skyline build. The applicable gate for pwiz-sharp is a warning-free `Pwiz.sln`
+build (#4810 made warnings fail it). Release build 2026-10-29: 0 warnings; every touched project
+built. 3 errors, all outside the branch and from the unprimed checkout: BiblioSpec's MascotShim
+cmake step (msparser library absent), SeeMS `SpectrumList_LockmassRefiner` and Thermo.Tests
+`GetInstrumentConfigurationComponents` (both symbols exist; vendor-mode build differences).
 
 ## Notes
 
