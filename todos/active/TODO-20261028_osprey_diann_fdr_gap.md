@@ -62,6 +62,20 @@ same signal across different replicates. We need to figure out a way to get accu
 - Still to show: that the RUN-level q of a reconciled or gap-filled peak (re-mapped through the run's
   score-to-q table) is accurate, since per-run filtering feeds quantification.
 
+## NOTE: how to describe the `transfer` second pass (Mike, 2026-10-28)
+
+"Transfer" names the mechanism, not the idea. Describe it as: **the second pass maps each re-scored peak through
+the first pass's calibrated score-to-q relationship** (per run; plus score-to-PEP once the run PEP is built) and
+keeps the first pass's experiment-level q - identify on the first pass, quantify on the reconciled peaks. Short
+name: "first-pass calibration". Renaming the `OSPREY_PASS2_QVALUE=transfer` token is Brendan's call (natural moment:
+if it becomes the default).
+
+**Next, agreed design - run-level PEP:** each replicate's own first-pass score-to-PEP curve (`PepEstimator` fitted on
+that run's target-vs-paired-decoy winners) gives every peak a run PEP at its score - unchanged peaks at their pass-1
+score, moved and gap-filled at their new one - stored beside the experiment PEP, exported per run, and validated by
+entrapment share per PEP bin for unchanged / moved / gap-filled. Mike expects most gap fills near PEP 1 ("we are
+saying those peptides are not in those samples").
+
 ## NOTE: DIA-NN on the Stellar (unit resolution) - always these flags (Mike, 2026-10-28)
 
 `--no-ms1 --mass-acc-cal 900` on every DIA-NN search of Stellar data. `--no-ms1`: unit-resolution data does not
