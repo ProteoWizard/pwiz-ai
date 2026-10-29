@@ -1,12 +1,15 @@
-# Osprey reads DIA-NN's .parquet spectral library directly
+# Osprey and DIA-NN exchange spectral libraries directly, both directions
 
-**Status**: Backlog. Written 2026-10-28 on MACS2 (Brendan), while setting up Osprey vs DIA-NN 2.7.0 runs.
+**Status**: Backlog. Written 2026-10-28 on MACS2 (Brendan), while setting up Osprey vs DIA-NN 2.7.0 runs;
+2026-10-29 added part 2 (Osprey writes its predicted library for DIA-NN). The aim of both parts: make an
+Osprey vs DIA-NN comparison, including the 2x2 library swap, as simple as possible, with no conversion
+scripts.
 **Module**: `osprey`
 **Related**: [TODO-20261021_osprey_diann_timing.md](../active/TODO-20261021_osprey_diann_timing.md),
 [TODO-20261028_osprey_diann_fdr_gap.md](../active/TODO-20261028_osprey_diann_fdr_gap.md) (both use the
 library swap this would simplify)
 
-## Goal
+## Part 1 goal: Osprey reads DIA-NN's .parquet library
 
 `Osprey -i runs... -l report-lib.parquet -o out.blib` searches a library DIA-NN predicted or built,
 with no conversion step. Today Osprey's `-l` takes a `.blib` or the DIA-NN import `.tsv`
@@ -64,8 +67,31 @@ search) a one-flag change.
    the swap can pass DIA-NN's accessions through), and `Run-DiannEntrapment.ps1 -Steps swap-*` passes
    the `.parquet` straight to `-l`.
 
+## Part 2: Osprey writes its predicted library as a DIA-NN TSV
+
+**Goal**: an option on the one command (`--fasta`), additive like `OSPREY_DIANN_REPORTS` and the other
+side reports: the `.blib` is still written and searched; Osprey also writes the library DIA-NN can search
+with `--lib`, e.g. `<output>.predicted.diann.tsv`. Brendan's direction 2026-10-29: expose it as an option
+beside the report options, not a replacement for the `.blib`. Option name to match the report options'
+naming when implemented.
+
+- **CarafeSharp can already write it**: `--lf-type DIA-NN`, `CarafeSharp.IO\CarafeLibraryTsvWriter.cs`
+  (Carafe's columns: ModifiedPeptide, StrippedPeptide, PrecursorMz, PrecursorCharge, Tr_recalibrated,
+  ProteinID, Decoy, FragmentMz, RelativeIntensity, FragmentType, FragmentNumber, ...). Osprey's one command
+  does not pass `--lf-type` through (Osprey.exe has no `lf-type` argument at 406fd374c0), and
+  `--lf-type blib,DIA-NN` is refused by CarafeSharp's parser today (`LibraryCommandLineTest.cs:188`), so
+  the work is letting one prediction write both, then the Osprey option that asks for it.
+- **Targets only by default**: DIA-NN generates its own decoys, as it does for its own predicted library.
+  The `.blib` keeps Osprey's decoys and `DecoyPairs` as now.
+- **Modifications in UniMod** (`C(UniMod:4)`), RT in the library's minutes (DIA-NN recalibrates).
+- **Interim script**: `ai/scripts/Osprey/Benchmark/diann_library_swap.py export <osprey.predicted.blib>
+  <out.tsv>` writes the targets of a `.blib` in this form (2026-10-29; first used for `diann-on-carafe` in
+  `D:\Users\brendanx\test\diann-vs-osprey\astral3-mike\swap\` on MACS2). Its output is the reference for
+  an equivalence test, and the script retires when the option lands.
+- **Test**: DIA-NN is not on the build agents, so the test is format-level: the TSV written beside a
+  subset `.blib` loads through `DiannTsvLoader` to the same targets (the existing TSV/blib equivalence test
+  is the model), and the header and modification text match what DIA-NN 2.7 accepts.
+
 ## Out of scope
 
 - Reading `.speclib`.
-- The reverse direction (DIA-NN searching Osprey's Carafe library). DIA-NN reads the `.tsv`, so that
-  needs a `.blib` -> DIA-NN `.tsv` export; a separate item if wanted.
