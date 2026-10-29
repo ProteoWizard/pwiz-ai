@@ -591,6 +591,26 @@ matches dominate: ~6.7x at a run-level pi0 ~0.85, ~4x at experiment level - the 
 shared code (experiment PEP, #4848 / Nick) - fix behind a switch, verify the identity and entrapment on the full
 first-pass population, then raise with Nick and Brendan.
 
+**Corrected PEP (commit 2674437153, `OSPREY_PEP_FORMULA=ratio`: PEP(s) = (D/T) fD(s) / fT(s); the dump also writes
+each run's PEP curve; `run_pep_calibration.py --pass1`):** Astral best config, transfer, attached library.
+- Run level over all 5.97M first-pass target peaks: mean PEP at run q <= 0.1 / 0.5 / 1 / 5% = 0.0010 / 0.0050 /
+  0.0100 / 0.0498 - the identity holds; entrapment FDP 0.0012 / 0.0049 / 0.0103 / 0.0534. By PEP bin, mean PEP vs
+  entrapment false (combined / lower): <0.01: 0.0013 vs 0.0015 / 0.0008; 0.01-0.05: 0.026 vs 0.025 / 0.012;
+  0.05-0.2: 0.111 vs 0.122 / 0.061; 0.2-0.5: 0.349 vs 0.375 / 0.187. Calibrated.
+- Experiment level (.blib PrecursorPep) at q <= 0.1 / 0.5 / 1%: 0.0010 / 0.0050 / 0.0100 (was 0.0082 / 0.0343 /
+  0.0588); same 83,329 / 104,301 / 112,790 precursors (nothing in Osprey decides on PEP).
+- Run PEP by class (corrected): gap fills 92.3% at PEP >= 0.5, median 0.88 ("not in this sample", as Mike expected);
+  moved 91.6% >= 0.5; unchanged median 0.002. At run q <= 1%: unchanged 302,585 at mean PEP 0.0094 (entrapment share
+  0.0045), moved 2,629 at 0.0101 (0.0038) - calibrated; gap fills 773 at mean PEP 0.0143 but entrapment share 0.058
+  (~11-12% false): the replicate curve still underestimates the few gap fills that look present (gap fills are
+  mostly absent peptides, a different mix than the run the curve was fitted on).
+- Stellar (features + GBDT, 6 XICs): run level over 1.44M first-pass target peaks, mean PEP at run q <= 0.1 / 0.5 /
+  1 / 5% = 0.0010 / 0.0050 / 0.0099 / 0.0497, entrapment FDP 0.0011 / 0.0047 / 0.0094 / 0.0516; by bin 0.0009 vs
+  0.0010, 0.025 vs 0.023, 0.109 vs 0.108, 0.352 vs 0.371. `.blib` PrecursorPep at q <= 0.1 / 0.5 / 1%: 0.0010 /
+  0.0048 / 0.0099 (was 0.0044 / 0.0188 / 0.0350), same 30,715 / 35,448 / 38,156 precursors.
+- Rust osprey has the same form (`crates/osprey-ml/src/pep.rs` lines 72, 91-92).
+- Note for Nick and Brendan drafted: `ai/.tmp/sessions/20261028-fdrgap/pep-note-draft.md` (not sent).
+
 **Stellar (the three test runs; tune on `_21`: MS2 PCC 0.966 -> 0.984, RT R2 0.9976 -> 0.9989; DIA-NN on mzML
 with `--no-ms1 --mass-acc-cal 900`, mass accuracy 707 / 264 / 506 / 219 ppm across its passes):**
 

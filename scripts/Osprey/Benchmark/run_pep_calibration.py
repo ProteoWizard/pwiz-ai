@@ -6,8 +6,13 @@ tools searched. For targets (entrapment counted as targets, as Osprey sees them)
 the mean run PEP with the entrapment-estimated false fraction N_e (1 + 1/r) / N - the combined estimator, an upper
 bound; the lower bound is N_e / (r N). A calibrated PEP sits between them.
 
+With --pass1 <FDRBench-Input.pass1.tsv> (a --fdrbench-per-run export) it also reads each run's
+<run>.run_pep_curve.tsv and applies it to EVERY first-pass target peak - the population where entrapment really is 1:1,
+so the per-bin comparison is fair - and checks the q-PEP identity there: the mean PEP of the peaks at run q <= t must
+not exceed t.
+
 Usage:
-  run_pep_calibration.py <dump dir> <peptide fasta> [--suffix _p_target]
+  run_pep_calibration.py <dump dir> <peptide fasta> [--suffix _p_target] [--pass1 <FDRBench-Input.pass1.tsv>]
 """
 import argparse
 import glob
@@ -28,7 +33,11 @@ def main():
     ap.add_argument('dump_dir')
     ap.add_argument('peptide_fasta')
     ap.add_argument('--suffix', default='_p_target')
+    ap.add_argument('--pass1')
     args = ap.parse_args()
+    if args.pass1:
+        full_population(args)
+        return
     entrap, r, _ = load_space(args.peptide_fasta, args.suffix)
     frames = []
     for path in sorted(glob.glob(os.path.join(args.dump_dir, '*.run_pep.tsv'))):
@@ -49,6 +58,38 @@ def main():
             ne = int(x['entrap'].sum())
             print(f'  {str(b):16s} {n:8d} {x["run_pep"].mean():9.4f} {ne * (1 + 1 / r) / n:13.4f} '
                   f'{ne / (r * n):14.4f} {int((x["run_q"] <= 0.01).sum()):10d}')
+
+
+def full_population(args):
+    from plot_diann_comparison import run_label
+    entrap, r, _ = load_space(args.peptide_fasta, args.suffix)
+    p1 = pd.read_csv(args.pass1, sep='\t', usecols=['peptide', 'q_value', 'score', 'run'])
+    p1['run'] = p1['run'].map(run_label)
+    p1['entrap'] = p1['peptide'].map(lambda s: entrap.get(stripped(s), False))
+    curves = {}
+    for path in glob.glob(os.path.join(args.dump_dir, '*.run_pep_curve.tsv')):
+        c = pd.read_csv(path, sep='\t')
+        curves[run_label(os.path.basename(path).replace('.run_pep_curve.tsv', ''))] = c
+    parts = []
+    for run, g in p1.groupby('run'):
+        c = curves[run]
+        g = g.copy()
+        g['run_pep'] = np.interp(g['score'], c['score'], c['run_pep'])
+        parts.append(g)
+    d = pd.concat(parts, ignore_index=True)
+    print(f'{len(d)} first-pass target peaks over {d["run"].nunique()} runs; r = {r:.4f}')
+    print('q-PEP identity (mean PEP of peaks at run q <= t must not exceed t):')
+    for t in (0.001, 0.005, 0.01, 0.05):
+        x = d[d['q_value'] <= t]
+        ne = int(x['entrap'].sum())
+        print(f'  run q <= {t:<6}: {len(x):8d} peaks, mean PEP {x["run_pep"].mean():.4f}, '
+              f'entrapment FDP {ne * (1 + 1 / r) / max(len(x), 1):.4f} (lower {ne / (r * max(len(x), 1)):.4f})')
+    d['bin'] = pd.cut(d['run_pep'], BINS, right=False)
+    print(f'  {"PEP bin":16s} {"peaks":>9s} {"mean PEP":>9s} {"false (comb)":>13s} {"false (lower)":>14s}')
+    for b, x in d.groupby('bin', observed=True):
+        ne = int(x['entrap'].sum())
+        print(f'  {str(b):16s} {len(x):9d} {x["run_pep"].mean():9.4f} {ne * (1 + 1 / r) / len(x):13.4f} '
+              f'{ne / (r * len(x)):14.4f}')
 
 
 if __name__ == '__main__':
