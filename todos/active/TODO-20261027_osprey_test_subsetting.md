@@ -327,3 +327,25 @@ inconclusive under OSPREY_VERSION_OVERRIDE left set by regression-parallel), 0 f
 TestOspreySearchTuning 142 s, TestOspreySearch 38 s, TestOspreySearchPerf 242 s downloading the Panorama zip (Brendan
 uploaded it; size and SHA-256 verified by an anonymous download). maccoss/osprey PR #74 (Rust apex change). pwiz commit
 126d2183eb; /code-review medium running before the PR.
+
+### 2026-10-28 (evening) - Grown subset dropped (Brendan); #4931 reworked
+
+**Measured cost (TeamCity, same EC2 agent `pwiz-windows-i-044112ceb846405ec`, dotCover on):** Osprey.Test 16.1 min on
+the old subset (build #1141, 4240469) vs 41.3 min on w2 (#1142, 4240640); the Astral subset tests are unchanged (19-25 s
+both), every Stellar subset test 2.5-3x (OptionVariants 2m42s -> 7m45s, LibraryBuildTuned 1m48s -> 5m18s). Uncovered PR
+builds (pwiz #4933 turns coverage off outside master): 2.3 min on the old subset, ~5 estimated on w2; Linux 5 -> 10 min.
+Inherent: one-run tuning needs ~3.4x the spectra (850 vs 229 MS2 per run). Gains were mostly not unique: the defect it
+exposed is visible on the old subset too (7 zero-apex re-scored rows in the old libdecoy probe; `TestSubsetStraightThroughAndReruns`
+now asserts the invariant and FAILS on master on the committed subset - YQFSLSSTEK and a decoy in `_20`, `red.log` -
+and passes with the fix, `green.log`); the one-run wizard path is `OspreySearchPerfTest`'s at scale.
+
+**Rework (pwiz bde31bed1b, PR retitled):** `StellarSubset.zip`, `OspreySearchTest.zip`, `OspreySearchTuningTest.cs`,
+`SubsetPipelineTest.LibraryBuild.cs` and `.LibraryTuning.cs` restored to master; kept: the apex fix + goldens + #74, the
+Panorama perf test and skiplist removal, `CarafeModelBuildLibraryTest` removal (its coverage in `BuildLibraryCarafeWizardTest`,
+now on three-run tuning with 8 `_21` peptides from the old subset, 56 s), modes 13/14 removal, and the size-independent test
+fixes. With the fix, the one-epoch tuned model on the 7-min subset leaves two runs at 0 in the entrapment leg and the
+held-out search reports 10 (first-pass floor), so those legs - which check what runs, not what passes - now report all
+(`--experiment-fdr 1`), like the existing fewer-inputs leg. Osprey 645/645 in 2.5 min, inspection clean
+(`rework-osprey-2.log`); TestBuildLibraryCarafeWizard 56 s, TestOspreySearchTuning 83 s, TestOspreySearch 22 s,
+CodeInspection (`rework-verify.log`). pwiz-ai `build_subset.py` preset and `StellarSubset-README.txt` back to the committed
+geometry; the candidate tooling (`--windows`, `--perf-zip`, `Measure-Subset.ps1`, `subset_fasta.py`) stays.

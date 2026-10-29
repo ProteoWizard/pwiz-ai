@@ -29,8 +29,8 @@ PRESETS = {
         subset_library='stellar-subset-library.tsv', subset_fasta='stellar-subset-proteins.fasta', readme='StellarSubset-README.txt',
         runs=['Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20', 'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21',
               'Ste-2024-12-02_HeLa_4mz_sDIA_400-900_22'],
-        target=594.5201, half_width=2.0, window_step=4.0018, windows=2, fasta='hela-filtered.fasta', rt_min=6.0, rt_max=18.0, rt_pad=0.5, ms1_lo=590.5, ms1_hi=600.5,
-        undetected_max=720, mz_drop_bits=8, inten_drop_bits=12,
+        target=594.5201, half_width=2.0, window_step=4.0018, windows=1, fasta='hela-filtered.fasta', rt_min=7.0, rt_max=13.0, rt_pad=0.5, ms1_lo=590.5, ms1_hi=600.5,
+        undetected_max=180, mz_drop_bits=8, inten_drop_bits=12,
         libdecoy='stellar-libdecoy/stellar-libdecoy-v3', libdecoy_prefix='stellar-subset-libdecoy'),
     # HRAM: m/z keeps all but 3 mantissa bits (~0.5 ppm). Two runs, not three, to stay under
     # 5 MB zipped - three-run reconciliation is the Stellar subset's job.
