@@ -6,11 +6,13 @@
   the main window
 - **Base**: `master` (merge master in after #4882 squash-merges; `CommandShell.cs` resolves trivially)
 - **Module**: `skyline`
+- **Status**: Completed
 - **Created**: 2026-10-20
 - **PRs**: [#4896](https://github.com/ProteoWizard/pwiz/pull/4896) fixes + 389 screenshots on
   `Skyline/skyline_26_1_1` (merged 2026-10-25 as `dc97cd311c`);
-  [#4915](https://github.com/ProteoWizard/pwiz/pull/4915) its cherry-pick to master (branch
-  `Skyline/work/20261025_cherry_pick_4896_to_master`, worktree `C:\proj\pwiz-work3`);
+  [#4915](https://github.com/ProteoWizard/pwiz/pull/4915) its cherry-pick to master plus the .NET 10
+  fixes (merged 2026-10-29 as `4f92fe97ba`; branch `Skyline/work/20261025_cherry_pick_4896_to_master`,
+  worktree `C:\proj\pwiz-work3`);
   [#4897](https://github.com/ProteoWizard/pwiz/pull/4897) ImageComparer Accept (master);
   [#4882](https://github.com/ProteoWizard/pwiz/pull/4882) SkylineTester hidden main window (master)
 - **Objective**: Validate auto-screenshots on master (.NET 10) at 100%, explain every changed screenshot,
@@ -49,8 +51,10 @@
 | Floating-window shadow seams (CustomReports s-22) | Windows drop shadow over the main window differs by 1 gray level on 1-2 rows between runs; not position (pinned and still varied), not timing (stable within a run) | Flake: revert. Real fix later: capture windows separately and compose. Noted in `screenshot-update-workflow.md` |
 | DIA-TTOF and TTOF DIA-Umpire data changes (mProphet model s-14, mass error histogram s-24, RT residuals s-26, and following) | #4589 (Nick, 2026-09-23) keeps spectra with no peaks during chromatogram import instead of dropping them. The TTOF tutorial data is mzML (no WIFF, so no SCIEX reader), and 16% of its spectra are empty (13,065 of 81,704 in `collinsb_I180316_001_SW-A.mzML`), so it changed far more than other datasets. #4589 re-recorded `TestTtofData*.json`, `TestDiaTtofDiaUmpireTutorial*.json`, `TestQeDataDiaNN.json` and PRM-PASEF | Real software change: accept |
 | DIA s-17 dotp labels missing from Peak Areas replicate panes (top pane none, bottom only over the short bar; axis 0-2 instead of 0-2.5) | Latent since the headroom code (#3247, 2024): UpdateGraph reserves label space from the label height measured in a previous draw, so a new pane (here from `RestoreViewOnScreen` / `LoadLayout`) gets none. February's run got a second UpdateGraph from retention time alignment finishing after the first draw (`WaitForDocumentLoaded`); now it returns in 13 ms. Also the top pane's labels were never added: `IsRedrawRequired` returned early on the base class's redraw. Proven with a diagnostic log of UpdateGraph/Draw/AddDotProductLabels | Fixed in `AreaReplicateGraphPane`: IsRedrawRequired no longer short-circuits; the Y-axis is re-scaled (`ReformatYAxisForLabels`) when the measured label height changes. Verified: both panes match February at s-17 |
-| AbsoluteQuant graphs (.NET 10 only): docked area ~1 px shorter, column splits 1 px off | Not yet explained - a control height or DigitalRune rounding change in .NET 10? | Open |
-| AbsoluteQuant s-05 grid empty area, s-15/16 calibration graph | Likely small .NET 4.7.2 -> 10 formatting changes | Open - confirm against the 26.1.1 run |
+| Docked layout 1 px off on .NET 10 (tree 1 px right with its left border showing, panes 1 px shorter, graphs resized) | Not DigitalRune. The .NET 10 port (254112b277) changed `dockPanel` from anchored at -1,0 and 736x444 in a 734x443 `panel1` (1 px past the left, right and bottom edges, hiding the panes' outer borders) to `Dock = Fill`. Proven by dumping control bounds on both runtimes | Fixed: `panel1_Layout` sets the dock panel to `-1, 0, width + 2, height + 1` (no anchor deltas, so the Windows-container fix stays). AbsoluteQuant s-06, s-10..s-13 identical in en/ja/zh-CHS |
+| Status bar size grip (every main-window screenshot, 18x18 px corner) | .NET 10 draws a different, anti-aliased grip | Fixed: `ClassicSizingGripRenderer` (ToolStripSystemRenderer) draws the .NET Framework six-dot grip; pixel-identical |
+| DataGridView grays (AbsoluteQuant s-05, s-15; every grid screenshot) | dotnet/winforms #5832 (2021, accessibility 3:1 contrast): GridColor default and header-cell dark border `ControlDark` -> `WindowFrame` (646464), plus a WindowFrame divider over the themed header divider (E5E5E5); separately the BackgroundColor default became `ControlDark` (A0A0A0, was AppWorkspace ABABAB). The header lines are hard-coded in internal methods | Accepted (Brendan, 2026-10-26): intended accessibility change. Restoring background + GridColor alone leaves the headers dark (tried, reverted) |
+| AbsoluteQuant s-09 "Open" button text 1 px higher | `BaseFileDialogNE.actionButton` is 20 px high (odd leftover around the text); .NET 10 rounds vertical centering the other way. 23 px buttons unaffected | Real .NET 10 change: accept |
 
 The four fixes are uncommitted in `pwiz-work2` (26.1.1) for testing; move them to this branch for master
 once confirmed: `Shared/zedgraph/ZedGraph/Legend.cs`, `Controls/Graphs/GraphFullScan.cs`,
@@ -90,11 +94,11 @@ Worth telling Brian about the two ZedGraph regressions so they are not undone.
 - [x] PR #4882: SkylineTester main window hidden in screenshot modes
 - [x] ImageComparer Accept/Revert on the git index (branch `20261021_imagecomparer_accept`)
 - [x] Commit the 26.1.1 fixes and accepted screenshots (#4896)
-- [ ] Rerun the 20 tutorials with remaining changes in `pwiz-work2` (list in its
+- [x] Rerun the 20 tutorials with remaining changes in `pwiz-work2` (list in its
       `SkylineTester test list.txt`; 9 are TestPerf - enable perf tests in SkylineTester)
-- [ ] Explain the remaining .NET 10 differences (docked-area 1 px, grid, calibration graph)
-- [ ] Move the fixes to this branch, rerun on master, accept, commit
-- [ ] Cherry-pick #4896's code commit to master (zh-CHS -> zh-Hans for the two Full-Scan layout
+- [x] Explain the remaining .NET 10 differences (docked-area 1 px, grid, calibration graph)
+- [x] Move the fixes to this branch, rerun on master, accept, commit
+- [x] Cherry-pick #4896's code commit to master (zh-CHS -> zh-Hans for the two Full-Scan layout
       files; master's Legend.cs/GraphFullScan.cs are LF-normalized, so re-apply rather than pick)
 
 ## Progress log
@@ -170,3 +174,92 @@ AbsoluteQuant..ExistingExperiments + GroupedStudies1 (3 languages) in Release wi
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261025_cherry_pick_4896_to_master.md` before starting work.
+
+### 2026-10-26 (evening) - AbsoluteQuant .NET 10 differences explained
+
+Method: temporary `DiagDumpBounds` in the AbsoluteQuant test dumped every control's bounds at s-06/s-10/s-11
+on 26.1.1 (`pwiz-work2`, .NET Framework 4.8) and master (`pwiz-work3`, .NET 10); the first differing line
+was `dockPanel` itself. Work files and logs: `ai/.tmp/sessions/20261026-dock/` (`bounds/`, `diffmap.ps1`,
+`wf/` WinForms sources, `run-*.log`).
+- Uncommitted in `pwiz-work3`: `Skyline.Designer.cs` + `SkylineGraphs.cs` (`panel1_Layout`), `Skyline.cs` +
+  new `Controls/ClassicSizingGripRenderer.cs` (status bar grip). Built, AbsoluteQuant passes en/ja/zh-CHS
+  with screenshots; TestAreaCVHistograms, TestFilesTreeForm, TestLabelLayoutDeterminism, TestArrangeGraphs pass.
+- AbsoluteQuant now differs from the committed set only in s-05/s-15 (grid colors, decision pending) and
+  s-09 (Open button text, accept).
+- Grid colors accepted; s-09 accepted (standard-size buttons in Import Results Files judged not worth
+  it: the buttons match the 20/21 px controls in their rows, and resizing changes every screenshot of
+  the dialog in 3 resx layouts - revisit in the high-DPI pass if at all).
+- Pushed to #4915: `7f098a7fb0` (dock overhang + grip renderer), `c9e49db333` (9 AbsoluteQuant PNGs).
+- Next: re-run the full .NET 10 retake and classify what is left.
+
+### 2026-10-27 - GroupedStudies1 frozen import progress hang
+
+- Cause (proven with the DIAG log): `RefreshSelectedControl` shows the file name until the selected file
+  passes 0%, and `UpdateStatus` returned early for the status that triggered the freeze. In the zh run of
+  the second retake, file 0 went 0% -> 100% between two UI updates, so the graph never replaced the file
+  name and `IsReadyForScreenshot` waited out 360 s. Not caused by earlier tests.
+- Fix (uncommitted, `AllChromatogramsGraph.UpdateStatus`): apply the status that reaches the threshold,
+  then freeze. Verified Release, en + zh in one process: zh hit the 0 -> 100% case and was ready in 120 ms.
+  `TestFunctional.cs` try/finally also still uncommitted. DIAG logging removed.
+- Note, not pursued: GroupedStudies s-03 (SRM, `ChromatogramDataProvider`) can freeze at 99% or 100% of
+  file 0, i.e. with or without the last chromatogram(s), so a peak can appear or not; the x-axis end
+  also varied (49 vs 50, only Y is locked). The freeze was designed around `SpectraChromDataProvider`.
+  Likely present on .NET 4.7.2 too. Accept s-03 variation for now.
+- Committed `74ba919d91` (freeze fix + try/finally).
+
+### 2026-10-27 (afternoon) - TestTutorial retake reviewed and committed
+
+All 18 TestTutorial screenshots in en/zh/ja accepted or reverted by Brendan. Pushed to #4915:
+- `f535098389` stable peptide colors (`ColorGenerator` uses the .NET Framework 64-bit string hash;
+  `TestPeptideColorsStable`). Proof: DIA s-16 regenerated pixel-identical to the committed .NET Framework one.
+- `5f945a77fc` Import Transition List column-type combo strip takes the grid's BackgroundColor (ExistingQuant s-06).
+- `c7b97167f9` `AvailableFieldsTree` ImageList explicit Depth32Bit (only ImageList relying on the default;
+  designer lists load fixed-depth ImageStreams). Still 8-bit by design choice: ChooseViewsControl,
+  ManageLayoutsForm, ExportLiveReportDlg.
+- `71df45db2b` 344 accepted PNGs.
+Accepted .NET 10 changes, explained: WinForms #5832 grid/header contrast; ImageList default depth;
+menu selection fill (B3D7F3 = 30% Highlight/Window blend); MethodEdit s-17 autocomplete order (ICU vs NLS:
+`"` sorts after `;`); MethodEdit s-22 tip values (float.ToString shortest round-trip vs 7 digits; "G7"
+would restore).
+- Gotcha: screenshot runs pause while the RDP window is minimized (looked like a hang; ExistingExperiments
+  took 1,306 s instead of 133 s).
+- Next: Brendan running the TestPerf tutorials (~2 h; AcquisitionComparison, DDASearch, DIA-PASEF,
+  DIA-QE, DIA-TTOF, DIA-Umpire-TTOF, IMSFiltering).
+
+### Candidate night session: trim screenshot settle waits
+
+Every auto screenshot sleeps 2.5 s fixed, besides WaitForGraphs(): 1,500 ms in
+`TestFunctional.CaptureScreenShot` (#3779), 500 ms activation and 500 ms repaint in
+`ScreenshotManager.ActivateScreenshotForm` (#3283, #4896). About 2,000 screenshots per full pass, so
+~83 min of a ~3.5 h full run (TestTutorial alone ~1.5 h). With client-area animation now off during
+screenshot runs (`DisableControlAnimations`), the UI likely settles faster.
+Plan: make the three waits overridable for a run (env var), start from the accepted screenshot set,
+run TestTutorial (then TestPerf) at reduced waits (e.g. 0 / 100 / 250 ms), count and classify changed
+PNGs per setting, and report which screenshots need which wait. Possibly replace fixed sleeps with
+"UI thread idle and painted" plus a short delay. Needs an unattended desktop with RDP restored.
+
+- Earlier note, superseded by `f535098389`: `ColorGenerator.GetColorIndex` uses `string.GetHashCode()`,
+  which .NET 10 randomizes per process (verified: 3 pwsh runs, 3 values; .NET Framework stable). Peptide
+  colors are generated at load, not stored. A drop-in of the .NET Framework 64-bit hash reproduced 26.1.1
+  colors exactly. Revisit if peptide colors are seen changing between runs.
+
+### 2026-10-29 - Merged
+
+PR #4915 merged as commit 4f92fe97ba (squash). It carried the #4896 cherry-pick and the .NET 10 fixes:
+dock panel 1 px overhang, classic status bar grip, stable peptide colors (ColorGenerator, .NET Framework
+64-bit string hash), zero axis tic noise (Scale.AddSteps), Library Match axis title font, AvailableFieldsTree
+ImageList depth, Import Transition List combo strip color, Show timestamps checkbox alignment when Open Log
+is hidden, msconvert progress reduced to one line per 1,000 spectra (MsconvertExe), and test reliability
+fixes (frozen import progress hang, MS Amanda download, Koina prediction wait, PathEx display seam for
+alert text, user-documents paths for the iRT and IMS library screenshots, DDA s-12 progress lock). Every
+tutorial screenshot in en/zh-Hans/ja was accepted or reverted, except DDASearch s-15, left unaccepted as
+the visible case for #4935.
+
+Follow-ups, not in this PR:
+- #4935: show all MS/MS ID evidence a precursor uses, and drop outlier IDs from the extraction window
+- Candidate night session: trim the 2.5 s of fixed screenshot waits (section above)
+- Possible tech-debt issue (not filed): a real msconvert wrapper class like BlibBuild's
+- Possible: switch the DDA search tutorial from MS Amanda to MSFragger; pin the MS Amanda download version
+- Retire `pwiz-work1` branch `Skyline/work/20261020_net10_tutorial_screenshots` (superseded; has
+  uncommitted AbsoluteQuant PNGs - ask first)
+- Next: PR #4602 (high-DPI) at 100%, then 150%
