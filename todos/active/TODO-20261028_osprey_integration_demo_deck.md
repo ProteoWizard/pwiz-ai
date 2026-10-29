@@ -2,8 +2,8 @@
 
 ## Branch Information
 - **Branch**: none needed (an HTML artifact, not pwiz code; a pwiz branch only if a demo pause has to be committed, which it does not)
-- **Created**: (pending)
-- **Status**: Backlog, briefed 2026-10-28
+- **Created**: 2026-10-28
+- **Status**: Active (started 2026-10-28)
 - **Module**: (none: ai/ deliverable)
 - **Objective**: A short DHTML demo deck for Mike MacCoss and Bo Wen showing the Skyline library-build
   flow with Osprey and Carafe as it shipped in PR #4927 (merged 2026-10-28, 15c39798df), and how
