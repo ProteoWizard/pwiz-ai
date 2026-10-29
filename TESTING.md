@@ -243,3 +243,9 @@ variable, an `IsDemo` switch or a `PauseForDemo` helper to a test: the tree must
 or diagnostic paths. `CodeInspection` flags a leftover `PauseTest()`, which is the reminder. For an
 LLM session the same mechanism is how to see the UI over the Skyline MCP (`Run-Tests.ps1
 -AiConnector`, then `skyline_get_form_image`), and the same rule applies: it does not get committed.
+
+A pause cannot hold an alert open. In test mode an alert (`MultiButtonMsgDlg`, `MessageDlg`) times
+out after 10 seconds and fails the test with `DialogTimeoutException`, and the MCP does not list it
+among the open forms anyway. Pause on wizard pages and property dialogs; let the test dismiss its
+alerts. A scrolling dialog such as the Osprey Additional Settings grid can be enlarged first with
+`skyline_resize_window` (the screen height caps it) so one capture shows every row.

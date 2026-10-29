@@ -3,7 +3,8 @@
 ## Branch Information
 - **Branch**: none needed (an HTML artifact, not pwiz code; a pwiz branch only if a demo pause has to be committed, which it does not)
 - **Created**: 2026-10-28
-- **Status**: Active (started 2026-10-28)
+- **Status**: Deck published 2026-10-28, awaiting Brendan's review
+- **Deck**: https://claude.ai/artifact/3dTj3s8uLAmM7p2qrKY44i (private until shared from its Share menu)
 - **Module**: (none: ai/ deliverable)
 - **Objective**: A short DHTML demo deck for Mike MacCoss and Bo Wen showing the Skyline library-build
   flow with Osprey and Carafe as it shipped in PR #4927 (merged 2026-10-28, 15c39798df), and how
@@ -36,9 +37,10 @@
   the run can use.
 
 ## Tasks
-- [ ] Capture the screens (both wizards, the two grids, page 1 of Build Library)
-- [ ] Build the deck; a slide for the 2-year arc and one for what changed (C#, TorchSharp, no runtimes)
-- [ ] Publish and hand Brendan the link; he sends it to Mike and Bo Wen
+- [x] Capture the screens (both wizards, the two grids, page 1 of Build Library)
+- [x] Build the deck; a slide for the 2-year arc and one for what changed (C#, TorchSharp, no runtimes)
+- [x] Publish and hand Brendan the link; he sends it to Mike and Bo Wen
+- [ ] Brendan reviews; fix what he asks for, then share from the deck's Share menu
 
 ## Progress Log
 
@@ -48,3 +50,24 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261028_osprey_integration_demo_deck.md` before starting work.
+
+### 2026-10-28 evening - Captured and published
+
+- 21 slides as a Slides artifact: cover, the two-year arc, what changed, Build Library (page 1 both
+  ways, tuning runs, FASTA, modifications, Search Settings, the fine-tune grid in two columns), Osprey
+  Search (data files, FASTA to predict from, existing library, Library Model, modifications, Search
+  Settings, the three grids side by side, run page, the Import Peptide Search hand-off, the imported
+  document), and where it stands. Fonts Domine and IBM Plex Sans; navy, warm off-white, burnt orange.
+- Captures over the Skyline MCP with temporary `PauseTest()` calls in `BuildLibraryCarafeWizardTest`
+  and `OspreySearchTest` (patch script and shots in `ai/.tmp/sessions/20261028-demo-deck/`), the
+  test files reverted and `TestFunctional` rebuilt afterwards. Each shot upscaled 2x nearest-neighbour
+  for the 1920-wide canvas; the Additional Settings grid resized to 560x1100 so every section is in
+  one capture, then cropped to columns.
+- Two things that did not work, now in `ai/TESTING.md` ("Demos Are Temporary"): a pause on the Osprey
+  download prompt fails the test (test-mode alerts time out after 10 s), and the MCP does not list an
+  alert among the open forms, so that screen is not in the deck.
+- The Artifact tool in this session has no asset upload, so the screenshots are published as the
+  deck's own files under `project/ds/shots/` and referenced by that path. If they do not render in
+  the page, that is the first thing to revisit.
+- Both demo test runs ended in a deliberate failure (the grid cancelled under the test) once the last
+  screen was captured; neither was a test result.
