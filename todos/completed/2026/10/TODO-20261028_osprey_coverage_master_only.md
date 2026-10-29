@@ -3,10 +3,10 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20261028_osprey_coverage_master_only` (from `master` at 15c39798df)
 - **Created**: 2026-10-28
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4933](https://github.com/ProteoWizard/pwiz/pull/4933)
+- **PR**: [#4933](https://github.com/ProteoWizard/pwiz/pull/4933) (merged 2026-10-29)
 - **Checkout**: `C:\proj\pwiz-tccov` (sparse worktree: `pwiz_tools/Osprey/*.ps1`, `*.bat`)
 
 ## Objective
@@ -43,3 +43,10 @@ Per-test attribution from the TeamCity REST API (builds #767-#1141):
 - [x] PR build #1144 (EC2) logged "Not the default branch: running tests without coverage."; build 10.4 min
       (was 27.6 median on EC2), Osprey.Test 2.3 min, CarafeSharp.Test 3.4 min, 762 tests, 0 failed
 - [ ] After merge: first master build still imports both .dcvr snapshots (Code Coverage tab populated)
+
+### 2026-10-29 - Merged
+
+PR #4933 merged as commit ed3f58d8c8 (squash, by the session completing it on Brendan's request). PR builds of
+`ProteoWizard_OspreyWindowsNet` now run without dotCover: #4933's own build took 10.5 min whole, Osprey.Test
+2.3 min, against 41.3 min Osprey.Test covered for pwiz #4931 on the same EC2 agent. Still open: the first master
+build after the merge must show both .dcvr snapshots imported (Code Coverage tab) - not yet run at merge time.
