@@ -167,6 +167,17 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
   Tools > Options and mirror-plot steps and gains the new first page and the FASTA route. The
   public pages' s-NN screenshots that are still right can be reused the way the Carafe draft does.
 
+### 2026-10-29 - PR #4934 merged
+
+PR #4934 merged as commit b914f854fc: `ScreenshotBorder` in CommonBaseUI (the cleanup moved verbatim
+from TestUtil), `ScreenCapture.GetFormImage` repainting every MCP form image on both the screen-copy
+and the off-screen-render path (a docked pane skipped, a failed repaint keeping the capture), and
+`ScreenshotBorderTest`. Brendan asked before approving: the DockableForm handling is unchanged, and
+the drawing code is unchanged, so tutorial screenshots should be pixel-identical; the subtle border
+differences he saw in the deck are from the Pillow repaint on the 16 pre-branch captures, not the
+code (only three slide images came from the branch build). The deck's 16 images can be recaptured
+with the merged build in one pause round if wanted. This TODO stays active for the wiki drafts.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261029_library_pages_drafts.md` before starting work.
 
