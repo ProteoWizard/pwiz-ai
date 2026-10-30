@@ -123,3 +123,24 @@ BuildLibraryCarafeWizardTest, CodeInspection and AlphapeptdeepBuildLibraryTest i
 Windows .NET Perf/Regression Tests (build 4242978, the authorization in the handoff) and Skyline PR Perf
 and Tutorial tests (4242979); the per-push configurations re-ran on the push. The Koina follow-up found
 the defect already fixed on master by #4925; see TODO-20261030_koina_predict_for_fasta.md.
+
+### 2026-10-30 night, later - Perf test red on TeamCity: master's Osprey, not the PR's
+Skyline PR Perf and Tutorial tests (build 4242979, on fb97a4d2b3) failed `TestAlphaPeptDeepBuildLibrary`
+at `VerifyAddIrts`: 6 iRT peptides, not the 7 the re-recorded answers expect (the phosphopeptide's RT
+withheld, the TSV-era result). Its stdout shows why: `OspreyTestUtil.EnsureOsprey` finds no Osprey build
+beside the Skyline source on the perf agent and downloads `OspreyHelpers.GetLatestBuildDownloadInfo()`,
+the latest successful **master** Osprey (build 4242390, 4f92fe97ba), so the PR's Skyline ran master's
+Osprey and CarafeSharp. Locally the sibling build hides this. A PR that changes Osprey and Skyline
+together could therefore never pass its perf run before merging.
+
+Fix (1f636e42e9): `OspreyTestUtil.EnsureOsprey` reads `BUILD_VCS_NUMBER` (set in every TeamCity build)
+and `OspreyHelpers.TryGetRevisionBuildDownloadInfo` asks the REST API for the finished successful Osprey
+Windows .NET build of that revision on any branch (`revision:<sha>,branch:default:any`; PR pushes build
+Osprey too), falling back to master's latest. The zip is cached as `Osprey-<version>-<sha8>-win-x64.zip`
+(`FileDownloadInfo.MirrorFilename`) because every build of a day shares the version in the zip's name and
+`CachedDownloadsForTests` would hand back a cached master zip. Verified by hiding the sibling build and
+running the perf test with `BUILD_VCS_NUMBER=fb97a4d2b3...`: it fetched the PR's build 4242981 and passed
+(`ai/.tmp/sessions/20261029-night-blib/blib-perftest-revision.log`). Caveat: the perf run must start
+after the revision's Osprey build has finished, or it falls back to master's; the night session triggers
+it only once that build is done. The Osprey Perf/Regression gate was re-queued on the new head as build
+4243012 (4242978 on the old head never left the queue; cancelled).
