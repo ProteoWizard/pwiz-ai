@@ -721,16 +721,28 @@ by hard link (their validity key holds neither the FDR model nor the training si
 | 41 features, GBDT | 27,975 (0.82%) | 24,402 | 29,248 |
 | 41 features, GBDT, `OSPREY_MAX_TRAIN_SIZE=3000000` | 36,151 (**1.26%**) | 30,338 | 34,840 |
 | 41 features, SVM, **12 XICs** (scores of `best12-transfer`) | 30,811 (**1.19%**) | 21,501 | 28,826 |
+| 41 features, SVM, strict-max C (`OSPREY_SVM_C_TOLERANCE=0`) | 31,297 (0.92%) | 23,994 | 31,769 |
+| 41 features, SVM, 12 XICs, strict-max C | 31,117 (**1.18%**) | 21,266 | 29,565 |
 
 - 12 XICs HURT the SVM on ZT (-23% at FDP 0.5%, -12% at 1%, and optimistic) while they helped GBDT (+18%). Its fold
   C picks were 1 / 0.1 / 0.1 against 1 / 0.1 / 1 at 6 XICs, so the SVM's C selection (the noise-level pick of
   #4703) may be part of it; not separated. "12 XICs for HRAM" holds for GBDT on ZT and for the 21-feature SVM on
   Astral, not yet for the 41-feature SVM.
+- C check (Mike: "fix the code first then run the c check"): both XIC counts rerun with the strict-max C, the old
+  exe on the same hard-linked scores (`ztscan-csel0.ps1`). Picks 1 / 1 / 0.1 at 12 XICs, 1 / 10 / 1 at 6. Under one
+  C rule 12 XICs still lose: -11% at FDP 0.5%, -7% at 1%, and stay optimistic (1.18% vs 0.92%) - so about half the
+  0.5% gap was the C pick and the rest, plus the miscalibration, is the XIC count. The C rule alone moved the 6-XIC arm
+  by -14% at FDP 0.5% (-3% at 1%): on ZT one fold's C pick is as large as the effects being compared, so a single-run
+  ZT difference under ~15% at FDP 0.5% is not resolved; FDP 1% is steadier. Every ZT arm trains on about 750
+  confident targets (0.5% of the 300,000-peak sample passes 1% FDR), which is why C is so loosely determined.
 - **Defect on this branch:** the feature mask and the XIC count change the per-file scores but are not in their
   validity key (search hash identical across `attached-transfer`, `best6-transfer`, `best12-transfer`), so a resume
   with either changed reuses the wrong scores silently. The mask is applied only while scoring
   (`CoelutionScorer`), so masked features are stored as 0. Fix before a PR: key the XIC count, and apply the mask
   where the FDR stage loads features so the scores always hold all 41 (that also makes a feature ablation FDR-only).
+  **Fixed** in fbab5a883c: `PinFeatureMask` zeros masked features in `LoadPinFeaturesFromParquet`; `;xic=N` in every
+  task's key and `;featmask=` in FirstPassFDR / PerFileRescoring / SecondPassFDR. Old scores do not match the new key,
+  so the next build rescores once. Unit tests 646/646, inspection clean, Stellar regression PASSED.
 
 - The new features help, not hurt: +37% at FDP 0.5% and +11% at 1% under the SVM, +11% at both under GBDT. The 6-XIC
   row looked flat because GBDT at the default training size costs about what the features gain.
