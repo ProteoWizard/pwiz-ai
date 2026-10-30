@@ -19,7 +19,9 @@ description: Use this skill when asked for a demo deck of a new Skyline feature,
 
 1. **Screens come from the functional test, at temporary pauses.** `PauseTest()` in the test
    (`PauseAndContinueForm.Show()` inside a static helper), `Run-Tests.ps1 -AiConnector`, then
-   `skyline_get_form_image` at each pause and Continue on `PauseAndContinueForm:Pause Test`. The
+   `skyline_get_form_image` at each pause and Continue on `PauseAndContinueForm:Pause Test`.
+   Which pause is up is the pause form's Message in `skyline_get_open_forms`; do not wait on the
+   run log, which prints the description late. The
    pauses live in a CRLF-aware patch script in the session folder, are reverted with
    `git checkout --` before any commit, and `TestFunctional` is rebuilt afterwards
    (ai/TESTING.md, "Demos Are Temporary").

@@ -151,10 +151,17 @@ Written at the end of the #4927 session (context nearly exhausted) so a fresh se
   its graph's right-click menu is (`Ion Types > B`, `Charges > 2` on `MsGraphExtension`). The forms
   listing shows a PauseAndContinueForm but not its description, and the test log writes the pause line
   late, so which pause is current can only be read from a capture of the pause form itself; Brendan
-  asked for the description in the Message column (an IDetailedMessage the pause form implements,
-  since deriving it from CommonFormEx would enlist it in CheckAllFormsDisposed). Not done yet.
+  asked for the description in the Message column. Done on the blib branch: `IDetailedMessage` in
+  CommonBaseUI (CommonFormEx implements it; `UiElement.GetFormInfo` fills the Message for any form
+  that does, not only a CommonFormEx) and `PauseAndContinueForm` returns its description. Verified
+  2026-10-29 17:10: five pauses stepped through on the listing alone, one call each.
 - The LabKey MCP's new `create_wiki_page` and `attach_wiki_files` tools returned a coroutine error
   (the wrappers shadowed the module functions they call); fixed and pushed to pwiz-ai (c64a7da9).
+- **Page update from the blib branch** (Brendan: the drafts are for the release that will include
+  it, so update them as part of testing, no need to wait for the merge): the AlphaPeptDeep draft's
+  text says Carafe runs the default AlphaPeptDeep model and writes the .blib itself, and its
+  explorer capture (which showed predict_sky.speclib.tsv as the library's file) is retaken from the
+  branch build, where the file is the library's own name.
 - The pretrained Build Library route showed "BlibBuild completed successfully": Osprey wrote peptdeep's
   TSV and Skyline rebuilt the blib from it. Fixed on its own branch, see
   `TODO-20261029_carafe_predict_blib.md`.

@@ -3,7 +3,8 @@
 ## Branch Information
 - **Branch**: Skyline/work/20261029_carafe_predict_blib (checkout `C:\proj\pwiz`)
 - **Created**: 2026-10-29
-- **Status**: In progress - code written, building and testing
+- **Status**: PR #4938 open, awaiting TeamCity and review
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4938
 - **Module**: `osprey`
 - **Objective**: Osprey's `--precursors` route (Skyline's Build Library with the Carafe source) writes
   the `.blib` the command line asks for, through the same CarafeSharp writer the FASTA route uses,
@@ -47,10 +48,21 @@ integration that nobody meant to keep; Brendan missed it in review of the integr
       embedded TSV/blib resources removed
 - [x] Tests: `PrecursorTableLibraryTest` (CarafeSharp, replaces `PrecursorTablePredictorTest`),
       `SubsetPipelineTest.TestSubsetPrecursorTable` asserts the blib
-- [ ] Build and run: Build-Osprey -RunTests -RunInspection; Build-CarafeSharp -RunTests
-      -TestName PrecursorTableLibraryTest; Build-Skyline, CarafeLibraryBuilderTest,
-      BuildLibraryCarafeWizardTest, CodeInspection
-- [ ] `/code-review medium`, PR with label osprey
+- [x] Build and run: Build-Osprey -RunTests -RunInspection (646 passed, inspection clean; the help
+      pages regenerated); Build-CarafeSharp -RunTests (108 passed, two ion-mobility assertions updated
+      for the CCS column); Build-Skyline, CarafeLibraryBuilderTest, BuildLibraryCarafeWizardTest,
+      CodeInspection (all clean)
+- [x] Committed as df36da2edc and pushed
+- [x] `/code-review medium`: 8 findings; 6 fixed in 4447472f29 (TestPerf's `AlphapeptdeepBuildLibraryTest`
+      compared the TSV and no longer compiled; the library's folder was opened as a model folder; the
+      task declared no output; the digest's alphabase forms were materialized up front; the fine-tune's
+      products were keyed on the library name; orphaned BlibBuild resources), 2 were the decided
+      behavior changes (Carafe's defaults; RT and CCS no longer zeroed for fragmentation-only mods)
+- [ ] Re-record `AlphapeptdeepBuildLibraryTest.zip` (Panorama perftests) with blib answers
+      (`without_iRT/LibraryWithoutIrt.blib`, `with_iRT/LibraryWithIrt.blib`): IsRecordMode, then upload
+- [x] PR #4938 with label osprey (four commits: the change, the review fixes, the timing message removal,
+      the pause description in the connector's form listing with the ScreenshotBorderTest one-liner)
+- [ ] TeamCity Osprey Perf/Regression gate on the PR (ask Brendan first)
 
 ## Open points
 - The translated usage resx files have no `_precursors` entry (they fall back to English);

@@ -29,19 +29,34 @@ pwsh -File ./ai/scripts/Skyline/Build-Skyline.ps1 -SourceRoot C:/proj/pwiz -Targ
 pwsh -File ./ai/scripts/Skyline/Run-Tests.ps1 -SourceRoot C:/proj/pwiz -TestName BuildLibraryCarafeWizardTest -AiConnector
 ```
 
-Launch the run in the background and wait for `~/.skyline-mcp/connection-*.json` to appear. At
-each pause: `skyline_get_open_forms` (the pause is `PauseAndContinueForm:Pause Test`, the form to
+Launch the run in the background and wait for `skyline_get_instances` to list the test's Skyline.
+At each pause: `skyline_get_open_forms` (the pause is `PauseAndContinueForm:Pause Test`, and its
+**Message column is the pause's description**, so one call says which pause is up; the form to
 capture is listed with it), `skyline_get_form_image(formId, returnFormat="file", filePath=...)`,
 look at the file, then `skyline_click_form_button("PauseAndContinueForm:Pause Test", "Continue")`.
 The pause form itself is never in a capture, since a capture is of one form.
+
+**Tell the pauses apart by the listing, not the log.** After a Continue, call
+`skyline_get_open_forms` again a few seconds later and read the Message: two pauses in a row with
+the same forms open look identical otherwise, and the run log prints a pause's description only
+some time after the pause is up (the output is redirected to a file and buffered), so a watcher on
+the log sits through a pause that is already waiting. Before pwiz PR #4938 the listing had no
+description for the pause form, and the only way to tell was `skyline_get_form_image` of the pause
+form itself.
 
 **Where to pause.** Write the list of screens first: every wizard page in order, each dialog a
 button opens, the run or progress page while it works and when it is done, the hand-off to the
 next wizard, and the result. Then put one pause after the test has filled each page and before it
 clicks Next. `PauseTest` is an instance method; inside a static helper (the shared `RunSearch`,
 `AdvanceToSearchSettings`) call `PauseAndContinueForm.Show("...")` instead, which is what
-`PauseTest` does. Give every pause a description naming the screen; the test log lists them in
-order, which is how you tell where a run is after a long wait.
+`PauseTest` does. Give every pause a description naming the screen: it is what the forms listing
+shows for the pause form, and the test log lists them in order.
+
+**A library built inside Peptide Settings cannot be explored from it**: the dialog enables Explore
+only when it loads, so a pause meant for the Spectral Library Explorer opens it from the main
+window after the settings dialog has closed (`ShowDialog<ViewLibraryDlg>(SkylineWindow.ViewSpectralLibraries)`).
+The explorer's toolbar buttons are not reachable over the MCP; its graph's right-click menu is
+(`skyline_click_control_menu_item` on `MsGraphExtension` with `Ion Types > B`, `Charges > 2`).
 
 **Keep the pauses as a patch script**, not as hand edits: a small Python script in the session
 folder (`ai/.tmp/sessions/<date>-<topic>/`) that inserts each pause after a unique anchor line,
@@ -86,8 +101,12 @@ and the chromatogram import 10. A tutorial dataset is the other source of good-l
 
 **Ending a run.** Letting the test finish is best: it passes and tears down. To stop early, cancel
 the wizard the test is on and then click Continue: the test fails at its next step and exits. On
-screen the framework pauses once more on the failure; Continue again. The build script refuses to
-build while a TestRunner is alive, so a run must be over before the next build.
+screen the framework pauses once more on the failure; Continue again. That works only when the
+next step touches the cancelled form; a test that merely sets properties on it walks on through
+its pauses and then waits minutes for a library that never comes, so when the listing shows a
+pause with no wizard beside it, stop the TestRunner instead (ask the developer first, as the build
+script does). The build script refuses to build while a TestRunner is alive, so a run must be over
+before the next build.
 
 **Processing.** For a 1920x1080 deck, upscale captures 2x with nearest-neighbour sampling (crisp UI
 pixels; a 581x405 dialog becomes 1162x810 and fills a 1080-wide slot at 1.8x native). Keep the
