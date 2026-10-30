@@ -3,8 +3,8 @@
 ## Branch Information
 - **Branch**: Skyline/work/20261029_carafe_predict_blib (checkout `C:\proj\pwiz`)
 - **Created**: 2026-10-29
-- **Status**: PR #4938 open, every TeamCity check green on the head 11cf54f23c (2026-10-30 03:48); awaiting Brendan's review and merge
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4938
+- **Status**: Completed
+- **PR**: [#4938](https://github.com/ProteoWizard/pwiz/pull/4938) (merged 2026-10-30)
 - **Module**: `osprey`
 - **Objective**: Osprey's `--precursors` route (Skyline's Build Library with the Carafe source) writes
   the `.blib` the command line asks for, through the same CarafeSharp writer the FASTA route uses,
@@ -177,3 +177,14 @@ PR #4942's own Perf and Tutorial run: build 4243193 (queued 2026-10-30 04:22).
 
 PR #4942 closed 2026-10-30: Brian's #4943 (19c4e61b28) made the same five-file rename and merged first, so master has
 the fix and this branch's 11cf54f23c is a no-op rename on merge. #4941 merged as 232005d401 (/pw-complete, --admin).
+
+### 2026-10-30 - Merged
+
+PR #4938 merged as commit c03ad0b5f7 (squash, --admin over a duplicate perf run, 4243177, whose 23 failures were all
+"not enough space on the disk" on a cloud agent; the run on the same head, 4243067, passed 118/118 and the
+Osprey gate 4243012 117/117). Shipped: Osprey's --precursors route writes the .blib itself through
+CarafeSharp's writer, the CCS beside the 1/K0, ModelSupport in CarafeSharp withholding unvalidated RT and
+CCS on the table route, Build Library following Carafe's fragment rules, the perf test's answers as blibs
+in the repository, TeamCity perf tests downloading the Osprey of their own revision, and the connector's
+pause description. Open points left for Brendan: ModelSupport on the FASTA route (Carafe Java parity for
+phospho RT), and the translated usage resx entries for --precursors.
