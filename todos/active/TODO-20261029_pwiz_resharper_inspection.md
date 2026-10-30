@@ -5,9 +5,9 @@
 - **Checkout**: `C:\Dev\CodeInspection`
 - **Module**: `pwiz`
 - **Base**: `origin/master`
-- **Status**: In progress. Risk-only settings generated; branch otherwise at its base.
+- **Status**: PR open. Settings, plus every finding fixed or suppressed in place (inspection at 0).
 - **GitHub Issue**: (none)
-- **PR**: (none)
+- **PR**: [#4945](https://github.com/ProteoWizard/pwiz/pull/4945)
 
 ## Objective
 
@@ -89,8 +89,10 @@ stricter; pwiz must not get a giant change set. So:
   editorconfig's `csharp_style_namespace_declarations = file_scoped:warning` outranks DotSettings
 
 ### Step 2 - the ~206 risk findings
-- [ ] Review each by hand; fix real bugs, suppress deliberate cases with a comment
-  (some empty catches in vendor code are intentional)
+- [x] Fixed PossibleMultipleEnumeration (local ToArray) and IntDivisionByZero (Math.Max clamp);
+  everything else suppressed per site with `// ReSharper disable once` (developer's call: no
+  file-wide disables; `catch { ; }` rejected because it trips EmptyStatement)
+- [ ] Follow up the suppressed suspected bugs listed in the PR description
 
 ### Step 3 - CI
 - [ ] Add the ReSharper half to root `tcinspect.ps1` (status `Core code inspection`), modelled on
