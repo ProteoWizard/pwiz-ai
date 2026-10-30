@@ -657,6 +657,54 @@ with `--no-ms1 --mass-acc-cal 900`, mass accuracy 707 / 264 / 506 / 219 ppm acro
   groups with no passing peptide at 12.7%). Precursors: default 31,693 at q 1% (0.70%), best 31,000 (0.99%).
   DIA-NN reports ~30% more single-peptide proteins at a quarter of Osprey's error there - the clearest target.
 
+**Stellar window-width set: acquired 2Th / 4Th vs demultiplexed 50% / SuperOverlap (2026-10-29; Mike: look at the
+ZT Scan and the staggered / super overlap data before more FDR work).** Lauren's 10-09 HeLa runs (3 replicates per
+method; TODO-20261021_osprey_stellar_demux.md), the fine-tuned entrapment library from that work
+(`carafe-finetune`, tuned on 2Th TR01) copied with entrapment filed under its targets' proteins
+(`stellar-demux\fdr-gap\attached-library`; `attach_entrapment.py` with the manifest also upgrades that library's
+pre-contract `DecoyPairs` table - PairID, no TargetRefSpectraID - which current Osprey refuses). Both overlap schemes
+are the profile joint demux + in-process Centrix of `super-speed-final` (memfix-demuxtool); the 50% mzMLs had been
+deleted and were regenerated with those settings (`tool\50pct-speed-final`, ~37 min per run). Snapshot
+`fdr-gap-pep-2674437153`; "best" = all features + GBDT + 6 XICs + transfer. Experiment level, combined entrapment FDP
+(r = 0.9948); `stellar-demux\fdrgap-<input>-<config>\search`, summary `stellar-demux\fdr-gap\arms_fdp_summary.txt`
+(`ai/.tmp/sessions/20261028-fdrgap/arms_fdp.py`).
+
+| Stellar | default: at q 1% (FDP) | default: at FDP 0.5% | best: at q 1% (FDP) | best: at FDP 0.5% | gain |
+|---|---|---|---|---|---|
+| 2Th acquired | 44,200 (0.86%) | 41,214 | 47,346 (0.85%) | 45,383 | +10.1% |
+| 4Th acquired | 33,448 (0.91%) | 31,443 | 34,784 (0.90%) | 33,087 | +5.2% |
+| 4Th 50% overlap, demux | 28,562 (0.94%) | 24,634 | 32,611 (0.83%) | 29,753 | +20.8% |
+| 4Th SuperOverlap, demux | 29,489 (**1.11%**) | 24,587 | 32,754 (0.99%) | 28,494 | +15.9% |
+
+- The new scoring helps most on demultiplexed data (+16-21% vs +5-10% acquired): the features separate demux
+  interference from signal. Both demuxed sets reach 86-90% of acquired 4Th with it (75-78% at the default).
+- The default's protein-compact second pass overshoots on SuperOverlap (1.11%; pass 1 0.93%); transfer keeps the
+  calibrated first pass on every input (0.83-0.99%).
+- The demux session's 2Th "47,405 at 0.49%" was entrapment in its own proteins (Finding 2); valid: 44,200 at 0.86%.
+- Run-StellarSearch.ps1 leaked `-Env` into its caller (several arms run with `&` in one process): the first 4Th and
+  SuperOverlap "default" arms ran the best settings. Fixed (cleared in a `finally`) and those arms rerun.
+
+**ZT Scan (demultiplexed mzMLs of 2026-10-27, D1-tuned Osprey library re-filed so entrapment shares its targets'
+proteins; `ztscan-full-20261027\fdr-gap\<arm>`, summary `fdr-gap\arms_fdp_summary.txt`; r = 1.0010).** Caveat: the
+library tuning command carried `--entrapment`, so tuning may have seen entrapment peptides.
+
+| ZT Scan | at q 1% (FDP) | at FDP 0.5% | at FDP 1% |
+|---|---|---|---|
+| default, protein-compact | 36,111 (**1.29%**) | 31,215 | 34,709 |
+| default, transfer | 29,236 (0.98%) | 20,450 | 29,370 |
+| features + GBDT + 12 XICs, transfer | 33,200 (**1.14%**) | 28,915 | 32,561 |
+| features + GBDT + 6 XICs, transfer | 27,975 (0.82%) | 24,402 | 29,248 |
+| DIA-NN 2.6.1, own library, .wiff | 50,627 (0.45%) | ~51,274 | - |
+| DIA-NN on our demux | 58,280 (0.43%) | - | - |
+
+- Osprey is at about half of DIA-NN on ZT Scan (Astral: 0.72x, Stellar: ahead) - the largest gap of any dataset.
+- Here protein-compact earns its place: +52% at matched FDP 0.5% over transfer, +18% at 1% - but its q runs ~1.3x
+  optimistic (Mike: the targets and decoys are not treated consistently, which is why it is not controlled).
+- The new scoring is worth +41% at FDP 0.5% under transfer, and 12 XICs beat 6 (+18%) as on Astral (HRAM). Its GBDT
+  first pass is optimistic on ZT (1.14% at q 1%; the first pass at the top of the list: q 0.41% at FDP 0.5%), unlike
+  Stellar and Astral.
+- Not yet run: features + GBDT + 12 XICs with protein-compact (both gains together; offered to Mike).
+
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
   single best peptide, target vs decoy paired by base id, scored from the first pass's pre-compaction

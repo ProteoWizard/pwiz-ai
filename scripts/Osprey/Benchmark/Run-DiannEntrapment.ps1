@@ -31,7 +31,7 @@
 #requires -Version 7
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)] [ValidateSet('Stellar', 'Astral')] [string]$Dataset,
+    [Parameter(Mandatory = $true)] [ValidateSet('Stellar', 'Astral', 'ZTScan')] [string]$Dataset,
     [string]$Steps = 'osprey,peptides,diann-library,diann-search',
     [string]$WorkDir,
     [string]$DataDir,
@@ -87,9 +87,19 @@ $presets = @{
         Resolution = 'hram'; FragTol = '20'; FragUnit = 'ppm'
         DiannSearch = @(); DiannInput = 'raw'
     }
+    # ZenoTOF 8600 ZT Scan, three runs as demultiplexed by Osprey.DemuxTool (mzML), from the 2026-10-27 comparison
+    # (TODO-20261021_osprey_stellar_demux.md). DIA-NN's own baseline there read the .wiff.
+    ZTScan = @{
+        Fasta = 'D:\test\osprey-runs\ztscan-full-20261025\library\uniprot_human_march2026_yeastENO1_contam_ADpeps.fasta'
+        Files = @('250814_ZTScan_100spd_A_1_A1', '250814_ZTScan_100spd_A_2_D1', '250814_ZTScan_100spd_A_3_G1')
+        DataDir = 'D:\test\osprey-runs\ztscan-full-20261027\demux'; InputExt = 'mzML'
+        Resolution = 'hram'; FragTol = '20'; FragUnit = 'ppm'
+        DiannSearch = @(); DiannInput = 'mzML'
+    }
 }
 $preset = $presets[$Dataset]
 $name = $Dataset.ToLowerInvariant()
+if (-not $DataDir -and $preset.DataDir) { $DataDir = $preset.DataDir }
 if (-not $DataDir) {
     $root = if ($env:OSPREY_EXAMPLE_DATA_DIR) { $env:OSPREY_EXAMPLE_DATA_DIR } else { 'D:\GitHub-Repo\maccoss\osprey\example_test_data' }
     $DataDir = Join-Path $root $name
@@ -97,8 +107,9 @@ if (-not $DataDir) {
 if (-not $WorkDir) { $WorkDir = Join-Path 'D:\test\osprey-runs\diann-entrapment' $name }
 # Osprey writes the tuned model as <output stem>.model.zip (#4895; .carafemodel before it).
 if (-not $Model) { $Model = "D:\test\osprey-runs\diann-compare\$name\osprey-library\osprey.model.zip" }
-$fasta = Join-Path $DataDir $preset.Fasta
-$runs = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.raw" })
+$fasta = if ([IO.Path]::IsPathRooted($preset.Fasta)) { $preset.Fasta } else { Join-Path $DataDir $preset.Fasta }
+$inputExt = if ($preset.InputExt) { $preset.InputExt } else { 'raw' }
+$runs = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.$inputExt" })
 $diannType = if ($DiannInput) { $DiannInput } else { $preset.DiannInput }
 $diannRuns = @($preset.Files | ForEach-Object { Join-Path $DataDir "$_.$diannType" })
 foreach ($path in @($fasta, $OspreyExe, $DiannExe, $Model, $EntrapmentFasta) + $runs + $diannRuns) {

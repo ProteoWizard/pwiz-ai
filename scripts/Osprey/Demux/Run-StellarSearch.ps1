@@ -72,9 +72,18 @@ $extra = $ExtraArgs -split ' ' | Where-Object { $_ }
 $sw = [Diagnostics.Stopwatch]::StartNew()
 "[$(Get-Date -Format s)] START $Arm exe=$Exe method=$Method kind=$Kind demux=$Demux cache=$CacheKey input=$rawDir\*$InputSuffix env=$Env extra=$ExtraArgs" |
     Tee-Object -FilePath $summary -Append
-& $Exe @inputs -l $Library -o (Join-Path $out 'output.blib') --resolution unit --fdr-level precursor `
-    --protein-fdr 0.01 --demux $Demux `
-    --cache-dir $cache --output-dir $out --timestamp --memstamp --verbose `
-    --log-file (Join-Path $out 'osprey.log') @extra *> (Join-Path $out 'console.log')
+# -Env is cleared afterwards: a caller running several arms with & shares this process, and a setting left behind
+# would silently apply to its next arm.
+try {
+    & $Exe @inputs -l $Library -o (Join-Path $out 'output.blib') --resolution unit --fdr-level precursor `
+        --protein-fdr 0.01 --demux $Demux `
+        --cache-dir $cache --output-dir $out --timestamp --memstamp --verbose `
+        --log-file (Join-Path $out 'osprey.log') @extra *> (Join-Path $out 'console.log')
+}
+finally {
+    foreach ($pair in $Env -split ',' | Where-Object { $_ }) {
+        Remove-Item "Env:$(($pair -split '=', 2)[0])" -ErrorAction SilentlyContinue
+    }
+}
 "[$(Get-Date -Format s)] END $Arm exit $LASTEXITCODE, $([math]::Round($sw.Elapsed.TotalSeconds)) s" |
     Tee-Object -FilePath $summary -Append
