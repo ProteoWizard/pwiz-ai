@@ -95,6 +95,16 @@ scan. A reader that takes the centroid stream (inferred for DIA-NN; closed sourc
 every symptom. msconvert reads the segmented scan. Worth reporting to DIA-NN's developer (fall back to the segmented
 scan for centroid scans without a centroid stream); until then DIA-NN needs mzML on Stellar.
 
+## DIRECTION (Mike, 2026-10-29): `transfer` is not the answer for reconciled peaks
+
+"The transfer makes less sense to me as I think about it. We need a better way to capture the null distribution of
+the moved and gap filled precursors with the paired decoys." Looking up a re-scored peak in the first-pass
+score-to-q / score-to-PEP curve assumes the first pass's mix of true and false (its pi0) - wrong for gap fills
+(mostly absent peptides; ~12% FDP at run q 1%). Next FDR work: build the null for moved and gap-filled peaks from
+their OWN paired decoys (Osprey already re-integrates / gap-fills each target's decoy alongside it), giving q and
+PEP for those peaks from that competition; keep the first-pass experiment q for identification. Parked on 2026-10-29
+while Mike looks at the ZT-scan / staggered / super-overlap data first.
+
 ## What we already know (from TODO-20261021_osprey_diann_timing.md, Osprey of 2026-10-21)
 
 These measurements predate two weeks of master, so Phase 1 repeats them. They also shape the plan:
