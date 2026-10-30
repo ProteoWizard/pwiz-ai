@@ -748,7 +748,25 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
-### 2026-10-30 - Icon loader moved to pwiz.Common.Controls.DpiIcons for the Document Grid bar and Edit Report dialog (35a440af8b, not yet pushed)
+### 2026-10-30 - Code review (medium) of the two icon commits fixed (bdb3c8144c, not yet pushed)
+
+- /code-review medium on eee6eb420f..35a440af8b: 10 findings, 7 fixed, 2 dropped (FileProgressControl
+  per-instance icon cost: one 16 px icon, measuring instance pre-existing; pixel twins: documented
+  tradeoff). Main one confirmed: BaseFileDialogNE scales lookInImageList in its ctor and the new
+  CommonFormEx.OnLoad PrepareIcons scaled it again through the sidebar buttons. ImageListScaler and
+  DpiIcons now mark lists/images already sized (ConditionalWeakTable) and skip them on later passes.
+  Also: PrepareIcons no longer disposes controls' original images, LOCK on IconSource caches, small
+  natives decoded once per assembly, HasDropDownItems before DropDownItems, Waters manual GetIcon
+  removed, lookup tests merged into one [TestMethod] with AssertEx.
+- Verified: build; unit test; local DpiFileDialogProbeTest at 150% (sidebar list 48 px after load
+  and after a second pass; 32 px design); gates both modes: TestPivotEditor, TestLayoutExportImport,
+  TestLibraryExplorer, TestFilesTreeForm, TestMultiSelect, TestDocumentGrid, then
+  TestAlphabeticalReportEditor, TestLiveReportsFilter, TestReportSharing.
+- Note: earlier gate lists named TestCustomReports, which does not exist (the functional tests are
+  TestDocumentReports etc.; the tutorial is TestCustomReportsTutorial); the test runner skipped it
+  silently. Check "Running N tests" in gate logs.
+
+### 2026-10-30 - Icon loader moved to pwiz.Common.Controls.DpiIcons for the Document Grid bar and Edit Report dialog (35a440af8b)
 
 - Developer: pwiz.Common's dialogs have their own icons in Shared/Common/Properties/Resources.resx
   (icon branch a9c7bac5ed moved the NavBar/ViewEditor inline images there) and pwiz.Common cannot
