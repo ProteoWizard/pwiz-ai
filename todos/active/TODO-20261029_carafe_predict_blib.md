@@ -113,3 +113,13 @@ break Carafe Java parity for phospho RT when the peptdeep RT model (not Chronolo
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261029_carafe_predict_blib.md` before starting work.
+
+### 2026-10-30 night session - Master merged, every gate queued
+origin/master (4 commits, mostly tutorial screenshots) merged as fb97a4d2b3, no conflicts. Local gates on
+the merge: Build-Osprey -RunTests -RunInspection (646 passed, inspection clean), Build-CarafeSharp
+-RunTests (108 passed), Build-Skyline and -Target TestPerf, then CarafeLibraryBuilderTest,
+BuildLibraryCarafeWizardTest, CodeInspection and AlphapeptdeepBuildLibraryTest in one run (0 failures,
+41 s; logs in `ai/.tmp/sessions/20261029-night-blib/`). Pushed 22:03. Triggered on `pull/4938`: Osprey
+Windows .NET Perf/Regression Tests (build 4242978, the authorization in the handoff) and Skyline PR Perf
+and Tutorial tests (4242979); the per-push configurations re-ran on the push. The Koina follow-up found
+the defect already fixed on master by #4925; see TODO-20261030_koina_predict_for_fasta.md.
