@@ -70,7 +70,7 @@ exactly such a document.
 - [x] Offline pass of KoinaSkylineIntegrationTest (15 s), CodeInspection, BuildLibraryCarafeWizardTest
 - [x] Committed eeb5fa84d0, pushed, PR #4941 (label `skyline`)
 - [x] `/code-review medium 4941`: 7 findings, 5 fixed in the second commit, 2 dropped (below)
-- [ ] TeamCity green on #4941
+- [x] TeamCity on #4941: Skyline PR build (bt209 #22562) and TestConnected green on a655725ec3; the Docker (Wine) container build was still pending at 00:40
 
 ## Progress Log
 ### 2026-10-30 night - Written, fixed, tested, PR opened
