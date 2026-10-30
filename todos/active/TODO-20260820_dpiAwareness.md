@@ -748,6 +748,46 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-10-30 - Icon loader moved to pwiz.Common.Controls.DpiIcons for the Document Grid bar and Edit Report dialog (uncommitted, awaiting approval)
+
+- Developer: pwiz.Common's dialogs have their own icons in Shared/Common/Properties/Resources.resx
+  (icon branch a9c7bac5ed moved the NavBar/ViewEditor inline images there) and pwiz.Common cannot
+  reference Skyline, so it needs its own loader (icon_builder TODO handoff item 7).
+- Project graph decides the home: CommonBaseUI (DpiScale, ImageListScaler, CommonFormEx) <
+  Common < Skyline. New Shared/CommonBaseUI/Controls/DpiIcons.cs: one IconSource per assembly
+  (its Properties.Resources natives keyed by pixels per transparent color + its embedded
+  Resources/Icons PNGs). GetIcon/GetIconName/GetIconResourceName take the owning Resources
+  class (typeof(Resources)); DpiUtil keeps thin wrappers for Skyline's. PrepareIcons moved
+  here and finds each control's source from the assembly that defines it (framework controls:
+  nearest non-WinForms ancestor; a designer-generated Resources class is located through the
+  embedded .Properties.Resources.resources file), matching the owner's natives first and then
+  every other assembly seen, so no registration step or order exists. PrepareIcons(ToolStrip,
+  Type) names the owner for a strip with no parent (TreeNodeContextMenu).
+- CommonFormEx.OnLoad calls PrepareIcons (FormEx's own call removed; DockableFormEx keeps its),
+  which brings in ViewEditor and ManageLayoutsForm. AvailableFieldsTree and ManageLayoutsForm
+  build their image lists by name (ImageListScaler.PrepareForDpi + DpiIcons.GetIcon, the
+  SequenceTree pattern). ChooseColumnsTab's up/down buttons go through the Button path.
+- Owner-first matters: Skyline and pwiz.Common both carry a pixel-identical Delete native with
+  different 24 px drawings; the first trial (union lookup, first source wins) drew Skyline's
+  Delete.24.png on the Document Grid bar. Verified by exact PNG search in the capture.
+- Test: DpiIconLookupTest.TestDpiCommonIconLookup - every small pwiz.Common native resolves to
+  its own name through its own Resources class (twins PlainLayout->DataColumn, Filter1->Filter),
+  a Common native is not found through Skyline's class and vice versa. 30 natives checked.
+- Verified: both unit tests; gate both modes (gate-common-icons3.log: TestCustomReports,
+  TestPivotEditor, TestLayoutExportImport, TestLibraryExplorer); throwaway local/dpi_icons_trial
+  recreated at e6dfc25f18 = DPI tip + icon tip a9c7bac5ed (the earlier f361799ffb predated the
+  inline-image move, so NavBar/ViewEditor items could not match): CustomReports at 150% into
+  tutorials/CustomReports-icons3 - Document Grid bar (Delete, Pivot, Navigator, Cluster,
+  MatchCase, Copy) and Edit Report toolbar (Undo, Find, Alphabetical, HiddenColumns) draw the
+  pwiz.Common PNGs; 17 of 28 shots changed vs icons2, all in those toolbar rows. Gallery
+  index-icons.html set "CustomReports Common icons".
+- Files: Shared/CommonBaseUI/Controls/DpiIcons.cs (new), Shared/CommonBaseUI/SystemUtil/
+  CommonFormEx.cs, Shared/Common/DataBinding/Controls/Editor/AvailableFieldsTree.cs,
+  Shared/Common/DataBinding/Controls/ManageLayoutsForm.cs, Skyline/Util/DpiUtil.cs,
+  FormEx.cs, DockableFormEx.cs, Menus/TreeNodeContextMenu.cs,
+  Controls/Graphs/FileProgressControl.cs, Test/DpiIconLookupTest.cs. Commit message drafted
+  (scratchpad commit-common-icons.txt).
+
 ### 2026-10-30 - GroupedStudies1 icons2 recaptured (browser window had covered the dialogs)
 
 - 23 dialog shots of the 2026-10-29 GroupedStudies1-icons2 capture (s-65..s-82, s-91..s-94, s-97,

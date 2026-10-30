@@ -140,6 +140,14 @@ halves travel separately.
    - Sizes follow `GetIconSizes`; MatchCase is 15 px native and uses the 16 px set (20/24/32).
    - Copy, Edit_Undo, Edit_Redo and the four Navigator names exist in both assemblies with
      identical PNGs; the per-assembly lookup keeps them apart.
+   DONE on the DPI branch 2026-10-30 (uncommitted pending approval): the loader is
+   pwiz.Common.Controls.DpiIcons in CommonBaseUI (below both Common and Skyline), one source per
+   assembly keyed by its Resources class; PrepareIcons moved there, called from CommonFormEx.OnLoad,
+   and matches the owning control's assembly first - needed because Delete is pixel-identical in
+   both assemblies but drawn differently. AvailableFieldsTree and ManageLayoutsForm load by name.
+   Verified with a9c7bac5ed merged: CustomReports capture shows the pwiz.Common PNGs on the
+   Document Grid bar and Edit Report toolbar. Details in TODO-20260820_dpiAwareness.md, entry
+   "Icon loader moved to pwiz.Common.Controls.DpiIcons".
 
 Assets branch commits after the push of 0fbf5d3536: c7443e63f6 (code-review medium fixes:
 navigator Delete magenta key, DropDownArrow removed in favor of LiteDropDownList's own arrow,
