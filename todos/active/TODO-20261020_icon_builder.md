@@ -140,7 +140,7 @@ halves travel separately.
    - Sizes follow `GetIconSizes`; MatchCase is 15 px native and uses the 16 px set (20/24/32).
    - Copy, Edit_Undo, Edit_Redo and the four Navigator names exist in both assemblies with
      identical PNGs; the per-assembly lookup keeps them apart.
-   DONE on the DPI branch 2026-10-30 (uncommitted pending approval): the loader is
+   DONE on the DPI branch 2026-10-30 (commit 35a440af8b, not yet pushed): the loader is
    pwiz.Common.Controls.DpiIcons in CommonBaseUI (below both Common and Skyline), one source per
    assembly keyed by its Resources class; PrepareIcons moved there, called from CommonFormEx.OnLoad,
    and matches the owning control's assembly first - needed because Delete is pixel-identical in

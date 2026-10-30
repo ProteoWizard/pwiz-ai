@@ -748,7 +748,7 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
-### 2026-10-30 - Icon loader moved to pwiz.Common.Controls.DpiIcons for the Document Grid bar and Edit Report dialog (uncommitted, awaiting approval)
+### 2026-10-30 - Icon loader moved to pwiz.Common.Controls.DpiIcons for the Document Grid bar and Edit Report dialog (35a440af8b, not yet pushed)
 
 - Developer: pwiz.Common's dialogs have their own icons in Shared/Common/Properties/Resources.resx
   (icon branch a9c7bac5ed moved the NavBar/ViewEditor inline images there) and pwiz.Common cannot
