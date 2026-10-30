@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4935](https://github.com/ProteoWizard/pwiz/issues/4935)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4947](https://github.com/ProteoWizard/pwiz/pull/4947)
 
 ## Objective
 
