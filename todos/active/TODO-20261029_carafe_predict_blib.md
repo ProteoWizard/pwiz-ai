@@ -174,3 +174,6 @@ gate 4243012 on 1f636e42e9: 117/117. Night session 21:33-03:48 (6 h 15 min). Thr
 after master's #4915), plus the merge fb97a4d2b3. Brendan merges.
 PR #4942 (b816bdd8e6) carries the audit-log rename alone, from master, so it can merge first; this PR's 11cf54f23c then becomes a no-op rename.
 PR #4942's own Perf and Tutorial run: build 4243193 (queued 2026-10-30 04:22).
+
+PR #4942 closed 2026-10-30: Brian's #4943 (19c4e61b28) made the same five-file rename and merged first, so master has
+the fix and this branch's 11cf54f23c is a no-op rename on merge. #4941 merged as 232005d401 (/pw-complete, --admin).
