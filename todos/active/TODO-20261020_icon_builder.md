@@ -253,6 +253,21 @@ Targets tab at 200% should show the 32 px frame.
       (pwiz.Common cannot call Skyline's DpiUtil: move the lookup into pwiz.Common taking the
       owning assembly, DpiUtil.GetIcon wraps it), add an IconBuilder per-assembly output and
       embed `Shared/Common/Resources/Icons` in Common.csproj
+- [x] pwiz.Common assets (2026-10-29, assets branch, not pushed): 95ea7739b7 the 32 drawings;
+      850292a452 `common.manifest` (31 entries, all vector except Filter, raster; directives
+      `@vector/@raster/@output`, IconBuilder builds every *.manifest by default), 93 PNGs in
+      `Shared/Common/Resources/Icons` embedded by Common.csproj, unused `Filter1` resource and
+      `agg_blank` drawing removed, `TestEmbeddedCommonIconSizes` added (green with build)
+- [ ] DPI side: a loader pwiz.Common can call. pwiz.Common cannot reference Skyline, so the
+      name/size lookup (today `DpiUtil.GetIcon` reading `typeof(DpiUtil).Assembly`) needs a
+      home in pwiz.Common taking the owning assembly, with DpiUtil wrapping it; PrepareIcons
+      pixel matching must also index pwiz.Common Resources.resx for the Edit Report dialog and
+      Document Grid bar. Sizes follow `GetIconSizes` (MatchCase is 15 px: 16 px size set)
+- [ ] pwiz.Common inline images: NavBar.resx (10) and ViewEditor.resx (7) embed their images
+      base64 (Alphabetical, HiddenColumns, Cluster among them; same art as the Resources
+      .bmp files, alpha instead of magenta). Move them into pwiz.Common Resources.resx as
+      83134adcc1 did for Skyline so PrepareIcons can match them; add any undrawn ones to the
+      gallery
 - [ ] Window icons (FindResults, Immediate, FilesTree): an .ico output kind in IconBuilder and a
       DpiUtil path for Form.Icon before their vectors can ship; gallery choices still open
 - [ ] After #4602 and #4887 are both on master: point IconResourcesTest at
