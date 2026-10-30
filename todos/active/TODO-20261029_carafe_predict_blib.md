@@ -161,3 +161,7 @@ Osprey Perf/Regression gate 4243012: SUCCESS, 117 passed of 117, the same count 
 PR #4931, so a complete run. It ran on 1f636e42e9; the head 11cf54f23c changes only test data (the audit
 logs), so it was not re-queued - Brendan can re-trigger on the head if the status must be on that commit.
 Third perf run on the head: build 4243067 (started 23:56, ~3.7 h).
+Transient on 1f636e42e9: bt209 #22561 (4243005) failed only `TestRInstaller` (could not reach www.r-project.org);
+the Docker (Wine) container build 4243011 then failed on its snapshot dependency alone (its own 348 tests
+passed; the one msconvert wiff diff it reports is also in the passing build 4242989). bt209 #22563 on the head
+passed; Docker 4243187 queued for the head.
