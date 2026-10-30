@@ -1,6 +1,7 @@
 # TODO-20261020_skylinetester_hidden_window.md
 
 ## Branch Information
+- **Status**: Completed - #4882 merged 2026-10-20
 - **Branch**: `Skyline/work/20261020_skylinetester_hidden_window`
 - **Base**: `master`
 - **Module**: `skyline`
@@ -29,4 +30,16 @@ Removed `WindowStyle = ProcessWindowStyle.Hidden`; `CreateNoWindow = true` still
 
 ## Tasks
 - [x] Fix and verify (main window shows from SkylineTester in Screenshot mode)
-- [ ] PR merged
+- [x] PR merged
+
+## Progress Log
+
+### 2026-10-20 - Merged
+
+PR #4882 squash-merged to `master` as `f1156f1019`.
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-20)
+
+SkylineTester no longer starts TestRunner with a hidden window style, so the Skyline main window shows in Screenshot, Auto-Screenshot and Cover shot modes on .NET 10.

@@ -5,7 +5,7 @@
 - **Branch**: `Skyline/work/20261005_rehoist_msconvertgui_seems`
 - **Base**: `Skyline/work/20260910_retire_cpp_tree` (PR #4658), stacked
 - **Created**: 2026-10-05
-- **Status**: In review
+- **Status**: Completed - #4783 merged 2026-10-07
 - **GitHub Issue**: (none)
 - **Module**: `pwiz`
 - **PR**: [#4783](https://github.com/ProteoWizard/pwiz/pull/4783)
@@ -113,3 +113,13 @@ mechanical .NET 10 / C# library re-targeting, with nothing the legacy app had le
   - left alone: the heatmap title's "isolation m/z 0" (it parses "[lo-hi]" as a number; legacy),
     per-scan TIC equal to the frame TIC (C++ `TimsSpectrum::getTIC` does the same), and
     `TimeMzHeatmapForm`'s own grid-row walk
+
+### 2026-10-07 - Merged
+
+PR #4783 squash-merged into `Skyline/work/20260910_retire_cpp_tree` as `e82a7d377a`; that branch merged into the port branch as #4658 (`6dd40d8c93`, 2026-10-07). The port branch reached master with #4619 (`156dab478b`, 2026-10-08).
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-07)
+
+MSConvertGUI and SeeMS re-hoisted so each is the current legacy app plus the .NET 10 re-targeting, one copy each with its own history.

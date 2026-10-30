@@ -8,7 +8,7 @@
   #4670 merges (GitHub retargets automatically).
 - **Checkout**: `C:\dev\pwiz-im7`
 - **Created**: 2026-09-16
-- **Status**: PR open, awaiting CI and Copilot review
+- **Status**: Completed - #4681 merged 2026-09-17
 - **GitHub Issue**: [#4674](https://github.com/ProteoWizard/pwiz/issues/4674)
 - **Module**: `pwiz`
 - **PR**: [#4681](https://github.com/ProteoWizard/pwiz/pull/4681) into Skyline/work/20260915_wiff2_concurrency_tests
@@ -211,3 +211,13 @@ fixed; four more are recorded above as pre-existing or out of scope.
 The first `/code-review` run inferred its target from the shell's working directory and spent
 29 minutes reviewing an unrelated branch. The re-run named the branch, the base and the expected
 file set explicitly.
+
+### 2026-09-17 - Merged
+
+PR #4681 squash-merged into `Skyline/work/20260915_wiff2_concurrency_tests` as `1ac591a6f1`; that branch merged into the port branch as #4670 (`94fc7222a4`, 2026-09-18). The port branch reached master with #4619 (`156dab478b`, 2026-10-08).
+
+## Resolution
+
+**Status**: Completed (merged 2026-09-17)
+
+One shared `ISampleDataApi` with per-path reader counts stops the ~34 KB leak per `.wiff2` open. The cpp-side issue task was left unfiled; the C++ tree has since been retired (#4658).

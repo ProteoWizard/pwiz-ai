@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260915_inno_installers`
 - **Base**: `Skyline/work/20260612_net8_port` (the .NET port branch, PR #4619)
 - **Created**: 2026-09-15
-- **Status**: In Progress
+- **Status**: Completed - #4676 merged 2026-10-02
 - **Module**: `skyline`
 - **PR**: [#4676](https://github.com/ProteoWizard/pwiz/pull/4676)
 
@@ -178,3 +178,13 @@ pwiz_tools/Skyline/Executables/Installer/
   the leaner stage; pwiz Installer.Tests versioned leg passed. Matt's interactive installs
   of all three products (pwiz standard upgraded the stale 0.1.0 in place) are on the
   machine, so the Skyline/Osprey uninstall-cycle re-tests wait for his go-ahead.
+
+### 2026-10-02 - Merged
+
+PR #4676 squash-merged into `Skyline/work/20260612_net8_port` as `0386082cc1`. The port branch reached master with #4619 (`156dab478b`, 2026-10-08).
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-02)
+
+Inno Setup installers for Skyline and Osprey, alongside the pwiz-sharp one. The items under "Follow-ups (not in this PR)" were not carried forward from this TODO.

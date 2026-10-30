@@ -7,7 +7,7 @@
 - **Checkout**: `C:\dev\pwiz-msconvert-pr` (git worktree)
 - **Module**: `pwiz`
 - **Created**: 2026-09-21
-- **Status**: PR open, awaiting CI and review
+- **Status**: Completed - #4695 merged 2026-09-22
 - **PR**: [#4695](https://github.com/ProteoWizard/pwiz/pull/4695) into #4339's branch
 
 ## Objective
@@ -163,3 +163,15 @@ measured, not quoted.
   obvious completion of the port and needs the xsd guard above to already be in place.
 - The retirement TODO (`TODO-20260910_retire_cpp_tree.md`) lists "generate_cvid.py still
   parses the C++ generator outputs" as a known gap — half closed by this.
+
+## Progress Log
+
+### 2026-09-22 - Merged
+
+PR #4695 squash-merged into `Skyline/work/20260629_thermo_rawfilereader_cv_update` as `7c658d4c9c`; it reached `master` with #4339 (`539d3f2055`, 2026-10-20).
+
+## Resolution
+
+**Status**: Completed (merged 2026-09-22)
+
+cpp `cvgen` ported to C#, so `CVID.generated.cs` regenerates from the OBO files without a C++ build. The Follow-ups above were not carried forward.

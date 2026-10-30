@@ -23,9 +23,7 @@ the way it already runs on net472.
     `20260925_diaumpire_persistent_cleanup_glob`.
 - **Base**: `Skyline/work/20260612_net8_port`
 - **Created**: 2026-09-17
-- **Status**: In Progress - #4685 and #4697 open, both pushed and current with the base;
-  **0 warnings, 0 errors** on #4685 as of 2026-09-29 - the goal is met. Wave 3 moved to
-  `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 not started.
+- **Status**: Completed - #4685 merged 2026-10-02
 - **Module**: `skyline`
 - **PR**: [#4685](https://github.com/ProteoWizard/pwiz/pull/4685),
   [#4697](https://github.com/ProteoWizard/pwiz/pull/4697)
@@ -1150,3 +1148,15 @@ The two fixes: `Path.TrimEndingDirectorySeparator` for the drive-root path bug #
 for consistency with the ClrMD guards in `HangDetection`/`GcRootReporter` - a fair catch on my own
 inconsistency, since I had argued elsewhere that a framework annotation is not our guarantee and a
 diagnostic path deserves the guard.
+
+## Progress Log
+
+### 2026-10-02 - Merged
+
+PR #4697 squash-merged as `17fa34a5da` (2026-09-29); PR #4685 squash-merged into the port branch as `bb4a910da2` (2026-10-02). The port branch reached master with #4619 (`156dab478b`, 2026-10-08).
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-02)
+
+Goal met: 0 ReSharper warnings, 0 errors in the Skyline Windows .NET build, with inspection running inside the build. Wave 3 moved to `TODO-20260924_httpclient_to_progress_continued.md`; wave 4 was not started and is not carried forward.

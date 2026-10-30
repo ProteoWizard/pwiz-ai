@@ -7,7 +7,7 @@
 - **Checkout**: `C:\dev\pwiz-msconvert-pr` (git worktree)
 - **Module**: `pwiz` (CV data + pwiz-sharp readers; nothing under `pwiz_tools/Skyline`)
 - **Created**: 2026-06-29 (as a master PR); retarget started 2026-09-21
-- **Status**: retargeted and pushed 2026-09-21 (`bcab0f28d0`, one commit, force-push over `8981502bc1`); PR base/title/label/description updated; CI running
+- **Status**: Completed - #4339 merged 2026-10-20
 - **PR**: [#4339](https://github.com/ProteoWizard/pwiz/pull/4339)
 
 ## Objective
@@ -108,3 +108,13 @@ referenced pwiz-sharp project Linux-flavored in place; rebuild `Pwiz.sln` afterw
   change as WIP `afdd899bb5` on `Skyline/work/20260917_resharper_inspection_noise`, then
   rebuilt the branch as above. Verified (see above), committed as `bcab0f28d0`, force-pushed,
   PR retargeted. Waiting on CI.
+
+### 2026-10-20 - Merged
+
+PR #4339 squash-merged to `master` as `539d3f2055` (its base became `master` once the port merged).
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-20)
+
+PSI-MS and UNIMOD CVs refreshed and the Orbitrap Tribrid Apex and Orbitrap Excedion added on the .NET 10 tree.

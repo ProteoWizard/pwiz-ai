@@ -12,7 +12,7 @@ This file is the reference for everything below; it is no longer edited.
 - **Base**: `master`
 - **Created**: 2026-10-19 (designed in the morning; the branch was cut the same evening after
   #4867 and #4868 merged)
-- **Status**: Phase 1 complete 2026-10-23 - PR 4a merged 2026-10-20 as #4876 (modes 1 and 3), with #4877 before it; 4b merged 2026-10-21 as #4885; the clean-up PR merged 2026-10-21 as #4895; 4c (HPC addressing, task declarations, one chain shape) merged 2026-10-22 as #4898 (46af8ac754). `.libcache` retirement merged 2026-10-22 as #4904 (f4f24aefad). #4849 (AlphaPeptDeep via CarafeSharp) merged 2026-10-23 as 946a33909f. Phase 2 (4d: Osprey as a download using #4849's libtorch runtime) continues in the active TODO of the same name.
+- **Status**: Completed - #4904 merged 2026-10-22
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4877](https://github.com/ProteoWizard/pwiz/pull/4877) (merged 2026-10-20) (option spelling), then
@@ -1352,3 +1352,13 @@ TeamCity Perf/Regression #341 (4231041) on `pull/4904`: SUCCESS (triggered at Br
 ### 2026-10-22 - .libcache retirement merged (#4904)
 
 PR #4904 merged as f4f24aefad (squash approved by Brendan; 17/17 checks, TeamCity Perf/Regression #341 SUCCESS). Shipped: `LibraryCache` gone with its tests and strings; `LibraryLoader` reads the derived `.blib` only and deletes `<lib>.libcache` at its exact path once the derived library is in place; `regression.ps1` relays the `.blib` only; P18 in `00-pipeline-architecture.md`; the `regression.html` mode 3 note. Not done, on purpose: a `.libcache` beside a `.blib` SOURCE is left alone (no successor file). This TODO stays active for #4849 and 4d.
+
+### 2026-10-22 - Merged
+
+Every phase 1 PR is on `master`: #4877 (`fd839c04cb`), #4876 (`6aaa29a684`), #4885 (`7819a9b6ac`), #4895 (`22626556a4`), #4898 (`46af8ac754`), and last #4904 (`f4f24aefad`, 2026-10-22).
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-22)
+
+Phase 1 of the Osprey one command is complete: library build from `--fasta`, `--training-input`, HPC addressing, and the `.libcache` retirement. Later work continues in `TODO-20261019_osprey_one_command.md`.
