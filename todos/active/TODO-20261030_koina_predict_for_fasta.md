@@ -69,7 +69,8 @@ exactly such a document.
 - [x] Recorded against live Koina (33 KB, `koinaFastaQueries.json`); `koinaQueries.json` restored; RecordData false
 - [x] Offline pass of KoinaSkylineIntegrationTest (15 s), CodeInspection, BuildLibraryCarafeWizardTest
 - [x] Committed eeb5fa84d0, pushed, PR #4941 (label `skyline`)
-- [ ] TeamCity green; `/code-review medium 4941` triage
+- [x] `/code-review medium 4941`: 7 findings, 5 fixed in the second commit, 2 dropped (below)
+- [ ] TeamCity green on #4941
 
 ## Progress Log
 ### 2026-10-30 night - Written, fixed, tested, PR opened
@@ -89,3 +90,16 @@ to passing, all by design and left alone (rising triage bar near merge):
 - Running `BuildLibraryCarafeWizardTest` on this branch after building Osprey from the #4938 branch fails
   with `predict.predicted.speclib.tsv` not found: master's Skyline expects the TSV, the other branch's
   Osprey writes the blib. Rebuild Osprey from whichever branch is checked out before running Carafe tests.
+
+### 2026-10-30 night - /code-review medium 4941 triage
+Seven findings. Fixed: (1) `ChangePick(PeptidePick.filter)` with a library rank set throws in
+`PeptideLibraries.DoValidate` ("does not support peptide ranking") through `ChangeProp`'s validation, so a
+document ranking its library peptides failed Build Library on both sources, the document route included,
+since `settingsDigest` is built before the route check (pre-existing from #4925; now
+`.ChangeRankId(null).ChangePick(filter)`, the idiom at `Library.cs:259`, and the test ranks its document);
+(2) the test now asserts the auto-select flags it depends on; (3) `EntrapmentTargets` null-guarded before
+the HashSet; (4) the expected DecoyPairs rows dedupe by library key before the sequence-and-charge
+grouping, as the writer's `ReadSpectrumIds` sees one spectrum per key; (7) `GetDocumentToPredict`'s
+summary names the overrides. Dropped: (5) the digest settings are built on the document route too - three
+clones, and with (1) fixed no longer a failure; (6) `WaitForCondition(Builder != null)` after a synchronous
+`OkWizardPage` - a refused page already fails the test on its dialog's text (seen twice tonight).
