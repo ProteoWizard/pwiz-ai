@@ -178,9 +178,16 @@ Generate a draft using this priority order:
 
 ### 1b.3 — Present and execute
 
-Show the drafted subject and body to the user verbatim, then ask:
+Print the drafted subject and body **in full, in a fenced block in your reply**, and end
+the reply with the question as plain text:
 
-> Merge PR #N with this squash message? (yes / edit / abandon)
+> Merge PR #N with this squash message (yes/edit/abandon)?
+
+Do not put the message inside an `AskUserQuestion` dialog: a long message is hard to
+read there, its preview variants may not render at all, and the developer cannot
+compare it with anything. The console text is the review surface; the one-line
+question is the whole prompt (see "Asking for approval of a message" in the
+version-control skill).
 
 - **yes**: proceed
 - **edit**: incorporate the user's revisions and re-confirm

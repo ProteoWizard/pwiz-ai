@@ -25,6 +25,18 @@ If the LLM has not built/tested the code itself, ask the developer: "Has this be
 
 **Uncommitted files you did not touch are most likely the same developer's, from another session on this machine - not "someone else's".** List them and ask whether to commit them or leave them in progress; never sweep them in, and stage by path rather than `git add -A`. See "Uncommitted Files You Did Not Touch" in the guide.
 
+## Asking for approval of a message
+
+When a commit message, squash-merge subject and body, or PR description needs the
+developer's approval, print it **in full, in a fenced block in the reply**, then end the
+reply with the question as plain text: `Commit with this message (yes/edit/abandon)?`
+
+Do not wrap it in an `AskUserQuestion` dialog. The dialog renders a long message badly,
+its preview variants may not show at all, and the developer cannot scroll back to compare
+it with the diff or the TODO. Keep `AskUserQuestion` for short multiple-choice decisions
+that carry no artifact to read. `/pw-complete`, `/pw-pcommit` and `/pw-pcommitfull` follow
+this form.
+
 ## Module Tagging — every pwiz PR
 
 `ProteoWizard/pwiz` carries three streams of work. Every PR belongs to exactly
