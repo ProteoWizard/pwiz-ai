@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261029_run_peptide_search_diann` 
 - **Base**: `Skyline/work/20261027_run_peptide_search_ux` (PR [#4928](https://github.com/ProteoWizard/pwiz/pull/4928), PR B), itself stacked on #4923 (PR A)
 - **Created**: 2026-10-29
-- **Status**: In Progress
+- **Status**: In Review
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4944](https://github.com/ProteoWizard/pwiz/pull/4944)
 - **Checkout**: `C:\dev\pwiz-inspect`
 
 ## Objective
@@ -84,8 +84,11 @@ The Run tutorial screenshots/text (previously "PR C") move after this PR.
   while Overwrite replaces them; Cancel leaves the wizard on its last input page.
 - Unit test (one table of input -> expected) for DIA-NN's needs-conversion decision across vendor types,
   incl. Waters vs Thermo .raw and Bruker .d with/without analysis.tdf.
-- A DIA-NN run on a converted vendor format (e.g. Waters) in a perf test, checking peak bounds land on the
-  imported replicate.
+- A DIA-NN run on a converted format, checking peak bounds land on the imported replicate:
+  `TestDiannSearchConverted` (an mzXML copy of the hela run; DIA-NN does not read mzXML). A Waters SONAR
+  perf test was tried and dropped: DIA-NN ignores the converted mzML's scanning-quadrupole arrays, sees
+  every MS2 scan as 50-2000 m/z (3.7M precursors in range) and crashed after ~1h40m; `--scanning-swath`
+  is documented only for SCIEX data read directly. No multi-sample TOF .wiff is known for a WIFF case.
 - Unaffected (import an existing DIA-NN library, no wizard): DiaSwathTutorialTest DIA-NN variants,
   DiaNnPeakImputationTest, GlobalQValueFilterTest.
 
@@ -97,3 +100,33 @@ The Run tutorial screenshots/text (previously "PR C") move after this PR.
 ## Progress
 
 - [x] Plan approved (2026-10-29)
+- [x] DiannSearchEngine (Model/DdaSearch): wraps DiannHelpers.RunSearch; vendor-type conversion check
+      (DiannHelpers.ReadsFormat + analysis.tdf probe); zero-precursor / unreadable / missing library errors moved
+      to ModelResources; LogFilePath hook on AbstractDdaSearchEngine opens DIA-NN's stdout log from the run page
+- [x] Conversion page: direct-DIA engine choice (MSFragger / DIA-NN) + GPF on its own row (GPF only for MSFragger);
+      description text updated
+- [x] SearchSettingsControl: engine list instead of combo index == enum; DIA offers the chosen engine only;
+      engine re-made when the DIA context changes (fixes MSFragger made in DDA mode by a page-1 preset);
+      pending preset applied when its engine is offered; DIA-NN install check; 0 = auto tolerances; .cfg import
+- [x] Overwrite/Append prompt at Run for every engine when the document uses its library (pipeline deletes the
+      library before rebuilding on Overwrite); today's behavior was a silent append
+- [x] DIA-NN presets in SearchSettingsPresets; presets saved by the old wizard moved in on first load
+- [x] Removed DiannSearchDlg (+designer/resx), its form-lookup rows, PrefillFoundResultsFiles, unused strings,
+      the "Only MSFragger" message; DIA-NN Search menu item opens Run with DIA + DIA-NN preselected
+- [x] Tests: DiannSearchTest rewritten (3 methods pass), DiannSearchEngineTest unit test, DdaSearchTest library
+      prompt (Cancel / Append / Overwrite), DiaSearchTest engine-choice assertion; DiannSearchPerfTest and
+      LFQbench (manual) rewritten
+- [x] Decision change: kept PR B page order (the DIA default already has no decoys), not method-before-FASTA
+- [x] Perf: TestDiannSearchTutorial (+ audit log in 5 languages), TestFeatureDetectionSIMscans,
+      TestDiaSearchStellarTutorialDraft
+- [x] Converted-format run: TestDiannSearchConverted (mzXML -> converted/*.mzML); all DIA-NN functional tests
+      check that library peak bounds set the replicate's peaks (VerifyPeakBoundsFromLibrary)
+- [x] tcinspect clean; CodeInspection passes
+- [x] /code-review high: 8 of 10 findings fixed - preset no longer re-selects its engine over one the user
+      picked; a DIA preset on/after the search settings page re-syncs DIA-Umpire and the engine list (DDA-only
+      engines turn DIA-Umpire on); Overwrite sets the old library aside and restores it if the build fails;
+      heavy mods kept from DIA-NN (SearchesIsotopeLabels); one sample of a multi-sample WIFF2 converts;
+      DIA-NN ppm check before the preset changes anything; migrated DIA-NN presets get unique names; the
+      Overwrite/Append prompt is asked after the isolation-window check. Dropped: engine display-name
+      duplication, a "0 = auto tolerance" engine property (DIA-NN only)
+- [x] PR created
