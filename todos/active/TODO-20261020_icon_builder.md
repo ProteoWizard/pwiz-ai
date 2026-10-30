@@ -230,6 +230,22 @@ Targets tab at 200% should show the 32 px frame.
       16 raster (Find, FindNext, MethodFile, Open, magnifier_zoom_in -> vector; Pinleftlight,
       UIModeMixed -> raster). 381 outputs verified square 32-bit ARGB at their named sizes; no C#
       changed, so no build was run for this commit
+- [ ] pwiz.Common icons (2026-10-29): the first inventory covered only Skyline/Resources, so
+      the Edit Report dialog (all of `Shared/Common/DataBinding/Controls/Editor`) and the
+      Document Grid bar were missed. 33 small images in `Shared/Common/Resources`; only Skyline
+      shows pwiz.Common UI (BiblioSpecUtil/ProteomeDb reference it for utilities only).
+      Gallery has 33 `Common_` rows (same file and storage keys). Drawings, uncommitted, in
+      `IconBuilder/Icons/Vector/Common/` from `Write-CommonVectors.py` (session folder): 11
+      traced orthogonal (Cluster, FreezeCells, HiddenColumns, PivotColumn, SublistColumn,
+      maximize, restore, agg_max, agg_min, agg_groupby, MatchCase), 14 hand-drawn (close,
+      agg_sum/mean/median/count/stddev, Number/Text/Bool/LinkColumn, UnknownUiMode, Pivot,
+      PivotAndFilter, Alphabetical), Delete/Filter/up/down copied from Skyline (pixel-identical
+      natives), DataColumn/PlainLayout/agg_blank empty (transparent natives),
+      DropImageNoBackground (10x4, recolored at run time by LiteDropDownList) not drawn.
+      Next: dev review in the gallery; then decide with the DPI session where the loader lives
+      (pwiz.Common cannot call Skyline's DpiUtil: move the lookup into pwiz.Common taking the
+      owning assembly, DpiUtil.GetIcon wraps it), add an IconBuilder per-assembly output and
+      embed `Shared/Common/Resources/Icons` in Common.csproj
 - [ ] Window icons (FindResults, Immediate, FilesTree): an .ico output kind in IconBuilder and a
       DpiUtil path for Form.Icon before their vectors can ship; gallery choices still open
 - [ ] After #4602 and #4887 are both on master: point IconResourcesTest at
