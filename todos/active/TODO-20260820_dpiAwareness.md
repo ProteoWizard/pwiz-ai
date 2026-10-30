@@ -713,6 +713,41 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-29 - Toolbar, menu and button icons routed through DpiUtil.GetIcon (DpiUtil.PrepareIcons; uncommitted, awaiting approval)
+
+- Developer asked for the toolbars and menus to use the per-DPI icons too (icon_builder TODO
+  handoff item 6 proposed the design). Designers assign Resources.X directly and an Image has
+  no name, so DpiUtil.PrepareIcons(Control) tabulates the pixels of every Resources.resx bitmap
+  up to 16 px once, walks the control tree (ToolStrip/MenuStrip/StatusStrip/ContextMenuStrip
+  items recursively through drop-downs, each control's ContextMenuStrip, Button, PictureBox)
+  and replaces each matched image with GetIcon's result. FormEx/DockableFormEx.OnLoad call it in
+  place of ScaleButtonImages (its Button + ImageList handling moved in). PrepareIcons(ToolStrip)
+  for strips no form reaches: TreeNodeContextMenu ctor; FileProgressControl ctor (created after
+  its host loads); WatersConnectSaveMethodFileDialog (CommonFormEx, not FormEx) calls GetIcon
+  for its new-folder button directly.
+- Root cause of the first failed trial (main toolbar unchanged while the Document Grid toolbar
+  changed): ToolStripItem.Image's setter calls MakeTransparent(ImageTransparentColor) on the
+  bitmap it is given, and the 16 px natives are magenta-keyed 24-bit BMPs (designers set
+  Magenta/Fuchsia 278x, White 6x, Transparent 3x in the resx), so the item's pixels no longer
+  matched the raw resource. Fix: one lookup table per key color (GetNativeIconNames(Color)),
+  built by applying the key to the natives the same way; fully transparent pixels read as zero.
+  Found with the local DpiToolbarProbeTest (TestFunctional, not for commit) dumping item image
+  sizes/lookup results in the DPI-aware process: dpi-sweep/toolbar-probe/toolbar-probe.txt.
+- Test: Test/DpiIconLookupTest - every small resource bitmap resolves to its own name (twins
+  PeakBlank/Blank and ReplicateMissing/FileMissing listed), plus a ToolStripButton with each key
+  color. 112 small natives checked.
+- Verified: unit test; gate both modes (gate-wire2.log: FilesTree, MultiSelect, LibraryExplorer,
+  ImportHighPrecTransitionList, LayoutExportImport, CustomReports); DPI branch alone: MethodEdit
+  150% within 1 level of dr6 (toolbars take the resample path = what WinForms drew), 96 DPI
+  no-op; throwaway branch + assets (chain-icons3): MethodEdit/CustomReports/GroupedStudies1 at
+  150% into tutorials/*-icons2 - main toolbar, Document/Results Grid Skyline buttons, graph
+  toolbars now draw the 24 px PNGs (6/9/36 shots changed vs the trees-only trial). Gallery
+  tutorials/index-icons.html, "toolbars" sets. Still unwired: the Shared NavBar items
+  (pwiz.Common resources, no embedded sizes) and dock tab icons (form Icon frames).
+- Files: Util/DpiUtil.cs, Util/FormEx.cs, Util/DockableFormEx.cs, Menus/TreeNodeContextMenu.cs,
+  Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
+  Test/DpiIconLookupTest.cs (new). Commit message drafted (scratchpad commit-wire.txt).
+
 ### 2026-10-29 - Icon-assets trial capture (icon_builder handoff item 5; local branch only, nothing pushed)
 
 - pwiz1 throwaway branch local/dpi_icons_trial = DPI tip eee6eb420f + origin/Skyline/work/20261020_icon_assets

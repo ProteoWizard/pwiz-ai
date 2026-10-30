@@ -100,6 +100,11 @@ halves travel separately.
    ViewLibraryDlg images call `DpiUtil.GetIcon`, so only those show the new drawings; toolbars,
    menus and buttons still get WinForms-scaled 16 px bitmaps. Nothing from the throwaway
    branch is pushed; drawing fixes come back through this TODO's gallery.
+   DONE 2026-10-29 (DPI session): MethodEdit, LibraryExplorer, CustomReports, GroupedStudies1
+   at 150% + MethodEdit at 96 DPI, gallery ai/.tmp/dpi-sweep/tutorials/index-icons.html. The
+   wired sites (Targets/Files trees incl. state images, completion list, Library Explorer)
+   show the 24 px PNGs; toolbars (main, grids, graphs) and dock tab icons are unchanged =
+   the unwired list. Details in TODO-20260820_dpiAwareness.md, entry "Icon-assets trial".
 6. **Toolbar, menu and button wiring (DPI side, proposed 2026-10-29).** Designers assign
    `Resources.X` directly and an Image carries no resource name (`Resources.X` returns a new
    bitmap per call, so reference matching fails). Proposed helper, called once per ToolStrip
@@ -108,16 +113,17 @@ halves travel separately.
    `DpiUtil.GetIcon(control, name, native, item.ImageTransparentColor)`. Covers toolbars, menus
    and context menus without per-designer edits. Buttons outside ToolStrips need the same
    lookup on `ButtonBase.Image`.
+   DONE on the DPI branch 2026-10-29 (DpiUtil.PrepareIcons, uncommitted pending approval), with
+   one addition to the design: ToolStripItem.Image's setter applies ImageTransparentColor to the
+   bitmap (the natives are magenta-keyed BMPs), so the lookup keeps one table per key color,
+   built by keying the natives the same way. Verified with the assets: main toolbar, grid and
+   graph toolbars draw the 24 px PNGs. Shared NavBar items (pwiz.Common resources) stay as they
+   are. Details in TODO-20260820_dpiAwareness.md, entry "Toolbar, menu and button icons".
 
 Assets branch commits after the push of 0fbf5d3536: c7443e63f6 (code-review medium fixes:
 navigator Delete magenta key, DropDownArrow removed in favor of LiteDropDownList's own arrow,
 TileFlipXY in the raster downscale, IconBuilder unknown-name and kind checks; build +
 IconResourcesTest green; not pushed yet).
-   DONE 2026-10-29 (DPI session): MethodEdit, LibraryExplorer, CustomReports, GroupedStudies1
-   at 150% + MethodEdit at 96 DPI, gallery ai/.tmp/dpi-sweep/tutorials/index-icons.html. The
-   wired sites (Targets/Files trees incl. state images, completion list, Library Explorer)
-   show the 24 px PNGs; toolbars (main, grids, graphs) and dock tab icons are unchanged =
-   the unwired list. Details in TODO-20260820_dpiAwareness.md, entry "Icon-assets trial".
 
 Contract: one call per icon,
 `DpiUtil.GetIcon(this, nameof(Resources.Save), Resources.Save, Color.Magenta)`, returning a
