@@ -144,3 +144,15 @@ running the perf test with `BUILD_VCS_NUMBER=fb97a4d2b3...`: it fetched the PR's
 after the revision's Osprey build has finished, or it falls back to master's; the night session triggers
 it only once that build is done. The Osprey Perf/Regression gate was re-queued on the new head as build
 4243012 (4242978 on the old head never left the queue; cancelled).
+
+### 2026-10-30 night, later still - Second perf-run red: master's DIA-NN tutorial rename
+The re-run on 1f636e42e9 (build 4243013) and the old-head run (4242979) both fail
+`TestDiannSearchTutorialDraft` at `EndAuditLogging`: "Log file ... TestDiannSearchTutorialDraft.log does not
+exist". #4915 (4f92fe97ba, master's newest commit, in tonight's merge) renamed the method from
+`TestDiannSearchTutorial` and left `TutorialAuditLogs/<lang>/TestDiannSearchTutorial.log` behind in all five
+languages; the test body passed, only the audit-log comparison keyed on the method name found nothing.
+Master's own perf run of 4f92fe97ba had not happened yet, so this PR's merge is where it first showed.
+Fixed on this branch as 11cf54f23c: `git mv` of the five logs to the draft name (the recorded steps are the
+same). Brendan may prefer that commit split into its own skyline PR; it is one rename. Local check running:
+`TestDiannSearchTutorialDraft -EnableInternet` (`ai/.tmp/sessions/20261029-night-blib/blib-diann-tutorial.log`).
+The perf run will be triggered a third time once the head's Osprey build finishes.
