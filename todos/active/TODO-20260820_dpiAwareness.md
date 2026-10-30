@@ -748,6 +748,20 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-10-30 - GroupedStudies1 icons2 recaptured (browser window had covered the dialogs)
+
+- 23 dialog shots of the 2026-10-29 GroupedStudies1-icons2 capture (s-65..s-82, s-91..s-94, s-97,
+  s-98) showed the icon review gallery's browser window instead of the dialog: CopyFromScreen takes
+  whatever is on the desktop at the form's bounds, and that window was in front of Skyline. Graph
+  shots in the same range were fine (rendered off-screen). MethodEdit, CustomReports and
+  LibraryExplorer icons2 sets checked on contact sheets: clean.
+- Throwaway branch local/dpi_icons_trial recreated at f361799ffb = DPI tip 895e28c4cc (wiring now
+  committed) + origin/Skyline/work/20261020_icon_assets f869e1128b (four newer icon commits, clean
+  merge). chain-icons5.ps1: build TestTutorial Release, recapture at 150%, return to the DPI branch.
+  98 shots, all Skyline windows; gallery index-icons.html regenerated (same localStorage keys).
+- Rule for screen captures while the desktop is shared with the developer: say when the capture
+  phase starts and ask for the primary monitor to stay uncovered until it ends (about 6 min here).
+
 ### 2026-10-29 - Icon-assets trial capture (icon_builder handoff item 5; local branch only, nothing pushed)
 
 - pwiz1 throwaway branch local/dpi_icons_trial = DPI tip eee6eb420f + origin/Skyline/work/20261020_icon_assets
