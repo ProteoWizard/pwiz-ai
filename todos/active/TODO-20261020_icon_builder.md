@@ -113,7 +113,7 @@ halves travel separately.
    `DpiUtil.GetIcon(control, name, native, item.ImageTransparentColor)`. Covers toolbars, menus
    and context menus without per-designer edits. Buttons outside ToolStrips need the same
    lookup on `ButtonBase.Image`.
-   DONE on the DPI branch 2026-10-29 (DpiUtil.PrepareIcons, uncommitted pending approval), with
+   DONE on the DPI branch 2026-10-29 (DpiUtil.PrepareIcons, commit 889f99ef85), with
    one addition to the design: ToolStripItem.Image's setter applies ImageTransparentColor to the
    bitmap (the natives are magenta-keyed BMPs), so the lookup keeps one table per key color,
    built by keying the natives the same way. Verified with the assets: main toolbar, grid and
