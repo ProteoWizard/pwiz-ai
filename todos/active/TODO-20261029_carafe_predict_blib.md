@@ -33,6 +33,16 @@ integration that nobody meant to keep; Brendan missed it in review of the integr
   route at all."
 - A precursor table's library always predicts the CCS (Skyline reads it back); it is a `.blib`
   alone whatever `-lf_type` says, and the output is the `-o` path itself.
+- **The model-support limit moves into CarafeSharp** (Brendan, evening): "Don't ask a model to predict
+  something it had no training data for" - David Shteynberg's validation of the default AlphaPeptDeep
+  models (Carbamidomethyl, Oxidation: all; Phospho, GlyGly: MS2 only) - but Carafe holds the knowledge
+  of what its default models support, not Skyline. `ModelSupport` in CarafeSharp.Models, applied by
+  `LibraryGenerator` on both routes: RT withheld unless Chronologer (the default RT model, which
+  encodes phosphorylation and was trained on it) predicted it itself; CCS withheld per the table; a
+  saved model adds its training modifications for MS2 and RT. Withheld values are NULL in the blib
+  (the old TSV path wrote 0). Consequence for AlphapeptdeepBuildLibraryTest: the phosphopeptide keeps
+  Chronologer's RT, so the iRT dialog counts 7 peptides (6 before, when the RT was zeroed), and its CCS
+  is withheld.
 
 ## Tasks
 - [x] CarafeSharp: `LibraryGenerator.PrecursorTablePath` (table precursors in place of a digest,
@@ -58,8 +68,10 @@ integration that nobody meant to keep; Brendan missed it in review of the integr
       task declared no output; the digest's alphabase forms were materialized up front; the fine-tune's
       products were keyed on the library name; orphaned BlibBuild resources), 2 were the decided
       behavior changes (Carafe's defaults; RT and CCS no longer zeroed for fragmentation-only mods)
-- [ ] Re-record `AlphapeptdeepBuildLibraryTest.zip` (Panorama perftests) with blib answers
-      (`without_iRT/LibraryWithoutIrt.blib`, `with_iRT/LibraryWithIrt.blib`): IsRecordMode, then upload
+- [x] AlphapeptdeepBuildLibraryTest's answers re-recorded as blibs in its data folder in the repository
+      (`TestPerf/AlphapeptdeepBuildLibraryTest.data`, not a Panorama zip): the TSVs removed, the test
+      passes against the blibs; IsRecordMode copies into the test's working copy, so copy into the data
+      folder right after the run, before another test run cleans the results folder
 - [x] PR #4938 with label osprey (four commits: the change, the review fixes, the timing message removal,
       the pause description in the connector's form listing with the ScreenshotBorderTest one-liner)
 - [ ] TeamCity Osprey Perf/Regression gate on the PR (ask Brendan first)
