@@ -74,7 +74,7 @@ integration that nobody meant to keep; Brendan missed it in review of the integr
       folder right after the run, before another test run cleans the results folder
 - [x] PR #4938 with label osprey (four commits: the change, the review fixes, the timing message removal,
       the pause description in the connector's form listing with the ScreenshotBorderTest one-liner)
-- [ ] TeamCity Osprey Perf/Regression gate on the PR (ask Brendan first)
+- [x] TeamCity Osprey Perf/Regression gate on the PR: build 4243012 on 1f636e42e9, 117/117 (the head 11cf54f23c differs only by the audit-log rename)
 
 ## Open points
 - The translated usage resx files have no `_precursors` entry (they fall back to English);
@@ -156,3 +156,8 @@ Fixed on this branch as 11cf54f23c: `git mv` of the five logs to the draft name 
 same). Brendan may prefer that commit split into its own skyline PR; it is one rename. Local check running:
 `TestDiannSearchTutorialDraft -EnableInternet` (`ai/.tmp/sessions/20261029-night-blib/blib-diann-tutorial.log`).
 The perf run will be triggered a third time once the head's Osprey build finishes.
+Local check done: `TestDiannSearchTutorialDraft -EnableInternet` passed with the renamed log (0 failures, 663 s).
+Osprey Perf/Regression gate 4243012: SUCCESS, 117 passed of 117, the same count as build #345 (4240683) on
+PR #4931, so a complete run. It ran on 1f636e42e9; the head 11cf54f23c changes only test data (the audit
+logs), so it was not re-queued - Brendan can re-trigger on the head if the status must be on that commit.
+Third perf run on the head: build 4243067 (started 23:56, ~3.7 h).
