@@ -101,6 +101,11 @@ halves travel separately.
    already routed through `DpiUtil.GetIcon` / `ImageListScaler.PrepareForDpi` show the new
    sizes; the sweep doubles as the list of still-unwired references. Nothing from the
    throwaway branch is pushed; drawing fixes come back through this TODO's gallery.
+   DONE 2026-10-29 (DPI session): MethodEdit, LibraryExplorer, CustomReports, GroupedStudies1
+   at 150% + MethodEdit at 96 DPI, gallery ai/.tmp/dpi-sweep/tutorials/index-icons.html. The
+   wired sites (Targets/Files trees incl. state images, completion list, Library Explorer)
+   show the 24 px PNGs; toolbars (main, grids, graphs) and dock tab icons are unchanged =
+   the unwired list. Details in TODO-20260820_dpiAwareness.md, entry "Icon-assets trial".
 
 Contract: one call per icon,
 `DpiUtil.GetIcon(this, nameof(Resources.Save), Resources.Save, Color.Magenta)`, returning a

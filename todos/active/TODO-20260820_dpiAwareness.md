@@ -713,6 +713,29 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
+### 2026-10-29 - Icon-assets trial capture (icon_builder handoff item 5; local branch only, nothing pushed)
+
+- pwiz1 throwaway branch local/dpi_icons_trial = DPI tip eee6eb420f + origin/Skyline/work/20261020_icon_assets
+  (0fbf5d3536, PR #4887) merged clean (no Skyline.csproj conflict after all). TestTutorial
+  Release build OK (sessions/20260910-dpi/build-icons2-release.log, chain-icons2.ps1).
+- Captures (all tests PASSED): MethodEdit, LibraryExplorer, CustomReports, GroupedStudies1
+  DPI-aware at 150% into dpi-sweep/tutorials/<Name>-icons/after (23/23/28/98 shots), MethodEdit
+  DPI-unaware at 96 DPI into MethodEdit-icons/before. 125% and 200% not run (display is at
+  150%; the harness has only the aware/unaware modes). Gallery: tutorials/index-icons.html
+  (make_icons_gallery.py; old column = MethodEdit-dr6, GroupedStudies1-dr2, LibraryExplorer,
+  CustomReports captures; new localStorage namespace dpiicons:).
+- Result at 150%: every wired call site shows the pre-rendered 24 px PNGs - Targets tree node
+  and state images (protein, peptide, precursor, transition, check/warning), Library Explorer
+  peptide list; crisp where the resampled 16 px natives were soft. Toolbars (main, Results
+  Grid / Document Grid, graph toolbars) and the dock tab icons are pixel-identical in both
+  columns: those image lists are the still-unwired references. At 96 DPI the tree icons are
+  identical (max channel diff 1); the remaining 96-DPI diffs are window active/inactive text
+  rendering from the DPI-unaware foreground handling, not icons.
+- GroupedStudies1 dialogs come out 1-2 px larger than the dr2 capture (e.g. 1326x602 ->
+  1328x603); from the master commits the merge brought in, not the icons - not chased.
+- pwiz1 left on local/dpi_icons_trial with the trial build in bin/staging/Release; switch
+  back with `git checkout Skyline/work/20260820_dpiAwareness` (harness files are untouched).
+
 ### 2026-10-29 - developers PR 7 (DigitalRune DPI fork) MERGED: 09d061d on uw-maccosslab/developers master
 
 - Last untested path before merge was the auto-hide strip (f0204f7 changed its icon draw).
