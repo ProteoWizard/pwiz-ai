@@ -96,11 +96,23 @@ halves travel separately.
    throwaway branch from the DPI tip, `git merge origin/Skyline/work/20261020_icon_assets`
    (expect a small conflict in `Skyline.csproj`, both branches touch it; nothing else should
    overlap), build, and run the capture sweep at 100/125/150/200% on the forms that show
-   icons: the main window toolbar and SequenceTree, FilesTree, FindResults, Immediate,
-   ViewLibraryDlg, the spectrum and chromatogram graph toolbars, DocumentGrid. Only references
-   already routed through `DpiUtil.GetIcon` / `ImageListScaler.PrepareForDpi` show the new
-   sizes; the sweep doubles as the list of still-unwired references. Nothing from the
-   throwaway branch is pushed; drawing fixes come back through this TODO's gallery.
+   icons. As of 2026-10-29 only SequenceTree, FilesTree, StatementCompletionTextBox and the two
+   ViewLibraryDlg images call `DpiUtil.GetIcon`, so only those show the new drawings; toolbars,
+   menus and buttons still get WinForms-scaled 16 px bitmaps. Nothing from the throwaway
+   branch is pushed; drawing fixes come back through this TODO's gallery.
+6. **Toolbar, menu and button wiring (DPI side, proposed 2026-10-29).** Designers assign
+   `Resources.X` directly and an Image carries no resource name (`Resources.X` returns a new
+   bitmap per call, so reference matching fails). Proposed helper, called once per ToolStrip
+   after `InitializeComponent`: hash the pixels of every Resources.resx bitmap once (name ->
+   hash), walk the strip's items recursively, and replace each matched image with
+   `DpiUtil.GetIcon(control, name, native, item.ImageTransparentColor)`. Covers toolbars, menus
+   and context menus without per-designer edits. Buttons outside ToolStrips need the same
+   lookup on `ButtonBase.Image`.
+
+Assets branch commits after the push of 0fbf5d3536: c7443e63f6 (code-review medium fixes:
+navigator Delete magenta key, DropDownArrow removed in favor of LiteDropDownList's own arrow,
+TileFlipXY in the raster downscale, IconBuilder unknown-name and kind checks; build +
+IconResourcesTest green; not pushed yet).
    DONE 2026-10-29 (DPI session): MethodEdit, LibraryExplorer, CustomReports, GroupedStudies1
    at 150% + MethodEdit at 96 DPI, gallery ai/.tmp/dpi-sweep/tutorials/index-icons.html. The
    wired sites (Targets/Files trees incl. state images, completion list, Library Explorer)
