@@ -92,3 +92,24 @@ integration that nobody meant to keep; Brendan missed it in review of the integr
 See the Tasks list; the design and the two decisions above were settled with Brendan before any
 code. Related: the Koina Predict-for defect and the wiki drafts in
 `TODO-20261028_osprey_integration_demo_deck.md`.
+
+### 2026-10-29 evening - Five commits on PR #4938, handoff to a night session
+
+Commits: df36da2edc (the change), 4447472f29 (review fixes), 436184d66b (timing message removed),
+4033bbf8ed (pause description in the connector's form listing, ScreenshotBorderTest one-liner),
+b487fece47 (ModelSupport in CarafeSharp, recorded perf-test answers, three redundant usings). TeamCity is
+green on everything it ran; GitHub shows Update Branch (master moved). Brendan's instruction for the
+night: update the branch (`git merge origin/master`, never rebase), trigger every TeamCity configuration
+on `pull/4938` - the Skyline PR build, Skyline Perf tests, Tutorials, and the Osprey Windows .NET
+Perf/Regression Tests (that one is normally ask-first; this instruction is the authorization, once, on
+the PR branch) - with the goal of all green and ready to merge by morning. Then a stacked PR making the
+Koina source's Predict For route real (the defect in TODO-20261028_osprey_integration_demo_deck.md:
+`CreateKoinaBuilder` in BuildLibraryDlg.cs never reads PredictForDocument, PredictForFastaPath,
+PredictDecoys or EntrapmentFastaPath; the FASTA digest, decoy and entrapment block of
+`CreateCarafeBuilder` (~lines 420-450) is the code to share; verify with a document that differs from
+the FASTA, since the demo's 720-precursor library equalled the document's count and proved nothing).
+Open question left for Brendan: whether ModelSupport should also apply to the FASTA route, which would
+break Carafe Java parity for phospho RT when the peptdeep RT model (not Chronologer) predicts.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261029_carafe_predict_blib.md` before starting work.
