@@ -708,6 +708,30 @@ library tuning command carried `--entrapment`, so tuning may have seen entrapmen
   default scoring and +17% over the new scoring under transfer - the gains add only partly. Its reported q is the
   most optimistic of any arm: 1.48% at q 1% (pass 1 1.14%; q 0.33% at FDP 0.5%). Still 0.66x DIA-NN at matched FDP.
 
+**ZT ablation of the new scoring (2026-10-30; Mike asked whether some new features hurt, from the 6-XIC row).** All 6
+XICs + transfer; summary `fdr-gap\arms_fdp_ablation.txt`. The last two arms reused `best6-transfer`'s per-file scores
+by hard link (their validity key holds neither the FDR model nor the training size); launchers
+`ai\.tmp\sessions\20261028-fdrgap\ztscan-ablation*.ps1`.
+
+| ZT Scan, 6 XICs, transfer | at q 1% (FDP) | at FDP 0.5% | at FDP 1% |
+|---|---|---|---|
+| 21 features, SVM (default) | 29,236 (0.98%) | 20,450 | 29,370 |
+| 21 features, GBDT | 25,158 (0.79%) | 21,953 | 26,441 |
+| 41 features, SVM | 31,944 (0.88%) | 28,004 | 32,708 |
+| 41 features, GBDT | 27,975 (0.82%) | 24,402 | 29,248 |
+| 41 features, GBDT, `OSPREY_MAX_TRAIN_SIZE=3000000` | 36,151 (**1.26%**) | 30,338 | 34,840 |
+
+- The new features help, not hurt: +37% at FDP 0.5% and +11% at 1% under the SVM, +11% at both under GBDT. The 6-XIC
+  row looked flat because GBDT at the default training size costs about what the features gain.
+- GBDT is short of confident targets on ZT: the 9.08M-precursor library leaves 0.4-0.7% of the 150k training targets
+  at 1% FDR (about 900). At 10x the training set it beats the 41-feature SVM by 8% at FDP 0.5% and 6.5% at 1% - but
+  its q runs optimistic (1.26% at q 1%) and the first-pass FDR took 3.3 h against about 15 min.
+- The 41-feature SVM is the best calibrated arm (0.88% at q 1%). The GBDT arms that find the most are the optimistic
+  ones, so a flexible model may be learning what tells this library's decoys from targets rather than what tells
+  right from wrong. Not tested.
+- The older run folders `ztscan-full-20261025`, `ztscan-centrix`, `ztscan-portable` and `demux-speed-20261026` moved
+  to `\\maccoss-nas\storage\osprey-runs-archive\osprey-runs` (T:) on 2026-10-30 to free D:.
+
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
   single best peptide, target vs decoy paired by base id, scored from the first pass's pre-compaction
