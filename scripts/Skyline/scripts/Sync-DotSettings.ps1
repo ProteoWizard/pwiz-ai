@@ -88,7 +88,7 @@ $pwizHiddenInspections = @(
     'NotAccessedField.Local', 'NotAccessedOutParameterVariable', 'PrivateFieldCanBeConvertedToLocalVariable',
     'AccessToStaticMemberViaDerivedType', 'UnusedMethodReturnValue.Local', 'UnusedTupleComponentInReturnValue',
     'OutParameterValueIsAlwaysDiscarded.Local', 'UnusedType.Local', 'EnumUnderlyingTypeIsInt',
-    'CollectionNeverQueried.Local', 'CollectionNeverUpdated.Local'
+    'CollectionNeverQueried.Local', 'CollectionNeverUpdated.Local', 'InconsistentNaming'
 )
 $pwizSeverities = @{}
 foreach ($id in $pwizHiddenInspections) { $pwizSeverities[$id] = 'DO_NOT_SHOW' }
