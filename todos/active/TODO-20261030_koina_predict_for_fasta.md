@@ -3,7 +3,7 @@
 ## Branch Information
 - **Branch**: Skyline/work/20261030_koina_predict_for_fasta (checkout `C:\proj\pwiz`, from `origin/master`)
 - **Created**: 2026-10-30 (night session following PR #4938's handoff)
-- **Status**: PR #4941 open, awaiting TeamCity and review
+- **Status**: PR #4941 open, TeamCity green on the head a655725ec3 (one late check still pending at 03:48); awaiting Brendan's review and merge
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4941
 - **Module**: `skyline`
 - **Objective**: Prove, with a functional test that runs offline, that the Koina source's Predict For

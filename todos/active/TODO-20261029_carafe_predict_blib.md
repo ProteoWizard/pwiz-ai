@@ -3,7 +3,7 @@
 ## Branch Information
 - **Branch**: Skyline/work/20261029_carafe_predict_blib (checkout `C:\proj\pwiz`)
 - **Created**: 2026-10-29
-- **Status**: PR #4938 open, awaiting TeamCity and review
+- **Status**: PR #4938 open, every TeamCity check green on the head 11cf54f23c (2026-10-30 03:48); awaiting Brendan's review and merge
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4938
 - **Module**: `osprey`
 - **Objective**: Osprey's `--precursors` route (Skyline's Build Library with the Carafe source) writes
@@ -165,3 +165,10 @@ Transient on 1f636e42e9: bt209 #22561 (4243005) failed only `TestRInstaller` (co
 the Docker (Wine) container build 4243011 then failed on its snapshot dependency alone (its own 348 tests
 passed; the one msconvert wiff diff it reports is also in the passing build 4242989). bt209 #22563 on the head
 passed; Docker 4243187 queued for the head.
+
+### 2026-10-30 03:48 - Session close: all green
+Head 11cf54f23c: 20 of 20 GitHub checks pass. Skyline PR Perf and Tutorial tests build 4243067: 118 passed of 118
+(the last master run, 4241191 on pull/4546, had 117), with the PR's own Osprey (build 4243057). Osprey Perf/Regression
+gate 4243012 on 1f636e42e9: 117/117. Night session 21:33-03:48 (6 h 15 min). Three commits tonight beyond the merge:
+1f636e42e9 (perf tests fetch the Osprey of their own revision), 11cf54f23c (DIA-NN tutorial audit logs renamed
+after master's #4915), plus the merge fb97a4d2b3. Brendan merges.
