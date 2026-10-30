@@ -748,7 +748,7 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
-### 2026-10-30 - Code review (medium) of the two icon commits fixed (bdb3c8144c, not yet pushed)
+### 2026-10-30 - Code review (medium) of the two icon commits fixed (d6c2443c20, pushed 2026-10-30)
 
 - /code-review medium on eee6eb420f..35a440af8b: 10 findings, 7 fixed, 2 dropped (FileProgressControl
   per-instance icon cost: one 16 px icon, measuring instance pre-existing; pixel twins: documented
@@ -762,11 +762,15 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   and after a second pass; 32 px design); gates both modes: TestPivotEditor, TestLayoutExportImport,
   TestLibraryExplorer, TestFilesTreeForm, TestMultiSelect, TestDocumentGrid, then
   TestAlphabeticalReportEditor, TestLiveReportsFilter, TestReportSharing.
+- Pre-push: CodeInspection test passed; ReSharper 2666 issues, 2522 CSharpErrors (environmental,
+  as before) and one warning in the touched files (ambiguous cref PrepareIcons(ToolStrip) in
+  DpiIcons, now PrepareIcons(ToolStrip, Type)), folded into the unpushed commit bdb3c8144c ->
+  d6c2443c20. Pushed 35a440af8b + d6c2443c20 to #4602; PR description updated.
 - Note: earlier gate lists named TestCustomReports, which does not exist (the functional tests are
   TestDocumentReports etc.; the tutorial is TestCustomReportsTutorial); the test runner skipped it
   silently. Check "Running N tests" in gate logs.
 
-### 2026-10-30 - Icon loader moved to pwiz.Common.Controls.DpiIcons for the Document Grid bar and Edit Report dialog (35a440af8b)
+### 2026-10-30 - Icon loader moved to pwiz.Common.Controls.DpiIcons for the Document Grid bar and Edit Report dialog (35a440af8b, pushed 2026-10-30)
 
 - Developer: pwiz.Common's dialogs have their own icons in Shared/Common/Properties/Resources.resx
   (icon branch a9c7bac5ed moved the NavBar/ViewEditor inline images there) and pwiz.Common cannot
