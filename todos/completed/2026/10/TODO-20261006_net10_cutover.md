@@ -1,6 +1,8 @@
 # TODO-20261006_net10_cutover.md -- Cut-over: promote the .NET 10 port branch to master
 
-> **Status: PLAN.** Written 2026-10-06 from a verified snapshot of the repository, TeamCity
+> **Status: COMPLETED 2026-10-30 - master is .NET 10 (#4619 merged 2026-10-08 as `156dab478b`).**
+>
+> Original plan: written 2026-10-06 from a verified snapshot of the repository, TeamCity
 > checks and branch protection. Nothing below has been executed. Brendan owns the sequence;
 > Matt owns the TeamCity side.
 
@@ -268,3 +270,15 @@
 - Email 2 (after 1.2): `skyline_26_1_1` exists, treat it as a release branch.
 - Email 3 (after 2.2): master is .NET 10; the one-time merge for open branches; nightly
   machines switch tomorrow.
+
+## Progress Log
+
+### 2026-10-08 - Merged
+
+PR #4619 squash-merged to `master` as `156dab478b`; the old master continues as `Skyline/skyline_26_1_1` for the .NET 4.7.2 dailies.
+
+## Resolution
+
+**Status**: Completed (cut over 2026-10-08; closed out 2026-10-30)
+
+pwiz `master` HEAD is on .NET 10. Brendan confirmed the cut-over complete on 2026-10-30; new issues are handled individually as they turn up, not tracked in this TODO.
