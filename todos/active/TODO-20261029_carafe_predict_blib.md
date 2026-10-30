@@ -172,3 +172,4 @@ Head 11cf54f23c: 20 of 20 GitHub checks pass. Skyline PR Perf and Tutorial tests
 gate 4243012 on 1f636e42e9: 117/117. Night session 21:33-03:48 (6 h 15 min). Three commits tonight beyond the merge:
 1f636e42e9 (perf tests fetch the Osprey of their own revision), 11cf54f23c (DIA-NN tutorial audit logs renamed
 after master's #4915), plus the merge fb97a4d2b3. Brendan merges.
+PR #4942 (b816bdd8e6) carries the audit-log rename alone, from master, so it can merge first; this PR's 11cf54f23c then becomes a no-op rename.
