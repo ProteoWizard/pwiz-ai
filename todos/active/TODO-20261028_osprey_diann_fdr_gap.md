@@ -694,6 +694,7 @@ library tuning command carried `--entrapment`, so tuning may have seen entrapmen
 | default, transfer | 29,236 (0.98%) | 20,450 | 29,370 |
 | features + GBDT + 12 XICs, transfer | 33,200 (**1.14%**) | 28,915 | 32,561 |
 | features + GBDT + 6 XICs, transfer | 27,975 (0.82%) | 24,402 | 29,248 |
+| features + GBDT + 12 XICs, protein-compact | 39,386 (**1.48%**) | 33,917 | 37,276 |
 | DIA-NN 2.6.1, own library, .wiff | 50,627 (0.45%) | ~51,274 | - |
 | DIA-NN on our demux | 58,280 (0.43%) | - | - |
 
@@ -703,7 +704,9 @@ library tuning command carried `--entrapment`, so tuning may have seen entrapmen
 - The new scoring is worth +41% at FDP 0.5% under transfer, and 12 XICs beat 6 (+18%) as on Astral (HRAM). Its GBDT
   first pass is optimistic on ZT (1.14% at q 1%; the first pass at the top of the list: q 0.41% at FDP 0.5%), unlike
   Stellar and Astral.
-- Not yet run: features + GBDT + 12 XICs with protein-compact (both gains together; offered to Mike).
+- Both together (`best12-compact`, Mike: "Yes, run it"): 33,917 at FDP 0.5%, +8.7% over protein-compact with the
+  default scoring and +17% over the new scoring under transfer - the gains add only partly. Its reported q is the
+  most optimistic of any arm: 1.48% at q 1% (pass 1 1.14%; q 0.33% at FDP 0.5%). Still 0.66x DIA-NN at matched FDP.
 
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
