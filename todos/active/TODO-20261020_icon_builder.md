@@ -241,9 +241,10 @@ Targets tab at 200% should show the 32 px frame.
       Document Grid bar were missed. 33 small images in `Shared/Common/Resources`; only Skyline
       shows pwiz.Common UI (BiblioSpecUtil/ProteomeDb reference it for utilities only).
       Gallery has 33 `Common_` rows (same file and storage keys). Drawings, uncommitted, in
-      `IconBuilder/Icons/Vector/Common/` from `Write-CommonVectors.py` (session folder): 11
+      `IconBuilder/Icons/Vector/Common/` from `Write-CommonVectors.py` (session folder): 9
       traced orthogonal (Cluster, FreezeCells, HiddenColumns, PivotColumn, SublistColumn,
-      maximize, restore, agg_max, agg_min, agg_groupby, MatchCase), 14 hand-drawn (close,
+      maximize, restore, agg_max, agg_min), 16 hand-drawn (agg_groupby and MatchCase redrawn
+      after the traced versions looked pixelated at 2x: trace only pure orthogonal art), (close,
       agg_sum/mean/median/count/stddev, Number/Text/Bool/LinkColumn, UnknownUiMode, Pivot,
       PivotAndFilter, Alphabetical), Delete/Filter/up/down copied from Skyline (pixel-identical
       natives), DataColumn/PlainLayout/agg_blank empty (transparent natives),
