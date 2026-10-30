@@ -3,8 +3,8 @@
 ## Branch Information
 - **Branch**: Skyline/work/20261030_koina_predict_for_fasta (checkout `C:\proj\pwiz`, from `origin/master`)
 - **Created**: 2026-10-30 (night session following PR #4938's handoff)
-- **Status**: PR #4941 open, TeamCity green on the head a655725ec3 (its perf run red only on master's #4915 regression, fixed by PR #4942); awaiting Brendan's review and merge
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4941
+- **Status**: Completed
+- **PR**: [#4941](https://github.com/ProteoWizard/pwiz/pull/4941) (merged 2026-10-30)
 - **Module**: `skyline`
 - **Objective**: Prove, with a functional test that runs offline, that the Koina source's Predict For
   route in Build Library predicts the chosen protein FASTA's digest with its decoys and entrapment
@@ -108,3 +108,12 @@ clones, and with (1) fixed no longer a failure; (6) `WaitForCondition(Builder !=
 The auto-triggered Skyline PR Perf and Tutorial run (4243074) fails `TestDiannSearchTutorialDraft` alone: master's #4915
 left the test's audit logs under the old name (fixed on #4938 as 11cf54f23c and on its own as PR #4942). Merge #4942, then
 `git merge origin/master` here and the run goes green; nothing in this PR is involved.
+
+### 2026-10-30 - Merged
+
+PR #4941 merged as commit 232005d401 (squash, --admin over the perf check that was red only on master's
+#4915 DIA-NN audit-log regression). Shipped: the Predict For digest forces auto-select on and clears the
+library rank before the pick by filter, for both sources; KoinaSkylineIntegrationTest covers the Koina
+FASTA route (decoys, entrapment, a document that differs) with recorded queries; KoinaLibraryBuilder.Document.
+Deferred, as an open point for Brendan: LibraryDecoyPairs leaves peptides with variable-modification forms
+unpaired by design.
