@@ -713,7 +713,7 @@ next -> MS1 Full-Scan Filtering (TestMs1Tutorial: 3 full-scan graphs, Library
 Explorer, library match). 20 window-size sites scaled locally (regex pass, all
 tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 
-### 2026-10-29 - Toolbar, menu and button icons routed through DpiUtil.GetIcon (DpiUtil.PrepareIcons; 889f99ef85, not yet pushed)
+### 2026-10-29 - Toolbar, menu and button icons routed through DpiUtil.GetIcon (DpiUtil.PrepareIcons; 895e28c4cc, pushed)
 
 - Developer asked for the toolbars and menus to use the per-DPI icons too (icon_builder TODO
   handoff item 6 proposed the design). Designers assign Resources.X directly and an Image has
@@ -746,7 +746,7 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   (pwiz.Common resources, no embedded sizes) and dock tab icons (form Icon frames).
 - Files: Util/DpiUtil.cs, Util/FormEx.cs, Util/DockableFormEx.cs, Menus/TreeNodeContextMenu.cs,
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
-  Test/DpiIconLookupTest.cs (new). Committed 889f99ef85 on developer approval; push pending.
+  Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
 ### 2026-10-29 - Icon-assets trial capture (icon_builder handoff item 5; local branch only, nothing pushed)
 

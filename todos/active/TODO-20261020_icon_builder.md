@@ -113,7 +113,7 @@ halves travel separately.
    `DpiUtil.GetIcon(control, name, native, item.ImageTransparentColor)`. Covers toolbars, menus
    and context menus without per-designer edits. Buttons outside ToolStrips need the same
    lookup on `ButtonBase.Image`.
-   DONE on the DPI branch 2026-10-29 (DpiUtil.PrepareIcons, commit 889f99ef85), with
+   DONE on the DPI branch 2026-10-29 (DpiUtil.PrepareIcons, commit 895e28c4cc, pushed to #4602), with
    one addition to the design: ToolStripItem.Image's setter applies ImageTransparentColor to the
    bitmap (the natives are magenta-keyed BMPs), so the lookup keeps one table per key color,
    built by keying the natives the same way. Verified with the assets: main toolbar, grid and
@@ -123,7 +123,7 @@ halves travel separately.
 Assets branch commits after the push of 0fbf5d3536: c7443e63f6 (code-review medium fixes:
 navigator Delete magenta key, DropDownArrow removed in favor of LiteDropDownList's own arrow,
 TileFlipXY in the raster downscale, IconBuilder unknown-name and kind checks; build +
-IconResourcesTest green; not pushed yet).
+IconResourcesTest green; pushed 2026-10-29).
 
 Contract: one call per icon,
 `DpiUtil.GetIcon(this, nameof(Resources.Save), Resources.Save, Color.Magenta)`, returning a
@@ -253,7 +253,7 @@ Targets tab at 200% should show the 32 px frame.
       (pwiz.Common cannot call Skyline's DpiUtil: move the lookup into pwiz.Common taking the
       owning assembly, DpiUtil.GetIcon wraps it), add an IconBuilder per-assembly output and
       embed `Shared/Common/Resources/Icons` in Common.csproj
-- [x] pwiz.Common assets (2026-10-29, assets branch, not pushed): 95ea7739b7 the 32 drawings;
+- [x] pwiz.Common assets (2026-10-29, assets branch, pushed with f869e1128b, an inspection fix): 95ea7739b7 the 32 drawings;
       850292a452 `common.manifest` (31 entries, all vector except Filter, raster; directives
       `@vector/@raster/@output`, IconBuilder builds every *.manifest by default), 93 PNGs in
       `Shared/Common/Resources/Icons` embedded by Common.csproj, unused `Filter1` resource and
