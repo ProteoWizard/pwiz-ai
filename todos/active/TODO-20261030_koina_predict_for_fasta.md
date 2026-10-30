@@ -3,8 +3,8 @@
 ## Branch Information
 - **Branch**: Skyline/work/20261030_koina_predict_for_fasta (checkout `C:\proj\pwiz`, from `origin/master`)
 - **Created**: 2026-10-30 (night session following PR #4938's handoff)
-- **Status**: In progress - test written, Koina queries being recorded
-- **PR**: (none yet)
+- **Status**: PR #4941 open, awaiting TeamCity and review
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4941
 - **Module**: `skyline`
 - **Objective**: Prove, with a functional test that runs offline, that the Koina source's Predict For
   route in Build Library predicts the chosen protein FASTA's digest with its decoys and entrapment
@@ -44,13 +44,48 @@ guard, with whatever that test exposes.
   (both JSONs are rewritten; restore `koinaQueries.json` from git), then `RecordData => false` and the
   test must pass offline.
 
+## Finding: the Predict For digest honored the document's auto-select setting
+The first recording run never reached Koina: `ImportFastaToPredict` reported "The FASTA file ... gave
+no peptides with the document settings" for a FASTA whose tryptic peptides pass the document's filter.
+Reproduced with SkylineCmd (`--in=Rat_plasma.sky --import-fasta=... --keep-empty-proteins`: the
+proteins arrive, with no peptides; a default document gives 40 for rat_mini.fasta), then bisected by
+transplanting the document's settings blocks into the default document
+(`ai/.tmp/sessions/20261029-night-blib/fasta-import-bisect.py`): only `<peptide_filter>` drops them,
+and the attribute that differs is `auto_select` (absent, so false, in `Rat_plasma.sky`).
+`PeptideGroupDocNode.ChangeSettings` creates a FASTA protein's peptides only when
+`PeptideSettings.Filter.AutoSelect` is on (line ~182), and `PeptideDocNode.ChangeSettings` creates
+precursors only when `TransitionSettings.Filter.AutoSelect` is on (line ~969). So for any document with
+"Auto-select all matching peptides" or "Auto-select all matching transitions" unchecked, the Predict For
+route - Koina and Carafe alike, the block is shared - digested the FASTA into empty proteins, or
+peptides without precursors, and blamed the FASTA. Fix: `GetDocumentToPredict`'s `settingsDigest` turns
+both auto-select flags on beside the existing pick=filter override; the digest is a document of its own,
+so the open document is untouched. The new test covers it as written, because the rat plasma document is
+exactly such a document.
+
 ## Tasks
+- [x] Fix: auto-select forced on in `BuildLibraryDlg.GetDocumentToPredict`'s digest settings
 - [x] Branch from origin/master; FASTA copied into the test's data folder
 - [x] Test and builder property written (patch script: `ai/.tmp/sessions/20261029-night-blib/patch-koina-test.py`)
-- [ ] Recorded against live Koina; `koinaQueries.json` restored; RecordData false
-- [ ] Offline pass of KoinaSkylineIntegrationTest; CodeInspection
-- [ ] Commit, push, PR (label `skyline`)
+- [x] Recorded against live Koina (33 KB, `koinaFastaQueries.json`); `koinaQueries.json` restored; RecordData false
+- [x] Offline pass of KoinaSkylineIntegrationTest (15 s), CodeInspection, BuildLibraryCarafeWizardTest
+- [x] Committed eeb5fa84d0, pushed, PR #4941 (label `skyline`)
+- [ ] TeamCity green; `/code-review medium 4941` triage
 
 ## Progress Log
-### 2026-10-30 night - Written
-Session logs: `ai/.tmp/sessions/20261029-night-blib/koina-*.log`.
+### 2026-10-30 night - Written, fixed, tested, PR opened
+Session logs: `ai/.tmp/sessions/20261029-night-blib/koina-*.log`, `rr-*.log`. What the test measured on the way
+to passing, all by design and left alone (rising triage bar near merge):
+- Of 18 target peptides (3 from the FASTA, 15 entrapment from Carafe's own digest of it, which allows
+  missed cleavages), 15 got a reverse-sequence decoy: `DecoyGenerator` drops a decoy that duplicates
+  another's key or gets no precursor. The test asserts 0 < decoys <= targets and that every decoy's
+  source is a target.
+- 33 peptides gave 30 precursors, all Koina-supported; the 31-residue entrapment peptides have no
+  precursor at charge 2 within the document's 50-1500 m/z instrument range. The test derives the expected
+  library from `KoinaHelpers.EncodeSequence` rather than a hardcoded unsupported count.
+- `LibraryDecoyPairs.Write` keys on unmodified sequence and charge and skips a key the library holds
+  twice, so every methionine peptide (unmodified and oxidized forms, the document's variable Oxidation)
+  goes unpaired: 14 rows for 30 spectra. Documented behavior of the writer; the test computes the expected
+  rows the same way. Worth a look if Osprey needs pairs for modified forms.
+- Running `BuildLibraryCarafeWizardTest` on this branch after building Osprey from the #4938 branch fails
+  with `predict.predicted.speclib.tsv` not found: master's Skyline expects the TSV, the other branch's
+  Osprey writes the blib. Rebuild Osprey from whichever branch is checked out before running Carafe tests.
