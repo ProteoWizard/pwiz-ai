@@ -117,8 +117,29 @@ halves travel separately.
    one addition to the design: ToolStripItem.Image's setter applies ImageTransparentColor to the
    bitmap (the natives are magenta-keyed BMPs), so the lookup keeps one table per key color,
    built by keying the natives the same way. Verified with the assets: main toolbar, grid and
-   graph toolbars draw the 24 px PNGs. Shared NavBar items (pwiz.Common resources) stay as they
-   are. Details in TODO-20260820_dpiAwareness.md, entry "Toolbar, menu and button icons".
+   graph toolbars draw the 24 px PNGs. Shared NavBar items (pwiz.Common resources) stayed out of
+   this step; see item 7. Details in TODO-20260820_dpiAwareness.md, entry "Toolbar, menu and button icons".
+7. **pwiz.Common icons (DPI side, requested 2026-10-30).** The Edit Report dialog and the
+   Document Grid bar draw pwiz.Common resources, which item 6 does not reach. Assets state on
+   PR #4887 (through a9c7bac5ed):
+   - Every small pwiz.Common image is a bitmap in `Shared/Common/Properties/Resources.resx`
+     (40 file references). a9c7bac5ed moved the 17 inline NavBar.resx / ViewEditor.resx images
+     there; the designers now assign `global::pwiz.Common.Properties.Resources.X` before
+     ApplyResources, and the form resx still sets ImageTransparentColor Magenta on those items.
+   - `Shared/Common/Resources/Icons/{Name}.{20,24,32}.png` (117 files, from
+     `IconBuilder/common.manifest`) are embedded by Common.csproj, so the manifest resource
+     names end in `.Resources.Icons.{Name}.{size}.png` in the pwiz.Common assembly.
+   Needed on the DPI branch:
+   - Move the name/size lookup into pwiz.Common (it cannot reference Skyline), taking the
+     assembly that owns the PNGs; `DpiUtil.GetIcon` wraps it for Skyline's own resources.
+   - `PrepareIcons` indexes pwiz.Common's Resources.resx as well as Skyline's, so the NavBar and
+     ViewEditor strips match. `btnUp`/`btnDown` (ChooseColumnsTab, ColumnListEditor) are
+     buttons, the ButtonBase path.
+   - Image lists built in code: `AvailableFieldsTree` (the column-type images in the Edit Report
+     tree) and `ManageLayoutsForm` (Filter) need the image-list path with the pwiz.Common lookup.
+   - Sizes follow `GetIconSizes`; MatchCase is 15 px native and uses the 16 px set (20/24/32).
+   - Copy, Edit_Undo, Edit_Redo and the four Navigator names exist in both assemblies with
+     identical PNGs; the per-assembly lookup keeps them apart.
 
 Assets branch commits after the push of 0fbf5d3536: c7443e63f6 (code-review medium fixes:
 navigator Delete magenta key, DropDownArrow removed in favor of LiteDropDownList's own arrow,
@@ -258,12 +279,14 @@ Targets tab at 200% should show the 32 px frame.
       `@vector/@raster/@output`, IconBuilder builds every *.manifest by default), 93 PNGs in
       `Shared/Common/Resources/Icons` embedded by Common.csproj, unused `Filter1` resource and
       `agg_blank` drawing removed, `TestEmbeddedCommonIconSizes` added (green with build)
-- [ ] DPI side: a loader pwiz.Common can call. pwiz.Common cannot reference Skyline, so the
+- [ ] DPI side (Handoff item 7): a loader pwiz.Common can call. pwiz.Common cannot reference Skyline, so the
       name/size lookup (today `DpiUtil.GetIcon` reading `typeof(DpiUtil).Assembly`) needs a
       home in pwiz.Common taking the owning assembly, with DpiUtil wrapping it; PrepareIcons
       pixel matching must also index pwiz.Common Resources.resx for the Edit Report dialog and
       Document Grid bar. Sizes follow `GetIconSizes` (MatchCase is 15 px: 16 px size set)
-- [ ] pwiz.Common inline images: NavBar.resx (10) and ViewEditor.resx (7) embed their images
+- [x] pwiz.Common inline images (2026-10-30, a9c7bac5ed, pushed): 17 moved, 4 never-drawn
+      placeholders dropped, Find traced, PivotAndFilter funnel separated from the bar; build,
+      icon tests and TestAlphabeticalReportEditor green. Was: NavBar.resx (10) and ViewEditor.resx (7) embed their images
       base64 (Alphabetical, HiddenColumns, Cluster among them; same art as the Resources
       .bmp files, alpha instead of magenta). Move them into pwiz.Common Resources.resx as
       83134adcc1 did for Skyline so PrepareIcons can match them; add any undrawn ones to the
