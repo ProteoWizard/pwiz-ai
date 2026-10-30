@@ -1,6 +1,6 @@
 # TODO-20261007_lf_normalization.md -- Normalize stored line endings to LF repo-wide (pwiz #4604)
 
-> **Status: IN PROGRESS 2026-10-08 - normalization merged, follow-up open.** PR
+> **Status: COMPLETED - #4789 and #4792 merged 2026-10-08; history below.** PR
 > [#4789](https://github.com/ProteoWizard/pwiz/pull/4789) merged 2026-10-08 into
 > `Skyline/work/20260612_net8_port` as `9e2b516bcb`. Remaining before this TODO completes: the
 > follow-up PR (`.git-blame-ignore-revs` with `5747ede7c9` and `9e2b516bcb`, `.editorconfig`
@@ -342,3 +342,13 @@ promotion fast-forwards master. Deferred, tracked in `TODO-20261006_net10_cutove
 follow-up PR (`.git-blame-ignore-revs` with `5747ede7c9` and `9e2b516bcb`, `.editorconfig` comment,
 CodeInspectionTest decision), the `-X renormalize` merges on the open port-branch PRs, and the T+1
 ai/ cleanup. Open questions 2 and 3 above are still Brendan's.
+
+### 2026-10-08 - Merged
+
+PR #4789 squash-merged into `Skyline/work/20260612_net8_port` as `9e2b516bcb`, and the follow-up #4792 as `77da67c3f3`. The port branch reached master with #4619 (`156dab478b`, 2026-10-08). The last open port-branch PRs listed above (#4782, #4724) have since merged.
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-08)
+
+Stored line endings normalized to LF repo-wide (#4604), with `.git-blame-ignore-revs` covering the normalization commits and the CodeInspection mixed-endings check removed.

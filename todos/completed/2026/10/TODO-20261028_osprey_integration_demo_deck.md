@@ -3,7 +3,8 @@
 ## Branch Information
 - **Branch**: none needed (an HTML artifact, not pwiz code; a pwiz branch only if a demo pause has to be committed, which it does not)
 - **Created**: 2026-10-28
-- **Status**: Deck published 2026-10-28, awaiting Brendan's review
+- **Status**: Completed - deck published 2026-10-28; #4934 merged 2026-10-29
+- **PR**: [#4934](https://github.com/ProteoWizard/pwiz/pull/4934)
 - **Deck**: https://claude.ai/artifact/3dTj3s8uLAmM7p2qrKY44i (private until shared from its Share menu)
 - **Module**: (none: ai/ deliverable)
 - **Objective**: A short DHTML demo deck for Mike MacCoss and Bo Wen showing the Skyline library-build
@@ -271,3 +272,13 @@ one-line change on a small master PR.
   in `/home/software/Skyline`. The page name, and so the paper's link, never changes. The old
   `s-NN.png` attachments stay until deleted in the LabKey UI (no delete tool). The release notes
   link the same page.
+
+### 2026-10-29 - Merged
+
+PR #4934 squash-merged to `master` as `b914f854fc`. Brendan closed out the deck 2026-10-30.
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-29)
+
+Demo deck for Mike and Bo on the Skyline library-build flow with Osprey and Carafe, published as an artifact; #4934 carried the screenshot-border support it needed.

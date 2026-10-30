@@ -1,6 +1,8 @@
 # TODO: Skyline → .NET 8 port + pwiz-sharp swap + Jamfile retirement
 
 Branch: `Skyline/work/20260612_net8_port` (off `master`)
+PR: [#4619](https://github.com/ProteoWizard/pwiz/pull/4619)
+Status: Completed - #4619 merged to `master` 2026-10-08 as `156dab478b`
 Worktree: `C:\dev\pwiz-net8\`
 
 ## The multi-target conversion pattern (proven on PortableUtil + CommonUtil)
@@ -7473,3 +7475,13 @@ reverted by `5bd83dae8b`; the curation then cancelled both. It survives **only**
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
+
+### 2026-10-08 - Merged
+
+PR #4619 squash-merged to `master` as `156dab478b`; the .NET 10 port is now master.
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-08)
+
+Skyline, pwiz-sharp and the C# BiblioSpec on .NET 10, with the Jamfile build retired, merged to `master`. Work after the merge is tracked in `TODO-20261006_net10_cutover.md`.

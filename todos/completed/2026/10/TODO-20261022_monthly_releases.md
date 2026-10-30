@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261022_monthly_releases`
 - **Base**: `master`
 - **Created**: 2026-10-22
-- **Status**: In Progress
+- **Status**: Completed - #4905, #4910 and ProteoWizard/web#28 merged
 - **GitHub Issue**: [#4899](https://github.com/ProteoWizard/pwiz/issues/4899)
 - **Module**: `pwiz`
 - **PR**: [#4905](https://github.com/ProteoWizard/pwiz/pull/4905) (merged 2026-10-23), follow-up [#4910](https://github.com/ProteoWizard/pwiz/pull/4910) (tags `release-[daily-]YYYY-MM-DD-sha` from the installer version; the 9 existing tags renamed 2026-10-23 - do not run the publish job on master until #4910 merges, then run it once to republish before merging web#28); seed PR [#4900](https://github.com/ProteoWizard/pwiz/pull/4900) (closed, never merged); website [ProteoWizard/web#28](https://github.com/ProteoWizard/web/pull/28)
@@ -25,8 +25,8 @@ The issue body holds the full technical detail: how the website resolves downloa
 - [x] Monthly pin job written (uncommitted): `scripts/misc/publish_monthly_release.py` + `.teamcity/ProteoWizard/buildTypes/ProteoWizard_PublishMonthlyRelease.xml` (cron 06:00 server time on the 1st; pins/tags the previous month, writes and SFTPs `bt83-monthly.xml` + `bt83-archive.json`; dry run off the default branch)
 - [x] (2026-10-23: first run 403'd - the server's customized Project developer role lacks pin_unpin_build/tag_build; after the user fixed pwiz-commit's permissions the rerun released build 4232279 as release-2026-10-23 and both files went live) After merge: run it manually with "Release the latest build now" (`--latest`; the mid-month October release, user decision 2026-10-22), confirm `pwiz-commit` can pin, and check both files at https://proteowizard.sourceforge.io/releases/
 - [x] Archive metadata covers every pinned SUCCESS bt83 build tagged `release-YYYY-MM` on any branch
-- [ ] Website in ProteoWizard/web (uncommitted, branch `release-channels` in `C:\dev\pwiz-web-help`): Monthly/Beta channel selector for the Windows installers + archive dropdown with a license-gated Download button. Merge only after the pin job publishes `releases/bt83-monthly.xml` and `releases/bt83-archive.json`
-- [ ] Commit-date versioning in `scripts/installer/build.ps1` (and `build-linux.sh`)
+- [x] Website in ProteoWizard/web (uncommitted, branch `release-channels` in `C:\dev\pwiz-web-help`): Monthly/Beta channel selector for the Windows installers + archive dropdown with a license-gated Download button. Merge only after the pin job publishes `releases/bt83-monthly.xml` and `releases/bt83-archive.json`
+- [x] Commit-date versioning in `scripts/installer/build.ps1` (and `build-linux.sh`)
 
 ## Seed commits
 
@@ -78,3 +78,13 @@ Researched and filed #4899. Key findings:
 * `/code-review xhigh` round 1: 15 findings, 14 fixed (empty `--month` arg, lookupLimit, last-finish consistency, typo, guest dry run, personal-build guard, version from installer-version.txt/VERSION, artifact filter, checkout rule `+:scripts/misc`, `%ci` + UTC fallback in the installer scripts, comments); the shared-version-computation refactor dropped. The replacement-related findings were then made moot by the permanent-release redesign.
 * Tests: end-to-end against a fake TeamCity (month-end after mid-month, already released, seed month, same-day clash, --latest, dry run, option conflict); real guest dry runs (scheduled: Sep released by its seed; --latest would release 4230758 as release-2026-10-22); pin+tag round-tripped for real on the unarchived failed build 4230571; website tested in Chrome with the new-format archive.
 * Uncommitted on the work branch: `scripts/installer/build.ps1` and `build-linux.sh` now take YYDOY from HEAD's committer date (matching `build/PwizVersion.targets`), falling back to today. Verified on `3f290fc` -> `4.0.26281-3f290fc`, the version TeamCity stamped that day.
+
+### 2026-10-26 - Merged
+
+PR #4905 squash-merged to `master` as `50123dd1c9` (2026-10-23; it includes the commit-date versioning in `scripts/installer/build.ps1`), follow-up #4910 as `bcc2a6a359` (2026-10-23), and the website PR ProteoWizard/web#28 as `45290bfbb8` (2026-10-26). Seed PR #4900 was closed unmerged by design.
+
+## Resolution
+
+**Status**: Completed (merged 2026-10-26)
+
+Monthly pwiz releases: a TeamCity job pins and tags the month-end bt83 build, the release archive covers every tagged build, and proteowizard.org offers the Monthly/Beta channel selector and archive.
