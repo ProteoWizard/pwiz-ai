@@ -8,7 +8,7 @@
 - **Status**: In Progress - levers in place, ready for the night session
 - **GitHub Issue**: none (planned as a night session by Brendan)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4951](https://github.com/ProteoWizard/pwiz/pull/4951)
 
 ## Objective
 
