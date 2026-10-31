@@ -101,10 +101,12 @@ TestPerf tutorials (~2 h at defaults, large downloads) only for the final confir
 - [x] Overridable waits + per-screenshot timing log (b7182ec46b)
 - [x] Run-Tests.ps1: several -EnvironmentVariables pairs in one argument
 - [x] Smoke test at 0/0/0 on TestCEOptimizationTutorial
-- [ ] Baseline run(s) at default waits (night session)
-- [ ] Reduced-wait runs and PNG classification (night session)
-- [ ] Choose new defaults or conditional waits; implement
-- [ ] Confirmation run; report minutes saved
+- [x] Baseline run(s) at default waits (night session)
+- [x] Reduced-wait runs and PNG classification (night session)
+- [x] Choose new defaults or conditional waits; implement
+- [x] Confirmation run; report minutes saved
+- [ ] Screen run of the code-review commit (n3/fP4)
+- [ ] PeakBoundaryImputation s-19 (volcano update after IsComplete)
 - [ ] PR
 
 ## Regression Test
@@ -121,3 +123,109 @@ Handing off to a night session.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20261030_screenshot_wait_times.md` before starting work.
+
+### 2026-10-30/31 - Night session
+
+Runs: `D:\test\skyline-runs\20261030_screenshot_waits\<arm>\` (arm.log, TestTutorial.log, timing.tsv,
+shots\<Test>\<lang>\s-NN.png). Driver and comparers (session-local):
+`ai/.tmp/sessions/20261030-night/` (run-arm.ps1, compare.py, compare_shots.py).
+
+**Method fix**: several tests write the same tutorial folder (TargetedMSMS x3 -> PRM, CE x2 ->
+OptimizeCE, GroupedStudiesDraft -> Tutorials\en), so comparing the tree after a run only sees the last
+writer. Added `SKYLINE_SCREENSHOT_COPY_DIR` (copy every saved PNG per test) and compared per test.
+TestTutorial en = 26 tests, 717 screenshots.
+
+| Arm | Settings | Run | Waits+flush | vs bA |
+|-----|----------|-----|-------------|-------|
+| baseline | defaults | 44.8 min | 30.4 min | (last-writer PNGs only) |
+| bA | defaults | 44.4 min | 30.8 min | - (vs baseline: 1 PNG, GroupedStudies s-03) |
+| w0 | 0/0/0, no flush | 14.3 min | 0.5 min | 143 of 205 last-writer PNGs differ, 2 tests crash |
+| f0 | 0/0/0 + paint flush | 15.3 min | 1.4 min | 712/717 |
+| f500 | 500/0/0 + paint flush | 21.3 min | 7.4 min | 715/717 |
+| f0b | 0/0/0 + flush (also after activation) + import-graph condition | 15.7 min | 1.7 min | 714/717 |
+
+**Findings**
+1. At 0 ms most differences are windows not yet painted (blank grids/graphs, half-drawn tab strips).
+   Replaced by a condition: `ScreenshotManager.WaitForPaint` - Invoke on the UI thread (drains work
+   posted before it), `RedrawWindow(RDW_UPDATENOW | RDW_ALLCHILDREN)` on every top-level window of that
+   thread, then `DwmFlush()`. Done before activation, after activation (before the adjusters), and
+   before capture. ~0.1 s per screenshot.
+2. Real race exposed at 0 ms: `ZedGraphShot.Take()` called `MasterPane.GetMetafile()` on the test
+   thread while the UI thread painted the same panes -> "Object is currently in use elsewhere" (GDI+,
+   ExistingExperiments) and "Collection was modified" (MSGraphPane labels, Ms1). Fixed: draw the
+   metafile on the UI thread via Invoke. The 2.5 s waits were hiding it.
+3. Import-progress shots (AllChromatogramsGraph): incremental renders are >= 1 s apart
+   (MIN_INCREMENTAL_RENDER), so at 0 ms the graph was empty. Added
+   `AsyncChromatogramsGraph2.IsRenderComplete` (no axis animation, no render pending/running, and
+   either nothing unrendered or a render since freeze) to `AllChromatogramsGraph.IsReadyForScreenshot`.
+   Residual: GroupedStudies1 s-03 peak detail still varies (data still arriving for the shown file);
+   it varied between the two default-wait baselines too - inherent.
+4. GroupedStudiesDraft s-04: checkbox corners blended twice (127 -> 88) whenever the pre-activation
+   flush runs, even with default sleeps. Only in the draft test, which takes an untyped
+   PauseForScreenShot() of the Skyline window behind a modal Peptide Settings dialog; its PNGs are not
+   committed. Real tutorial Peptide Settings shots with checked lists match.
+5. Ms1 s-09: 9 px at 438,314 - the same pixels differed between the default baseline and git.
+6. Pre-existing: TestMSstatsTutorialLegacy and TestQuasarTutorialLegacy failed every screenshot run
+   with leftover temp CSVs. Root cause: in screenshot mode the test runs the tool, which exports its
+   input report to temp, then cancels the args collector - so the tool never runs and nothing
+   deletes the file. Fixed in `ToolDescriptionRunUI.RunTool`: delete the report when the args
+   collector is canceled. Both pass in screenshot mode now (arm `legacy`).
+7. Intermittent at 0 ms even with the flush (f0b vs f0c): SmallMolQuant s-09, the file list caught
+   mid-paint. Added a stable capture: `ActiveWindowShot.Take` captures again (after another
+   WaitForPaint) until two captures match, max 10; retries go to the timing log (CaptureRetries).
+8. Final code, no env vars (arm n1): TestTutorial en 16.3 min (was 44.4), 715/717 vs bA; the 2 are
+   GroupedStudies1 s-03 (live import) and the draft s-04.
+
+**TestPerf tutorials** (11 tests, 308 screenshots; `ai/.tmp/sessions/20261030-night/perf-tutorials.txt`):
+
+| Arm | Settings | Run | Waits+capture | vs bP |
+|-----|----------|-----|---------------|-------|
+| bP | old waits forced (1500/500/500, flush 0) | 53.5 min | 13.0 min | - |
+| fP | new defaults | 36.9 min | 1.1 min | 302/308, 1 capture retry |
+
+fP differences: DDA s-12 and DiaUmpire s-13 are live search logs (text depends on search progress);
+OrbiPrm s-41 1 px; PeakBoundaryImputation s-16/s-18 status bar "Label layout" instead of "Ready" and
+s-19 a volcano label placed differently - the label layout (`LabelLayoutRunner`: 100 ms debounce
+timer + worker thread) was still running. WaitForGraphs did not know about it; added
+`LabelLayoutRunner.AnyPending` to `SkylineWindow.IsGraphUpdatePending`.
+
+| bP2 | old waits again | 47.9 min | 13.0 min | vs bP: DDA s-12, DiaUmpire s-13, OrbiPrm s-41 differ (noise) |
+| fP2 | new defaults + label layout wait | 37.8 min | 1.0 min | vs bP2: 306/308 (DiaUmpire s-13 noise, PBI s-19) |
+
+Label-layout tests all pass with the new IsGraphUpdatePending (TestGroupComparisonVolcanoPlot,
+TestLabelLayoutDeterminism, TestPeakArea*Graph, TestVolcanoPlot*).
+
+**Scored against git** (Brendan's metric: target = shots the old code reproduces exactly from the
+committed PNGs; `ai/.tmp/sessions/20261030-night/vs_git.py old1,old2 new1,new2`):
+* TestTutorial: old (bA) reproduces 573 of 663; n1 and n2 572/573 - the miss is GroupedStudies1
+  s-03, which the old code matched in only 1 of 2 runs, so 572/572 on shots the old code holds.
+* TestPerf tutorials: old (bP and bP2) both reproduce 295 of 308; fP 292/295 (PBI s-16/18/19),
+  fP2 294/295 (PBI s-19).
+
+**Open: PeakBoundaryImputation s-19** ("Volcano plot after imputation", ZedGraph metafile). The
+volcano gets one more `QueueUpdateGraph` -> `UpdateGraph` -> label layout ~0.8 s after the test's
+`WaitForConditionUI(foldChangeVolcanoPlot.IsComplete)`; with any >= ~0.5 s sleep the shot matches
+both old-wait baselines, with 150 ms it does not. Traced with temporary logging in LabelLayoutRunner
+(reverted; logs `D:\test\skyline-runs\20261030_screenshot_waits\label-{new,old}.log`): every layout
+completes; the capture simply comes before that last update. Not caught by: label-layout pending,
+post-activation WaitForGraphs, or draining the UI queue to idle (GetQueueStatus loop) - so the
+trigger is background-driven (`BindingListSourceAllRowsChanged`/`ListChanged`, or tree AfterSelect
+after `RestoreFloatingWindows`). Next: log which caller queues that update, then make the test (or
+FoldChangeForm.IsComplete) wait for it.
+
+Also added after fP2: WaitForPaint loops until the UI queue has no posted/sent/paint messages (max
+20 passes), and CaptureScreenShot waits for graphs again after activation. Confirmed by n2
+(TestTutorial: 26/26 pass, 16.9 min, 572/572 of git shots the old code holds) and fP3 (perf: 11/11
+pass, 38.1 min, 294/295 - PBI s-19).
+
+Committed locally (2026-10-31): 57d7076760 waits, 5d4d544336 tool temp report, bd24eac3d7 label
+layout wait, 2b3fe1834a `/code-review medium` fixes - 8 of 10 findings taken (import-graph render
+flag reset at the actual freeze, zero-size graph counts as rendered, disposed-graph layouts not
+pending, registry pruned on add, PAINT_FLUSH=0 restores the old waits, flush at the end of
+ActivateScreenshotForm, Common User32.EnumThreadWindows, per-manager retry count); dropped: the
+capture loop under animation (capped at 10, logged, 0-1 retries seen) and WaitForGraphs covering
+label layout (intended). 2b3fe1834a is built, CodeInspection and label-layout tests pass, but it has
+NOT been run on screen - next screenshot run should be n3/fP4 against bA/bP via vs_git.py.
+
+Translated set (from the folders): 1,001 en + 551 ja + 551 zh-CHS = 2,103 committed screenshots;
+at ~2.3 s saved each, ~81 min per full run.
