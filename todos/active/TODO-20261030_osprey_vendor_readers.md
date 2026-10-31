@@ -66,10 +66,12 @@ with no arguments, so every vendor reader built in its NO_VENDOR_SUPPORT mode.
       090701-LTQVelos-unittest-01.raw (28 MS2 + 58 MS1). No DIA vendor file was at hand for a full search
 - [x] Local: the no-vendor Debug build gives one Error: line naming the file and msconvert, no stack,
       from both `--task SpectraCache` and a full search
-- [ ] TeamCity (Brendan, config change): add `--i-agree-to-the-vendor-licenses
-      --require-vendor-support` to the build step of Osprey Windows .NET
-      (ProteoWizard_OspreyWindowsNet) and Osprey Linux .NET
-      (ProteoWizard_VersionedConfigs_OspreyLinuxNet)
+- [x] TeamCity (Brendan, 2026-10-30): `--i-agree-to-the-vendor-licenses --require-vendor-support`
+      added to the Command parameters of both Osprey configs; TeamCity committed them to master as
+      .teamcity/patches (c44ef8dba5, 1296614c8c). A master merge touching only .teamcity fires no
+      Osprey trigger. On 11e9d21b: Windows #1163 "Vendor support: ENABLED", win-x64 zip 170.5 MB,
+      TestRawVsMzmlSpectraParity now reads the .raw (146 ms vs 6 ms); Linux #593 ENABLED
+      (cross-platform SDKs), linux-x64 zip 206.7 MB. All green
 - [ ] After a vendor-enabled master build: move Skyline's pinned Osprey build
       (`OspreyHelpers.OSPREY_VERSION` and build id) and raise `OSPREY_DOWNLOAD_SIZE_MB` (150) to about 170 for the vendor zip
 - [x] `/code-review medium`: 6 findings. Fixed 4: the IOTest early return now requires the
