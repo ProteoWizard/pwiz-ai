@@ -248,7 +248,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string[]]$EnvironmentVariables = @()  # NAME=VALUE pairs set for TestRunner, for tests that read a switch
-                                           # from the environment, e.g. "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey\torch"
+                                           # from the environment, e.g. "SKYLINE_TEST_OSPREY_TORCH_RUNTIMES=$env:LOCALAPPDATA\Osprey\torch".
+                                           # Several pairs go comma-separated in one argument ("A=1,B=2"), since
+                                           # pwsh -File passes a list as one string; a comma not followed by NAME= stays in the value.
 )
 
 # Script location: ai/scripts/Skyline/
@@ -858,7 +860,8 @@ try {
     Push-Location $outputDir
     try {
         # Switches a test reads from its environment; TestRunner inherits this process's variables
-        foreach ($pair in $EnvironmentVariables) {
+        $pairs = $EnvironmentVariables | ForEach-Object { $_ -split ',(?=[A-Za-z_][A-Za-z0-9_]*=)' }
+        foreach ($pair in $pairs) {
             $name, $value = $pair -split '=', 2
             if ([string]::IsNullOrWhiteSpace($name) -or $null -eq $value) {
                 throw "-EnvironmentVariables takes NAME=VALUE pairs, not '$pair'"
