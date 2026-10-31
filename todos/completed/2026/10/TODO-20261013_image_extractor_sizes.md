@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261013_image_extractor_sizes`
 - **Base**: `master`
 - **Created**: 2026-10-13
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#4839](https://github.com/ProteoWizard/pwiz/pull/4839)
+- **PR**: [#4839](https://github.com/ProteoWizard/pwiz/pull/4839) (merged 2026-10-31)
 
 ## Objective
 
@@ -47,7 +47,8 @@ larger bitmaps to extract. Every icon also has a compiled XAML vector image
 ## Remaining
 
 - [x] Push branch, open PR with `skyline:` prefix and label (#4839, 2026-10-13)
-- [ ] Address Copilot review if any
+- [x] Address Copilot review if any - one finding (render errors still exit 0) accepted as-is for a
+      hand-run dev tool whose errors print per icon
 
 ## Notes
 
@@ -55,3 +56,10 @@ larger bitmaps to extract. Every icon also has a compiled XAML vector image
   Skyline test suite do not cover it.
 - Developed on the pwiz1 checkout (DPI branch) and moved to its own branch so the
   DPI PR stays focused.
+
+### 2026-10-31 - Merged
+
+PR #4839 merged as commit 91906eb492 after Brendan's review. Shipped the size arguments, WPF rendering
+of the catalog's XAML vector images for sizes other than 16, per-size output folders and the README
+rewrite. Not done: a nonzero exit code on render errors (Copilot), and rendering the ~20 XAML-only
+icons at 16 px. Independent of #4887, whose IconBuilder carries its own vector XAML sources.
