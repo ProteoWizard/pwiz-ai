@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261029_ms2_id_evidence`
 - **Base**: `master`
 - **Created**: 2026-10-29
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4935](https://github.com/ProteoWizard/pwiz/issues/4935)
 - **Module**: `skyline`
-- **PR**: [#4947](https://github.com/ProteoWizard/pwiz/pull/4947)
+- **PR**: [#4947](https://github.com/ProteoWizard/pwiz/pull/4947) (merged 2026-10-31)
 
 ## Objective
 
@@ -26,15 +26,15 @@ Not known to be a .NET 10 regression: MS Amanda 2.0 -> 3.0 produced the false ch
 
 ## Tasks
 
-- [ ] Chromatograms: draw ID and aligned ID lines for every library precursor used as evidence,
+- [x] Chromatograms: draw ID and aligned ID lines for every library precursor used as evidence,
       labeled with charge and label type (e.g. "ID 3+"); mark IDs from another form as such
       (e.g. heavy matched to light IDs) rather than as the precursor's own IDs
-- [ ] Extraction window (`RetentionTimeFilterType.ms2_ids`): center on the median of ID times and
+- [x] Extraction window (`RetentionTimeFilterType.ms2_ids`): center on the median of ID times and
       drop outliers before extending the range (like RCalcIrt / IrtPeptidePicker); apply the same
       rejection to aligned times
-- [ ] Library Match combo: list all spectra of the peptide (all charges and label types), exact
+- [x] Library Match combo: list all spectra of the peptide (all charges and label types), exact
       precursor matches first, for both light and heavy precursors
-- [ ] Library Match title: name the label type of the spectrum shown, not the selected precursor
+- [x] Library Match title: name the label type of the spectrum shown, not the selected precursor
 - [ ] Spectral Library Explorer: keep consistent with the Library Match combo change
 - [ ] Check behavior on 26.1.1 with this data
 
@@ -131,3 +131,13 @@ Code map:
 * Brendan re-recorded and staged DDASearch s-14..17 and PRM s-16/21/22/24 (en, ja, zh-CHS), also
   before the review fixes; TestDdaTutorial `VerifyOutlierIdIgnored` needs a screenshot-mode rerun.
 * Committed 88d8ccb6ea, pushed; PR opened for TeamCity.
+
+### 2026-10-31 - Merged
+
+PR #4947 merged as commit 8944f3f2a4. Shipped: outlier MS/MS ID rejection before `ms2_ids`
+extraction (full-scan files, IDs from or aligned to the file), chromatogram ID lines for every pooled
+library precursor labeled by charge and label type, all of the peptide's spectra in the Library Match
+list, and a Library Match title naming the spectrum shown. Deferred: Spectral Library Explorer
+consistency with the Library Match change, and the 26.1.1 behavior check. Still to confirm in
+Brendan's next overnight run: DIA-Umpire FullFileset values and TestDdaTutorial
+`VerifyOutlierIdIgnored` in screenshot mode with the final rule.
