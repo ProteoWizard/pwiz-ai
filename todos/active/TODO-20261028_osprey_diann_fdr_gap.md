@@ -1,8 +1,9 @@
 # TODO-20261028_osprey_diann_fdr_gap.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261028_osprey_diann_fdr_gap` (local, not pushed: d9ef469191 OSPREY_XIC_FRAGMENTS,
-  31f24282b6 / 6ffe5333c4 / 087b2825d9 the new features + OSPREY_FEATURE_MASK), cut from
+- **PR**: [#4950](https://github.com/ProteoWizard/pwiz/pull/4950) (opened 2026-10-30; Auto-fix off)
+- **Module**: `osprey`
+- **Branch**: `Skyline/work/20261028_osprey_diann_fdr_gap` (pushed; merged with master at 4145709c7d), cut from
   `origin/master` at 406fd374c0 (2026-10-28), which holds all of Brendan's Osprey work to date,
   including the one-command CarafeSharp library build (#4876, #4885) and the `.model.zip` rename (#4895)
 - **Checkout**: `D:\Dev\pwiz-osprey-fdr` (new worktree)
