@@ -124,7 +124,7 @@ grown to these `.csproj`s (`ls pwiz_tools/Osprey/*/*.csproj` is the check):
 | `Osprey.Chromatography` | RT calibration (`RTCalibrator`), peak detection |
 | `Osprey.Scoring` | XCorr, cosine, batch scoring |
 | `Osprey.FDR` | Percolator, protein FDR, reconciliation |
-| `Osprey.Diagnostics` | `-d`-only diagnostics seam (`IOspreyDiagnostics`, `OspreyDiagnosticsLog`); references Chromatography, Scoring and FDR |
+| `Osprey.Diagnostics` | `OSPREY_DIAGNOSTICS`-only diagnostics seam (`IOspreyDiagnostics`, `OspreyDiagnosticsLog`); references Chromatography, Scoring and FDR |
 | `Osprey.Tasks` | The pipeline tasks (`PerFileScoringTask`, `FirstPassFdrTask`, `PerFileRescoreTask`, `SecondPassFdrTask`), `PipelineContext`, blib / report / FDRBench output writers |
 | `Osprey` (main) | CLI (`Program`), run planning, `OspreyFileDiagnostics` dumps |
 | `Osprey.Test` | Unit tests |
@@ -195,12 +195,12 @@ Osprey's `--perf-stats` and `--verbose` gates stay on `OspreyOutput`. Only
 through the seam. Do not call `Console.Write*` / `Console.Error` directly
 anywhere, and do not add a second writer.
 
-`Osprey.Diagnostics` is **`-d`-only debug code and must not sit on the mainline
+`Osprey.Diagnostics` is **`OSPREY_DIAGNOSTICS`-only debug code and must not sit on the mainline
 output path**: routing a mainline `[TIMING]` / `[COUNT]` line through
 `OspreyDiagnosticsLog` conflates mainline with debug (and would need a
 `FDR -> Diagnostics` reference, a cycle, since Diagnostics already references
-FDR). The contract is "`-d` turns it on, otherwise silent": a task may call the
-diagnostics seam to emit a `-d` dump, but no mainline line is produced by it.
+FDR). The contract is "`OSPREY_DIAGNOSTICS` turns it on, otherwise silent": a task may call the
+diagnostics seam to emit a diagnostic dump, but no mainline line is produced by it.
 A new long-running loop reports through the shared `ProgressReporter`
 (`pwiz.Common.SystemUtil`, moved from Osprey.Core); Skyline's `ProgressStatus` /
 `IProgressMonitor` route is not pursued for the command-line tools (Brendan, 2026-10-14).
@@ -242,7 +242,7 @@ verification is needed on the C# side (`copy_and_verify` need not be ported).
 The parquet writer once did exactly this anti-pattern (temp in the system temp
 dir + `File.Move`, mislabelled "safe NAS writes"); it now uses `SimpleFileSaver`.
 
-**Exempt:** `-d` diagnostic dumps (`OspreyFileDiagnostics` etc.), the streaming
+**Exempt:** `OSPREY_DIAGNOSTICS` dumps (`OspreyFileDiagnostics` etc.), the streaming
 CLI log, and test fixtures -- transient or append-streaming files that are not
 durable pipeline artifacts.
 

@@ -24,20 +24,21 @@ magnitudes. Cross-impl byte-equal for any value both sides agree on at
 the f64 level. Prefer the `ai/.tmp/diff_*.py` numerical helpers over
 raw `diff` (handles CRLF and any residual format differences).
 
-## Osprey `-d` master switch (C# only)
+## Osprey `OSPREY_DIAGNOSTICS` master switch (C# only)
 
-Osprey accepts `-d` / `--diagnostics` on the command line as a
+Osprey reads `OSPREY_DIAGNOSTICS=1` (until 2026-10-30 the `-d` / `--diagnostics`
+argument, moved out of the user-facing help) as a
 convenience that turns on the structured cross-impl dump bundle without
 setting individual env vars. It enables every `OSPREY_DUMP_*` dump
 **except** the per-call firehose `OSPREY_DUMP_MP_INPUTS`, the (currently
 disabled) `OSPREY_DUMP_PREDICT_RT`, all `*_ONLY` early-exit gates, and the
 `OSPREY_DIAG_*` per-entry selectors (which need specific IDs). For
 fine-grained control set the individual env vars below instead -- they
-compose with `-d` and still work on their own (no `-d` required). Internally
-`-d` is implemented by the `OspreyDiagnostics` facade, which holds the live
-`OspreyFileDiagnostics` sink only when a dump is enabled; with neither `-d`
+compose with `OSPREY_DIAGNOSTICS` and still work on their own. Internally
+the switch is implemented by the `OspreyDiagnostics` facade, which holds the live
+`OspreyFileDiagnostics` sink only when a dump is enabled; with neither `OSPREY_DIAGNOSTICS`
 nor any env var set, the sink is null and all diagnostics are a no-op.
-(Rust osprey has no `-d`; use the env vars.)
+(Rust osprey has no master switch; use the individual env vars.)
 
 ## Calibration Stage (Stage 3)
 
