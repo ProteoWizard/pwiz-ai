@@ -91,3 +91,14 @@ to convert to mzML, -d/--diagnostics became OSPREY_DIAGNOSTICS, and the --memsta
 Deferred: moving Skyline's pinned Osprey package to a vendor-enabled master build (and its download
 size to about 170 MB), which is what makes Matt's wizard download read .raw files. The manual
 Perf/Regression gate was not run; the change touches packaging and messages, not search results.
+
+### 2026-10-31 - Master build failed; follow-up fix
+
+The first master build after the merge (Osprey Windows .NET #1165, 56baaced) failed one test,
+TestNoUtf8Bom, so packaging never ran and master produced no Windows artifacts. Linux #597 passed.
+The test scans the Osprey tree for UTF-8 BOMs, skipping bin/obj/TestResults/.vs but not dist/. The
+extra PR build #1162 on the same agent had left a vendor package in dist/_staging, and three Sciex
+.config files there carry a BOM. Tests run before packaging, so the master build found them. Fix on
+Skyline/work/20261031_osprey_bom_skip_dist: dist added to the skip list. Verified locally with the
+three files staged under dist: 646/646, and the files keep their BOM (the test no longer rewrites them).
+
