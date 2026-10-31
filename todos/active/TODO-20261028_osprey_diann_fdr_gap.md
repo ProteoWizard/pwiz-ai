@@ -282,7 +282,12 @@ Open:
 - [ ] Stellar check that 12 XICs + features + GBDT do not cost IDs where Osprey already leads
 - [ ] Remaining gap (~25% at FDP 0.5%): further Radiant families (alt-charge features, amino-acid counts for
       GBDT), and the classifier (bagged NN like DIA-NN/Radiant)
-- [ ] Fix `peak_spectrum_cosine_sd.IsReversedScore` (the data says higher is target-like)
+- [x] Fix `peak_spectrum_cosine_sd.IsReversedScore` (the data says higher is target-like) - 80f7c2469d, with the
+      other `/code-review` fixes: OSPREY_RECONCILIATION / OSPREY_PEP_FORMULA keyed, `OSPREY_RECONCILIATION=off`
+      removed (failed at rescoring), training-export CORE flags follow the XIC count. Dropped: override-path
+      runner-up values (count 1, margins 0; transfer measured calibrated with them unmasked on all three datasets),
+      duplicate-bounds margins, reusing the SG sweep's cosines
+- [x] Document the new features and per-dataset use: `docs/03-spectral-scoring.md` B.7 (e554304005)
 - [ ] Decide with Brendan what becomes default (XIC count, features, classifier); goldens move when it does
 - [ ] Entrapment design: Osprey's `--entrapment` files entrapment under its own `_p_target` protein, which
       cannot measure the protein-compact pass 2 (Finding 2). Raise with Brendan/Nick (protein-level FDP needs the
