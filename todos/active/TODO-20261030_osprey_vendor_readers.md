@@ -9,7 +9,7 @@
   step arguments (below) before the installers carry vendor readers.
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (none)
+- **PR**: #4949
 
 ## Goal
 
@@ -77,4 +77,4 @@ with no arguments, so every vendor reader built in its NO_VENDOR_SUPPORT mode.
       win-*, and four stale `-d` mentions. Dropped 2: a hidden `-d` alias (developer switch,
       docs name the replacement) and a shared EULA helper (5 lines in two independent scripts).
       Re-verified: 646/646, inspection clean, package passes its SDK check and reads the .raw
-- [ ] Commit, push, PR
+- [x] Commit 4e155ea1f7, PR #4949 (2026-10-30)
