@@ -748,6 +748,25 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-10-31 - Merged master (87250e23f9) and fixed Copilot review round 2 (00726a7c33), pushed
+
+- Merge conflicts: #4934 moved the border cleanup to CommonBaseUI ScreenshotBorder; the DPI-scaled
+  frame (ceil(factor) px, #B7B7B7, scaled radius) moved there using DpiScale.Factor. Master's new
+  TestCleanupBorder hardcoded #707070 and failed DPI-aware; it now expects the DPI frame color.
+  Master's Osprey/Build Library wizards added an unscaled 5-arg WizardPages.AddPageControl; merged
+  into one DPI-scaled method with footer = 0 (Osprey FASTA footer converted to 96-DPI units).
+- Copilot (2 comments, both real): SkylineWindow read MainWindowSize/Maximized after
+  InitializeComponent, whose high-DPI autoscale raised Resize and overwrote them (now read before,
+  as StartPage); dpiaware was missing from AddPassThroughArguments for parallel workers. Replied
+  and resolved both threads.
+- Verified: Solution build; gate both modes (TestCleanupBorder, TestDpiIconLookup,
+  TestBuildLibraryCarafeWizard, TestOspreySearch, TestDiannSearchEmptyResults1_9_1, TestDocumentGrid,
+  start-page tests); CodeInspection test passed. Placement fix verified by reading only (no test
+  restores a saved placement).
+- Local: harness stash re-applied after the merge (DiaTutorial and option-string conflicts
+  resolved); the stash entry is kept as a backup. Branch upstream was set to the net8_port
+  branch; reset to origin/Skyline/work/20260820_dpiAwareness.
+
 ### 2026-10-30 - Code review (medium) of the two icon commits fixed (d6c2443c20, pushed 2026-10-30)
 
 - /code-review medium on eee6eb420f..35a440af8b: 10 findings, 7 fixed, 2 dropped (FileProgressControl
