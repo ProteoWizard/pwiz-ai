@@ -37,7 +37,10 @@ Not known to be a .NET 10 regression: MS Amanda 2.0 -> 3.0 produced the false ch
 - [x] Library Match title: name the label type of the spectrum shown, not the selected precursor
 - [x] Spectral Library Explorer: keep consistent with the Library Match combo change (no change
       needed - ViewLibraryDlg already lists each LibKey as its own row)
-- [ ] Check behavior on 26.1.1 with this data
+- [x] Check behavior on 26.1.1 with this data - not needed (Brendan, 2026-10-31): 26.1.1 is a
+      historic Skyline-daily branch taking only critical changes; this fix was critical only for the
+      .NET 10 tutorial screenshots, where the newer MS Amanda IDs a spectrum at ~20 min for a peptide
+      eluting at ~130 min
 
 ## Regression Test
 
@@ -139,7 +142,9 @@ PR #4947 merged as commit 8944f3f2a4. Shipped: outlier MS/MS ID rejection before
 extraction (full-scan files, IDs from or aligned to the file), chromatogram ID lines for every pooled
 library precursor labeled by charge and label type, all of the peptide's spectra in the Library Match
 list, and a Library Match title naming the spectrum shown. The Spectral Library Explorer needed no
-change (it already lists each charge as its own row). Deferred: the 26.1.1 behavior check. Brendan ran and verified
+change (it already lists each charge as its own row). No 26.1.1 check or cherry-pick: that branch
+takes only critical changes, and this was critical only for the .NET 10 tutorial screenshots (the
+newer MS Amanda's false ~20 min ID for a peptide eluting at ~130 min). Brendan ran and verified
 all screenshots with the final rule before the merge, and the overnight TeamCity Skyline Perf and
 Tutorial runs passed (all 19 checks green), so the DIA-Umpire FullFileset values and TestDdaTutorial
 `VerifyOutlierIdIgnored` noted as pending on 2026-10-30 are confirmed.
