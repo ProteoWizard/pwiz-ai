@@ -633,6 +633,8 @@ function Invoke-OspreyDatasetRun {
     # retained-fragment skip - writing a second copy into the data directory.
     if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
+    # A gendecoy library still carries _p_target entrapment, which Osprey refuses to search unpaired.
+    elseif (Test-Path $manifest) { $cliArgs += @('--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
     if ($TrainingExport) { $cliArgs += '--training-export' }

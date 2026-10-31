@@ -85,7 +85,7 @@ def read_osprey_peaks(folder):
             if not os.path.exists(p):
                 continue
             t = pq.read_table(p, columns=['is_decoy', 'modified_sequence', 'charge', 'apex_rt', 'start_rt',
-                                          'end_rt', 'file_name'])
+                                          'end_rt', 'bounds_area', 'file_name'])
             t = t.filter(pc.invert(t.column('is_decoy')))
             df = t.drop(['is_decoy']).to_pandas()
             df['rank'] = rank
@@ -94,13 +94,13 @@ def read_osprey_peaks(folder):
     df['key'] = df['modified_sequence'].map(unimod) + '/' + df['charge'].astype(str)
     df['run'] = df['file_name'].map(run_name)
     df = df.sort_values('rank').drop_duplicates(['key', 'run'], keep='first')
-    return df.set_index(['key', 'run'])[['apex_rt', 'start_rt', 'end_rt']]
+    return df.set_index(['key', 'run'])[['apex_rt', 'start_rt', 'end_rt', 'bounds_area']]
 
 
 def read_diann(path):
     t = pq.read_table(path, columns=['Run', 'Modified.Sequence', 'Precursor.Charge', 'Decoy', 'Q.Value',
                                      'Global.Q.Value', 'PEP', 'RT', 'RT.Start', 'RT.Stop', 'Predicted.RT',
-                                     'Protein.Group'])
+                                     'Protein.Group', 'Precursor.Quantity'])
     df = t.to_pandas()
     df = df[df['Decoy'] == 0]
     df['key'] = df['Modified.Sequence'] + '/' + df['Precursor.Charge'].astype(str)
@@ -127,11 +127,11 @@ def q_bin(q, dropped=None):
 
 
 def build(work, args):
-    run_export = os.path.join(work, 'osprey-export-run')
+    run_export = os.path.join(work, args.osprey_run)
     o_run = read_fdrbench(run_export, per_run=True)
-    o_exp = read_fdrbench(os.path.join(work, 'osprey-export-experiment'), per_run=False)
+    o_exp = read_fdrbench(os.path.join(work, args.osprey_experiment), per_run=False)
     peaks = read_osprey_peaks(run_export)
-    dn = read_diann(os.path.join(work, 'diann-search-loose', 'report.parquet'))
+    dn = read_diann(os.path.join(work, args.diann, 'report.parquet'))
 
     o = o_run.join(peaks, how='left')
     o['exp_q'] = o_exp['q_value'].reindex(o.index.get_level_values('key')).values
@@ -156,7 +156,55 @@ def build(work, args):
     df['diann_bin'] = q_bin(dq)
     df['rt'] = df['RT'].astype(float).fillna(df['apex_rt'].astype(float))
     df['protein'] = df['protein'].fillna(df['Protein.Group'])
+    df['o_id'], df['d_id'] = o_id, d_id
+    # From each tool's side, what became of its 1% IDs in the other tool.
+    agree = o_id & d_id & (df['peak'].values == 'same peak')
+    diff = df['peak'].values == 'different peak'
+    for tool, mine, other in (('osprey', o_id, d_id), ('diann', d_id, o_id)):
+        df[f'{tool}_fate'] = np.select(
+            [~mine, agree, diff, df['peak'].values == 'same peak'],
+            ['', 'agree: same peak at 1%', 'different peak', 'same peak, other tool above 1%'],
+            'other tool reports no peak')
     return df
+
+
+ROC_MAX_Q = 0.5   # the loose DIA-NN report stops here, so both curves do
+FATES = ['agree: same peak at 1%', 'same peak, other tool above 1%', 'different peak', 'other tool reports no peak']
+
+
+def fate_histogram(values, fates, edges):
+    """Counts per fate in each bin, and the disagreement fraction per bin."""
+    out = {}
+    idx = np.clip(np.digitize(values, edges) - 1, 0, len(edges) - 2)
+    ok = ~np.isnan(values)
+    for f in FATES:
+        sel = ok & (fates == f)
+        out[f] = np.bincount(idx[sel], minlength=len(edges) - 1).tolist()
+    total = np.array([sum(out[f][i] for f in FATES) for i in range(len(edges) - 1)])
+    agree = np.array(out[FATES[0]])
+    out['disagree_fraction'] = [round(float(1 - a / t), 4) if t >= 20 else None for a, t in zip(agree, total)]
+    return out
+
+
+def roc(df, truth_tool, ranked_tool):
+    """ranked_tool's scored precursor-runs in score order against truth_tool's 1% IDs as ground truth: a call
+    is a true positive when the precursor is a truth ID and the two peaks match, else a false positive."""
+    truth = df[f'{truth_tool}_fate'].values != ''
+    if ranked_tool == 'osprey':
+        q, tie = df['q_value'].astype(float).values, -df['score'].astype(float).values
+    else:
+        q, tie = df['Q.Value'].astype(float).values, df['PEP'].astype(float).values
+    scored = ~np.isnan(q) & (q <= ROC_MAX_Q)
+    order = np.lexsort((tie[scored], q[scored]))
+    qs = q[scored][order]
+    tp = (truth & (df['peak'].values == 'same peak'))[scored][order]
+    ctp, cfp = np.cumsum(tp), np.cumsum(~tp)
+    n_truth = int(truth.sum())
+    keep = np.unique(np.linspace(0, len(qs) - 1, 1500).astype(int))
+    at = int(np.searchsorted(qs, NOMINAL, side='right')) - 1
+    return {'fp': cfp[keep].tolist(), 'tpr': (ctp[keep] / n_truth).round(5).tolist(), 'q': qs[keep].round(5).tolist(),
+            'n_truth': n_truth, 'at_1pct': {'fp': int(cfp[at]), 'tpr': round(float(ctp[at] / n_truth), 5)} if at >= 0 else None,
+            'max_tpr': round(float(ctp[-1] / n_truth), 5)}
 
 
 def payload(df, args):
@@ -214,16 +262,26 @@ def payload(df, args):
                                 'n': int(len(d)), 'median': float(np.median(d)) if len(d) else 0.0,
                                 'beyond': int((np.abs(d) > 60).sum())}
 
-    # Score-vs-score: -log10 q, missing placed below the axis.
+    # Score-vs-score: -log10 run q, split by whether the two peaks match; missing placed below the axis.
     def lq(q):
         return np.where(np.isnan(q), -0.6, -np.log10(np.clip(q, Q_FLOOR, 1)))
     scored = df[df['status'] != 'neither']
-    x = lq(scored['q_value'].astype(float).values)
-    y = lq(scored['Q.Value'].astype(float).values)
     edges = np.linspace(-0.8, 6.2, 71)
-    h, _, _ = np.histogram2d(x, y, bins=[edges, edges])
-    out['heat'] = {'edges': edges.round(2).tolist(), 'z': np.log10(h.T + 1).round(3).tolist(),
-                   'n': h.T.astype(int).tolist()}
+    out['heat'] = {'edges': edges.round(2).tolist()}
+    for p in ('same peak', 'different peak', 'one tool only'):
+        # Same peak: every pair where both tools chose it, at any q, to show where the 1% cut splits them.
+        sub = df[(df['peak'] == p).values] if p == 'same peak' else scored[(scored['peak'] == p).values]
+        oq = sub['q_value'].astype(float).values
+        dq = sub['Q.Value'].astype(float).values
+        h, _, _ = np.histogram2d(lq(oq), lq(dq), bins=[edges, edges])
+        o1, d1 = oq <= NOMINAL, dq <= NOMINAL
+        both_q = ~np.isnan(oq) & ~np.isnan(dq)
+        # Spearman: Pearson on average ranks (no scipy dependency).
+        rho = pd.Series(oq[both_q]).rank().corr(pd.Series(dq[both_q]).rank()) if both_q.sum() > 2 else None
+        out['heat'][p] = {'z': np.log10(h.T + 1).round(3).tolist(), 'n': h.T.astype(int).tolist(), 'total': int(len(sub)),
+                          'quad': {'both': int((o1 & d1).sum()), 'osprey': int((o1 & ~d1).sum()),
+                                   'diann': int((~o1 & d1).sum()), 'neither': int((~o1 & ~d1).sum())},
+                          'rho': None if rho is None or np.isnan(rho) else round(float(rho), 3)}
 
     # Disagreements: confident in one tool, weak or missing in the other.
     oq = df['q_value'].astype(float)
@@ -248,6 +306,29 @@ def payload(df, args):
                          'DIA-NN predicted RT', 'Peaks']
     out['tables'] = tables
     out['runs_short'] = [r[-2:] for r in runs]
+
+    # Venn on precursor-run pairs: in both only when both tools pass it at 1% on the same peak.
+    o_id, d_id = df['o_id'].values, df['d_id'].values
+    agree = df['osprey_fate'].values == FATES[0]
+    out['venn'] = {'both': int(agree.sum()), 'osprey': int((o_id & ~agree).sum()), 'diann': int((d_id & ~agree).sum()),
+                   'both_1pct_different_peak': int((o_id & d_id & (df['peak'].values == 'different peak')).sum())}
+
+    # Disagreement by each tool's own log10 intensity and own RT.
+    out['fates'] = FATES
+    rt_edges = np.arange(0, np.ceil(np.nanmax(df['rt'].values)) + 1, 1.0)
+    out['rt_edges'] = rt_edges.tolist()
+    for tool, area, rt in (('osprey', 'bounds_area', 'apex_rt'), ('diann', 'Precursor.Quantity', 'RT')):
+        sel = df[f'{tool}_fate'].values != ''
+        fates = df[f'{tool}_fate'].values[sel]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            li = np.log10(df[area].astype(float).values[sel])
+        li[~np.isfinite(li)] = np.nan
+        lo, hi = np.nanpercentile(li, [0.5, 99.9])
+        i_edges = np.arange(np.floor(lo * 5) / 5, np.ceil(hi * 5) / 5 + 0.01, 0.2)
+        out[f'{tool}_i_edges'] = i_edges.round(2).tolist()
+        out[f'{tool}_by_intensity'] = fate_histogram(li, fates, i_edges)
+        out[f'{tool}_by_rt'] = fate_histogram(df[rt].astype(float).values[sel], fates, rt_edges)
+    out['roc'] = {'osprey_vs_diann_truth': roc(df, 'diann', 'osprey'), 'diann_vs_osprey_truth': roc(df, 'osprey', 'diann')}
     return out
 
 
@@ -267,6 +348,9 @@ def main():
     ap.add_argument('--weak', type=float, default=0.05)
     ap.add_argument('--max-rows', type=int, default=4000)
     ap.add_argument('--title', default=None)
+    ap.add_argument('--osprey-run', default='osprey-export-run', help='folder (under the work dir) of the per-run export')
+    ap.add_argument('--osprey-experiment', default='osprey-export-experiment')
+    ap.add_argument('--diann', default='diann-search-loose', help='folder of the --qvalue 0.5 DIA-NN report')
     args = ap.parse_args()
     df = build(args.work_dir, args)
     data = payload(df, args)

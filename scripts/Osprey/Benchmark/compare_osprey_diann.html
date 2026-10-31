@@ -57,6 +57,10 @@ Precursors match on modified sequence (UniMod) and charge. Peaks match by Skylin
 either apex inside the other's boundaries, or overlap of at least half the mean width.</p>
 <div class="cards" id="cards"></div>
 
+<h2>Overlap at 1%, counting a precursor as shared only on the same peak</h2>
+<p class="note" id="vennnote"></p>
+<div id="venn" style="max-width:720px"></div>
+
 <h2>IDs per run</h2>
 <div id="perrun" class="plot" style="height:300px"></div>
 
@@ -66,10 +70,31 @@ either apex inside the other's boundaries, or overlap of at least half the mean 
 "Not reported": Osprey did not score it, or DIA-NN's q was above 50%.</p>
 <div class="grid2"><div id="where-d" class="plot"></div><div id="where-o" class="plot"></div></div>
 
+<h2>Disagreement by intensity</h2>
+<p class="note">Each tool's 1% IDs by its own intensity estimate (Osprey: peak area; DIA-NN: Precursor.Quantity),
+since a peak the tools disagree on can be intense in one and faint in the other. Bars: what became of the ID in
+the other tool. Line (right axis): the fraction not agreed, where a bin has at least 20 IDs.</p>
+<div class="grid2"><div id="int-o" class="plot"></div><div id="int-d" class="plot"></div></div>
+
+<h2>Disagreement by retention time</h2>
+<p class="note">The same, by each tool's own RT (Osprey apex, DIA-NN RT), 1 min bins.</p>
+<div class="grid2"><div id="rtf-o" class="plot"></div><div id="rtf-d" class="plot"></div></div>
+
+<h2>Each tool scored against the other as ground truth</h2>
+<p class="note">One tool's 1% IDs are the truth. The other tool's scored precursor-runs, best q first, count as
+found only when the precursor is a truth ID and the peaks match; every other call, including the right
+precursor on a different peak, counts as a false positive. The marker is the ranked tool's own 1% cut.</p>
+<div class="grid2"><div id="roc-o" class="plot"></div><div id="roc-d" class="plot"></div></div>
+
 <h2>Confidence in one tool vs the other</h2>
-<p class="note">Run-level &minus;log10 q for every precursor either tool identifies (log color scale). The strip
-below 0 holds precursors the tool did not report. The off-diagonal corners are the disagreements tabled below.</p>
-<div id="heat" class="plot" style="height:520px"></div>
+<p class="note">Run-level &minus;log10 q (log color scale). The large panel holds every precursor-run where both
+tools chose the same peak, at any q either reported; the two below hold precursor-runs that at least one tool
+identifies at 1% on different peaks, or that only one tool reports. The strip below 0 holds precursors the tool did not report;
+DIA-NN's loose report stops at q 0.5 (0.3 on this axis). Dotted lines are the 1% run q cut; corner counts use run
+q only, so they can exceed the Venn, which also requires experiment q &le; 1%. &rho; is the Spearman correlation
+where both tools report a q.</p>
+<div id="heat-same" class="plot" style="height:560px"></div>
+<div class="grid2"><div id="heat-diff" class="plot" style="height:480px"></div><div id="heat-one" class="plot" style="height:480px"></div></div>
 
 <h2>Retention time</h2>
 <div class="grid2"><div id="rtbins" class="plot"></div><div id="rtdis" class="plot"></div></div>
@@ -136,13 +161,30 @@ whereBar('where-d', D.diann_only_in_osprey, 'DIA-NN-only IDs: Osprey run q', C.d
 whereBar('where-o', D.osprey_only_in_diann, 'Osprey-only IDs: DIA-NN run q', C.osprey);
 
 const mid = D.heat.edges.slice(0, -1).map((v, i) => (v + D.heat.edges[i + 1]) / 2);
-Plotly.newPlot('heat', [{ type: 'heatmap', x: mid, y: mid, z: D.heat.z, customdata: D.heat.n,
-  colorscale: 'Viridis', hovertemplate: 'Osprey %{x:.2f}<br>DIA-NN %{y:.2f}<br>n=%{customdata}<extra></extra>',
-  colorbar: { title: { text: 'log10 n' } } }],
-  layout({ xaxis: { title: { text: 'Osprey −log10 run q' }, range: [-0.8, 6.2], gridcolor: css('--rule') }, yaxis: { title: { text: 'DIA-NN −log10 run q' }, range: [-0.8, 6.2], gridcolor: css('--rule') },
-    shapes: [-Math.log10(D.weak), -Math.log10(D.confident)].flatMap(v => [
-      { type: 'line', x0: v, x1: v, y0: -0.8, y1: 6.2, line: { dash: 'dot', width: 1, color: css('--muted') } },
-      { type: 'line', y0: v, y1: v, x0: -0.8, x1: 6.2, line: { dash: 'dot', width: 1, color: css('--muted') } }]) }), cfg);
+function heat(id, key) {
+  const h = D.heat[key], q = h.quad, cut = 2, lo = -0.8, hi = 6.2;
+  const pct = n => `${fmt(n)} (${(100 * n / Math.max(h.total, 1)).toFixed(1)}%)`;
+  const note = (x, y, text, xanchor, yanchor) => ({ x, y, text, xanchor, yanchor, showarrow: false,
+    font: { size: 12, color: css('--ink') }, bgcolor: css('--bg'), opacity: 0.85 });
+  Plotly.newPlot(id, [{ type: 'heatmap', x: mid, y: mid, z: h.z, customdata: h.n, colorscale: 'Viridis',
+    hovertemplate: 'Osprey %{x:.2f}<br>DIA-NN %{y:.2f}<br>n=%{customdata}<extra></extra>',
+    colorbar: { title: { text: 'log10 n' } } }],
+    layout({ title: { text: `${key[0].toUpperCase() + key.slice(1)}: ${fmt(h.total)} precursor-run pairs` +
+        (h.rho === null ? '' : `, ρ = ${h.rho}`) },
+      xaxis: { title: { text: 'Osprey −log10 run q' }, range: [lo, hi], gridcolor: css('--rule') },
+      yaxis: { title: { text: 'DIA-NN −log10 run q' }, range: [lo, hi], gridcolor: css('--rule') },
+      shapes: [
+        { type: 'line', x0: cut, x1: cut, y0: lo, y1: hi, line: { dash: 'dot', width: 1.5, color: css('--ink') } },
+        { type: 'line', y0: cut, y1: cut, x0: lo, x1: hi, line: { dash: 'dot', width: 1.5, color: css('--ink') } }],
+      annotations: [
+        note(hi, hi, `both ≤ 1%<br>${pct(q.both)}`, 'right', 'top'),
+        note(hi, lo, `Osprey only ≤ 1%<br>${pct(q.osprey)}`, 'right', 'bottom'),
+        note(lo, hi, `DIA-NN only ≤ 1%<br>${pct(q.diann)}`, 'left', 'top'),
+        note(lo + 0.1, cut - 0.1, `neither<br>${pct(q.neither)}`, 'left', 'top')] }), cfg);
+}
+heat('heat-same', 'same peak');
+heat('heat-diff', 'different peak');
+heat('heat-one', 'one tool only');
 
 Plotly.newPlot('rtbins', ['both', 'Osprey only', 'DIA-NN only'].map(s => ({
   type: 'bar', name: s, x: D.rt_bins, y: D.rt_hist[s], marker: { color: STATUS_COLOR[s] }
@@ -179,6 +221,65 @@ Plotly.newPlot('rtdelta', PEAKS.map(p => {
 }), layout({ title: { text: 'ΔRT, Osprey apex − DIA-NN RT<br><sub>1 s bins; beyond ±60 s piles in the end bins</sub>' },
   barmode: 'overlay', bargap: 0, xaxis: { title: { text: 'ΔRT (s)' }, gridcolor: css('--rule') },
   yaxis: { title: { text: 'Pairs' }, type: 'log', gridcolor: css('--rule') }, legend: { orientation: 'h', y: -0.25 } }), cfg);
+
+// Venn, area-proportional: circle areas for the two totals, the distance chosen for the overlap area.
+(function () {
+  const v = D.venn, a = v.osprey + v.both, b = v.diann + v.both;
+  const ra = Math.sqrt(a / Math.PI), rb = Math.sqrt(b / Math.PI);
+  const lens = (d) => {
+    if (d >= ra + rb) return 0;
+    if (d <= Math.abs(ra - rb)) return Math.PI * Math.min(ra, rb) ** 2;
+    const x = (d * d + ra * ra - rb * rb) / (2 * d), y = d - x;
+    return ra * ra * Math.acos(x / ra) - x * Math.sqrt(ra * ra - x * x) + rb * rb * Math.acos(y / rb) - y * Math.sqrt(rb * rb - y * y);
+  };
+  let lo = Math.abs(ra - rb), hi = ra + rb;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (lens(m) > v.both) lo = m; else hi = m; }
+  const d = (lo + hi) / 2, W = 900, H = 320, scale = (H - 20) / (2 * Math.max(ra, rb));
+  const cx1 = W / 2 - d * scale / 2, cx2 = W / 2 + d * scale / 2, cy = H / 2;
+  const left = Math.min(cx1 - ra * scale, cx2 - rb * scale), right = Math.max(cx1 + ra * scale, cx2 + rb * scale);
+  const inner = (Math.max(cx1 - ra * scale, cx2 - rb * scale) + Math.min(cx1 + ra * scale, cx2 + rb * scale)) / 2;
+  const txt = (x, y, t, sub, anchor) => `<text x="${x}" y="${y}" text-anchor="${anchor || 'middle'}" fill="${css('--ink')}" font-size="16" font-weight="600">${t}</text>` +
+    (sub ? `<text x="${x}" y="${y + 18}" text-anchor="${anchor || 'middle'}" fill="${css('--muted')}" font-size="12">${sub}</text>` : '');
+  const per = n => `about ${fmt(Math.round(n / D.runs.length))} per run`;
+  document.getElementById('venn').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%">` +
+    `<circle cx="${cx1}" cy="${cy}" r="${ra * scale}" fill="${C.osprey}" fill-opacity="0.35" stroke="${C.osprey}"/>` +
+    `<circle cx="${cx2}" cy="${cy}" r="${rb * scale}" fill="${C.diann}" fill-opacity="0.35" stroke="${C.diann}"/>` +
+    txt(inner, cy, fmt(v.both), 'both, same peak') +
+    txt(left - 12, cy - 30, `Osprey only ${fmt(v.osprey)}`, `Osprey total ${fmt(a)}`, 'end') +
+    txt(right + 12, cy - 30, `DIA-NN only ${fmt(v.diann)}`, `DIA-NN total ${fmt(b)}`, 'start') + '</svg>';
+  document.getElementById('vennnote').textContent = `Precursor-run pairs over ${D.runs.length} runs. Both tools pass ` +
+    `${fmt(v.both_1pct_different_peak)} more pairs at 1% but on different peaks; they count in each tool's own region. ` +
+    `Shared: ${per(v.both)}; Osprey only: ${per(v.osprey)}; DIA-NN only: ${per(v.diann)}.`;
+})();
+
+const FATE_COLOR = { 'agree: same peak at 1%': C.both, 'same peak, other tool above 1%': C.same,
+  'different peak': C.diff, 'other tool reports no peak': C.one };
+function fatePlot(id, h, edges, title, xtitle) {
+  const mid = edges.slice(0, -1).map((v, i) => (v + edges[i + 1]) / 2);
+  Plotly.newPlot(id, D.fates.map(f => ({ type: 'bar', name: f, x: mid, y: h[f], marker: { color: FATE_COLOR[f] } }))
+    .concat([{ type: 'scatter', mode: 'lines+markers', name: 'fraction not agreed', x: mid, y: h.disagree_fraction,
+      yaxis: 'y2', line: { color: css('--ink'), width: 2 }, marker: { size: 4 }, connectgaps: false }]),
+    layout({ title: { text: title }, margin: { l: 60, r: 55, t: 36, b: 50 }, barmode: 'stack', bargap: 0, legend: { orientation: 'h', y: -0.3 },
+      xaxis: { title: { text: xtitle }, gridcolor: css('--rule') }, yaxis: { title: { text: 'Precursor-run pairs' }, gridcolor: css('--rule') },
+      yaxis2: { overlaying: 'y', side: 'right', range: [0, 1], tickformat: '.0%', showgrid: false } }), cfg);
+}
+fatePlot('int-o', D.osprey_by_intensity, D.osprey_i_edges, "Osprey's 1% IDs by Osprey peak area (bounds_area)", 'log10 Osprey bounds_area');
+fatePlot('int-d', D.diann_by_intensity, D.diann_i_edges, "DIA-NN's 1% IDs by DIA-NN quantity", 'log10 DIA-NN Precursor.Quantity');
+fatePlot('rtf-o', D.osprey_by_rt, D.rt_edges, "Osprey's 1% IDs by Osprey apex RT", 'RT (min)');
+fatePlot('rtf-d', D.diann_by_rt, D.rt_edges, "DIA-NN's 1% IDs by DIA-NN RT", 'RT (min)');
+
+function rocPlot(id, r, ranked, truth, color) {
+  const traces = [{ type: 'scatter', mode: 'lines', name: ranked, x: r.fp, y: r.tpr, customdata: r.q,
+    line: { color, width: 2 }, hovertemplate: 'q ≤ %{customdata}<br>false %{x:,}<br>found %{y:.1%}<extra></extra>' }];
+  if (r.at_1pct) traces.push({ type: 'scatter', mode: 'markers+text', name: `${ranked} q 1%`, x: [r.at_1pct.fp], y: [r.at_1pct.tpr],
+    text: [`q 1%: ${(100 * r.at_1pct.tpr).toFixed(1)}% found, ${fmt(r.at_1pct.fp)} false`], textposition: 'bottom right',
+    marker: { size: 10, color: css('--ink') } });
+  Plotly.newPlot(id, traces, layout({ title: { text: `${ranked} ranked, ${truth} 1% IDs as truth (${fmt(r.n_truth)})` }, showlegend: false,
+    xaxis: { title: { text: `${ranked} calls not confirmed by ${truth} (log; q ≤ 0.5)` }, type: 'log', gridcolor: css('--rule') },
+    yaxis: { title: { text: `Fraction of ${truth} IDs found on the same peak` }, range: [0, 1], tickformat: '.0%', gridcolor: css('--rule') } }), cfg);
+}
+rocPlot('roc-o', D.roc.osprey_vs_diann_truth, 'Osprey', 'DIA-NN', C.osprey);
+rocPlot('roc-d', D.roc.diann_vs_osprey_truth, 'DIA-NN', 'Osprey', C.diann);
 
 // Disagreement tables
 const TABS = { diann: `DIA-NN confident, Osprey weak (${fmt(D.disagree_counts.diann)})`,
