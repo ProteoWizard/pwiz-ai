@@ -109,8 +109,15 @@ PR #4952 merged as commit e42f817bad. The BOM tests skip dist/. On the PR itself
 packaged vendor-enabled artifacts: Windows #1170 (build 4245726, "Vendor support: ENABLED", all nine
 vendor reader assemblies staged) published Osprey-26.1.1.304-win-x64.zip (170.5 MB) and
 Osprey-Setup-26.1.1.304.exe (118.7 MB); Linux #605 (build 4245730) published
-Osprey-26.1.1.304-linux-x64.zip (206.7 MB). The first master build after this merge is the one that
-publishes vendor-enabled Windows installers from master. Still deferred: moving Skyline's pinned Osprey
-build (OspreyHelpers.OSPREY_VERSION and build id) to that master build and raising
-OSPREY_DOWNLOAD_SIZE_MB from 150 to about 170.
+Osprey-26.1.1.304-linux-x64.zip (206.7 MB). Master then built the merge: Windows #1172 (build 4245876)
+and Linux #607 (build 4245877), both green, same artifacts.
+
+No pin change follows (correcting the "deferred" item above, 2026-10-31). Since PR 4d (#4909) a master
+daily or developer build of Skyline downloads the latest successful master Osprey build through the
+TeamCity REST API (OspreyHelpers.GetLatestBuildDownloadInfo); only a release (build 0) and the
+FEATURE COMPLETE dailies (build 9) install the pinned OSPREY_VERSION / OSPREY_BUILD_ID, which the
+release process sets and pins on the server. So Skyline's wizard already downloads #1172's vendor-enabled
+package. The one residue is OSPREY_DOWNLOAD_SIZE_MB (150) in the download prompt, now about 170 for
+the vendor zip; TeamCity's artifact listing carries each file's size, so the prompt could state the real
+size of the build it is about to download instead of a constant.
 
