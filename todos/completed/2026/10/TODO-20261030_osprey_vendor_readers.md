@@ -5,11 +5,10 @@
 - **Checkout**: `C:\proj\pwiz`
 - **Base**: `master`
 - **Created**: 2026-10-30
-- **Status**: Code changes made and verified locally (build, tests, inspection, packaging, raw read). Needs the TeamCity
-  step arguments (below) before the installers carry vendor readers.
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: #4949
+- **PR**: [#4949](https://github.com/ProteoWizard/pwiz/pull/4949) (merged 2026-10-30)
 
 ## Goal
 
@@ -72,7 +71,7 @@ with no arguments, so every vendor reader built in its NO_VENDOR_SUPPORT mode.
       Osprey trigger. On 11e9d21b: Windows #1163 "Vendor support: ENABLED", win-x64 zip 170.5 MB,
       TestRawVsMzmlSpectraParity now reads the .raw (146 ms vs 6 ms); Linux #593 ENABLED
       (cross-platform SDKs), linux-x64 zip 206.7 MB. All green
-- [ ] After a vendor-enabled master build: move Skyline's pinned Osprey build
+- [ ] DEFERRED (follow-up, not in #4949): after a vendor-enabled master build, move Skyline's pinned Osprey build
       (`OspreyHelpers.OSPREY_VERSION` and build id) and raise `OSPREY_DOWNLOAD_SIZE_MB` (150) to about 170 for the vendor zip
 - [x] `/code-review medium`: 6 findings. Fixed 4: the IOTest early return now requires the
       no-vendor-support inner exception, package.ps1 also checks a native SDK (timsdata.dll) on
@@ -80,3 +79,15 @@ with no arguments, so every vendor reader built in its NO_VENDOR_SUPPORT mode.
       docs name the replacement) and a shared EULA helper (5 lines in two independent scripts).
       Re-verified: 646/646, inspection clean, package passes its SDK check and reads the .raw
 - [x] Commit 4e155ea1f7, PR #4949 (2026-10-30)
+
+## Progress Log
+
+### 2026-10-30 - Merged
+
+PR #4949 merged as commit 56baaced8c. Shipped: the Osprey TeamCity scripts take the vendor-license
+agreement from the build step (now set on both Osprey configs), package.ps1 bundles the vendor SDKs
+and EULAs and checks they landed, the vendor read errors are one-line UserMessageExceptions that say
+to convert to mzML, -d/--diagnostics became OSPREY_DIAGNOSTICS, and the --memstamp help was reworded.
+Deferred: moving Skyline's pinned Osprey package to a vendor-enabled master build (and its download
+size to about 170 MB), which is what makes Matt's wizard download read .raw files. The manual
+Perf/Regression gate was not run; the change touches packaging and messages, not search results.
