@@ -8,7 +8,8 @@
 - **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: [#4949](https://github.com/ProteoWizard/pwiz/pull/4949) (merged 2026-10-30)
+- **PR**: [#4949](https://github.com/ProteoWizard/pwiz/pull/4949) (merged 2026-10-30); follow-up
+  [#4952](https://github.com/ProteoWizard/pwiz/pull/4952) (merged 2026-10-31)
 
 ## Goal
 
@@ -101,4 +102,15 @@ extra PR build #1162 on the same agent had left a vendor package in dist/_stagin
 .config files there carry a BOM. Tests run before packaging, so the master build found them. Fix on
 Skyline/work/20261031_osprey_bom_skip_dist: dist added to the skip list. Verified locally with the
 three files staged under dist: 646/646, and the files keep their BOM (the test no longer rewrites them).
+
+### 2026-10-31 - Follow-up merged
+
+PR #4952 merged as commit e42f817bad. The BOM tests skip dist/. On the PR itself both Osprey configs
+packaged vendor-enabled artifacts: Windows #1170 (build 4245726, "Vendor support: ENABLED", all nine
+vendor reader assemblies staged) published Osprey-26.1.1.304-win-x64.zip (170.5 MB) and
+Osprey-Setup-26.1.1.304.exe (118.7 MB); Linux #605 (build 4245730) published
+Osprey-26.1.1.304-linux-x64.zip (206.7 MB). The first master build after this merge is the one that
+publishes vendor-enabled Windows installers from master. Still deferred: moving Skyline's pinned Osprey
+build (OspreyHelpers.OSPREY_VERSION and build id) to that master build and raising
+OSPREY_DOWNLOAD_SIZE_MB from 150 to about 170.
 
