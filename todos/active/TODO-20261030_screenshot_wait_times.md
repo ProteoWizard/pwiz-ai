@@ -118,3 +118,6 @@ TestPerf tutorials (~2 h at defaults, large downloads) only for the final confir
 
 Branch created from master c03ad0b5f7 in pwiz-work3. Levers committed (b7182ec46b), smoke-tested.
 Handing off to a night session.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20261030_screenshot_wait_times.md` before starting work.
