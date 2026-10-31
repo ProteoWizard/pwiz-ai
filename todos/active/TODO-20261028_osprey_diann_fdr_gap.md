@@ -811,6 +811,21 @@ rows of the ZT ablation table above exactly, fold C picks included.
 - Conclusion: keep all 41. The families are individually small and data-dependent, but none costs IDs anywhere
   beyond the C-pick noise, and together they are the largest single-run gain on every instrument.
 
+**Runner-up features on rescored peaks (2026-10-31, 57e016e86c).** Peaks rescored at override bounds reported a lone
+candidate (count 1, margins 0), the most target-like count. Mike's fix: rerun first-pass detection over the normal
+window and compare the imposed peak with the candidates it does not cover; `;runnerup=` keys PerFileRescoring /
+SecondPassFDR only when a runner-up feature is unmasked. 647/647, inspection clean, Stellar gate PASSED. Every
+transfer arm with the runner-up features on was rerun (`fam2-*`, snapshot `_bin\fdr-gap-runnerup-57e016e86c`,
+`OSPREY_VERSION_OVERRIDE=26.1.1.303` to adopt fam-all41's scores; launcher `runnerup-rerun.ps1`, log
+`D:\test\osprey-runs\fdr-gap\runnerup-rerun.log`). Counts moved by at most 16 precursors (Astral 41 SVM 106,064 ->
+106,052 at q 1%, 96,270 -> 96,257 at FDP 0.5%; GBDT 102,232 -> 102,227; Stellar <= 2; ZT <= 1). No conclusion changed;
+doc tables updated (01853d89f1). New row: Stellar 41-feature SVM at 12 XICs 27,451 (0.69%) / 26,585 at FDP 0.5% (-16%
+vs 6 XICs). Cost of the second detection: per-file rescoring Astral +25-28% (209 -> 267 s; about 2% of the search),
+Stellar +11%, ZT none. Mike suggested reusing the first pass's stored CWT candidates instead; not done - pick scores
+are not stored (adding them to `cwt_candidates` breaks Rust byte parity), the count is capped at top 5, and forced
+gap-fills have no candidates; at ~2% the re-detection was kept. Open option: run it only when a runner-up feature is
+unmasked, so default runs pay nothing.
+
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
   single best peptide, target vs decoy paired by base id, scored from the first pass's pre-compaction
