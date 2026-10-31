@@ -87,3 +87,14 @@ NN-style combiner over 100+ scores is required to compete.
   (log4 41,149). One linear weight cannot serve both intensity regimes. GBDT rescues the strong peaks with no
   transform (all47: VVDVLDSIK 0.001, SVEETLR 0.002) and all53-GBDT keeps GVIECLK at 0.014 (SVM 0.091) - the
   interaction a nonlinear combiner models is what the linear SVM is missing on these peaks.
+- 2026-10-30 eve: why explained_intensity is negative (`sessions\20261028-diann\ei_probe*.py`, `.out`). It is a
+  ratio (matched / apex-spectrum TIC), so #4412's log10 conditioning of absolute intensities never covered it. The
+  negative weight is in master too (pin21: -0.169 at 3 files, -0.197 at 21) and survives log (logexpl -0.175).
+  Alone on the training contrast (1% targets vs decoys) it is strong and positive (AUC 0.868; apex 0.703); in a
+  47-feature logistic it turns -0.48, and no single removal flips it - it is collinear with the quality family
+  (mp min fragment R2 +0.69, good-fit count +0.62, SG xcorr +0.56), so the model weights only its abundance residual,
+  negatively, and that penalty grows without bound in the tail (clean strong peaks). log10 sharpness = 1.12 x log10
+  apex + const (Spearman +0.90 on positives); its residual after apex has AUC 0.484, so it carries no shape
+  information and the -0.507 / +0.395 pair is a width proxy (targets 0.145 min vs decoys 0.094). Supports #4466
+  part 2. Next: a bounded EI (clip at a decoy quantile) vs EI split into log matched intensity + quality; width or
+  scale-free sharpness in place of log sharpness.
