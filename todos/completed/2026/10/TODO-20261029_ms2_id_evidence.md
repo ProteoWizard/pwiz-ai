@@ -35,7 +35,8 @@ Not known to be a .NET 10 regression: MS Amanda 2.0 -> 3.0 produced the false ch
 - [x] Library Match combo: list all spectra of the peptide (all charges and label types), exact
       precursor matches first, for both light and heavy precursors
 - [x] Library Match title: name the label type of the spectrum shown, not the selected precursor
-- [ ] Spectral Library Explorer: keep consistent with the Library Match combo change
+- [x] Spectral Library Explorer: keep consistent with the Library Match combo change (no change
+      needed - ViewLibraryDlg already lists each LibKey as its own row)
 - [ ] Check behavior on 26.1.1 with this data
 
 ## Regression Test
@@ -137,8 +138,8 @@ Code map:
 PR #4947 merged as commit 8944f3f2a4. Shipped: outlier MS/MS ID rejection before `ms2_ids`
 extraction (full-scan files, IDs from or aligned to the file), chromatogram ID lines for every pooled
 library precursor labeled by charge and label type, all of the peptide's spectra in the Library Match
-list, and a Library Match title naming the spectrum shown. Deferred: Spectral Library Explorer
-consistency with the Library Match change, and the 26.1.1 behavior check. Brendan ran and verified
+list, and a Library Match title naming the spectrum shown. The Spectral Library Explorer needed no
+change (it already lists each charge as its own row). Deferred: the 26.1.1 behavior check. Brendan ran and verified
 all screenshots with the final rule before the merge, and the overnight TeamCity Skyline Perf and
 Tutorial runs passed (all 19 checks green), so the DIA-Umpire FullFileset values and TestDdaTutorial
 `VerifyOutlierIdIgnored` noted as pending on 2026-10-30 are confirmed.
