@@ -277,8 +277,8 @@ Open:
       target, and re-competing those scores makes q optimistic. Fix to test: build the decoy's consensus from its
       picks in the runs where its target qualified (or never move a pair's best run); measure against
       reconciliation off
-- [ ] Ablate with OSPREY_FEATURE_MASK: which of the 20 new features carry the gain (SVM weights say
-      peak_spectrum_cosine_mean/sd, peak_candidate_count, context_precursor_mz, the intensity shares)
+- [x] Ablate with OSPREY_FEATURE_MASK: which of the 20 new features carry the gain. Done 2026-10-30 (leave one
+      family out, SVM, Astral / Stellar / ZT): data-dependent, none costs IDs anywhere; keep all 41
 - [ ] Stellar check that 12 XICs + features + GBDT do not cost IDs where Osprey already leads
 - [ ] Remaining gap (~25% at FDP 0.5%): further Radiant families (alt-charge features, amino-acid counts for
       GBDT), and the classifier (bagged NN like DIA-NN/Radiant)
@@ -754,6 +754,56 @@ by hard link (their validity key holds neither the FDR model nor the training si
   right from wrong. Not tested.
 - The older run folders `ztscan-full-20261025`, `ztscan-centrix`, `ztscan-portable` and `demux-speed-20261026` moved
   to `\\maccoss-nas\storage\osprey-runs-archive\osprey-runs` (T:) on 2026-10-30 to free D:.
+
+**Leave-one-family-out ablation (2026-10-30; Mike: "Start ablations", answering whether all 41 features are needed
+for every data type).** Fixed build fbab5a883c (snapshot `_bin\fdr-gap-featmask-fbab5a883c`), 41-feature SVM,
+transfer, attached library; per dataset one full search with every feature (`fam-all41`), then FDR-only arms on its
+hard-linked scores (every one logged `PerFileScoring:skipping`). Families: runner-up (3), context (3),
+per-fragment-rank (12), spectrum across the peak (2); `fam-default21` = mask unset. Launcher
+`ai\.tmp\sessions\20261028-fdrgap\family-ablation.ps1`, log `D:\test\osprey-runs\fdr-gap\family-ablation.log`, arms
+`<dataset root>\fam-*`. Experiment level, combined entrapment FDP. The Stellar `fam-all41` reproduced the old-build
+`feat-transfer` exactly (33,120 / 31,542), so moving the mask to load time changed nothing unmasked.
+
+| Astral, 12 XICs | fold C | at q 1% (FDP) | at FDP 0.5% | at FDP 1% |
+|---|---|---|---|---|
+| all 41 | 0.01 / 0.1 / 0.01 | 106,064 (1.04%) | 96,270 | 105,498 |
+| no runner-up | 0.1 / 1 / 0.1 | 105,387 (1.10%) | 96,006 (-0.3%) | 104,473 (-1.0%) |
+| no context | 0.1 / 0.01 / 0.1 | 105,065 (1.05%) | 95,694 (-0.6%) | 104,536 (-0.9%) |
+| no per-fragment-rank | 0.01 / 0.1 / 0.1 | 106,178 (1.05%) | 97,117 (+0.9%) | 105,718 (+0.2%) |
+| no spectrum across peak | 0.1 / 0.01 / 0.1 | 101,845 (1.00%) | 93,438 (-2.9%) | 101,879 (-3.4%) |
+| 21 (all new out) | 0.1 / 0.1 / 0.1 | 100,071 (1.01%) | 90,238 (-6.3%) | 99,946 (-5.3%) |
+
+| Stellar, 6 XICs | fold C | at q 1% (FDP) | at FDP 0.5% | at FDP 1% |
+|---|---|---|---|---|
+| all 41 | 0.01 / 0.01 / 0.01 | 33,120 (0.77%) | 31,542 | 34,360 |
+| no runner-up | 0.01 / 0.01 / 0.01 | 33,001 (0.74%) | 31,664 (+0.4%) | 34,251 (-0.3%) |
+| no context | 0.01 / 0.01 / 0.01 | 32,234 (0.79%) | 30,874 (-2.1%) | 33,379 (-2.9%) |
+| no per-fragment-rank | 0.01 / 0.01 / 0.1 | 33,226 (0.75%) | 31,590 (+0.2%) | 34,195 (-0.5%) |
+| no spectrum across peak | 0.01 / 1 / 0.01 | 32,685 (0.72%) | 31,271 (-0.9%) | 34,204 (-0.5%) |
+| 21 (all new out) | 0.1 / 0.01 / 0.01 | 31,693 (0.71%) | 30,012 (-4.9%) | 32,663 (-4.9%) |
+
+| ZT Scan, 6 XICs | fold C | at q 1% (FDP) | at FDP 0.5% | at FDP 1% |
+|---|---|---|---|---|
+| all 41 | 1 / 0.1 / 1 | 31,944 (0.88%) | 28,004 | 32,708 |
+| no runner-up | 0.1 / 1 / 1 | 30,910 (0.95%) | 22,774 (-18.7%) | 31,461 (-3.8%) |
+| no context | 0.1 / 0.1 / 1 | 31,324 (0.85%) | 26,825 (-4.2%) | 32,232 (-1.5%) |
+| no per-fragment-rank | 0.1 / 0.1 / 10 | 31,063 (0.95%) | 24,616 (-12.1%) | 31,392 (-4.0%) |
+| no spectrum across peak | 10 / 0.1 / 1 | 31,258 (0.82%) | 25,887 (-7.6%) | 32,360 (-1.1%) |
+| 21 (all new out) | 1 / 0.1 / 1 | 29,236 (0.98%) | 20,450 (-27%) | 29,370 (-10.2%) |
+
+The ZT `fam-all41` and `fam-default21` reproduced the old-build "41 features, SVM" and "21 features, SVM (default)"
+rows of the ZT ablation table above exactly, fold C picks included.
+
+- The 20 new features together help on every data type under the SVM: Astral +6.7% at FDP 0.5% (+5.6% at 1%),
+  Stellar +5.1% (+5.2%), ZT +37% (+11.4%). Every arm calibrated or conservative.
+- No single family is needed everywhere, and which one matters depends on the data: spectrum across the peak on
+  Astral (about half the gain), context on Stellar, runner-up and per-fragment-rank on ZT.
+- Per-fragment-rank (12 of the 20) is worth nothing on Astral or Stellar (dropping it +0.9% / +0.2% at FDP 0.5%) but
+  -4.0% at FDP 1% on ZT, so the data do not support dropping it. Every ZT leave-one-out moved the fold C picks, and on
+  ZT the C rule alone moves -14% at FDP 0.5% and -3% at 1%: the ZT per-family numbers sit at about that noise level,
+  while the all-20 gain (+11% at 1%) is well above it.
+- Conclusion: keep all 41. The families are individually small and data-dependent, but none costs IDs anywhere
+  beyond the C-pick noise, and together they are the largest single-run gain on every instrument.
 
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its
