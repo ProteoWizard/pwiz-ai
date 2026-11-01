@@ -2620,6 +2620,9 @@ factor for gaps. No-op at 100%. 289 sites in 30 screenshot tests converted (suba
      have the existing tutorial page script (the one that adds the TOC) switch `<img>` to them on high-DPI
      displays (`window.devicePixelRatio >= 1.5`), or emit `srcset="s-NN.png 1x, 1-5x/s-NN.png 1.5x"` so
      the browser picks; images declared 1.5x display at natural size / 1.5 CSS px.
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260820_dpiAwareness.md` before starting work.
+
 5. Then: Brendan reruns tutorials + perf at 150%, push the three local commits, write the acceptance
    review for this PR.
 
