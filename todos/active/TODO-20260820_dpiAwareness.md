@@ -2593,6 +2593,33 @@ factor for gaps. No-op at 100%. 289 sites in 30 screenshot tests converted (suba
    (~1.67) - CustomReports, DiaSwath, Ms1; (wide windows fit: 3840x2160 monitors);
    GroupedStudies1 1920x1032 left unscaled; LiveReports:681 and AcquisitionComparison:676 build clip
    rectangles from screen coordinates then ClipBitmap scales again (possible double scaling).
+4b. Brendan's first full pass of all 150% screenshots (2026-11-01), grouped by likely cause:
+   - **Sizes not scaled** (a path the 289-site conversion missed - check RestoreViewOnScreen/.view
+     layouts, ResizeFormOnScreen, sizes set in helpers): DIA-PASEF s-05, DIA-QE s-04, DIA-TTOF s-04,
+     DIA-Umpire-TTOF s-15, GroupedStudies s-08, SmallMoleculeQuantification s-16/s-18/s-20 (form height).
+   - **Too short / too narrow**: DIA-PASEF s-16 (odd layout when short), DIA-QE s-15, DIA-TTOF s-15,
+     GroupedStudies s-65/s-68/s-69/s-74, LiveReports s-04, PRMOrbitrap s-29/s-30; MethodEdit s-16/s-17
+     not wide enough.
+   - **Menus truncated** (clip/capture from the menu's bounds, item 3): CustomReports s-16, LiveReports
+     s-04, AuditLog s-03/s-04/s-20.
+   - **Clip starts too low at the top** (standard shows tabs and some toolbar): DIA-PASEF s-18/s-19,
+     DIA-QE s-17/s-18/s-19, DIA-TTOF same, DIA-Umpire-TTOF s-19/s-20 - likely ClipDockingRect's fixed
+     hBorder/topBorder/bottomBorder (DiaSwath ~1435, DiaUmpire ~951).
+   - **Docked window gets a redrawn window border** (only at high DPI; CleanupBorder treating a docked
+     pane like a form?): CustomReports s-24, DIA s-16, GroupedStudies s-16, iRT s-12, LiveReports s-06,
+     PeakPicking s-02/s-10; related: MethodRefine s-08/s-10/s-13/s-14 docked titlebar gap at right edge,
+     MethodEdit s-08 (clipped docked window, screen dirt top/left), s-18 (dirt on left edge).
+   - **Size grip (thumb) redrawn badly** - too small/misplaced, likely CleanupBorder drawing it at 96-DPI
+     geometry: GroupedStudies s-01, LiveReports s-03/s-07, MethodEdit s-14, MS1Filtering s-17.
+   - **Red highlight rectangles at fixed coordinates**: LiveReports s-42 too short, MS1Filtering s-17
+     too far right.
+   - **Other**: DDASearch s-16 Peak Areas x-axis labels vertical (horizontal in standard); DIA-PASEF
+     s-14 progress plot missing peaks (import graph timing? see PR #4951 IsRenderComplete);
+     SmallMoleculeQuantification s-02/s-03 dark gray fill at the right of the column type row.
+   - **Website idea (Brendan)**: publish 150% screenshots in a per-tutorial subfolder (e.g. `1-5x/`) and
+     have the existing tutorial page script (the one that adds the TOC) switch `<img>` to them on high-DPI
+     displays (`window.devicePixelRatio >= 1.5`), or emit `srcset="s-NN.png 1x, 1-5x/s-NN.png 1.5x"` so
+     the browser picks; images declared 1.5x display at natural size / 1.5 CSS px.
 5. Then: Brendan reruns tutorials + perf at 150%, push the three local commits, write the acceptance
    review for this PR.
 
