@@ -5,10 +5,10 @@
 - **Checkout**: `C:\Dev\BugFix`
 - **Base**: `master`
 - **Created**: 2026-10-27
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
 - **Support thread**: https://skyline.ms/home/support/announcements-thread.view?rowId=76102 (Rafael)
-- **PR**: [#4926](https://github.com/ProteoWizard/pwiz/pull/4926)
+- **PR**: [#4926](https://github.com/ProteoWizard/pwiz/pull/4926) (merged 2026-11-01)
 
 ## Objective
 
@@ -30,3 +30,15 @@ Rafael's MS-DIAL and FragHub MSP examples:
 - matchms "riken" exports use the MS-DIAL field names with RETENTIONTIME in seconds; that is why the guess warns.
 - `C6:OH b` in TEXT_LIB_NO_ADDUCT has NIST-style `RetentionTime: 1.52616` that looks like minutes but is read as seconds (unchanged).
 - Out of scope: Rafael's request to copy library RT into Explicit Retention Time.
+
+## Progress Log
+
+### 2026-11-01 - Merged
+
+PR #4926 merged as commit bfa16023. Shipped: bare `RetentionTime:` read as minutes for entries with
+MS-DIAL cues (seconds otherwise), FragHub `RT:` (minutes) and `RetentionTimeSecs:` support,
+`PRECURSORTYPE:` read as the adduct, a once-per-assumed-unit-per-file async warning naming the file,
+line and entry and suggesting the file be edited and re-imported, and NIST cache format bumped 7 -> 8.
+Review fix: an unparsed `RETENTIONTIME:` no longer marks a later `RT:` as seconds. Deferred: the
+`C6:OH b` style (`Precursor_type:` + `CompoundClass:`) is still read as seconds pending knowing its
+writer; Rafael's Explicit Retention Time request was not addressed.
