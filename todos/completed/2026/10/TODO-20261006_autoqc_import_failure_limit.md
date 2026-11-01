@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261006_autoqc_import_failure_limit`
 - **Base**: `Skyline/skyline_26_1_1`
 - **Created**: 2026-10-06, branch created 2026-10-08
-- **Status**: In Progress. VM tests done, all commits pushed
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#4939](https://github.com/ProteoWizard/pwiz/pull/4939)
+- **PR**: [#4939](https://github.com/ProteoWizard/pwiz/pull/4939) (merged 2026-11-01)
 
 ## Objective
 
@@ -111,10 +111,11 @@ and imported the failed file. The custom-folder message named the folder.
 - [x] PR #4939 against `Skyline/skyline_26_1_1` (2026-10-29)
 - [x] VM tests (above)
 - [x] Push `0e34cb14dc`
-- [ ] Update the PR description with the VM tests
+- [x] Update the PR description with the VM tests
 - [x] Test 2, a ClickOnce Skyline-daily update while a configuration runs (developer computer, 2026-10-31). The VM
       checkpoint `AutoQC 284 + ClickOnce daily 279 real feed` can repeat it on the next ClickOnce Skyline-daily
-- [ ] Check the PR's CI before merge
+- [x] Check the PR's CI before merge. The Perf and Tutorial check failed because the TeamCity agent's disk was full,
+      and the PR was merged past it
 
 ## Key Files
 
@@ -124,3 +125,12 @@ and imported the failed file. The custom-folder message named the folder.
 - `pwiz_tools/Skyline/Executables/AutoQC/AutoQC/AutoQcConfigManager.cs` - `SetConfigEnabled`
 - `pwiz_tools/Skyline/Executables/SharedBatch/SharedBatch/Logger.cs` - `Init`
 - `pwiz_tools/Skyline/Executables/AutoQC/AutoQCTest/ProcessRunnerTest.cs`
+
+## Progress Log
+
+### 2026-11-01 - Merged
+
+PR #4939 merged into `Skyline/skyline_26_1_1` as commit `901b516594`, for the AutoQC release. A configuration now
+stops with an error and a restart or edit message when its Skyline is uninstalled or replaced, instead of retrying
+its imports forever. The accepted limits above were not changed. Copilot's finding on the extra Skyline runs in
+`ProcessOneFile` was answered and left as it is. The squash commit body has no `See TODO-...` line.
