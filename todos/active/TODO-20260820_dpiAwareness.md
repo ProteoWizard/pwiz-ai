@@ -2536,3 +2536,59 @@ checkable alphabetical sidebar. Chunk 1: 5 before/after pairs captured
 EditIsolationSchemeDlg) - awaiting developer review. Image-diff automation
 ruled a dead end (logical-res captures). **Next session handoff**: read
 ai/.tmp/handoff-dpi-form-sweep.md for the full continue protocol.
+
+
+### 2026-10-31 - Brendan's review: 100% screenshot gate, DPI-aware screenshot runs, test window scaling
+
+Setup: Brendan reviews in `C:\proj\pwiz` on local branch `review/4602-fast-screenshots` = this branch +
+master + PR #4951 (screenshot waits; not for push). PR commits are made in `C:\proj\pwiz-work3` on
+`Skyline/work/20260820_dpiAwareness` and merged into the review branch. Run data and scripts:
+`D:\test\skyline-runs\20261030_screenshot_waits\`, `ai/.tmp/sessions/20261030-night/`
+(run-arm.ps1 -Root -DpiAware, compare_shots.py, vs_git.py, overlay.py, icon_only.py).
+
+**Test 1 - 100%, en TestTutorial, nothing should change** (vs master+#4951 baseline `mA`): 144/717
+differed. 126 = docking tab icons: developers PR #7's frame selection drew each icon's own 16-px frame
+at 96 DPI, and Targets' icon is SkylineDoc.ico (the .sky Explorer icon; master's tab always showed the
+32-px frame shrunk nearest-neighbor). Fixed: developers branch `Skyline/work/20261031_docking_icon_frames`
+(db99175, pushed; PR to be opened by Brendan - gh lacks SSO for uw-maccosslab) keeps stock drawing when
+`DpiHelper.IsScaled` is false; this branch 55c8d403f7 installs that DLL and reverts eee6eb420f's
+SequenceTreeForm icon to master. 9 = PeakPicking graphs Dock=Fill (d9025cb9a8), accepted by Brendan:
+ec5408f92d. Pushed through ec5408f92d; AbsoluteQuant 16/16 identical after the fix (full rerun pending).
+
+**DPI-aware screenshot runs**: TestRunner defaults to `dpiaware=off`, so every screenshot run above
+100% was bitmap-stretched (blurry). 7707c2cffe (pushed): SkylineTester adds `dpiaware=on` for any
+`pause=-N` screenshot mode. pwiz-ai fad3f466: `Run-Tests.ps1 -DpiAware`.
+
+**Test window sizes** (local commits, NOT pushed: b8aecfddd9, faee6bdb4b, 8dc27e495d):
+`AbstractFunctionalTest.ScaledSize(window, w, h)` / `ScaledWidth` / `ScaledHeight` scale the client area
+by the AutoScaleMode.Font ratio (CurrentAutoScaleDimensions / design 6x13; ~1.67 x 1.54 at 150%) plus
+the current non-client size, so test-sized windows match designer-sized dialogs; `Scaled(px)` = DPI
+factor for gaps. No-op at 100%. 289 sites in 30 screenshot tests converted (subagent; report in
+`ai/.tmp/agent-scaling-status.md`). Brendan's full 150% run: 1:42:55 (was 3h+), 2 failures.
+
+**Open - next session**
+1. TestTargetedMSMSTutorial `ValidatePeakTooltips` (TargetedMSMSTutorialTest.cs ~1397) times out at 150%:
+   hover points `(191,95)`, `(169,175)`, `(190,5)` are 100% pixels in the spectrum graph. Derive them from
+   data coordinates (y8 peak, m/z 951.6229, intensity 3814516) via
+   `SkylineWindow.GraphSpectrum.ZedGraphControl.GraphPane.GeneralTransform` (plain x1.5 misses: margins
+   grow with the font). Third point = above the peak (no tooltip).
+2. TestDriftTimePredictorTutorial fails at DriftTimePredictorTutorialTest.cs:248 `ClickChromatogram`
+   "Full-scan dot not present" at 150%. Click path is DPI-independent (GeneralTransform; tracking radius
+   already `DpiUtil.Scale(this, 20)`), so suspect graph state: the test's wide windows (wideWidth) may
+   exceed the screen at 150% and be clamped. Run the test alone at 150% with screenshots and look.
+3. AuditLog s-03/s-04 (AuditLogTutorialTest.cs:164-172, Undo/Redo list expanded): fixed clip rectangles
+   `(0,0,713,131)` / `(0,0,743,127)` are x1.5 by `ClipBitmap`, but the drop-down's position and
+   font-scaled size are not uniform. Compute the clip from the undo/redo drop-down's screen bounds relative
+   to SkylineWindow (plus a margin), in device pixels (ClipBitmap multiplies by the scaling factor, so add
+   a device-pixel overload or divide first).
+4. Other subagent flags: grid column widths / SplitterDistance use `Scaled` (1.5) not the layout ratio
+   (~1.67) - CustomReports, DiaSwath, Ms1; windows sized 1330-1600 px exceed the screen at 150%;
+   GroupedStudies1 1920x1032 left unscaled; LiveReports:681 and AcquisitionComparison:676 build clip
+   rectangles from screen coordinates then ClipBitmap scales again (possible double scaling).
+5. Then: Brendan reruns tutorials + perf at 150%, push the three local commits, write the acceptance
+   review for this PR.
+
+Related, not on this PR: ImageComparer F5 fix (`Skyline/work/20261031_imagecomparer_f5` in pwiz-work3,
+c5f66ab203, local) + "Same" size mode (key S; uncommitted in C:\proj\pwiz) -> one small PR from master
+once Brendan approves. `Build-DigitalRune.ps1 -Install` still targets `pwiz_tools/Shared/Lib/` instead of
+`Lib/DigitalRune/net10/`. PR #4951 (screenshot waits) open: PeakBoundaryImputation s-19 open item.
