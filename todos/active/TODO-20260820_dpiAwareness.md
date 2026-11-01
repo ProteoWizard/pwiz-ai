@@ -2581,7 +2581,11 @@ factor for gaps. No-op at 100%. 289 sites in 30 screenshot tests converted (suba
    `(0,0,713,131)` / `(0,0,743,127)` are x1.5 by `ClipBitmap`, but the drop-down's position and
    font-scaled size are not uniform. Compute the clip from the undo/redo drop-down's screen bounds relative
    to SkylineWindow (plus a margin), in device pixels (ClipBitmap multiplies by the scaling factor, so add
-   a device-pixel overload or divide first).
+   a device-pixel overload or divide first). Same pattern: AuditLog s-20 (AuditLogTutorialTest.cs:429,
+   "Audit Log Reports menu"), clip width 503 fixed - derive it from the open Reports drop-down menu.
+   Likely a shared helper: clip a screenshot to a window plus an open drop-down/menu's bounds.
+   Brendan's 150% image walk-through: done through AuditLog, starting CustomReports (2026-10-31);
+   expect more clip/menu cases like these in later tutorials.
 4. Other subagent flags: grid column widths / SplitterDistance use `Scaled` (1.5) not the layout ratio
    (~1.67) - CustomReports, DiaSwath, Ms1; (wide windows fit: 3840x2160 monitors);
    GroupedStudies1 1920x1032 left unscaled; LiveReports:681 and AcquisitionComparison:676 build clip
