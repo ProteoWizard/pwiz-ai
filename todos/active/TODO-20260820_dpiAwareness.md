@@ -2574,15 +2574,16 @@ factor for gaps. No-op at 100%. 289 sites in 30 screenshot tests converted (suba
    grow with the font). Third point = above the peak (no tooltip).
 2. TestDriftTimePredictorTutorial fails at DriftTimePredictorTutorialTest.cs:248 `ClickChromatogram`
    "Full-scan dot not present" at 150%. Click path is DPI-independent (GeneralTransform; tracking radius
-   already `DpiUtil.Scale(this, 20)`), so suspect graph state: the test's wide windows (wideWidth) may
-   exceed the screen at 150% and be clamped. Run the test alone at 150% with screenshots and look.
+   already `DpiUtil.Scale(this, 20)`), so suspect graph state at that point (pane layout or axis range
+   with the font-scaled window). Not screen clamping: Brendan's monitors are 3840x2160 at 150%, so
+   windows up to ~2700 device px fit. Run the test alone at 150% with screenshots and look.
 3. AuditLog s-03/s-04 (AuditLogTutorialTest.cs:164-172, Undo/Redo list expanded): fixed clip rectangles
    `(0,0,713,131)` / `(0,0,743,127)` are x1.5 by `ClipBitmap`, but the drop-down's position and
    font-scaled size are not uniform. Compute the clip from the undo/redo drop-down's screen bounds relative
    to SkylineWindow (plus a margin), in device pixels (ClipBitmap multiplies by the scaling factor, so add
    a device-pixel overload or divide first).
 4. Other subagent flags: grid column widths / SplitterDistance use `Scaled` (1.5) not the layout ratio
-   (~1.67) - CustomReports, DiaSwath, Ms1; windows sized 1330-1600 px exceed the screen at 150%;
+   (~1.67) - CustomReports, DiaSwath, Ms1; (wide windows fit: 3840x2160 monitors);
    GroupedStudies1 1920x1032 left unscaled; LiveReports:681 and AcquisitionComparison:676 build clip
    rectangles from screen coordinates then ClipBitmap scales again (possible double scaling).
 5. Then: Brendan reruns tutorials + perf at 150%, push the three local commits, write the acceptance
