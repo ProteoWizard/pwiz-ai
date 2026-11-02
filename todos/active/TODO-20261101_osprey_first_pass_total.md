@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4463](https://github.com/ProteoWizard/pwiz/issues/4463)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4957](https://github.com/ProteoWizard/pwiz/pull/4957)
 - **Worktree**: `D:\Dev\pwiz-unimod` (night-session worktree of `C:\proj\pwiz`, after PR #4956)
 
 ## Objective
