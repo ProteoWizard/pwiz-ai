@@ -7,7 +7,7 @@
 - **Status**: PR open - guard added; #4645 fixed by #4860 (see Progress Log)
 - **GitHub Issue**: [#4645](https://github.com/ProteoWizard/pwiz/issues/4645)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4966](https://github.com/ProteoWizard/pwiz/pull/4966)
 - **Worktree**: `D:\Dev\pwiz-fdpcurve`
 
 ## Objective
@@ -113,3 +113,4 @@ the change that fixed it, and add a mode-3 guard so the agreement cannot silentl
   guard runs on StellarLibDecoy only. Since #4860 both datasets reach the same pairing code, but
   generated-decoy behavior across the chain (incl. the latent ExcludedEntrapment asymmetry above)
   is only covered if mode 3 is un-cut there (~9-12 min more per full gate).
+- Status comment posted on #4645: https://github.com/ProteoWizard/pwiz/issues/4645#issuecomment-6570082381
