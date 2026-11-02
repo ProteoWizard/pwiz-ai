@@ -13,7 +13,7 @@
   training-set views (`TestSubsetDiagnosticsAddedLater` would need those keys exempted).
 - **GitHub Issue**: [#4550](https://github.com/ProteoWizard/pwiz/issues/4550), [#4467](https://github.com/ProteoWizard/pwiz/issues/4467)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4965](https://github.com/ProteoWizard/pwiz/pull/4965)
 - **Worktree**: `D:\Dev\pwiz-featdiag` (overnight agent worktree of `C:\proj\pwiz`)
 
 ## Objective
@@ -44,7 +44,7 @@ calculators one feature at a time (see TODO-20261030_osprey_scoring_library.md):
 - [x] Unit tests (metric math) + SubsetPipelineTest assertion
 - [x] Gates: Build-Osprey -RunTests -RunInspection; regression Stellar + StellarLibDecoy
 - [x] Review (fresh agent)
-- [ ] PR
+- [x] PR #4965 opened (no TeamCity run triggered; it needs Brendan's go-ahead)
 
 ## Decisions
 
@@ -108,7 +108,7 @@ the ROC threshold. Dropped: none.
   (`ai/.tmp/sessions/20261101-featdiag/precommit-6.log`). Regression r1 Stellar PASSED and
   StellarLibDecoy PASSED incl. mode1b diagnostics vs golden and mode3 HPC chain
   (`ai/.tmp/sessions/20261101-featdiag/regression-*-r1.log`); r2 on the post-review code
-  (`regression-*-r2.log`).
+  (`regression-*-r2.log`): Stellar PASSED, StellarLibDecoy PASSED.
 - Rendered the StellarLibDecoy report with the final template in headless Edge: no console
   errors; on Stellar xcorr and SG-weighted xcorr group at r = 0.96, joint permutation drop 99.9%.
 - Committed f8641f70e2.
