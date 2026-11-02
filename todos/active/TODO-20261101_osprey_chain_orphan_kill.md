@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4503](https://github.com/ProteoWizard/pwiz/issues/4503)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4960](https://github.com/ProteoWizard/pwiz/pull/4960)
 
 ## Objective
 
@@ -58,7 +58,7 @@ the next TeamCity build. Make `regression.ps1` reclaim the processes it launches
       export try/finally). Dropped: a hand-started run from this bin whose console closed is
       swept (that is the decision above); Wait-Process on a reused PID costs at most 60 s; logging
       the killed process's command line is cosmetic.
-- [ ] PR
+- [x] PR #4960 opened
 
 ## Progress Log
 
