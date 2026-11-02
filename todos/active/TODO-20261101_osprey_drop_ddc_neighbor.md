@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4709](https://github.com/ProteoWizard/pwiz/issues/4709)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4962](https://github.com/ProteoWizard/pwiz/pull/4962)
 
 ## Objective
 
@@ -53,7 +53,7 @@ Stage 4 dedup internals public.
       defects; no remaining reader of the column, keys or property under pwiz_tools; the bump is
       read in one place; Stage 4 dedup unchanged (visibility only). The int[] column in the new
       CarafeSharp case was the one open question - the test passed, so Rewrite writes it
-- [ ] PR
+- [x] PR #4962 opened
 
 ## Progress Log
 
