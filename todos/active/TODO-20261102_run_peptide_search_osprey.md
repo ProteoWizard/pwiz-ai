@@ -5,10 +5,10 @@
 - **Base**: `Skyline/work/20261029_run_peptide_search_diann` (PR [#4944](https://github.com/ProteoWizard/pwiz/pull/4944), PR C),
   stacked on #4928 (PR B) and #4923 (PR A)
 - **Created**: 2026-11-02
-- **Status**: In Progress
+- **Status**: In Review
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4972](https://github.com/ProteoWizard/pwiz/pull/4972)
 - **Checkout**: `C:\dev\pwiz-inspect`
 
 ## Objective
@@ -94,11 +94,34 @@ screenshots/text move to PR E.
 ## Progress
 
 - [x] Plan and decisions (2026-11-02)
-- [ ] OspreySearchEngine + SearchEngine.Osprey
-- [ ] DIA search method page: Osprey + library source
-- [ ] Library Model page
-- [ ] Search settings page hosts OspreySearchSettingsControl
-- [ ] Pipeline: engine-written library installed with set-aside/restore; Overwrite/Cancel prompt
-- [ ] Presets, menu shortcut, install check
-- [ ] Remove OspreySearchDlg
-- [ ] Tests rewritten and passing; tcinspect; code review
+- [x] OspreySearchEngine (Model/DdaSearch) + SearchEngine.Osprey (EnumNames audit name); Osprey writes `-o` into
+      its working folder; engine strings moved to ModelResources; tuned model copied beside the document after success
+- [x] DIA search method page: Osprey in the direct-DIA engines; Predict / Search an existing library [path][Browse];
+      leaving it validates the existing library, the stem clash, and runs OspreyInstaller.EnsureInstalled (the
+      settings page asks Osprey for its settings, so the install check moved here from the menu item)
+- [x] Library Model page added in code (PeptideSearchWizardDlg.AddWizardTabPage, Pages.library_model_page) with
+      a WizardPage.IsShown check, since predicting is chosen after the first page fixes the workflow's pages
+- [x] Search settings page hosts OspreySearchSettingsControl (HidePresets) in place of the generic engine controls;
+      grid scopes from RunPeptideSearchDlg.GetOspreyConfig (which carries the runs and FASTA, so ScopesFor and the
+      audit log's in-scope settings are right)
+- [x] Pipeline: SearchResultIsLibrary engines skip BlibBuild; InstallSearchLibrary copies the library into place
+      (PR C's SetAsideLibrary restores the old one on failure); Overwrite / Cancel prompt for Osprey
+- [x] Presets: SearchSettingsPreset.OspreySettings (an embedded OspreySettingsPreset); a DIA preset for Osprey
+      turns DIA-Umpire off and chooses Osprey; menu item opens Run with DIA + Osprey; charges from the document
+      after the transition settings page (no default-document special case)
+- [x] Removed OspreySearchDlg (+designer/resx), OspreySearchControl, its form-lookup rows and unused strings;
+      OspreySearchSettings moved to its own file
+- [x] Tests: OspreySearchTest, OspreySearchTuningTest, OspreySearchPerfTest rewritten for the Run wizard and passing;
+      DDA/DIA/DIA-NN search tests, preset tests, Osprey unit tests, CodeInspection pass
+- [ ] TestBuildLibraryCarafeWizard fails on this stack with the latest Osprey master build (26.1.1.304): master's
+      #4938 changed Osprey's precursor-table prediction to write a .blib, with the Skyline side on master; the stack
+      predates it (not PR D code). Resolves when master is merged into the stack.
+- [x] tcinspect clean
+- [x] /code-review high: 7 of 9 findings fixed - the page showing stays in the page order (a preset on the
+      Library Model page had made Next finish the wizard), and a preset there refreshes the engine list; Osprey's
+      checks and engine settings repeat at Run (a preset can choose Osprey after the method page); Osprey's own
+      work-folder output is refused as the library to search; max variable mods from the document; Use GPU saved
+      only when the Library Model page was used; a tuned model not kept is shown after the run; the resume
+      fingerprint includes the existing library and saved model timestamps; the model list is read only when
+      needed. Dropped: the duplicated two-line Carafe checks (Build Library and Run hosts)
+- [x] PR created
