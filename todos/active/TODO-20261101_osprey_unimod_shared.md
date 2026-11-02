@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4736](https://github.com/ProteoWizard/pwiz/issues/4736)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4956](https://github.com/ProteoWizard/pwiz/pull/4956)
 - **Worktree**: `D:\Dev\pwiz-unimod` (night-session worktree of `C:\proj\pwiz`)
 
 ## Objective
@@ -69,7 +69,7 @@ right specificity) changes which modification a BiblioSpec library reads as, so 
   `C:\proj\ai`). One finding, fixed: UNIMOD:0 (the ontology root, no composition) read as a
   +0 Da modification; now skipped, with a test. Everything else checked clean (init order,
   title collisions, masses vs the old table, thread safety).
-- [ ] PR
+- [x] PR [#4956](https://github.com/ProteoWizard/pwiz/pull/4956) opened 2026-11-01
 
 ## Decisions Brendan might revisit
 
