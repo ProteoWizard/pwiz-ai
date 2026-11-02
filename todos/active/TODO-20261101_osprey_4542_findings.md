@@ -38,3 +38,18 @@ streaming and regression mode 5) against master 728ff3a131 and fix what is still
 
 ### 2026-11-01
 - Verified each finding by grep and `git log -S` at 728ff3a131.
+- Finding 7 residue reproduced: `$env:OSPREY_SVM_C_TOLERANCE='0.5'; & ./regression.ps1 -Dataset
+  Stellar -NoBuild -StageOnly` leaves it empty on master, `0.5` with the fix.
+- Finding 9: checked `Invoke-ResumeInvalidation` on scratch dirs (both kinds / blib only /
+  1st-pass only / neither): deletes the same set when both exist, throws naming the missing kind
+  otherwise. Its only caller is mode 2 (`Measure-CumulativeCoverage.ps1` mentions it in a comment
+  only).
+- Review (fresh general-purpose agent, medium): one comment finding, taken - the new comment
+  said nothing above the clear runs Osprey, but `Resolve-DatasetInputs` runs `--export-library`,
+  which returns before the variable is read. Also fixed a stale `regression.ps1:298-304`
+  citation for `Invoke-ResumeInvalidation` in `docs/19-testing.md` that it pointed out.
+- Gates: `Build-Osprey.ps1 -Debug -RunTests -RunInspection` 646/646, zero warnings
+  (`ai/.tmp/sessions/20261101-triage/precommit-4542-2.log`). Committed 5ecb6f3e0c.
+- Regression: `-Dataset Stellar` PASSED (`regression-4542-Stellar.log`); `-Dataset
+  StellarLibDecoy` PASSED incl. mode 2 resume (the invalidation caller) and mode 3 chain
+  (`regression-4542-StellarLibDecoy.log`), both in `ai/.tmp/sessions/20261101-triage/`.
