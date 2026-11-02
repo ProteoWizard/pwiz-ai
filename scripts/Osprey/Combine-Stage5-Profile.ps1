@@ -83,15 +83,13 @@ $pairs = @(
     @{ csMatch='LinearSvmClassifier.Train';            rustMatch='svm::LinearSvm::fit' },
     @{ csMatch='LinearSvmClassifier.FisherYatesShuffle'; rustMatch='shuffle' },
     @{ csMatch='Matrix.DotVector';                     rustMatch='dot' },
-    @{ csMatch='TargetDecoyCompetition.CompeteFromIndicesInto'; rustMatch='compete_from_indices' },
-    # The display-class number is compiler-assigned and moves with any edit to the class, so
-    # it is wildcarded rather than spelled (the matcher is -like "*csMatch*").
-    @{ csMatch='PercolatorTrainer+<>c__DisplayClass*.<GridSearchC>b__'; rustMatch='svm::LinearSvm::fit' },
+    @{ csMatch='PercolatorFdr.CompeteFromIndicesInto'; rustMatch='compete_from_indices' },
+    @{ csMatch='PercolatorFdr+<>c__DisplayClass16_0.<GridSearchC>b__0'; rustMatch='svm::LinearSvm::fit' },
     @{ csMatch='DecoyGenerator.RecalculateFragments';  rustMatch='DecoyGenerator::recalc' },
     @{ csMatch='DecoyGenerator.CalculateFragmentMz';   rustMatch='DecoyGenerator::calculate_fragment_mz' },
     @{ csMatch='PepEstimator+Kde.Pdf';                 rustMatch='pep::PepEstimator::pdf' },
     @{ csMatch='PepEstimator';                         rustMatch='pep::PepEstimator::fit' },
-    @{ csMatch='PercolatorTrainer.RunPercolator';      rustMatch='run_percolator' }
+    @{ csMatch='PercolatorFdr.RunPercolator';          rustMatch='run_percolator' }
 )
 
 function Match-RustRow($csFunction, $rustRows, $pairs) {

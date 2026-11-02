@@ -122,11 +122,6 @@ param(
     [switch]$TakeScreenshots = $false,  # Auto-capture tutorial screenshots (pause=-3, implies -ShowUI)
 
     [Parameter(Mandatory=$false)]
-    [switch]$DpiAware = $false,  # dpiaware=on: run system-DPI-aware like shipping Skyline, so screenshots at 125%+ display
-                                 # scale render crisp instead of bitmap-stretched. TestRunner defaults to DPI-unaware (96-DPI
-                                 # test geometry). Needs a TestRunner that knows the option (PR #4602 onward).
-
-    [Parameter(Mandatory=$false)]
     [switch]$AiConnector = $false,  # aiconnector=on: register each test's Skyline with the MCP (~/.skyline-mcp)
                                     # and pre-approve screen capture, so a Claude Code session can drive
                                     # the test at its PauseTest pauses (capture forms, click Continue).
@@ -740,7 +735,6 @@ Write-Host "  Test: $TestName" -ForegroundColor Gray
 Write-Host "  Language(s): $languageParam" -ForegroundColor Gray
 Write-Host "  UI Mode: $(if ($ShowUI) { 'On-screen (visible)' } else { 'Offscreen (hidden)' })" -ForegroundColor Gray
 Write-Host "  Screenshots: $(if ($TakeScreenshots) { 'Auto-capture (pause=-3)' } else { 'Off' })" -ForegroundColor Gray
-Write-Host "  DPI aware: $(if ($DpiAware) { 'On (dpiaware=on, renders at the display scale)' } else { 'Off (96-DPI geometry; bitmap-stretched above 100%)' })" -ForegroundColor Gray
 Write-Host "  AI connector: $(if ($AiConnector) { 'On (aiconnector=on: the test''s Skyline registers with the MCP)' } else { 'Off' })" -ForegroundColor Gray
 Write-Host "  Internet: $(if ($EnableInternet) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Vendor readers: $(if ($NoVendorReaders) { 'Off (vendors=off, pass-0 data path)' } else { 'On' })" -ForegroundColor Gray
@@ -945,10 +939,6 @@ try {
 
         if ($TakeScreenshots) {
             $runnerArgs += "pause=-3"
-        }
-
-        if ($DpiAware) {
-            $runnerArgs += "dpiaware=on"
         }
 
         if ($AiConnector) {

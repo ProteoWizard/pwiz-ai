@@ -820,19 +820,11 @@ transfer arm with the runner-up features on was rerun (`fam2-*`, snapshot `_bin\
 `D:\test\osprey-runs\fdr-gap\runnerup-rerun.log`). Counts moved by at most 16 precursors (Astral 41 SVM 106,064 ->
 106,052 at q 1%, 96,270 -> 96,257 at FDP 0.5%; GBDT 102,232 -> 102,227; Stellar <= 2; ZT <= 1). No conclusion changed;
 doc tables updated (01853d89f1). New row: Stellar 41-feature SVM at 12 XICs 27,451 (0.69%) / 26,585 at FDP 0.5% (-16%
-vs 6 XICs). Mike suggested reusing the first pass's stored CWT candidates instead; not done - pick scores are not
-stored (adding them to `cwt_candidates` breaks Rust byte parity), the count is capped at top 5, and forced gap-fills
-have no candidates.
-
-**Runner-up detection gated (2026-10-31, 4e40a99310).** Mike: run the second detection only when needed. It runs only
-when `PinFeatureMask.UsesRunnerUpFeatures()` (the same predicate as the `;runnerup=` term), passed in as
-`ScoringContext.OverrideRunnerUpCandidates`; default runs report a lone candidate again. 647/647, inspection clean,
-Stellar gate PASSED (`ai/.tmp/sessions/20261028-fdrgap/regression-stellar-gate.log`). Astral check (snapshot
-`_bin\fdrgap-runnerup-gate`, log `D:\test\osprey-runs\fdr-gap\runnerup-gate-check.log`): `fam3-all41` matches
-`fam2-all41` exactly (106,052 / 96,257); `fam3-default21` re-score step 0.299 ms/peak vs 0.292 before the fix and
-0.311 with the detection. **Cost correction:** the earlier "+25% Astral / +11% Stellar per-file rescoring" was machine
-load. Measured from the "Re-scored N peaks" step alone, the detection costs 15-20% of that step: about 2.5 s per Astral
-file and 0.5 s per Stellar file, a few percent of PerFileRescoring. The gate saves little time.
+vs 6 XICs). Cost of the second detection: per-file rescoring Astral +25-28% (209 -> 267 s; about 2% of the search),
+Stellar +11%, ZT none. Mike suggested reusing the first pass's stored CWT candidates instead; not done - pick scores
+are not stored (adding them to `cwt_candidates` breaks Rust byte parity), the count is capped at top 5, and forced
+gap-fills have no candidates; at ~2% the re-detection was kept. Open option: run it only when a runner-up feature is
+unmasked, so default runs pay nothing.
 
 **Review of #4823 (Nick's protein FDR, draft, last updated 2026-10-18; Mike asked for an opinion 2026-10-28).**
 - What it does: picked-protein FDR (Savitski 2015) over EVERY library protein / parsimony group, each on its

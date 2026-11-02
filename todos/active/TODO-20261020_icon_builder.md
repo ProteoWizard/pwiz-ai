@@ -171,8 +171,8 @@ The fork drew them wrong at every DPI: `Graphics.DrawIcon(icon, rect)` stretches
 `Icon` instance was created with (32x32 from the resx) with nearest-neighbor, and
 `new Icon(icon, size)` falls back to the next SMALLER frame (measured: 20 and 24 -> 16; 64 -> 48).
 Fix written in the fork checkout (`Workspaces/ProteoWiz/developers`, branch
-`DigitalRune/work/20261020_dpiScaling`, PR uw-maccosslab/developers #7, merged as 09d061d; the
-saved patch copy was removed 2026-10-31 as fully contained in it): `DpiHelper.SelectFrame` (exact
+`DigitalRune/work/20261020_dpiScaling`, PR uw-maccosslab/developers #7), also saved as
+`TODO-20261020_icon_builder-DigitalRune-IconFrames.patch`: `DpiHelper.SelectFrame` (exact
 frame, else smallest larger, else largest smaller), `DpiHelper.DrawIcon` (exact frame via
 DrawIcon, otherwise ToBitmap + bicubic), used by DrawDocumentTab, DrawToolWindowTab and the
 auto-hide strip (which passed `icon.ToBitmap()` of the 32 frame). Builds clean (one
@@ -180,13 +180,6 @@ pre-existing CS0114 warning elsewhere). On PR #7 as f0204f7 (pushed by the DPI s
 added a117881 listing DpiHelper.cs in the legacy .NET Framework project); next: rebuild the DLL
 into #4602 with Build-DigitalRune.ps1. Visual check:
 Targets tab at 200% should show the 32 px frame.
-
-2026-10-31 follow-up (Brendan's 100% screenshot review of #4602): at 96 DPI the frame selection
-showed each icon's own 16 px frame, which for Targets is SkylineDoc.ico's small Explorer icon (other
-artwork), and changed 126 English tutorial screenshots. developers branch
-`Skyline/work/20261031_docking_icon_frames` (db99175) keeps the stock drawing when
-`DpiHelper.IsScaled` is false; #4602 55c8d403f7 installs that DLL and reverts eee6eb420f's
-SequenceTreeForm icon to master (= SkylineDoc.ico).
 
 ## Decision source
 

@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261029_ms2_id_evidence`
 - **Base**: `master`
 - **Created**: 2026-10-29
-- **Status**: Completed
+- **Status**: In Progress
 - **GitHub Issue**: [#4935](https://github.com/ProteoWizard/pwiz/issues/4935)
 - **Module**: `skyline`
-- **PR**: [#4947](https://github.com/ProteoWizard/pwiz/pull/4947) (merged 2026-10-31)
+- **PR**: [#4947](https://github.com/ProteoWizard/pwiz/pull/4947)
 
 ## Objective
 
@@ -26,21 +26,17 @@ Not known to be a .NET 10 regression: MS Amanda 2.0 -> 3.0 produced the false ch
 
 ## Tasks
 
-- [x] Chromatograms: draw ID and aligned ID lines for every library precursor used as evidence,
+- [ ] Chromatograms: draw ID and aligned ID lines for every library precursor used as evidence,
       labeled with charge and label type (e.g. "ID 3+"); mark IDs from another form as such
       (e.g. heavy matched to light IDs) rather than as the precursor's own IDs
-- [x] Extraction window (`RetentionTimeFilterType.ms2_ids`): center on the median of ID times and
+- [ ] Extraction window (`RetentionTimeFilterType.ms2_ids`): center on the median of ID times and
       drop outliers before extending the range (like RCalcIrt / IrtPeptidePicker); apply the same
       rejection to aligned times
-- [x] Library Match combo: list all spectra of the peptide (all charges and label types), exact
+- [ ] Library Match combo: list all spectra of the peptide (all charges and label types), exact
       precursor matches first, for both light and heavy precursors
-- [x] Library Match title: name the label type of the spectrum shown, not the selected precursor
-- [x] Spectral Library Explorer: keep consistent with the Library Match combo change (no change
-      needed - ViewLibraryDlg already lists each LibKey as its own row)
-- [x] Check behavior on 26.1.1 with this data - not needed (Brendan, 2026-10-31): 26.1.1 is a
-      historic Skyline-daily branch taking only critical changes; this fix was critical only for the
-      .NET 10 tutorial screenshots, where the newer MS Amanda IDs a spectrum at ~20 min for a peptide
-      eluting at ~130 min
+- [ ] Library Match title: name the label type of the spectrum shown, not the selected precursor
+- [ ] Spectral Library Explorer: keep consistent with the Library Match combo change
+- [ ] Check behavior on 26.1.1 with this data
 
 ## Regression Test
 
@@ -135,16 +131,3 @@ Code map:
 * Brendan re-recorded and staged DDASearch s-14..17 and PRM s-16/21/22/24 (en, ja, zh-CHS), also
   before the review fixes; TestDdaTutorial `VerifyOutlierIdIgnored` needs a screenshot-mode rerun.
 * Committed 88d8ccb6ea, pushed; PR opened for TeamCity.
-
-### 2026-10-31 - Merged
-
-PR #4947 merged as commit 8944f3f2a4. Shipped: outlier MS/MS ID rejection before `ms2_ids`
-extraction (full-scan files, IDs from or aligned to the file), chromatogram ID lines for every pooled
-library precursor labeled by charge and label type, all of the peptide's spectra in the Library Match
-list, and a Library Match title naming the spectrum shown. The Spectral Library Explorer needed no
-change (it already lists each charge as its own row). No 26.1.1 check or cherry-pick: that branch
-takes only critical changes, and this was critical only for the .NET 10 tutorial screenshots (the
-newer MS Amanda's false ~20 min ID for a peptide eluting at ~130 min). Brendan ran and verified
-all screenshots with the final rule before the merge, and the overnight TeamCity Skyline Perf and
-Tutorial runs passed (all 19 checks green), so the DIA-Umpire FullFileset values and TestDdaTutorial
-`VerifyOutlierIdIgnored` noted as pending on 2026-10-30 are confirmed.
