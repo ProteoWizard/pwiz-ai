@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4672](https://github.com/ProteoWizard/pwiz/issues/4672)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4961](https://github.com/ProteoWizard/pwiz/pull/4961)
 
 ## Objective
 
@@ -49,7 +49,7 @@ lines, and carry the per-run values in the report as a plotted per-run statistic
       defects. Dropped: the subset assertion that every run has a boundary assumes the subset
       data (true today, and the message says so); pinning RunCutoffs in the diagnostics golden
       would mean re-recording it, outside this issue
-- [ ] PR
+- [x] PR #4961 opened
 
 ## Progress Log
 
