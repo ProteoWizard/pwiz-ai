@@ -9,7 +9,7 @@
   (and the already-resolved [#4731](https://github.com/ProteoWizard/pwiz/issues/4731),
   [#4732](https://github.com/ProteoWizard/pwiz/issues/4732), [#4733](https://github.com/ProteoWizard/pwiz/issues/4733))
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4959](https://github.com/ProteoWizard/pwiz/pull/4959)
 
 Folds in `todos/backlog/TODO-osprey_resume_validity_gates.md` (removed in the same pwiz-ai commit).
 
@@ -79,7 +79,14 @@ footer version/hashes only; a fix needs a footer marker mirrored in Rust.
     earlier version
   - DROPPED: one extra stamp read per declared output when a task starts - only when the task is
     about to run (hours at scale), and the first not-current output already stops `CanRehydrate`
-- [ ] PR
+- [x] PR [#4959](https://github.com/ProteoWizard/pwiz/pull/4959) opened (commits 5f1daeb4ee,
+      38c5e9684a). Re-ran regression.ps1 -Dataset Stellar on the final HEAD: PASSED
+      (`regr-stellar2.log`). TeamCity Perf/Regression NOT triggered (Brendan's call).
+
+## Next steps (for Brendan)
+- Close #4731, #4732, #4733 as resolved by #4809/#4665 (the PR lists them; it does not auto-close them).
+- No PR 2: its three issues needed no code. The planned branch
+  `Skyline/work/20261101_osprey_sidecar_authorship` was not created.
 
 ## Progress Log
 
