@@ -294,7 +294,8 @@ Targets tab at 200% should show the 32 px frame.
       Document Grid bar. Sizes follow `GetIconSizes` (MatchCase is 15 px: 16 px size set)
 - [x] pwiz.Common inline images (2026-10-30, a9c7bac5ed, pushed): 17 moved, 4 never-drawn
       placeholders dropped, Find traced, PivotAndFilter funnel separated from the bar; build,
-      icon tests and TestAlphabeticalReportEditor green. Was: NavBar.resx (10) and ViewEditor.resx (7) embed their images
+      icon tests and TestAlphabeticalReportEditor green; 4f2b82ec44 (pushed) switched Common Delete
+      to the hq2x raster the gallery choice names, same PNGs as Skyline. Was: NavBar.resx (10) and ViewEditor.resx (7) embed their images
       base64 (Alphabetical, HiddenColumns, Cluster among them; same art as the Resources
       .bmp files, alpha instead of magenta). Move them into pwiz.Common Resources.resx as
       83134adcc1 did for Skyline so PrepareIcons can match them; add any undrawn ones to the
