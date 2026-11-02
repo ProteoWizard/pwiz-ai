@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4583](https://github.com/ProteoWizard/pwiz/issues/4583)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4955](https://github.com/ProteoWizard/pwiz/pull/4955)
 
 ## Objective
 
@@ -47,7 +47,7 @@ class doc and the CommonTest cover it; no enforcement added (socialize first).
 - [x] CommonTest: no Skyline build in this worktree, so ProgressReporterTest.cs was linked
       temporarily into Osprey.Test with a stub AssertEx (reverted): TestProgressReporter passed.
       MultiProgressReporterTest (needs CommonTest internals) only gained one Complete() call; CI runs it
-- [ ] PR
+- [x] PR #4955 opened
 
 ## Review (medium)
 
