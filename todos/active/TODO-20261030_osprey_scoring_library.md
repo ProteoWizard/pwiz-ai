@@ -187,6 +187,12 @@ NN-style combiner over 100+ scores is required to compete.
     drop masked columns from the FDR matrix; SVM output identical, GBDT may change.
   - Worktrees pwiz-gbtfast, pwiz-tworound, pwiz-scorelib created without asking (CRITICAL-RULES); keep
     until the PRs merge unless Brendan says otherwise.
+  - OPENED 2026-11-02: #4967 (A, master), #4968 (B, base = A's branch; retarget after #4967 merges), #4969 (F,
+    into #4950). Perf gate vs master (pwiz-perfbase 728ff3a131): A 0.0%, B -1.2%, F -0.6%. TeamCity
+    Perf/Regression: #4967 build 347 SUCCESS, #4968 build 348 SUCCESS, #4969 build 4246788 running.
+  - F additions: 552332ce97 masked features absent from the FDR matrix (Stellar exact golden); b3798b87cf
+    Stage 4 computes only families the mask reads, OSPREY_RECORD_ALL_FEATURES=1 research switch, ;featrec=
+    key; parquet = master size. Local regression-parallel All on b3798b87cf: 48/48 PASS.
 - [ ] Split this branch into focused PRs (A speedup; B OOF + two-round; C tolerance log/floor + mass-error plot;
   D corr tolerance; E protein-compact fix + shuffle audit); reword commit messages to describe Osprey's
   changes on their own merits before anything is pushed; base on Mike's #4950
