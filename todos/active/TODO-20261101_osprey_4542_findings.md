@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_4542_findings` (worktree `D:\Dev\pwiz-triage`)
 - **Base**: `master` (728ff3a131)
 - **Created**: 2026-11-01
-- **Status**: In Progress
+- **Status**: PR open, awaiting review and the TeamCity Perf/Regression gate (not triggered)
 - **GitHub Issue**: [#4542](https://github.com/ProteoWizard/pwiz/issues/4542)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4964](https://github.com/ProteoWizard/pwiz/pull/4964)
 
 ## Objective
 
