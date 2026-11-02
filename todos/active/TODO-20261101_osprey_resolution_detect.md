@@ -7,7 +7,7 @@
 - **Status**: In Progress (overnight autonomous session)
 - **GitHub Issue**: [#4893](https://github.com/ProteoWizard/pwiz/issues/4893)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4958](https://github.com/ProteoWizard/pwiz/pull/4958) (open, CI green, awaiting review)
 
 ## Objective
 
@@ -91,3 +91,12 @@ measured; it falls to the scores file or the HRAM default with a warning.)
 - Review fixes committed f424dd77d6; gate 3 green (647/647, zero inspection warnings).
 - Launched the chain: Stellar -DetectResolution, Astral explicit, Astral -DetectResolution,
   Stellar explicit again on the final code (`logs/chain.log`).
+- Opened PR #4958 (f424dd77d6) with the chain's box open; CI green (16 checks, Osprey Windows .NET
+  and Linux .NET included).
+- Chain finished 19:59 (recorded by the parent session): all four legs exit 0 and `Osprey regression
+  PASSED`. Stellar -DetectResolution 5/5 vs the explicit golden; Astral explicit PASS including mode 3
+  HPC chain; Astral -DetectResolution PASS including mode 3 (FDR nodes took the mode from the scores
+  files); Stellar explicit on f424dd77d6 PASS. Logs: `ai/.tmp/sessions/20261101-resolution/logs/
+  regr-*.log`. PR test plan ticked. Next: Brendan's review; the manual Perf/Regression gate is his
+  call (detection adds nothing the explicit-flag gate would exercise, since regression.ps1 passes
+  the flag from its dataset table).
