@@ -49,8 +49,28 @@ as the explicit value does.
 - [x] regression.ps1 `-DetectResolution` switch
 - [x] Gate: build + tests + inspection (647/647, zero inspection warnings)
 - [ ] Regression Stellar + Astral (explicit) vs golden; then detected
-- [ ] /code-review medium, triage
+- [x] Code review at medium, triage (see below)
 - [ ] PR
+
+## Code review triage
+
+`/code-review` refused to start: its hook reads the session's cwd, which in this agent session
+stays `C:\proj\ai` (a subagent cannot change it). The same medium-effort correctness review ran as
+a read-only subagent given `git diff origin/master...HEAD` in the worktree. Four findings, all
+verified and fixed in f424dd77d6:
+
+1. Fixed - HPC per-file nodes measure only their own run, and an undecided first input fell
+   straight to HRAM. Now the first input whose spectra decide is used; the doc no longer claims
+   every node resolves the same mode for mixed cohorts (the FDR join refuses mismatched search
+   hashes, so the failure is loud; such chains need `--resolution`).
+2. Fixed - `regression.ps1 -DetectResolution -LibraryAsBlib` dropped `--resolution` from the
+   library export, which has no inputs and would type at HRAM. The export keeps the table value.
+3. Fixed - an exception opening or reading a damaged/locked `.spectra.bin` escaped detection and
+   crashed startup. Now falls back to the source, then the scores files.
+4. Fixed - a library phase node logged `[PATH] resolution: explicit` with no flag; now `unused`.
+
+Dropped: none. (Noted, not fixed: a run whose only spectra are a `.demux.spectra.bin` cannot be
+measured; it falls to the scores file or the HRAM default with a warning.)
 
 ## Notes for Brendan
 
@@ -66,3 +86,8 @@ as the explicit value does.
   mzML is a placeholder crashed in detection (XmlException) before its designed error. Fixed:
   an unreadable source measures nothing (the task that reads it reports why). Second gate green.
 - Committed 587087ceca. Running regression Stellar (explicit) next.
+- `regression.ps1 -Dataset Stellar` (explicit, on 587087ceca): PASS, 5 of 5 checks
+  (log `ai/.tmp/sessions/20261101-resolution/logs/regr-stellar-explicit.log`).
+- Review fixes committed f424dd77d6; gate 3 green (647/647, zero inspection warnings).
+- Launched the chain: Stellar -DetectResolution, Astral explicit, Astral -DetectResolution,
+  Stellar explicit again on the final code (`logs/chain.log`).
