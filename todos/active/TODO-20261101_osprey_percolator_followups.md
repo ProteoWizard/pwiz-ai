@@ -38,3 +38,14 @@ line at the method's new location in `PercolatorEngine.cs`.
 - Moved the code with a byte-preserving splice script (CRLF kept), then qualified the
   cross-class calls and updated crefs, `FdrTest`, and two comments in `FdrProjectionOutput.cs`
   and `FdrProjectionSinks.cs`.
+- Motion check (`verify_motion.py` in the session folder): with class qualifiers stripped, every
+  removed line reappears; the only differences are the four private -> internal widenings and
+  two doc comments.
+- Review (fresh general-purpose agent, medium): no behavior findings. Took its one nit (the
+  `PercolatorEngine` class summary now says it holds the streaming first pass). Left the
+  `PercolatorScorer_RunStreamingFirstPass_*` resource keys named after the old class: renaming
+  them churns three RESX files for no runtime change.
+- Gates: `Build-Osprey.ps1 -Debug -RunTests -RunInspection` 646/646, zero inspection warnings
+  (`ai/.tmp/sessions/20261101-triage/precommit-4494-3.log`); `regression.ps1 -Dataset Stellar`
+  PASSED, mode 1 vs golden, 1c, 4, 6 (`ai/.tmp/sessions/20261101-triage/regression-4494-Stellar.log`).
+- Committed 80b9ed002b, pushed.
