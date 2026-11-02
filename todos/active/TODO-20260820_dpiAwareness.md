@@ -2536,3 +2536,97 @@ checkable alphabetical sidebar. Chunk 1: 5 before/after pairs captured
 EditIsolationSchemeDlg) - awaiting developer review. Image-diff automation
 ruled a dead end (logical-res captures). **Next session handoff**: read
 ai/.tmp/handoff-dpi-form-sweep.md for the full continue protocol.
+
+
+### 2026-10-31 - Brendan's review: 100% screenshot gate, DPI-aware screenshot runs, test window scaling
+
+Setup: Brendan reviews in `C:\proj\pwiz` on local branch `review/4602-fast-screenshots` = this branch +
+master + PR #4951 (screenshot waits; not for push). PR commits are made in `C:\proj\pwiz-work3` on
+`Skyline/work/20260820_dpiAwareness` and merged into the review branch. Run data and scripts:
+`D:\test\skyline-runs\20261030_screenshot_waits\`, `ai/.tmp/sessions/20261030-night/`
+(run-arm.ps1 -Root -DpiAware, compare_shots.py, vs_git.py, overlay.py, icon_only.py).
+
+**Test 1 - 100%, en TestTutorial, nothing should change** (vs master+#4951 baseline `mA`): 144/717
+differed. 126 = docking tab icons: developers PR #7's frame selection drew each icon's own 16-px frame
+at 96 DPI, and Targets' icon is SkylineDoc.ico (the .sky Explorer icon; master's tab always showed the
+32-px frame shrunk nearest-neighbor). Fixed: developers branch `Skyline/work/20261031_docking_icon_frames`
+(db99175, pushed; PR to be opened by Brendan - gh lacks SSO for uw-maccosslab) keeps stock drawing when
+`DpiHelper.IsScaled` is false; this branch 55c8d403f7 installs that DLL and reverts eee6eb420f's
+SequenceTreeForm icon to master. 9 = PeakPicking graphs Dock=Fill (d9025cb9a8), accepted by Brendan:
+ec5408f92d. Pushed through ec5408f92d; AbsoluteQuant 16/16 identical after the fix (full rerun pending).
+
+**DPI-aware screenshot runs**: TestRunner defaults to `dpiaware=off`, so every screenshot run above
+100% was bitmap-stretched (blurry). 7707c2cffe (pushed): SkylineTester adds `dpiaware=on` for any
+`pause=-N` screenshot mode. pwiz-ai fad3f466: `Run-Tests.ps1 -DpiAware`.
+
+**Test window sizes** (local commits, NOT pushed: b8aecfddd9, faee6bdb4b, 8dc27e495d):
+`AbstractFunctionalTest.ScaledSize(window, w, h)` / `ScaledWidth` / `ScaledHeight` scale the client area
+by the AutoScaleMode.Font ratio (CurrentAutoScaleDimensions / design 6x13; ~1.67 x 1.54 at 150%) plus
+the current non-client size, so test-sized windows match designer-sized dialogs; `Scaled(px)` = DPI
+factor for gaps. No-op at 100%. 289 sites in 30 screenshot tests converted (subagent; report in
+`ai/.tmp/agent-scaling-status.md`). Brendan's full 150% run: 1:42:55 (was 3h+), 2 failures.
+
+**Open - next session**
+1. TestTargetedMSMSTutorial `ValidatePeakTooltips` (TargetedMSMSTutorialTest.cs ~1397) times out at 150%:
+   hover points `(191,95)`, `(169,175)`, `(190,5)` are 100% pixels in the spectrum graph. Derive them from
+   data coordinates (y8 peak, m/z 951.6229, intensity 3814516) via
+   `SkylineWindow.GraphSpectrum.ZedGraphControl.GraphPane.GeneralTransform` (plain x1.5 misses: margins
+   grow with the font). Third point = above the peak (no tooltip).
+2. TestDriftTimePredictorTutorial fails at DriftTimePredictorTutorialTest.cs:248 `ClickChromatogram`
+   "Full-scan dot not present" at 150%. Click path is DPI-independent (GeneralTransform; tracking radius
+   already `DpiUtil.Scale(this, 20)`), so suspect graph state at that point (pane layout or axis range
+   with the font-scaled window). Not screen clamping: Brendan's monitors are 3840x2160 at 150%, so
+   windows up to ~2700 device px fit. Run the test alone at 150% with screenshots and look.
+3. AuditLog s-03/s-04 (AuditLogTutorialTest.cs:164-172, Undo/Redo list expanded): fixed clip rectangles
+   `(0,0,713,131)` / `(0,0,743,127)` are x1.5 by `ClipBitmap`, but the drop-down's position and
+   font-scaled size are not uniform. Compute the clip from the undo/redo drop-down's screen bounds relative
+   to SkylineWindow (plus a margin), in device pixels (ClipBitmap multiplies by the scaling factor, so add
+   a device-pixel overload or divide first). Same pattern: AuditLog s-20 (AuditLogTutorialTest.cs:429,
+   "Audit Log Reports menu"): mainly a HEIGHT problem - the clip already uses bmp.Height, but the menu
+   extends below the AuditLogForm, whose capture ends at the form, so the menu's bottom is cut off;
+   the fixed width 503 is also a bit cramped. Capture/clip from the open Reports menu's bounds (width
+   and height), not the form's.
+   Likely a shared helper: clip a screenshot to a window plus an open drop-down/menu's bounds.
+   Brendan's 150% image walk-through: done through AuditLog, starting CustomReports (2026-10-31);
+   expect more clip/menu cases like these in later tutorials.
+4. Other subagent flags: grid column widths / SplitterDistance use `Scaled` (1.5) not the layout ratio
+   (~1.67) - CustomReports, DiaSwath, Ms1; (wide windows fit: 3840x2160 monitors);
+   GroupedStudies1 1920x1032 left unscaled; LiveReports:681 and AcquisitionComparison:676 build clip
+   rectangles from screen coordinates then ClipBitmap scales again (possible double scaling).
+4b. Brendan's first full pass of all 150% screenshots (2026-11-01), grouped by likely cause:
+   - **Sizes not scaled** (a path the 289-site conversion missed - check RestoreViewOnScreen/.view
+     layouts, ResizeFormOnScreen, sizes set in helpers): DIA-PASEF s-05, DIA-QE s-04, DIA-TTOF s-04,
+     DIA-Umpire-TTOF s-15, GroupedStudies s-08, SmallMoleculeQuantification s-16/s-18/s-20 (form height).
+   - **Too short / too narrow**: DIA-PASEF s-16 (odd layout when short), DIA-QE s-15, DIA-TTOF s-15,
+     GroupedStudies s-65/s-68/s-69/s-74, LiveReports s-04, PRMOrbitrap s-29/s-30; MethodEdit s-16/s-17
+     not wide enough.
+   - **Menus truncated** (clip/capture from the menu's bounds, item 3): CustomReports s-16, LiveReports
+     s-04, AuditLog s-03/s-04/s-20.
+   - **Clip starts too low at the top** (standard shows tabs and some toolbar): DIA-PASEF s-18/s-19,
+     DIA-QE s-17/s-18/s-19, DIA-TTOF same, DIA-Umpire-TTOF s-19/s-20 - likely ClipDockingRect's fixed
+     hBorder/topBorder/bottomBorder (DiaSwath ~1435, DiaUmpire ~951).
+   - **Docked window gets a redrawn window border** (only at high DPI; CleanupBorder treating a docked
+     pane like a form?): CustomReports s-24, DIA s-16, GroupedStudies s-16, iRT s-12, LiveReports s-06,
+     PeakPicking s-02/s-10; related: MethodRefine s-08/s-10/s-13/s-14 docked titlebar gap at right edge,
+     MethodEdit s-08 (clipped docked window, screen dirt top/left), s-18 (dirt on left edge).
+   - **Size grip (thumb) redrawn badly** - too small/misplaced, likely CleanupBorder drawing it at 96-DPI
+     geometry: GroupedStudies s-01, LiveReports s-03/s-07, MethodEdit s-14, MS1Filtering s-17.
+   - **Red highlight rectangles at fixed coordinates**: LiveReports s-42 too short, MS1Filtering s-17
+     too far right.
+   - **Other**: DDASearch s-16 Peak Areas x-axis labels vertical (horizontal in standard); DIA-PASEF
+     s-14 progress plot missing peaks (import graph timing? see PR #4951 IsRenderComplete);
+     SmallMoleculeQuantification s-02/s-03 dark gray fill at the right of the column type row.
+   - **Website idea (Brendan)**: publish 150% screenshots in a per-tutorial subfolder (e.g. `1-5x/`) and
+     have the existing tutorial page script (the one that adds the TOC) switch `<img>` to them on high-DPI
+     displays (`window.devicePixelRatio >= 1.5`), or emit `srcset="s-NN.png 1x, 1-5x/s-NN.png 1.5x"` so
+     the browser picks; images declared 1.5x display at natural size / 1.5 CSS px.
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260820_dpiAwareness.md` before starting work.
+
+5. Then: Brendan reruns tutorials + perf at 150%, push the three local commits, write the acceptance
+   review for this PR.
+
+Related, not on this PR: ImageComparer F5 reload fix + "Same" size mode (key S, keeps the original size
+ratio in the label) -> PR #4954 (`Skyline/work/20261031_imagecomparer_f5`), also cherry-picked into the
+review branch. Developers PR for the docking icons: opened by Brendan. `Build-DigitalRune.ps1 -Install` still targets `pwiz_tools/Shared/Lib/` instead of
+`Lib/DigitalRune/net10/`. PR #4951 (screenshot waits) open: PeakBoundaryImputation s-19 open item.
