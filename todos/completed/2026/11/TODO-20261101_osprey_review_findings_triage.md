@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261101_osprey_review_findings_triage` (worktree `D:\Dev\pwiz-triage`; no commits - nothing to fix)
 - **Base**: `master` (728ff3a131)
 - **Created**: 2026-11-01
-- **Status**: Completed - no PR needed; issue comment posted, ready for Brendan to close #4544
+- **Status**: Completed - no PR needed; #4544 closed by Brendan 2026-11-03 on the posted classification; the empty work branch and the triage worktree were removed after #4963 merged
 - **GitHub Issue**: [#4544](https://github.com/ProteoWizard/pwiz/issues/4544)
 - **Module**: `osprey`
 - **PR**: none
