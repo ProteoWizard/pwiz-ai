@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_fdp_curve_route`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: PR open - guard added; #4645 fixed by #4860 (see Progress Log)
+- **Status**: Completed
 - **GitHub Issue**: [#4645](https://github.com/ProteoWizard/pwiz/issues/4645)
 - **Module**: `osprey`
-- **PR**: [#4966](https://github.com/ProteoWizard/pwiz/pull/4966)
+- **PR**: [#4966](https://github.com/ProteoWizard/pwiz/pull/4966) (merged 2026-11-03)
 - **Worktree**: `D:\Dev\pwiz-fdpcurve`
 
 ## Objective
@@ -114,3 +114,11 @@ the change that fixed it, and add a mode-3 guard so the agreement cannot silentl
   generated-decoy behavior across the chain (incl. the latent ExcludedEntrapment asymmetry above)
   is only covered if mode 3 is un-cut there (~9-12 min more per full gate).
 - Status comment posted on #4645: https://github.com/ProteoWizard/pwiz/issues/4645#issuecomment-6570082381
+
+### 2026-11-03 - Merged
+
+PR #4966 merged as commit 2189226503. Shipped: the mode-3 FDP-curve comparator and its matrix row,
+running on StellarLibDecoy. Issue #4645 closed by the merge, with #4860 recorded as the fix. Left
+for Brendan: whether to un-cut mode 3 on StellarGenDecoyEntrap (about 9-12 min more per full
+gate) so the guard also covers the generated-decoy route, and the latent ExcludedEntrapment
+asymmetry noted above, which no regression dataset reaches today.
