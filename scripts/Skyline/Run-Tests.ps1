@@ -12,6 +12,9 @@
     Name of specific test to run, or:
     - "Test.dll" / "TestData.dll" / "TestFunctional.dll" - Run all tests in DLL
     - "@filepath" - Load test names from file (e.g., "@SkylineTester test list.txt")
+    - "TestA,TestB" - Several tests, comma-separated. The log is named after this text, so past a
+      handful of names its path exceeds 260 characters and TestRunner dies before any test runs;
+      put a longer list in a file (one name per line) and pass "@filepath" instead
     Note: Not required when using -UseTestList
 
 .PARAMETER UseTestList
