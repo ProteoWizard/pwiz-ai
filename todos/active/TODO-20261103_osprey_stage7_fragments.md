@@ -49,3 +49,16 @@ only if the structure is clear and output-locked by the golden.
   struct of double Mz + float intensity + annotation, ~14.6 fragments per entry (90.3M peaks / 6.18M
   entries), so ~0.4 KB per entry: ~0.3 GB for ~749K paired decoys, ~0.6 GB for all ~1.5M retained
   entries, against a Stage 7 p10 floor measured at 28.7 GB in 2026-08.
+
+## Resume here (2026-11-03 14:16, agent D handed back before the run finished)
+
+The run is still going in the run dir above. When `run.log` shows `DONE ... exit=0`:
+1. `grep -a "MEM library-fragments\|library-fragments-released\|MEM stage7-fragments-released\|\[TASK\]" run.log`
+   gives the 5->6 line (scope rescore-gap-fill) and the 6->7 line (scope retained-summary). The code predicts
+   the second frees 0: on straight-through runs it reads the same summary Stage 5 applied.
+2. `python C:\proj\ai\scripts\perfviz.py run.log --files 82` gives the SecondPassFDR peak and p10 floor.
+3. Compare the ~0.4 GB decoy / ~0.7 GB all-retained fragment estimate with that floor. If the lever is about
+   1-3% of the floor, record that #4577 is low value and point at #4486, then post a status comment on #4577.
+   If it is larger, implement the entry-level predicate `!IsDecoy && retained(base)` at SecondPassFdrTask.cs:1014
+   (also the load-time skip on --task SecondPassFDR) and update SubsetPipelineTest.AssertFragmentRelease (asserts
+   Stage 7 released 0) and regression.ps1's Test-LibraryFragmentRelease mode-6 checks. Gate: Stellar + StellarLibDecoy.
