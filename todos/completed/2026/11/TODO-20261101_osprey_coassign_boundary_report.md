@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_coassign_boundary_report`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4672](https://github.com/ProteoWizard/pwiz/issues/4672)
 - **Module**: `osprey`
-- **PR**: [#4961](https://github.com/ProteoWizard/pwiz/pull/4961)
+- **PR**: [#4961](https://github.com/ProteoWizard/pwiz/pull/4961) (merged 2026-11-03)
 
 ## Objective
 
@@ -55,3 +55,11 @@ lines, and carry the per-run values in the report as a plotted per-run statistic
 
 ### 2026-11-01
 - Implemented. Commit f548323f96.
+
+### 2026-11-03 - Merged
+
+PR #4961 merged as commit 2461de8241. Shipped: per-run boundary lines out of the log, RunNames and
+RunCutoffs in the co-assignment data for both passes, and the per-run line plot in the report. Not
+done, by choice: pinning RunCutoffs in the diagnostics golden (would re-record it). Issue #4672
+closed by the merge. #4955, #4959 and #4965 each share one file with this change and take a small
+merge from master.
