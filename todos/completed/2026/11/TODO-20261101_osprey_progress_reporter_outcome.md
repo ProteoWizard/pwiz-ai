@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_progress_reporter_outcome`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4583](https://github.com/ProteoWizard/pwiz/issues/4583)
 - **Module**: `osprey`
-- **PR**: [#4955](https://github.com/ProteoWizard/pwiz/pull/4955)
+- **PR**: [#4955](https://github.com/ProteoWizard/pwiz/pull/4955) (merged 2026-11-03)
 
 ## Objective
 
@@ -66,3 +66,12 @@ blocks, segment banking and the tests. Two notes, both dropped:
 
 ### 2026-11-01
 - Implemented as above. Commit 49af0db202.
+
+### 2026-11-03 - Merged
+
+PR #4955 merged as commit a33ca3308d. Shipped: Complete() as the explicit success signal, Dispose
+silent, all 50 reporters updated, the three not-using workarounds removed. Issue #4583 closed by
+the merge. Follow-up filed as #4979 (Brendan's direction): static ProgressReporter.Run() /
+Run<T>() wrappers that call Complete() themselves and hide the constructor, so a forgotten call
+is not writable; a pure refactor locked by the Stellar golden and the shared reporter tests.
+#4963 edits the same method as one line here and re-applies it when it merges.
