@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_percolator_followups` (worktree `D:\Dev\pwiz-triage`)
 - **Base**: `master` (728ff3a131)
 - **Created**: 2026-11-01
-- **Status**: PR open, awaiting review and the TeamCity Perf/Regression gate (not triggered)
+- **Status**: Completed
 - **GitHub Issue**: [#4494](https://github.com/ProteoWizard/pwiz/issues/4494)
 - **Module**: `osprey`
-- **PR**: [#4963](https://github.com/ProteoWizard/pwiz/pull/4963)
+- **PR**: [#4963](https://github.com/ProteoWizard/pwiz/pull/4963) (merged 2026-11-03)
 
 ## Objective
 
@@ -66,3 +66,12 @@ line at the method's new location in `PercolatorEngine.cs`.
   `PercolatorScorer` took it too. Merge commit 27fd6b72ba, pushed. Gates on it: 648/648, 0 inspection
   warnings (`pw-complete-4963/precommit-merge2.log`); Stellar PASSED
   (`pw-complete-4963/regression-stellar-merge2.log`). Diff vs master is still the pure motion.
+
+### 2026-11-03 - Merged
+
+TeamCity Perf/Regression gate build #352 (4248191) passed on the pre-merge head 80b9ed002b: all four
+datasets plus the CarafeSharp pass. PR #4963 merged as commit 054f484787. Shipped: the code motion
+as described, with #4955's Complete() calls and #4965's BuildContributions signature carried to the
+moved code. Issue #4494 closed by the merge; its dropped items (QProgress move, BASE_ID_MASK sweep,
+TrainFoldModels parameter trim) are recorded in the classification table above. Brendan's #4967,
+#4968 and #4969 edit PercolatorEngine.cs and take a merge from master after this.
