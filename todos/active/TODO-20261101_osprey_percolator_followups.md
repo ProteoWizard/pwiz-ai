@@ -49,3 +49,14 @@ line at the method's new location in `PercolatorEngine.cs`.
   (`ai/.tmp/sessions/20261101-triage/precommit-4494-3.log`); `regression.ps1 -Dataset Stellar`
   PASSED, mode 1 vs golden, 1c, 4, 6 (`ai/.tmp/sessions/20261101-triage/regression-4494-Stellar.log`).
 - Committed 80b9ed002b, pushed.
+
+### 2026-11-03 - Merged master after #4955 landed
+- #4955 (merged a33ca3308d) added Complete() calls inside the code this branch moves, so
+  PercolatorScorer.cs conflicted. Resolved by keeping the deletion of the moved block and carrying
+  the four calls (ingest, subset load, pass-1 score, fold merge) to RunStreamingFirstPass in
+  PercolatorEngine; the branch's diff against master is again the pure code motion
+  (7 files, +1430/-1423). Merge commit 56452c6e56, pushed.
+- Gates on the merge: Build-Osprey Debug tests + inspection 646/646, 0 warnings
+  (`ai/.tmp/sessions/pw-complete-4963/precommit-merge.log`); `regression.ps1 -Dataset Stellar`
+  PASSED (`ai/.tmp/sessions/pw-complete-4963/regression-stellar-merge.log`). The TeamCity
+  Perf/Regression gate queued as build 4248191 is pinned to the pre-merge head 80b9ed002b.
