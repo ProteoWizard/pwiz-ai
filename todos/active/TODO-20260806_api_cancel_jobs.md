@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260806_api_cancel_jobs`
 - **Base**: `master`
 - **Created**: 2026-08-06
-- **Status**: In Progress
+- **Status**: In review prep - description and screenshots done, awaiting CI and ready-for-review
 - **GitHub Issue**: none
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4546](https://github.com/ProteoWizard/pwiz/pull/4546) (draft)
 
 ## Motivation
 
@@ -92,12 +92,76 @@ into each other's diagnostic log.
 
 ## Remaining
 
-- **`SkylineAiConnector.zip` rebuild (Nick, in Visual Studio).** `SkylineMcpTest`
-  diffs the `[McpServerTool]` names in source against the ZIP's advertised list,
-  so it fails until the ZIP is rebuilt from `SkylineMcp.sln` with the two new
-  tools. `EXPECTED_ZIP_VERSION` is already set to `26.1.1.218` to match what
-  `PackageToolZip` stamps from `AssemblyInfo.cs`.
-- **`/code-review max`** before opening the PR.
+- Wait for TeamCity on `2fadcfcbd7`, then mark #4546 ready for review.
+
+## Review and PR prep (2026-11-02)
+
+Three commits, pushed together as `d94485ac5b..2fadcfcbd7`:
+
+1. **`5f942dc420`** - `RunInBackground` registered the job's cancellation and made
+   its first progress report AFTER releasing `_lock`. Work finishing in that gap
+   disposes the job (`ObjectDisposedException` reading the token), and a late
+   non-final report re-adds a finished job to the status bar
+   (`SkylineWindow.UpdateProgress` adds a non-final status it cannot find). Both
+   moved inside the lock; `RunWork` sets `_finished` under the same lock before
+   `FinishBackgroundJob`. Renamed `btnCancelJob`/`CancelSelectedJob` to
+   `btnStopJob`/`StopSelectedJob` to match the button. Restored master's
+   `TestFunctional.csproj`: a master merge had rewritten it LF->CRLF (162 lines of
+   pure line-ending churn in the PR diff).
+2. **`58718d0aab`** - `/code-review medium` over `origin/master...HEAD` (10 findings;
+   6 fixed, 4 dropped):
+   - Request threads came from `ActionUtil.RunAsync`, which makes FOREGROUND
+     threads. An abandoned request whose verb never returns kept the process alive
+     with no windows after exit (seen live: a Skyline whose start page was closed
+     over the MCP stayed running and had to be killed). Now a `new Thread` with
+     `IsBackground = true` running `CommonActionUtil.RunNow`.
+   - Exit stopped the jobs before `CheckSaveDocument`, so Cancel at the save prompt
+     left Skyline open with its exports already stopped. Split into
+     `AskToStopBackgroundJobs` (before the save prompt) and `StopBackgroundJobs`
+     (after it).
+   - A failure between `RunInBackground` and `PerformWork`'s finally was both
+     rethrown to the caller and reported by the job. `PerformWork` no longer
+     rethrows once `_backgroundJob` is set.
+   - `GetReportRows`/`GetReportFromDefinitionRows` now pass
+     `RunJob(..., stopIfAbandoned: true)`: their token is linked with
+     `RequestCancellation`, since nobody can receive the rows once the caller has
+     gone.
+   - The `GetRunningJobs` docs said "only jobs this service/connection started";
+     since the registry moved to `BackgroundJobs` it also lists jobs the user
+     backgrounded. Docs and the MCP tool description corrected (the tool now tells
+     the model not to stop those unless asked); `SkylineAiConnector.zip` rebuilt
+     with `dotnet build SkylineMcp.sln -c Release` (26.1.2.306,
+     `EXPECTED_ZIP_VERSION` updated).
+   - `ExportLiveReportDlg` creates the `FileSaver` after everything that can throw.
+   - Dropped: exit prompt during an MCP read (something is running; abandoned
+     reads now end), backgrounded error lacking the file name (IO errors carry the
+     path), the abandoned-call error text (written to a closed pipe, never read),
+     double progress report per tick (trivial cost).
+3. **`2fadcfcbd7`** - The exit prompt read "The job 'Exporting report 'Transition
+   Results'' is still running" (the description already quotes the report name).
+   Now "{0} is still running."; both exit resources renamed after
+   `AskToStopBackgroundJobs`.
+
+Verified live over the Skyline MCP on this branch's Debug build:
+`TTOF6600_64w.sky` (552,644 transitions x 6 replicates) and `CTOSymposium.sky`
+(715,802) from `F:\skydata\pedro`. A backgrounded Transition Results export is
+byte-identical to a foreground one; Stop Job, `skyline_cancel_job` and exit-OK
+leave no partial file; exit-OK ends the process. A "Raw Chromatograms" report
+(RawTimes/RawIntensities) runs far past the MCP's 30 s `CallTimeout`: the accept
+on its Save dialog timed out, the next call reached Skyline with the export's
+LongWaitDlg still up, Run in Background and `skyline_cancel_job` both worked
+over the MCP. The button placement noted below as "not visually confirmed" is
+now confirmed. Screenshots in `nickshulman/pr-assets` under
+`pwiz/4546-background-jobs/`, embedded in the PR description.
+
+**Connector gap found (not this branch's scope):** accepting a native Save
+dialog through the MCP does not return until the work it starts finishes (up to
+the 30 s timeout). Capturing the wait dialog of a shorter export needed an
+out-of-band `BM_CLICK` posted to the dialog's Save button.
+
+Tests: `TestJsonToolJobs`, `TestLongWaitDlgBackground` (3 loops),
+`TestSkylineMcp`, `TestJsonToolServer`, `TestMcpConnectorDisconnect`,
+`TestRunCommandMcpConnector`, `CodeInspection`.
 
 ## "Run in Background" (second commit)
 
@@ -200,8 +264,10 @@ possible: wrong on both counts.)
 **"Stop", not "terminate"**: settled after trying "terminate" (a dialog with both
 "Cancel Jobs" and "Cancel" is ambiguous, which is what started this). "Stop Job"
 in the Running Jobs dialog, "Stopping" in its progress column, "stop" in the exit
-prompt. Code names stay Cancel* - cancellation is the mechanism, and "stop" reads
-as a promise the mechanism cannot make.
+prompt. Code names below the UI stay Cancel* (`BackgroundJobs.Cancel`, `CancelAll`)
+- cancellation is the mechanism, and "stop" reads as a promise the mechanism
+cannot make. The dialog's own button and method are `btnStopJob`/`StopSelectedJob`
+(renamed 2026-11-02 to match what the user clicks).
 
 ## Exit guard, first pass (fourth commit)
 
