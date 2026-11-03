@@ -7,7 +7,7 @@
 - **Status**: In Review (PR open; TeamCity Perf/Regression not yet run - parent session queues it)
 - **GitHub Issue**: (none - from backlog `TODO-osprey_env_var_cataloging.md`, folded in below)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4983](https://github.com/ProteoWizard/pwiz/pull/4983)
 - **Worktree**: `C:\proj\wt-envvar` (night-session agent worktree, round 2 wave B)
 
 ## Objective
