@@ -1052,7 +1052,6 @@ to use instead.
 |---|---|
 | `OSPREY_EXIT_AFTER_CALIBRATION` | Exit after Stage 3; skip main search |
 | `OSPREY_LOAD_CALIBRATION` | Path to `.calibration.json` to load instead of running Stage 3 |
-| `OSPREY_LOESS_CLASSICAL_ROBUST` | `1` = Cleveland (1979) robust LOESS; default matches Rust |
 | `OSPREY_MAX_SCORING_WINDOWS` | Cap main-search windows for fast iteration under profilers |
 | `OSPREY_TRACE_PEPTIDE` | Modified-sequence filter for the per-peptide diagnostic trace (`[trace]` log lines across Stages 3-7). Comma-separated for multiple. Paired decoys auto-matched. |
 

@@ -96,11 +96,6 @@ lib_rt ascending, at R (round-trip) precision.
 ### OSPREY_LOESS_INPUT_ONLY=1
 Exit after LOESS input dump.
 
-### OSPREY_LOESS_CLASSICAL_ROBUST=1
-Switch LOESS robust iteration mode from Rust-compatible (residuals
-computed once from initial fit) to classical Cleveland 1979 (residuals
-refreshed per iteration). Supported in both tools.
-
 ## Main Search (Stage 4)
 
 ### OSPREY_DIAG_SEARCH_ENTRY_IDS=<id1,id2,...>

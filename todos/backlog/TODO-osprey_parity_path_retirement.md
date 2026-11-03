@@ -45,20 +45,16 @@ Categories:
 | A2 | `OSPREY_STAGE6_STREAM_SURVIVORS=0` (resident post-compaction survivor buffer) | A | **O(files × survivors)**: 28 GB at 163 files, super-linear | FirstPassFdrTask, PerFileRescoreTask, PerFileScoringTask guard, OspreyEnvironment, ResidentPaths | Pin test in ResidentPoolGuardTest; docs only | ~170 + ~70 test |
 | A3 | Resident Stage-7 join (`RescoredEntries.Streams == false`), reached from A1, A2 **and** A4 | A (shared) | **O(files × survivors)**: 4.4 GB + 0.197 GB/file; 91.1 GB measured at 446 runs | Pass2FdrSidecar, SecondPassFdrTask, PerFileRescoreTask, PipelineByproducts | Goes only after A1, A2 **and** A4's per-file half have all moved | ~300 |
 | A4 | **DONE by PR #4816 (2026-10-10).** `OSPREY_PASS2_QVALUE=transfer`: per-file half computed in Stage 7 over the whole pool (#4665) | A (placement) / C (algorithm) | **O(files × survivors)** via A3 | Pass2FdrSidecar (transfer core ~540, ComputePass2Resident 154), Program.cs | Transfer is the **only** pass-2 mode compatible with `OSPREY_EXPERIMENT_AGG=mean-best-N`; the plan is to MOVE `TransferOneFile` into `Pass2PerFileWorker`, not delete it | ~250 resident glue (the algorithm stays) |
-| A5 | `OSPREY_RELEASE_LIBRARY_FRAGMENTS=0` | A | O(library), not O(files): +10.8 GB at 4 SEA-AD files | LibraryFragmentRelease, OspreyEnvironment, LibraryEntry tripwire text | Two tests to rework; =0 not honoured on the `--task SecondPassFDR` leg (inferred inconsistency) | ~70 + ~60 test |
 | A6 | `OSPREY_ALLOW_UNFIXED_RESIDENT` + `ResidentPaths` + resident-pool guards | A (support) | n/a (it admits A1/A2) | OspreyEnvironment 390-470, ResidentPaths.cs, PerFileScoringTask guards, Program.cs, regression.ps1 | Goes after A1 and A2 | ~350 prod + ~450 test + ~60 ps1 |
 | A7 | Diagnostics that force resident pools: `OSPREY_DUMP_PERCOLATOR`, `DUMP_RESCORED`, `DUMP_MULTICHARGE` / `DUMP_RECONCILIATION`, all enabled by `-d` | B\* | **O(files × precursors)**, warn-only, no guard | PerFileScoringTask.PreCompactionPoolReason, PerFileRescoreTask, Stage6Planner | Rust cross-impl bisection workflow (Test-Snapshot stage5, DIAGNOSTICS.md) | redesign, not delete |
 | A8 | Unswitched resident fallbacks: full `FdrProjectionSet.BuildFromEntries`, all-runs `HydrateReconciliationOverlay`, the disk-state reasons in `PreCompactionPoolReason` | A\* | **O(files × precursors)** on resume / recon-sidecar routes | FirstPassFdrTask:3188, RescoreHydration:320-497, PerFileScoringTask:1785-1827 | These are live resume paths; each needs a streaming replacement | ~300 once streamed |
-| A9 | `OSPREY_LOESS_CLASSICAL_ROBUST=0` (legacy cached-residual LOESS) | A | none | LoessRegression, RTCalibration, Calibrator, CalibrationRefit | Rust v26.3.1+ matches the default; none known | ~15 |
 | A10 | `OSPREY_PICK_LDA=0` (legacy product-form peak pick) | A | none | PeakDataExtractor, OspreyEnvironment (validity key) | Scripts expose `-PickProduct`; doc says "kept precisely so the two stay comparable"; Rust may still pick by product (inferred) | ~25 + scripts |
 | A11 | `OSPREY_TRAIN_PICK_RUN=0` (cross-run maximum training row) | A | none (same dictionaries) | PercolatorSampling, PercolatorScorer, validity key | Rust's criterion is the maximum, so a cross-impl comparison needs it (inferred) | ~30 |
 | A12 | `OSPREY_MAX_PARALLEL_FILES` (back-compat cap) | A | none (a cap, not a memory path) | FileParallelism.cs:87-163, PerFileScoringTask:1078 | `ai/scripts/Osprey/Test-PerfGate.ps1` uses it as the cross-binary control for a baseline binary that predates `--parallel-files` | ~25 + tests |
 | A13 | Retired-name stubs: `OSPREY_STAGE7_STREAM` refusal; `OSPREY_ALLOW_UNBOUNDED_MEMORY`, `OSPREY_PROTEIN_COMPACT_RETRAIN`, `OSPREY_EXIT_AFTER_SCORING` comments; the `transfer-compete` / `percolator` names | A (residue) | none | Program.cs:579-595, OspreyEnvironment:290-307, scripts' ValidateSets | Stale scripts still pass them; the refusal protects A/B attribution | ~35 code + comments |
-| A14 | `OSPREY_BLOCK_READ_MB=0` (default 4 since 2026-10-04, PR #4765) | A | none | BlockReadStream.OpenRead | None once the default flips; keep BlockReadStats/Log as B | ~5 |
-| A15 | `OSPREY_BLOCK_READ_GATE=0` (default on since 2026-10-04, PR #4765) | A | none | BlockReadStream.ReadFromDisk | none | ~5 |
-| A16 | `OSPREY_STUB_IDENTITY=0` (default 1 since 2026-10-04, PR #4765) | A | none (LibraryIdentity is O(library)) | ParquetScoreCache 1145-1500, FirstPassFdrTask 208, 4225-4335, FirstPassSurvivorLoader:121 | The decode-from-file path is **not** removable; it is the per-row-group fallback when the library lacks an id. Only the mode switch and the `=2` verifier go | ~40 |
+| A16 | **=0 arm DONE (2026-11-03, `Skyline/work/20261103_osprey_parity_rows`).** `OSPREY_STUB_IDENTITY=2` verifier remains | B (proof harness) | none | ParquetScoreCache `VerifyLibraryIdentity`, `OspreyEnvironment.StubIdentity` (1 or 2) | Mode 2 is kept until the flip is banked on a cohort; then the switch goes entirely | ~25 |
 | A17 | Old-format back-compat readers | A (back-compat) | none | FirstPassModelIO StratumBaseIds, ParquetScoreCache reconciled="true", CalibrationParams legacy JSON | Pre-split output directories would stop resuming | ~60 |
-| A18 | Dead or test-only code found along the way | cleanup | none | FdrProjection.cs Builder, FdrProjectionSinks FdrStreamingSink, PercolatorQValues, PercolatorEngine frozenModel | none | ~300 |
+| A18 | Dead or test-only code found along the way (partly DONE 2026-11-03) | cleanup | none | FdrProjection.cs Builder (oracle test only), PercolatorEngine `RunPercolatorFdr` facade and `frozenModel` | PercolatorEngine was off-limits on 2026-11-03 (Brendan's open PRs); the Builder backs a byte-parity test | ~250 |
 
 Rough total if every A item is fully removed: about 3,000 production lines and 1,200 test lines. The largest single block is A1. The Rust-bisection diagnostics family (`OspreyFileDiagnostics.cs` and related) is about 3,400 lines, but it is category B and is not counted.
 
@@ -210,26 +206,6 @@ docs/00-pipeline-architecture.md:1314-1323 names only transfer, which is incompl
 - Transfer is the only pass-2 mode compatible with mean(best-N). Pass2FdrSidecar.cs:1985-2002 refuses protein-compact after a mean-best first pass and names transfer as the fix; docs/07-fdr-control.md:731-741 says the same.
 - The removal target is therefore the resident *placement*, by moving `TransferOneFile` into `Pass2PerFileWorker`. The algorithm itself is category C.
 
-### A5. `OSPREY_RELEASE_LIBRARY_FRAGMENTS=0`
-
-- **How set:** environment variable. `OspreyEnvironment.ReleaseLibraryFragments` (OspreyEnvironment.cs:309-349), a settable property.
-- **Default:** ON.
-- **Why kept:** "Set OSPREY_RELEASE_LIBRARY_FRAGMENTS=0 to keep the whole library resident as the A/B byte-identity oracle." The default measured 28.5 to 17.7 GB at Stage-7 peak on 4 SEA-AD files.
-- **Memory:** O(library), not O(files). The saving shrinks as the file count grows.
-
-**Code that exists only for =0 (~70 lines):**
-- The flag term in `LibraryFragmentRelease.RunsOnThisLeg` (LibraryFragmentRelease.cs:57).
-- The `;libfrag=0` suffix branch (LibraryFragmentRelease.cs:82-87). This is partly shared with A1.
-- The tripwire message text in LibraryEntry.cs:191,198.
-
-**Tests:** LibraryFragmentReleaseTest.cs:177-234; TaskValidityKeyTest.cs:606-659 (uses =0 to make the term observable).
-
-**regression.ps1 / scripts:** neither sets it. Regression/README.md:81-88 describes a manual =0 verification.
-
-**Notes:**
-- PerFileScoringTask.cs:1128-1129 and TrainingExportWriter.cs:359 apply `RetainFragmentsFor` on `--task SecondPassFDR` without checking the flag. So =0 is not fully honoured on that leg, although the validity key still says `;libfrag=0` (inferred).
-- Stale reference: ScoringTaskShared.cs:1017 cites a nonexistent `LibraryFragmentRelease.SummaryCanExist`.
-
 ### A6. `OSPREY_ALLOW_UNFIXED_RESIDENT`, `ResidentPaths` and the guards
 
 - **How set:** environment variable, a comma- or semicolon-separated token list (OspreyEnvironment.cs:390-470).
@@ -275,21 +251,9 @@ These have no switch. They are chosen by disk state or route, but they are O(fil
 
 **Blockers:** these are live resume paths, so each needs a streaming replacement rather than a deletion.
 
-### A9. `OSPREY_LOESS_CLASSICAL_ROBUST=0`: legacy single-refresh LOESS
-
-- **How set:** environment variable (OspreyEnvironment.cs:113-121), readonly.
-- **Default:** ON (classical).
-- **Why kept:** "set to '0' to force the legacy single-refresh path for comparison."
-- **Code:**
-  - The `classicalRobust` parameter and the residual-refresh branch: Osprey.Chromatography/LoessRegression.cs:229-241, 293-298.
-  - `RTCalibratorConfig.ClassicalRobustIterations`: RTCalibration.cs:54-63, 85, 157.
-  - Reads at Calibrator.cs:1336 and CalibrationRefit.cs:91-97.
-  - ~15 lines.
-- **Note:** the LoessRegression doc (229-237) still says the default is false ("matches Rust"). The config default is true, so that doc is stale. RTCalibration.cs:187 calls `Fit` with robustness iterations 0, so the flag has no effect there.
-- **Tests:** none found. **Scripts:** ai DIAGNOSTICS.md:98 documents it.
-- **Blockers:** none (Rust v26.3.1+ uses classical).
-
 ### A10. `OSPREY_PICK_LDA=0`: legacy product-form peak pick
+
+- **Re-verified 2026-11-03: still blocked.** Rust `pick_lda.rs` keeps the `OSPREY_PICK_LDA=0` legacy arm as an A/B lever, and the dataset runners still expose `-PickProduct`.
 
 - **How set:** environment variable (OspreyEnvironment.cs:~385-411), readonly.
 - **Default:** ON (learned model).
@@ -308,6 +272,8 @@ These have no switch. They are chosen by disk state or route, but they are O(fil
 
 ### A11. `OSPREY_TRAIN_PICK_RUN=0`: cross-run maximum training row
 
+- **Re-verified 2026-11-03: deferred.** The switch is read in `PercolatorEngine.cs` (and the reservoir sits in `PercolatorScorer.cs`), both off-limits while Brendan's PRs own them.
+
 - **How set:** environment variable (OspreyEnvironment.cs ~ "OSPREY_TRAIN_PICK_RUN" block), readonly.
 - **Default:** ON (one sampled run).
 - **Why kept:** "setting the variable to 0 restores the historical cross-run maximum for A/B work." The doc also says it is "Rust's criterion in pipeline.rs" (PercolatorSampling.cs:197-201).
@@ -322,6 +288,8 @@ These have no switch. They are chosen by disk state or route, but they are O(fil
 
 ### A12. `OSPREY_MAX_PARALLEL_FILES`: back-compat concurrency cap
 
+- **Re-verified 2026-11-03: still blocked.** `Test-PerfGate.ps1` still sets it as the cross-binary control.
+
 - **How set:** environment variable (OspreyEnvironment.cs:55-68).
 - **Default:** 0 (no cap).
 - **Why kept:** "legacy back-compat cap on concurrent file processing, superseded by the --parallel-files CLI argument."
@@ -332,6 +300,8 @@ These have no switch. They are chosen by disk state or route, but they are O(fil
 
 ### A13. Retired-name residue
 
+- **Re-verified 2026-11-03: deferred.** The script ValidateSets still offer `transfer-compete` (eight runners); Osprey refuses the value at startup, so a stale script fails fast. Edit the scripts when no long run is using them.
+
 - **`OSPREY_STAGE7_STREAM`:** `Stage7StreamRetiredSet` (OspreyEnvironment.cs:290-307) and the startup error in Program.cs:579-595 (~35 lines). Test: CommandLineErrorTest.cs:51,144-146. The refusal stops a stale A/B script from mis-labelling its results. Remove it once no script sets the variable; none in `ai/scripts/Osprey` does today.
 - **`OSPREY_ALLOW_UNBOUNDED_MEMORY`, `OSPREY_PROTEIN_COMPACT_RETRAIN`, `OSPREY_EXIT_AFTER_SCORING`:** no code reads them; they survive only in comments.
   - ai DIAGNOSTICS.md:375-377 and :410 still document `EXIT_AFTER_SCORING` as live.
@@ -341,34 +311,19 @@ These have no switch. They are chosen by disk state or route, but they are O(fil
   - The `stratumBaseIds == null` branch in StreamingFdr.cs:205, 660-664 is test-only.
   - Script ValidateSets still offer `transfer-compete`.
 
-### A14 / A15. New: `OSPREY_BLOCK_READ_MB` and `OSPREY_BLOCK_READ_GATE` (OFF arms after the flip)
+### A16. `OSPREY_STUB_IDENTITY`: the 0 arm is gone; the =2 verifier remains
 
-- **How set:** environment variables (OspreyEnvironment.cs:70-84), readonly. Currently 0 / unset.
-- After the flip, the parity-only code is:
-  - the `FileStream` branch in `BlockReadStream.OpenRead` (Osprey.IO/BlockReadStream.cs:62-70, ~3 lines);
-  - the ungated `else` in `ReadFromDisk` (BlockReadStream.cs:287-300, ~4 lines);
-  - the `<= 0` early-out in `BlockReadStats.Text` (Osprey.Core/BlockReadStats.cs:59-60).
-- Every reader already goes through `BlockReadStream.OpenRead`: 20 sites in ParquetScoreCache.cs and FdrScoresSidecar.cs:351, 827, 942.
-- `BlockReadStats` (70 lines) and `BlockReadLog` (Osprey.Tasks/BlockReadLog.cs, 38 lines) are category B.
-- **Tests:** none for either switch or for `BlockReadStream`. Because the values are readonly statics, a test cannot A/B them in-process without making them properties (note for the flip).
-- **Memory:** none. One block buffer per open stream, ~MB.
-
-### A16. New: `OSPREY_STUB_IDENTITY` (the 0 arm after the flip to 1)
-
-- **How set:** environment variable (OspreyEnvironment.cs:86-93), readonly, values 0/1/2.
-- The code is:
-  - `LibraryIdentity` (Osprey.Core/LibraryIdentity.cs, 81 lines, O(library) int arrays);
-  - the identity overloads `LoadFdrStubsFromParquet(..., LibraryIdentity)` (ParquetScoreCache.cs:1145-1240) and `ReadFdrStubScalars(..., LibraryIdentity)` (:1368-1454);
-  - `AllInLibrary` / `VerifyLibraryIdentity` (:1456-1491);
-  - `FirstPassFdrTask.StubIdentity` (:208, 4225-4230), `TryStreamFromLibrary` (:4314-4332) and the call at :4281;
-  - `FirstPassSurvivorLoader.Identity` (:121, 192).
-- **After the flip, the decode-from-file branch is NOT parity-only.** It is the per-row-group fallback whenever the library lacks an id, and the path when a file has no `is_decoy` column. What becomes parity-only:
-  - the `== 0` checks;
-  - the non-identity overloads, if no caller remains (tests call them: IOTest.cs:2538, 3629, 3690, 4931-5129);
-  - mode 2 (`VerifyLibraryIdentity`, ~25 lines). Mode 2 is a proof harness (B), worth keeping until the flip is banked on a cohort.
-- **Tests:** none exercise `LibraryIdentity` or modes 1/2 directly (no `LibraryIdentity` reference in Osprey.Test). Worth adding before the flip.
+- 2026-11-03: the `=0` arm (always decode charge, decoy flag and peptide from the file) was removed with
+  its `== 0` check in `FirstPassFdrTask.StubIdentity`; any value but 2 now reads as 1. The decode-from-file
+  branch stays: it is the per-row-group fallback when the library lacks an id.
+- What remains: mode 2 (`VerifyLibraryIdentity`, reads both and stops at the first difference), a proof
+  harness. Remove it, and the switch, once the identity path is banked on a cohort run.
+- The non-identity overloads of `LoadFdrStubsFromParquet` / `ReadFdrStubScalars` still have test callers
+  (IOTest); they go only if those tests move to the identity overloads.
 
 ### A17. Old-format back-compat readers
+
+- **Re-verified 2026-11-03: deferred.** Removing the readers stops pre-split output directories from resuming; do it at the next format bump, as the code says.
 
 - `FirstPassModelIO.ModelDto.StratumBaseIds` (FirstPassModelIO.cs:98-105) and the `LoadFromAny` fallback (:178-205). ~15 lines. The doc says "Removable at the next format bump." No test feeds a pre-split file.
 - The reconciled parquet `osprey.reconciled = "true"` (pre-#4486 row-parallel shape) is still accepted by `ValidateScoresParquetGroup` (ParquetScoreCache.cs:2443-2452), along with the missing-`score_index` positional fallback (:236-258). This is probably reachable only under `OSPREY_VERSION_OVERRIDE` (inferred).
@@ -379,13 +334,15 @@ These have no switch. They are chosen by disk state or route, but they are O(fil
 
 ### A18. Dead or test-only code found along the way
 
-These are not switches, but they are worth deleting in the same sweep:
-- `FdrProjectionSet.Builder` (Osprey.FDR/FdrProjection.cs:390-495, ~100 lines). Its only caller is FdrTest.cs:4101 (verified).
-- `FdrStreamingSink` (Osprey.Tasks/FdrProjectionSinks.cs:356-444, ~90 lines) is never constructed. ScoringTaskShared.cs:881-890 still cites it.
-- `RunPercolatorFdr(FdrProjectionSet…)` facade (FirstPassFdrTask.cs:2899-2930) has zero callers.
-- `PercolatorQValues.ComputeFullPopulationPrecursorFdr` (PercolatorQValues.cs:308-354, ~47 lines) has zero callers.
-- The `frozenModel` parameter (PercolatorEngine.cs:86, 125, 502, 517, 611-629; FirstPassFdrTask.cs:2844, 2884) is never passed non-null (inferred).
-- The StreamingFdr.cs:250-255 note "DELETE THIS RECOMPUTE ... before the PR merges" is stale. The recompute is now the deliberate `OSPREY_PASS2_VERIFY_WORKER` instrument (B).
+Done 2026-11-03 (`Skyline/work/20261103_osprey_parity_rows`): `FdrStreamingSink` (never constructed),
+`PercolatorQValues.ComputeFullPopulationPrecursorFdr` (no callers), and the stale "DELETE THIS RECOMPUTE"
+note in StreamingFdr (the recompute is the `OSPREY_PASS2_VERIFY_WORKER` instrument, B).
+
+Remaining:
+- `FdrProjectionSet.Builder` (Osprey.FDR/FdrProjection.cs). Its only caller is the byte-parity test for
+  the streaming lean-stub load in FdrTest; deleting it deletes that oracle, so decide that together.
+- `RunPercolatorFdr(FdrProjectionSet...)` in PercolatorEngine: no production caller, two FdrTest callers.
+- The `frozenModel` parameter in PercolatorEngine, never passed non-null (inferred).
 
 ---
 
