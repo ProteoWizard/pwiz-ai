@@ -94,3 +94,7 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   questions (section "Decisions"). Worktrees created under `C:\proj\wt-*` on their branches from
   origin/master c1242139bf. DIA-NN confirmed absent on UW8; SEA-AD cohort confirmed present.
   Nothing launched: this TODO and its brief are the handoff.
+- 13:11-13:30 (night session, Fable 5.1 parent): origin/master had moved to 049d045e98 (#4967 merged;
+  #4950, #4968, #4969 still open, so the hold list stands). Fast-forwarded all four worktrees to it.
+  Launched agents A-D (Opus) from inside their worktrees with the brief file as their instructions;
+  each writes `ai/.tmp/agent-<X>-status.md`. Budget log: `ai/.tmp/night-session-budget.md`.

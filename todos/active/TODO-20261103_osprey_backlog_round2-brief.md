@@ -130,3 +130,32 @@ release still frees zero. Then write the design in your TODO (which entries Stag
 fragments for, and how the retained set can narrow at the 6->7 boundary). Implement only if the
 structure is clear and the change is output-locked by the golden; otherwise the TODO and a status comment
 on #4577 are the deliverable.
+
+## Agent E (worktree `C:\proj\wt-manifest`, branch `Skyline/work/20261103_osprey_stage6_manifest`)
+
+Item 7, re-scoped 2026-11-03 after measuring what #4898 did. Read `C:\proj\ai\todos\backlog\TODO-task_file_contract_from_declarations.md`
+and `gh issue view 4601 --comments` in full. Already on master (do not redo): `--task-files` prints each
+task's declared inputs/outputs (`Program.PrintTaskFiles`), `OspreyTask.IsPerFileWorker` is the per-file/join
+distinction, `regression.ps1`'s HPC chain (`Get-DeclaredTaskFiles`) and `Run-SeaAd.ps1 -LinkFrom`
+(`ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`) both stage from `--task-files` and fail on a missing
+declared input; SecondPassFDR no longer declares `<stem>.calibration.json`; #4621/#4646 made Stage 6 write a
+`.scores-reconciled.parquet` for every run with an `osprey.rescored` footer fact, and `AnyReconciledParquet`
+reads the fact (option (a) of #4601 landed).
+
+Step 1 (measure, record in your TODO): verify each remaining #4601 checkbox and each backlog-TODO task
+against your base commit; cite file:line. Expected open items: (i) Stage 5 does not publish the Stage 6
+work manifest it computes; (ii) `AnalysisPipeline.WriteTaskSidecars` stamps every declared output that
+merely exists (defense-in-depth gap); (iii) no regression leg covers two runs in one output directory
+with different PerFileRescoring validity keys and a shrinking work set; (iv) option (b) sidecar-only
+attestation. Also check whether `<each>.reconciliation.json` is still declared by SecondPassFDR and
+whether it is read on the default path.
+
+Step 2 (implement what is open, golden-unchanged): the work manifest as an analysis-wide sidecar written by
+FirstPassFDR (name it in the existing `output.<pass>.*` style; JSON; per stem: consensus / reconciliation /
+gap-fill flags and a `hasWork` summary), declared in `Outputs` so `--task-files` prints it; the driver stamps
+only outputs this run produced or verified current; a `regression.ps1` opt-in mode (NOT in the default or
+`-Dataset All` set, no TeamCity change this round) that runs Stellar twice in one directory with a key change
+that shrinks the work set and asserts the second blib equals a clean-directory run. Option (b) is a design
+note in the TODO unless it falls out trivially. Skip the `1st-pass.model.json` stratum split (it is #4581
+territory, held). Gate: Stellar and StellarLibDecoy. Module `osprey`. Fold the backlog TODO into your dated
+TODO (what #4898 already delivered, what you did, what is left) and `git rm` it in the same pwiz-ai commit.
