@@ -289,3 +289,64 @@ review of the whole feature is cheaper than two.
 - tcinspect.ps1 first run aborted (inspectcode exit 4) because the pre-build of SkylineTester.csproj
   failed on duplicate assembly attributes from a stale `SkylineTester/obj/x64/Release`; deleted it
   and reran (log `ai/.tmp/sessions/20261102-modsite/tcinspect2.log`).
+
+## Scope items from the data investigation (2026-11-02, dev decision: implement now)
+Source: `ai/.tmp/sessions/20261102-modsite/data-investigation-PR4391.md` (Panorama Public HRI
+phospho PRM dataset, PXD074030; local copy under `D:\Users\RitaCh\Downloads\V0088-02_...(3)`).
+Both items are cheap, analytic, and need no results data. More datasets are being collected to
+look for further common patterns before the larger analysis tools are scoped.
+
+- [x] **S1 Neutral-loss ions are never "uniquely localizing".** A phospho fragment minus H3PO4 has
+      exactly the composition of the unmodified fragment minus H2O (HPO3 - H3PO4 = -H2O), so the
+      m/z the analyzer calls unique to S4 (b4-98) is produced by every other isomer as b4-H2O. Seen in
+      the data: b4-98 present in 37/38 files at the T15 peak, y5-98 "unique to T15" present in 38/38
+      at the S4/S5 peak. The analyzer works on (IonType, cleavageOffset) and never sees losses:
+      `GetProducingSetSize` / `IsUniqueToPrecursor(Transition)` ignore them, and
+      `TransitionSettings.Accept(..., localizingAnalyzer)` is called per loss combination in
+      `TransitionGroup.GetTransitions` with only (type, offset), so the loss form is auto-picked as a
+      localizing ion too. Fix: thread the losses through (`TransitionDocNode.Losses` /
+      `TransitionLosses` in `GetTransitions`; `MatchedFragmentIon` losses in the Library Match path)
+      and return not-unique when any loss comes from an ambiguous modification (general rule: when
+      mod mass minus loss mass is 0 or a generic loss such as H2O / NH3). Every consumer must follow:
+      `Transition.UniquelyLocalizing` column, tree badge, tree and pick-list tooltips,
+      `SpectrumGraphItem.GetLocalizedModificationName`, `SpectrumRanker` filter path. Add a unit test
+      with a phospho loss (b4-98 of the S4 form is NOT unique; b4 phospho intact IS) and extend the
+      functional test's setting case so a -98 ion is not added as a localizing ion.
+- [x] **S2 Group ambiguity by mass shift, not by StaticMod instance.** Skyline ships "Phospho (ST)"
+      and "Phospho (Y)" as two mods, so for VGTCLYASPEQLEGSEYDAK the analyzer sees candidates
+      {T3, S8, S15} for the S/T forms and {Y6, Y17} for the Y form, and gives them different
+      `LocalizationGroupKey`s although all five residues compete at one precursor m/z (data: the
+      three nodes sit on one peak and the Y6/T3 "unique" ions are absent). Fix: in the ctor, group
+      the explicit static mods by monoisotopic mass delta (rounded, e.g. 1e-3), and take candidate
+      sites as the union of `IsApplicableMod` over every structural mod in the document settings
+      with that same mass delta (the peptide's own ExplicitMods do not mention the sibling mod, so
+      the analyzer needs `SrmSettings.PeptideSettings.Modifications.StaticModifications` back; the
+      ctor's settings parameter was removed in the code review as unused). Key entry and tooltip name
+      become the sibling names joined, or the mass delta; both peptides must produce the same key.
+      Unit test: Phospho (ST) + Phospho (Y) in settings, Y-form and S-form of one sequence share a
+      key and an isomer count of 5; a document with only Phospho (ST) keeps the old behavior.
+
+### S1 + S2 implemented (2026-11-02, late evening)
+- S1: every analyzer ion query takes `TransitionLosses` (overloads on `TransitionDocNode`,
+  `(Transition, losses)` and `(IonType, offset, losses)`; the loss-free `Transition` overloads are
+  gone so no caller can forget). `HasAmbiguousLoss`: a loss whose `PrecursorMod` has the mass shift
+  of an ambiguous group makes the ion not unique (`GetProducingSetSize` = `IsomerCount`, resolves
+  nothing). `TransitionSettings.Accept` / `TransitionFilter.Accept` gained `TransitionLosses losses`
+  after the analyzer; `GetTransitions` passes the loop `losses`, `OtherLabelTypesAllowed` the
+  matching node losses, `SpectrumRanker` `match.Losses`, `SpectrumGraphItem` `mfi.Losses`; tree,
+  pick list and entity use the `TransitionDocNode` overloads. Tests: `TestPhosphoLossNotUnique`
+  (b4 unique, b4-98 not, producing set = isomer count); functional fixture PHOSPHO now has an
+  always-included H3PO4 loss and the setting case asserts no loss ion below the precursor m/z;
+  `IsIon` / `FindIon` / the column check skip loss transitions.
+- S2: ctor groups explicit mods by `GetMassShiftKey` (monoisotopic shift via
+  `SequenceMassCalc.GetModMass`, rounded to 1e-3 Da as a long); candidate sites = union of
+  `IsApplicableMod` over the placed entries plus every structural mod in
+  `settings.PeptideSettings.Modifications.StaticModifications` with that shift. `AmbiguousMod`
+  carries `Name` (sibling names sorted, joined with "/") and `MassShiftKey`; `LocalizationGroupKey`
+  and the tooltips use `Name`, `Mod` stays the placed entry (tests `AreSame`). The `SrmSettings`
+  ctor/factory parameter is back with a real use; `PeptideTreeNode` caches by node AND settings
+  reference again. Test `TestSiblingModsShareAmbiguity`: Y5-form and S7-form of
+  VGTCLYASPEQLEGSEYDAK share key and isomer count 5, b6 (T2+Y5) producing set 2; settings with
+  only Phospho (ST) give 3 and a key without the Y entry.
+- Gate: build + the 7-test batch green (analyzer, functional en, filter serialization,
+  TestNeutralLoss, TestAutoSelect, TestLibraryRankedNeutralLosses, CodeInspection).
