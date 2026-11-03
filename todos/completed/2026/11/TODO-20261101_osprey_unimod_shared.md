@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261101_osprey_unimod_shared`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: Off hold (Brendan, 2026-11-03): merge after its Perf/Regression gate (build 4248233) passes.
+- **Status**: Completed (merged 2026-11-03 after its Perf/Regression gate, build 4248233, passed).
   The PR is step one of the unification roadmap filed as #4980 (one UniMod source, one element table,
   formula-preserving modifications, a shared lookup layer); the composition-based mass and the MS1
   isotope atoms follow in a later PR on top of this one. Earlier hold note kept below for the record.
@@ -101,3 +101,13 @@ right specificity) changes which modification a BiblioSpec library reads as, so 
 - Investigated sources, chose Pwiz.Data.Common; implemented; unit tests 646/646, inspection clean
   (log `C:\proj\ai\.tmp\sessions\20261101-unimod\gate1.log`); pwiz Common.Tests Unimod 4/4
   (`C:\proj\ai\.tmp\sessions\20261101-unimod\pwiz-common-test.log`).
+
+### 2026-11-03 - Merged
+
+TeamCity Perf/Regression gate build #354 (4248233) passed on a37a709df1: all four datasets plus the
+CarafeSharp pass. PR #4956 merged as commit af5efe8b2b. Shipped: Osprey's UniMod ids, titles and
+masses from unimod.obo through Pwiz.Data.Common.Unimod, the private tables gone, reader versions 5.
+Issue #4736 closed by the merge. Its items 2-4 (mass matching against all of UniMod, reconciling
+Skyline's data with the obo, a tool-docs rule) are now steps of the unification roadmap #4980,
+where the next Osprey PR computes modification masses from the obo composition and carries the
+atoms into the MS1 isotope distribution.
