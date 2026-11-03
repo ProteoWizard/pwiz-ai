@@ -7,7 +7,7 @@
 - **Status**: In Progress (PR open, awaiting the Perf/Regression gate the parent session queues and maccoss's review)
 - **GitHub Issue**: [#4978](https://github.com/ProteoWizard/pwiz/issues/4978)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4982](https://github.com/ProteoWizard/pwiz/pull/4982)
 - **Worktree**: `C:\proj\wt-carafe` (night-session agent worktree, round 2 wave D)
 
 ## Objective
@@ -51,7 +51,7 @@ per-commit pass reads `Passed 108` with nothing skipped.
       tcbuild.bat / tctest.bat comments
 - [x] Gates (below)
 - [x] /code-review medium (triage below)
-- [ ] PR (reviewer maccoss)
+- [x] PR #4982 (reviewer maccoss); commits ed0eb8892a, 5e23704f08
 
 ## Gate evidence
 
