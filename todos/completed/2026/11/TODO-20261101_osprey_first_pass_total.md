@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_first_pass_total`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4463](https://github.com/ProteoWizard/pwiz/issues/4463)
 - **Module**: `osprey`
-- **PR**: [#4957](https://github.com/ProteoWizard/pwiz/pull/4957)
+- **PR**: [#4957](https://github.com/ProteoWizard/pwiz/pull/4957) (merged 2026-11-03)
 - **Worktree**: `D:\Dev\pwiz-unimod` (night-session worktree of `C:\proj\pwiz`, after PR #4956)
 
 ## Objective
@@ -60,3 +60,9 @@ the task brief.
 
 ### 2026-11-01
 - Implemented and gated as above.
+
+### 2026-11-03 - Merged
+
+PR #4957 merged as commit 3b659483e1. Shipped: the experiment-level distinct-precursor line in place
+of the summed run-level total, the resource string and the test that pins it. Not added: a peptide
+count beside it (Rust printed one), left out as described above. Issue #4463 closed by the merge.
