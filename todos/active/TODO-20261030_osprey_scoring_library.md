@@ -193,6 +193,9 @@ NN-style combiner over 100+ scores is required to compete.
   - F additions: 552332ce97 masked features absent from the FDR matrix (Stellar exact golden); b3798b87cf
     Stage 4 computes only families the mask reads, OSPREY_RECORD_ALL_FEATURES=1 research switch, ;featrec=
     key; parquet = master size. Local regression-parallel All on b3798b87cf: 48/48 PASS.
+  - 2026-11-03 MERGED #4967 as 049d045e98 (GBDT speedup + DeterministicMath fdlibm exp/log, GBDT
+    bit-identical Windows/Linux at 1-16 threads; TC Perf/Regression 4248590 and Osprey Linux .NET green).
+    #4968 retargeted to master. Master (12 small PRs) merged into #4967, #4968, #4950 and #4969 first.
 - [ ] Split this branch into focused PRs (A speedup; B OOF + two-round; C tolerance log/floor + mass-error plot;
   D corr tolerance; E protein-compact fix + shuffle audit); reword commit messages to describe Osprey's
   changes on their own merits before anything is pushed; base on Mike's #4950
