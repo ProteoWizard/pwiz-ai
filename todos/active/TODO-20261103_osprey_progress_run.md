@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4979](https://github.com/ProteoWizard/pwiz/issues/4979)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4984](https://github.com/ProteoWizard/pwiz/pull/4984)
 - **Worktree**: `C:\proj\wt-progress` (night-session agent worktree, round 2 wave A)
 
 ## Objective
@@ -65,7 +65,7 @@ identical (Stellar golden; `ProgressReporterTest` / `MultiProgressReporterTest`)
 - [x] regression.ps1 -Dataset Stellar - PASSED before review fixes (`.../regress-stellar-item1.log`);
       re-run on the final code PASSED too (`.../regress-stellar-item1b.log`)
 - [x] /code-review medium, triage (below)
-- [ ] PR
+- [x] PR #4984 opened (TeamCity Perf/Regression gate NOT triggered - parent session queues it)
 
 ## Code review (/code-review medium, 2026-11-03)
 
