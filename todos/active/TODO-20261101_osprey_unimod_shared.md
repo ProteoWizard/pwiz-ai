@@ -4,7 +4,11 @@
 - **Branch**: `Skyline/work/20261101_osprey_unimod_shared`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: ON HOLD (Brendan, 2026-11-02). PR #4956 is open and green but is not to be merged yet.
+- **Status**: Off hold (Brendan, 2026-11-03): merge after its Perf/Regression gate (build 4248233) passes.
+  The PR is step one of the unification roadmap filed as #4980 (one UniMod source, one element table,
+  formula-preserving modifications, a shared lookup layer); the composition-based mass and the MS1
+  isotope atoms follow in a later PR on top of this one. Earlier hold note kept below for the record.
+- **Hold note (2026-11-02)**: PR #4956 was open and green but not to be merged yet.
   Brendan wants Skyline and Osprey to agree on UniMod before either follows core pwiz: Skyline's
   `UniModData.cs` is generated from a 2023 `unimod.xml` (1,172 ids) while the obo this PR reads is
   from 2026-02 (1,560 ids). Decide first whether UniModCompiler is repointed at the obo and
