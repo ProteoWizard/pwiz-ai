@@ -213,9 +213,9 @@ review of the whole feature is cheaper than two.
   `7531719a31` code review fixes. Pushed 2026-11-02 evening on the dev's request together with
   `14e7697e64` (merge of master) and `5171e451e0`. The PR got the `skyline` label, the `skyline:`
   title prefix and a rewritten body. The 4 Copilot threads (MultiplyClamped overflow, two on the
-  Peptide entity memoization, the removed pick-list label) are all addressed in the pushed commits;
-  replying/resolving them over the GitHub API was blocked by the harness permission classifier,
-  so they may still show open - resolve by hand or with /pw-respond 4391.
+  Peptide entity memoization, the removed pick-list label) were answered and resolved over the
+  GitHub API (the harness auto-mode classifier denied that call; it went through once the dev
+  switched the session to manual mode and approved it).
 - Pre-push gate as run: build + TestSiteDeterminingIonFunctional (en + fr),
   TestSiteDeterminingIonAnalyzer, SerializeTransitionFilterTest, TestNeutralLoss, TestAutoSelect,
   TestLibraryRankedNeutralLosses, CodeInspection; `Build-Skyline.ps1 -QuickInspection` (Skyline +
