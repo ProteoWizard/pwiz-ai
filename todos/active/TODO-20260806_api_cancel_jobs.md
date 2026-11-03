@@ -92,7 +92,15 @@ into each other's diagnostic log.
 
 ## Remaining
 
-- Wait for TeamCity on `2fadcfcbd7`, then mark #4546 ready for review.
+- Wait for TeamCity on `4985ddaaa2`, then mark #4546 ready for review.
+
+## Copilot review (2026-11-02, `4985ddaaa2`)
+
+All 5 threads fixed and resolved: `JobProgressMonitor` no longer forwards final
+statuses (the exporter reports Complete before `saver.Commit()`, which took the
+job out of the list early); `RunJob` reports a failure through `job.Failed` when
+the request was abandoned; `RequiresJsonToolServiceMethod` on both job MCP tools;
+status-text double-click enabled, progress-bar wiring removed.
 
 ## Review and PR prep (2026-11-02)
 
@@ -227,9 +235,11 @@ System.Threading.Tasks API in a codebase that bans async/await.
 `RunningJobsDlg` (Controls) lists Job / Status / Progress on a 500 ms timer, rows
 matched by job id and updated in place so the selection survives; "Cancel Job"
 cancels the selected one, which then reads "Canceling" until the work stops.
-Reached from **Tools > Running Jobs...** and by **double-clicking the status bar**
-(wired on both `statusGeneral` and `statusProgress` - one visual area, and the
-progress bar is the bigger target).
+Reached from **Tools > Running Jobs...** and by **double-clicking the status
+text** (`statusGeneral`, which needs `DoubleClickEnabled = true` - a
+ToolStripItem's default is false). The progress bar was wired too at first, but
+it is a native control that never receives a double-click (confirmed with a real
+mouse double-click, 2026-11-02), so that wiring was removed.
 
 Two gates came with the menu item, both handled: `RunningJobsDlg` added to
 `TestRunnerFormLookup.csv`, and `KeyboardShortcuts.html` re-recorded in
