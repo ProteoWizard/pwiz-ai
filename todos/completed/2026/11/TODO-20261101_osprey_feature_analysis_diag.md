@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20261101_osprey_feature_analysis_diag`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: In Review. DECISION FOR BRENDAN: the training-set analysis runs on EVERY run,
+- **Status**: Completed (merged 2026-11-03; Brendan accepted the every-run analysis at merge)
+- **Decision as shipped**: the training-set analysis runs on EVERY run,
   not only under `--model-diagnostics` (P16, see Decision 1). Measured cost on the 3-file Stellar
   regression: `[TIMING] Percolator training-set analysis: 0.8s` (300,000-row subset, 21 features,
   linear SVM) against `Percolator train all folds (parallel): 106.5s`. To gate it on the flag
@@ -112,3 +113,12 @@ the ROC threshold. Dropped: none.
 - Rendered the StellarLibDecoy report with the final template in headless Edge: no console
   errors; on Stellar xcorr and SG-weighted xcorr group at r = 0.96, joint permutation drop 99.9%.
 - Committed f8641f70e2.
+
+### 2026-11-03 - Merged
+
+TeamCity Perf/Regression gate build #351 (4248190) passed on f8641f70e2: all four datasets plus the
+CarafeSharp pass. PR #4965 merged as commit b77cfb0326. Shipped as described above; #4550 closed by
+the merge, #4467 stays open for the leave-one-out ablation, VIF and single-feature-IDs parts. The
+every-run analysis (CollectTrainingAnalysis) stands as the shipped behavior. #4963 now conflicts
+with master in PercolatorScorer.cs a second time (this PR's trainer-capture edits sit inside the
+block it moves) and is re-merged next.
