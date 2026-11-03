@@ -135,3 +135,157 @@ several serines). v1 = an **ion-selection assistant**.
   transient popup, revisit if reused elsewhere).
 - Ambiguity considers static (structural) mods only; heavy/isotope + crosslinkers excluded.
   Non-disjoint mod site-sets (two mods competing for one residue) noted as an edge to watch.
+
+## Session 2026-11-02 - merge master + Copilot review fixes
+- pwiz1 was parked on `Skyline/work/20260820_dpiAwareness` with the uncommitted DPI sweep
+  harness. Parked it as `git stash` entry "dpiAwareness local sweep harness WIP (parked
+  2026-11-02 for modSite session; never commit)" and moved the four untracked
+  `TestFunctional/Dpi*ProbeTest.cs` / `DpiPaneSweepTest.cs` files to
+  `ai/.tmp/sessions/20261102-modsite/dpi-probes/` (SDK-style csproj globs would have compiled
+  them against the stashed harness). **Restore both when switching pwiz1 back to the DPI branch.**
+- Merged `origin/master` (424 commits behind; PR showed CONFLICTING). All 13 conflicts were
+  whole-file: master's LF normalization (#4789) + BOM pass + SDK-style csproj conversion. Resolved
+  by taking master's files and re-applying the branch delta (`git apply --ignore-whitespace`);
+  the three csproj edits are dropped (globs pick up the new files). `git add --renormalize` so the
+  branch's files are stored LF like master. Merge commit `14e7697e64` (local, not pushed).
+  Branch diff vs master is back to 15 files, +1316/-8.
+- Copilot review (2026-07-08) threads, all addressed in the working tree (uncommitted):
+  - `MultiplyClamped` overflow: compare `a > MAX_COUNT / b` before multiplying.
+  - `Peptide` analyzer memo not document-sensitive: replaced the computed-flag fields with
+    `CachedValue<SiteDeterminingIonAnalyzer>` (same `CachedValue.Create(DataSchema, ...)` pattern as
+    `Transition._results`), so it recomputes when `SrmDocument.ReferenceId` changes.
+  - `lblSiteDeterminingEmpty` missing `AutoSize = false` in the Designer: added.
+- Build (net10.0-windows, dotnet) green in 183 s. Tests PASS: TestSiteDeterminingIonAnalyzer,
+  TestSiteDeterminingIonFunctional (en + fr), ColumnCaptionLocalizationTest (5), TestNeutralLoss.
+  Log: `pwiz1/pwiz_tools/Skyline/bin/staging/Debug/TestSiteDeterminingIonAnalyzer,...,TestNeutralLoss.log`.
+- Fix commit `5171e451e0` (local). Still to do: push (merge + `5c03faaabf` UniquelyLocalizing
+  column + fixes), resolve the 4 Copilot threads, add the `skyline` label + `skyline:` title prefix
+  and the TODO link + UniquelyLocalizing bullet to the PR description, pre-push inspection gate.
+
+## Scope expansion 2026-11-02 (dev decision: same PR, not a follow-up)
+Rationale from the dev: without a document-wide way to select unique ions the PR has little
+practical use, and the human review (the real time-limiting step) has not happened yet, so one
+review of the whole feature is cheaper than two.
+
+### Design (implemented, awaiting build/test)
+1. **Targets-tree badge**: `SequenceTree.ImageId.fragment_unique` / `fragment_lib_unique`, built at
+   ImageList creation by `AddLocalizingBadge` - a copy of Fragment / FragmentLib with a 5x5 pixel
+   "U" (blue, (0,90,200)) in the upper-right corner, set pixel by pixel so it stays crisp at 16 px.
+   `TransitionTreeNode.TypeImageIndex` picks it when `IsUniquelyLocalizing`. Decoys never get it.
+2. **Analyzer ownership moved to `PeptideTreeNode.SiteDeterminingAnalyzer`** (cached by settings
+   reference, reset in `OnModelChanged`); precursor and transition nodes ask the parent. This also
+   closes the "analyzer never invalidated" item below. Null when the peptide is not localizable.
+3. **Tooltip**: `TransitionTreeNode.RenderTip` gains an optional mod name and adds a
+   "Uniquely localizes: <mod>" row (`SeqNodeResources.TransitionTreeNode_RenderTip_Uniquely_localizes`).
+4. **Document-wide selection = Transition Settings > Filter > Product ion selection group:
+   "Include ions that localize modifications"** (`cbLocalizingIons`). Model:
+   `TransitionFilter.IncludeLocalizingIons` ([Track], attr `include_localizing_ions`, ctor param with
+   default, `ChangeIncludeLocalizingIons`, Equals/GetHashCode), `DocumentFormat.VERSION_26_12`,
+   `Skyline_Current.xsd`, `PropertyNames.TransitionFilter_IncludeLocalizingIons`.
+   Auto-pick: `TransitionGroup.GetTransitions` builds one analyzer per precursor (new ctor
+   `(settings, Peptide, ExplicitMods)`) when the setting is on, and `TransitionFilter.Accept` gets a
+   `localizingIon` flag that bypasses the fragment range (start/end finders and the "m/z > precursor"
+   start m/z) but NOT the precursor exclusion window / DIA window. Ion types and product charges
+   from the tab still apply (deliberate: the user controls them in the same tab; the tooltip says so).
+   `SrmSettingsDiff.DiffTransitions` already keys off `Filter.Equals`, so no change there.
+   The settings dialog grew: groupBox1 222->246, tabControlPeptidesSmallMols 331->355 in en + ja +
+   zh-Hans resx (the localized resx override sizes, so all three had to move).
+5. **Tests**: `TestIncludeLocalizingIonsSetting` in the functional test (range "m/z > precursor":
+   b3 absent -> present after the checkbox; every selected ion below precursor m/z is unique; serine
+   run gains nothing; tree icon fragment_unique for b3 and plain for b7; `AssertEx.Serializable`).
+   `SerializeTransitionFilterTest` gained the attribute round trip.
+
+### 2026-11-02 results
+- Build green (net10). Tests PASS: TestSiteDeterminingIonAnalyzer, TestSiteDeterminingIonFunctional
+  (en + fr), SerializeTransitionFilterTest, TestNeutralLoss, SchemaDocumentsTest (2),
+  DocumentSerializerTest (3), AuditLogListTest (2), TestAutoSelect, ColumnCaptionLocalizationTest (5),
+  CodeInspection.
+- Round-trip lesson: the functional test's PHOSPHO was a *variable* mod; the second peptide modified
+  through EditPepModsDlg kept the variable instance while the document settings held the explicit
+  copy, so `AssertEx.Serializable` compared unequal (IsVariable true vs false) with identical XML.
+  Pre-existing behavior, unrelated to this PR; the test now uses a plain structural mod.
+- The form-screenshot switch of the test wrapper (`-Forms ... -FormScreenshotDir`) does not work on
+  master: the runner argument behind it only exists in the uncommitted DPI harness (stashed). The
+  icon was verified instead by rendering the exact badge pixel ops in Python
+  (session scratchpad `badge_preview.png`).
+- Committed 2026-11-02 (each approved by the dev): `297dd16b78` inspection fixes, `868c057d0b`
+  badge + tooltip + filter setting + toggle removal, `668ac8242b` Library Match tooltip row,
+  `7531719a31` code review fixes. Pushed 2026-11-02 evening on the dev's request together with
+  `14e7697e64` (merge of master) and `5171e451e0`. The PR got the `skyline` label, the `skyline:`
+  title prefix and a rewritten body. The 4 Copilot threads (MultiplyClamped overflow, two on the
+  Peptide entity memoization, the removed pick-list label) are all addressed in the pushed commits;
+  replying/resolving them over the GitHub API was blocked by the harness permission classifier,
+  so they may still show open - resolve by hand or with /pw-respond 4391.
+- Pre-push gate as run: build + TestSiteDeterminingIonFunctional (en + fr),
+  TestSiteDeterminingIonAnalyzer, SerializeTransitionFilterTest, TestNeutralLoss, TestAutoSelect,
+  TestLibraryRankedNeutralLosses, CodeInspection; `Build-Skyline.ps1 -QuickInspection` (Skyline +
+  Test projects: no findings in PR files; its 423 issues are the known unresolved-symbol noise in
+  Shared/* plus pre-existing items; TestFunctional was not in its project set because it picks
+  projects from uncommitted changes). `tcinspect.ps1` could not be used: inspectcode exits 4
+  right after loading the solution on this machine, before any file output, both before and
+  after clearing the stale SkylineTester obj - unexplained, worth a look in a later session.
+
+### Dev review of the first build (2026-11-02, screenshot of the Pick Children popup)
+1. **Badge missing in the Pick Children popup.** `TransitionGroupTreeNode.GetPickTypeImage` always
+   asked `TransitionTreeNode.GetTypeImage` for the plain icon. Fixed: `GetTypeImage` takes the
+   uniqueness flag and the precursor node passes `IsUniquelyLocalizing(child)`. Test: pixel compare
+   of the b3 / b7 pick-list images against `fragment_unique` / `fragment` (`AssertSameImage`;
+   `ImageList.Images[i]` returns a fresh copy, so reference equality is useless).
+2. **Union vs intersection for the filter checkbox - kept union.** `TransitionFilter.Accept` is
+   already (exclusion window AND types AND charges) AND (range OR special ions); localizing ions
+   join the OR with the special ions. An AND with the range could never add an ion (anything in the
+   range is already picked); it would only remove non-unique ions, i.e. an "only localizing ions"
+   restriction - a different feature, and empty for non-localizable peptides unless scoped. Can be a
+   separate option later if method capacity ever matters.
+3. **Pick Children toggle removed (dev decision).** With the badge in the popup and the document
+   setting for bulk selection, the toggle only narrowed a long unfiltered list, not worth its
+   footprint. `PopupPickList.cs/.Designer.cs` and `ControlsResources.resx/.designer.cs` are back
+   at master (also drops the `VisibleChoices` test hook); `ISiteDeterminingIonPicker` deleted from
+   `SrmTreeNode.cs`; `TransitionGroupTreeNode` keeps one public `IsUniquelyLocalizing(DocNode)`
+   (renamed from `IsSiteDeterminingChoice`; `CanShowSiteDeterminingIons` / `GetSiteDeterminingTip`
+   gone). Functional test: the three per-peptide methods now assert on `IsUniquelyLocalizing` and the
+   pick-list icons instead of the toggle (`AssertNoUniquelyLocalizingIons` helper). The
+   "Confirmed design decisions" / T3 entries above describing the toggle are historical.
+4. **Library Match tooltip (dev request, 2026-11-02).** The peak tooltip
+   (`GraphSpectrum.ToolTipImplementation`) now takes the owning `SpectrumGraphItem` and adds a
+   "Uniquely localizes:" row (`GraphsResources.GraphSpectrum_ToolTip_Uniquely_localizes`) per
+   uniquely localizing matched ion, naming the ion too when the peak has several matched ions.
+   `SpectrumGraphItem` builds a `SiteDeterminingIonAnalyzer` lazily from its `PeptideDocNode` +
+   `SrmSettings` (gated on `RulersApplicable`, null unless `CanLocalize`) and exposes
+   `GetLocalizedModificationName(MatchedFragmentIon)` (ordinal -> cleavage offset via
+   `Transition.OrdinalToOffset`). The analyzer gained a `GetResolvedModification(IonType, int)`
+   overload. The library's mod info is not a separate condition: the Library Match lookup is by
+   modified sequence, so a shown spectrum already carries the document peptide's mods.
+   **Deliberately NOT done** (dev: annotations + their context menu are already overloaded): no
+   marker in the peak annotation labels. If team feedback is positive it is one line in
+   `AbstractSpectrumGraphItem.GetLabel` using the same lookup. Test: `TestLibraryMatchTooltip`
+   renders the tip off screen on a synthetic 2-peak spectrum (b3 / b7 m/z of the resolvable
+   precursor) ranked with `NewLibraryRankedSpectrumInfo`, no library file needed.
+   Not run: `TestTargetedMSMSTutorial` asserts exact tooltip text, but its peptides carry no
+   ambiguous mod, so the analyzer is null there and no row is added; the tutorial zip is not
+   local and needs an internet-enabled run.
+
+### /code-review medium on the branch (2026-11-02, before push) - 9 findings, 7 fixed, 2 dropped
+- **Real bug (fixed)**: `SpectrumRanker.ApplyRanking` called `TransitionSettings.Accept` without
+  the localizing flag, so with library pick = `filter` a unique ion outside the range was never
+  ranked and (since that mode only picks ranked ions) never auto-selected. Fix: both `Accept`
+  overloads take `SiteDeterminingIonAnalyzer localizingAnalyzer = null` instead of a bool and
+  check `IsUniqueToPrecursor(type, offset)` themselves after the range test; `SpectrumRanker`
+  builds the analyzer once per ranking (`LocalizingAnalyzer`), `TransitionGroup.GetTransitions`
+  passes its own; `OtherLabelTypesAllowed` lost the bool. Test: `TestLibraryFilteredRanking`
+  (synthetic spectrum, pick = filter, b3 ranks only with the setting on; b7 always).
+- Fixed: multi-mod ions name every resolved mod (`GetResolvedModifications`,
+  `GetUniquelyLocalizedModificationNames(Transition|IonType,int)` joined with ", ").
+- Fixed: pick-list tip (`PickTransitionTip`) gets the localization row and `HasTip` is true for
+  localizing ions (before: only for losses).
+- Fixed: analyzer ctor `SrmSettings` parameter removed (never read), `GetProducingSetSizeAsInt` and
+  the `TryGetSpan(Transition)` overload removed, `CreateIfLocalizable(Peptide, mods | nodePep)`
+  factory replaces four copies of "build, keep only if CanLocalize".
+- Fixed: `PeptideTreeNode` caches the analyzer by `DocNode` reference, not settings reference.
+- Dropped: disposing the badge `Bitmap` after `ImageList.Images.Add` - the list keeps the original
+  reference until its handle is created; same lifetime as the 34 `Resources.*` icons there.
+- Dropped: hoisting `IsUniqueToPrecursor` out of the adduct loop - moot once `Accept` evaluates it
+  lazily after the range test.
+- tcinspect.ps1 first run aborted (inspectcode exit 4) because the pre-build of SkylineTester.csproj
+  failed on duplicate assembly attributes from a stale `SkylineTester/obj/x64/Release`; deleted it
+  and reran (log `ai/.tmp/sessions/20261102-modsite/tcinspect2.log`).
