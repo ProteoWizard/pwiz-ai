@@ -154,10 +154,15 @@ over the MCP. The button placement noted below as "not visually confirmed" is
 now confirmed. Screenshots in `nickshulman/pr-assets` under
 `pwiz/4546-background-jobs/`, embedded in the PR description.
 
-**Connector gap found (not this branch's scope):** accepting a native Save
-dialog through the MCP does not return until the work it starts finishes (up to
-the 30 s timeout). Capturing the wait dialog of a shorter export needed an
-out-of-band `BM_CLICK` posted to the dialog's Save button.
+**Capturing a short export's wait dialog:** accepting the Save dialog over the
+MCP returns only when the export is done - by design, a verb returns when what it
+asked for has finished, when Skyline stops to ask something (a message box), or
+when the caller drops the connection (the 30 s timeout, which this branch makes
+safe). A LongWaitDlg is progress, not a question, so it does not end the call. An
+export shorter than 30 s therefore has no moment to capture over the MCP; a slow
+report (RawTimes/RawIntensities columns) reaches its dialog through the timeout.
+The shorter-export screenshots used a `BM_CLICK` posted to the Save button from
+PowerShell, which is a demo workaround and not a connector defect.
 
 Tests: `TestJsonToolJobs`, `TestLongWaitDlgBackground` (3 loops),
 `TestSkylineMcp`, `TestJsonToolServer`, `TestMcpConnectorDisconnect`,
