@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_resolution_detect` (worktree `D:\Dev\pwiz-resolution`)
 - **Base**: `master` (cut at 728ff3a131)
 - **Created**: 2026-11-01
-- **Status**: In Progress (overnight autonomous session)
+- **Status**: Completed
 - **GitHub Issue**: [#4893](https://github.com/ProteoWizard/pwiz/issues/4893)
 - **Module**: `osprey`
-- **PR**: [#4958](https://github.com/ProteoWizard/pwiz/pull/4958) (open, CI green, awaiting review)
+- **PR**: [#4958](https://github.com/ProteoWizard/pwiz/pull/4958) (merged 2026-11-03)
 
 ## Objective
 
@@ -100,3 +100,13 @@ measured; it falls to the scores file or the HRAM default with a warning.)
   regr-*.log`. PR test plan ticked. Next: Brendan's review; the manual Perf/Regression gate is his
   call (detection adds nothing the explicit-flag gate would exercise, since regression.ps1 passes
   the flag from its dataset table).
+
+### 2026-11-03 - Merged
+
+TeamCity Perf/Regression gate build #350 (4248189) passed on f424dd77d6: all four datasets plus the
+CarafeSharp pass. PR #4958 merged as commit 2c97d15379. Shipped: `--resolution auto` as the default,
+the centroid-spacing measurement with its logged evidence, the scores-file route for FDR nodes, and
+`regression.ps1 -DetectResolution`. Issue #4893 closed by the merge. Left for Brendan: TeamCity's
+gate still passes the explicit flag from the dataset table, so detection on full data is covered
+only by a developer's `-DetectResolution` run; one extra Stellar leg with `-DetectResolution` (about
+5 min) or dropping `--resolution` from the table would put it under the gate.
