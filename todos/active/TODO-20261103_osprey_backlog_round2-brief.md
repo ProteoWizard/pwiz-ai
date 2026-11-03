@@ -159,3 +159,33 @@ that shrinks the work set and asserts the second blib equals a clean-directory r
 note in the TODO unless it falls out trivially. Skip the `1st-pass.model.json` stratum split (it is #4581
 territory, held). Gate: Stellar and StellarLibDecoy. Module `osprey`. Fold the backlog TODO into your dated
 TODO (what #4898 already delivered, what you did, what is left) and `git rm` it in the same pwiz-ai commit.
+
+## Agent F (worktree `C:\proj\wt-carafe`, branch `Skyline/work/20261103_osprey_linux_path_audit`)
+
+#4361 remainder (read the issue and its 2026-09-18 status comment). Phases A, C and D are done. Do Phase B
+only: the path / line-ending audit of `pwiz_tools/Osprey` (literal `'\'` vs `Path.Combine`,
+`Environment.NewLine` in TSV/CSV/JSON writers that cross-impl or Linux readers consume, `Path.GetTempPath`
+semantics, env-var and `_test_*` workdir conventions that assume forward-slash paths); fix what is a real
+Linux defect; add a pin test that the DIA-NN TSV loader (find its current name) accepts `\n`-only input
+byte-for-byte equal to CRLF input; add a path-platform test that `OspreyConfig` / library-source /
+output-path derivations round-trip `/`-rooted and `C:\`-rooted paths. No TeamCity changes (decision 6):
+the Linux end-to-end status check and server-side activation stay open; say so in a status comment on
+#4361 (do not close the issue). Golden must not move; gate Stellar. Module `osprey`.
+
+## Agent G (worktree `C:\proj\wt-manifest`, branch `Skyline/work/20261103_osprey_equal_chance_alarms`)
+
+#4464, diagnostics-only slice (read the issue and its 2026-09-18 status comment in full). The display
+halves shipped in #4399 (`BuildDensityRatio` / `DensityRatioData` in `ModelDiagnosticsData.cs`). Build, in
+`--model-diagnostics` ONLY: (A) the decoy-independent `f_false` null from a two-component mixture fit of
+the target composite score (EM, Gaussian; guard ill-conditioning: minimum component weight, identifiability
+check, else "insufficient separation to assess"); (B) the divergence metric decoy-vs-`f_false` (location +
+scale mismatch in composite sigma, plus a binned symmetric divergence), diagFDR's q-band decoy-fraction
+check (`|delta_balance| > 0.15` flags), and a KPI badge in the report; (C) the paired-coin alarm badge when
+a pairing manifest with entrapment is present; (D) decoy support count in a neighbourhood of the operating
+cutoff with a "granular regime" badge. NO console warning on the FDR path, NO edits under `Osprey.FDR` or
+`Osprey.ML`, no env-var instrument (F) this round. JSON keys additive; thresholds are constants in one
+place with the issue's numbers; definitions on the diagnostics docs page. Prefer new files
+(`ModelDiagnostics/EqualChance*.cs`) over edits to `ModelDiagnosticsReport.cs`, because another agent's
+#4489 card lands in the same report this round. Gate: Stellar, StellarLibDecoy, StellarGenDecoyEntrap
+(the gendecoy set is where the alarms should fire; report what each badge says on each dataset). Module
+`osprey`.

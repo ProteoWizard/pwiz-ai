@@ -98,3 +98,18 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   #4950, #4968, #4969 still open, so the hold list stands). Fast-forwarded all four worktrees to it.
   Launched agents A-D (Opus) from inside their worktrees with the brief file as their instructions;
   each writes `ai/.tmp/agent-<X>-status.md`. Budget log: `ai/.tmp/night-session-budget.md`.
+- 13:50: Agent D opened PR #4982 (osprey: Moved the full-size CarafeSharp parity tests to a developer-run
+  script; reviewer maccoss). Script/test-only, no FDR or scoring code: no Perf/Regression gate queued
+  (decision 8). D's SEA-AD 82-file measurement for #4577 started 13:16 and is re-scoring all 82 files
+  (caches invalid for this build); expected to finish ~18:00. Log:
+  `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-protein-compactagentD4577-20261103_131639\run.log`.
+- 14:15: Agent D handed back (report in `ai/todos/active/TODO-20261103_carafesharp_parity_script.md` and
+  `TODO-20261103_osprey_stage7_fragments.md`; design notes say the 6->7 narrowing is likely a 1-3% lever).
+  Its SEA-AD run continues detached; the parent reads it ~18:00 ("Resume here" in the stage7 TODO).
+  Launched Agent E (item 7 as re-scoped, `C:\proj\wt-manifest`). Context 83% free, burn ~7%/h.
+- 15:40: Agent E opened PR #4985 (test-only: shrinking Stage 6 work-set check in SubsetPipelineTest;
+  the Stage 5 manifest premise is gone since #4863, WriteTaskSidecars gone since #4809). No gate queued.
+  FLAG for Brendan: the PR says `Fixes #4601`, which closes the issue on E's judgement; option (b) and the
+  #4597 compaction risk stay unbuilt. Backlog TODO-task_file_contract_from_declarations.md folded and removed.
+  Two slots free: launched Agent F (#4361 Phase B, `wt-carafe`) and Agent G (#4464 diagnostics-only
+  slice, `wt-manifest`); sections added to the brief.
