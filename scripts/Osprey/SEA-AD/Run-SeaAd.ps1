@@ -142,6 +142,11 @@
     [COUNT] / [STAGE-WALL] lines the route checks and memory scripts read. Use it for a run
     whose purpose is to read the default log a user sees.
 
+.PARAMETER LogMemory
+    Export OSPREY_LOG_MEMORY=1 so Osprey emits its post-GC [MEM ...] probes and the
+    library-fragment release lines. Each probe forces a full GC, so an arm with it is not
+    comparable on wall time with one without. Off by default (the module exports 0).
+
 .PARAMETER ProfileTo
     Run Osprey under dotTrace sampling and save the snapshot to this .dtp path. Combine with
     -Task X -LinkFrom <run> to profile one stage at cohort scale.
@@ -171,6 +176,7 @@ param(
     [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
     [string]$Pass2Mode = 'protein-compact',
     [switch]$PickProduct,
+    [switch]$LogMemory,
     [int]$NumFiles,
     [int]$SkipFirstFiles = 0,
     [int]$EveryNthFile = 1,

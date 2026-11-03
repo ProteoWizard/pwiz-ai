@@ -46,7 +46,10 @@
 .EXAMPLE
     pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests -TestName ModelParity
 .EXAMPLE
-    pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -TestData Fetch -RunTests -RunInspection -RequireData
+    pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -RunTests -RunInspection -RequireData
+.EXAMPLE
+    pwsh -File ./ai/scripts/CarafeSharp/Build-CarafeSharp.ps1 -TestCategory FullParity -RunTests -TestData Fetch -RequireData
+    # the full-size Carafe parity tests; pwiz_tools/CarafeSharp/scripts/Compare-CarafeParity.ps1 is the usual way
 #>
 param(
     [ValidateSet("Debug", "Release")]
