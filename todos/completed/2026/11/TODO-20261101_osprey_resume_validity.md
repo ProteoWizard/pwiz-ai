@@ -4,12 +4,12 @@
 - **Branch**: `Skyline/work/20261101_osprey_resume_validity` (worktree `D:\Dev\pwiz-resume`)
 - **Base**: `master` (cut at 728ff3a131)
 - **Created**: 2026-11-01
-- **Status**: In Progress (overnight autonomous session)
+- **Status**: Completed
 - **GitHub Issue**: [#4764](https://github.com/ProteoWizard/pwiz/issues/4764), [#4373](https://github.com/ProteoWizard/pwiz/issues/4373)
   (and the already-resolved [#4731](https://github.com/ProteoWizard/pwiz/issues/4731),
   [#4732](https://github.com/ProteoWizard/pwiz/issues/4732), [#4733](https://github.com/ProteoWizard/pwiz/issues/4733))
 - **Module**: `osprey`
-- **PR**: [#4959](https://github.com/ProteoWizard/pwiz/pull/4959)
+- **PR**: [#4959](https://github.com/ProteoWizard/pwiz/pull/4959) (merged 2026-11-03)
 
 Folds in `todos/backlog/TODO-osprey_resume_validity_gates.md` (removed in the same pwiz-ai commit).
 
@@ -94,3 +94,13 @@ footer version/hashes only; a fix needs a footer marker mirrored in Rust.
 - Read issues, backlog TODO, #4809's completed TODO; verified each item in code (table above).
 - Implemented, gated (646/646, 0 inspection), committed 5f1daeb4ee; Stellar + StellarLibDecoy PASS.
 - Review fix (key-aware warning) in a second commit after its own gate.
+
+### 2026-11-03 - Merged
+
+TeamCity Perf/Regression gate build #353 (4248192) passed on 38c5e9684a: all four datasets plus the
+CarafeSharp pass. PR #4959 merged as commit d66538cb41. Shipped: the other-build warning with the
+OSPREY_VERSION_OVERRIDE hint, the override seam, and the four resume test legs plus the
+no-Stage-6-work assertion. Issues #4764 and #4373 closed by the merge; #4731, #4732 and #4733
+closed by Brendan the same day on the evidence recorded above (#4809, #4665). Still not done, by
+choice: the backlog's "Not doing #1" (the --task join validates scores parquets by footer only), and
+same-day builds sharing a version string still reuse each other's outputs (#4764's residue).
