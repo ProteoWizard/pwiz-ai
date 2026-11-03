@@ -10,7 +10,7 @@
   #4601 once that lands, with (iv) as the design note below.
 - **GitHub Issue**: [#4601](https://github.com/ProteoWizard/pwiz/issues/4601)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4985](https://github.com/ProteoWizard/pwiz/pull/4985)
 - **Worktree**: `C:\proj\wt-manifest` (night-session agent E, round 2 of the backlog wave)
 
 ## Objective
@@ -94,7 +94,7 @@ no TeamCity change. Brendan may revisit.
       (`...\20261103-agentE\regression-Stellar.log`, `regression-StellarLibDecoy.log`; Release built
       from 057b91bff4 - the review-fix commit after it touches only the test file)
 - [x] /code-review medium, triage (below)
-- [ ] PR
+- [x] PR #4985 opened; TeamCity Perf/Regression not triggered (the parent session queues it)
 
 ## Left open (not this item)
 
