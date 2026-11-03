@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_drop_ddc_neighbor`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4709](https://github.com/ProteoWizard/pwiz/issues/4709)
 - **Module**: `osprey`
-- **PR**: [#4962](https://github.com/ProteoWizard/pwiz/pull/4962)
+- **PR**: [#4962](https://github.com/ProteoWizard/pwiz/pull/4962) (merged 2026-11-03)
 
 ## Objective
 
@@ -59,3 +59,11 @@ Stage 4 dedup internals public.
 
 ### 2026-11-01
 - Implemented. Commit 36be271fe1.
+
+### 2026-11-03 - Merged
+
+PR #4962 merged as commit b8b068a40c. Shipped as Mike asked in #4709 (his own column from #4708):
+the column, footer keys, RT sort and neighbor counting removed from Osprey and from
+CarafeSharp.Contracts; export format 3, older formats still read. Issue #4709 closed by the merge.
+The CarafeSharp test evidence on this PR surfaced the eight always-inconclusive full-size parity
+tests, now issue #4978 (move them to a developer-run parity script).
