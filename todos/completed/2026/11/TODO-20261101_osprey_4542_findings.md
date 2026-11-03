@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_4542_findings` (worktree `D:\Dev\pwiz-triage`)
 - **Base**: `master` (728ff3a131)
 - **Created**: 2026-11-01
-- **Status**: PR open, awaiting review and the TeamCity Perf/Regression gate (not triggered)
+- **Status**: Completed
 - **GitHub Issue**: [#4542](https://github.com/ProteoWizard/pwiz/issues/4542)
 - **Module**: `osprey`
-- **PR**: [#4964](https://github.com/ProteoWizard/pwiz/pull/4964)
+- **PR**: [#4964](https://github.com/ProteoWizard/pwiz/pull/4964) (merged 2026-11-03)
 
 ## Objective
 
@@ -53,3 +53,11 @@ streaming and regression mode 5) against master 728ff3a131 and fix what is still
 - Regression: `-Dataset Stellar` PASSED (`regression-4542-Stellar.log`); `-Dataset
   StellarLibDecoy` PASSED incl. mode 2 resume (the invalidation caller) and mode 3 chain
   (`regression-4542-StellarLibDecoy.log`), both in `ai/.tmp/sessions/20261101-triage/`.
+
+### 2026-11-03 - Merged
+
+PR #4964 merged as commit a0fe01760e, onto a master that already held #4960's regression.ps1
+change (clean merge). Shipped: the OSPREY_SVM_C_TOLERANCE snapshot placement and the
+Invoke-ResumeInvalidation two-kind check, plus the docs citation. The TeamCity Perf/Regression
+gate was not run; harness-only change, with Stellar and StellarLibDecoy passed locally. Issue
+#4542 closed by the merge with the classification table above as its record.
