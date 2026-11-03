@@ -60,3 +60,9 @@ line at the method's new location in `PercolatorEngine.cs`.
   (`ai/.tmp/sessions/pw-complete-4963/precommit-merge.log`); `regression.ps1 -Dataset Stellar`
   PASSED (`ai/.tmp/sessions/pw-complete-4963/regression-stellar-merge.log`). The TeamCity
   Perf/Regression gate queued as build 4248191 is pinned to the pre-merge head 80b9ed002b.
+- Second merge after #4965 (b77cfb0326) landed: its `BuildContributions` signature change
+  (`PercolatorResults` in place of fold weights) sat inside the moved block, so the call in
+  `PercolatorEngine` took the new signature and the kept `internal` declaration in
+  `PercolatorScorer` took it too. Merge commit 27fd6b72ba, pushed. Gates on it: 648/648, 0 inspection
+  warnings (`pw-complete-4963/precommit-merge2.log`); Stellar PASSED
+  (`pw-complete-4963/regression-stellar-merge2.log`). Diff vs master is still the pure motion.
