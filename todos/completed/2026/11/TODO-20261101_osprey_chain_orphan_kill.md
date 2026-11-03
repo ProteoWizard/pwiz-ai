@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261101_osprey_chain_orphan_kill`
 - **Base**: `master`
 - **Created**: 2026-11-01
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4503](https://github.com/ProteoWizard/pwiz/issues/4503)
 - **Module**: `osprey`
-- **PR**: [#4960](https://github.com/ProteoWizard/pwiz/pull/4960)
+- **PR**: [#4960](https://github.com/ProteoWizard/pwiz/pull/4960) (merged 2026-11-03)
 
 ## Objective
 
@@ -64,3 +64,10 @@ the next TeamCity build. Make `regression.ps1` reclaim the processes it launches
 
 ### 2026-11-01
 - Implemented and harness-tested. Commit 9878650e40.
+
+### 2026-11-03 - Merged
+
+PR #4960 merged as commit 93d002fc0e. Shipped: `Stop-LaunchedOsprey` in every launch's finally and
+the script's own, and the pre-build `Stop-OrphanedOsprey` sweep of a dead-parent exe from this build
+tree. Brendan accepted the sweep-kills decision at merge; refusing to build is the alternative if a
+detached developer run from the same tree is ever swept. Issue #4503 closed by the merge.
