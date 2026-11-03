@@ -973,6 +973,15 @@ Parquet interop gotchas:
 
 ## Environment variable reference
 
+**The full, current list is `Osprey --help-env`**, generated from the `EnvVar` declarations and
+grouped by kind (behavior, allowance, performance, harness, diagnostic). Do not keep a hand list
+in a doc or a script; point at it. **Adding a switch** means declaring a `static readonly EnvVar`
+beside the code that reads it (`new EnvVar(@"OSPREY_X", EnvVarGroup.<kind>, @"<description>")`)
+and reading `.Value`; `CodeInspectionTest.TestEnvironmentReadThroughEnvVar` fails on a raw
+`Environment.GetEnvironmentVariable`, and startup refuses any `OSPREY_*` name no declaration holds.
+Give `Values` when the switch selects an arm, so a mistyped value is refused rather than run as the
+default under the requested arm's name.
+
 **Adding a switch that exists only for parity with a superseded path** (including the OFF arm a default
 flip leaves behind)? Register it in **ai/todos/backlog/TODO-osprey_parity_path_retirement.md** in the
 same change - the central catalogue of parity-only code that must eventually be removed.
