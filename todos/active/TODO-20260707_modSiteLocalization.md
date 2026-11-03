@@ -350,3 +350,11 @@ look for further common patterns before the larger analysis tools are scoped.
   only Phospho (ST) give 3 and a key without the Y entry.
 - Gate: build + the 7-test batch green (analyzer, functional en, filter serialization,
   TestNeutralLoss, TestAutoSelect, TestLibraryRankedNeutralLosses, CodeInspection).
+
+### CI follow-up (2026-11-03) - TestReportsHelpDocumentation
+- TeamCity builds 22606/22609 failed only on `TestReportsHelpDocumentation`: it compares freshly
+  generated Document Grid documentation to the checked-in `Documentation/Help/<lang>/Reports-*.html`,
+  which lacked the three new columns. Regenerated with the test's record mode (flip `IsRecordMode`
+  to true, run once, restore the file from git), 6 files / +18 lines (proteomic + mixed, en/ja/zh-Hans;
+  small-molecule pages unchanged). Commit c771ba25dc, pushed. Lesson: any new Document Grid column
+  needs this regeneration; the local 7-test batch does not include it.
