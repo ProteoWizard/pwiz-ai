@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_parity_rows`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Review (PR open; TeamCity Perf/Regression not yet run - parent session queues it)
+- **Status**: Completed
 - **GitHub Issue**: (none - rows of backlog `TODO-osprey_parity_path_retirement.md`)
 - **Module**: `osprey`
-- **PR**: [#4986](https://github.com/ProteoWizard/pwiz/pull/4986)
+- **PR**: [#4986](https://github.com/ProteoWizard/pwiz/pull/4986) (merged 2026-11-04)
 - **Worktree**: `C:\proj\wt-envvar` (night-session agent worktree, round 2 wave B, second branch)
 
 ## Objective
@@ -109,3 +109,7 @@ Dropped:
   cosmetic.
 - The "who wrote it, not the key" reader rule now rests on a hypothetical per-leg term: the rule is still
   the safe one for HPC readers; tightening it to a full key check is a design change, not a removal.
+
+### 2026-11-04 - Merged
+
+PR #4986 merged as commit 13b90f2d41. Shipped: the OFF arms of RELEASE_LIBRARY_FRAGMENTS, LOESS_CLASSICAL_ROBUST, BLOCK_READ_MB, BLOCK_READ_GATE and STUB_IDENTITY (the =2 verifier kept) with their tests, FdrStreamingSink and ComputeFullPopulationPrecursorFdr; a retired arm is a startup error through the EnvVar catalog's own value check (the separate RetiredReadArmError was dropped at the master merge); catalogue rows updated. These were self-parity switches for the memory-bounded rewrite, not Rust parity. Gates: regression-parallel All 49/49, Perf/Regression 4249273, 651 tests and Stellar after merging master with #4983. Deferred with re-checked blockers: A10 (Rust and scripts keep PICK_LDA=0), A11 (PercolatorEngine/Scorer off limits), A12 (Test-PerfGate baseline), A13 (runners still list transfer-compete), A17 (pre-split directories resume), rest of A18.
