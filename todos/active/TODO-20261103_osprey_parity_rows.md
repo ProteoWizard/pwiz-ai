@@ -7,7 +7,7 @@
 - **Status**: In Review (PR open; TeamCity Perf/Regression not yet run - parent session queues it)
 - **GitHub Issue**: (none - rows of backlog `TODO-osprey_parity_path_retirement.md`)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4986](https://github.com/ProteoWizard/pwiz/pull/4986)
 - **Worktree**: `C:\proj\wt-envvar` (night-session agent worktree, round 2 wave B, second branch)
 
 ## Objective
