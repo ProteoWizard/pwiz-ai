@@ -4,12 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_diann_parquet_loader`
 - **Base**: `master` (3c2f42b552)
 - **Created**: 2026-11-03
-- **Status**: PR open, awaiting review and the TeamCity gate (parent session queues it). Decision
-  for Brendan (optional): derived-cache naming for DIA-NN's fixed `report-lib.parquet` name in a
-  shared `--cache-dir` (see Code review, dropped item 4).
+- **Status**: Completed
 - **GitHub Issue**: (none - backlog TODO-osprey_diann_library_interchange.md, part 1)
 - **Module**: `osprey`
-- **PR**: [#4994](https://github.com/ProteoWizard/pwiz/pull/4994)
+- **PR**: [#4994](https://github.com/ProteoWizard/pwiz/pull/4994) (merged 2026-11-04)
 - **Worktree**: `C:\proj\wt-progress` (agent H of the 2026-11-03 round-2 wave)
 
 ## Objective
@@ -134,3 +132,7 @@ Dropped:
   perfviz: sustained 1.5 GB managed). Derived `.parquet.blib` write 53 s; whole export 177.5 s.
   Typing check: 2,162 of 18.66 M peaks the library labels as another ion within tolerance, 504
   with no ion in tolerance (warning, as for a .tsv).
+
+### 2026-11-04 - Merged
+
+PR #4994 merged as commit 0d93cd23a5. Shipped: -l accepts a DIA-NN 2.x library .parquet (DiannParquetLoader over DiannTsvLoader's row assembly), the shared DiannLibraryParquetReader in BiblioSpec.IO used by BiblioSpec's DiaNNSpecLibReader too, the <library>.parquet.blib cache, .speclib refusal with the conversion hint, empty-library handling, TestDiannParquetLibraryLoadsAsItsTsv with the committed DIA-NN 2.7 fixtures; Stellar golden unchanged; Perf/Regression 4249971 passed; Skyline build passed on re-run (first run lost TestRInstaller to a network failure). Unexplained: CodeQL Analyze (csharp) failed on this PR only, 3 min vs 16 min baseline, log expired; watch the first master CodeQL run after this merge. Deferred: Source.Id decoy pairing, sharing the DIA-NN TSV reading (BiblioSpec's TSVReader knows no DIA-NN dialect), part 2 of the interchange TODO.
