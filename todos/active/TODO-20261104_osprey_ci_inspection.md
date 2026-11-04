@@ -1,12 +1,13 @@
 # TODO-20261104_osprey_ci_inspection.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261104_osprey_ci_inspection` (local, not pushed), cut from `origin/master` at 3c2f42b552
+- **Branch**: `Skyline/work/20261104_osprey_ci_inspection` cut from `origin/master` at 3c2f42b552
 - **Checkout**: `D:\Users\brendanx\proj\pwiz-scorelib` (worktree, MACS2)
 - **Base**: `master`
 - **Module**: `osprey`
 - **Created**: 2026-11-03
-- **Status**: Implemented and verified locally (f0cfff35f3, a25a25240a); ready for review and push. No PR yet.
+- **Status**: PR open, awaiting the first TeamCity build (f0cfff35f3, a25a25240a)
+- **PR**: [#4995](https://github.com/ProteoWizard/pwiz/pull/4995)
 
 ## Objective (Brendan, 2026-11-03)
 Run code inspection inside the "Osprey Windows .NET" TeamCity config (ProteoWizard_OspreyWindowsNet), as
