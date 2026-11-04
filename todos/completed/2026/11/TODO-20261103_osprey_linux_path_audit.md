@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_linux_path_audit`
 - **Base**: `master` (4ec653c0d4)
 - **Created**: 2026-11-03
-- **Status**: In Progress (night-session agent F; worktree `C:\proj\wt-carafe`)
+- **Status**: Completed
 - **GitHub Issue**: [#4361](https://github.com/ProteoWizard/pwiz/issues/4361) (Phase B only; the issue stays open)
 - **Module**: `osprey`
-- **PR**: [#4988](https://github.com/ProteoWizard/pwiz/pull/4988)
+- **PR**: [#4988](https://github.com/ProteoWizard/pwiz/pull/4988) (merged 2026-11-04)
 
 ## Objective
 
@@ -138,3 +138,7 @@ so a native path identifies identically on Windows and Linux. The reconciliation
 - regression.ps1 -Dataset Stellar: PASSED, mode1 vs golden PASS
   (`ai/.tmp/sessions/20261104-agentF2/regression-stellar.log`).
 - Pushed the branch; PR comment posted. TeamCity gate not triggered (parent decides).
+
+### 2026-11-04 - Merged
+
+PR #4988 merged as commit 65fe096b11. Shipped: PathComparison (exact on Linux, case-insensitive elsewhere) at the FDR sidecar write-once guard, the parquet charge-check memo, the sibling stamp check and the own-product exclusions; calibration.json written with LF everywhere; the DIA-NN TSV LF/CRLF pin and ArtifactPathsTest.TestPathDerivationsAcrossPathStyles. Gates: Perf/Regression 4249301, 653 tests and Stellar after the mechanical master merge. Not run on Linux (WSL build failed in build/VendorPinsGenerator). Open: Windows Run1/run1 in one output dir still unrefused (precise fix described above); #4361 stays open for the TeamCity Linux activation.
