@@ -162,8 +162,23 @@ fine-tune is already shown byte-repeatable by `TestRegressionSubsetRepeatsOnGpu`
 - Built, gated and committed `ed0eb8892a`; code review and PR follow.
 - Follow-ups (agent D2): `5e337927b0` (-Torch backend), `819b195ddc` (review fixes). After the fixes:
   no usable GPU (`CUDA_VISIBLE_DEVICES=-1`) fails only the three GPU comparisons, 5/8 pass
-  (`C:\proji\.tmpgentD2-parity-nogpu2.log`); CUDA 6/8 as before (`agentD2-parity-stellar-cuda3.log`);
+  (`C:\proj\ai\.tmp\agentD2-parity-nogpu2.log`); CUDA 6/8 as before (`agentD2-parity-stellar-cuda3.log`);
   CPU 8/8 (`agentD2-parity-stellar-cpu3.log`). CarafeSharp default pass `Passed 108`, inspection clean
-  (`C:\proji\.tmpgentD2-carafe-build2.log`; one earlier attempt crashed inside InspectCode with an
+  (`C:\proj\ai\.tmp\agentD2-carafe-build2.log`; one earlier attempt crashed inside InspectCode with an
   internal CLR error, rerun clean); Osprey pre-commit 649 tests, inspection clean
-  (`C:\proji\.tmpgentD2-osprey-precommit.log`).
+  (`C:\proj\ai\.tmp\agentD2-osprey-precommit.log`).
+
+### 2026-11-04 (agent D3: master merge)
+- `397e48f050` merged origin/master. One conflict, `pwiz_tools/Osprey/tcbuild.bat`, in the CarafeSharp
+  step: this branch had only reworded its comment, #4995 (merged) had added
+  `-BuildWarningsPath "%BUILD_WARNINGS%"` and the `RESULT` bookkeeping. Kept this branch's comment and
+  #4995's two lines unchanged. `CarafeSharp/build.ps1` auto-merged (the FullParity exclusion and #4995's
+  `-BuildWarningsPath` parameter touch different hunks).
+- Gates on the merge: `Build-CarafeSharp.ps1 -RunTests -RunInspection` every test in the default pass
+  passed (108, none skipped or inconclusive), 0 compiler warnings, inspection clean
+  (`C:\proj\ai\.tmp\agentD3-carafe-build.log`); Osprey pre-commit 652 passed, inspection clean
+  (`agentD3-osprey-precommit.log`); `Compare-CarafeParity.ps1` (with build, CPU) Stellar 8/8 PASS, 1:56
+  (`agentD3-parity-stellar-cpu.log`); local `tcbuild.bat` (no vendor, coverage on because
+  tc-is-default-branch saw no TeamCity branch) exit 0: clean, Osprey 652 and CarafeSharp 108 tests,
+  installers, "No build warnings and no inspections at WARNING or above" (`agentD3-tcbuild.log`).
+- PR #4918 adds a test to the default pass (109): counts are stated as "every test passes" from here on.
