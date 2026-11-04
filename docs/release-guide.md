@@ -1207,6 +1207,13 @@ git log Skyline-daily-25.1.1.271..HEAD --oneline
 
 Transform developer commit messages into brief (single line) past tense summaries from a **user perspective**.
 
+Every bullet leads with the verb for what the team did, the same set as commit titles
+(see "Tense" in `version-control-guide.md`): **Fixed, Added, Improved, Changed, Updated**. The
+implied subject is "we, the Skyline development team". "New!" is emphasis placed before the
+verb, never a replacement for it. Never write a noun phrase with no verb ("Support for X" is
+"Added support for X"; "New! Peptide Search with Tide" is "New! Added peptide search with Tide").
+Earlier hand-converted notes on the wiki page often break this, so do not copy their wording.
+
 **Include:**
 - Added features ("Added support for X")
 - Updated functionality ("Updated method export for Thermo instruments")
