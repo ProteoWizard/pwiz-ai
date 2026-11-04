@@ -4,10 +4,12 @@
 - **Branch**: `Skyline/work/20261103_carafesharp_parity_script`
 - **Base**: `master` (049d045e98)
 - **Created**: 2026-11-03
-- **Status**: In Progress (PR open; Brendan's three follow-ups done, see "Follow-ups"). **Decision for Brendan:**
-  on CUDA the prediction and predicted-library comparisons exceed their CPU-derived RT limits (Stellar and
-  Astral); tolerances were NOT loosened. Options: GPU-specific limits in the tests, or disabling TF32 in
-  CarafeSharp's inference (a product change). Awaiting maccoss's review.
+- **Status**: In Progress (PR open, master merged, awaiting the Perf/Regression gate and maccoss's review).
+  The GPU gate is pinned (`7b870207a4`, Brendan's decision 2026-11-04): `-Torch cuda` passes 12/12 under
+  pinned GPU RT/iRT limits with bit-identical repeat predictions. **For Brendan:** disabling TF32 in
+  CarafeSharp inference is the way to close the GPU/CPU gap, and it measured free on the RTX 4000 Ada
+  (`NVIDIA_TF32_OVERRIDE=0`: RT 1.3e-4 -> 2.3e-6, TSV RT 0.77 -> 0.01 min, wall within noise); not done
+  here (a product change).
 - **GitHub Issue**: [#4978](https://github.com/ProteoWizard/pwiz/issues/4978)
 - **Module**: `osprey`
 - **PR**: [#4982](https://github.com/ProteoWizard/pwiz/pull/4982)
@@ -182,3 +184,38 @@ fine-tune is already shown byte-repeatable by `TestRegressionSubsetRepeatsOnGpu`
   tc-is-default-branch saw no TeamCity branch) exit 0: clean, Osprey 652 and CarafeSharp 108 tests,
   installers, "No build warnings and no inspections at WARNING or above" (`agentD3-tcbuild.log`).
 - PR #4918 adds a test to the default pass (109): counts are stated as "every test passes" from here on.
+
+### 2026-11-04 (agent D3: pinned GPU gate, Brendan's decision)
+- `7b870207a4`: new `CarafeSharp.Test/GpuParity.cs`. On CUDA each prediction comparison (Stellar/Astral
+  predictions and predicted library) predicts twice in-process and requires bit-identical RT/MS2 values
+  (library: TSV SHA-256), and compares with the previous run's outputs in
+  `TestResults/CarafeParity-Outputs-cuda-<GPU>-<driver>[-tf32off]` (saved only after the comparison passes).
+  RT/iRT (predictions, per dataset) and TSV/.blib RT (library, per reference folder) get pinned GPU limits,
+  ~1.25x the measured value; MS2 keeps the CPU limits. Each pinned value prints as `GPU pinned: ...` and the
+  OVERALL line says `PASS (GPU pinned: RT differs from Carafe beyond the CPU limits by up to ...)`.
+  `docs/04-testing.md` has the CPU / CUDA / TF32-off table and the "GPU parity" paragraph.
+- Measured (RTX 4000 Ada, 596.71; log `C:\proj\ai\.tmp\agentD3-gpu-measure.log`): Stellar RT 1.02e-4, iRT
+  1.46e-2; Astral RT 1.33e-4, iRT 2.09e-2; library TSV RT 0.04 (Stellar initial), 0.77 (`carafe_main_varmod`,
+  .blib 0.764), 0.03-0.04 (m3 refs), 0.10 (Astral). The varmod 0.77 min was not seen before (earlier runs
+  stopped at the first failing folder). Nondeterminism: none, 19/19 repeats bit-identical in-process and
+  across 7 runs, so no cudnn deterministic setting was needed.
+- TF32 timing, same build, on/off/on/off, -Dataset All (logs `agentD3-gpu-tf32{on,off}-{1,2}.log`, trx
+  `agentD3-CarafeParity-*-cuda-{on,off}{1,2}.trx`, script `.tmp/sessions/20261104-agentD3/timing.py`):
+  Stellar predictions 4.7/4.1 s on vs 4.8/4.5 off (1.05); Stellar predicted library 39.5/32.7 vs 36.5/32.9
+  (0.96; GPU library prediction 54.3 vs 52.1 s); Astral predictions 1.2/1.2 vs 1.1/1.3 (1.03); Astral library
+  206.9/171.2 vs 161.6/180.8 (0.91; prediction 66.6 vs 61.2 s). TF32 off is free within noise. TF32 off:
+  RT 1.6e-6 / 2.3e-6 (Astral just over 2e-6), iRT <= 3.9e-4, TSV 0.01, .blib up to 7.4e-3 (varmod).
+- /code-review medium, 10 findings. Fixed: baseline folder keyed by GPU+driver (a driver update would fail
+  every repeat check); baseline saved only after the comparison passes (a failing first run became the
+  baseline); subset runs get their own keys; OVERALL wording (deltas are from Carafe, not from the CPU);
+  dropped the redundant MS2 pin fields. Dropped: per-machine pins / fix TF32 instead (Brendan's decision is to
+  pin; TF32-off recorded above for him); varmod pin 0.95 too wide (it is 1.25x the measured 0.77, still fails
+  on growth); .blib not repeat-checked (TSV carries the same predictions); doubled GPU runtime (the spec asks
+  for two predictions; CUDA wall 4:26 for both datasets); `IsGpu` re-probing and a third SHA-256 helper
+  (microseconds; the existing ones are private/internal).
+- Brendan merged master (#4918, CUDA allocator) into the branch meanwhile; merged it (`68dba733a4`). Gates
+  after it: CarafeSharp default pass 109 passed, 0 warnings, inspection clean
+  (`agentD3-carafe-build-post4918.log`); CUDA All 12/12, 19/19 repeats bit-identical against the saved outputs
+  (`agentD3-parity-cuda-post4918.log`); CPU All 12/12 (`agentD3-parity-cpu-post4918.log`); Osprey pre-commit
+  652, inspection clean (`agentD3-osprey-precommit-post4918.log`).
+- Also updated `osprey-development` SKILL.md and `osprey-library-generation-guide.md` (CUDA no longer "fails").

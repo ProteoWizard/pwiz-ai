@@ -176,9 +176,9 @@ Rust-side key constraints:
   CarafeSharp change touching prediction, digestion, fragment assembly,
   fine-tuning or export masking runs
   `pwiz_tools/CarafeSharp/scripts/Compare-CarafeParity.ps1` (Stellar at
-  least; `-Dataset Astral` too when the Astral paths change; on the CPU -
-  `-Torch cuda` exists but two RT comparisons exceed their CPU tolerances
-  on an Ada GPU) before the PR. No test pass or TeamCity config runs
+  least; `-Dataset Astral` too when the Astral paths change; on the CPU,
+  and `-Torch cuda` when the GPU path changes - it passes under pinned GPU
+  RT limits and requires bit-identical repeat predictions) before the PR. No test pass or TeamCity config runs
   these full-size comparisons. Authoritative description:
   `pwiz_tools/CarafeSharp/docs/04-testing.md` ("Full-size parity").
 
