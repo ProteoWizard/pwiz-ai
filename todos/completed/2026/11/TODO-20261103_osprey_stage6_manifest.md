@@ -4,13 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_stage6_manifest`
 - **Base**: `master` (049d045e98)
 - **Created**: 2026-11-03
-- **Status**: In Progress - Step 1 measured; the work manifest (i) and the driver stamp (ii) are
-  NOT built, because master no longer has the shape the issue describes (see Step 1). What is
-  left to build is the shrinking-work-set key-change check (iii). Decision for Brendan: close
-  #4601 once that lands, with (iv) as the design note below.
+- **Status**: Completed
 - **GitHub Issue**: [#4601](https://github.com/ProteoWizard/pwiz/issues/4601)
 - **Module**: `osprey`
-- **PR**: [#4985](https://github.com/ProteoWizard/pwiz/pull/4985)
+- **PR**: [#4985](https://github.com/ProteoWizard/pwiz/pull/4985) (merged 2026-11-03)
 - **Worktree**: `C:\proj\wt-manifest` (night-session agent E, round 2 of the backlog wave)
 
 ## Objective
@@ -151,3 +148,7 @@ pool-size mismatch against the stale parquet. Log:
   expected open items are not open; one is built here.
 - Built `AssertShrinkingWorkSetRecomputes`, mutation-checked it, ran the gates, reviewed.
   Commits 057b91bff4, fcb179d980.
+
+### 2026-11-03 - Merged
+
+PR #4985 merged as commit 940df9220f. Shipped: the shrinking-work-set key-change step in SubsetPipelineTest.TestSubsetStraightThroughAndReruns, mutation-checked; no product code. Deferred: the Stage 5 work manifest (premise gone since #4863), option (b) sidecar-only attestation (design note above), and the #4597 compaction risk. The PR's Fixes line closed #4601 at merge.
