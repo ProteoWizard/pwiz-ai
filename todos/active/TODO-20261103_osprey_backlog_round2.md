@@ -113,3 +113,44 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   #4597 compaction risk stay unbuilt. Backlog TODO-task_file_contract_from_declarations.md folded and removed.
   Two slots free: launched Agent F (#4361 Phase B, `wt-carafe`) and Agent G (#4464 diagnostics-only
   slice, `wt-manifest`); sections added to the brief.
+- 15:55: Agents A and B opened PR #4984 (ProgressReporter Run wrappers) and PR #4983 (env-var catalog,
+  --help-env); both touch FDR/scoring files, so Perf/Regression queued: build 4249213 for pull/4984,
+  build 4249212 for pull/4983 (https://teamcity.labkey.org/build/<id>). A is gating #4489 (item 2);
+  B is gating parity rows (item 2, A10-A13/A17 and parts of A18 deferred with reasons in its TODO).
+  Master moved again: #4968 and #4969 merged; #4950 still open (hold list stands for Percolator/GBT).
+- 16:03: Agent B handed back: PR #4986 (parity-only arms of five switches removed; A10-A13, A17 and the
+  rest of A18 deferred with re-checked blockers). Perf/Regression queued: build 4249273 for pull/4986.
+  Expected merge conflict: #4983 and #4986 both edit OspreyEnvironment.cs (second to merge drops the
+  retired EnvVar declarations; both TODOs say how). B's slot stays open: every remaining open osprey
+  issue is held, assigned, or item 6 (DIA-NN fixture still absent). Four agents running: A, C, F, G.
+- Agent A handed back: PR #4987 (decoy-based per-k FDP; diagnostics only, three goldens unchanged,
+  no gate per decision 8). Entrapment and decoy curves agree on StellarLibDecoy and StellarGenDecoyEntrap
+  (k=1: 3.41 vs 3.76%, 4.60 vs 3.93%). Decisions for Brendan in its TODO: no pass-2 decoy curve
+  (gap-fill bias), plain D/T estimator, and #4984 leaves the ProgressReporter constructor public until
+  the Percolator sites convert. Slots A and B idle; C, F, G running.
+- Agent F handed back: PR #4988 (Linux path identity + LF calibration.json; #4361 left open with a
+  status comment, TeamCity activation still pending). Perf/Regression queued for pull/4988 (build 4249301,
+  16:23). Not run on Linux: the WSL build failed in build/VendorPinsGenerator and the agent
+  stopped rather than bypass the direct-build hook. Open gap for Brendan: on Windows, `Run1`/`run1` in one
+  output dir are still unrefused (precise fix in its TODO).
+- Agent G handed back: PR #4989 (equal-chance alarms card in --model-diagnostics; "Partially addresses
+  #4464"; diagnostics only, 35/35 parallel regression, no gate). No alarm fires on any gate dataset
+  (current gendecoys are near-calibrated; the F instrument is the way to a positive case). Four
+  thresholds are the agent's own numbers (location 0.5 sigma, scale x1.5, coin 10 points, granular <50).
+- 17:00: Agent C was stalled since 14:00 on a hung TestData.dll test process (PID 173296, 175 CPU-s in
+  3 h; 50 earlier failures look like vendor raw import in the fresh worktree, first TestCommandLineNoJoin;
+  TestMs1Tutorial "Expected document to have results"). Resumed C with the facts and told it to kill the
+  process, classify the failures, and finish Item 1. SEA-AD run: Stage 5 done 16:54 (fragments released
+  for 4,667,143 of 6,175,389 precursors; 754,359 base_ids retained), Stage 6 running.
+- 17:05: Agent C root-caused the stall: the worktree has no Directory.Build.user.props, so Skyline
+  built with vendor support DISABLED and the 50 TestData failures + TestMs1Tutorial are environmental.
+  Rebuilding with -VendorLicenses and re-running. Lesson for the next round's briefs: Skyline-module
+  worktrees must build with -VendorLicenses (memory `worktrees-lack-vendor-props`).
+- Agent C handed back: PR #4990 (skyline: UniModCompiler reads unimod.obo, UniModData.cs 1172 -> 1554
+  ids, 6 protein-terminal-only ids excluded, TestUniModAgreesWithObo; "Part of #4980") and PR #4991
+  (pwiz: MzTabReader resolves UNIMOD ids from the embedded obo; unimod.xml stays until #4990 merges).
+  Skyline CI runs on the PR; no Osprey gate. FLAGS for Brendan: (1) `Pwiz.Data.Common.Unimod` keys
+  specificities by `spec_N`, which the obo repeats per site group, so it keeps one site per group
+  (Phospho loses T) - affects Osprey and BiblioSpec, not filed (roadmap step 2); (2) ~410 new hidden
+  entries now take part in mass matching on import; (3) ~50 entries differ from UniMod's six-decimal
+  mass by 1-26e-6 Da with Skyline's element masses (step 3 question).
