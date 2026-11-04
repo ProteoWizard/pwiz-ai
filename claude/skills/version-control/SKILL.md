@@ -120,10 +120,15 @@ Co-Authored-By: Claude <noreply@anthropic.com>
     "**Added** pre-processing **to strip** Carafe's per-peptide accessions
     at library load"
 
-  The behavior verb survives — in the present tense, after the action. Test
-  by asking "what did I do?"; if the answer is not one of that small set of
-  action verbs, the feature is describing itself. Full table and rationale
-  in ai/docs/version-control-guide.md ("Tense").
+  - "Failed the Osprey build on compiler warnings" (the build *fails*) →
+    "**Changed** the Osprey build **to fail** on compiler warnings"
+
+  The behavior verb survives — in the present tense, after the action.
+  **Lead with Added, Fixed, Improved or Changed** (Removed, Refactored,
+  Moved, Renamed, Documented for the rest). Test: prefix "I". It must read
+  as "I <verb>", not "The code <present-tense verb>" with the subject
+  dropped and the verb past-tensed. Full table and rationale in
+  ai/docs/version-control-guide.md ("Tense").
 - Bullet points use `* ` prefix (not `-`)
 - `Reported by <First>.` (or `Requested by <First>.`) when the change came from a user report/request — see "Crediting reporters" below
 - TODO reference required for feature branches

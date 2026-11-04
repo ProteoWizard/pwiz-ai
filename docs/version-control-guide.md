@@ -273,9 +273,20 @@ Note what happens to the behavior verb in the fixed column: it moves to the **pr
 after the action, exactly as the section above prescribes ("Fixed ... **to judge** ...", "Added
 pre-processing **to strip** ..."). The two rules compose.
 
-The test: ask **"what did I do?"** The answer is always one of a small set - Added, Fixed,
-Removed, Changed, Improved, Refactored, Moved, Renamed, Documented, Enabled, Disabled. If the
-leading verb is not one of those, it is almost certainly the feature describing itself, and the
+**Lead with one of the recommended verbs:** **Added, Fixed, Improved, Changed** cover nearly
+every commit. Removed, Refactored, Moved, Renamed, Documented, Enabled and Disabled cover the
+rest. Reach outside the set only when none of these is true.
+
+The test: put **"I"** in front of the title. It must read as what the developer did ("I changed
+the build to fail ..."), not as **"The code <present-tense verb>"** with the subject dropped and
+the verb moved to the past. If the title is just "The build fails on warnings" turned into
+"Failed the build on warnings", it is wrong, even though "I failed the build" parses:
+
+| The code, past-tensed | Developer action |
+|---|---|
+| "**Failed** the Osprey Windows .NET build on code inspection and compiler warnings" (the build *fails*) | "**Changed** the Osprey Windows .NET build to fail on code inspection and compiler warnings" |
+
+A leading verb outside the set is almost always the feature describing itself, and the
 release-notes reader learns nothing about what shipped.
 
 ### Example
