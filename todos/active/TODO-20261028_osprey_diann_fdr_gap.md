@@ -882,6 +882,24 @@ against DIA-NN without MBR (its own single-run peak), run q <= 1%, real targets,
   osprey/DIA-NN 10th percentile 0.50 - while on shared precursors the widths nearly match (median ratio
   0.89). Narrow bounds on a weak peak would weaken the coelution features that look decoy-like there.
 
+**ZT Scan conditions on the merged branch (night 2026-11-03/04, SPEEDYGONZALES; Mike: "work out the optimal
+conditions for the ZT-scan demux data").** Build 5340c30909 (#4969 / #4967 / #4968 in), the 10-25 joint-demux mzMLs
+(byte-identical to 10-27's) and the D1-tuned CarafeSharp entrapment library (unattached; transfer on every arm),
+`C:\test\osprey-runs\ztscan-pr4950`. 40 arms, full tables in `ai/.tmp/handoff-20261104-zt.md` (local to that
+machine), scripts `ai/.tmp/sessions/20261103-zt4950`.
+- **Best: all 97 features + 12 XICs + two-round GBDT** (`OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1
+  OSPREY_GBT_PREFILTER_SIZE=200000`): 46,708 real targets at FDP 1% (3 seeds, +-0.5%), 42,616 at FDP 0.5%; +72% over
+  this build's 21-feature SVM; ~0.8x DIA-NN on the same mzMLs. Reported q 1.18-1.26% FDP at q 1% on every seed.
+  Supersedes "41-feature SVM best calibrated on ZT" in docs/03 B.7.
+- Two-round is the lever (+33% over one-round GBDT, which ties the SVM); its sample sizes and train FDR are noise.
+  SVM training size (Percolator 3.0 Fig. 1): 300k / 500k / 1M = 36,354 / 38,282 / 39,292 at FDP 1% (2-seed means).
+- Scoring knobs neutral: RT floor 0.25, TC window 0.05 / 0.08, start tolerance 15 / 30 ppm, pre-filter off.
+- **Defect found:** `median_polish_residual_ratio` is unbounded (sum|o-p| / sum o, zeros as 0.0001); on ZT junk peaks
+  it reaches 18,650 (z 2,377) and the SVM puts them above every real ID (q floor 0.0044; FDP 0.5% unreachable at 6
+  XICs). Bounded form sum|o-p| / (sum o + sum p): local commit 0f18cb87f3 on `nightlywork/zt-bounded-residual-ratio`
+  (worktree `C:\Dev\pwiz-osprey-fdr`, NOT pushed), 669/669 tests; 21-feature SVM +11% at FDP 1% (6 XICs), +4% (12),
+  97-feature +6%; beats masking. Moves every golden - needs Mike / Brendan, Astral / Stellar and the gate.
+
 ### 2026-10-28 - Planned
 
 Branch and worktree created from origin/master 406fd374c0. Read the compaction gate
