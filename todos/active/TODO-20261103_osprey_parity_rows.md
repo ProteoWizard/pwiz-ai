@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261103_osprey_parity_rows`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Progress
+- **Status**: In Review (PR open; TeamCity Perf/Regression not yet run - parent session queues it)
 - **GitHub Issue**: (none - rows of backlog `TODO-osprey_parity_path_retirement.md`)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -63,11 +63,29 @@ OSPREY_BLOCK_READ_GATE, and changes OSPREY_STUB_IDENTITY's `Values` to `1|2` (an
 - [x] Verify each row's blockers against current code
 - [x] Remove A5, A9, A14, A15, A16 (=0), A18 (part); tests; docs
 - [x] Build-Osprey -RunTests -RunInspection (650/650, 0 warnings; `ai/.tmp/sessions/20261103-agentB/gate5.log`)
-- [ ] regression-parallel.ps1 -Dataset All (`ai/.tmp/sessions/20261103-agentB/regress-all.log`)
-- [ ] /code-review medium, triage
-- [ ] Push TODO, open PR
+- [x] regression-parallel.ps1 -Dataset All: 49 PASS / 0 FAIL / 0 SKIP in 1:20:46 on 9fe29f1fb6
+  (`ai/.tmp/sessions/20261103-agentB/regress-all.log`; lane logs
+  `pwiz_tools/Osprey/TestResults/regression-lane-*-20261103_143048.log` in the worktree)
+- [x] /code-review medium, triage (below); fixes 2db6b5bc0d gated by Build-Osprey 650/650
+  (`gate6.log`) - startup refusals and log text only, output-neutral
+- [x] Push TODO, open PR
 
 ## Progress Log
 
 ### 2026-11-03 (night session, agent B)
 - Implemented the Done list above.
+
+### /code-review medium (8 findings) - triage
+Fixed (2db6b5bc0d):
+- `OSPREY_STUB_IDENTITY=0` and `OSPREY_BLOCK_READ_MB<=0` silently ran the default under the retired
+  arm's name; now a startup error (`OspreyEnvironment.RetiredReadArmError`), with CommandLineErrorTest cases.
+- Stale `ClassicalRobustIterations` line in 05-rt-alignment; stale `_stubIdentity` comment.
+- Dead `text != null` check in BlockReadLog; constant `gate {1}` slot in the block-read line
+  (the PercolatorEngine copy of the null check is left: off-limits file).
+Dropped:
+- No escape hatch around the released-fragment tripwire: retiring the =0 arm is the point; an
+  under-computed retained set should fail loudly and be fixed in code.
+- RunsOnThisLeg and LegAdmitsRelease now overlap: one takes the context, one the config; merging is
+  cosmetic.
+- The "who wrote it, not the key" reader rule now rests on a hypothetical per-leg term: the rule is still
+  the safe one for HPC readers; tightening it to a full key check is a design change, not a removal.
