@@ -126,3 +126,15 @@ so a native path identifies identically on Windows and Linux. The reconciliation
 - Implemented fixes and tests; build2 651/651; /code-review medium (6 findings, triaged below);
   build3 651/651 + 0 inspection warnings; Stellar regression PASSED.
 - Committed 720873cf19; opened PR #4988; posted #4361 status comment. Awaiting the TeamCity gate (parent session queues it).
+
+### 2026-11-04 (agent F2, worktree `C:\proj\wt-envvar`)
+- Merged origin/master (13b90f2d41: #4983, #4986, #4987, #4989, #4994) as merge commit
+  106d3c8c5e. No conflicts; git auto-merged the shared files (FirstPass/SecondPassFdrTask,
+  ScoringTaskShared, Program, ParquetScoreCache). Every `PathComparison` site this PR
+  introduced survives on the merged tree; #4986 deleted none of them. Nothing resolved by hand.
+- Build-Osprey -RunTests -RunInspection: 653/653 (incl. `TestPathDerivationsAcrossPathStyles`,
+  `TestLibraryLoadsIdenticallyFromTsvAndBlib`), 0 inspection warnings
+  (`ai/.tmp/sessions/20261104-agentF2/build.log`).
+- regression.ps1 -Dataset Stellar: PASSED, mode1 vs golden PASS
+  (`ai/.tmp/sessions/20261104-agentF2/regression-stellar.log`).
+- Pushed the branch; PR comment posted. TeamCity gate not triggered (parent decides).
