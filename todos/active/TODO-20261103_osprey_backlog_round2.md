@@ -158,3 +158,14 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   retained). Stage 7 floor is now 4.4 GB managed (peak 8.6, private 13.6) against a run peak of 38.9 GB
   private in Stage 5, so the ~0.4-0.7 GB fragment lever is 2% of peak: DEFERRED with a status comment
   on #4577 and the read recorded in TODO-20261103_osprey_stage7_fragments.md. No PR for item D2.
+- 18:52: Gates PASSED for #4983 (build 4249212) and #4984 (build 4249213). #4986 (4249273) running,
+  #4988 (4249301) queued behind it. The Perf/Regression config does not report to the PR's GitHub
+  status; check TeamCity by build id.
+- 19:35: Gate PASSED for #4986 (build 4249273). #4988 (4249301) started 19:31, ~65 min.
+- 20:50: Brendan awake. Gate PASSED for #4988 pending the final step (build 4249301 at 100%). Item 6
+  fixture: Brendan created `M:\home\brendanx\data\MacCoss\Osprey\DIA-NN`; wrote `request.md` there
+  for the MACS2 session. Finding: BiblioSpec's `DiaNNSpecLibReader.LoadSpecLibFromParquetAsync` already
+  reads the DIA-NN v2 library parquet (same columns); the backlog TODO omitted it. The tree's test inputs
+  have only PSM `report.parquet` + `.skyline.speclib`, no library parquet, so the fixture is still needed.
+- 20:55: Gate PASSED for #4988 (build 4249301). All four queued gates green; every PR of the wave is
+  ready for /pw-complete (#4982 awaits Mike's review).

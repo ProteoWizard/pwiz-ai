@@ -50,6 +50,13 @@ search) a one-flag change.
 - Parquet.Net is already a dependency of `Osprey.IO` (pwiz's patched build,
   `Shared\Lib\Parquet\ParquetNet.targets`).
 
+- **BiblioSpec already reads the library `.parquet`**: `pwiz_tools/BiblioSpec/src/BiblioSpec/DiaNNSpecLibReader.cs`
+  (`LoadSpecLibFromParquetAsync`, cpp PR #4189) reads DIA-NN v2 `report-lib.parquet` through Parquet.Net
+  with the same columns listed above, row group by row group, skipping `Decoy != 0`. Osprey should share
+  that column reading rather than write a second map (noted 2026-11-03; it was missing here). The tree
+  has no library `.parquet` fixture: BiblioSpec's test inputs hold only the PSM `report.parquet` and a
+  `.skyline.speclib`. Fixture request: `M:/home/brendanx/data/MacCoss/Osprey/DIA-NN/request.md`.
+
 ## Plan
 
 1. A `DiannParquetLoader` beside `DiannTsvLoader`, sharing its row-to-`LibraryEntry` assembly,
