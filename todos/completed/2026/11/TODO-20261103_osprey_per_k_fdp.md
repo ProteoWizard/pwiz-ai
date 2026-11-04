@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_per_k_fdp`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4489](https://github.com/ProteoWizard/pwiz/issues/4489)
 - **Module**: `osprey`
-- **PR**: [#4987](https://github.com/ProteoWizard/pwiz/pull/4987)
+- **PR**: [#4987](https://github.com/ProteoWizard/pwiz/pull/4987) (merged 2026-11-03)
 - **Worktree**: `C:\proj\wt-progress` (second branch in agent A's night-session worktree)
 
 ## Objective
@@ -107,3 +107,7 @@ Eight findings, triaged:
 
 ### 2026-11-03 - Session 1 (night agent A)
 - Implemented the estimator, tests, report overlay + card and doc section.
+
+### 2026-11-03 - Merged
+
+PR #4987 merged as commit 8f7c835d99. Shipped: decoyRunCountHistogram, decoyFdpByRunCount and decoyFdpAtLeastRunCount on every pass-1 crossRun view from both the batch oracle and the streamed accumulator, the dashed decoy-FDP curve and the FDP-vs-reproducibility card, definitions in docs/fractional-entrapment.md; goldens unchanged on Stellar, StellarLibDecoy and StellarGenDecoyEntrap. Deferred by design: no pass-2 decoy curve (gap-fill bias), plain D/T estimator without +1 or pi0, no separate peptide or protein-level views. The PR's Fixes line closed #4489.
