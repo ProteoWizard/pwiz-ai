@@ -46,7 +46,7 @@ Categories:
 | A3 | Resident Stage-7 join (`RescoredEntries.Streams == false`), reached from A1, A2 **and** A4 | A (shared) | **O(files × survivors)**: 4.4 GB + 0.197 GB/file; 91.1 GB measured at 446 runs | Pass2FdrSidecar, SecondPassFdrTask, PerFileRescoreTask, PipelineByproducts | Goes only after A1, A2 **and** A4's per-file half have all moved | ~300 |
 | A4 | **DONE by PR #4816 (2026-10-10).** `OSPREY_PASS2_QVALUE=transfer`: per-file half computed in Stage 7 over the whole pool (#4665) | A (placement) / C (algorithm) | **O(files × survivors)** via A3 | Pass2FdrSidecar (transfer core ~540, ComputePass2Resident 154), Program.cs | Transfer is the **only** pass-2 mode compatible with `OSPREY_EXPERIMENT_AGG=mean-best-N`; the plan is to MOVE `TransferOneFile` into `Pass2PerFileWorker`, not delete it | ~250 resident glue (the algorithm stays) |
 | A6 | `OSPREY_ALLOW_UNFIXED_RESIDENT` + `ResidentPaths` + resident-pool guards | A (support) | n/a (it admits A1/A2) | OspreyEnvironment 390-470, ResidentPaths.cs, PerFileScoringTask guards, Program.cs, regression.ps1 | Goes after A1 and A2 | ~350 prod + ~450 test + ~60 ps1 |
-| A7 | Diagnostics that force resident pools: `OSPREY_DUMP_PERCOLATOR`, `DUMP_RESCORED`, `DUMP_MULTICHARGE` / `DUMP_RECONCILIATION`, all enabled by `-d` | B\* | **O(files × precursors)**, warn-only, no guard | PerFileScoringTask.PreCompactionPoolReason, PerFileRescoreTask, Stage6Planner | Rust cross-impl bisection workflow (Test-Snapshot stage5, DIAGNOSTICS.md) | redesign, not delete |
+| A7 | **DONE (2026-10-11).** `OSPREY_DUMP_PERCOLATOR`, `DUMP_RESCORED`, `DUMP_MULTICHARGE`, `DUMP_RECONCILIATION` removed from C# (each held every run's entries); the names are refused at startup (`CommandLineErrorTest.UNRECOGNIZED_VARIABLES`) | B\* | none left | docs 05, 09, 11, 18 record the removal; no `PreCompactionPoolReason` / `EntriesForDump` on master | verified 2026-11-04 | 0 |
 | A8 | Unswitched resident fallbacks: full `FdrProjectionSet.BuildFromEntries`, all-runs `HydrateReconciliationOverlay`, the disk-state reasons in `PreCompactionPoolReason` | A\* | **O(files × precursors)** on resume / recon-sidecar routes | FirstPassFdrTask:3188, RescoreHydration:320-497, PerFileScoringTask:1785-1827 | These are live resume paths; each needs a streaming replacement | ~300 once streamed |
 | A10 | `OSPREY_PICK_LDA=0` (legacy product-form peak pick) | A | none | PeakDataExtractor, OspreyEnvironment (validity key) | Scripts expose `-PickProduct`; doc says "kept precisely so the two stay comparable"; Rust may still pick by product (inferred) | ~25 + scripts |
 | A11 | `OSPREY_TRAIN_PICK_RUN=0` (cross-run maximum training row) | A | none (same dictionaries) | PercolatorSampling, PercolatorScorer, validity key | Rust's criterion is the maximum, so a cross-impl comparison needs it (inferred) | ~30 |
@@ -227,7 +227,17 @@ docs/00-pipeline-architecture.md:1314-1323 names only transfer, which is incompl
 
 **Script residue:** `ai/scripts/Osprey/SEA-AD/Measure-Stage6Rescore.ps1:300-322,485` still passes the retired token `hpc-merge`.
 
-### A7. Diagnostics that silently re-create resident pools (B\*)
+### A7. Diagnostics that silently re-created resident pools (B\*) - DONE 2026-10-11
+
+Verified 2026-11-04 against master 13b90f2d41: `OSPREY_DUMP_PERCOLATOR`, `OSPREY_DUMP_RESCORED`,
+`OSPREY_DUMP_MULTICHARGE` and `OSPREY_DUMP_RECONCILIATION` were removed from C# on 2026-10-11 (docs
+05-rt-alignment.md:167, 09-multi-charge-consensus.md:151, 11-boundary-overrides.md:320, 18-peptide-trace.md:214)
+because each held or pulled every run's entries at once; `PerFileScoringTask.PreCompactionPoolReason` and
+`Stage6Planner.EntriesForDump` no longer exist, and the four names are refused at startup. The dumps that
+remain under `-d` are per-file (calibration, CWT path, MP inputs) or consensus-table sized
+(`OSPREY_DUMP_CONSENSUS`, `OSPREY_DUMP_INV_PREDICT`); none re-creates O(files x precursors) memory.
+The original inventory follows for the record.
+
 
 These are category B (Rust bisection harness). They are listed here because they bring back O(files × precursors) memory with only a warning, and because A1 removal depends on them.
 - `OSPREY_DUMP_PERCOLATOR` is the first reason in `PerFileScoringTask.PreCompactionPoolReason` (PerFileScoringTask.cs:1789-1790, verified). On a resume / load-from-parquet route it loads every file's full stubs. It is warn-only (`WarnPreCompactionPool`, :1765).
