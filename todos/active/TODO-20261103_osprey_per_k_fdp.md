@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4489](https://github.com/ProteoWizard/pwiz/issues/4489)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4987](https://github.com/ProteoWizard/pwiz/pull/4987)
 - **Worktree**: `C:\proj\wt-progress` (second branch in agent A's night-session worktree)
 
 ## Objective
@@ -101,7 +101,7 @@ Eight findings, triaged:
       unchanged (`.../regress-item2-<Dataset>.log`)
 - [x] Read the decoy and entrapment curves (table above)
 - [x] /code-review medium, triage (above)
-- [ ] PR
+- [x] PR #4987 opened (TeamCity Perf/Regression gate NOT triggered - parent session queues it)
 
 ## Progress Log
 
