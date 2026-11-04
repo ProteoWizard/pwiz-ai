@@ -10,6 +10,7 @@
     What to build: Solution, Skyline, SkylineTester, Test, TestData, TestFunctional, TestConnected, TestTutorial, TestPerf, Clean, Rebuild
     AiConnector and ImageComparer build those DevTools/Tools projects, which are not in Skyline.sln.
     ImageComparer builds the GUI and the ImageComparer MCP server (Core comes in as a reference).
+    UniModCompiler builds the DevTools code generator for Model\DocSettings\UniModData.cs (not in Skyline.sln).
 
 .PARAMETER Configuration
     Debug or Release (default: Debug)
@@ -59,7 +60,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Solution", "Skyline", "SkylineTester", "CommonTest", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "AiConnector", "ImageComparer", "Clean", "Rebuild")]
+    [ValidateSet("Solution", "Skyline", "SkylineTester", "CommonTest", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "AiConnector", "ImageComparer", "UniModCompiler", "Clean", "Rebuild")]
     [string]$Target = "Solution",
 
     [Parameter(Mandatory=$false)]
@@ -384,6 +385,10 @@ if ($isNet8) {
             'Executables\DevTools\ImageComparer\ImageComparer.csproj'
             'Executables\DevTools\ImageComparer.Mcp\ImageComparer.Mcp.csproj'
         )
+    } elseif ($Target -eq 'UniModCompiler') {
+        # Not in Skyline.sln. Run bin\<Config>\<TFM>\UniModCompiler.exe afterwards to regenerate
+        # Model\DocSettings\UniModData.cs from pwiz\data\common\unimod.obo (see its README.md).
+        $net8Projects = @('Executables\DevTools\UniModCompiler\UniModCompiler.csproj')
     } elseif ($Target -notin @('Solution', 'Rebuild', 'Clean')) {
         $net8Projects = @("$Target\$Target.csproj")
     }
@@ -409,7 +414,7 @@ if ($isNet8) {
     # SkylineTester's staging check on 2026-08-26 after an x64 rebuild, so the run used a binary
     # four hours older than the source and failed on an argument it had never heard of.
     $net8Props = @("/p:Configuration=$Configuration", "/p:Platform=$Platform")
-    if ($Target -in @('AiConnector', 'ImageComparer')) {
+    if ($Target -in @('AiConnector', 'ImageComparer', 'UniModCompiler')) {
         # The connector projects have no x64 platform; PackageToolZip reads bin\<Config>\<TFM>.
         # ImageComparer builds AnyCPU into bin\<Config>\<TFM>, where its MCP registration points.
         $net8Props = @("/p:Configuration=$Configuration")
