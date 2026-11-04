@@ -154,3 +154,7 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   (Phospho loses T) - affects Osprey and BiblioSpec, not filed (roadmap step 2); (2) ~410 new hidden
   entries now take part in mass matching on import; (3) ~50 entries differ from UniMod's six-decimal
   mass by 1-26e-6 Da with Skyline's element masses (step 3 question).
+- 18:55: SEA-AD run for #4577 finished (exit 0, 5:33). 6->7 release still frees 0 (754,359 base_ids
+  retained). Stage 7 floor is now 4.4 GB managed (peak 8.6, private 13.6) against a run peak of 38.9 GB
+  private in Stage 5, so the ~0.4-0.7 GB fragment lever is 2% of peak: DEFERRED with a status comment
+  on #4577 and the read recorded in TODO-20261103_osprey_stage7_fragments.md. No PR for item D2.

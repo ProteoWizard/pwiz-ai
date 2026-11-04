@@ -62,3 +62,15 @@ The run is still going in the run dir above. When `run.log` shows `DONE ... exit
    If it is larger, implement the entry-level predicate `!IsDecoy && retained(base)` at SecondPassFdrTask.cs:1014
    (also the load-time skip on --task SecondPassFDR) and update SubsetPipelineTest.AssertFragmentRelease (asserts
    Stage 7 released 0) and regression.ps1's Test-LibraryFragmentRelease mode-6 checks. Gate: Stellar + StellarLibDecoy.
+
+## Measurement read (2026-11-03 18:55, parent night session)
+
+Run finished 18:50, exit 0, 5:33 wall. Release lines: 5->6 freed 4,667,143 of 6,175,389 (754,359
+base_ids retained); 6->7 freed 0 (same 754,359 retained). perfviz managed p10/p50/peak, private peak:
+PerFileScoring 7.6/11.6/25.0 (29.6); FirstPassFDR 7.5/13.8/29.7 (38.9); PerFileRescoring 5.8/7.8/14.2
+(18.0); SecondPassFDR 4.4/5.7/8.6 (13.6). Managed heap entering Stage 7 post-GC 3.53 GB; working set
+after the empty release 10.66 GB.
+
+Decision: DEFER. The 0.4-0.7 GB lever is 10-15% of the Stage 7 floor but 2% of the run peak, which is
+Stage 5 (38.9 GB private). Stage 7 no longer sets the machine requirement. Worth doing only for a
+standalone `--task SecondPassFDR` node. Status comment posted on #4577; no branch, no PR.
