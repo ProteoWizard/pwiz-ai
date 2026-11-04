@@ -173,3 +173,19 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   measured format facts: first row group always empty, RT on the predicted scale in both shapes,
   Source.Id only on decoys, trailing Trace column in empirical libraries). Item 6 launched as Agent H
   (`wt-progress`, branch `Skyline/work/20261103_osprey_diann_parquet_loader`); brief section added.
+- 21:45: Brendan reviewed the completion plan (artifact AzeCh12WKV9ngitSM4LhyR). Tier 1 merged via
+  /pw-complete: #4985 -> 940df9220f, #4990 -> 165bf9bffb, #4991 -> de6beefa92; TODOs moved to
+  completed/2026/11; branches deleted. #4982 held: Brendan wants GPU support in the parity script,
+  the Astral leg run here, and the script surfaced in the osprey-development skill like the cross-impl
+  comparison (it is not today); follow-up agent D2 launched on the PR branch in wt-carafe. With #4990
+  and #4991 both merged, pwiz/data/common/unimod.xml has no reader and can be deleted.
+- 22:40: #4987 merged (8f7c835d99) and finalized. Merged master into #4989's branch (one conflict,
+  docs/README.md rows; template auto-merged); merged branch 651/651 + inspection clean
+  (`ai/.tmp/sessions/20261103-parent/build-4989-merged.log`). Agent H opened PR #4994 (DIA-NN 2.x
+  library .parquet via -l; shared column reader moved into BiblioSpec.IO; 1.56 M-precursor load in
+  23 s, peak managed 4.1 GB). Perf/Regression queued: build 4249971 for pull/4994.
+- 2026-11-04 00:10: Tier 2 merged: #4987 -> 8f7c835d99, #4989 -> 0bec7caeef (after a master merge
+  resolved by the parent; both cards confirmed in a re-rendered Stellar report). #4982 follow-up
+  posted (PR comment 6624465850): CPU 12/12 on Stellar+Astral; CUDA fails the RT comparisons because
+  of TF32 (decision for Brendan: GPU tolerances vs disabling TF32 in inference). Tier 3 starts with
+  the #4983 conflict (OspreyEnvironment.cs vs #4968) - agent B2 in wt-envvar.
