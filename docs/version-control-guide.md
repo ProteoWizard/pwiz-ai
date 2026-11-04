@@ -282,8 +282,9 @@ whose implied subject is "we, the Skyline development team". The Skyline Release
 (skyline.ms, version 151) shows the set in use, counted by the leading verb of each bullet:
 Fixed 621, Added 162, Improved 124, Updated 25, Changed 11. **"New!"** there is emphasis, not
 the verb: look past it for the verb ("New! Added support for the Comet search engine"). The
-other leading words are noun-phrase bullets ("Support for ...", "Peptide Search with Tide"),
-not a pattern to copy.
+other leading words are noun-phrase bullets that leave the verb out, not a pattern to copy:
+"Support for the latest DIA-NN speclib format" is "**Added** support for the latest DIA-NN
+speclib format".
 
 The test: put **"I"** in front of the title. It must read as what the developer did ("I changed
 the build to fail ..."), not as **"The code <present-tense verb>"** with the subject dropped and
