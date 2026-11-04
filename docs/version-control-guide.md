@@ -277,6 +277,12 @@ pre-processing **to strip** ..."). The two rules compose.
 every commit. Removed, Refactored, Moved, Renamed, Documented, Enabled and Disabled cover the
 rest. Reach outside the set only when none of these is true.
 
+The implied subject is "I, the developer", which is what lets a title become a release note
+whose implied subject is "we, the Skyline development team". The Skyline Release Notes page
+(skyline.ms, version 151) shows the set in use, counted by the first word of each bullet:
+Fixed 621, Added 160, Improved 123, Updated 25, Changed 11. The other leading words there are
+older noun-phrase bullets ("New ...", "Support for ..."), not verbs to copy.
+
 The test: put **"I"** in front of the title. It must read as what the developer did ("I changed
 the build to fail ..."), not as **"The code <present-tense verb>"** with the subject dropped and
 the verb moved to the past. If the title is just "The build fails on warnings" turned into
