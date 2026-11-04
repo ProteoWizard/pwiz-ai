@@ -113,7 +113,7 @@ screenshots/text move to PR E.
       OspreySearchSettings moved to its own file
 - [x] Tests: OspreySearchTest, OspreySearchTuningTest, OspreySearchPerfTest rewritten for the Run wizard and passing;
       DDA/DIA/DIA-NN search tests, preset tests, Osprey unit tests, CodeInspection pass
-- [ ] TestBuildLibraryCarafeWizard fails on this stack with the latest Osprey master build (26.1.1.304): master's
+- [x] (fixed 2026-11-04 by merging master into the stack) TestBuildLibraryCarafeWizard failed on this stack with the latest Osprey master build (26.1.1.304): master's
       #4938 changed Osprey's precursor-table prediction to write a .blib, with the Skyline side on master; the stack
       predates it (not PR D code). Resolves when master is merged into the stack.
 - [x] tcinspect clean

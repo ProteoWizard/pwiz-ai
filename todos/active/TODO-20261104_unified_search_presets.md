@@ -97,7 +97,7 @@ away. The Run tutorial screenshots/text move to PR F.
 ## Progress
 
 - [x] Plan and decisions (2026-11-04)
-- [ ] Merge master into the stack
+- [x] Merge master into the stack (2026-11-04: A by GitHub; B, C, D locally - a DdaTutorialTest conflict, and ModelResources.designer.cs line endings)
 - [ ] Engine part + XML
 - [ ] Driver filter + workflow filtering in Run Peptide Search
 - [ ] Build Library on the unified list; migration; .skyosp import
