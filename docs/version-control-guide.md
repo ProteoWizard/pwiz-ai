@@ -274,7 +274,8 @@ after the action, exactly as the section above prescribes ("Fixed ... **to judge
 pre-processing **to strip** ..."). The two rules compose.
 
 **Lead with one of the recommended verbs:** **Added, Fixed, Improved, Changed** cover nearly
-every commit. Removed, Refactored, Moved, Renamed, Documented, Enabled and Disabled cover the
+every commit, and **Updated** fits a new version of something already there ("Updated Agilent
+instrument vendor DLLs"). Removed, Refactored, Moved, Renamed, Documented, Enabled and Disabled cover the
 rest. Reach outside the set only when none of these is true.
 
 The implied subject is "I, the developer", which is what lets a title become a release note

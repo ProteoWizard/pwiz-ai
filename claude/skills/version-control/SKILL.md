@@ -124,8 +124,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
     "**Changed** the Osprey build **to fail** on compiler warnings"
 
   The behavior verb survives — in the present tense, after the action.
-  **Lead with Added, Fixed, Improved or Changed** (Removed, Refactored,
-  Moved, Renamed, Documented for the rest). Test: prefix "I". It must read
+  **Lead with Added, Fixed, Improved or Changed**, or Updated for a new
+  version of something ("Updated Agilent instrument vendor DLLs"); Removed,
+  Refactored, Moved, Renamed, Documented for the rest. Test: prefix "I". It must read
   as "I <verb>", not "The code <present-tense verb>" with the subject
   dropped and the verb past-tensed. Full table and rationale in
   ai/docs/version-control-guide.md ("Tense").
