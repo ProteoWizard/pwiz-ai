@@ -5,7 +5,7 @@
 - **Base**: `Skyline/work/20261102_run_peptide_search_osprey` (PR [#4972](https://github.com/ProteoWizard/pwiz/pull/4972), PR D),
   stacked on #4944 (PR C), #4928 (PR B) and #4923 (PR A)
 - **Created**: 2026-11-04
-- **Status**: Planned
+- **Status**: Branch pushed, no PR yet (user, 2026-11-04)
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
 - **PR**: (pending)
@@ -98,7 +98,26 @@ away. The Run tutorial screenshots/text move to PR F.
 
 - [x] Plan and decisions (2026-11-04)
 - [x] Merge master into the stack (2026-11-04: A by GitHub; B, C, D locally - a DdaTutorialTest conflict, and ModelResources.designer.cs line endings)
-- [ ] Engine part + XML
-- [ ] Driver filter + workflow filtering in Run Peptide Search
-- [ ] Build Library on the unified list; migration; .skyosp import
-- [ ] Tests; tcinspect; code review
+- [x] Engine part + XML: an Osprey preset's engine part is its `OspreySettings` (the `OspreySettingsPreset` payload,
+      written as its element) and it writes no generic attributes; its generic fields hold fixed values
+      (`ClearGenericSettingsForOsprey`) so it equals itself read back; `SearchSettingsPreset.CreateOsprey`. Kept the
+      generic properties on the preset rather than moving them into a separate generic type (no caller change).
+      Fixed: a preset with no FASTA wrote an empty FASTA attribute, which means "clear the FASTA" - no attribute
+      now; the wizard still saves a missing FASTA as empty, keeping its meaning
+- [x] `SettingsListComboDriver.Filter` / `SelectFirstItem`; the wizard lists the presets of the chosen workflow
+      (`BuildPeptideSearchLibraryControl.WorkflowChanged` reloads, clearing a selection no longer listed); a preset
+      no longer sets the workflow; missed cleavages go with the enzyme (a preset without one leaves the digestion);
+      an imported preset of another workflow is kept for that workflow with a message
+- [x] Build Library: `OspreySearchSettingsControl`'s row lists the Osprey presets of the shared list and saves
+      Osprey presets there (an Osprey preset of the name keeps its FASTA and mods); `MoveInOspreyPresets` moves
+      `OspreySettingsPresets` across (unique names). Dropped: importing a shared `.skyosp` file through Edit list
+      (the format is weeks old; a lab can re-save the preset); built-in Osprey presets (they would impose an enzyme)
+- [x] Tests: SearchSettingsPresetTest (generic, Osprey, older and PR D formats; driver filter; migration);
+      TestDdaSearchSettingsPreset filtering block; BuildLibraryCarafeWizardTest saves and reapplies an Osprey preset;
+      Osprey, DIA-NN, DDA, DIA search tests, TestDdaTutorial and CodeInspection pass
+- [x] tcinspect clean
+- [x] Code review (high): 6 findings, all fixed - the combo driver's last selection is set after every reload (a
+      stale one crashed Edit list... or applied an unchosen preset); a .params preset with no workflow is for the
+      workflow it is imported into; presets of engine settings alone (`HasEngineSettingsOnly`) leave the iRT
+      standard; Build Library refuses saving over another engine's preset; `SearchSettingsPresetList.EnsureDefaults`
+      (defaults + DIA-NN and Osprey moves) runs from Build Library too; tests fixed to test what they claim
