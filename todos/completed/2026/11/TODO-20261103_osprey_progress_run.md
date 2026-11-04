@@ -4,13 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_progress_run`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Progress - master merged in 2026-11-04 (gates green); awaiting the TeamCity
-  Perf/Regression gate (parent re-queues) and review. Decision taken conservatively: #4968
-  has merged, but PercolatorEngine.cs / PercolatorScorer.cs are still left on explicit
-  `Complete()` (off limits this round); converting them is the follow-up for Brendan to schedule.
+- **Status**: Completed
 - **GitHub Issue**: [#4979](https://github.com/ProteoWizard/pwiz/issues/4979)
 - **Module**: `osprey`
-- **PR**: [#4984](https://github.com/ProteoWizard/pwiz/pull/4984)
+- **PR**: [#4984](https://github.com/ProteoWizard/pwiz/pull/4984) (merged 2026-11-04)
 - **Worktree**: `C:\proj\wt-progress` (night-session agent worktree, round 2 wave A)
 
 ## Objective
@@ -113,3 +110,7 @@ No correctness bugs found. Seven findings, triaged:
   branch, so left alone here (`carafe-gate2.log`); Skyline TestProgressReporter + TestMultiProgressReporter
   passed through Run-Tests.ps1 after a full solution build (`commontest-run.log`); regression.ps1 Stellar
   PASS and StellarLibDecoy PASS incl. diagnostics mode1b (`regress-Stellar.log`, `regress-StellarLibDecoy.log`).
+
+### 2026-11-04 - Merged
+
+PR #4984 merged as commit 3f7788ac62. Shipped: ProgressReporter.Run, Run<T> and TryRun; every scoped reporter in Osprey and CarafeSharp converted, including the DIA-NN parquet loader that #4994 added while the PR was open; DiannTsvLoader's private BuildEntries renamed ValidateAndBuildEntries to disambiguate from #4994's shared one. Gates: Perf/Regression 4249213 and 4250536 (after the master merge), 653 Osprey tests, CarafeSharp 117, the two CommonTest reporter tests, Stellar and StellarLibDecoy unchanged. Deferred for Brendan to schedule now that #4968 merged: convert PercolatorEngine.cs (5 sites) and PercolatorScorer.cs (2), give the PipelineByproducts iterator its own form, then make the constructor and Complete() non-public. Core code inspection on the PR failed only on the new NU1903 advisory for Microsoft.DotNet.ILCompiler 10.0.3 in MsData.NativeAot.csproj, unrelated.
