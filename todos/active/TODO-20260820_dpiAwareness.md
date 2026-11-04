@@ -2627,6 +2627,6 @@ factor for gaps. No-op at 100%. 289 sites in 30 screenshot tests converted (suba
    review for this PR.
 
 Related, not on this PR: ImageComparer F5 reload fix + "Same" size mode (key S, keeps the original size
-ratio in the label) -> PR #4954 (`Skyline/work/20261031_imagecomparer_f5`), also cherry-picked into the
-review branch. Developers PR for the docking icons: opened by Brendan. `Build-DigitalRune.ps1 -Install` still targets `pwiz_tools/Shared/Lib/` instead of
+ratio in the label) -> PR #4954, merged 2026-11-04 as f13defc8b4 (branch deleted), also cherry-picked
+into the review branch. Developers PR for the docking icons: opened by Brendan. `Build-DigitalRune.ps1 -Install` still targets `pwiz_tools/Shared/Lib/` instead of
 `Lib/DigitalRune/net10/`. PR #4951 (screenshot waits) open: PeakBoundaryImputation s-19 open item.
