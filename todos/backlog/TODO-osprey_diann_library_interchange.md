@@ -11,6 +11,11 @@ library swap this would simplify)
 
 ## Part 1 goal: Osprey reads DIA-NN's .parquet library
 
+**Done in PR [#4994](https://github.com/ProteoWizard/pwiz/pull/4994)** (2026-11-03,
+[TODO-20261103_osprey_diann_parquet_loader.md](../active/TODO-20261103_osprey_diann_parquet_loader.md)):
+plan steps 1-4. Still open here: plan step 5 (simplify the benchmark scripts), part 2, and pairing
+DIA-NN library decoys from `Source.Id`.
+
 `Osprey -i runs... -l report-lib.parquet -o out.blib` searches a library DIA-NN predicted or built,
 with no conversion step. Today Osprey's `-l` takes a `.blib` or the DIA-NN import `.tsv`
 (`DiannTsvLoader`), and DIA-NN 2.x no longer writes that `.tsv`, so every DIA-NN library reaches

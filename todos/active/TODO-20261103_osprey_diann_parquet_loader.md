@@ -9,7 +9,7 @@
   shared `--cache-dir` (see Code review, dropped item 4).
 - **GitHub Issue**: (none - backlog TODO-osprey_diann_library_interchange.md, part 1)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4994](https://github.com/ProteoWizard/pwiz/pull/4994)
 - **Worktree**: `C:\proj\wt-progress` (agent H of the 2026-11-03 round-2 wave)
 
 ## Objective
