@@ -169,3 +169,7 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   have only PSM `report.parquet` + `.skyline.speclib`, no library parquet, so the fixture is still needed.
 - 20:55: Gate PASSED for #4988 (build 4249301). All four queued gates green; every PR of the wave is
   ready for /pw-complete (#4982 awaits Mike's review).
+- 21:20: DIA-NN fixtures arrived from MACS2 (`M:\home\brendanx\data\MacCoss\Osprey\DIA-NN`, README with
+  measured format facts: first row group always empty, RT on the predicted scale in both shapes,
+  Source.Id only on decoys, trailing Trace column in empirical libraries). Item 6 launched as Agent H
+  (`wt-progress`, branch `Skyline/work/20261103_osprey_diann_parquet_loader`); brief section added.

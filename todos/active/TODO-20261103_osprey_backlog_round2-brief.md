@@ -189,3 +189,49 @@ place with the issue's numbers; definitions on the diagnostics docs page. Prefer
 #4489 card lands in the same report this round. Gate: Stellar, StellarLibDecoy, StellarGenDecoyEntrap
 (the gendecoy set is where the alarms should fire; report what each badge says on each dataset). Module
 `osprey`.
+
+## Agent H (worktree `C:\proj\wt-progress`, branch `Skyline/work/20261103_osprey_diann_parquet_loader`)
+
+Item 6: `C:\proj\ai\todos\backlog\TODO-osprey_diann_library_interchange.md` **part 1 only** (Osprey `-l
+report-lib.parquet`), read in full, including the 2026-11-03 bullet about BiblioSpec. Fixtures and their
+README (read it in full; every number in it was measured) are at `M:\home\brendanx\data\MacCoss\Osprey\DIA-NN`
+(a network share: copy the folder except `full-predicted/` to `D:\test\diann-fixtures` first and work from
+there; the two full-predicted files are 263 MB and 489 MB, copy only `human-fasta.library.parquet` for the
+streaming measurement). Module `osprey`.
+
+Design points settled by the README:
+- Columns are identical across predicted and empirical libraries (empirical adds a trailing `Trace` string
+  column: ignore it). Floats are float32, ints int64, no nulls. One row per fragment.
+- **The first row group of every non-empty library has 0 rows**; the loader must iterate all row groups
+  and never treat row group 0 as representative. The zero-id empirical case (`tiny20-stellar-zero-ids/
+  report-lib.parquet`, 0 rows, full schema) must load as an empty library with a clear message, not throw.
+- `RT` is DIA-NN's predicted scale in BOTH shapes (empirical: 8.2 * minutes - 63.6); map it to the same
+  field `DiannTsvLoader` fills from `NormalizedRetentionTime`, nothing else.
+- `Modified.Sequence` uses `C(UniMod:4)` and an N-terminal `(UniMod:1)` BEFORE the first residue; reuse
+  `DiannTsvLoader`'s modification parsing so both formats agree. `Fragment.Loss.Type` is `noloss` on every
+  row in these files but the column is real; map it as the `.tsv` path maps `FragmentLossType`.
+- `Decoy` 1 marks decoys (plain sequences, no prefix; `Source.Id` names the paired target). Honor
+  `--decoys-in-library` exactly as the `.tsv` path does; do not synthesize pairs from `Source.Id` this
+  round (record it as a follow-up in the TODO).
+- BiblioSpec already reads this format: `pwiz_tools/BiblioSpec/src/BiblioSpec/DiaNNSpecLibReader.cs`
+  `LoadSpecLibFromParquetAsync` (Parquet.Net, `MustFindParquetField`, row-group loop). Prefer ONE column
+  reader shared by both: if `Osprey.IO` can reference the assembly that holds it without a dependency
+  inversion, call it; otherwise move the column reading into the assembly both already share (the one
+  with `BiblioSpec.IO`'s writer) and have both call it; only as a last resort mirror it, with a test that
+  pins the column list to BiblioSpec's. Say which in the PR. No async/await in Osprey code
+  (CRITICAL-RULES): wrap or restructure the Parquet.Net calls as the existing Osprey parquet readers do.
+- `LibraryLoader` dispatches `.parquet` next to `.tsv`; the derived cache is `<library>.parquet.blib`;
+  `.speclib` is refused with the `diann --lib x.speclib --gen-spec-lib --out-lib x.parquet` hint; `-l`
+  help and `docs/` name the format.
+
+Tests (commit `predicted-20prot/lib.parquet` 0.41 MB, `varmods/lib-varmods.parquet` 0.50 MB, the empty
+`tiny20-stellar-zero-ids/report-lib.parquet`, and `converted/lib.tsv` compressed if the test data
+convention allows; cite the README for provenance): the parquet loads identically to `converted/lib.tsv`
+(model `SubsetPipelineTest.TestLibraryLoadsIdenticallyFromTsvAndBlib`; note the tsv carries pyarrow's
+float32-to-text values, so compare at float32 precision), the varmods pair likewise (UniMod:35 and
+N-terminal UniMod:1), the empty library, and the `.speclib` refusal. Measure, do not test: load
+`human-fasta.library.parquet` (1.56 M precursors, 18.7 M rows, 6 row groups) with `--timestamp --memstamp`
+and report wall time and peak managed heap in the PR. Gate: Stellar (the `.tsv` and `.blib` paths are
+untouched, so the golden cannot move; if it does, stop). Leave part 2 and the benchmark-script
+simplification (plan step 5) to a later round; update the backlog TODO's part 1 to "done in PR #N" and
+leave the file in place for part 2.
