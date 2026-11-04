@@ -279,9 +279,11 @@ rest. Reach outside the set only when none of these is true.
 
 The implied subject is "I, the developer", which is what lets a title become a release note
 whose implied subject is "we, the Skyline development team". The Skyline Release Notes page
-(skyline.ms, version 151) shows the set in use, counted by the first word of each bullet:
-Fixed 621, Added 160, Improved 123, Updated 25, Changed 11. The other leading words there are
-older noun-phrase bullets ("New ...", "Support for ..."), not verbs to copy.
+(skyline.ms, version 151) shows the set in use, counted by the leading verb of each bullet:
+Fixed 621, Added 162, Improved 124, Updated 25, Changed 11. **"New!"** there is emphasis, not
+the verb: look past it for the verb ("New! Added support for the Comet search engine"). The
+other leading words are noun-phrase bullets ("Support for ...", "Peptide Search with Tide"),
+not a pattern to copy.
 
 The test: put **"I"** in front of the title. It must read as what the developer did ("I changed
 the build to fail ..."), not as **"The code <present-tense verb>"** with the subject dropped and
