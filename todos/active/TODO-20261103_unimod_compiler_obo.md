@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4980](https://github.com/ProteoWizard/pwiz/issues/4980) (roadmap step 1 and the enforcement comment)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4990](https://github.com/ProteoWizard/pwiz/pull/4990)
 - **Worktree**: `C:\proj\wt-unimodgen` (night-session agent C, wave TODO-20261103_osprey_backlog_round2)
 
 ## Objective
@@ -34,7 +34,7 @@ obo (ids, six-decimal masses, sites/terminus, explicit exclusion list).
 - [ ] TestData.dll on a vendor-enabled build (running at PR time; see Progress Log)
 - [x] README + CV-update procedure docs (compiler README, build/CvGen/Program.cs, pwiz/utility/README.md)
 - [x] /code-review medium (triage below)
-- [ ] PR
+- [x] PR #4990 opened 2026-11-03
 
 ## Decisions (for Brendan to revisit)
 
