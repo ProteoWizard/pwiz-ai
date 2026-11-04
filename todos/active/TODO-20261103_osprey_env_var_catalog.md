@@ -130,6 +130,33 @@ Dropped:
   several switches declared here (A5, A9, A14-A16). The two PRs touch the same declarations in
   `OspreyEnvironment.cs`; whichever merges second resolves by deleting the EnvVar along with its
   reader.
+- #4986 (parity rows) merges AFTER this PR. It retires OSPREY_RELEASE_LIBRARY_FRAGMENTS,
+  OSPREY_LOESS_CLASSICAL_ROBUST and OSPREY_BLOCK_READ_GATE and sets STUB_IDENTITY to `1|2`. Not
+  done here; in the catalog that edit is: delete each `ENV_*` declaration with its reader, and
+  change STUB_IDENTITY's `Values` to `{ "1", "2" }`. The 2026-11-04 merge resolution touched only
+  the GBT block near DETERMINISTIC_MATH, none of those four declarations.
+
+### 2026-11-04 (agent B2) - merged master in
+- `git merge origin/master` (0bec7caeef) as merge commit 3f5c75a1f9, pushed. Master since the
+  branch point: #4968, #4974, #4985, #4987, #4989, #4990, #4991 (#4969 merged into a feature
+  branch, not master, so it is not in this merge).
+- One conflict, `Osprey.Core/OspreyEnvironment.cs`, from #4968 (opt-in out-of-fold scoring and
+  two-round GBDT first-pass training). It added two raw reads and their KnownVariables names:
+  - `OSPREY_GBT_OOF` -> `ENV_GBT_OOF`, group behavior, flag (`0|1` shown, no listed values, so no
+    new startup check); reader unchanged: `ParseIntOrNull(ENV_GBT_OOF) == 1`.
+  - `OSPREY_GBT_PREFILTER_SIZE` -> `ENV_GBT_PREFILTER_SIZE`, group behavior, `<N>`, 0/unset off;
+    reader unchanged: `Math.Max(0, ParseIntOrZero(ENV_GBT_PREFILTER_SIZE))`.
+  - Descriptions from #4968's doc comments and PR body (not keyed vs keyed, resume retrains,
+    second-pass still fold mean, memory cost, projection path ignores it). Master's KnownVariables
+    hunk dropped (the catalog replaces it). The `ParseInt*` helpers have the same bodies as master's.
+- Every other file the merge touched: no new raw environment access (grep of the master-side diff
+  for Get/SetEnvironmentVariable, ExpandEnvironmentVariables and `"OSPREY_` literals).
+- Gates: `Build-Osprey.ps1 -SourceRoot C:/proj/wt-envvar -Configuration Debug -RunTests
+  -RunInspection` 651/651, 0 inspection warnings, incl. TestEnvironmentReadThroughEnvVar
+  (`ai/.tmp/sessions/20261104-agentB2/gate2.log`; `gate1.log` was an InspectCode internal CLR
+  crash 0x80131506, a tool fault, passed on retry). `regression.ps1 -Dataset Stellar` PASSED,
+  mode1 vs golden PASS (`ai/.tmp/sessions/20261104-agentB2/regress-stellar.log`). `--help-env`
+  lists both new switches under Behavior (`ai/.tmp/sessions/20261104-agentB2/help-env.txt`).
 
 ## Folded in: the backlog TODO (TODO-osprey_env_var_cataloging.md, raised 2026-08-29)
 
