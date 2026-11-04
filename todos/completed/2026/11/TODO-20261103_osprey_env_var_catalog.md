@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_env_var_catalog`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Review (PR open; TeamCity Perf/Regression not yet run - parent session queues it)
+- **Status**: Completed
 - **GitHub Issue**: (none - from backlog `TODO-osprey_env_var_cataloging.md`, folded in below)
 - **Module**: `osprey`
-- **PR**: [#4983](https://github.com/ProteoWizard/pwiz/pull/4983)
+- **PR**: [#4983](https://github.com/ProteoWizard/pwiz/pull/4983) (merged 2026-11-04)
 - **Worktree**: `C:\proj\wt-envvar` (night-session agent worktree, round 2 wave B)
 
 ## Objective
@@ -171,3 +171,7 @@ and description STRUCTURAL (constructor), so only the source scan needs a test; 
 user's shell variable; the namespace claim (`OSPREY_*` is ours) decided deliberately; a value
 typo on a behavior switch is an error (Mike's `transfer-complete`). Its open question - is there
 a description check for CommandArgs? - is moot here: descriptions are constructor arguments.
+
+### 2026-11-04 - Merged
+
+PR #4983 merged as commit a0bd242dd8. Shipped: EnvVar declarations for all 97 OSPREY_* switches (plus #4968's two GBT switches registered at the master merge), EnvVar.Value as the only environment read with CodeInspectionTest.TestEnvironmentReadThroughEnvVar enforcing it, --help-env, the startup switch line, did-you-mean for unknown names, listed-value refusal. Decisions kept: unknown name is an error (#4825), descriptions not RESX, no shared base extracted from ArgumentBase, four =0-means-ON flags now read set-and-not-0. Gate: Perf/Regression 4249212 and 4250241 (after the merge). Follow-up: #4986 must drop the RELEASE_LIBRARY_FRAGMENTS, LOESS_CLASSICAL_ROBUST and BLOCK_READ_GATE declarations and set STUB_IDENTITY to 1|2 when it merges master.
