@@ -6,8 +6,8 @@
 - **Base**: `master`
 - **Module**: `osprey`
 - **Created**: 2026-11-03
-- **Status**: PR open, awaiting the first TeamCity build (f0cfff35f3, a25a25240a)
-- **PR**: [#4995](https://github.com/ProteoWizard/pwiz/pull/4995)
+- **Status**: Completed
+- **PR**: [#4995](https://github.com/ProteoWizard/pwiz/pull/4995) (merged 2026-11-04)
 
 ## Objective (Brendan, 2026-11-03)
 Run code inspection inside the "Osprey Windows .NET" TeamCity config (ProteoWizard_OspreyWindowsNet), as
@@ -42,10 +42,19 @@ build too, and both fail it only AT THE END, after tests and installers ran, so 
     CarafeSharp still built/tested, installers skipped, exit 1 (`e2e-3-testfail.log`)
 - [x] jb 2025.3.3 on #4950 (5340c30909): flags ParquetScoreCache.cs(407) PossibleNullReferenceException and
   (416) RedundantCast, exit 1 (`fdrgap-inspect.log`) - no need to pin 2026.2.1
-- [ ] TeamCity run of the PR (first real agent run; watch the Inspections tab and the build-time cost)
+- [x] TeamCity run of the PR: build 4249979 SUCCESS, "No build warnings and no inspections at WARNING or above", ~14 min vs ~9 min before
 
 ## Remaining
 - Optional TeamCity-side: add `env.GITHUB_STATUS_TOKEN=%GitHubAuthToken%` and
   `env.INSPECTION_TARGET_URL=https://teamcity.labkey.org/buildConfiguration/%system.teamcity.buildType.id%/%teamcity.build.id%?guest=1`
   to ProteoWizard_OspreyWindowsNet for the separate GitHub status.
 - Linux config (OspreyLinuxNet, tcbuild.sh) unchanged.
+
+## Progress Log
+
+### 2026-11-04 - Merged
+
+PR #4995 merged as commit 607f65560d. The Osprey Windows .NET build now runs ReSharper inspection (CLI 2025.3.3)
+and the build-warnings check last in tcbuild.bat and fails only at the end, after every test has reported.
+Deferred: the optional GitHub-status parameters on ProteoWizard_OspreyWindowsNet and the Linux tcbuild.sh.
+Known consequence: #4950 fails this build on its two ParquetScoreCache.cs warnings until #4992 is merged into it.
