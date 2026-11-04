@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261103_mztab_unimod_obo`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4980](https://github.com/ProteoWizard/pwiz/issues/4980) (roadmap step 1, BiblioSpec half)
 - **Module**: `pwiz`
-- **PR**: [#4991](https://github.com/ProteoWizard/pwiz/pull/4991)
+- **PR**: [#4991](https://github.com/ProteoWizard/pwiz/pull/4991) (merged 2026-11-03)
 - **Worktree**: `C:\proj\wt-unimodgen` (night-session agent C; second branch after #4990)
 
 ## Objective
@@ -47,3 +47,7 @@ already are, so BiblioSpec has one UniMod source.
 
 ### 2026-11-03
 - Branch cut from origin/master after #4990 was pushed.
+
+### 2026-11-03 - Merged
+
+PR #4991 merged as commit de6beefa92. Shipped: MzTabReader resolves UNIMOD ids through Pwiz.Data.Common.Unimod; BlibBuild and the installer stage no longer carry unimod.xml; MzTabReaderTests. Follow-up: with #4990 also merged, nothing in the tree reads pwiz/data/common/unimod.xml and it can be deleted.

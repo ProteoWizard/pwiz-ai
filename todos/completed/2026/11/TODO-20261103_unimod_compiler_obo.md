@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261103_unimod_compiler_obo`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4980](https://github.com/ProteoWizard/pwiz/issues/4980) (roadmap step 1 and the enforcement comment)
 - **Module**: `skyline`
-- **PR**: [#4990](https://github.com/ProteoWizard/pwiz/pull/4990)
+- **PR**: [#4990](https://github.com/ProteoWizard/pwiz/pull/4990) (merged 2026-11-03)
 - **Worktree**: `C:\proj\wt-unimodgen` (night-session agent C, wave TODO-20261103_osprey_backlog_round2)
 
 ## Objective
@@ -95,3 +95,7 @@ Dropped:
   Environmental, not UniMod.
 - Code-review fixes regenerate an identical UniModData.cs.
 - Pass `-VendorLicenses` to every Build-Skyline.ps1 call in a fresh worktree.
+
+### 2026-11-03 - Merged
+
+PR #4990 merged as commit 165bf9bffb. Shipped: UniModCompiler on unimod.obo, UniModData.cs regenerated (1,172 to 1,554 ids, 6 protein-terminal-only ids excluded by name), TestUniModAgreesWithObo, regeneration documented. Deferred to the #4980 roadmap: the shared Pwiz.Data.Common.Unimod reader keeps one site per spec group (step 2); about 50 entries differ from UniMod's six-decimal mass under Skyline's element table (step 3). Note for users: about 410 new hidden entries now take part in mass matching on import.
