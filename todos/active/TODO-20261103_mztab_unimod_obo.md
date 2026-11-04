@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4980](https://github.com/ProteoWizard/pwiz/issues/4980) (roadmap step 1, BiblioSpec half)
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#4991](https://github.com/ProteoWizard/pwiz/pull/4991)
 - **Worktree**: `C:\proj\wt-unimodgen` (night-session agent C; second branch after #4990)
 
 ## Objective
