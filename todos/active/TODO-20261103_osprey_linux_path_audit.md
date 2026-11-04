@@ -7,7 +7,7 @@
 - **Status**: In Progress (night-session agent F; worktree `C:\proj\wt-carafe`)
 - **GitHub Issue**: [#4361](https://github.com/ProteoWizard/pwiz/issues/4361) (Phase B only; the issue stays open)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4988](https://github.com/ProteoWizard/pwiz/pull/4988)
 
 ## Objective
 
@@ -37,7 +37,7 @@ check and the server-side activation of the Osprey Linux .NET config. Both stay 
   half of the new tests is written so it runs as-is on the Osprey Linux .NET config once that is
   activated. Session scripts: `ai/.tmp/sessions/20261103-agentF/wsl-setup.sh`.
 - [x] /code-review medium, triage (below)
-- [ ] PR, status comment on #4361
+- [x] PR #4988, status comment on #4361 (issue left open)
 
 ## Audit (base 4ec653c0d4)
 
@@ -125,4 +125,4 @@ so a native path identifies identically on Windows and Linux. The reconciliation
 - Read the brief, #4361 and its 2026-09-18 status; audited (above).
 - Implemented fixes and tests; build2 651/651; /code-review medium (6 findings, triaged below);
   build3 651/651 + 0 inspection warnings; Stellar regression PASSED.
-- Committed 720873cf19 on the branch; PR and #4361 status comment next.
+- Committed 720873cf19; opened PR #4988; posted #4361 status comment. Awaiting the TeamCity gate (parent session queues it).
