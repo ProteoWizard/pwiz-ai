@@ -75,6 +75,26 @@ OSPREY_BLOCK_READ_GATE, and changes OSPREY_STUB_IDENTITY's `Values` to `1|2` (an
 ### 2026-11-03 (night session, agent B)
 - Implemented the Done list above.
 
+### 2026-11-04 (agent B3) - merged master (#4983 env var catalog)
+- `git merge origin/master` (a0bd242dd8) as merge commit 4fde91588c, pushed. Conflicts:
+  `Osprey.Core/OspreyEnvironment.cs` (5 hunks) and `Osprey.Test/CommandLineErrorTest.cs` (1);
+  `Osprey/Program.cs` auto-merged.
+- Catalog edits: deleted the EnvVar declarations and readers of OSPREY_RELEASE_LIBRARY_FRAGMENTS,
+  OSPREY_LOESS_CLASSICAL_ROBUST and OSPREY_BLOCK_READ_GATE (now refused as unknown names);
+  OSPREY_STUB_IDENTITY `Values` = `1|2`; OSPREY_BLOCK_READ_MB gained `AcceptsValue = IsPositiveInt`.
+  Master's `KnownVariables` removal taken; every other #4983 declaration as master has it
+  (incl. GBT_OOF, GBT_PREFILTER_SIZE).
+- One mechanism: `OspreyEnvironment.RetiredReadArmError` and its Program.cs check deleted; the
+  retired `=0` arms are refused by `EnvVar.ValueError` ("OSPREY_STUB_IDENTITY='0' is not a
+  recognized value. Use '1' or '2'..."). CommandLineErrorTest's `=0` cases kept; STARTUP_VARIABLES
+  is the union of both sides. One sentence added to docs/20-command-line.md.
+- Beyond the catalog declarations and the startup check: nothing (two stray `/// <summary>`
+  openers left by the merge removed; StubIdentity doc wording).
+- Gates: Build-Osprey -RunTests -RunInspection 651/651, 0 warnings
+  (`ai/.tmp/sessions/20261104-agentB3/gate2.log`); regression.ps1 -Dataset Stellar PASSED, golden
+  unchanged (`.../regress-stellar.log`); `--help-env` lists none of the three retired names and
+  shows `OSPREY_STUB_IDENTITY=1|2` (`.../help-env.txt`).
+
 ### /code-review medium (8 findings) - triage
 Fixed (2db6b5bc0d):
 - `OSPREY_STUB_IDENTITY=0` and `OSPREY_BLOCK_READ_MB<=0` silently ran the default under the retired
