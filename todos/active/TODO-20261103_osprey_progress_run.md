@@ -4,7 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_progress_run`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Progress
+- **Status**: In Progress - master merged in 2026-11-04 (gates green); awaiting the TeamCity
+  Perf/Regression gate (parent re-queues) and review. Decision taken conservatively: #4968
+  has merged, but PercolatorEngine.cs / PercolatorScorer.cs are still left on explicit
+  `Complete()` (off limits this round); converting them is the follow-up for Brendan to schedule.
 - **GitHub Issue**: [#4979](https://github.com/ProteoWizard/pwiz/issues/4979)
 - **Module**: `osprey`
 - **PR**: [#4984](https://github.com/ProteoWizard/pwiz/pull/4984)
@@ -89,3 +92,24 @@ No correctness bugs found. Seven findings, triaged:
 
 ### 2026-11-03 - Session 1 (night agent A)
 - Converted 41 sites, added TryRun after finding the seven soft-failure paths. Debug build green.
+
+### 2026-11-04 - Session 2 (agent A2): merged master (#4983, #4986, #4987, #4988, #4989, #4994, #4918, #4968 ...)
+- `git merge origin/master` (7d9a4fa98a) applied with NO textual conflicts. FirstPassFdrTask, SecondPassFdrTask,
+  Calibrator, Pass2FdrSidecar, ParquetScoreCache, DiannTsvLoader, PercolatorQValues and ModelDiagnosticsData
+  were changed on both sides; checked each by hand: master's edits there (PathComparison, EnvVar, validity
+  key terms, comments) all fall outside the converted lambda bodies, and every file's post-merge diff
+  against master is the same size as the PR's own diff. DiannTsvLoader combined coherently with #4994's
+  shared `BuildEntries`/`AddFragmentRow`.
+- Fix-up bcbe15deac: converted the one NEW scoped site, `DiannParquetLoader.Load` read reporter (#4994),
+  to `ProgressReporter.Run` (same heading, same completion point). Renamed the PR's private 3-argument
+  `DiannTsvLoader.BuildEntries` to `ValidateAndBuildEntries`. #4994's cref `DiannTsvLoader.BuildEntries`
+  had become ambiguous (InvalidXmlDocComment).
+- Remaining `new ProgressReporter(` in Osprey/CarafeSharp: PercolatorEngine (5), PercolatorScorer (1+floor),
+  PercolatorQValues.QProgress (kept), PipelineByproducts iterator. Same set as before.
+- Gates (logs in `ai/.tmp/sessions/20261104-agentA2/`): Build-Osprey -RunTests -RunInspection 653/653,
+  inspection zero (`osprey-gate2.log`); CarafeSharp tests 117/117 (`carafe-tests.log`); CarafeSharp
+  inspection reports 1 warning, `PeptdeepConstants.cs:25` redundant `using System.Collections.Generic`,
+  in a file untouched by either side, also seen on master by #4709 and fixed on the carafesharp_parity_script
+  branch, so left alone here (`carafe-gate2.log`); Skyline TestProgressReporter + TestMultiProgressReporter
+  passed through Run-Tests.ps1 after a full solution build (`commontest-run.log`); regression.ps1 Stellar
+  PASS and StellarLibDecoy PASS incl. diagnostics mode1b (`regress-Stellar.log`, `regress-StellarLibDecoy.log`).
