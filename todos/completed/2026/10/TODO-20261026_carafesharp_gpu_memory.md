@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261026_carafesharp_gpu_memory`
 - **Base**: `master` (d476f8a120)
 - **Created**: 2026-10-26
-- **Status**: PR open (#4918, 24babd5e17): measured, reviewed (/code-review max, 15 findings addressed), gates green.
+- **Status**: Completed
 - **GitHub Issue**: none
 - **Module**: `osprey`
-- **PR**: [#4918](https://github.com/ProteoWizard/pwiz/pull/4918)
+- **PR**: [#4918](https://github.com/ProteoWizard/pwiz/pull/4918) (merged 2026-11-04)
 - **Checkout**: `D:\Dev\pwiz-carafe-vram` (blencathra: i9-9900K, 64 GB, GTX 1650 4 GB)
 
 ## Objective
@@ -89,3 +89,7 @@ the C runtime's copy of the environment.
       no spill (training library 749 s, tuning search 771 s, fine-tune 180 s, final library 1,396 s)
 - [x] Reworked build through Osprey (`gpu-probe-apiset`): settings take effect in-process, 700 s, no spill
 - [x] Build, tests, inspection (CarafeSharp and Osprey); PR #4918 to master (label osprey)
+
+### 2026-11-04 - Merged
+
+PR #4918 merged as commit 91a0c9aaa1. Shipped: TorchDevice.Resolve sets roundup_power2_divisions:4,per_process_memory_fraction:0.75 on Windows before CUDA starts unless the user set an allocator variable; CrtEnvironment binds getenv/_wputenv_s through api-ms-win-crt-environment-l1-1-0.dll; TestCudaAllocatorSettings in the default pass. Reviewed by Brendan's session 2026-11-04 (no blockers; two notes: the 0.75 cap on large cards is overridable, and the narrow-read/wide-write CRT pairing deserves a comment); CarafeSharp 116/116 and inspection clean locally; merged on CI green without a Perf/Regression gate run. Note for #4982: the default CarafeSharp pass now has one more test.
