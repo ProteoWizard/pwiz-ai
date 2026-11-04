@@ -136,6 +136,16 @@ within the golden's tolerances (the GPU's models differ from the CPU golden's, a
 expected). The subset run is short, so fixed startup costs are a large share of it; the
 full-size Stellar and Astral runs were not timed on this machine.
 
+**CarafeSharp parity with Carafe (before a CarafeSharp PR).** A change touching prediction,
+digestion, fragment assembly, fine-tuning or export masking runs the full-size comparisons
+with Carafe 2.2.0's own output, which no test pass or TeamCity config runs:
+`pwsh -File ./pwiz_tools/CarafeSharp/scripts/Compare-CarafeParity.ps1` (Stellar, ~4 min after
+a 1.5 GB fetch), plus `-Dataset Astral` when the Astral paths change (4.8 GB fetch, 22 GB
+extracted). `-Torch cuda` runs them on the GPU against the CPU's tolerances; on this machine's
+Ada GPU the two RT comparisons exceed those, so judge a change by its CPU run. The
+authoritative description, with the measured CPU/GPU differences, is
+`pwiz_tools/CarafeSharp/docs/04-testing.md` ("Full-size parity").
+
 ---
 
 ## The pipeline

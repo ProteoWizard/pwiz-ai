@@ -172,6 +172,15 @@ Rust-side key constraints:
   on Stellar + Astral; see `Compare/README.md` for the tolerance.
   (The former per-PIN-feature `Test-Features.ps1` is archived under
   `Compare/archive/`.)
+- **CarafeSharp parity gate** (C#, the library builder Osprey hosts): a
+  CarafeSharp change touching prediction, digestion, fragment assembly,
+  fine-tuning or export masking runs
+  `pwiz_tools/CarafeSharp/scripts/Compare-CarafeParity.ps1` (Stellar at
+  least; `-Dataset Astral` too when the Astral paths change; on the CPU -
+  `-Torch cuda` exists but two RT comparisons exceed their CPU tolerances
+  on an Ada GPU) before the PR. No test pass or TeamCity config runs
+  these full-size comparisons. Authoritative description:
+  `pwiz_tools/CarafeSharp/docs/04-testing.md` ("Full-size parity").
 
 Rust-only TODOs live at `ai/todos/active/TODO-OR-*.md`
 (`OR` = osprey rust).

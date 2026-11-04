@@ -4,7 +4,10 @@
 - **Branch**: `Skyline/work/20261103_carafesharp_parity_script`
 - **Base**: `master` (049d045e98)
 - **Created**: 2026-11-03
-- **Status**: In Progress (PR open, awaiting the Perf/Regression gate the parent session queues and maccoss's review)
+- **Status**: In Progress (PR open; Brendan's three follow-ups done, see "Follow-ups"). **Decision for Brendan:**
+  on CUDA the prediction and predicted-library comparisons exceed their CPU-derived RT limits (Stellar and
+  Astral); tolerances were NOT loosened. Options: GPU-specific limits in the tests, or disabling TF32 in
+  CarafeSharp's inference (a product change). Awaiting maccoss's review.
 - **GitHub Issue**: [#4978](https://github.com/ProteoWizard/pwiz/issues/4978)
 - **Module**: `osprey`
 - **PR**: [#4982](https://github.com/ProteoWizard/pwiz/pull/4982)
@@ -93,7 +96,74 @@ separate `Perftests\carafesharp` folder on the agent - kept deliberately so the 
 - `ai/scripts/CarafeSharp/Measure-CumulativeCoverage.ps1`'s "with data" leg (`build.ps1 -Coverage -RequireData`)
   no longer includes the full-size tests; the doc's coverage table notes it was measured before. Not changed.
 
+## Follow-ups (Brendan's review, 2026-11-03)
+
+1. **GPU backend** (`5e337927b0`): `Compare-CarafeParity.ps1 -Torch cpu|cuda` (build.ps1's parameter name).
+   The comparisons hard-coded the CPU (`CarafeReferenceRun.Settings.Device = "cpu"`, `CPU` in
+   `CarafeParityTest` / `CarafeFineTuneParityTest`), so a CUDA build alone would have run them on the CPU.
+   New `TestData.ComparisonDeviceName` / `ComparisonDevice`: GPU when `CARAFESHARP_REQUIRE_CUDA=1` (which
+   `build.ps1 -Torch cuda` already sets), failing on fallback; else CPU. Results kept as
+   `TestResults/CarafeParity-<Dataset>-<cpu|cuda>.trx`; header and each row name the backend.
+   No-GPU path: build.ps1's nvidia-smi preflight, then per test `Assert.Fail("No CUDA device ...
+   (CARAFESHARP_REQUIRE_CUDA=1: the comparison must run on the GPU)")`, checked with
+   `CUDA_VISIBLE_DEVICES=-1` (log `C:\proj\ai\.tmp\agentD2-parity-nogpu.log`).
+   **Bit-for-bit vs tolerance:** neither. Carafe's references were written on CUDA (torch 2.5.1) but no
+   backend reproduces them bit for bit; the CPU passes the existing tolerances; CUDA does not for RT.
+2. **Astral run here** (first time; fetch 4.8 GB at ~60 MB/s, log `C:\proj\ai\.tmp\agentD2-astral-fetch.log`).
+   The documented "about 12 minutes" was never measured; measured ~4 min of tests, doc corrected.
+3. **Surfaced**: `osprey-development` SKILL.md (bullet after the Rust parity gate), and
+   `ai/docs/osprey-library-generation-guide.md` (GPU section). `ai/scripts/CarafeSharp` has no README, so
+   nothing there. `docs/04-testing.md` stays authoritative and now holds the CPU/CUDA table.
+
+### Results (RTX 4000 Ada, driver 596.71; i9-14900)
+
+| Run | Outcome | Wall | Log |
+|---|---|---|---|
+| Stellar + Astral, CPU (with build) | 12/12 PASS | 5:39 | `C:\proj\ai\.tmp\agentD2-parity-all-cpu.log` |
+| Stellar, CUDA (with CUDA build, overlapped the Astral extract) | 6/8 | 4:37 | `C:\proj\ai\.tmp\agentD2-parity-stellar-cuda.log` |
+| Stellar, CUDA, -NoBuild, quiet machine | 6/8 | 1:10 | `C:\proj\ai\.tmp\agentD2-parity-stellar-cuda2.log` |
+| Astral, CUDA (with build) | 2/4 | 2:36 | `C:\proj\ai\.tmp\agentD2-parity-astral-cuda.log` |
+| Stellar, CUDA, `NVIDIA_TF32_OVERRIDE=0`, `-TestName Predict` | 1/2 | - | `C:\proj\ai\.tmp\agentD2-parity-stellar-cuda-notf32.log` |
+| Astral, CUDA, `NVIDIA_TF32_OVERRIDE=0` | 3/4 | 4:03 | `C:\proj\ai\.tmp\agentD2-parity-astral-cuda-notf32.log` |
+
+Per-comparison CPU times: Stellar PeptideForms 7.5s, FragmentMz 5.2s, LibraryAssembly 12.1s, PredictedLibrary
+42.3s, Predictions 8.5s, FineTune 2.9s, FullFastaBuilds 32.3s, Masking 1.1s; Astral FastaBuilds 18.3s,
+FineTune 1.8s, Library 198.3s, Predictions 1.8s. CUDA (quiet run): the same six pass in similar times
+(FullFastaBuilds 31.4s, Assembly 16.0s); Predictions and PredictedLibrary fail in 1-4 s on the first folder.
+trx copies: `C:\proj\ai\.tmp\agentD2-CarafeParity-*.trx`.
+
+CUDA failures (limits unchanged): Stellar RT 1.0e-4 rt_norm (limit 2e-6), library TSV RT 0.04 min (0.011);
+Astral RT 1.3e-4, library TSV RT 0.10. MS2 is fine on CUDA (1.7e-6 - 6.1e-6, limit 1.5e-5). With TF32 off:
+Stellar RT 1.6e-6 (passes), Stellar .blib RT 7.4e-3 (limit 1e-3, fails; CPU 3.2e-4), Astral RT 2.3e-6 (fails
+by a hair), Astral library passes. So TF32 (libtorch's default for cuDNN conv/LSTM on Ampere+) explains
+most of the RT gap; plain GPU rounding the rest.
+
+### Code review of the follow-up (/code-review medium, 8 findings)
+
+Fixed: (1) `CarafeReferenceRun` resolved the GPU in its constructor, so with no usable GPU the
+comparisons that never predict (peptidoforms, m/z, assembly, masking) failed with the GPU message -
+it is CPU again and `CheckPredictedLibrary` sets `TestData.ComparisonDeviceName` itself; (2) the kept
+`CarafeParity-<Dataset>-<torch>.trx` survived a run that wrote none - now removed before each leg;
+(3) the backend label named nvidia-smi's first GPU whatever `CUDA_VISIBLE_DEVICES` says - the label now
+carries the variable (build.ps1's own preflight has the same first-GPU limitation).
+
+Dropped: `CARAFESHARP_REQUIRE_CUDA=1` left in a developer's shell sends a CPU pass's prediction twins to
+the GPU - the variable is build.ps1's, documented as "the GPU is required", and the failure message names
+it; CUDA mode always fails so its exit code is not a gate - that is the recorded decision for Brendan, not
+something to fix by loosening; `ComparisonDevice` probes CUDA on each access - microseconds against
+seconds-long comparisons; the GPU-required check duplicates `CudaDeviceTest`'s - that one is inconclusive
+without the variable, a different policy; the fine-tune reload's 1e-6 cosine on the GPU may be
+nondeterministic - runs only with `CARAFESHARP_FINETUNE_FULL=1`, never from the script, and the GPU
+fine-tune is already shown byte-repeatable by `TestRegressionSubsetRepeatsOnGpu`.
+
 ## Progress Log
 
 ### 2026-11-03 (night session, agent D)
 - Built, gated and committed `ed0eb8892a`; code review and PR follow.
+- Follow-ups (agent D2): `5e337927b0` (-Torch backend), `819b195ddc` (review fixes). After the fixes:
+  no usable GPU (`CUDA_VISIBLE_DEVICES=-1`) fails only the three GPU comparisons, 5/8 pass
+  (`C:\proji\.tmpgentD2-parity-nogpu2.log`); CUDA 6/8 as before (`agentD2-parity-stellar-cuda3.log`);
+  CPU 8/8 (`agentD2-parity-stellar-cpu3.log`). CarafeSharp default pass `Passed 108`, inspection clean
+  (`C:\proji\.tmpgentD2-carafe-build2.log`; one earlier attempt crashed inside InspectCode with an
+  internal CLR error, rerun clean); Osprey pre-commit 649 tests, inspection clean
+  (`C:\proji\.tmpgentD2-osprey-precommit.log`).
