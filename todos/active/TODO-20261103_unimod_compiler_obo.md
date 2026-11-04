@@ -31,7 +31,7 @@ obo (ids, six-decimal masses, sites/terminus, explicit exclusion list).
 - [x] `TestUniModAgreesWithObo` in `Test/UniModTest.cs`
 - [x] Build, run TestUniMod (updates UniModStaticList.xml / UniModHeavyList.xml; run twice), new test
 - [x] CodeInspection, Test.dll, 56 modification-related functional/tutorial tests
-- [ ] TestData.dll on a vendor-enabled build (running at PR time; see Progress Log)
+- [x] TestData.dll on a vendor-enabled build: 182 tests pass (sweep2-testdata-vendor.log)
 - [x] README + CV-update procedure docs (compiler README, build/CvGen/Program.cs, pwiz/utility/README.md)
 - [x] /code-review medium (triage below)
 - [x] PR #4990 opened 2026-11-03
