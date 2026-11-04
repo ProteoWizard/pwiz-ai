@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4464](https://github.com/ProteoWizard/pwiz/issues/4464)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4989](https://github.com/ProteoWizard/pwiz/pull/4989)
 - **Worktree**: `C:\proj\wt-manifest` (agent G, night session 2026-11-03)
 
 ## Objective
@@ -64,7 +64,7 @@ decoy-generator fixes. Astral's mixture is not separated (Ashman D 0.32) -> cann
 - [x] Build-Osprey -RunTests -RunInspection (651/651, 0 warnings)
 - [x] regression-parallel Stellar, StellarLibDecoy, StellarGenDecoyEntrap; read badges on each
 - [x] /code-review medium (triage below)
-- [ ] PR
+- [x] PR #4989
 
 ## Progress Log
 
