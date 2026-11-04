@@ -199,6 +199,15 @@ NN-style combiner over 100+ scores is required to compete.
   - 2026-11-03 MERGED #4968 as 4ec653c0d4 (OSPREY_GBT_OOF + OSPREY_GBT_PREFILTER_SIZE, opt in; TC 4248751
     green). Night plan: master -> #4950 -> #4969; PR C+D (branch 20261103_osprey_fragment_tolerance) on
     #4969; PR E (20261103_osprey_protein_compact_symmetric) on master.
+  - 2026-11-03 night: master merged into #4950 (fc9677add1) and #4950 into #4969 (5566096500, TC 4249159 green).
+    Mike then MERGED #4969 into #4950 (5340c30909, with his Copilot fixes f33860f583) and asked that further work go
+    to his branch; he reviews it within #4950. OPENED #4992 (C+D: fragment-tolerance diagnostics + opt-in
+    OSPREY_CORR_FRAGMENT_TOLERANCE, base = #4950; SEA-AD 7 ppm +0.7/+1.0/+1.3% at FDP 0.5/0.75/1%, 3 seeds) and #4993
+    (E: protein-compact complement competes against its own decoys, base = master; SEA-AD GBDT-OOF entrapment 134 -> 9
+    at q 1%, real at FDP 0.5% +1,324, protein groups 5,462 -> 4,276; goldens re-baselined; Addresses #4581; open
+    question: per-half vs shared +1). Docs: pwiz_tools/Osprey/docs/protein-shuffled-entrapment.md; script
+    ai/scripts/Osprey/Library/Build-ProteinShuffledEntrapment.py. Local only: f0cfff35f3 Osprey CI inspection in
+    tcbuild.bat (Skyline/work/20261104_osprey_ci_inspection, pwiz-scorelib) awaiting Brendan.
 - [ ] Split this branch into focused PRs (A speedup; B OOF + two-round; C tolerance log/floor + mass-error plot;
   D corr tolerance; E protein-compact fix + shuffle audit); reword commit messages to describe Osprey's
   changes on their own merits before anything is pushed; base on Mike's #4950
