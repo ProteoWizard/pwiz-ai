@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261103_osprey_equal_chance_alarms`
 - **Base**: `master`
 - **Created**: 2026-11-03
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4464](https://github.com/ProteoWizard/pwiz/issues/4464)
 - **Module**: `osprey`
-- **PR**: [#4989](https://github.com/ProteoWizard/pwiz/pull/4989)
+- **PR**: [#4989](https://github.com/ProteoWizard/pwiz/pull/4989) (merged 2026-11-04)
 - **Worktree**: `C:\proj\wt-manifest` (agent G, night session 2026-11-03)
 
 ## Objective
@@ -117,3 +117,7 @@ Dropped:
   this round) is the way to produce one.
 - Thresholds chosen without an issue number: location 0.5 sigma, scale x1.5, coin 10 points,
   granular 50 decoys. All in `EqualChanceThresholds`.
+
+### 2026-11-04 - Merged
+
+PR #4989 merged as commit 0bec7caeef. Shipped: EqualChanceMixtureFit and EqualChanceAlarms (A+B null alignment and q-band balance, C paired coin, D decoy support) under a new equalChance JSON key, the Summary-tab card, docs/equal-chance-diagnostics.md; goldens unchanged on all three gate datasets; merged after a master merge that brought in the #4987 per-k card (one docs/README.md conflict, both cards confirmed in a re-rendered Stellar report). Deferred: the FDR-path console warning, E, F, diagFDR's boundary window, the decoy-null size floor (#4363). No alarm has yet fired on real data; the thresholds are the agent's numbers. #4464 stays open (Partially addresses).
