@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261105_ilcompiler_nu1903`
 - **Base**: `master`
 - **Created**: 2026-11-05
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `pwiz`
-- **PR**: [#4999](https://github.com/ProteoWizard/pwiz/pull/4999)
+- **PR**: [#4999](https://github.com/ProteoWizard/pwiz/pull/4999) (merged 2026-11-05)
 
 ## Objective
 
@@ -63,3 +63,7 @@ check fails on every PR, e.g. https://teamcity.labkey.org/buildConfiguration/bt8
 - Explicit PackageReference: build clean, publish failed (above). Switched to the item override: build 0 warnings, publish succeeded.
 - Added `-Publish` / `-RuntimeIdentifier` to `ai/scripts/PwizSharp/Build-PwizSharp.ps1` so the Native AOT publish can be exercised through the script (the linker step needs `vswhere.exe` on PATH outside a VS developer prompt).
 - Logs: `C:\proj\ai\.tmp\sessions\20261105-n1\` (`before.log`, `after-project.log`, `publish-pinned.log` = failed explicit-reference publish, `publish-known.log`, `after-sln.log`).
+
+### 2026-11-05 - Merged
+
+PR #4999 merged as commit dd1ea43e89. Shipped: a KnownILCompilerPack override to 10.0.14 for net10.0 on MsData.NativeAot.csproj, clearing NU1903 (GHSA-p3jp-9v83-76w9) so the Core code inspection check is green again; verified by a full Pwiz.sln rebuild, a win-x64 publish and the shim's tests. Also added -Publish / -RuntimeIdentifier to Build-PwizSharp.ps1. Remove the override once global.json moves to an SDK bundling 10.0.14 or later. Merged on Brendan's approval before either reviewer responded.
