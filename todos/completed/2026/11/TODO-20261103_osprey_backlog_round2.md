@@ -4,7 +4,7 @@
 - **Branch**: none yet - this TODO is the plan and handoff for a wave of agent-run branches, one per item below
 - **Base**: `master` (origin/master c1242139bf at planning time)
 - **Created**: 2026-11-03 (handoff written by the round-1 session)
-- **Status**: READY TO LAUNCH - nothing started. Brendan answered every gating question (section "Decisions"); worktrees for the first four agents exist under `C:\proj\wt-*`. The next session launches wave A from the "Launch procedure" section.
+- **Status**: Completed - wave A merged in full (11 PRs + #4918) by 2026-11-05
 - **GitHub Issue**: round-1 ranking https://claude.ai/artifact/4a2D4pryYFsVPpCdsPky2G ; round-2 plan page https://claude.ai/artifact/AzeCh12WKV9ngitSM4LhyR
 - **Module**: `osprey` (items 4 and 5 below are `skyline` / `pwiz` module PRs)
 
@@ -224,3 +224,16 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   MsData.NativeAot.csproj): needs a master fix. #4982: gate 4250519 passed; Brendan approved the squash
   AND decided TF32 off in CarafeSharp inference (free, reproducibility); agent D4 adding it to the PR
   branch with re-pinned GPU limits; gate re-queue then merge. #4972 review questions still open.
+- 2026-11-05 02:39: #4982 -> e941a2ab39 (gate 4251695 after TF32 off for GPU prediction; #4978 closed). Wave A
+  COMPLETE: 11 PRs merged (#4982-#4991, #4994) plus Mike's #4918; every TODO in completed/2026/11
+  (and 2026/10 for #4918). Open for Brendan: #4972 stack review questions (release gating first);
+  NU1903 advisory failing Core code inspection on every PR; the golden-moving stack after #4950
+  (recommended as 3-4 separate PRs, see 2026-11-03 evening discussion); follow-ups recorded in
+  the completed TODOs: Percolator ProgressReporter sites, deterministic GPU fine-tuning, deleting
+  unimod.xml, Source.Id decoy pairing, sharing DIA-NN TSV reading, #4577 deferred.
+
+## Postscript
+
+Session 2026-11-03 13:11 to 2026-11-05 02:39 PST (parent context 90% -> see budget log). Seven agents in
+wave A, four follow-up merge agents, one review agent (#4972), two GPU agents (#4982). No golden
+moved; no push to pwiz master outside squash merges. Handoff: ai/.tmp/handoff-2026-11-03.md.
