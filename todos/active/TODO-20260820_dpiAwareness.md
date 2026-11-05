@@ -748,6 +748,20 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-11-05 - TC inspection fix (4c783aedc8) and second master merge (75eb2b0df7), pushed
+
+- TC Skyline code inspection on 7707c2cffe: 2 RedundantArgumentDefaultValue in OspreySearchDlg
+  (lines 98, 125 passed footer 0 after the 10-31 merge made footer optional). Root cause of the
+  slip: before the 10-31 push only the CodeInspection test ran, not inspectcode. Fixed by dropping
+  the explicit 0s; local inspectcode clean for branch files (423 local issues are environmental).
+- Merge conflict: #4946 moved GraphChromatogram's tracking-dot code; DpiUtil.Scale(this, 20) now
+  on its FindClosestCurve call, and the scaled pixelTolerance kept (first pass took master's
+  whole file and dropped it; redone hunk-only).
+- Verified: Release solution build; gate both modes TestFullScanGraph, TestFullScanProperties,
+  TestIgnoreSimScans, TestSpectrumSequenceRuler, TestOspreySearch; inspectcode + CodeInspection test.
+- pwiz1 was borrowed from Skyline/work/20260707_modSiteLocalization and switched back afterwards;
+  the sweep harness was not restored (stash entry still holds it).
+
 ### 2026-10-31 - Merged master (87250e23f9) and fixed Copilot review round 2 (00726a7c33), pushed
 
 - Merge conflicts: #4934 moved the border cleanup to CommonBaseUI ScreenshotBorder; the DPI-scaled
