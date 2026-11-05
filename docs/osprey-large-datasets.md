@@ -81,6 +81,9 @@ containers that day).
 | AHA Plasma Stroke EV | **200** | **1,167 GB** | 5.8 GB | yes | 2 plates x (96 quant + 4 ChromLib); aortic arch replacement |
 | TEIREX Experiment 2 | 936 | 8,296 GB | 8.9 GB | **no** | 10 x 96-well mouse plates; one plate fits, the set does not |
 | Eclipse staggered (Webinar 27) | 6 | 19.9 GB (6 raw + 6 demuxed mzML) | 1.2 GB raw | yes | **staggered-window DIA**: the demultiplexing test set, with C++ msconvert's demultiplexed mzML beside each run |
+| Stellar overlapping windows (Lauren) | 24 | ~45 GB (reported) | 1.9 GB | yes | ion trap staggered DIA at 2- and 4-fold, profile and centroid, acquired 2/4 Th references (section 6) |
+| Astral Normal vs Staggered | 42 | ~240 GB (reported) | 5.7 GB | yes | Astral staggered vs normal at 2-8 Th (section 7) |
+| ZenoTOF 8600 ZT Scan | 3 | 26.0 GB needed (56.1 GB in folder) | 8.7 GB | yes | scanning-quadrupole DIA (section 8) |
 
 ## 1. CHS-SeerData (UW-Floyd Lab) - RECOMMENDED NEXT
 
@@ -214,6 +217,100 @@ three "Total" runs the 2026-10 pwiz-vs-#4710 comparisons searched (with EV13-15)
 alternate SAXN and HydN), but a different suffix from Total04-06; their Panorama source
 is not recorded. Searches of "the six Eclipse runs" before 2026-10-11 mean EV13-15 + Total01-03.
 Workflow, runners and comparison scripts: `ai/scripts/Osprey/Demux/README.md`.
+
+MEASURED 2026-11-05 (PROPFIND): Mike's share `Shared_w_lab/@files/RawFiles/Eclipse-staggered/` holds
+EV13 and EV14 `.raw` (1.241 / 1.265 GB) and `.mzML` (2.469 / 2.501 GB) and the library (13.634 GB,
+the 12.7 GB above in GiB); 21.11 GB in all.
+
+## Demultiplexing and Centrix data from PR #4710 (sections 6-9)
+
+The data behind Mike's #4710 work (Stellar profile demux, Centrix, Astral staggered, ZT Scan),
+which `TODO-20261105_pwiz_demux_port.md` ports into ProteoWizard. Mike's results are recorded
+in `todos/active/TODO-20261021_osprey_stellar_demux.md` and `TODO-20260923_osprey_demux.md`; on
+his machine the data is under `D:\test\osprey-runs\<set>\raw`. The scripts read data and run
+roots from `DEMUX_DATA_ROOT` / `DEMUX_RUN_ROOT` (`ai/scripts/Osprey/Demux/README.md`).
+
+**Small real-data slices of every set are already in the repo on #4710's branch** and are the
+subset tests to port first. They are listed in `pwiz_tools/Osprey/Osprey.Test/Data/Demux/README.md`
+and `Data/Centrix/README.md`, which also give the commands that cut them. All are 0.05-4.8 MB:
+the Eclipse EV13 slice with msconvert's demux, the Astral ME slice, the Stellar SuperOverlap profile
+slice, the ZT Scan A1 profile slice with its kernel, and two Stellar profile slices with a Rust
+Centrix golden. Each slice has a per-spectrum golden.
+
+## 6. Stellar overlapping-window DIA (Lauren, for Mike)
+
+* Portal: https://panoramaweb.org/MacCoss/Lauren/20261009_Stellar-Centroiding-for-Mike/project-begin.view
+* WebDAV raw: `https://panoramaweb.org/_webdav/MacCoss/Lauren/20261009_Stellar-Centroiding-for-Mike/%40files/RawFiles/`
+* **Access: 403 for the Agents group (2026-11-05); needs a read grant.** Reported by Mike's
+  session: 24 files, 45 GB, not yet measured by PROPFIND.
+
+HeLa, 24 min gradient, precursors 400-900 m/z, HCD 20, fragments 200-1200 m/z. Four methods, three
+replicates (TR01-03) each, every one acquired once centroided and once in profile (`_profile`):
+
+| Method | Windows per pass | Passes per cycle | Demux bin | Max fill |
+|---|---|---|---|---|
+| `2Th` | 251 x 2 Th | 1 | (2 Th, acquired) | 11.5 ms |
+| `4Th` | 126 x 4 Th | 1 | (4 Th, acquired) | 23 ms |
+| `4Th-50pctOverlap` | 126 x 4 Th, +2 Th per pass | 2 | 2 Th | 23 ms |
+| `4Th-SuperOverlap` | 126 x 4 Th, +1 Th per pass | 4 | 1 Th | 23 ms |
+
+The acquired 2Th and 4Th runs are references for demultiplexing. Narrow-window runs summed into
+staggered windows (`Osprey.DemuxTool --remultiplex`) give a ground truth for k = 2-4. The profile
+runs carry a -0.55 Th MS2 calibration error (instrument), which confounds profile vs centroid.
+
+**Libraries**: the Osprey Stellar test library (same HeLa), `hela-filtered-SkylineAI_spectral_library.tsv`
+in the regression set `osprey-testfiles-mzML-v2\stellar`; and Mike's fine-tuned library with
+Arabidopsis natural entrapment, `carafe-finetune\osprey_new_library\carafe_spectral_library.blib`
+(969,337 precursors) + `osprey_library_db_pairing.tsv`. The fine-tuned library is on Mike's machine
+only (ask for an upload) and can be rebuilt with `Run-CarafeSharpWorkflow.ps1 -Dataset Stellar`
+from `hela-filtered.fasta` and `uniprot_arabidopsis_feb2023.fasta`, in about 50 min on CPU.
+Also in Mike's share, MEASURED: `Shared_w_lab/@files/RawFiles/2026-0701-stellar-testlibrary-and-output/`
+(2.75 GB: Carafe library TSV, pairing, peptide FASTA, an Osprey output and its FDRBench input).
+
+## 7. Astral Normal vs Staggered (2024-06)
+
+* Portal: https://panoramaweb.org/MacCoss/maccoss/2024-06%20Astral%20Normal%20vs%20Staggered/project-begin.view
+* WebDAV: `https://panoramaweb.org/_webdav/MacCoss/maccoss/2024-06%20Astral%20Normal%20vs%20Staggered/%40files/RawFiles/`
+* **Access: 403 for the Agents group (2026-11-05); needs a read grant.** Reported: seven
+  conditions x 6 replicates, ~240 GB. Mike searched reps 1-3 of each (21 files).
+
+Orbitrap Astral, mouse spleen, 400-900 m/z. Pairs to compare: MA vs MD/ME, MB vs MF, MC vs MG.
+
+| Condition | Windows | Max fill |
+|---|---|---|
+| MA | 2 Th normal | 4 ms |
+| MB | 3 Th normal | 7 ms |
+| MC | 4 Th normal | 10 ms |
+| MD | 4 Th staggered | 8 ms |
+| ME | 4 Th staggered | 10 ms |
+| MF | 6 Th staggered | 14 ms |
+| MG | 8 Th staggered | 20 ms |
+
+**Library**: Mike's fine-tuned mouse library (6.17M precursors, CarafeSharp GPU, fine-tuned on MA
+Rep1, Chronologer RT) from `uniprot_mouse_may2025_contam_yeastENO1.fasta` with Arabidopsis natural
+entrapment. It is on Mike's machine only; ask for an upload or rebuild it with
+`Run-CarafeSharpWorkflow.ps1 -Dataset Astral`.
+
+## 8. ZenoTOF 8600 ZT Scan
+
+* WebDAV: `https://panoramaweb.org/_webdav/MacCoss/maccoss/Shared_w_lab/%40files/RawFiles/ZenoTOF8600-ZTScan/`
+* **Access: OK (207).** MEASURED 2026-11-05: 23 files, 56.09 GB.
+
+Three runs, `250814_ZTScan_100spd_A_{1_A1,2_D1,3_G1}`, each 300,570 spectra (699 cycles of one
+MS1 plus 429 scanning-quadrupole bins). Per run, only three files are needed: `.wiff.scan`
+(8.60-8.66 GB), `.wiff2` (0.078 GB, read by Osprey and pwiz) and `.wiff` (0.040 GB, read by
+DIA-NN). Skip `.wiff.dia`/`.dia.quant` (5.7 GB each, a collaborator's DIA-NN files) and the
+`timeseries.data`/`-journal` sidecars. That leaves **26.0 GB**. The library is in the same
+folder: `ZT-Scan-Testdata-CarafeSharp-FineTune_library.blib` (12.55 GB) and
+`uniprot_human_march2026_yeastENO1_contam_ADpeps.fasta`. Download with
+`Get-PanoramaFiles.ps1 -Filter`. The quadrupole kernels measured from these runs are in
+`ai/scripts/Osprey/Demux/kernels`.
+
+## 9. Glu-Fib Centrix (small)
+
+* WebDAV: `https://panoramaweb.org/_webdav/MacCoss/maccoss/Shared_w_lab/%40files/RawFiles/Glu-Fib-Centrix/`
+* **Access: OK (207).** MEASURED: 3 files, 0.08 GB: `Crucios_Glufib_LIT_27HCD_{Normal,Rapid,Turbo}_z2_profile.centrix.mzML`,
+  Centrix output at three ion trap scan rates. The profile sources are not in the folder.
 
 ## Budgeting a download
 
