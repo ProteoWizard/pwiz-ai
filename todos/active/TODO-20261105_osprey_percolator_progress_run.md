@@ -7,7 +7,7 @@
 - **Status**: In Review - gates green, PR open against #4950's branch; TeamCity Perf/Regression not triggered (parent session queues it). Decisions below are the conservative options taken without Brendan.
 - **GitHub Issue**: [#4979](https://github.com/ProteoWizard/pwiz/issues/4979)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#5000](https://github.com/ProteoWizard/pwiz/pull/5000) (base: #4950's branch)
 - **Worktree**: `C:\proj\wt-percolator` (agent P1)
 
 ## Objective
@@ -54,7 +54,7 @@ non-public so a forgotten completion cannot be written. Pure refactor: log outpu
 - [x] CommonTest TestProgressReporter + TestMultiProgressReporter - 2/2
 - [x] regression.ps1 Stellar + StellarLibDecoy - both PASSED against the committed goldens
 - [x] Code review (medium), triage (below)
-- [ ] PR opened against #4950's branch
+- [x] PR #5000 opened against #4950's branch (not merged; TeamCity not triggered)
 
 ## Code review (2026-11-05)
 
