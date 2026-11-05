@@ -4,18 +4,10 @@
 - **Branch**: `Skyline/work/20261103_carafesharp_parity_script`
 - **Base**: `master` (049d045e98)
 - **Created**: 2026-11-03
-- **Status**: In Progress (PR open, master merged, awaiting the Perf/Regression gate and maccoss's review).
-  **TF32 off shipped in this PR** (Brendan's decision 2026-11-04; agent D4): `TorchDevice.Resolve` turns
-  off CUDA matmul and cuDNN TF32, so GPU prediction meets the CPU limits; the GPU gate is pinned only where
-  a residual remains (Astral RT 2.34e-6, pin 3e-6; `carafe_main_varmod` .blib RT 7.4e-3 min, pin 9.3e-3).
-  Cost 0.98-1.06x in a same-session A/B. **Decision for Brendan (conservative option taken):** fine-tuning
-  keeps cuDNN TF32 (`TorchDevice.AllowTf32ForTraining`), because with it off the GPU fine-tune is not
-  byte-repeatable (`TestRegressionSubsetRepeatsOnGpu` 0/4, HEAD 3/3) and TorchSharp 0.106 cannot set
-  `cudnn.deterministic` (`use_deterministic_algorithms` is `[Obsolete("not implemented")]`). Turning TF32
-  off for training too needs a deterministic-cuDNN setter (a TorchSharp upgrade or a native call).
+- **Status**: Completed
 - **GitHub Issue**: [#4978](https://github.com/ProteoWizard/pwiz/issues/4978)
 - **Module**: `osprey`
-- **PR**: [#4982](https://github.com/ProteoWizard/pwiz/pull/4982)
+- **PR**: [#4982](https://github.com/ProteoWizard/pwiz/pull/4982) (merged 2026-11-05)
 - **Worktree**: `C:\proj\wt-carafe` (night-session agent worktree, round 2 wave D)
 
 ## Objective
@@ -267,3 +259,7 @@ fine-tune is already shown byte-repeatable by `TestRegressionSubsetRepeatsOnGpu`
   nested training in any host; Dispose restores the product policy, off); `GpuPins` equal to the CPU limits print a
   "GPU pinned" line before failing (failure path only, still fails); `using (null)` on the CPU (idiomatic).
 - Also updated `osprey-development` SKILL.md and `osprey-library-generation-guide.md` (TF32 off, two pinned residuals).
+
+### 2026-11-05 - Merged
+
+PR #4982 merged as commit e941a2ab39. Shipped: the FullParity category and Compare-CarafeParity.ps1 (-Dataset Stellar|Astral|All, -Torch cpu|cuda); the per-commit pass runs every test with none skipped; GpuParity.cs with zero-tolerance self-consistency and GPU pins only where a residual remains (Astral RT 3e-6, varmod .blib RT 9.3e-3 min); TF32 off for GPU prediction in TorchDevice.Resolve (0.98-1.06x, no cost), fine-tuning keeps cuDNN TF32 because turning it off made it non-repeatable; tcbuild.bat reconciled with #4995; the osprey-development skill and the library-generation guide name the script as the CarafeSharp parity gate. Gates: Perf/Regression 4250519 and 4251695, CarafeSharp 109 and inspection clean, Osprey 652, CPU 12/12, CUDA 12/12 across six runs. Merged on Brendan's approval without Mike's review (requested, never submitted). Follow-ups: deterministic GPU fine-tuning needs a cuDNN deterministic setter (TorchSharp upgrade or native call); the orphaned TestResults baseline folders on UW8 can be deleted.
