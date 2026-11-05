@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#4999](https://github.com/ProteoWizard/pwiz/pull/4999)
 
 ## Objective
 
@@ -28,7 +28,7 @@ check fails on every PR, e.g. https://teamcity.labkey.org/buildConfiguration/bt8
 - [x] win-x64 Native AOT publish succeeds with all three packs at 10.0.14
 - [x] Full Pwiz.sln rebuild (vendor licenses) shows zero warnings
 - [x] MsData.NativeAot.Tests 10/10
-- [ ] PR opened, reviewers chambm and bspratt
+- [x] PR opened, reviewers chambm and bspratt
 
 ## Decisions
 
