@@ -2630,3 +2630,19 @@ Related, not on this PR: ImageComparer F5 reload fix + "Same" size mode (key S, 
 ratio in the label) -> PR #4954, merged 2026-11-04 as f13defc8b4 (branch deleted), also cherry-picked
 into the review branch. Developers PR for the docking icons: opened by Brendan. `Build-DigitalRune.ps1 -Install` still targets `pwiz_tools/Shared/Lib/` instead of
 `Lib/DigitalRune/net10/`. PR #4951 (screenshot waits) open: PeakBoundaryImputation s-19 open item.
+
+### 2026-11-02 - harness parked while pwiz1 serves the modSite PR (restore before resuming)
+pwiz1 was switched to `Skyline/work/20260707_modSiteLocalization` on 2026-11-02. The local sweep
+harness is preserved in two places and must be restored together when pwiz1 returns to this branch:
+- `git stash` entry `stash@{0}` in pwiz1: "dpiAwareness local sweep harness WIP (parked 2026-11-02
+  for modSite session; never commit)" - Program.cs harness hunk, TestFunctional.csproj,
+  TestRunner/Program.cs, TestRunner/app.manifest, TestUtil/TestFunctional.cs. `stash@{1}` is the
+  older backup of the same harness. Check `git stash list` first; indices shift if anything else is
+  stashed.
+- The four untracked probe tests moved out of the tree so the SDK-style csproj globs would not
+  compile them against the stashed harness:
+  `ai/.tmp/sessions/20261102-modsite/dpi-probes/{DpiAutoHideProbeTest,DpiFileDialogProbeTest,
+  DpiPaneSweepTest,DpiToolbarProbeTest}.cs` -> copy back to `pwiz1/pwiz_tools/Skyline/TestFunctional/`.
+Restore order: `git checkout Skyline/work/20260820_dpiAwareness`, `git stash pop`, copy the probes
+back. The `ai/.tmp/handoff-20260820_dpiAwareness.md` file referenced above no longer exists; this
+section replaces it for the harness.
