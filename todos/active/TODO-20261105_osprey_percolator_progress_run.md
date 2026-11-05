@@ -77,3 +77,9 @@ captured / released locals, thread-safety and remaining callers all checked. Two
   (built with `Build-Skyline.ps1 -Target CommonTest`, run with `dotnet test` on CommonTest.dll),
   `regress-Stellar.log`, `regress-StellarLibDecoy.log`.
 - gate3 aborted in inspectcode with "Internal CLR error (0x80131506)"; an unchanged re-run passed.
+
+### 2026-11-05 - Inspection fix (parent session)
+- Skyline code inspection on the PR flagged `DisposeOnUsingVariable` at ProgressReporterTest.cs:179
+  (the double-Dispose case disposed a using variable by hand). Fixed by creating that scope without
+  `using`; CommonTest builds clean. Core code inspection fails only on NU1903 (ILCompiler advisory),
+  which PR #4999 fixes on master; this branch picks it up at its next master merge.
