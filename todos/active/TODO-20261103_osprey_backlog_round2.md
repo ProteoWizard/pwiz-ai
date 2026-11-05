@@ -189,3 +189,38 @@ fixture is here. Alternates: #4470 (golden-moving, so after decision 1 and 2 cle
   posted (PR comment 6624465850): CPU 12/12 on Stellar+Astral; CUDA fails the RT comparisons because
   of TF32 (decision for Brendan: GPU tolerances vs disabling TF32 in inference). Tier 3 starts with
   the #4983 conflict (OspreyEnvironment.cs vs #4968) - agent B2 in wt-envvar.
+- 00:40: #4983 merged master (3f5c75a1f9): OSPREY_GBT_OOF and OSPREY_GBT_PREFILTER_SIZE from #4968
+  registered as EnvVar; 651/651, Stellar unchanged (`ai/.tmp/sessions/20261104-agentB2/`). Gate
+  re-queued (build id below). Note from the merge: #4969 did not merge into master; it merged into
+  `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950's branch), so the hold list is unchanged.
+  #4994 gate PASSED (4249971); squash message awaiting Brendan.
+- 00:45: /pw-complete 4994 stopped at the gate: required check "Skyline master and PRs" shows ERROR
+  because build 4249965 was CANCELED after 707 tests passed (re-queued as 4250240); CodeQL
+  "Analyze (csharp)" FAILED on #4994 only (3 min vs the ~16 min baseline; log blob already gone;
+  run not retriable). CodeQL is not a required check (ruleset requires Core Windows/Linux, Skyline
+  master and PRs, Skyline code inspection). Suspect: CodeQL's autobuild and BiblioSpec.IO's new
+  ReferenceParquetNet target. Waiting for 4250240; CodeQL will show again on the next push or on master.
+- 2026-11-04 (day): Tier 3 so far: #4983 -> a0bd242dd8, #4986 -> 13b90f2d41, #4994 -> 0d93cd23a5
+  (Skyline build re-run after a TestRInstaller network failure; CodeQL csharp fails on several PRs,
+  non-required, cause unknown). #4988 master-merged mechanically (106d3c8c5e), Brendan's yes given,
+  merge waits on its checks. #4984 follows #4988. Catalogue row A7 marked DONE (081bea91): the
+  resident-pool dumps left C# 2026-10-11; no fat-memory family remains. #4982: conflict with #4995 in
+  tcbuild.bat, agent D3 merging; Brendan's decision: pin GPU behavior in this PR (self-consistency
+  zero-tolerance, GPU-specific limits that pass today, delta called out, TF32 named as the way to close
+  it); gate on pull/4982 queued before the squash; Mike's review request stays.
+- 2026-11-04 afternoon: #4918 (Mike's CUDA allocator fix) reviewed by the parent and merged ->
+  91a0c9aaa1 on Brendan's approval. #4988 -> 65fe096b11 (mechanical master merge). #4984 master
+  merge running (agent A2; FDR task files resolved by hand -> gate re-run before squash). #4982:
+  master merged (tcbuild.bat vs #4995), GPU gate pinned (GpuParity.cs: self-consistency 19/19
+  bit-identical across 7 runs, limits ~1.25x measured, deltas printed), TF32 off measured FREE
+  (ratio 0.91-1.05) and narrows RT to CPU level except Astral 2.3e-6 vs 2e-6 and varmod .blib 7.4e-3;
+  new finding carafe_main_varmod library RT differs 0.77 min on CUDA. Gate queued: build 4250519 for
+  pull/4982. DECISION for Brendan: disable TF32 in CarafeSharp inference (product change, no measured cost).
+  #4972 stack reviewed (review.md in ai/.tmp/sessions/20261104-review4972; demo deck
+  https://claude.ai/artifact/1BkTGtjL8rtUxZpQBS3KnV): approve after the release-gating and
+  library-restore concerns; empty Model list on the Library Model page found in the demo.
+- 2026-11-04 21:40: Brendan awake. #4984 -> 3f7788ac62 (gate 4250536 passed); Tier 3 chain complete.
+  Core code inspection now fails every PR on NU1903 (Microsoft.DotNet.ILCompiler 10.0.3 in
+  MsData.NativeAot.csproj): needs a master fix. #4982: gate 4250519 passed; Brendan approved the squash
+  AND decided TF32 off in CarafeSharp inference (free, reproducibility); agent D4 adding it to the PR
+  branch with re-pinned GPU limits; gate re-queue then merge. #4972 review questions still open.
