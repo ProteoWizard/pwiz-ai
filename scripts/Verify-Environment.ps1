@@ -1112,6 +1112,45 @@ if (Test-Path $staleMaccossCache) {
     Add-Result "Leftover plugin caches" "OK" "none" $true
 }
 
+# Optional: Windows Terminal profile + taskbar shortcut that start Claude Code in the
+# project root (new-machine-setup.md section 7.7). INFO only - never fails verification.
+Write-Host "Checking Claude Code taskbar launcher..." -ForegroundColor Gray
+$launcherDoc = "optional - see ai/docs/new-machine-setup.md section 7.7"
+$wtSettingsPaths = @(
+    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+) | Where-Object { Test-Path $_ }
+$claudeProfile = $null
+foreach ($wtPath in $wtSettingsPaths) {
+    try {
+        $wt = Get-Content $wtPath -Raw | ConvertFrom-Json  # pwsh 7 tolerates JSONC comments
+        $claudeProfile = $wt.profiles.list | Where-Object { $_.commandline -match '\bclaude\b' } | Select-Object -First 1
+        if ($claudeProfile) { break }
+    } catch { }
+}
+if (-not $wtSettingsPaths) {
+    Add-Result "Claude Code launcher" "INFO" "Windows Terminal not found - $launcherDoc" $true
+} elseif (-not $claudeProfile) {
+    Add-Result "Claude Code launcher" "INFO" "no Windows Terminal profile runs claude - $launcherDoc" $true
+} else {
+    # Look for a taskbar pin that launches the profile by name
+    $pinDir = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+    $pinned = $false
+    if (Test-Path $pinDir) {
+        $shell = New-Object -ComObject WScript.Shell
+        foreach ($lnk in Get-ChildItem $pinDir -Filter *.lnk) {
+            if ($shell.CreateShortcut($lnk.FullName).Arguments -like "*$($claudeProfile.name)*") { $pinned = $true; break }
+        }
+    }
+    $profileDetail = "profile '$($claudeProfile.name)' in $($claudeProfile.startingDirectory)"
+    if ($pinned) {
+        Add-Result "Claude Code launcher" "OK" "$profileDetail, pinned to taskbar" $true
+    } else {
+        Add-Result "Claude Code launcher" "INFO" "$profileDetail, not pinned to taskbar - $launcherDoc" $true
+    }
+}
+
 # Print Summary
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Environment Check Results" -ForegroundColor Cyan

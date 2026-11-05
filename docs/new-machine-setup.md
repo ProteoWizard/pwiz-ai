@@ -1651,6 +1651,68 @@ proxy and needs the actual component installed.
 
 For developers not touching `maccoss/osprey`, skip this entirely.
 
+### 7.7 Claude Code Taskbar Launcher (Optional)
+
+One click on the taskbar opens a Windows Terminal tab already in the project root and
+running `claude`. It replaces the steps open a terminal, `cd <project-root>`, `claude`.
+`Verify-Environment.ps1` reports it as `Claude Code launcher`: `OK` if it is set up,
+`INFO` if not. It never fails verification.
+
+> **For LLM assistants:** Ask the developer whether they want this. Don't install it
+> unasked: it edits their Windows Terminal settings. If they decline, move on.
+
+It has two parts: a Windows Terminal profile, and a shortcut to that profile that the
+developer pins to the taskbar.
+
+**1. Add a "Claude Code" profile to Windows Terminal.** The settings file is usually
+`%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json`.
+For Terminal Preview it is under `Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe`. For an
+unpackaged install it is `%LOCALAPPDATA%\Microsoft\Windows Terminal\settings.json`. Back it
+up first, then add this entry to `profiles.list`:
+
+```powershell
+$s = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+Copy-Item $s "$s.bak-$(Get-Date -Format yyyy-MM-dd)"
+[guid]::NewGuid().ToString()   # use for the profile's guid
+(Get-Command claude).Source    # use for the icon
+```
+
+```json
+{
+    "commandline": "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoExit -Command claude",
+    "guid": "{<new-guid>}",
+    "hidden": false,
+    "icon": "C:\\Users\\<user>\\.local\\bin\\claude.exe",
+    "name": "Claude Code",
+    "startingDirectory": "<project-root>"
+}
+```
+
+Make this change with the Edit tool. Don't round-trip the file through
+`ConvertFrom-Json`/`ConvertTo-Json`: the settings file is JSON with comments, and a
+round-trip deletes the comments and reformats the whole file. Terminal reloads the file
+by itself as soon as it is saved.
+
+`-NoExit` is intentional. When `claude` exits, you're left at a `pwsh` prompt in the
+project root instead of watching the tab close.
+
+**2. Create a shortcut and pin it.**
+
+```powershell
+$lnk = "$env:USERPROFILE\Desktop\Claude Code.lnk"
+$sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+$sc.TargetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps\wt.exe"
+$sc.Arguments = '-p "Claude Code"'
+$sc.WorkingDirectory = '<project-root>'
+$sc.IconLocation = "$((Get-Command claude).Source),0"
+$sc.Save()
+```
+
+Scripts can't pin to the Windows 11 taskbar, so the developer does it by hand: right-click
+the shortcut → **Show more options** → **Pin to taskbar**. After that, the desktop copy can
+be deleted. If they would rather not add a taskbar icon, the profile also shows in the
+jump list when they right-click a pinned Windows Terminal icon.
+
 ---
 
 ## Phase 8: Nightly Test Setup (Optional)
