@@ -5,11 +5,14 @@
 - **Base**: `master` (049d045e98)
 - **Created**: 2026-11-03
 - **Status**: In Progress (PR open, master merged, awaiting the Perf/Regression gate and maccoss's review).
-  The GPU gate is pinned (`7b870207a4`, Brendan's decision 2026-11-04): `-Torch cuda` passes 12/12 under
-  pinned GPU RT/iRT limits with bit-identical repeat predictions. **For Brendan:** disabling TF32 in
-  CarafeSharp inference is the way to close the GPU/CPU gap, and it measured free on the RTX 4000 Ada
-  (`NVIDIA_TF32_OVERRIDE=0`: RT 1.3e-4 -> 2.3e-6, TSV RT 0.77 -> 0.01 min, wall within noise); not done
-  here (a product change).
+  **TF32 off shipped in this PR** (Brendan's decision 2026-11-04; agent D4): `TorchDevice.Resolve` turns
+  off CUDA matmul and cuDNN TF32, so GPU prediction meets the CPU limits; the GPU gate is pinned only where
+  a residual remains (Astral RT 2.34e-6, pin 3e-6; `carafe_main_varmod` .blib RT 7.4e-3 min, pin 9.3e-3).
+  Cost 0.98-1.06x in a same-session A/B. **Decision for Brendan (conservative option taken):** fine-tuning
+  keeps cuDNN TF32 (`TorchDevice.AllowTf32ForTraining`), because with it off the GPU fine-tune is not
+  byte-repeatable (`TestRegressionSubsetRepeatsOnGpu` 0/4, HEAD 3/3) and TorchSharp 0.106 cannot set
+  `cudnn.deterministic` (`use_deterministic_algorithms` is `[Obsolete("not implemented")]`). Turning TF32
+  off for training too needs a deterministic-cuDNN setter (a TorchSharp upgrade or a native call).
 - **GitHub Issue**: [#4978](https://github.com/ProteoWizard/pwiz/issues/4978)
 - **Module**: `osprey`
 - **PR**: [#4982](https://github.com/ProteoWizard/pwiz/pull/4982)
@@ -219,3 +222,48 @@ fine-tune is already shown byte-repeatable by `TestRegressionSubsetRepeatsOnGpu`
   (`agentD3-parity-cuda-post4918.log`); CPU All 12/12 (`agentD3-parity-cpu-post4918.log`); Osprey pre-commit
   652, inspection clean (`agentD3-osprey-precommit-post4918.log`).
 - Also updated `osprey-development` SKILL.md and `osprey-library-generation-guide.md` (CUDA no longer "fails").
+
+### 2026-11-04 (agent D4: TF32 off, Brendan's decision)
+- `386715744d` (pushed): everything below.
+- `TorchDevice.DisableTf32` (called in `Resolve` once CUDA is known to be there, beside #4918's allocator setup):
+  `torch.backends.cuda.matmul.allow_tf32 = false` and `torch.backends.cudnn.allow_tf32 = false`; both setters
+  exist in TorchSharp 0.106 (libtorch's matmul default is already off, so cuDNN is the one that matters).
+  `NVIDIA_TF32_OVERRIDE` handling removed from the script and `GpuParity`; the outputs folder lost its `-tf32off`
+  suffix (a folder saved before the change holds TF32 outputs: delete it, as the doc says).
+- Measured (logs `C:\proj\ai\.tmp\agentD4-gpu-tf32code-{1,2,3}.log`, CPU `agentD4-cpu-1.log`): CUDA 12/12, 19/19
+  repeats bit-identical in every run AND identical to D3's `NVIDIA_TF32_OVERRIDE=0` outputs (seeded as the baseline),
+  so code-off == env-off. TF32 off: Stellar RT 1.55e-6, iRT 2.7e-4; Astral RT 2.34e-6, iRT 3.9e-4; MS2 <= 6.1e-6;
+  TSV 0.01 everywhere; .blib 7.40e-3 (varmod), 9.4e-4 / 7.0e-4 (m3). CPU 12/12.
+- Pins: Stellar RT/iRT, Astral iRT, all TSV and the m3 .blib now use the CPU limits; kept Astral RT pin 3e-6 and
+  varmod .blib pin 9.3e-3 (~1.25x), comments give value, date, GPU.
+- Cost: the first runs looked 8-12% slower than D3's TF32-on runs, but the non-GPU comparisons in them were ~40%
+  slower too (the machine, not TF32). Same-session A/B (HEAD build vs this change, 2 runs each, logs
+  `agentD4-ab-tf32{on,off}-{1,2}.log`, script `.tmp/sessions/20261104-agentD4/ab.sh`): 0.98-1.06 per comparison,
+  library prediction 0.99 / 1.00. The TF32-on leg also reproduced D3's TF32 baseline bit for bit. The off leg
+  verified the new pins (PASS, pinned lines as above).
+- **Found by the CUDA category gate**: with cuDNN TF32 off, `TestRegressionSubsetRepeatsOnGpu` failed 4/4 (the two
+  GPU fine-tunes' rt.safetensors differ; golden tolerances still pass); HEAD passed 3/3 (`agentD4-gpurepeat.log`).
+  TorchSharp 0.106 exposes no `cudnn.deterministic`, and `use_deterministic_algorithms` is
+  `[Obsolete("not implemented")]` (CS0619). Conservative fix: `TorchDevice.AllowTf32ForTraining` re-allows cuDNN
+  TF32 for the duration of `FineTuneRun.Run` and turns it off after, so training is exactly as before (byte-repeatable)
+  and prediction is float32. After it: CUDA category 3/3 passed (`agentD4-cuda-category-fix-{1,2,3}.log`), CUDA
+  parity All 12/12 (`agentD4-gpu-final.log`).
+- Gates: CarafeSharp default pass 109 passed, 0 warnings, inspection clean (`agentD4-carafe-build2.log`); Osprey
+  pre-commit 652 passed, inspection clean (`agentD4-osprey-precommit2.log`).
+- /code-review medium (8 findings, before the training fix). Fixed: the GPU fine-tune regression concern (found
+  independently by the gate, fixed above); ChronologerModel's comment restated as the current reason. Dropped:
+  stale TF32 baselines in an unsuffixed outputs folder (only this machine ever saved one, re-seeded; the doc says to
+  delete it); Stellar RT headroom 1.29x on other GPUs (pins are per-machine measurements by design; the CPU limit is
+  the goal); TF32 flags process-wide / paths not through Resolve (every product path resolves through `Resolve`, and
+  training sets and restores its own); the flag-readback test (the parity script is the behavioral check; the
+  readback catches a setter becoming a no-op in name); pins equal to the CPU limits (`GpuPins` needs both values,
+  spelled as the CPU constants); OVERALL wording and the dropped TF32 label (both pinned values are RT; no TF32 mode
+  remains to label).
+- Second /code-review medium (after the training fix; triage only, bar raised to shipped defects). Fixed (comments
+  only, CarafeSharp gate re-run: 109 passed, 0 warnings, inspection clean, `agentD4-carafe-build3.log`): training's
+  TF32 scope also covers its calibration/metric predictions (stated; that is the pre-change behavior, kept on
+  purpose); `NVIDIA_TF32_OVERRIDE=0` would now also turn off training's TF32 (stated in TorchDevice and the script).
+  Dropped: stale baseline folder and per-machine headroom (as above); process-wide flag / nesting (no concurrent or
+  nested training in any host; Dispose restores the product policy, off); `GpuPins` equal to the CPU limits print a
+  "GPU pinned" line before failing (failure path only, still fails); `using (null)` on the CPU (idiomatic).
+- Also updated `osprey-development` SKILL.md and `osprey-library-generation-guide.md` (TF32 off, two pinned residuals).

@@ -177,8 +177,9 @@ Rust-side key constraints:
   fine-tuning or export masking runs
   `pwiz_tools/CarafeSharp/scripts/Compare-CarafeParity.ps1` (Stellar at
   least; `-Dataset Astral` too when the Astral paths change; on the CPU,
-  and `-Torch cuda` when the GPU path changes - it passes under pinned GPU
-  RT limits and requires bit-identical repeat predictions) before the PR. No test pass or TeamCity config runs
+  and `-Torch cuda` when the GPU path changes - with TF32 off it meets the
+  CPU limits except two pinned float32 RT residuals, and requires
+  bit-identical repeat predictions) before the PR. No test pass or TeamCity config runs
   these full-size comparisons. Authoritative description:
   `pwiz_tools/CarafeSharp/docs/04-testing.md` ("Full-size parity").
 

@@ -141,10 +141,10 @@ digestion, fragment assembly, fine-tuning or export masking runs the full-size c
 with Carafe 2.2.0's own output, which no test pass or TeamCity config runs:
 `pwsh -File ./pwiz_tools/CarafeSharp/scripts/Compare-CarafeParity.ps1` (Stellar, ~4 min after
 a 1.5 GB fetch), plus `-Dataset Astral` when the Astral paths change (4.8 GB fetch, 22 GB
-extracted). `-Torch cuda` runs them on the GPU, where RT exceeds the CPU limits (TF32, libtorch's default)
-and is judged by pinned GPU limits measured on this machine's RTX 4000 Ada, and every GPU
-prediction must repeat bit for bit; `NVIDIA_TF32_OVERRIDE=0` narrows the RT delta 50x or more at no
-measurable cost. The
+extracted). `-Torch cuda` runs them on the GPU, where CarafeSharp turns TF32 off (#4982), so the GPU
+meets the CPU limits except two small float32 residuals (Astral RT, one .blib RT) judged by GPU pins
+measured on this machine's RTX 4000 Ada, and every GPU prediction must repeat bit for bit;
+`NVIDIA_TF32_OVERRIDE=0` is no longer needed. The
 authoritative description, with the measured CPU/GPU differences, is
 `pwiz_tools/CarafeSharp/docs/04-testing.md` ("Full-size parity").
 
