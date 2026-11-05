@@ -8,7 +8,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none)
 - **Module**: `pwiz`
-- **PR**: (none yet)
+- **PR**: [#5002](https://github.com/ProteoWizard/pwiz/pull/5002)
 
 ## Objective
 
@@ -75,7 +75,7 @@ C# only (the C++ tree is retired).
 - [x] Tests: `pwiz/data/common/test/CvOnlineUpdateTests.cs` (15) + shared
       `CvOnlineUpdateFixtures.cs` (fake server, OBO builders), linked into MsData.Tests
 - [x] mzML round-trip: `pwiz/data/msdata/test/MzmlCvOnlineUpdateTests.cs`
-- [ ] Code review, commit, PR
+- [x] Code review, commit, PR (#5002)
 
 ### Test list
 1. Unknown accession resolves; `CvIsA` reaches the embedded parent
