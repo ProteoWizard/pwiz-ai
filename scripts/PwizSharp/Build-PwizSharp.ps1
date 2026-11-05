@@ -52,6 +52,13 @@
 .PARAMETER LogFile
     Also write a normal-verbosity MSBuild file log (every warning and error) to this path
 
+.PARAMETER Publish
+    Run dotnet publish instead of dotnet build, the way tcbuild.bat publishes the Native AOT shim
+    (pwiz/utility/bindings/NativeAot/MsData.NativeAot.csproj). Use with -RuntimeIdentifier.
+
+.PARAMETER RuntimeIdentifier
+    Runtime identifier passed as -r, e.g. win-x64 (required for a Native AOT publish)
+
 .PARAMETER SourceRoot
     Path to the pwiz checkout root (auto-detected if not specified). Pwiz.sln is found at the
     checkout root (current layout) or under pwiz-sharp/ (older branches).
@@ -95,6 +102,12 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$LogFile = $null,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Publish = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$RuntimeIdentifier = "",
 
     [Parameter(Mandatory=$false)]
     [string]$SourceRoot = $null,
@@ -187,14 +200,18 @@ try {
     Set-Location $sharpRoot
 
     $buildStart = Get-Date
-    $buildArgs = @('build', $Project, '-nologo') + $props + @('-v:minimal')
+    $verb = if ($Publish) { 'publish' } else { 'build' }
+    $buildArgs = @($verb, $Project, '-nologo') + $props + @('-v:minimal')
+    if ($RuntimeIdentifier) {
+        $buildArgs += @('-r', $RuntimeIdentifier)
+    }
     if ($Rebuild) {
         $buildArgs += '--no-incremental'
     }
     if ($LogFile) {
         $buildArgs += @('-fl', "-flp:logfile=$([System.IO.Path]::GetFullPath($LogFile, $initialLocation.Path));verbosity=normal")
     }
-    Write-Host "`ndotnet build $Project" -ForegroundColor Yellow
+    Write-Host "`ndotnet $verb $Project" -ForegroundColor Yellow
     if ($Summary) {
         $buildOutput = & dotnet @buildArgs 2>&1
         $buildExit = $LASTEXITCODE
