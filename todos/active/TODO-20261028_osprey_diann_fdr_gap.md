@@ -901,8 +901,8 @@ machine), scripts `ai/.tmp/sessions/20261103-zt4950`.
   97-feature +6%; beats masking. Moves every golden - needs Mike / Brendan, Astral / Stellar and the gate.
 
 **Round-2 selection by confidence, not a fixed 200k rows (2026-11-04; Mike: a fixed count does not scale with the
-data set; select wherever targets and decoys still separate).** Local commits on `nightlywork/gbt-prefilter-q`
-(off the PR tip, NOT pushed): 99d5cd8b93 `OSPREY_GBT_PREFILTER_Q` (every peptide group whose best round-1 score
+data set; select wherever targets and decoys still separate).** Pushed to the PR as 95c0d2cbb9 (with the
+sampling switch below; first written as local commits on `nightlywork/gbt-prefilter-q`): 99d5cd8b93 `OSPREY_GBT_PREFILTER_Q` (every peptide group whose best round-1 score
 reaches the score where paired competition on round-1 scores reaches q) and ca546cd197 `OSPREY_GBT_PREFILTER_LFDR`
 (down to where windowed decoy/target winners first exceed the setting); OSPREY_GBT_PREFILTER_SIZE becomes the cap;
 668/668 tests. Stellar / Astral natural-entrapment libraries rebuilt on the CPU with the PR build. All 97
@@ -920,6 +920,26 @@ features, two-round GBDT, real targets at FDP 1%:
 - q 20% or local FDR 0.9 is within 0.6% of each data set's best - one setting for all three. Tight cuts lose
   (plateau starts at q ~5% Astral, ~10% ZT, ~20% Stellar). Round 1 at 500k only rescues tight cuts.
 - Full tables: `ai/.tmp/handoff-20261104-zt.md` on SPEEDYGONZALES; `C:\test\osprey-runs\{ztscan,stellar,astral}-pr4950\summary.tsv`.
+
+**Capping round 2 by a random sample (2026-11-04 evening; Mike: an uncapped cut can grow too large).**
+`OSPREY_GBT_PREFILTER_SAMPLE=1`: the cut decides which peptide groups are eligible; over
+OSPREY_GBT_PREFILTER_SIZE rows a seeded random sample of whole groups is taken instead of the top ones. Pushed to
+the PR as 95c0d2cbb9 with the q / local-FDR switches, ported to the #4983 catalog; 671/671 tests, inspection
+clean; results posted on the PR (issuecomment-6651116749). Local FDR 0.9, real targets at FDP 1%:
+
+| round 2 | ZT | Stellar | Astral |
+|---|---|---|---|
+| fixed top 200k | 46,551 | 41,685 | 119,302 |
+| all eligible | 47,120 (504k) | 41,552 (255k) | 129,056 (662k) |
+| random 200k | 45,992 | 41,123 | 127,497 |
+| random 500k | 46,236 | 41,552 (under cap) | 129,035 |
+
+- Same 200k rows on Astral: top 119,302, random 127,497 - the top-N loses the borderline examples, not rows.
+- Random 500k matches all-eligible within noise everywhere. ZT arm-to-arm noise at FDP 1% is ~2% (random 500k
+  drops 4k of 504k rows and lands 1.9% lower).
+- Astral round 2: 47 s at 200k, 90 s at 500k, 143 s uncapped (full search 17.4 min). Round 1 at 500k adds ~35 s
+  and no IDs, and on Stellar / ZT it moves the cut (eligible 197k / 423k).
+- Proposal: local FDR 0.9 + random 500k cap. Making it the default is still a decision for Mike / Brendan.
 
 ### 2026-10-28 - Planned
 
