@@ -900,6 +900,27 @@ machine), scripts `ai/.tmp/sessions/20261103-zt4950`.
   (worktree `C:\Dev\pwiz-osprey-fdr`, NOT pushed), 669/669 tests; 21-feature SVM +11% at FDP 1% (6 XICs), +4% (12),
   97-feature +6%; beats masking. Moves every golden - needs Mike / Brendan, Astral / Stellar and the gate.
 
+**Round-2 selection by confidence, not a fixed 200k rows (2026-11-04; Mike: a fixed count does not scale with the
+data set; select wherever targets and decoys still separate).** Local commits on `nightlywork/gbt-prefilter-q`
+(off the PR tip, NOT pushed): 99d5cd8b93 `OSPREY_GBT_PREFILTER_Q` (every peptide group whose best round-1 score
+reaches the score where paired competition on round-1 scores reaches q) and ca546cd197 `OSPREY_GBT_PREFILTER_LFDR`
+(down to where windowed decoy/target winners first exceed the setting); OSPREY_GBT_PREFILTER_SIZE becomes the cap;
+668/668 tests. Stellar / Astral natural-entrapment libraries rebuilt on the CPU with the PR build. All 97
+features, two-round GBDT, real targets at FDP 1%:
+
+| | ZT (12 XICs) | Stellar (6) | Astral (12) |
+|---|---|---|---|
+| 21-feature SVM | 27,120 | 33,173 | 97,648 |
+| fixed 200k | 46,551 | 41,685 | 119,302 |
+| q 20% (round 1 300k) | 46,847 | 41,457 | 129,348 |
+| local FDR 0.9 | 47,120 | 41,552 | 129,056 |
+| best arm | 47,120 | 41,685 | 129,831 |
+
+- The fixed 200k is 8% short on Astral (its round-1 q 5% alone is 331k rows); every q / local-FDR cut fixes that.
+- q 20% or local FDR 0.9 is within 0.6% of each data set's best - one setting for all three. Tight cuts lose
+  (plateau starts at q ~5% Astral, ~10% ZT, ~20% Stellar). Round 1 at 500k only rescues tight cuts.
+- Full tables: `ai/.tmp/handoff-20261104-zt.md` on SPEEDYGONZALES; `C:\test\osprey-runs\{ztscan,stellar,astral}-pr4950\summary.tsv`.
+
 ### 2026-10-28 - Planned
 
 Branch and worktree created from origin/master 406fd374c0. Read the compaction gate
