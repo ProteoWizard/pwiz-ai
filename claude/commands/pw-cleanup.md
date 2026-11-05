@@ -1,5 +1,5 @@
 ---
-description: Clean up ai/.tmp and the test data area, deciding item by item with the developer
+description: Clean up finished clones and worktrees, ai/.tmp and the test data area, deciding item by item with the developer
 ---
 Read and follow `ai/docs/cleanup-guide.md`.
 
@@ -8,10 +8,13 @@ with the developer which items are disposable, which are misplaced, and which sh
 promoted to a durable document before the copy goes. Ask about anything large, ancient
 or ambiguous, and list paths so the developer can recognise their own work.
 
+Three phases: the clones and worktrees that sessions created for work that has since
+merged (the largest items on the machine), `ai/.tmp`, and the test data area.
+
 Deleting is a normal outcome here - the point is that each deletion was judged, not that
 nothing gets removed.
 
-If the developer names a scope (`tmp` or `test`), do only that phase.
+If the developer names a scope (`clones`, `tmp` or `test`), do only that phase.
 
 Memory is a separate command: `/pw-cleanup-memory` reviews this machine's Claude Code
 auto-memory against `ai/` (see `ai/docs/memory-cleanup-guide.md`).

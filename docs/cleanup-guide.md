@@ -1,6 +1,7 @@
 # Cleanup Guide
 
-How to clean up `ai/.tmp/` and the machine's test data area. Driven by `/pw-cleanup`.
+How to clean up the machine's clones and worktrees, `ai/.tmp/`, and the test data area.
+Driven by `/pw-cleanup`.
 
 ## Why this is a command and not a script
 
@@ -15,6 +16,51 @@ had reached **79 GB across 706 entries**, and the largest item - a 75 GB directo
 Osprey run output - was 18 days old, well inside what the script would have swept. It
 survived because nothing prompts anyone to run the script, and running it blind is
 unsafe. The command is the thing that gets invoked.
+
+## Phase 0 - clones and worktrees
+
+Sessions create git worktrees and sibling clones for parallel work: agent waves put one
+worktree per agent under `C:\proj\wt-*` (or `D:\Dev\pwiz-*`), a review session checks a PR
+out beside the primary clone, a perf baseline gets its own detached checkout. They are the
+largest items on the machine (a full Skyline checkout with build output is 35-170 GB) and
+nothing removes them when the work merges. Added 2026-11-05 after the round-2 backlog wave
+left five `C:\proj\wt-*` worktrees and two `D:\Dev` worktrees behind, all detached at
+master with their PRs merged.
+
+1. **Measure first.** From the primary clone:
+
+   ```bash
+   git -C C:/proj/pwiz worktree list
+   mcp__status__get_project_status()          # every sibling clone: branch, dirty state
+   du -sh C:/proj/wt-* C:/proj/pwiz-* D:/Dev/pwiz-*   # sizes; a few seconds each
+   ```
+
+   For each entry record: path, branch or `detached`, dirty count, last commit date, size.
+
+2. **Classify.** Each is one of:
+
+   - **Finished agent or review worktree** - detached or on a branch whose PR is merged
+     (`gh pr list --state merged --head <branch>`), no uncommitted changes. Remove:
+     `git -C C:/proj/pwiz worktree remove <path>` then `git worktree prune`. A local
+     branch left in it (`review/<N>`) goes with `git branch -D` once its PR is merged or
+     abandoned, and that is the one place `-D` is expected.
+   - **Dirty or unpushed** - uncommitted changes, untracked files, or commits not on any
+     remote (`git -C <path> log --branches --not --remotes --oneline`). List the files and
+     commits for the developer; never remove without an explicit yes. Untracked files in
+     another session's checkout are usually that developer's own work in progress.
+   - **Deliberate long-lived checkout** - a release branch (`skyline_26_1_1`), a perf
+     baseline pinned at a commit, a port branch kept for comparison. Keep; ask only if the
+     branch is gone upstream or the last commit is months old.
+
+3. **Name the big ones.** Anything over 20 GB gets its own line with size, branch and last
+   commit date, whatever its classification.
+
+4. **Remove with an explicit yes per item.** A sibling clone (not a worktree) is deleted as
+   a directory after the unpushed-commit check; its entry in
+   `mcp__status__get_project_status` disappears with it.
+
+The git stash is shared across worktrees of one clone; a stash entry another session made
+is not a reason to keep a worktree, but mention it before removing.
 
 ## Phase 1 - `ai/.tmp`
 
