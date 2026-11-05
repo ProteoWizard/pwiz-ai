@@ -38,10 +38,9 @@ and `TODO-20260923_osprey_demux.md` (the original engines, ZT Scan).
 Catalog: `ai/docs/osprey-large-datasets.md` sections 5-9 (added 2026-11-05). Goal: any machine can
 reproduce every gate. Local scripts first; expand Osprey Perf/Regression where practical.
 
-- [ ] Agents group read grants (403 on 2026-11-05):
-  - [ ] `/MacCoss/Lauren/20261009_Stellar-Centroiding-for-Mike` (Stellar, section 6)
-  - [ ] `/MacCoss/maccoss/2024-06 Astral Normal vs Staggered` (Astral, section 7)
-- [ ] Then measure both by PROPFIND and replace the "reported" sizes in the catalog
+- [x] Agents group read grants (Brendan, 2026-11-05): Stellar (section 6) and Astral (section 7)
+- [x] Measured by PROPFIND: Stellar 24 raw, 44.9 GB; Astral 42 raw, 252.2 GB (reps 1-3: 21, 128.8 GB)
+- [ ] Check whether the Astral staggered `.mzML` beside the raw are msconvert demux output (`dataProcessing`)
 - [ ] Ask Mike to upload to `Shared_w_lab/@files/RawFiles/`: Stellar fine-tuned library
   (`carafe-finetune\osprey_new_library\carafe_spectral_library.blib` + pairing), Astral fine-tuned
   mouse library, and the FASTAs (`hela-filtered.fasta`, `uniprot_arabidopsis_feb2023.fasta`,

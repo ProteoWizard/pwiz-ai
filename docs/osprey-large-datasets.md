@@ -81,8 +81,8 @@ containers that day).
 | AHA Plasma Stroke EV | **200** | **1,167 GB** | 5.8 GB | yes | 2 plates x (96 quant + 4 ChromLib); aortic arch replacement |
 | TEIREX Experiment 2 | 936 | 8,296 GB | 8.9 GB | **no** | 10 x 96-well mouse plates; one plate fits, the set does not |
 | Eclipse staggered (Webinar 27) | 6 | 19.9 GB (6 raw + 6 demuxed mzML) | 1.2 GB raw | yes | **staggered-window DIA**: the demultiplexing test set, with C++ msconvert's demultiplexed mzML beside each run |
-| Stellar overlapping windows (Lauren) | 24 | ~45 GB (reported) | 1.9 GB | yes | ion trap staggered DIA at 2- and 4-fold, profile and centroid, acquired 2/4 Th references (section 6) |
-| Astral Normal vs Staggered | 42 | ~240 GB (reported) | 5.7 GB | yes | Astral staggered vs normal at 2-8 Th (section 7) |
+| Stellar overlapping windows (Lauren) | 24 | 44.9 GB | 1.9 GB (0.8 centroid, 2.9 profile) | yes | ion trap staggered DIA at 2- and 4-fold, profile and centroid, acquired 2/4 Th references (section 6) |
+| Astral Normal vs Staggered | 42 | 252.2 GB raw (128.8 GB reps 1-3) | 6.0 GB | yes | Astral staggered vs normal at 2-8 Th (section 7) |
 | ZenoTOF 8600 ZT Scan | 3 | 26.0 GB needed (56.1 GB in folder) | 8.7 GB | yes | scanning-quadrupole DIA (section 8) |
 
 ## 1. CHS-SeerData (UW-Floyd Lab) - RECOMMENDED NEXT
@@ -241,8 +241,9 @@ Centrix golden. Each slice has a per-spectrum golden.
 
 * Portal: https://panoramaweb.org/MacCoss/Lauren/20261009_Stellar-Centroiding-for-Mike/project-begin.view
 * WebDAV raw: `https://panoramaweb.org/_webdav/MacCoss/Lauren/20261009_Stellar-Centroiding-for-Mike/%40files/RawFiles/`
-* **Access: 403 for the Agents group (2026-11-05); needs a read grant.** Reported by Mike's
-  session: 24 files, 45 GB, not yet measured by PROPFIND.
+* **Access: OK (207)**, Agents group granted 2026-11-05. MEASURED: **24 `.raw`, 44.92 GB**, flat
+  `RawFiles/`, nothing else in the folder. Centroid-mode runs 0.73-0.82 GB, profile runs
+  2.90-3.05 GB. Names: `20261009_Stellar_WWopt_<method>_400-900mz_24min[_profile]_TR0{1,2,3}.raw`.
 
 HeLa, 24 min gradient, precursors 400-900 m/z, HCD 20, fragments 200-1200 m/z. Four methods, three
 replicates (TR01-03) each, every one acquired once centroided and once in profile (`_profile`):
@@ -271,8 +272,20 @@ Also in Mike's share, MEASURED: `Shared_w_lab/@files/RawFiles/2026-0701-stellar-
 
 * Portal: https://panoramaweb.org/MacCoss/maccoss/2024-06%20Astral%20Normal%20vs%20Staggered/project-begin.view
 * WebDAV: `https://panoramaweb.org/_webdav/MacCoss/maccoss/2024-06%20Astral%20Normal%20vs%20Staggered/%40files/RawFiles/`
-* **Access: 403 for the Agents group (2026-11-05); needs a read grant.** Reported: seven
-  conditions x 6 replicates, ~240 GB. Mike searched reps 1-3 of each (21 files).
+* **Access: OK (207)**, Agents group granted 2026-11-05. MEASURED: the folder is 1,118 GB, but
+  most of it is not needed:
+  * `RawFiles/` (574.8 GB): **42 `.raw`, 252.2 GB** (7 conditions x Rep1-6, 3.9-8.1 GB, growing
+    with window width). Beside each is an `.mzML` (3.8-10.8 GB) and a DIA-NN `.mzML.quant`. The
+    staggered mzML are larger than their raw (MG 10.75 vs 7.18 GB), which suggests a 2024
+    msconvert demultiplexed output, like the Eclipse set. **Unverified**: check `dataProcessing`
+    before using them as a reference.
+  * **Reps 1-3 of all seven conditions (what Mike searched): 21 `.raw`, 128.8 GB.** Download
+    with `Get-PanoramaFiles.ps1 -Filter '*Rep[123]_*.raw'`.
+  * `DIA-NN Output/` (11.8 GB): the 2024 DIA-NN search, with its FASTA
+    `uniprot_mouse_may2023_contam_yeastENO1.fasta` and predicted speclib.
+  * Three Skyline documents of the DIA-NN results (~94 GB each, plus an 83 GB `.sky.zip` each).
+    Not needed.
+* Names: `Astral-Neo-18June2024-<M?>-<w>mz-<norm|stag>-DIA-400-900-<fill>maxIT-spleen-Rep<n>_<inj>.raw`.
 
 Orbitrap Astral, mouse spleen, 400-900 m/z. Pairs to compare: MA vs MD/ME, MB vs MF, MC vs MG.
 
