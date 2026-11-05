@@ -302,7 +302,10 @@ SequenceTreeForm icon to master (= SkylineDoc.ico).
 - [x] pwiz.Common inline images (2026-10-30, a9c7bac5ed, pushed): 17 moved, 4 never-drawn
       placeholders dropped, Find traced, PivotAndFilter funnel separated from the bar; build,
       icon tests and TestAlphabeticalReportEditor green; 4f2b82ec44 (pushed) switched Common Delete
-      to the hq2x raster the gallery choice names, same PNGs as Skyline. Was: NavBar.resx (10) and ViewEditor.resx (7) embed their images
+      to the hq2x raster the gallery choice names, same PNGs as Skyline. 9fed5208cd (GitHub
+      "Update branch", 2026-11-03) resolved the Skyline.csproj conflict on the branch side and
+      revived the NVIDIA .bat EmbeddedResource lines master had deleted (#4849): CS1566 on every
+      TC Skyline build. 27c6af57b0 (pushed 2026-11-05) removed them. Was: NavBar.resx (10) and ViewEditor.resx (7) embed their images
       base64 (Alphabetical, HiddenColumns, Cluster among them; same art as the Resources
       .bmp files, alpha instead of magenta). Move them into pwiz.Common Resources.resx as
       83134adcc1 did for Skyline so PrepareIcons can match them; add any undrawn ones to the
