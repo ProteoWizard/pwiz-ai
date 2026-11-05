@@ -215,3 +215,23 @@ NN-style combiner over 100+ scores is required to compete.
 - [ ] Fewer Percolator iterations at full size (training-target fraction flat from iteration 5)
 - Commits (local, not pushed): 996b6d15af speedup, f94bf045b2 two-round, 40482fe670 ftol floor + log,
   7177775469 mass-error plot, 307d273f2e corr tolerance.
+- 2026-11-04 night (local branches, NOT pushed; SEA-AD A10_014 full single-file pipeline, real targets at
+  entrapment FDP 0.5%, 3 seeds; baseline = #4992 tip b96c3e60d6 with GBDT + OOF + prefilter 200k, all features,
+  12 XICs, corr XICs 7 ppm, RT floor 1.0, tc window 0.40: 54,592 / 54,323 / 54,636, mean 54,517):
+  - OSPREY_REF_XIC=corr 23cada1bc3 (Brendan: the most-intense-fragment reference is at odds with more fragments
+    at low intensity). The core reference XIC (apex scan -> every apex-spectrum feature, area, SNR, sharpness, MS1
+    reference) was the fragment with the largest total intensity over the WHOLE extraction window; now the
+    fragment with the best summed correlation to the others inside the chosen peak. 56,069 (+2.8%), q1% FDP
+    0.60-0.66%. Same reference choice in the pick (top-5 corr, tie-break): no gain (dropped).
+  - OSPREY_LOCAL_RT_TOLERANCE=15 d93b039dab (agent, pwiz-scorelib nightlywork/20261104_rt_edge): per-library-RT
+    half-width from the 15 nearest calibration residuals; the library RT saturates near 19.2-19.3 (one library RT
+    spans ~19-23 min elution). +554 (+1.0%), late-edge recovery 57% -> 82%, +1.7% candidates.
+  - Shadow (fragment m/z - 1.00336/z) + cleaned-tc features b07eb8a73a (agent, pwiz-cdexp
+    nightlywork/20261104_interference), slots 97-100, masked by default: +740 (+1.4%); shadow_frac6 carries it.
+  - All three (pwiz-gbtfast nightlywork/20261104_shape_ref 480afc4ca5, gated): 57,427 (+5.3%); FDP 0.75% +4.2%,
+    1% +3.7%; q1% FDP 0.63-0.68%. 3 files (A01_005/A06_010/A10_014) seed 1, ref + local RT: 59,914 -> 62,851 (+4.9%).
+  - Ruled out: CWT valley threshold 0.15/0.30, coverage 3/4 and both (bounds +49% wider, no gain: narrow bounds
+    mark the misses, they do not cause them); CWT detection on top-6 fragments; 10 or 16 XICs (12 stays best);
+    no signal prefilter (+104 at +40% candidates).
+  - Gap classes (private numbers in U:\tools\claude\diann-study): same-peak low score still dominates, two
+    thirds in the lowest-quantity tercile; the fixed-window tc/tight family is the only one still separating it.
