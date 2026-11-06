@@ -235,6 +235,16 @@ NN-style combiner over 100+ scores is required to compete.
     no signal prefilter (+104 at +40% candidates).
   - Gap classes (private numbers in U:\tools\claude\diann-study): same-peak low score still dominates, two
     thirds in the lowest-quantity tercile; the fixed-window tc/tight family is the only one still separating it.
+- 2026-11-06: origin/master (5d12377aad) merged into #4993 (merge b02849d607, pushed; no amend/rebase). One
+  conflict, `pwiz_tools/Osprey/docs/README.md` table: kept master's fractional-entrapment text and
+  equal-chance-diagnostics row (#4987, #4989) plus this branch's protein-shuffled-entrapment row. Catalog: nothing
+  to register - the branch reads no new variable (`Pass2StrataValidityKeySuffix` uses the existing
+  `Pass2ProteinCompact` / ENV_PASS2_QVALUE EnvVar; the test sets OSPREY_PASS2_QVALUE through
+  `OverrideVariables`). No `new ProgressReporter` scopes added by the branch (constructor still public on master
+  anyway). #4986's StreamingFdr change was comment-only; nothing in the branch depends on removed arms. Master
+  moved no goldens since the merge base. Gates: Build-Osprey Debug 653/653 tests, 0 inspection warnings
+  (`ai/.tmp/pc1-build.log`); `regression-parallel.ps1 -Dataset All` 49 PASS / 0 FAIL in 40:38 against the
+  branch's goldens (`ai/.tmp/pc1-regr/console.log` and lane logs).
 
 ## 2026-11-06: spectrum-match and library-agreement families (branch Skyline/work/20261106_osprey_spectrum_match)
 Stacked on #4998. Commits dd94ef9d00, 8211bc3a37. Masked by default and HRAM only.
