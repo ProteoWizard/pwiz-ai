@@ -9,7 +9,7 @@
   tense were rewritten; comments that already read as history were left alone.
 - **GitHub Issue**: [#4980](https://github.com/ProteoWizard/pwiz/issues/4980) (step-1 leftover; Part of, not Fixes)
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#5003](https://github.com/ProteoWizard/pwiz/pull/5003)
 - **Worktree**: `C:\proj\wt-unimodxml` (agent U1)
 
 ## Objective
