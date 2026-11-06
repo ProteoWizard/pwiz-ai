@@ -4,12 +4,10 @@
 - **Branch**: `Skyline/work/20261106_remove_unimod_xml`
 - **Base**: `master` (cut from dd1ea43e89)
 - **Created**: 2026-11-06
-- **Status**: In Review - gates green, PR open; TeamCity not triggered (parent session queues it). Decision
-  (conservative, for Brendan to revisit): only comments that described unimod.xml in the present
-  tense were rewritten; comments that already read as history were left alone.
+- **Status**: Completed
 - **GitHub Issue**: [#4980](https://github.com/ProteoWizard/pwiz/issues/4980) (step-1 leftover; Part of, not Fixes)
 - **Module**: `pwiz`
-- **PR**: [#5003](https://github.com/ProteoWizard/pwiz/pull/5003)
+- **PR**: [#5003](https://github.com/ProteoWizard/pwiz/pull/5003) (merged 2026-11-06)
 - **Worktree**: `C:\proj\wt-unimodxml` (agent U1)
 
 ## Objective
@@ -51,3 +49,7 @@ to `pwiz/data/common/unimod.obo` and #4991 moved BiblioSpec's MzTabReader to
   0 warnings (skyline-build2.log, skyline-tests2.log).
 - CodeInspection's only WARNING is the pre-existing tolerated `new WebClient` in
   SetupDeployProject.cs.
+
+### 2026-11-06 - Merged
+
+PR #5003 merged as commit abaf9155af. Shipped: pwiz/data/common/unimod.xml deleted (no reader, copier or installer step remained after #4990 and #4991); five comments reworded as history. BiblioSpec 143/143, PwizSharp and Skyline builds at zero repo warnings, TestUniMod, TestUniModAgreesWithObo and CodeInspection passed, 18 PR checks. Note left for Brendan: Build-PwizSharp.ps1 without vendor licenses fails on master in ThermoModelParityTests.cs:110 and SeeMS/Processing.cs:595 while CI's no-vendor check passes; not investigated.
