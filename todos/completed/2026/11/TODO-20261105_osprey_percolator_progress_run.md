@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261105_osprey_percolator_progress_run`
 - **Base**: `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950) - the PR targets #4950's branch and merges there before #4950 merges to master
 - **Created**: 2026-11-05
-- **Status**: In Review - gates green, PR open against #4950's branch; TeamCity Perf/Regression not triggered (parent session queues it). Decisions below are the conservative options taken without Brendan.
+- **Status**: Completed
 - **GitHub Issue**: [#4979](https://github.com/ProteoWizard/pwiz/issues/4979)
 - **Module**: `osprey`
-- **PR**: [#5000](https://github.com/ProteoWizard/pwiz/pull/5000) (base: #4950's branch)
+- **PR**: [#5000](https://github.com/ProteoWizard/pwiz/pull/5000) (merged 2026-11-06)
 - **Worktree**: `C:\proj\wt-percolator` (agent P1)
 
 ## Objective
@@ -83,3 +83,7 @@ captured / released locals, thread-safety and remaining callers all checked. Two
   (the double-Dispose case disposed a using variable by hand). Fixed by creating that scope without
   `using`; CommonTest builds clean. Core code inspection fails only on NU1903 (ILCompiler advisory),
   which PR #4999 fixes on master; this branch picks it up at its next master merge.
+
+### 2026-11-06 - Merged
+
+PR #5000 merged as commit cf8a8bc074. Merged into #4950's integration branch Skyline/work/20261028_osprey_diann_fdr_gap, not master; it reaches master with #4950's final squash. Shipped: the seven Percolator progress sites on Run/Run<T>, QProgress removed, ProgressReporter.Begin scope for the PipelineByproducts iterator, constructor and Complete() private; the training-feature load in RunStreamingIntoProjection moved into a helper to keep its memory release. Gates on the branch: Osprey 671, CarafeSharp 109, CommonTest reporter tests, Stellar and StellarLibDecoy unchanged, Perf/Regression 4251762; the DisposeOnUsingVariable inspection fixed on the PR. Completes #4979.
