@@ -4,7 +4,7 @@
 - **Branch**: (none yet - measurement and design only; `Skyline/work/20261103_osprey_stage7_fragments` if implemented)
 - **Base**: `master` (049d045e98)
 - **Created**: 2026-11-03
-- **Status**: In Progress - 82-file SEA-AD measurement running
+- **Status**: Completed - deferred; #4577 closed 2026-11-06 (Stage 7 is now the lowest-memory stage; the lever is 2% of the run peak)
 - **GitHub Issue**: [#4577](https://github.com/ProteoWizard/pwiz/issues/4577)
 - **Module**: `osprey`
 - **PR**: (none - no PR until the measurement is read)
@@ -74,3 +74,7 @@ after the empty release 10.66 GB.
 Decision: DEFER. The 0.4-0.7 GB lever is 10-15% of the Stage 7 floor but 2% of the run peak, which is
 Stage 5 (38.9 GB private). Stage 7 no longer sets the machine requirement. Worth doing only for a
 standalone `--task SecondPassFDR` node. Status comment posted on #4577; no branch, no PR.
+
+### 2026-11-06 - Closed
+
+Brendan closed #4577 on the 2026-11-03 measurement: Stage 7 is now the lowest-memory stage of the run (4.4 GB managed floor against a 38.9 GB private peak in Stage 5), so narrowing the retained set there is not worth the change. Revisit only for a standalone --task SecondPassFDR node, where it is about a 10% cut of that node's floor; the predicate and the asserts that would move are described above.
