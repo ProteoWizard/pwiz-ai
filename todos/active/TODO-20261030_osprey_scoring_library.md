@@ -262,3 +262,7 @@ Stacked on #4998. Commits dd94ef9d00, 8211bc3a37. Masked by default and HRAM onl
   FDP 1%, +40% candidates); calibration LDA with spectrum scores (about 30% more anchors, higher anchor entrapment, tolerance
   4.57 -> 5.57 ppm, -830); calibration peak choice by match probability (-215).
 - Still to do: full SEA-AD, performance metrics, default flip with re-recorded goldens as a separate PR. Later: feature cost analysis.
+
+### 2026-11-06 - #4993 merged
+
+PR #4993 merged as ab7c6b21a7 (master merged in first, b02849d607: README conflict only, nothing to register in the EnvVar catalog; all-datasets regression 49/49 against the re-banked goldens; the four required TeamCity checks green; no Perf/Regression re-run by Brendan's decision). Shipped: stratum and complement compete separately against their own decoys at run and experiment scope; goldens re-banked on all four datasets; docs/protein-shuffled-entrapment.md. Not addressed here: the stratum's own residual protein-aware FDP under GBDT out-of-fold (training rows rescored with the averaged model).
