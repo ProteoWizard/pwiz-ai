@@ -115,3 +115,8 @@ naming when implemented.
   and that arm needs its own entrapment check to be interpretable. Measured on the 20-protein empirical
   fixture: composition pairs 42 of 162 (25.9%) and the library is refused at the 80% floor; without
   `--decoys-in-library` the 162 are dropped and Osprey generates its own, which is what the swap benchmark does.
+- **Share the DIA-NN library TSV reading between BiblioSpec and Osprey**: deferred until a concrete need.
+  BiblioSpec's `TSVReader` knows OpenSWATH, AlphaPepDeep and Bruker Paser; Osprey's `DiannTsvLoader` knows
+  only DIA-NN 1.x's `--out-lib` dialect; BlibBuild assumes `.speclib` for DIA-NN. The shape would be a
+  dialect-aware column reader in `BiblioSpec.IO` beside `DiannLibraryParquetReader`, with the line-error
+  accounting and min-fragment rule given a shared home. DIA-NN 2.x writes parquet, which both tools share.
