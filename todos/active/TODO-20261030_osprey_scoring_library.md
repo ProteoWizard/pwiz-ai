@@ -235,3 +235,20 @@ NN-style combiner over 100+ scores is required to compete.
     no signal prefilter (+104 at +40% candidates).
   - Gap classes (private numbers in U:\tools\claude\diann-study): same-peak low score still dominates, two
     thirds in the lowest-quantity tercile; the fixed-window tc/tight family is the only one still separating it.
+
+## 2026-11-06: spectrum-match and library-agreement families (branch Skyline/work/20261106_osprey_spectrum_match)
+Stacked on #4998. Commits dd94ef9d00, 8211bc3a37. Masked by default and HRAM only.
+- SEA-AD A10_014, real targets at entrapment FDP 0.5%, 3 seeds: 57,427 -> + library agreement 57,779 -> + spectrum match 58,429
+  (FDP 1%: 61,122 -> 61,594 -> 62,034). Paired 5 seeds with the pick reweighting on: spectrum match +675, positive on every seed.
+- Offline apex scores: xcorr's weakness is its whole-scan preprocessing in chimeric scans. Removing its 5% floor barely helps and
+  removing per-window scaling hurts. Matched-fragment scores read at library positions pass about 3x as many strong misses.
+  Advantage holds at 10 ppm and is mostly gone by 20 ppm.
+- Stellar (3 files, 3 seeds): both families within seed noise; match probability alone 52-112 at q 1% vs xcorr 12,812, hence HRAM only.
+  Masking xcorr on Stellar costs 4-5% (one seed). GBDT env vs defaults: pass 1 +37% / +29% at FDP 0.5% / 1%; pass 2 +20% / +15%, with
+  pass-2 FDP at q 1% 1.15-1.19% vs 0.99%, to check before GBDT becomes the unit-resolution default.
+- Not kept (local record nightlywork/20261105_double_counting): MS1 evidence (-317); OSPREY_PICK_WEIGHT_SCALE 1,1,0.75,2 (+467 without
+  the spectrum family, about +200 with it, within seed noise; moves 9 -> 279 of 848 wrong-peak precursors onto DIA-NN's peak);
+  spectrum score in the peak pick (-109; +210 at FDP 1%); duplicate-peak winner by spectrum score (-282); no prefilter (-67; +127 at
+  FDP 1%, +40% candidates); calibration LDA with spectrum scores (about 30% more anchors, higher anchor entrapment, tolerance
+  4.57 -> 5.57 ppm, -830); calibration peak choice by match probability (-215).
+- Still to do: full SEA-AD, performance metrics, default flip with re-recorded goldens as a separate PR. Later: feature cost analysis.
