@@ -55,6 +55,13 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       TestWebAccessProbeRateLimited went red then green. Dropped the rest (repeats, test-only,
       efficiency, HTTP-layer redesign). tcinspect RedundantNameQualifier fixed; tcinspect clean.
       Pushed ab098f51b5, cd1ad8851a
+- [x] Copilot (real review): add coverage for cancelling the real WaitForRateLimit - added
+      TestRateLimitWaitCancellation; thread replied and resolved
+- [x] Third /code-review medium: the production wait ran under ProteinMetadataManager's
+      lock(_processedNodes), which ClearCache takes on the UI thread at close - production wait
+      capped at 15s (MAX_RATE_LIMIT_DELAY; tests MAX_TEST_RATE_LIMIT_DELAY 60s); zero/past
+      Retry-After floored at 2s. Rejected alternative: a "not before" gate with no sleep, which
+      depends on the loader's reschedule cadence (possible busy loop). Pushed 4660acb611
 - [ ] Release-branch backport to `Skyline/skyline_26_1_1` (the only release branch; .NET 4.7.2
       and diverged, so manual rather than the cherry-pick label)
 - [ ] Update UniprotApiVersionCheck.RECORDED_API_DEPLOYMENT_DATE once web tests are re-checked
