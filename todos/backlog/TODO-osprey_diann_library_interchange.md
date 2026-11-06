@@ -107,3 +107,11 @@ naming when implemented.
 ## Out of scope
 
 - Reading `.speclib`.
+
+## Deferred follow-ups (Brendan, 2026-11-06)
+
+- **Pair DIA-NN library decoys from `Source.Id`** (part 1 leftover from PR #4994): record and skip. It only
+  matters for an arm where Osprey searches with DIA-NN's own mutated decoys instead of generating its own,
+  and that arm needs its own entrapment check to be interpretable. Measured on the 20-protein empirical
+  fixture: composition pairs 42 of 162 (25.9%) and the library is refused at the 80% floor; without
+  `--decoys-in-library` the 162 are dropped and Osprey generates its own, which is what the swap benchmark does.
