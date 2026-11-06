@@ -4,13 +4,10 @@
 - **Branch**: `Skyline/work/20261106_carafesharp_deterministic_cudnn`
 - **Base**: `master` (dd1ea43e89)
 - **Created**: 2026-11-06
-- **Status**: In Review - GPU experiment succeeded (outcome A); PR #5004 open, not merged, no TeamCity triggered. Decision taken
-  conservatively: the deterministic setting is scoped to `FineTuneRun.Run` only (prediction is untouched), and
-  a libtorch without the exports falls back to today's non-repeatable float32 training with a logged warning,
-  rather than re-allowing TF32.
+- **Status**: Completed
 - **GitHub Issue**: (none - follow-up of #4978 / PR #4982)
 - **Module**: `osprey`
-- **PR**: [#5004](https://github.com/ProteoWizard/pwiz/pull/5004)
+- **PR**: [#5004](https://github.com/ProteoWizard/pwiz/pull/5004) (merged 2026-11-06)
 - **Worktree**: `C:\proj\wt-tf32`
 
 ## Objective
@@ -76,3 +73,7 @@ Logs in `C:\proj\ai\.tmp\sessions\20261106-tf32\logs\`:
   Brendan may prefer the TF32 fallback; it is a two-line change.
 - Dropped: test flips the global flag concurrently with a GPU fine-tune - CarafeSharp.Test does not parallelize.
 - Dropped: macOS `.dylib` - CarafeSharp supports x64 Windows and Linux only (build.ps1).
+
+### 2026-11-06 - Merged
+
+PR #5004 merged as commit 5d12377aad. Shipped: LibTorchContext (torch_cpu exports via NativeLibrary.TryGetExport), TorchDevice.DeterministicCuDnn around FineTuneRun.Run with TF32 forced off, AllowTf32ForTraining removed, TestLibTorchContextResolves; GPU fine-tuning repeats 8/8 (and the LSTM model 6/6) at no cost. Gates: CPU pass 110, CUDA 2/2, Stellar GPU parity 8/8, Perf/Regression 4253324, 18 PR checks. Open decision carried forward: when the exports are missing, training logs a warning and runs without the setting (no longer repeatable); the reviewer's alternative, fall back to TF32 on, is a two-line change if wanted.
