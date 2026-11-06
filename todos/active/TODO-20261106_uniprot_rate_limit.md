@@ -50,6 +50,11 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       tested), dropped 6 (no progress text during the wait, 503 handling, MapHttpRequestException
       path, delay carried in a field, shared give-up counter, cap placement). Commit 97e5b59d5a
 - [x] PR #5008 opened (label skyline)
+- [x] Second /code-review medium: fixed HasWebAccess (uncancelable probe waited out a 429, then
+      cached "no internet") - a 429 now ends the probe at once and counts as access; test
+      TestWebAccessProbeRateLimited went red then green. Dropped the rest (repeats, test-only,
+      efficiency, HTTP-layer redesign). tcinspect RedundantNameQualifier fixed; tcinspect clean.
+      Pushed ab098f51b5, cd1ad8851a
 - [ ] Release-branch backport to `Skyline/skyline_26_1_1` (the only release branch; .NET 4.7.2
       and diverged, so manual rather than the cherry-pick label)
 - [ ] Update UniprotApiVersionCheck.RECORDED_API_DEPLOYMENT_DATE once web tests are re-checked
