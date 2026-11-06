@@ -4,13 +4,13 @@
 - **Branch**: `Skyline/work/20261106_carafesharp_deterministic_cudnn`
 - **Base**: `master` (dd1ea43e89)
 - **Created**: 2026-11-06
-- **Status**: In Progress - GPU experiment succeeded (outcome A); gates and PR in flight. Decision taken
+- **Status**: In Review - GPU experiment succeeded (outcome A); PR #5004 open, not merged, no TeamCity triggered. Decision taken
   conservatively: the deterministic setting is scoped to `FineTuneRun.Run` only (prediction is untouched), and
   a libtorch without the exports falls back to today's non-repeatable float32 training with a logged warning,
   rather than re-allowing TF32.
 - **GitHub Issue**: (none - follow-up of #4978 / PR #4982)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#5004](https://github.com/ProteoWizard/pwiz/pull/5004)
 - **Worktree**: `C:\proj\wt-tf32`
 
 ## Objective
@@ -32,7 +32,7 @@ exports `at::globalContext()` and `Context::setDeterministicCuDNN(bool)`).
 - [x] Docs: `docs/04-testing.md` GPU parity / Reproducibility; `osprey-library-generation-guide.md`
 - [x] Gates: CPU default pass + inspection, CUDA category, `Compare-CarafeParity.ps1 -Torch cuda` (Stellar), Osprey build
 - [x] `/code-review medium`
-- [ ] Commit, PR
+- [x] Commit 9259c43e64, PR #5004
 
 ## Progress Log
 

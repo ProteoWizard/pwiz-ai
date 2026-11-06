@@ -144,7 +144,8 @@ a 1.5 GB fetch), plus `-Dataset Astral` when the Astral paths change (4.8 GB fet
 extracted). `-Torch cuda` runs them on the GPU, where CarafeSharp turns TF32 off (#4982), so the GPU
 meets the CPU limits except two small float32 residuals (Astral RT, one .blib RT) judged by GPU pins
 measured on this machine's RTX 4000 Ada, and every GPU prediction must repeat bit for bit;
-`NVIDIA_TF32_OVERRIDE=0` is no longer needed. The
+`NVIDIA_TF32_OVERRIDE=0` is no longer needed. GPU fine-tuning is in float32 too, and repeats byte for
+byte because cuDNN is held to its deterministic algorithms while it trains (#5004). The
 authoritative description, with the measured CPU/GPU differences, is
 `pwiz_tools/CarafeSharp/docs/04-testing.md` ("Full-size parity").
 
