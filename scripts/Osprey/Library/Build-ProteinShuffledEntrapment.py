@@ -49,9 +49,25 @@ library files, and assign.tsv (sequence, new_acc, on_target, orig_proteins),
 the per-peptide truth an analysis needs to split entrapment hits by where they
 landed.
 
+-------------------------------------------------------------------------
+Split mode (--in-targets <fraction>):
+
+A SPLIT variant moves only a chosen fraction of the entrapment peptides, and
+moves them onto TARGET proteins only; the rest keep their own entrapment
+proteins untouched. The subset is rng.choice(n, size=round(fraction * n),
+replace=False) over the entrapment peptides in manifest order, and each chosen
+peptide then draws ONE accession uniformly from the distinct accessions of the
+target rows, with the same rng (numpy default_rng(seed)), so the result is
+deterministic. assign.tsv still lists EVERY entrapment peptide: moved ones
+carry on_target 1 and their new accession, unmoved ones on_target 0 and
+new_acc = their original proteins. p_decoy rows follow their pair as above.
+With --in-targets 0.5 on a 1:1 library about half the entrapment is on a
+target protein, as in the full shuffle, but the other half is unchanged
+rather than redistributed among entrapment proteins.
+
 usage:
     python Build-ProteinShuffledEntrapment.py --library-dir <dir> --out-dir <dir>
-        [--seed 20261101] [--copy]
+        [--seed 20261101] [--copy] [--in-targets <fraction>]
 """
 import argparse
 import os
@@ -72,7 +88,11 @@ def main():
     ap.add_argument('--out-dir', required=True)
     ap.add_argument('--seed', type=int, default=20261101)
     ap.add_argument('--copy', action='store_true', help='copy library files instead of hard-linking')
+    ap.add_argument('--in-targets', type=float, default=None, metavar='FRACTION',
+                    help='split mode: move only this fraction of the entrapment peptides, onto target proteins only')
     a = ap.parse_args()
+    if a.in_targets is not None and not 0.0 <= a.in_targets <= 1.0:
+        sys.exit('--in-targets must be a fraction in [0, 1]')
 
     src = os.path.join(a.library_dir, MANIFEST)
     if not os.path.isfile(src):
@@ -91,16 +111,28 @@ def main():
     if entrap.empty:
         sys.exit('No entrapment (p_target) rows in the manifest - nothing to shuffle')
     rng = np.random.default_rng(a.seed)
-    draw = rng.integers(0, len(pool), len(entrap))
-    assign = dict(zip(entrap.sequence, (pool[i] for i in draw)))
+    if a.in_targets is None:
+        draw = rng.integers(0, len(pool), len(entrap))
+        assign = dict(zip(entrap.sequence, (pool[i] for i in draw)))
+    else:
+        target_pool = sorted(set(man[man.peptide_type == 'target'].proteins.str.split(';').explode()))
+        n = len(entrap)
+        chosen = rng.choice(n, size=round(a.in_targets * n), replace=False)
+        draw = rng.integers(0, len(target_pool), len(chosen))
+        seqs = entrap.sequence.to_numpy()
+        assign = dict(zip(seqs[chosen], (target_pool[i] for i in draw)))
+        print(f'split mode: --in-targets {a.in_targets}, target accession pool {len(target_pool)}')
 
     with open(os.path.join(a.out_dir, 'assign.tsv'), 'w', newline='\n') as f:
         f.write('sequence\tnew_acc\ton_target\torig_proteins\n')
         for seq, prot in zip(entrap.sequence, entrap.proteins):
-            acc = assign[seq]
+            acc = assign.get(seq, prot)
             f.write(f'{seq}\t{acc}\t{int("_p_target" not in acc)}\t{prot}\n')
     on_target = sum('_p_target' not in x for x in assign.values())
-    print(f'entrapment peptides reassigned {len(assign)}, now on a target protein {on_target}')
+    if a.in_targets is None:
+        print(f'entrapment peptides reassigned {len(assign)}, now on a target protein {on_target}')
+    else:
+        print(f'entrapment peptides total {len(entrap)}, placed on a target protein {on_target}, unchanged {len(entrap) - len(assign)}')
 
     out = man.copy()
     is_entrap = out.peptide_type == 'p_target'

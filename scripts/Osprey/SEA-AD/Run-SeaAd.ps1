@@ -181,6 +181,7 @@ param(
     [int]$SkipFirstFiles = 0,
     [int]$EveryNthFile = 1,
     [string]$ExcludePattern,
+    [string]$IncludePattern,
     [int]$Threads = 30,
     [int]$ParallelFiles = 0,
     [int]$ParallelFilesCaching = 0,
