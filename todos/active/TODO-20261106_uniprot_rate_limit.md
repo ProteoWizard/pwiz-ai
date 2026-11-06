@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none - from nightly perf tests)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5008](https://github.com/ProteoWizard/pwiz/pull/5008)
 - **Checkout**: `C:\Dev\WebStuff`
 
 ## Objective
@@ -49,7 +49,7 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       from the server's Date header; GetRetryAfter made public on NetworkRequestException and
       tested), dropped 6 (no progress text during the wait, 503 handling, MapHttpRequestException
       path, delay carried in a field, shared give-up counter, cap placement). Commit 97e5b59d5a
-- [ ] PR (label skyline)
+- [x] PR #5008 opened (label skyline)
 - [ ] Release-branch backport to `Skyline/skyline_26_1_1` (the only release branch; .NET 4.7.2
       and diverged, so manual rather than the cherry-pick label)
 - [ ] Update UniprotApiVersionCheck.RECORDED_API_DEPLOYMENT_DATE once web tests are re-checked
