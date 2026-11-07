@@ -158,3 +158,9 @@ accepted Astral precursors carry peptide q > 0.01 under #4823's one-winner-per-p
   PercolatorQValues.ComputeExperimentPeptideQMap, LibraryProteinScores), and accepting a peptide when any precursor
   passes would inflate the error rate the way "any peptide passes, so the protein passes" does. Blib consumers filter
   at the level they mean.
+- Proposal (Brendan, 2026-11-07): choose the protein-compact stratum by a pass-1 protein q from the full-library
+  picked-protein competition (#4823's machinery applied to pass 1), not by the >=2-distinct-detected-target-peptides
+  count (FirstPassFdrTask.BuildProteinCompactStratum, target-conditioned, #4581) and never by a per-run q. Intent of
+  protein-compact is to recover peptides of proteins already believed present, not to bolster the protein, which a
+  max-score protein competition cannot do anyway. Test: 3-file split library, in-target half (184, 1.10%) should fall
+  toward the own-protein half (11, 0.07%) with yield held.
