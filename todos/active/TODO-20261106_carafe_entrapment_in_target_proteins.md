@@ -68,3 +68,43 @@ protein-group FDP against the 1:1 run.
 - `--task ModelDiagnostics` on a completed run re-renders the stored pass-2 product; the protein card is kept from
   the join arm but not rebuilt on the diagnostics-only fold arm.
 - Default of `--strip-entrapment` for the one-command route.
+
+## Results (2026-11-06 night, A10_014, Arabidopsis entrapment, exp-wide q 1%)
+| library | pass | targets | entrapment on target proteins | on own proteins | combined |
+|---|---|---|---|---|---|
+| r0.2 split (10% + 10%) | 1 | 37,638 | 32 (FDP 0.97%) | 24 (0.73%) | 56 of 59.9 +/- 15.2 expected, 0.92% |
+| r0.2 split | 2 protein-compact | 44,947 | 46 (1.16%) | 0 (0.00%) | 46 of 72.2 expected, 0.63% |
+| r0.2 unsplit (20% own) | 1 | 37,638 | - | 56 | 0.92% (identical to split) |
+| r0.2 unsplit | 2 | 45,473 | - | 2 | 0.03% |
+| 1:1 split (48% + 48%) | 1 | 34,682 | 95 (0.84%) | 94 (0.83%) | 1.10% |
+| 1:1 split | 2 | 41,979 | 149 (1.09%) | 0 | 0.72% |
+| 1:1 unsplit | 1 | 33,978 | - | 181 | 1.08% |
+| 1:1 unsplit | 2 | 43,614 | - | 0 (of 210.9 expected) | 0.00% |
+
+- Pass 1 is the negative control: both halves agree and, at r0.2, the split and unsplit libraries are bit-identical.
+- Pass 2 (protein-compact) accepts entrapment only on target proteins: the standard design reads it as FDP 0.03% (r0.2) or 0.00%
+  (1:1); the in-target half reads 1.09-1.16% at a reported q of 1%, i.e. about calibrated on target proteins while the
+  own-protein half is driven to zero. The plain combined estimate under-reads by about half.
+- Before vs after PR #4993 (exe `D:\test\osprey-runs\_bin\before-4993`, #4993's code files reverted): identical counts on this file
+  (split 46/0, control 2), as the doc's SVM rows predicted; the fix moved GBDT runs, not the default SVM.
+- Run dirs: `D:\test\osprey-runs\sea-ad\runs\seaad-1files-libdecoy-r{0.2,1.0}-protein-compact-arab[-split][-before4993]-20261106_*`;
+  reader `C:\proj\ai\.tmp\sessions\20261106-carafe-entrap\read-placement.py <run dir>`.
+- Library repair: the Carafe-built Arabidopsis library has 82 rows merging a decoy with an identical target (loader refuses them in
+  libdecoy mode); dropped from the manifests of every `-arabidopsis*` variant (`*.merged-rows.orig` beside each), scripts
+  `drop-merged-rows*.py`, `find-merged-rows.py` in the session folder.
+
+## Review (code-review medium, 2026-11-06)
+Fixed: Build Library page offered the in-target field though a predicted .blib carries no proteins (field removed there);
+stripped protein-group report rows (entrapment-only test, empty groups skipped); protein-entrapment sidecar stamped and checked;
+cref typo; non-ASCII dash. Dropped: per-replicate protein count in stats.tsv keeps entrapment-only groups under --strip-entrapment
+(opt-in, follow-up); strip after protein FDR is the design; `--entrapment --entrapment-in-targets 0.1` refused because the
+entrapment ratio defaults to 1 (message could say so); the sidecar is written on every join (needed by the fold arm).
+
+## Open questions
+- At 1:1 the split and unsplit libraries differ in pass 1 (34,682 vs 33,978 targets at q 1%); at r0.2 they are identical.
+  Pass 1 should carry no protein information - find what differs (derived .blib, feature set, training-set pick).
+- Protein-group card: the expected count prints 0 because the group q grid near 1% is coarse; show the interval at the
+  nearest threshold or on a fixed q grid.
+- Feature demo: deck https://claude.ai/artifact/SHwDzSKvAAzDV23iqNEhRj and wiki draft
+  `C:\proj\ai\.tmp\sessions\20261106-entrap-demo\wiki\EntrapmentInTargetProteins.md`; the two Skyline dialog screenshots need
+  the Screen Capture Permission consent in Skyline (launch the Debug Skyline-daily, click Allow, re-run the capture step).
