@@ -153,3 +153,8 @@ the card reads: #4823 removes ~740 groups from the 1% set and the entrapment-onl
 i.e. conservative at the protein level on this cohort. Branch state: Nick's branch ff3ae1afd6 + 9153490876 (goldens),
 #5011 head 5182ceabef, PR base = Skyline/work/20261011_osprey_protein_fdr. Observation from the merge: 1,783 of 117,660
 accepted Astral precursors carry peptide q > 0.01 under #4823's one-winner-per-peptide competition (one at 1.0).
+- Brendan (2026-11-07): the peptide q above 1% with precursor q below it under #4823 is correct multiple-hypothesis
+  control, not a defect: every level competes best against best by base id (verified: StreamingFdr.CompetePeptides,
+  PercolatorQValues.ComputeExperimentPeptideQMap, LibraryProteinScores), and accepting a peptide when any precursor
+  passes would inflate the error rate the way "any peptide passes, so the protein passes" does. Blib consumers filter
+  at the level they mean.
