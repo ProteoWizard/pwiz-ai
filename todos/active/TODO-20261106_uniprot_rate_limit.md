@@ -62,6 +62,10 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       capped at 15s (MAX_RATE_LIMIT_DELAY; tests MAX_TEST_RATE_LIMIT_DELAY 60s); zero/past
       Retry-After floored at 2s. Rejected alternative: a "not before" gate with no sleep, which
       depends on the loader's reschedule cadence (possible busy loop). Pushed 4660acb611
+- [x] Copilot re-review: approval recommended, no open issues. Fourth /code-review medium:
+      tightened the cancellation test bound 30s -> 5s (30s could not catch a broken cancel on
+      the 15s production wait); a live probe confirmed 100 OR'd terms returns 200, so the
+      batch cap needs no margin; the rest repeats/dropped. Pushed ccd3a7151e
 - [ ] Release-branch backport to `Skyline/skyline_26_1_1` (the only release branch; .NET 4.7.2
       and diverged, so manual rather than the cherry-pick label)
 - [ ] Update UniprotApiVersionCheck.RECORDED_API_DEPLOYMENT_DATE once web tests are re-checked
