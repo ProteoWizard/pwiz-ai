@@ -215,14 +215,61 @@ This way, your `pwiz` checkout is always ready for the next daily release after 
 
 ### Skyline-daily (beta)
 
-Regular daily builds from master branch. No special workflow - automated nightly builds.
+**Current branch: `Skyline/skyline_26_1_1`, not master.** Until the first .NET 10
+Skyline-daily from master (planned for the week of 2026-11-16), Skyline-daily ships the
+.NET 4.7.2 line from the `Skyline/skyline_26_1_1` release branch, which the `daily` folder
+has checked out. This is like the Skyline-daily releases made from a release branch ahead
+of a major release, except that the version keeps `SKYLINE_BRANCH : 1` (`26.1.1.DDD`) and
+does not change to 26.1.9. Fixes reach it by cherry-pick from master.
 
-**Version settings on master**:
+**Version settings** (`pwiz_tools/Skyline/Jamfile.jam`):
 ```jam
-constant SKYLINE_YEAR : 25 ;
+constant SKYLINE_YEAR : 26 ;
 constant SKYLINE_ORDINAL : 1 ;
 constant SKYLINE_BRANCH : 1 ;  # daily
 ```
+
+**Workflow** (26.1.1.309, 2026-11-05):
+
+1. **Release notes**: commits since the last `Skyline-daily-*` tag reachable from the
+   branch (`git describe --tags --abbrev=0 --match 'Skyline-daily-*' HEAD`). See
+   "Generating Skyline-daily Release Notes". AI Connector features already announced
+   through the Tool Store are not repeated; changes that depend on Skyline-daily itself
+   (e.g. the MCP form screenshots) are. A release users must install before an upcoming
+   change gets a bold "Please update to this release." paragraph above the list and a
+   matching subject line.
+2. **Version bump commit**: edit `ApplicationRevision` and `ApplicationVersion` in
+   `pwiz_tools/Skyline/Skyline.csproj` to the release date's DDD, commit as
+   `Skyline-daily 26.1.1.DDD version bump`, push. The build takes DDD from the HEAD
+   commit date, so this commit sets the version - commit it on the release day.
+   Edit with the Edit tool or PowerShell: Git Bash `sed -i` rewrites the file's CRLF
+   line endings and turns a 2-line diff into the whole file.
+3. **Build**: `clean.bat` then `bso.bat` in the `daily` folder (see "Release Folder
+   Setup"). From the Bash tool, run each as
+   `env -u NoDefaultCurrentDirectoryInExePath cmd //c bso.bat` - the harness sets that
+   variable, and with it `cmd` cannot find `clean.bat` or the nested `call b.bat` in the
+   current folder. `bso.bat` ends with `SkylineCmd --version`; check it prints the new
+   version and the bump commit's hash.
+4. **Publish** ClickOnce, ZIP and MSI as in the FEATURE COMPLETE steps (ClickOnce to
+   `Skyline-daily13-64`, ZIP/MSI to `M:\home\brendanx\tools\Skyline-daily\`), upload to
+   `/home/software/Skyline/daily`, and update `install-disconnected-64` and
+   `install-administrator-64`. The saved wiki file starts with a metadata header that
+   must be stripped before `update_wiki_page`. Anonymous requests to the `_webdav`
+   download URLs return 401; the developer verifies downloads in a browser.
+5. **Tag** `Skyline-daily-26.1.1.DDD` on the bump commit and push it.
+6. **Announce**: `post_announcement` to `/home/software/Skyline/daily`, then MailChimp
+   (see "Writing and Posting Release Notes").
+7. **Docker**: run **Publish Docker image (Skyline-release-daily)**
+   (`ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily`) on branch
+   `Skyline/skyline_26_1_1`. **Not** the "Skyline-daily" publish config: that one depends
+   on the master container, which now builds .NET 10. Expect the tag
+   `skyline_daily_26.1.1.DDD-<hash>`; `latest` is not moved. On 2026-11-05 the Linux
+   cloud agents failed five times in a row (one could not spawn processes, then
+   "Could not connect to build agent" with automatic restarts); pinning the build to a
+   freshly connected `pwiz-linux-i-*` agent (`trigger_build(agent_name=...)`) worked.
+
+When the first .NET 10 Skyline-daily ships from master, rewrite this section for master
+and the **Skyline-daily** publish config again.
 
 ### Skyline-daily (FEATURE COMPLETE)
 
@@ -504,7 +551,7 @@ Pre-release stabilization period before official release.
    | Release Type | Deploy Config | Dependency (Docker container build) |
    |---|---|---|
    | **Skyline-daily (master)** | [Publish Docker image (Skyline-daily)](https://teamcity.labkey.org/buildConfiguration/ProteoWizard_ProteoWizardPublishDockerForSkylineDaily) | [Docker container (Wine x86_64)](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizardAndSkylineDockerContainerWineX8664) — master branch |
-   | **FEATURE COMPLETE (RC)** | [Publish Docker image (Skyline-release-daily)](https://teamcity.labkey.org/buildConfiguration/ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily) | [Docker container (release branch)](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664) |
+   | **FEATURE COMPLETE (RC)**, and **Skyline-daily from `Skyline/skyline_26_1_1`** (run on that branch) | [Publish Docker image (Skyline-release-daily)](https://teamcity.labkey.org/buildConfiguration/ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily) | [Docker container (release branch)](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664) |
    | **Major/Patch release** | [Publish Docker image (Skyline Release Branch)](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardPublishDockerAndSingularityImagesSkylineReleaseBranch) | Same release branch Docker container |
 
    **Before clicking Deploy**: Verify the dependency Docker container build succeeded with

@@ -20,14 +20,14 @@ If no folder is specified, infer from type:
 
 | Folder | Branch | Purpose |
 |--------|--------|---------|
-| `daily` | `master` | Skyline-daily builds |
+| `daily` | `Skyline/skyline_26_1_1` | Skyline-daily builds (.NET 4.7.2) until the first .NET 10 Skyline-daily from `master` |
 | `skyline_26_1` | `Skyline/skyline_26_1` | Skyline patches (current stable) |
 
 ## Release Type Quick Reference
 
 | Type | Version Format | Branch | Guide Section |
 |------|----------------|--------|---------------|
-| `daily` | `YY.N.1.DDD` | `master` | "Skyline-daily (beta)" |
+| `daily` | `YY.N.1.DDD` | `Skyline/skyline_26_1_1` (for now; see guide) | "Skyline-daily (beta)" |
 | `complete` | `YY.N.9.DDD` | `Skyline/skyline_YY_N` | "Skyline-daily (FEATURE COMPLETE)" |
 | `rc` | `YY.N.9.DDD` | `Skyline/skyline_YY_N` | Same as complete, on existing branch |
 | `major` | `YY.N.0.DDD` | `Skyline/skyline_YY_N` | "Skyline (release)" |
@@ -47,8 +47,10 @@ If no folder is specified, infer from type:
 ## Key Differences by Type
 
 ### daily
-- Build and publish from the `daily` subfolder (master branch)
-- Generate release notes from commits since last tag
+- Build and publish from the `daily` subfolder, on `Skyline/skyline_26_1_1` until the
+  first .NET 10 Skyline-daily from `master` (see "Skyline-daily (beta)" in the guide)
+- Generate release notes from commits since the last `Skyline-daily-*` tag on that branch
+- Docker: **Skyline-release-daily** publish config, not **Skyline-daily** (which builds master)
 - Post to `/home/software/Skyline/daily` container
 - MailChimp to beta list only (~5,000 users)
 
