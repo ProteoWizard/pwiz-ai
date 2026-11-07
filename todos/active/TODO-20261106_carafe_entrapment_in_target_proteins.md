@@ -143,3 +143,13 @@ Koina page takes the same information.
   6.66% on Astral 1:1 before, 0.82% after); this card reports it in the run. Re-measure #4823 on master after #4993:
   the complement fix already dropped the entrapment-only groups 67 -> 5 at 3 files (2.57% -> 0.22% by the card),
   so part of what #4823 measured as 6.66% may have been the complement's survivors.
+
+## Stack result (2026-11-07, master + #4993 + #4823 + #5011, exe D:\test\osprey-runs\_bin\stack-4823-5011, 3 files, 1:1 Arabidopsis)
+Precursor level identical to master + #4993 (#4823 does not touch precursor q): split pass 2 184 on target proteins
+(1.10%) / 11 own (0.07%), unsplit 17 (0.07%); pass 1 unchanged.
+Protein groups at protein q 1%: split 3,887 groups (was 4,626 = every group), 2 entrapment-only (0.10%; expected 19.1 +/- 8.6
+under calibration); unsplit 3,870 groups, 0 entrapment-only (0.00%). The protein q axis is now real (distinct q values), so
+the card reads: #4823 removes ~740 groups from the 1% set and the entrapment-only groups it keeps are below expectation,
+i.e. conservative at the protein level on this cohort. Branch state: Nick's branch ff3ae1afd6 + 9153490876 (goldens),
+#5011 head 5182ceabef, PR base = Skyline/work/20261011_osprey_protein_fdr. Observation from the merge: 1,783 of 117,660
+accepted Astral precursors carry peptide q > 0.01 under #4823's one-winner-per-peptide competition (one at 1.0).
