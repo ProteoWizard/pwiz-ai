@@ -267,6 +267,13 @@ Stacked on #4998. Commits dd94ef9d00, 8211bc3a37. Masked by default and HRAM onl
 
 PR #4993 merged as ab7c6b21a7 (master merged in first, b02849d607: README conflict only, nothing to register in the EnvVar catalog; all-datasets regression 49/49 against the re-banked goldens; the four required TeamCity checks green; no Perf/Regression re-run by Brendan's decision). Shipped: stratum and complement compete separately against their own decoys at run and experiment scope; goldens re-banked on all four datasets; docs/protein-shuffled-entrapment.md. Not addressed here: the stratum's own residual protein-aware FDP under GBDT out-of-fold (training rows rescored with the averaged model).
 
+## 2026-11-06 night: SEA-AD 82 files, A master / B stack / C DIA-NN
+Deck: https://claude.ai/artifact/JRAMrxSaHJcAXhu5MJDu1P (private). Analysis: `ai/.tmp/sessions/20261104-night/abc-compare.py`, output under `D:\Users\brendanx\test\diann-vs-osprey\seaad\abc-night`.
+- Pass 1 real targets at FDP 0.5% / 1%: A 44,648 / 50,181; B 79,635 / 86,111; C 99,548 / 107,129. B vs A +78%, A vs C -55%, B vs C -20%. C searched its own library, not Carafe. One seed; B's gains need settings that are off by default.
+- Wall: A 2h36m, B 6h02m (contended to 16:46), C 8h06m (upper bound). Back to back on 8 files, one order, load not logged: B 39m10s, A 23m58s, 1.63x; peaks 89.4 and 59.4 GB. Estimated B at 82 quiet files: 4.25 to 5 hours.
+- Protein FDR is inert on library decoys, on master too: all groups q = 0 (A 6,205 with 255 entrapment; B 7,779 with 440). `ProteinFdr.cs:732` looks up `DECOY_` + peptide. A fix would pair by base_id and change StellarLibDecoy output, so it needs a decision on the goldens. Not attempted.
+- Not done: weak-file cohort single-file FirstPassFDR, masked first-pass arm, local Test-PerfGate for #5005, 82-file DIA-NN on Carafe.
+
 ### Note from the entrapment-in-target-proteins session (2026-11-07, Brendan asked it be left here)
 Please review `TODO-20261106_carafe_entrapment_in_target_proteins.md` (PR #5011, branch
 `Skyline/work/20261106_carafe_split_entrapment`, now stacked on #4823's branch) before measuring a transfer-based pass 2.
