@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261106_carafe_split_entrapment`
 - **Base**: `master` (ab7c6b21a7)
 - **Created**: 2026-11-06
-- **Status**: In Progress (night session 2026-11-06; PR to open before morning)
+- **Status**: In Review (PR #5011 opened 2026-11-06 22:30 by the night session)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#5011](https://github.com/ProteoWizard/pwiz/pull/5011)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Idea (Brendan, 2026-11-05)
@@ -108,3 +108,7 @@ entrapment ratio defaults to 1 (message could say so); the sidecar is written on
 - Feature demo: deck https://claude.ai/artifact/SHwDzSKvAAzDV23iqNEhRj and wiki draft
   `C:\proj\ai\.tmp\sessions\20261106-entrap-demo\wiki\EntrapmentInTargetProteins.md`; the two Skyline dialog screenshots need
   the Screen Capture Permission consent in Skyline (launch the Debug Skyline-daily, click Allow, re-run the capture step).
+- TestBuildLibraryCarafeWizard fails at line 304 (fine-tuned RT R2 = 0): the training export selects by pass-2 run q and two of the
+  three Stellar subset runs end with 0 precursors at q 0.01 after ~115 each at pass 1 (TrainingExportWriter.ReadRunQ /
+  PairTargets reading the 2nd-pass sidecar q under protein-compact strata, #4993); one test row, R2 defined 0. Same q-values as
+  master by the regression goldens, so master's behavior; failing run kept at C:\proji\.tmp\OspreySearchTest-buildlib-failing-run.
