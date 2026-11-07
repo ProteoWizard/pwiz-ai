@@ -136,3 +136,10 @@ Koina page takes the same information.
   three Stellar subset runs end with 0 precursors at q 0.01 after ~115 each at pass 1 (TrainingExportWriter.ReadRunQ /
   PairTargets reading the 2nd-pass sidecar q under protein-compact strata, #4993); one test row, R2 defined 0. Same q-values as
   master by the regression goldens, so master's behavior; failing run kept at C:\proji\.tmp\OspreySearchTest-buildlib-failing-run.
+- Protein-group card on master: every picked-protein q is 0 in these libdecoy runs (verified in the stored products: 350
+  q points, all 0.0), so the card's q axis is one point and its curve is blank; the counts at "q <= 1%" are all groups.
+  This is the defect Nick's PR #4823 fixes (decoys looked up by DECOY_ name, only detected proteins competing, scores
+  from the compacted pass-2 pool). #4823 measured the same quantity offline (all-Arabidopsis groups, FDP = 2E/(T+E),
+  6.66% on Astral 1:1 before, 0.82% after); this card reports it in the run. Re-measure #4823 on master after #4993:
+  the complement fix already dropped the entrapment-only groups 67 -> 5 at 3 files (2.57% -> 0.22% by the card),
+  so part of what #4823 measured as 6.66% may have been the complement's survivors.
