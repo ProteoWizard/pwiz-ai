@@ -105,7 +105,7 @@ entrapment ratio defaults to 1 (message could say so); the sidecar is written on
   Pass 1 should carry no protein information - find what differs (derived .blib, feature set, training-set pick).
 - Protein-group card: the expected count prints 0 because the group q grid near 1% is coarse; show the interval at the
   nearest threshold or on a fixed q grid.
-- Feature demo: deck https://claude.ai/artifact/SHwDzSKvAAzDV23iqNEhRj and wiki draft
+- Feature demo: deck https://claude.ai/artifact/UWjptc8nhWU4zpFq51wLfy and wiki draft
   `C:\proj\ai\.tmp\sessions\20261106-entrap-demo\wiki\EntrapmentInTargetProteins.md`; the two Skyline dialog screenshots need
   the Screen Capture Permission consent in Skyline (launch the Debug Skyline-daily, click Allow, re-run the capture step).
 - TestBuildLibraryCarafeWizard fails at line 304 (fine-tuned RT R2 = 0): the training export selects by pass-2 run q and two of the
