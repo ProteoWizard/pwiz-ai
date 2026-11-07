@@ -66,9 +66,13 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       tightened the cancellation test bound 30s -> 5s (30s could not catch a broken cancel on
       the 15s production wait); a live probe confirmed 100 OR'd terms returns 200, so the
       batch cap needs no margin; the rest repeats/dropped. Pushed ccd3a7151e
+- [x] Entrez: TestFastaImportWeb failed live on NCBI 429 (Retry-After 2; limit 3/s without an
+      API key) because a lookup's summary and full requests went out back to back. Every Entrez
+      request now starts >= 400ms after the last (ENTREZ_REQUEST_INTERVAL); TestEntrezRequestSpacing
+      red (0.25ms gap) then green. TestFastaImportWeb, TestOlderProteomeDbWeb, UniquePeptides1PerfTest
+      green live; RECORDED_API_DEPLOYMENT_DATE -> 06-November-2026. tcinspect clean. Pushed a7784c7f89
 - [ ] Release-branch backport to `Skyline/skyline_26_1_1` (the only release branch; .NET 4.7.2
       and diverged, so manual rather than the cherry-pick label)
-- [ ] Update UniprotApiVersionCheck.RECORDED_API_DEPLOYMENT_DATE once web tests are re-checked
 
 ## Notes
 
