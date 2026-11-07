@@ -108,6 +108,10 @@ entrapment ratio defaults to 1 (message could say so); the sidecar is written on
 | 1:1 unsplit | 1 | 40,581 | - | 231 | 1.15% |
 | 1:1 unsplit | 2 | 52,849 | - | 17 | 0.07% |
 Protein groups at protein q 1%: split 5 entrapment-only of 4,626 (0.22%); unsplit 7 of 4,624 (0.30%).
+Before #4993 (3 files, split): pass 2 51,851 targets, 219 on target proteins (1.29%), 73 own (0.43%), combined 1.14%;
+entrapment-only groups 67 of 5,168 (2.57%). So at 3 files the complement fix removes the own-protein entrapment and the
+entrapment-only groups the complement let through across runs (73 -> 11, 67 -> 5), which one file cannot show; the
+in-target excess inside the stratum (219 -> 184, about the reported rate) remains.
 Run dirs `runs\seaad-3files-libdecoy-r1.0-protein-compact-arab[-split][-before4993]-20261107_*`.
 
 Related: the audit that inspired this (shuffle library, GBDT out-of-fold, 37 -> 291 entrapment on detected target
