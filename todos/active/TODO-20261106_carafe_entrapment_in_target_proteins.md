@@ -100,6 +100,26 @@ cref typo; non-ASCII dash. Dropped: per-replicate protein count in stats.tsv kee
 (opt-in, follow-up); strip after protein FDR is the design; `--entrapment --entrapment-in-targets 0.1` refused because the
 entrapment ratio defaults to 1 (message could say so); the sidecar is written on every join (needed by the fold arm).
 
+## 3-file result (2026-11-07, first three SEA-AD files, 1:1 Arabidopsis, exp-wide q 1%)
+| library | pass | targets | on target proteins | on own proteins | combined |
+|---|---|---|---|---|---|
+| 1:1 split (48% + 48%) | 1 | 41,221 | 106 (0.79%) | 123 (0.92%) | 229 of 202 +/- 28 expected, 1.13% |
+| 1:1 split | 2 protein-compact | 51,384 | 184 (1.10%) | 11 (0.07%) | 195 of 251 expected, 0.77% |
+| 1:1 unsplit | 1 | 40,581 | - | 231 | 1.15% |
+| 1:1 unsplit | 2 | 52,849 | - | 17 | 0.07% |
+Protein groups at protein q 1%: split 5 entrapment-only of 4,626 (0.22%); unsplit 7 of 4,624 (0.30%).
+Run dirs `runs\seaad-3files-libdecoy-r1.0-protein-compact-arab[-split][-before4993]-20261107_*`.
+
+Related: the audit that inspired this (shuffle library, GBDT out-of-fold, 37 -> 291 entrapment on detected target
+proteins; #4993's 134 -> 9 under GBDT) is recorded in `TODO-20261030_osprey_scoring_library.md` (2026-11-01 entry and
+"#4993 merged"); that TODO's open item "make a protein-shuffled entrapment arm a standard FDRBench check" is what this
+branch's placement split provides. With the default SVM first pass the complement fix moves nothing, as its SVM rows
+said; the residual is the stratum's own excess.
+
+Build Library > Carafe/Koina (2026-11-07): the predicted .blib now writes protein rows from the document's groups or the
+FASTA accessions (CarafeSharp precursor table gained `protein_id`), the in-target field is back on that page, and the
+Koina page takes the same information.
+
 ## Open questions
 - At 1:1 the split and unsplit libraries differ in pass 1 (34,682 vs 33,978 targets at q 1%); at r0.2 they are identical.
   Pass 1 should carry no protein information - find what differs (derived .blib, feature set, training-set pick).
