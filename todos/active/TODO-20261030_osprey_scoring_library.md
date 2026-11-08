@@ -38,6 +38,10 @@ preference: it never recompetes, so it needs no special audit to justify), exper
 - Keep mean-best-N available but off by default unless it beats PB alone at scale.
 - PerFileRescoring always uses transfer for FDR estimation; no recompeting (unneeded without protein-compact, and
   hard to explain).
+- GBDT is what #4850 merges on, as the PR that closes the gap to DIA-NN to under 10%.
+- Also keep a tested linear SVM path and make it as strong as possible without protein-compact: target within 10% of
+  DIA-NN (DIA-NN has a linear option too). Open: which features the SVM keeps (mask none vs default), whether PB
+  and mean-best-N help it. First arms: `svm62.ps1` (62 files, links, off / PB / mb2 / mb2 + PB, log `svm62.log`).
 - Calibration must be shown at scale: 3 files is easy. Accepted for now that own-protein FDP reads near zero under PB,
   because the on-target half shows the peptide-level FDP is honest. Evidence at scale: the s82 chain (82 files, sized
   split: mb2, mb2 + PB, transfer, PB + transfer) and DIA-NN 2.7.0 on the same 82 files and library
