@@ -90,6 +90,15 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       #5010 ce22f2b149 (build, FASTA/ProteomeDb tests incl. live web, -RunInspection 0/0)
 - [x] UniProt deployed new API code on 07-November-2026; live web tests passed against it, so
       RECORDED_API_DEPLOYMENT_DATE -> 07-November-2026. #5008 376282c23b, #5010 ab997675b4
+- [x] /code-review high (whole PR): a 429 with Retry-After 60 cost a request every 15s pass, and
+      each importer (metadata loader, digest loader, protein association) kept its own wait. Added
+      RateLimitGate on WebSearchProvider (static for the real services; test providers that fake a
+      429 own one): every 429 closes the service until Retry-After; in normal use each pass waits
+      at most MAX_RATE_LIMIT_DELAY for it and sends nothing until it has passed. The probe and the
+      give-up seam bypass it. TestRateLimitOutlastsPass red (2 requests) then green. Moved the
+      static Entrez fields ahead of instance fields. Dropped: 503 Retry-After (repeat), probe flag
+      race, seam-on per-pass cost, uncancellable 400ms sleep, dead ENTREZ_RATELIMIT entries,
+      250ms poll, timing-test flakiness. Both inspections clean. #5008 143789c4a4, #5010 d51e513c73
 - [ ] Carry any later #5008 review changes over to #5010; merge #5010 after #5008
 
 ## Notes
