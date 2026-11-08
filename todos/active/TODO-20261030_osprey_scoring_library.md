@@ -155,10 +155,28 @@ protein-compact but still costs some; size normalisation (#4580) may help.
 | PB max paired | 96,321 | 1.02% | 10 | 89,931 / 96,209 (+9.9% / +9.7%) |
 | PB mean-3 paired | 96,475 | 0.98% | 11 | 90,190 / 96,663 (+10.2% / +10.2%) |
 | mean-best-2 (`-ExperimentAgg`) | 86,017 | 0.69% | 172 | 83,361 / 89,266 (+1.9% / +1.7%) |
+| mean-best-2 + PB max paired | 97,012 | 1.05% | 13 | 89,848 / 96,413 (+9.8% / +9.9%) |
 
 The PB gain grows with run count (3 files: +4.6% / +6.6% sized) and reported FDP holds. mean-best-2 alone adds
 +1.9% / +1.7% at unchanged FDP, and with no protein information its two placement halves stay together (199 on
-target vs 172 own). mean-best-2 + PB running 2026-11-08 00:00. To confirm on the sized split.
+target vs 172 own). mean-best-2 + PB adds nothing over PB alone: PB already takes the gain mean-best-2 found.
+To confirm on the sized split and at 82 files.
+
+**Own-protein half = the standard FDRBench reading** (Wen et al., Nat. Methods 2025, entrapment on its own
+proteins; `read_pb62_own.py`, combined estimator with r = 0.5 per half, r = 1.0 pooled). FDP at q 1%:
+
+| Arm | on-target half | own half | both halves pooled |
+|---|---|---|---|
+| off | 0.69% | 0.68% | 0.91% |
+| mean-best-2 | 0.69% | 0.60% | 0.86% |
+| PB max paired | 1.02% | 0.03% | 0.70% |
+| PB mean-3 paired | 0.98% | 0.03% | 0.68% |
+| mean-best-2 + PB max | 1.05% | 0.04% | 0.73% |
+
+With PB the standard reading reports FDP 30x below the reported q (own find rate at "1% FDP" 121k vs the honest
+96k), and a pooled library hides the on-target 1.02% as 0.70%. PB is therefore invisible to the standard method:
+only the split reading audits it. For scale, DIA-NN (3 files, uniform split, final) keeps own 83 vs on-target 160
+at q1, about 1:2; Osprey PB keeps 10 vs ~330, about 1:33. Without PB Osprey is 1:1 (192 vs ~196).
 
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
