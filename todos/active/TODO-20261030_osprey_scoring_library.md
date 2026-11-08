@@ -233,7 +233,7 @@ proteins in size; on-target entrapment cannot test this (its peptides sit on det
 proteins. Conclusion of the three shapes: keep the default floor shape; none moves proteins or find rate beyond noise,
 and the switch need not ship. The cost of PB at the protein level is ~230 real proteins for ~360 false ones removed.
 
-**DIA-NN entrapment FDP at its reported q 1%** (`read_split.py` on `diann-vs-osprey\seaadisectuns3\<lib>eport.parquet`,
+**DIA-NN entrapment FDP at its reported q 1%** (`read_split.py` on `diann-vs-osprey\seaad\bisect\runs3\<lib>\report.parquet`,
 Global.Q.Value, e(1+1/r)/(t+e), r = 0.50): DIA-NN under-reports. 3 files uniform (A1-split): on-target 0.63%, own 0.33%
 (160 / 83 of 75,725); 3 files sized (A2-sized): on 0.59%, own 0.34%; 1 file uniform: on 0.75%, own 0.44%. Its
 on-target FDP reaches 1% only at q ~1.45-1.55% (find rate 78,666 sized, 79,335 uniform). Osprey PB is near
