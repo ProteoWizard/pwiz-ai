@@ -180,3 +180,9 @@ only RtR2; #5011 Osprey gate 4256393 green at 85%. #5012: Windows 4256410 and Os
 TeamCity final (2026-11-08 03:1x): #5012 Windows 4256410 SUCCESS (TestBuildLibraryCarafeWizard passes), #5012 Osprey
 Perf/Regression 4256411 SUCCESS; #5011 Osprey Perf/Regression 4256393 SUCCESS. Brendan accepted the 0.9 RT R2 bar.
 Merge order: #5012 first, then master into #4823 and #5011 so their Windows builds lose the RtR2 failure.
+
+### 2026-11-08 - #5012 merged
+PR #5012 merged as e78e6b6433 (training export selects rows by the first-pass run q; TestBuildLibraryCarafeWizard fixed,
+its RT R2 bar 0.9 accepted by Brendan). All TeamCity checks green on the re-runs (the first Core and Osprey .NET runs failed
+only on an Inno Setup download, Docker on that dependency); GitHub's CodeQL csharp check failed on a bundle download 504 and
+could not be re-run. Next: merge master into #4823 and #5011 so their Windows builds lose the RtR2 failure.
