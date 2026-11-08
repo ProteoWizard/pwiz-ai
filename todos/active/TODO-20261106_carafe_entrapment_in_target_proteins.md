@@ -233,3 +233,16 @@ so a surviving decoy's target survives and TargetPeptideFor names it; null-pepti
 same unguarded lookup; LibraryProteinScores.Add ignoring out-of-range ids - documented, and the driver's version stamp check
 guards the stale-sidecar case.
 PR body still says "Draft, experimental" and leaves the TeamCity Perf/Regression item unchecked although 4256392 was SUCCESS.
+
+### 2026-11-08 - Finishing #4823 for merge (Brendan's call: finish it rather than hand back review comments)
+Brendan: both PRs should merge soon; a session stacking on #4850 already uses #5011, and that work is likely to remove the
+SecondPassFDR re-competition at every level. The PEP question (fit population, item 6 above) goes to Mike; items 1-2 stay open.
+Fixed on Nick's branch (833e1a2a31, pushed): OspreyBlibWriter writes RefSpectra.PeptidePep and Proteins.Pep (the #4848 columns
+Osprey had not filled; GroupPeps had reached nothing but a unit test), BlibOutputWriter passes entry.ExperimentPeptidePep and
+the group PEP (1.0 with no target winner), IOTest/SubsetPipelineTest/BlibComparer cover them, BlibGolden.ps1 pins them,
+regression-parallel.ps1 forwards -CreateGolden (recapture 18:47 wall vs ~2 h serial), 13-blib-output-schema.md lists six paired
+columns. Goldens: RefSpectra and Proteins recaptured on all four datasets; verified by stripping the new column and diffing
+(0 diffs, 0 empty values; `ai/.tmp/sessions/20261108-pwcontinue/check-goldens.ps1`); protein_fdr.tsv unchanged. Gates: Osprey
+656/656 + zero inspections; `regression-parallel.ps1 -Dataset All` 49/49 PASS in 41:59. PR body rewritten (no longer "draft";
+test plan current). TeamCity Osprey Perf/Regression triggered on pull/4823: build 4256524.
+#5011: merged Nick's branch (8d05d56cda), Osprey gate 656/656 + zero inspections; Stellar + StellarGenDecoyEntrap legs running.
