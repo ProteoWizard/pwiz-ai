@@ -216,6 +216,18 @@ the GBDT's lowest bin and the trees are the same. The one-peptide loss is theref
 library sibling; a protein detected by one peptide still has unscored-but-present siblings whose max is noise.
 That is the size question, which the size arms test.
 
+**Shape size does not recover proteins either** (`pb62-max-size`, F_decoy(max)^k, no sibling 0.5): 96,059
+targets at q 1% (paired 96,321), FDP on 1.03% own 0.05% pooled 0.72%, on-target find 88,756/95,748 at 0.5/1%
+(paired 89,931/96,209); real proteins 8,625 (paired 8,628), one-peptide 1,866, 68.1% of baseline one-peptide
+proteins kept. The column's growth with protein size is not what costs the proteins.
+
+**Most of the protein loss is false proteins** (`entprot62.py`, q <= 1%). Own-protein entrapment proteins are
+absent by construction and sit at r = 0.5 per target protein: off 190 detected (188 one-peptide), PB paired 10,
+PB size 15. Estimated false target proteins: off ~380 of 9,216 (~4% protein FDP), PB ~20 of 8,628. So of the
+net -588 proteins, ~360 are false proteins removed and ~230 are real proteins lost (~2.6% of real proteins);
+one-peptide: ~2,090 real -> ~1,840 (~-12%). Estimate assumes own-entrapment proteins match absent target
+proteins in size; on-target entrapment cannot test this (its peptides sit on detected proteins).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
