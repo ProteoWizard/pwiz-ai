@@ -191,3 +191,10 @@ could not be re-run. Next: merge master into #4823 and #5011 so their Windows bu
 Branch head 745e31dcee on #4823's branch; #5012 merged on master. Next: merge master into #4823, then #4823 into this branch,
 re-trigger the Windows builds, review. Demo deck complete at https://claude.ai/artifact/UWjptc8nhWU4zpFq51wLfy.
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261106_carafe_split_entrapment.md` before starting work.
+
+### 2026-11-08 - Master merged through the stack
+Merged origin/master (#5012, e78e6b6433) into Nick's branch (d40c3cf9a4, pushed) and Nick's branch into this one (e7cb10820b,
+pushed). Both gates green: Osprey build, 656/656 tests, zero inspections on each branch; on this branch `regression.ps1
+-Dataset Stellar` PASS (10 phases, 230 s) and `-Dataset StellarGenDecoyEntrap` PASS (12 phases, 363 s), no golden moved.
+TeamCity did not queue a Windows build (bt209) on pull/4823 after the push; manual triggers on pull/4823 and pull/5011
+need Brendan's okay. Copilot on #4823 (2026-10-11) was a quota refusal, not a review. Next: review #4823, then #5011.
