@@ -200,6 +200,13 @@ noise siblings rises with k) - consistent with PB + transfer keeping 68.5% of ba
 for absent large proteins. Candidate fixes: no-sibling rows as missing / a sibling-count column, size-normalised
 value (#4580).
 
+**62 files: PB costs proteins** (`onehit62.py`, q <= 1%, real proteins = target-class peptides): off 9,216 proteins
+(2,467 one-peptide), PB max paired 8,628 (1,859): -6.4% proteins while precursors rise ~14%. PB keeps 68.1% of the
+baseline one-peptide proteins, loses 849 proteins overall, gains 261 (on-target FDP 1%: 63.2%, lost 1,050). The gain
+lands on already-detected proteins (5+ peptides 4,289 -> 4,633). Shape arms running 2026-11-08 03:30
+(`pbshape62.ps1`, exe `_bin\n1108-pbshape`, `OSPREY_PROTEIN_BEST_SHAPE`=nosib | size | size-nosib, uncommitted on
+`nightlywork/20261107_protein_best_pass2` in pwiz-nightbase; ProteinBestFeatureTest passes).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
