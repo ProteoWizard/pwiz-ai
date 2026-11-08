@@ -154,8 +154,11 @@ protein-compact but still costs some; size normalisation (#4580) may help.
 | off | 84,576 | 0.69% | 192 | 81,828 / 87,738 |
 | PB max paired | 96,321 | 1.02% | 10 | 89,931 / 96,209 (+9.9% / +9.7%) |
 | PB mean-3 paired | 96,475 | 0.98% | 11 | 90,190 / 96,663 (+10.2% / +10.2%) |
+| mean-best-2 (`-ExperimentAgg`) | 86,017 | 0.69% | 172 | 83,361 / 89,266 (+1.9% / +1.7%) |
 
-The gain grows with run count (3 files: +4.6% / +6.6% sized) and reported FDP holds. To confirm on the sized split.
+The PB gain grows with run count (3 files: +4.6% / +6.6% sized) and reported FDP holds. mean-best-2 alone adds
++1.9% / +1.7% at unchanged FDP, and with no protein information its two placement halves stay together (199 on
+target vs 172 own). mean-best-2 + PB running 2026-11-08 00:00. To confirm on the sized split.
 
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
