@@ -301,6 +301,18 @@ run searched A01_005, A02_006, A03_007 (0001/0002/0003). Within-Osprey deltas st
 (SVM +9.5% vs --no-nn, -13% vs NN; GBDT PB -5%) do not. Matched runs queued (`m3.ps1`, `-IncludePattern
 'A01_005|A06_010|A10_014'`): SVM, SVM + PB, GBDT, GBDT + PB, transfer, log `runs-pb\m3.log`.
 
+**82-file timing (s82-off, 72 threads, 64 logical cores).** First-pass scoring ran 39,594 s for 82 files (11.0 h),
+files one at a time; coelution scoring 349 s/file mean, RT calibration 42 s. While it had the machine alone
+(00:48-03:32, 22 files) it averaged **7.4 min/file**; later files shared cores with the pb62/svm62/svm3 arms.
+Percolator first-pass FDR 2,270 s. DIA-NN 2.7.0 on the same 82 files (diann-search-82, 72 threads, --reanalyse)
+took 485.9 min total = **5.9 min/file for its whole search**, so Osprey's first pass alone is ~1.25x DIA-NN's
+full run, and a full Osprey run projects to ~12 h vs 8.1 h. Brendan's bar: Osprey must stay faster than DIA-NN
+(not as fast as the old ~2 h). Clean single-file ablations queued before the DIA-NN 82 sized run (`timing82.ps1`,
+A10_014, PerFileScoring, 72 threads, nothing else running): full, then each of XIC_FRAGMENTS=12,
+CORR_FRAGMENT_TOLERANCE, REF_XIC=corr, LOCAL_RT_TOLERANCE dropped, all dropped, the 26.1.1.301 exe, full again;
+log `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-timing\timing.log`.
+SVM at 82 files (`svm82.ps1`, FirstPassFDR on links to s82-off): off, PB, mean-best-2 + PB.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
