@@ -207,3 +207,29 @@ back onto its method (7b00951ce1, pushed). Local `Build-Skyline.ps1 -RunInspecti
 issues in Shared projects it could not restore (NU1105 "unable to find project information" for CarafeSharp.*, BiblioSpec.IO;
 318 in ProteowizardWrapper\MsDataFileImpl.cs) - environmental, TeamCity's inspection is the authority. bt209 did not auto-queue
 on pull/4823 after the d40c3cf9a4 push (pull/5011 queued within a minute).
+
+### 2026-11-08 - Review of #4823 (code-review medium, 9 findings, each verified against the code)
+Raise with Nick (ordered by weight):
+1. ProteinFdr.ComputeLibraryPickedProteinFdr: proteins that parsimony Step 3 dropped as proper subsets are in no group's
+   Accessions (dropped, not merged), so `!grouped.Contains(acc)` makes each a unit of its own, scored on the same peptides as
+   the retaining group - one peptide yields N+1 correlated winners. The doc says "each library protein in no group" meaning
+   never-detected proteins. Calibration (0.82% vs DIA-NN 0.90%) says the net effect is small, but it is a design gap.
+2. Same method: a group's score is the best first-pass score over every peptide of its accessions (LibraryProteinScores.ByProtein),
+   so config.SharedPeptides (Razor/Unique) no longer affects which peptide a group may win on; pass 1 (ComputeProteinFdr via
+   PeptideToGroupMap) still honours it. Design question, not a defect, but the two passes now disagree on the setting.
+3. docs/DIVERGENCES.md INTENT rows say the peptide PEP and protein-group PEP are "written to the blib as RefSpectra.PeptidePep /
+   Proteins.Pep". OspreyBlibWriter adds PrecursorQValue, PrecursorPep, PeptideQValue and the protein q only (#4848 defined the
+   columns; the Osprey write is the follow-up the PR body names). Doc fix.
+4. SecondPassFdrTask.ReadFirstPassProteinScores streams `.1st-pass.fdr_experiment.bin` a second time; Pass2FdrSidecar (line 712,
+   ReadMap) already holds the same records in pass1Experiment. Efficiency only; one record per scored precursor.
+5. Single-file second pass: FinishRecord reports experiment precursor q = run q (ExperimentQ short-circuits on !_multiFile) but
+   experiment peptide q from CompetePeptides, which has no single-file shortcut; pass 1 (PercolatorScorer isSingleFile ? rpe) keeps
+   exp == run. The FinishRecord comment reads as intentional; worth one sentence of why.
+6. ComputeLibraryGroupPeps fits the PEP over every unit including never-detected library proteins. The doc comment states that
+   intent; question whether the fit population should be the grouped units.
+Dropped (reason): decoy-per-charge split in CompetePeptides - compaction is pair-symmetric by base id (FirstPassFdrTask ~1490),
+so a surviving decoy's target survives and TargetPeptideFor names it; null-peptide ArgumentNullException at PercolatorScorer
+349 - peptides come from peptideById and are string.Empty, not null, in the stub case, and PercolatorQValues 1044 has used the
+same unguarded lookup; LibraryProteinScores.Add ignoring out-of-range ids - documented, and the driver's version stamp check
+guards the stale-sidecar case.
+PR body still says "Draft, experimental" and leaves the TeamCity Perf/Regression item unchecked although 4256392 was SUCCESS.
