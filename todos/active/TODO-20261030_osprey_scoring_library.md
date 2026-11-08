@@ -204,8 +204,17 @@ value (#4580).
 (2,467 one-peptide), PB max paired 8,628 (1,859): -6.4% proteins while precursors rise ~14%. PB keeps 68.1% of the
 baseline one-peptide proteins, loses 849 proteins overall, gains 261 (on-target FDP 1%: 63.2%, lost 1,050). The gain
 lands on already-detected proteins (5+ peptides 4,289 -> 4,633). Shape arms running 2026-11-08 03:30
-(`pbshape62.ps1`, exe `_bin\n1108-pbshape`, `OSPREY_PROTEIN_BEST_SHAPE`=nosib | size | size-nosib, uncommitted on
+(`pbshape62.ps1`, exe `_bin\n1108-pbshape`, `OSPREY_PROTEIN_BEST_SHAPE`=nosib | size | size-nosib, local commit 39fc1b55fe on
 `nightlywork/20261107_protein_best_pass2` in pwiz-nightbase; ProteinBestFeatureTest passes).
+
+**Shape nosib = floor, bit for bit** (`pb62-max-nosib`, fdrbench.tsv md5 705c3863... identical to
+pb62-max-paired). Not a dead switch: run.log shows `Shape: nosib` and the stored column
+(`read_pbsidecar.py` on `<stem>.1st-pass.protein_best.bin`) holds the sentinel. Almost nothing has no
+scored sibling: 1,334 of 4,403,242 entries in A01_005 (1,408 of 3.95M in A04_008), and the floor of a floor run
+(-13.9 in P2-pb-pc A01_005) already sits near the 0.1% quantile of real values, so floor and sentinel share
+the GBDT's lowest bin and the trees are the same. The one-peptide loss is therefore not about proteins with no
+library sibling; a protein detected by one peptide still has unscored-but-present siblings whose max is noise.
+That is the size question, which the size arms test.
 
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
