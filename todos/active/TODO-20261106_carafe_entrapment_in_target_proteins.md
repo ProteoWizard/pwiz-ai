@@ -164,3 +164,16 @@ accepted Astral precursors carry peptide q > 0.01 under #4823's one-winner-per-p
   protein-compact is to recover peptides of proteins already believed present, not to bolster the protein, which a
   max-score protein competition cannot do anyway. Test: 3-file split library, in-target half (184, 1.10%) should fall
   toward the own-protein half (11, 0.07%) with yield held.
+
+## TestBuildLibraryCarafeWizard fix (2026-11-08, PR #5012, branch Skyline/work/20261108_osprey_training_export_q from master)
+Bisected with the test: passes at abaf9155af, fails at ab7c6b21a7 (#4993). Cause: TrainingExportWriter selected rows by the
+2nd-pass run q, which #4993 made stratified (stratum and complement each vs their own decoys with their own +1); on the
+Stellar subset each half is under ~100 targets, so runs 20 and 22 exported 0 rows and run 21 only 102 -> one held-out row,
+R2 defined 0. Fix: the export selects by the first-pass run q (the whole-run, undepleted null); run_q_pass footer "1";
+wizard test bar 0.99 -> 0.9 (new split: 5 held-out peptides, pretrained 0.9153 -> fine-tuned 0.9598; reviewer's call).
+Gates: Osprey 653/653 + zero inspections, Stellar and StellarGenDecoyEntrap PASS (no golden moved), Skyline wizard/search/
+CodeInspection green. Must merge ahead of #4823 and #5011 (no merging with a known failure).
+
+TeamCity (2026-11-07/08): #4823 Osprey Perf/Regression 4256392 SUCCESS; #4823 Windows 4256391 fails only RtR2 (above),
+TestRInstaller (no r-project.org) and TestNativeMessageBox (flaky Save As lookup). #5011 Windows 4256406 at 745e31dcee fails
+only RtR2; #5011 Osprey gate 4256393 green at 85%. #5012: Windows 4256410 and Osprey gate 4256411 queued.
