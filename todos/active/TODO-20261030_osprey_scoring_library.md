@@ -272,6 +272,14 @@ SVM is 12.6% below GBDT at 62 files, calibrated (conservative), and mean-best-2 
 at startup (PB needs the two-round tree training); an agent is adding the two-round path and PB column for the SVM
 on local `nightlywork/20261108_svm_protein_best` (snapshot `_bin\n1108-svmpb`).
 
+**Osprey SVM, 3 files sized, transfer, no PB** (`read_svm3.py`; same 3 files and library as DIA-NN runs3):
+pass 1 68,415 at on-target FDP 1% (q ~2%), 62,183 at 0.5%; at reported q 1% 61,230, on 0.46%, own 0.44%.
+Pass 2 (transfer): 61,193 at q 1% (0.46%), 66,326 at q 2% (0.76%). Its FDRBench file holds only the 86,949 rows
+that reached pass 2, and the conservative SVM never reaches 1% FDP inside it, so the reader's '1% FDP' value
+(86,509) is just the file's end, not a find rate; pass 2 is bounded near pass 1's 68.4k. So: SVM ~68.4k vs
+DIA-NN --no-nn 62,473 (+9.5%), DIA-NN NN 78,666 (-13%), GBDT PB + transfer 74,643 (-8%). Within 10% of DIA-NN
+needs ~70.8k; PB gave GBDT +6.6% at 3 files, so SVM + PB is the arm to run next.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
