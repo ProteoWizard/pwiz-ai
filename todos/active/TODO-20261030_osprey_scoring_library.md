@@ -286,6 +286,21 @@ so mean-best-2 makes the SVM more conservative still (true 1% only at q ~2.5%). 
 q 1%, 63,362 at q 2% (0.39%), below pass 1, because only 86,949 rows reach pass 2. Still short of the 70.8k target;
 mean-best-2 is a small lever for the SVM. Readers: `ai/.tmp/sessions/20261104-night/read_svm3.py`, `qlevels.py`.
 
+**SVM two-round + PROTEIN_BEST (2026-11-08).** pwiz-nightbase `nightlywork/20261108_svm_protein_best` 3cd7072d50
+(local, on 39fc1b55fe): round-1 SVM fold models score every candidate (held-out fold for round-1 training rows,
+averaged weights otherwise), PB column and prefilter open to the SVM; OSPREY_GBT_OOF stays tree-only. Stellar
+regression PASSED; gate 682/683, the failure is TestEnvironmentReadThroughEnvVar on the base commit's
+OSPREY_PROTEIN_BEST_SHAPE help line (the shape switch is not shipping, so it goes with that commit). 3 files sized,
+transfer, on links to svm3-transfer: **SVM + PB 71,934 at on-target FDP 1%** (+5.1% over SVM off 68,415), 67,458
+at 0.5%; at q 1% 70,597 with on 0.81% / own 14 - PB also fixes the SVM's over-conservative q. Pass 2 71,915.
+vs GBDT PB + transfer 74,643: -3.6%.
+
+**CORRECTION: the 3-file Osprey vs DIA-NN comparisons were on different files.** DIA-NN runs3 (A2-sized,
+A2-sized-nonn, uniform) searched A01_005, A06_010, A10_014 (samples 0001/0005/0009); every Osprey `-NumFiles 3`
+run searched A01_005, A02_006, A03_007 (0001/0002/0003). Within-Osprey deltas stand; the Osprey/DIA-NN ratios above
+(SVM +9.5% vs --no-nn, -13% vs NN; GBDT PB -5%) do not. Matched runs queued (`m3.ps1`, `-IncludePattern
+'A01_005|A06_010|A10_014'`): SVM, SVM + PB, GBDT, GBDT + PB, transfer, log `runs-pb\m3.log`.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
