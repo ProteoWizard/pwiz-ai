@@ -294,6 +294,10 @@ OSPREY_PROTEIN_BEST_SHAPE help line (the shape switch is not shipping, so it goe
 transfer, on links to svm3-transfer: **SVM + PB 71,934 at on-target FDP 1%** (+5.1% over SVM off 68,415), 67,458
 at 0.5%; at q 1% 70,597 with on 0.81% / own 14 - PB also fixes the SVM's over-conservative q. Pass 2 71,915.
 vs GBDT PB + transfer 74,643: -3.6%.
+Split of the SVM gain (same 3 files, on-target find rate at FDP 1%, pass 1): off 68,415; two-round prefilter alone
+(OSPREY_GBT_PREFILTER_SIZE=200000, no PB) 69,822 (+2.1%, q 1% still conservative at 0.47%); + PB 71,934 (+3.0% more);
+mean-best-2 + PB 71,875 (no gain over PB alone; q 1% 68,264 at 0.57%, more conservative). As with GBDT, mean-best-2
+adds nothing once PB is on. Runs `runs-pb\seaad-3files-libdecoy-r1.0-transfersvm3-pf`, `...-transfer-mean-best-2svm3-mb2-pb`.
 
 **CORRECTION: the 3-file Osprey vs DIA-NN comparisons were on different files.** DIA-NN runs3 (A2-sized,
 A2-sized-nonn, uniform) searched A01_005, A06_010, A10_014 (samples 0001/0005/0009); every Osprey `-NumFiles 3`
