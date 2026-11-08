@@ -122,6 +122,7 @@ $categories = @{
     "Diagnostic scripts" = @()
     "Python scripts"    = @()
     "Handoff files"     = @()
+    "Night-session logs" = @()
     "Installer binaries" = @()
     "Localization"      = @()
     "Other"             = @()
@@ -139,6 +140,8 @@ foreach ($file in $toDelete) {
         $categories["Diagnostic scripts"] += $file
     } elseif ($name -match '\.py$') {
         $categories["Python scripts"] += $file
+    } elseif ($name -match '^night-session-budget') {
+        $categories["Night-session logs"] += $file
     } elseif ($name -match '^handoff-') {
         $categories["Handoff files"] += $file
     } elseif ($name -match '\.(zip|msi|exe)$') {

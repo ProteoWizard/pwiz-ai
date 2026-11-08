@@ -75,7 +75,7 @@ exceed its precursor q (picked-peptide, best against best by base id); intended,
 ### 2026-11-07 - Protein evidence (OSPREY_PROTEIN_BEST), pass-2 refit root cause, 3/62/82-file placement audit
 Session folder `ai/.tmp/sessions/20261104-night` (library builders `lib_*.py`, readers `read_sized.py`, `read_refit.py`,
 `onehit_sized.py`, `read_fdr_sidecar.py`, `read_pb62.py`, chains `pb62-chain.ps1`, `pb62-mb2.ps1`, `s82-chain.ps1`);
-runs under `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-pb` (MACS2); minute-by-minute log `ai/.tmp/night-session-budget.md`.
+runs under `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-pb` (MACS2); minute-by-minute log `ai/.tmp/night-session-budget-20261107.md` (MACS2, not committed).
 All numbers are real targets at entrapment FDP 0.5% / 1% read on the on-target half of the split (combined estimator
 e(1+1/r)/(t+e)), "q1" = entrapment FDP at reported q 1%. B env: OSPREY_XIC_FRAGMENTS=12, FDR_MODEL=gbdt, LOESS_BANDWIDTH
 0.10, MIN_RT_TOLERANCE 1.0, GBT_OOF=1, GBT_PREFILTER_SIZE 200000, TC_HALF_WINDOW 0.40, CORR_FRAGMENT_TOLERANCE 7,

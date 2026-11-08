@@ -97,6 +97,16 @@ is not a reason to keep a worktree, but mention it before removing.
 
 5. **Execute** the same command without `-WhatIf`, then report the before and after.
 
+### Night-session budget logs
+
+`/night-session` writes one dated log per night, `night-session-budget-<YYYYMMDD>.md`
+(the script reports them as "Night-session logs"). Each is a minute-by-minute timeline
+whose findings should already be in a TODO. Before deleting one, check that the TODO it
+served carries its results (search the TODOs for the log's file name or the night's
+date); if it does not, promote the missing findings first, as for any durable file. An
+undated `night-session-budget.md` predates the dated scheme: rename it by its start date
+(the "Start:" line) rather than deleting it.
+
 ## Phase 2 - the test data area
 
 The test data root is machine-specific (on BRENDANX-UW8 it is `D:\test`). Treat it as

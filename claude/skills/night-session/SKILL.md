@@ -36,14 +36,31 @@ a wrong guess wastes hours and forces the user to cancel and redirect.
 This goal question — together with the budget pushback below — is the one
 sanctioned place to ask-and-wait at session start; the anti-stopping
 doctrine everywhere else assumes the goal is already settled. Once the
-goal is set, record it at the top of `ai/.tmp/night-session-budget.md`
+goal is set, record it at the top of the night's budget log (below)
 and don't ask further clarifying questions unless genuinely blocked.
+
+### The budget log is dated, one file per night
+
+Write it to `ai/.tmp/night-session-budget-<YYYYMMDD>.md`, dated by the
+session's start, never to an undated `night-session-budget.md`. Before
+writing, check whether that name exists: if another session already
+owns tonight's file, use `-<YYYYMMDD>-2.md`. **Never overwrite an earlier
+night's log.** The undated name was reused every night, and each new
+session overwrote the last one's timeline; the Osprey scoring-library
+sprint lost a week of findings that way (2026-11-07).
+
+The log is scratch, not the record. Every finding, commit and decision
+also goes into the active TODO as it lands, and the TODO is pushed:
+other sessions and developers read the TODO, never this file. Cite the
+log's dated path in the TODO entry so the timeline can be found while it
+still exists. `/pw-cleanup` deletes old logs once their content is in a
+TODO (see "Night-session budget logs" in `ai/docs/cleanup-guide.md`).
 
 ## First step: measure your starting position
 
 Before any other work, run two measurements and write them down where
 you can refer back later (a `TaskCreate` description, a note at the top
-of the session log, or `ai/.tmp/night-session-budget.md`):
+of the session log, or the dated `ai/.tmp/night-session-budget-<YYYYMMDD>.md`):
 
 1. **Time**: `pwsh -Command "Get-Date"` — what time is it locally,
    and when does the user expect to wake (ask if unclear, default to
