@@ -77,6 +77,19 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       by hand: release stores WebEnabledFastaImporter.cs and FastaImporterTest.cs as CRLF (whole-file
       conflict), lacks IsTransient, and .NET Framework has no HttpStatusCode.TooManyRequests (added
       HTTP_TOO_MANY_REQUESTS = 429). Offline, live web and inspection tests green
+- [x] Fifth review round: the 333ms per-batch Entrez wait duplicated WaitForEntrezRequestInterval,
+      so it was removed (ENTREZ_RATELIMIT 0). That exposed a real gap: the Entrez clock was per
+      importer, so a new importer's first request was not spaced from the previous one's last
+      (live Entrez 429 in record mode; TestEntrezRequestSpacing extended to two importers went red
+      at 342ms, then green). The clock is now static under a lock. Dropped: routing the spacing
+      through the cancellable WaitForRateLimit seam (at most 400ms), MapHttpRequestException not
+      copying RetryAfter (that path never carries a 429 response). RECORDED_API_DEPLOYMENT_DATE
+      kept at 06-November-2026 and its doc reworded: a re-record experiment changed only data
+      drift in WebData.json (ContentType spacing, row order, a few unreviewed entries), no new
+      URLs or format, so the recordings were left alone. #5008 pushed ec2915f747; ported to
+      #5010 ce22f2b149 (build, FASTA/ProteomeDb tests incl. live web, -RunInspection 0/0)
+- [ ] UniProt deployed new API code on 07-November-2026 (warning fires); live web tests pass
+      against it - decide whether to bump RECORDED_API_DEPLOYMENT_DATE
 - [ ] Carry any later #5008 review changes over to #5010; merge #5010 after #5008
 
 ## Notes
