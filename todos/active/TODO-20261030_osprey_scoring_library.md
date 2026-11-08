@@ -188,6 +188,18 @@ showed when one-peptide-per-protein Carafe labels disabled it. To do when promot
 only the env var), the active setting in run.log and in the output metadata, and a test that off reproduces the
 pre-PB results bit for bit.
 
+**What the PB column is (read from `ProteinBestFeature.cs`, 2026-11-08), and where it differs from the
+protein-level competition score.** Per run, from round-1 scores: each peptide reduced to its best row (all charges,
+all candidate peaks); a candidate reads max (or top-N mean) over the OTHER peptides of its protein, own peptide
+excluded; no sibling -> floor = median of the run's decoy precursor best scores; shared peptide -> max over
+accessions. Paired decoy: reads exactly its target's value (decoy scores never enter). So the column is identical
+within each target/decoy pair: it sets a per-pair prior, not a target-vs-decoy signal. Differences from protein
+FDR: self excluded, per run not experiment-wide, decoys do not form decoy proteins. Consequences to measure: (1)
+one-peptide proteins always read the floor, which is below what an absent multi-peptide protein reads (max of k
+noise siblings rises with k) - consistent with PB + transfer keeping 68.5% of baseline singletons; (2) size bias
+for absent large proteins. Candidate fixes: no-sibling rows as missing / a sibling-count column, size-normalised
+value (#4580).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
