@@ -186,3 +186,8 @@ PR #5012 merged as e78e6b6433 (training export selects rows by the first-pass ru
 its RT R2 bar 0.9 accepted by Brendan). All TeamCity checks green on the re-runs (the first Core and Osprey .NET runs failed
 only on an Inno Setup download, Docker on that dependency); GitHub's CodeQL csharp check failed on a bundle download 504 and
 could not be re-run. Next: merge master into #4823 and #5011 so their Windows builds lose the RtR2 failure.
+
+### 2026-11-08 - Handoff
+Branch head 745e31dcee on #4823's branch; #5012 merged on master. Next: merge master into #4823, then #4823 into this branch,
+re-trigger the Windows builds, review. Demo deck complete at https://claude.ai/artifact/UWjptc8nhWU4zpFq51wLfy.
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261106_carafe_split_entrapment.md` before starting work.
