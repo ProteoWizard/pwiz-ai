@@ -31,6 +31,18 @@ preference: it never recompetes, so it needs no special audit to justify), exper
 (OSPREY_EXPERIMENT_AGG=mean-best-N) at 62-82 runs, and an experiment-wide qualify gate for protein-compact. Brendan
 (2026-11-07): about 5% behind DIA-NN is close enough for a first Osprey beta, given a start more than 50% behind.
 
+## Target design (Brendan, 2026-11-08)
+
+- Remove protein-compact: an inferior, statistically questionable way to get the same protein knowledge PB gives.
+- PROTEIN_BEST on by default, with a switch to turn it off (transparency DIA-NN lacks).
+- Keep mean-best-N available but off by default unless it beats PB alone at scale.
+- PerFileRescoring always uses transfer for FDR estimation; no recompeting (unneeded without protein-compact, and
+  hard to explain).
+- Calibration must be shown at scale: 3 files is easy. Accepted for now that own-protein FDP reads near zero under PB,
+  because the on-target half shows the peptide-level FDP is honest. Evidence at scale: the s82 chain (82 files, sized
+  split: mb2, mb2 + PB, transfer, PB + transfer) and DIA-NN 2.7.0 on the same 82 files and library
+  (`diann82sized.ps1`, queued behind S82DONE, output `diann-vs-osprey\seaad\bisect\runs82\A2-sized`).
+
 ## Standing rules for this phase
 - Read every number on the on-target half of the split (combined estimator e(1+1/r)/(t+e)); own-protein entrapment
   collapses under any protein-aware step and is not an FDP reading.
