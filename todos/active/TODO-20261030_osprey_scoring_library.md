@@ -280,6 +280,12 @@ that reached pass 2, and the conservative SVM never reaches 1% FDP inside it, so
 DIA-NN --no-nn 62,473 (+9.5%), DIA-NN NN 78,666 (-13%), GBDT PB + transfer 74,643 (-8%). Within 10% of DIA-NN
 needs ~70.8k; PB gave GBDT +6.6% at 3 files, so SVM + PB is the arm to run next.
 
+**SVM + mean-best-2, 3 files sized, transfer (2026-11-08 11:22).** On links to svm3-transfer. Pass 1: 69,616 at
+on-target FDP 1% (+1.8% over SVM off 68,415), 64,326 at 0.5% (+3.4%); at q 1% 60,343 with on 0.29% / own 0.27%,
+so mean-best-2 makes the SVM more conservative still (true 1% only at q ~2.5%). Pass 2 (transfer) by q: 60,313 at
+q 1%, 63,362 at q 2% (0.39%), below pass 1, because only 86,949 rows reach pass 2. Still short of the 70.8k target;
+mean-best-2 is a small lever for the SVM. Readers: `ai/.tmp/sessions/20261104-night/read_svm3.py`, `qlevels.py`.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
