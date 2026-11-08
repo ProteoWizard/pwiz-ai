@@ -228,6 +228,11 @@ net -588 proteins, ~360 are false proteins removed and ~230 are real proteins lo
 one-peptide: ~2,090 real -> ~1,840 (~-12%). Estimate assumes own-entrapment proteins match absent target
 proteins in size; on-target entrapment cannot test this (its peptides sit on detected proteins).
 
+**Shape size-nosib: the same** (`pb62-max-size-nosib`): 96,313 targets, FDP on 1.04% own 0.05%, on-target find
+88,359/95,991; 8,636 real proteins (1,836 one-peptide), 68.6% of baseline one-peptide proteins kept, 15 own-entrapment
+proteins. Conclusion of the three shapes: keep the default floor shape; none moves proteins or find rate beyond noise,
+and the switch need not ship. The cost of PB at the protein level is ~230 real proteins for ~360 false ones removed.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
