@@ -198,3 +198,12 @@ pushed). Both gates green: Osprey build, 656/656 tests, zero inspections on each
 -Dataset Stellar` PASS (10 phases, 230 s) and `-Dataset StellarGenDecoyEntrap` PASS (12 phases, 363 s), no golden moved.
 TeamCity did not queue a Windows build (bt209) on pull/4823 after the push; manual triggers on pull/4823 and pull/5011
 need Brendan's okay. Copilot on #4823 (2026-10-11) was a quota refusal, not a review. Next: review #4823, then #5011.
+
+### 2026-11-08 - Skyline code inspection on #5011
+TeamCity bt209 4256438 (e7cb10820b, auto-queued on pull/5011 after the push) was SUCCESS on tests (RtR2 gone) but the
+"Skyline code inspection" status failed with 2 InvalidXmlDocComment warnings at BuildLibraryCarafeWizardTest.cs(610): commit
+188a853ab5 inserted the Accession helper between ShowAndDismissMessage's summary and its method. Fixed by moving the summary
+back onto its method (7b00951ce1, pushed). Local `Build-Skyline.ps1 -RunInspection` no longer lists the file, but reports 432
+issues in Shared projects it could not restore (NU1105 "unable to find project information" for CarafeSharp.*, BiblioSpec.IO;
+318 in ProteowizardWrapper\MsDataFileImpl.cs) - environmental, TeamCity's inspection is the authority. bt209 did not auto-queue
+on pull/4823 after the d40c3cf9a4 push (pull/5011 queued within a minute).
