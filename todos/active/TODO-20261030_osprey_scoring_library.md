@@ -312,6 +312,10 @@ A10_014, PerFileScoring, 72 threads, nothing else running): full, then each of X
 CORR_FRAGMENT_TOLERANCE, REF_XIC=corr, LOCAL_RT_TOLERANCE dropped, all dropped, the 26.1.1.301 exe, full again;
 log `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-timing\timing.log`.
 SVM at 82 files (`svm82.ps1`, FirstPassFDR on links to s82-off): off, PB, mean-best-2 + PB.
+s82-off pass-2 rescoring (protein-compact, 72 threads, sharing cores with the 3-file arms) runs ~3 min/file, so
+~4 h for 82 files: a full Osprey 82-file run projects to ~16 h vs DIA-NN 8.1 h. Queue reordered (`night2.ps1`):
+timings right after s82-off, then s82-pb-transfer beside svm82, s82-transfer, s82-mb2, s82-mb2-pb, then DIA-NN 82
+sized; s82-pb-pc dropped.
 
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
