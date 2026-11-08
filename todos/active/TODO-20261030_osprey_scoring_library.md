@@ -181,6 +181,13 @@ Own:on counts by q (`read_pb62_counts.py`): off 1:1.0 at every q from 0.5% to 5%
 PB max 1:77 at 0.5%, 1:33 at 1%, 1:11 at 5%; mean-best-2 + PB 1:43, 1:28, 1:9 (own 12 vs 10 at 1%, 214 vs 181 at
 5%). PB sets the ratio; mean-best-2 softens it slightly without changing the find rate.
 
+**Decision (Brendan, 2026-11-08): PB on by default, with a documented switch to turn it off.** Reason: PB is the
+same score the protein-level competition uses, applied through paired decoys, and the #5011 split audits it
+(own half = protein-level question, on-target half = peptide-level). DIA-NN has no such switch; its protein use only
+showed when one-peptide-per-protein Carafe labels disabled it. To do when promoting: a real CLI/config option (not
+only the env var), the active setting in run.log and in the output metadata, and a test that off reproduces the
+pre-PB results bit for bit.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
