@@ -88,8 +88,8 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       drift in WebData.json (ContentType spacing, row order, a few unreviewed entries), no new
       URLs or format, so the recordings were left alone. #5008 pushed ec2915f747; ported to
       #5010 ce22f2b149 (build, FASTA/ProteomeDb tests incl. live web, -RunInspection 0/0)
-- [ ] UniProt deployed new API code on 07-November-2026 (warning fires); live web tests pass
-      against it - decide whether to bump RECORDED_API_DEPLOYMENT_DATE
+- [x] UniProt deployed new API code on 07-November-2026; live web tests passed against it, so
+      RECORDED_API_DEPLOYMENT_DATE -> 07-November-2026. #5008 376282c23b, #5010 ab997675b4
 - [ ] Carry any later #5008 review changes over to #5010; merge #5010 after #5008
 
 ## Notes
