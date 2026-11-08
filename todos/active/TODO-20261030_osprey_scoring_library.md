@@ -177,6 +177,9 @@ With PB the standard reading reports FDP 30x below the reported q (own find rate
 96k), and a pooled library hides the on-target 1.02% as 0.70%. PB is therefore invisible to the standard method:
 only the split reading audits it. For scale, DIA-NN (3 files, uniform split, final) keeps own 83 vs on-target 160
 at q1, about 1:2; Osprey PB keeps 10 vs ~330, about 1:33. Without PB Osprey is 1:1 (192 vs ~196).
+Own:on counts by q (`read_pb62_counts.py`): off 1:1.0 at every q from 0.5% to 5%; mean-best-2 1:1.2 / 1:1.0;
+PB max 1:77 at 0.5%, 1:33 at 1%, 1:11 at 5%; mean-best-2 + PB 1:43, 1:28, 1:9 (own 12 vs 10 at 1%, 214 vs 181 at
+5%). PB sets the ratio; mean-best-2 softens it slightly without changing the find rate.
 
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
