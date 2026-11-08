@@ -266,3 +266,31 @@ Stacked on #4998. Commits dd94ef9d00, 8211bc3a37. Masked by default and HRAM onl
 ### 2026-11-06 - #4993 merged
 
 PR #4993 merged as ab7c6b21a7 (master merged in first, b02849d607: README conflict only, nothing to register in the EnvVar catalog; all-datasets regression 49/49 against the re-banked goldens; the four required TeamCity checks green; no Perf/Regression re-run by Brendan's decision). Shipped: stratum and complement compete separately against their own decoys at run and experiment scope; goldens re-banked on all four datasets; docs/protein-shuffled-entrapment.md. Not addressed here: the stratum's own residual protein-aware FDP under GBDT out-of-fold (training rows rescored with the averaged model).
+
+### Note from the entrapment-in-target-proteins session (2026-11-07, Brendan asked it be left here)
+Please review `TODO-20261106_carafe_entrapment_in_target_proteins.md` (PR #5011, branch
+`Skyline/work/20261106_carafe_split_entrapment`, now stacked on #4823's branch) before measuring a transfer-based pass 2.
+What it gives you for testing a pass 2 that does not recompete:
+- **The oracle.** `--model-diagnostics` now splits the entrapment FDP by protein placement (entrapment on real target
+  proteins vs on its own proteins) and adds a protein-group FDP card. A pass with no protein information gives the two
+  halves the same curve (pass 1 does: 106 vs 123 at q 1% on 3 files). protein-compact pass 2 reads 184 on target proteins
+  (1.10%) vs 11 own (0.07%) while the standard design reports 0.07%: that gap is what recompeting against the depleted
+  null buys. Success criterion for your transfer-based pass 2: the halves stay together in pass 2 with the yield held
+  (51,384 targets at q 1% on the first 3 SEA-AD files). Any first-pass protein-evidence feature (#4580) must reach decoys
+  through their paired target's protein, or the halves separate one pass earlier.
+- **Libraries** (D:\test\osprey-runs\sea-ad\lib on BRENDANX-UW25; derive your own elsewhere with
+  `ai/scripts/Osprey/Library/Build-ProteinShuffledEntrapment.py --in-targets 0.5` on any Carafe-layout library):
+  `target+decoy+entrapment-arabidopsis-split` (1:1, half on target proteins), `-r0.2-split` (10% + 10%), unsplit twins.
+  The Carafe-built Arabidopsis library has 82 merged decoy/target rows the libdecoy loader refuses; they are dropped from
+  these manifests (`find-merged-rows.py` in the session folder does it for another copy).
+- **Reader**: `read-placement.py <run dir>` (C:\proj\ai\.tmp\sessions\20261106-carafe-entrap) prints both passes at q 1%
+  from the stored products; no HTML needed. Exe snapshots there: `_bin\split-entrap-20261106`, `_bin\before-4993`,
+  `_bin\stack-4823-5011`.
+- **Numbers to beat/keep** (3 files, 1:1 split): before #4993 pass 2 219 on targets / 73 own, 67 entrapment-only protein
+  groups; after #4993 184 / 11, 5 groups; with #4823 stacked the precursor level is unchanged and the protein card gets a
+  real q axis (3,887 groups at protein q 1%, 2 entrapment-only vs 19 expected).
+Open questions you may hit: (1) 1:1 split vs unsplit differ in pass 1 (34,682 vs 33,978 targets on one file) where the
+20% pair is bit-identical; cause unknown, so compare split against split. (2) Brendan's proposal: choose any protein
+stratum by a pass-1 protein q from the full-library picked-protein competition, never by target-peptide counts or
+per-run q (#4581); a transfer design that never recompetes sidesteps it. (3) Under #4823 a precursor's peptide q can
+exceed its precursor q (picked-peptide, best against best by base id); intended, filter at the level you mean.
