@@ -7,7 +7,10 @@
 - **Base**: Mike's FDR-gap branch (TODO-20261028_osprey_diann_fdr_gap.md), then `master`
 - **Module**: `osprey`
 - **Created**: 2026-10-30
-- **Status**: Rebased onto Mike's PR #4950 (80f7c2469d; FDR-load mask OSPREY_FEATURE_MASK). 89 features, new ones masked
+- **Status (2026-11-07)**: Protein-evidence and pass-2 work on local branches in `pwiz-nightbase` (none pushed):
+  OSPREY_PROTEIN_BEST, the refit bandwidth fix and OSPREY_RECON_REFIT=off; best Osprey is PROTEIN_BEST + transfer,
+  5-6% behind DIA-NN final on the size-weighted split audit (3 files) (see 2026-11-07 entry). 82-file sized-split chain in flight.
+- **Status (earlier)**: Rebased onto Mike's PR #4950 (80f7c2469d; FDR-load mask OSPREY_FEATURE_MASK). 89 features, new ones masked
   by default. Best: GBDT, time-correlation family, half-window 0.25 min: 50,537 at FDP 0.5% on SEA-AD 3 files
   (3-seed mean; SVM all47 40,922; DIA-NN 68,418). Night 2026-10-30 log: `ai/.tmp/night-session-budget.md`.
 
@@ -301,3 +304,116 @@ Open questions you may hit: (1) 1:1 split vs unsplit differ in pass 1 (34,682 vs
 stratum by a pass-1 protein q from the full-library picked-protein competition, never by target-peptide counts or
 per-run q (#4581); a transfer design that never recompetes sidesteps it. (3) Under #4823 a precursor's peptide q can
 exceed its precursor q (picked-peptide, best against best by base id); intended, filter at the level you mean.
+
+### 2026-11-07 - Protein evidence (OSPREY_PROTEIN_BEST), pass-2 refit root cause, 3/62/82-file placement audit
+Session folder `ai/.tmp/sessions/20261104-night` (library builders `lib_*.py`, readers `read_sized.py`, `read_refit.py`,
+`onehit_sized.py`, `read_fdr_sidecar.py`, `read_pb62.py`, chains `pb62-chain.ps1`, `pb62-mb2.ps1`, `s82-chain.ps1`);
+runs under `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-pb` (MACS2); minute-by-minute log `ai/.tmp/night-session-budget.md`.
+All numbers are real targets at entrapment FDP 0.5% / 1% read on the on-target half of the split (combined estimator
+e(1+1/r)/(t+e)), "q1" = entrapment FDP at reported q 1%. B env: OSPREY_XIC_FRAGMENTS=12, FDR_MODEL=gbdt, LOESS_BANDWIDTH
+0.10, MIN_RT_TOLERANCE 1.0, GBT_OOF=1, GBT_PREFILTER_SIZE 200000, TC_HALF_WINDOW 0.40, CORR_FRAGMENT_TOLERANCE 7,
+REF_XIC=corr, LOCAL_RT_TOLERANCE 15, FDR_SEED 1, FEATURE_MASK none.
+
+**Comparing with DIA-NN.** The Osprey vs DIA-NN gap depends on how entrapment is annotated in the library (Carafe's
+per-peptide `_pepNNNNN` accessions vs real protein grouping); never quote a gap without stating it. Bisection detail
+is kept privately. Osprey pass 1 uses no protein information (bit-identical across label variants).
+
+**Audit design.** #5011 split: half the entrapment moved onto target proteins, half on its own proteins. The on-target
+half is the auditable reading; the own half collapses under any protein-aware step. The uniform draw by accession
+under-reads protein boosts: target peptides land on detected proteins 38.7% vs moved entrapment 31.3% (1.24x;
+`placement_bias.py`). Size-weighted variant (`lib_split_entrap.py --sized`, draw proportional to a protein's target
+peptides) corrects it: `D:\Users\brendanx\test\osprey-runs\lib\astral\target+decoy+entrapment-20260817-split-sized`.
+Pass 1 off is identical on both libraries (control).
+
+**Pass-2 loss root cause (CalibrationRefit).**
+- `CalibrationRefit.Refit` hardcoded LOESS span 0.3, ignoring OSPREY_LOESS_BANDWIDTH=0.10. The refit missed the gradient
+  end by +0.5 to +1.4 min after 20 min; 6,217 real pass-1 IDs were force-integrated at the wrong RT and floored above q 1%
+  (5,845 elute >= 17 min); only 43 entrapment lost.
+- Fix 4eda4a820a (`nightlywork/20261107_refit_bandwidth` from c0c2bcd43c): `Refit(..., double bandwidth =
+  DEFAULT_BANDWIDTH)`, planner passes `config.RtCalibration.LoessBandwidth`; test
+  TestRefitFollowsGradientEndAtConfiguredBandwidth; gate 679/679, inspection 0. Transfer 58,568 / 62,704 -> 61,860 /
+  66,040; protein-compact 63,962 / 68,989 -> 67,404 / 72,648.
+- Residual: 2,665 still moved at the late bend (refit residual 0.2-0.3 min at 18-22 min vs the 0.1-min tolerance floor),
+  231 same-apex score changes (pass-2 rescoring uses the fold-mean model, pass 1 OOF), ~180 from the coarse score-to-q
+  table near 1%.
+- 06e3c9a131 OSPREY_RECON_REFIT=off (throws on other values): plan reconciliation with the first-pass calibration.
+  Transfer pass 2 then equals pass 1 (64,556 / 68,644 vs 64,312 / 68,600): the loss is gone. Gate 679/679.
+- Open: whether the refit earns its place at all; if kept, it needs a span that follows the gradient end.
+
+**OSPREY_PROTEIN_BEST** (Brendan's protein-best-N proposal).
+- Round-2 GBDT column through the prefilter seam (`TrainWithScorePrefilter`; needs gbdt and OSPREY_GBT_PREFILTER_SIZE):
+  per protein, max (or mean of top N) of round-1 scores. OSPREY_PROTEIN_BEST=max|mean-N, _DECOY=paired|own, _SHUFFLE.
+- Decoys must read their PAIRED target's protein evidence. "own" collapses FDR; shuffle control flat.
+- Trial 0288321816 on `Skyline/work/20261107_osprey_protein_best_n` (`Osprey.FDR/ProteinBestFeature.cs` + tests).
+  Through pass 2: e8e5beda58 (merge of the refit branch) + c213f37184 on `nightlywork/20261107_protein_best_pass2`,
+  gate 682/682; per-run sidecar `<stem>.1st-pass.protein_best.bin` (OSPRYPBC v1, entry_id -> value, plus floor).
+  Rescored rows use the persisted value; rows without one and all gap fills get the floor.
+  **Decision for Brendan**: the gap-fill floor (conservative choice).
+- Decoy origin (`read_fdr_sidecar.py`, `results_summary.txt`, 3 files, q <= 1%): own-protein entrapment 124 -> 11 and its
+  decoys 204 -> 30 together; the entrapment share in the top N of the own pool is unchanged, so the collapse of the own
+  half is symmetric and decoy competition stays fair there. The decoy budget moves into the detected stratum
+  (target decoys passing 276 -> 456; target:decoy 243 -> 165).
+- Exe snapshots: `_bin\n1107-proteinbest` (trial), `n1107-refitbw`, `n1107-norefit`, `n1107-pb-pass2` (all features),
+  `n1106night-b` (baseline B, contains #4993).
+
+**3 files, size-weighted split** (`read_sized.py`):
+
+| Arm | FDP 0.5% / 1% | q1 FDP |
+|---|---|---|
+| DIA-NN final (aggregate, for scale) | 73,765 / 78,666 | 0.59% |
+| PB max + transfer, no refit | 69,060 / 74,643 | 0.91% |
+| PB max + protein-compact, no refit | 69,001 / 74,413 | 1.47% |
+| PB max, pass 1 | 68,700 / 74,378 | 1.03% |
+| protein-compact, no refit | 68,465 / 73,918 | 1.55% |
+| protein-compact, refit bandwidth fixed (uniform split) | 67,404 / 72,648 | 1.30% |
+| today's default (protein-compact, old refit) | 62,309 / 67,721 | 1.42% |
+| pass 1 off | 65,656 / 69,794 (uniform) | |
+
+Only PROTEIN_BEST arms report at or under 1%; protein-compact overshoots by ~50% at q 1%, consistent with its
+per-run q < 1% union stratum hiding false discoveries. PB + transfer is 6.4% / 5.1% behind DIA-NN final. Transfer is
+the pass-2 design that never recompetes, so it needs no new audit method to justify it (Brendan: the long-standing
+preference; #4823 and #5011 are what make it the clear answer).
+
+**One-peptide proteins** (`onehit_sized.py`, matched on-target FDP 1%, final): baseline 2,373 real proteins with one
+peptide; PB + transfer still detects 68.5% of them, protein-compact 51.4%. Real proteins detected 8,556 / 7,865 / 7,518
+(baseline / PB / protein-compact). Uniform split at q <= 1%: 2,263; 74.8% vs 54.0%. PB costs fewer singletons than
+protein-compact but still costs some; size normalisation (#4580) may help.
+
+**62 files, uniform split, pass 1** (`read_pb62.py`; the 82-file baseline ran out of disk after scoring files
+0001-0062, so each arm is FirstPassFDR on hard links to those 62 score files, ~30 min each):
+
+| Arm | q 1% targets | q1 FDP | own at q1 | FDP 0.5% / 1% |
+|---|---|---|---|---|
+| off | 84,576 | 0.69% | 192 | 81,828 / 87,738 |
+| PB max paired | 96,321 | 1.02% | 10 | 89,931 / 96,209 (+9.9% / +9.7%) |
+| PB mean-3 paired | 96,475 | 0.98% | 11 | 90,190 / 96,663 (+10.2% / +10.2%) |
+
+The gain grows with run count (3 files: +4.6% / +6.6% sized) and reported FDP holds. To confirm on the sized split.
+
+**Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
+gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
+on hard links: ~30 min at 62-82 files instead of 6-8 h.
+
+**Disk.** The split library nearly doubles candidates (6.18M per file): ~3.9 GB of scores per file, the same again
+reconciled in pass 2. Freed ~1.4 TB on D: (now ~1.4 TB free): unregistered the WSL distro OspreyLinux (CHS 446-file
+and SEA-AD Linux runs; logs, diagnostic HTML, stats and protein groups in
+`D:\Users\brendanx\test\osprey-runs\_archive\wsl-OspreyLinux`; rootfs tarball kept in `D:\WSL`), deleted the TDP-43
+.raw on D: (spectra.bin on E:) and this session's 3-file parquets.
+
+**In flight (2026-11-07 23:00 PST).**
+- `pb62-mb2.ps1`: 62 files, OSPREY_EXPERIMENT_AGG=mean-best-2 alone and with PB max (log `runs-pb\pb62.log`).
+- `s82-chain.ps1` (log `runs-pb\s82.log`): 82 files, size-weighted split, refit off, one exe `_bin\n1107-pb-pass2`:
+  baseline (all stages, protein-compact pass 2), then FirstPassFDR-only mean-best-2 and mean-best-2 + PB, then
+  transfer, PB + transfer, PB + protein-compact (Stage 5 onward on links; reconciled parquets dropped after each
+  arm's pass-2 FDRBench).
+
+**Next.**
+- Read the 82-file arms: does PB + transfer hold, is the transfer-only arm honest (halves stay together, per the note
+  from the #5011 session above), does protein-compact's per-run union inflate FDP at scale.
+- Experiment-wide qualify gate for protein-compact: OSPREY_PROTEIN_COMPACT_QUALIFY was never committed on any pwiz
+  branch (`-QualifyBy experiment` in Run-SeaAd.ps1 is a no-op); design in
+  TODO-20260804_osprey_pass2_ab_and_library_production.md; separate OSPREY_PROTEIN_COMPACT_QUALIFY_FDR; the runner should
+  refuse it on builds that cannot honour it. Mike's protein-compact testing was at ~3 files.
+- Pass-2 consistency: OOF vs fold-mean rescoring; a finer score-to-q table.
+- PB refinements: size normalisation (#4580), feedback each iteration.
+- Eventually one PR, possibly into #4850. Nothing to GitHub until Brendan says.
