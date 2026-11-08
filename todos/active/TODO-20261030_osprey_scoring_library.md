@@ -321,6 +321,37 @@ s82-off pass-2 rescoring (protein-compact, 72 threads, sharing cores with the 3-
 timings right after s82-off, then s82-pb-transfer beside svm82, s82-transfer, s82-mb2, s82-mb2-pb, then DIA-NN 82
 sized; s82-pb-pc dropped.
 
+**Matched 3 files: calibration and find rate, Osprey vs DIA-NN (2026-11-08 15:20).** A01_005, A06_010, A10_014, size-
+weighted split, transfer, refit off; Osprey exe `_bin\n1108-svmpb`; DIA-NN 2.7.0 runs3. Precursor level, split-entrapment
+FDP on the on-target half, r from each library's own counts (Osprey 565,555 / 1,131,671; `libdiff.out`). Reader
+`ai/.tmp/sessions/20261104-night/calib3.py`, output `calib3.out`.
+
+| arm | q 1%: kept, FDP | q 2%: kept, FDP | find at FDP 0.5% | find at FDP 1% | vs DIA-NN NN | vs --no-nn |
+|---|---|---|---|---|---|---|
+| DIA-NN NN | 75,125, 0.59% | 80,977, 1.33% | 73,758 | 78,668 | - | +25.9% |
+| DIA-NN --no-nn | 56,662, 0.42% | 63,471, 1.14% | 57,709 | 62,472 | -20.6% | - |
+| Osprey GBDT, PB off, pass 1 | 67,202, 0.68% | 72,237, 1.41% | 65,656 | 69,794 | -11.3% | +11.7% |
+| Osprey GBDT + PB, pass 1 | 74,541, 1.04% | 79,132, 2.05% | 68,700 | 74,378 | -5.5% | +19.1% |
+| Osprey GBDT + PB, pass 2 | 73,978, 0.91% | 78,240, 1.77% | 69,060 | 74,643 | **-5.1%** | +19.5% |
+| Osprey SVM, PB off, pass 1 | 56,158, 0.52% | 62,193, 1.25% | 56,025 | 60,448 | -23.2% | -3.2% |
+| Osprey SVM + PB, pass 1 | 64,441, 0.85% | 70,218, 1.85% | 60,286 | 65,753 | -16.4% | **+5.3%** |
+| Osprey SVM + PB, pass 2 | 64,415, 0.85% | 68,932, 1.58% | 60,264 | 65,722 | -16.5% | +5.2% |
+
+- PB is what puts both models on target: GBDT -11.3% -> -5.1% of DIA-NN NN; SVM from 3.2% behind --no-nn to 5.3% ahead.
+- Calibration: Osprey + PB is close to nominal (q 1% -> FDP 0.85-1.04%); DIA-NN is conservative (q 1% -> 0.59% NN,
+  0.42% --no-nn), so at reported q 1% GBDT + PB keeps 99% of DIA-NN NN's count (74.0k vs 75.1k) and SVM + PB keeps
+  114% of --no-nn's. PB off, Osprey is conservative too (0.52-0.68%).
+- The file mismatch above was narrower than written: only the `svm3-*` SVM arms (`-NumFiles 3`) searched A01-A03.
+  Every GBDT 3-file arm (pb3-*, pb3s-*, P2-*, N-pc-sized) searched the matched files, and m3-gbdt-pb reproduced
+  P2-pb-transfer bit for bit (all 101,395 pass-2 rows; same counts at every q). So the GBDT + PB -5% stood; the SVM
+  ratios were wrong because A01-A03 find more (SVM + PB 71,934 there vs 65,753 here).
+- DIA-NN on Osprey's own split library (`runs3\O-sized`, `O-sized-nonn`) is not a fair arm: that library carries
+  Osprey's decoys with no Decoy flag, so DIA-NN searched them as targets (689 decoy-protein precursors at q 1% NN, 322
+  --no-nn) on top of its own decoys, finding 75,180 / 57,565 at FDP 1% and calibrating conservatively (q 1% -> 0.27% /
+  0.14%). The two libraries are otherwise the same peptides (Osprey 2,263,108 non-decoy, DIA-NN 2,259,099, all of
+  DIA-NN's in Osprey's; the 4,009 Osprey-only are long peptides), so the shared-library DIA-NN rows are the reference.
+- Pass-2 FDRBench holds only rows that reached pass 2; rows at q = 1 are now excluded from find counts (`*` marks).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
