@@ -255,6 +255,23 @@ Global.Q.Value, e(1+1/r)/(t+e), r = 0.50): DIA-NN under-reports. 3 files uniform
 on-target FDP reaches 1% only at q ~1.45-1.55% (find rate 78,666 sized, 79,335 uniform). Osprey PB is near
 nominal (1.03% pass 1, 0.91% PB + transfer), so the gap is read at matched on-target FDP, not at reported q.
 
+**DIA-NN linear (--no-nn), 3 files sized** (`diann3nonn.ps1`, `bisect\runs3\A2-sized-nonn`): 62,473 at on-target
+FDP 1% (NN 78,666: -20.6%), 57,711 at 0.5%; at reported q 1% 56,662 targets, on 0.42%, own 0.15%.
+
+**Osprey SVM, 62 files, first pass** (`svm62.ps1`, mask none, links to pb82-off scores):
+
+| Arm | targets q1 | FDP on / own / pooled | on-target find 0.5% / 1% |
+|---|---|---|---|
+| SVM off | 70,900 | 0.57% / 0.51% / 0.72% | 70,137 / 76,722 |
+| SVM mean-best-2 | 71,329 | 0.49% / 0.47% / 0.64% | 71,369 / 78,054 |
+| GBDT off (for scale) | 84,576 | 0.69% / 0.68% / 0.91% | 81,828 / 87,738 |
+
+SVM is 12.6% below GBDT at 62 files, calibrated (conservative), and mean-best-2 gives it +1.7%. Not comparable with DIA-NN
+--no-nn above: 62 files vs 3 (more files find more), and first pass only (no pass 2 at all). The matched run is
+`svm3.ps1`: 3 files sized, SVM, transfer, refit off, no PB, then mean-best-2 on links (log `runs-pb\svm3.log`). SVM + PB was refused
+at startup (PB needs the two-round tree training); an agent is adding the two-round path and PB column for the SVM
+on local `nightlywork/20261108_svm_protein_best` (snapshot `_bin\n1108-svmpb`).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
