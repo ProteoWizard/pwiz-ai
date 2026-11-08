@@ -177,3 +177,6 @@ CodeInspection green. Must merge ahead of #4823 and #5011 (no merging with a kno
 TeamCity (2026-11-07/08): #4823 Osprey Perf/Regression 4256392 SUCCESS; #4823 Windows 4256391 fails only RtR2 (above),
 TestRInstaller (no r-project.org) and TestNativeMessageBox (flaky Save As lookup). #5011 Windows 4256406 at 745e31dcee fails
 only RtR2; #5011 Osprey gate 4256393 green at 85%. #5012: Windows 4256410 and Osprey gate 4256411 queued.
+TeamCity final (2026-11-08 03:1x): #5012 Windows 4256410 SUCCESS (TestBuildLibraryCarafeWizard passes), #5012 Osprey
+Perf/Regression 4256411 SUCCESS; #5011 Osprey Perf/Regression 4256393 SUCCESS. Brendan accepted the 0.9 RT R2 bar.
+Merge order: #5012 first, then master into #4823 and #5011 so their Windows builds lose the RtR2 failure.
