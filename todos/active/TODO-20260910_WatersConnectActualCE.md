@@ -137,3 +137,16 @@ SDK-style with auto-globbed Compile items. Merged `origin/master` into the branc
   from the PR body pass, the two CE optimization tutorials among them (TestTutorial built separately).
 * Run-Tests.ps1 gotchas: a long comma list becomes the log file name and fails before any test runs, so use
   `@file`; TestTutorial is not part of the solution build, so build it with `-Target TestTutorial` first.
+
+### 2026-11-09 - Live check of the C# reader against devconnect
+
+* `Reader_UNIFI_HarnessAgainstReferenceUrls` with `WC_PASSWORD` set read both devconnect fixtures live and matched the
+  references, the Hazell MRM injection among them, so the server does not send a bare `NaN` token for older MRM
+  channels (System.Text.Json would have rejected it); `"NaN"` or null reads as 0 and no CE param is written, as before.
+* Converted the 6-Mix CE-step injection (75fb8289) with the C# msconvert built from this branch: 242 SRM chromatograms,
+  121 CE params in eV, per-chromatogram id/CE sequence identical to the September C++ conversion in the test zip.
+  The server delivers numeric CE as JSON numbers (the first commit parsed numbers only and produced that file).
+* Still unverified: a run acquired from a method exported by this code (6Mix-ceopt-09171440 was uploaded for Waters).
+* Gotchas: the harness needs `-VendorLicenses` (no-vendor UNIFI makes Read throw) and the password in the PROCESS
+  environment - user-level `setx` values are not inherited by shells spawned from an already running Claude Code, so
+  copy them in with `$env:WC_PASSWORD = [Environment]::GetEnvironmentVariable("WC_PASSWORD","User")` first.
