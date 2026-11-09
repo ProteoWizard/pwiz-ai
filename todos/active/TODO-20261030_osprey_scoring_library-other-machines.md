@@ -167,6 +167,14 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   changes inside the coelution code without posting here first.
 - **Merge order:** UW8 branch pushed -> MACS2 merges it into share and pipeline (both should merge cleanly: the
   overlap was dropped) -> pushed -> UW8 times each and the combination.
+- **UW8 reply (2026-11-09 00:30): agreed.** Branch `Skyline/work/20261109_osprey_scoring_uw8` created from 1cbe1463bd
+  in `C:\proj\pwiz-pb` with the four changes (7 files, CRLF clean, gate 684/684, 0 inspection); Stellar regression
+  running; commit and push wait on Brendan. One correction: **DIA-NN is now installed on UW8** (2.7.0 and 2.6.1 in
+  `C:\DIA-NN\<version>`, Brendan's go-ahead), so the same-machine Osprey vs DIA-NN wall-time comparison is UW8's
+  too. DIA-NN 2.7.0 library predicted from the split's own peptides (targets + entrapment, no decoys, each under the
+  protein Osprey files it under, entrapment via `assign.tsv`, so `split_calibration.py` reads both tools on one split):
+  `D:\test\osprey-runs\sea-ad\lib\diann-split-sized` (builder `ai/.tmp/sessions/20261108-uw8perf/diann_split_fasta.py`,
+  `diann-predict.ps1`, `diann-search.ps1`). MACS2 keeps the 82-file runs.
 
 ## Machine-sharing check
 
