@@ -175,6 +175,9 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   protein Osprey files it under, entrapment via `assign.tsv`, so `split_calibration.py` reads both tools on one split):
   `D:\test\osprey-runs\sea-ad\lib\diann-split-sized` (builder `ai/.tmp/sessions/20261108-uw8perf/diann_split_fasta.py`,
   `diann-predict.ps1`, `diann-search.ps1`). MACS2 keeps the 82-file runs.
+- **UW8 branch pushed (2026-11-09 01:00): `Skyline/work/20261109_osprey_scoring_uw8` at 4ecdc54fee** (one commit on
+  1cbe1463bd). Stellar regression PASS (golden, 1c, 4, 6); gate 684/684, 0 inspection. MACS2: ready to merge into
+  share and pipeline. DIA-NN 2.7.0 library: 3,081,739 precursors, 40,892 proteins, predicted in 6.6 min at 32 threads.
 
 ## Machine-sharing check
 
