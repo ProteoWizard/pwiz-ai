@@ -365,10 +365,18 @@ against the old golden). Snapshot `_bin
 **SEA-AD confirmation, matched 3 files (`runs-pb\pbcli3.log`):** the packaged build reproduces the env-var arms byte
 for byte in both passes' FDRBench: default (GBDT) == m3-gbdt-pb, `--protein-best off` == m3-gbdt, SVM default ==
 m3-svm-pb. Runner: `Run-SeaAd.ps1 -ProteinBest on|off` (pwiz-ai 48ca1f1d).
-**Small-library collapse** (TestSubsetLibraryBuild `--miss-c 0`, 276 targets: 0 pass-2 precursors with PB on): agent
-pbsmall is on it (`ai/.tmp/agent-pbsmall-status.md`). So far: when round 2 would train on the same rows as round 1 the
-SVM path degenerates; guard added in PercolatorTrainer.TrainWithScorePrefilter with a red-then-green FdrTest. GBDT on
-that library fails with PB off too (classifier at the edge on tiny data), so that part is not PB.
+**Small-library collapse: fixed, e994dedfaa (local).** Not the PB column: `--protein-best off` with the round-2 size
+forced to 200000 fails the same way. On a 552-precursor library every candidate fits both the 300k round-1 subsample and
+the 200k round-2 cap, so round 2 holds round 1's own 546 rows, and every starting score is out of fold from one of three
+fold models on scales that differ severalfold (decoy max 0.590 / 0.139 / 0.159). The pooled ranking picks a poor first
+positive set, round 2 stops after one iteration, and the second-pass stratum misses 1% by one target (best q 1/97).
+Fix in `PercolatorTrainer.TrainWithScorePrefilter`: when round 2's rows are round 1's, round 2 starts from a single
+feature like round 1 (logged). With it off and the second round forced, the model is bit-identical to single-round.
+Full-size round 2 never equals round 1 (Stellar 300,000 vs 199,998; Astral 300,000 vs 199,999), so goldens are
+unchanged. New FdrTest check (red before, green after, SVM and GBDT), the TestSubsetLibraryBuild workaround removed;
+gate 683/683, 0 inspection. Open: GBDT on that tiny library fails with or without PB (sits at the 100-target floor);
+the test leg passes at exactly 100 at 1%, a thin margin; at full size round 2's start still mixes out-of-fold and
+fold-mean scores (fixing it would move goldens). Logs `ai/.tmp/agent-pbsmall/`.
 
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
