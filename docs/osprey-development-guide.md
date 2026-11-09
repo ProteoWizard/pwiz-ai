@@ -205,6 +205,24 @@ A new long-running loop reports through the shared `ProgressReporter`
 (`pwiz.Common.SystemUtil`, moved from Osprey.Core); Skyline's `ProgressStatus` /
 `IProgressMonitor` route is not pursued for the command-line tools (Brendan, 2026-10-14).
 
+### Reusing Skyline infrastructure: share it in CommonUtil, or write a thin Osprey version?
+
+This keeps coming up (ProgressReporter, SimpleFileSaver, ProducerConsumerWorker). The rule the decisions so far
+follow:
+
+- **Reuse it from `pwiz_tools/Shared/CommonUtil`** when the class is generic and depends only on `System` (and
+  CommonUtil itself). `Osprey.Core` and `Osprey` already reference `CommonUtil.csproj`, and every Osprey project sits
+  above Core.
+- **Move it into CommonUtil** when it is generic but still lives in Skyline or Osprey (ProgressReporter moved from
+  Osprey.Core into `pwiz.Common.SystemUtil`). Do not copy it.
+- **Write an Osprey-specific version** only when the Skyline class carries contracts a command-line tool should not
+  take on: GUI or document-model types, Skyline's `ProgressStatus` / `IProgressMonitor`. `SimpleFileSaver`, not
+  Skyline's `FileSaver`, is that case for atomic writes.
+- **Missing behaviour goes into the shared class or beside it**, not into a fork. For example,
+  `ProducerConsumerWorker` (`CommonUtil/SystemUtil`) hands items over in completion order; a writer that must keep
+  window order (byte-identical output) adds a reorder buffer on top of a one-consumer `QueueWorker`. If that is
+  generic, it belongs next to the worker in CommonUtil.
+
 ### Atomic file writes: SimpleFileSaver (never a cross-volume temp + move)
 
 Every DURABLE artifact -- anything a later step, a resume, or the user reads
