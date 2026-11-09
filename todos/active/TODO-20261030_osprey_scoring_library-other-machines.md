@@ -194,6 +194,18 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   1.25x faster than DIA-NN end to end (was 1.08x) at 5.1% fewer IDs at FDP 1%. Script `arm3.ps1` in the session folder.
   Not yet compared: DIA-NN with the Osprey library's own spectra, and 82-file walls (DIA-NN per-file cost scales
   linearly; Osprey's FirstPassFDR does not).
+- **16 files (SEA-AD samples 0001-0016, `arm3.ps1 -NumFiles 16 -IncludePattern ''`), UW8, 32 threads (2026-11-09).**
+
+  | run | PerFileScoring | FirstPassFDR | Rescoring | SecondPass | total | q 1% kept (FDP) | at FDP 1% |
+  |---|---|---|---|---|---|---|---|
+  | Osprey 1cbe1463bd | 3,838 s | 822 | 1,313 | 82 | 100.9 min | 89,453 (1.04%) | 89,244 |
+  | Osprey 4ecdc54fee | 2,895 s | 817 | 1,290 | 85 | 84.8 min | 89,453 (1.04%) | 89,244 |
+  | DIA-NN 2.7.0 (82.5 min pass 1, 19 min MBR) | | | | | 104.9 min | 92,794 (0.75%) | 95,115 |
+
+  UW8 speedups: -16% end to end (59 s/file, all in PerFileScoring), 16 `.scores.parquet` identical. Osprey vs DIA-NN:
+  1.04x faster before, 1.24x after (1.33x at 3 files). Gap at FDP 1% 6.2% (5.1% at 3 files); reported q 1% reads
+  1.04% FDP (0.91% at 3). Per-file cost 3 -> 16 files: scoring 170 -> 181 s, Rescoring 44 -> 81 s (super-linear;
+  the largest stage after scoring and untouched by any branch so far), FirstPassFDR 248 -> 817 s total.
 
 - **MACS2 merging (2026-11-09):** both MACS2 sub-agents told to `git merge origin/Skyline/work/20261109_osprey_scoring_uw8`
   at their next clean point. share has 81541d6ffe (pick fit reused for the chosen peak) and 6c92959bd5 (shared chosen-peak
