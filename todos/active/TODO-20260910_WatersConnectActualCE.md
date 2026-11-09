@@ -114,3 +114,26 @@ Uploaded a CE optimization method built by this code to devconnect (Skyline/6mix
 Waters to acquire; the server accepted steps that differ only in CE, which confirms the export premise. Note
 the template must be a tandem-MS method - the Lancaster LC template was rejected with TargetsNotSupported.
 PR #4683 opened.
+
+### 2026-11-09 - Merge master after the C++ tree retirement
+
+PR #4683 had been conflicting with master since #4658 retired the C++ tree and hoisted the C# port into
+`pwiz/data/...`, #4789 normalized stored line endings to LF, and the .NET 10 port made the csproj files
+SDK-style with auto-globbed Compile items. Merged `origin/master` into the branch in pwiz2 (no rebase):
+
+* The three C++ reader files are deleted on master; ported the CE read to the C# UNIFI reader instead.
+  `UnifiChromatogramInfo.CollisionEnergy` (UnifiData.cs), parsed from
+  `msTechnique.fragmentationProperties.collisionEnergy` in `WatersConnectDataSource.FetchMrmChromatograms`
+  (finite number or quoted number kept as a magnitude; NaN, null and missing read as 0) and set as
+  `MS_collision_energy` in eV on the precursor activation in `ChromatogramList_UNIFI.FillSrmChromatogram`.
+* Took master's copies of Export.cs, ChromDataProvider.cs and MsDataFileImpl.cs and re-applied the PR hunks;
+  dropped the three csproj edits (globbed now); `git add --renormalize` so every PR file is stored LF.
+* The .NET 10 build compiles `ProteowizardWrapper.PwizSharp/MsDataFileImpl.cs`, not the legacy wrapper file,
+  so `IsWatersConnectFile` lives in both (as `IsShimadzuFile` does).
+* Reader tests: `Discovery_MrmChannels_ReadCollisionEnergy` (WatersConnectDataSourceTests, six CE spellings)
+  and CE assertions in `GetChromatogram_SRM_PopulatesQ1Q3AndPolarity` plus
+  `GetChromatogram_SRM_WithoutCollisionEnergy_SetsNoActivation` (ChromatogramListUnifiTests). UNIFI.Tests
+  46/46 pass; Skyline Debug build clean with `-VendorLicenses`; the three PR tests and the 13 non-tutorial
+  regression tests all pass.
+* Run-Tests.ps1 gotchas: a long comma list becomes the log file name and fails before any test runs, so use
+  `@file`; TestTutorial is not part of the solution build, so build it with `-Target TestTutorial` first.
