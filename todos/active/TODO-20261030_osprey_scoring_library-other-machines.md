@@ -263,6 +263,10 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
     unchanged (73,978, 0.91%); FDRBench beyond 1% moves slightly (unreported precursors keep first-pass peaks).
   - Stage 6 per file at 3 files is now mostly fixed cost: reconciled-parquet write ~20 s (decodes all 4.4M
     first-pass rows, every column, to keep ~180k Stage 5 survivors) and the model-diagnostics mass-error pass ~10 s.
+- **Decision (Brendan, 2026-11-09): the MACS2 share and pipeline branches are not merged.** On UW8 share gave no
+  measurable gain and pipeline ~6 s/file (~3%, the per-window dedup); not worth the added complexity. The UW8 branch
+  (f90d19aaa6) carries neither. Keep for the follow-up issue only: the whole-file dedup shares `removed[]` across
+  windows, so an entry in two windows can make output timing-dependent (no such entries in SEA-AD or Stellar).
 - **Idea for later (Brendan, 2026-11-09): shared peak boundaries for all charge states of a peptide in PASS 1**, as
   Skyline enforces (the molecule's elution sets the time; charge comes after). Pass 1 today picks each charge state
   independently (32,084 survivor charge states across 3 files sit outside half the leader's width), e.g. GVDAQGTLSKIFK
