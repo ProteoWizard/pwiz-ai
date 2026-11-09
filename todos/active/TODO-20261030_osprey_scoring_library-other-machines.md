@@ -102,6 +102,33 @@ DIA-NN rows need its own library and assignment (`--diann <report.parquet> --dia
   MACS2 82-file baseline (GBDT, protein-best off, protein-compact) reads q 1% -> FDP 1.29% in pass 2.
 - DIA-NN 82 files on the same split peptides (MACS2 timed DIA-NN only on the unsplit library: 5.9 min/file).
 
+## BRENDANX-UW8 results (2026-11-08, i9-14900K, 32 threads, 128 GB, machine otherwise idle)
+
+Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8-pb-1cbe1463bd`; runs under
+`D:\test\osprey-runs\sea-ad\runs-uw8`; scripts in `ai/.tmp/sessions/20261108-uw8perf` (`ablate.ps1`, `compare_scores.py`).
+
+- **Reproduction: exact.** GBDT, protein-best on, transfer pass 2, 3 files: pass 2 73,978 at q 1% (FDP 0.91%), 74,643
+  at FDP 1% - MACS2's numbers. 25.5 min wall at 32 threads.
+- **Single-setting ablations** (A10_014, `--task PerFileScoring`, 32 threads; coelution / task wall): full 182.8 / 257.1 s;
+  XIC 6 121.4 / 194.7; no CORR_FRAGMENT_TOLERANCE 120.9 / 194.3; no REF_XIC 180.4 / 250.9; no LOCAL_RT_TOLERANCE
+  175.7 / 246.1; all four off 77.5 / 152.1. XIC 12 and the 7 ppm correlation re-extraction each cost ~61 s; REF_XIC and
+  LOCAL_RT are near free. (Faster per file than MACS2: 24k cand/s here vs 13.9k there.)
+- **Code changes in hand, NOT committed (UW8 owns these; do not duplicate):**
+  1. Largest-window-first scheduling in `ScoringPipeline.RunCoelutionScoring` (exact candidate count, `NoBuffering`
+     partitioner) plus a "Window threads busy" log line: coelution 182.8 -> 169.7 s, busy 94%.
+  2. The OSPREY_CORR_FRAGMENT_TOLERANCE XICs extracted in the same scan-major pass as the search XICs
+     (`ExtractXicsScanMajor` gains a corr config, `TryExtract` takes them precomputed). The candidate-major re-extraction
+     was 1,123 core-s of `MzBucketIndex.LowerBound` against 414 for the same lookups scan-major. Coelution
+     169.7 -> 134.5 s (-26% cumulative), CPU 5,104 -> 3,995 core-s.
+  Both: `.scores.parquet` identical to the baseline (4,356,316 rows x 128 columns); Debug gate 683/683, 0 inspection;
+  `ScoringTest` scan-major test now also checks the corr XICs bitwise.
+- dotTrace CLI here was 2025.3.2 and hit a CLR assert (`TS_Hijacked`) under .NET 10 with no snapshot; updated to
+  2026.2.4.1, which works with the installed 2026.2 Reporter. Snapshots: `runs-uw8\profile-full-lpt.dtp`,
+  `profile-full-corrsm.dtp`.
+- Next candidates from the profile: median polish per CWT candidate in `CandidateLibCosine` (~365 core-s) and the
+  chosen peak's polish recomputed in `ScoreCandidate` (~73 core-s, same XICs and bounds as the pick).
+- DIA-NN is not installed on UW8, so there is no same-machine DIA-NN timing yet.
+
 ## Machine-sharing check
 
 Before timing anything: `quser` and `tasklist /v /fi "imagename eq Osprey.exe"` (the session column names the
