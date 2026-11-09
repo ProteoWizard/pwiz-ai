@@ -108,6 +108,21 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       the Entrez clock (redesign), redundant post-refusal wait, no failure reason on gated
       proteins, duplicated test RequestCount. #5008 c0f62bd85a, #5010 4b04b06148 (one hunk
       hand-applied: release has HTTP_TOO_MANY_REQUESTS beside MAX_TEST_RATE_LIMIT_DELAY)
+- [x] /code-review high on c0f62bd85a: a 429 met mid-pass still ended the whole pass (abort), so
+      an Entrez refusal kept UniProt from being searched; and a closed gate spent the pass's 15s
+      before the next service was asked. Waiting moved to the end of the pass; a refusal skips only
+      its own service. Removed ENTREZ_RATELIMIT (0, unused since every Entrez request is spaced).
+      Test provider now counts Entrez requests (GetXmlTextReader). Both new cases red, then green.
+      #5008 91fb94e86a, #5010 a7e37d83ed
+- [x] /code-review high on 91fb94e86a + Copilot (Max effort): the end-of-pass wait slowed every
+      500-protein batch while one service refused (ProteomeDb.LookupProteinMetadata loops batches),
+      and used a duration recorded at refusal time. Now waits only when the pass resolved nothing,
+      until the first refusing service reopens (min over gates, capped 15s). Tests red then green.
+      Dropped: loader-level deferral (redesign), non-polite providers (test-only), pre-check
+      placement, test Entrez spacing; Copilot's per-request gate recheck (a 429 is never retried
+      within a lookup; a race costs one request) and Entrez-to-UniProt conversions lost while
+      UniProt is closed (pre-existing for any UniProt failure; Entrez is asked again at most once
+      per 15s pass). #5008 6802fe3ee8, #5010 e0d804b6e9
 - [ ] Carry any later #5008 review changes over to #5010; merge #5010 after #5008
 
 ## Notes
