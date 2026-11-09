@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261106_carafe_split_entrapment`
 - **Base**: `master` (ab7c6b21a7)
 - **Created**: 2026-11-06
-- **Status**: In Review (PR #5011 opened 2026-11-06 22:30 by the night session)
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: [#5011](https://github.com/ProteoWizard/pwiz/pull/5011)
+- **PR**: [#5011](https://github.com/ProteoWizard/pwiz/pull/5011) (merged 2026-11-09 as 4abddb97fc)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Idea (Brendan, 2026-11-05)
@@ -261,3 +261,15 @@ population, double sidecar read, single-file second-pass peptide q) are filed as
 tests and zero inspections, then Ensure-InnoSetup.ps1:144 "Could not obtain a valid Inno Setup installer from any source"
 (re-triggered as 4256790); CodeQL Analyze (python) failed on a 504 downloading its bundle, and `gh run rerun` is refused
 ("cannot be retried") - only a new push re-runs it, as on #5012.
+
+### 2026-11-09 - Merged
+
+PR #5011 merged as commit 4abddb97fc, on master after #4823 (61591d866b). Shipped: `--entrapment-in-targets` in CarafeSharp and
+Osprey, entrapment marked by its pairing, the placement-split entrapment FDP and protein-group FDP cards, `--strip-entrapment`
+(default off), the Skyline Osprey Search and Build Library fields, protein rows in the predicted blib, and the Carafe wizard
+doc-comment fix. Merged over the pending Skyline PR Perf and Tutorial check (not required; passed on the prior tip) and the
+CodeQL Analyze (python) bundle-download 504 (not required, not retryable), per Brendan. Deferred: the default of
+`--strip-entrapment` for the `--fasta --entrapment` route, the 1:1 split-vs-unsplit pass-1 difference, stratum selection by a
+pass-1 protein q, and the protein card's expected count on a coarse q grid (Open questions above); the #4823 review follow-ups
+are issue #5013. Demo deck https://claude.ai/artifact/UWjptc8nhWU4zpFq51wLfy; wiki draft unpublished at
+`ai/.tmp/sessions/20261106-entrap-demo/wiki/EntrapmentInTargetProteins.md`.
