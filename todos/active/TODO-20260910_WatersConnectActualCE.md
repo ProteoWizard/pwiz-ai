@@ -133,7 +133,7 @@ SDK-style with auto-globbed Compile items. Merged `origin/master` into the branc
 * Reader tests: `Discovery_MrmChannels_ReadCollisionEnergy` (WatersConnectDataSourceTests, six CE spellings)
   and CE assertions in `GetChromatogram_SRM_PopulatesQ1Q3AndPolarity` plus
   `GetChromatogram_SRM_WithoutCollisionEnergy_SetsNoActivation` (ChromatogramListUnifiTests). UNIFI.Tests
-  46/46 pass; Skyline Debug build clean with `-VendorLicenses`; the three PR tests and the 13 non-tutorial
-  regression tests all pass.
+  46/46 pass; Skyline Debug build clean with `-VendorLicenses`; the three PR tests and all 15 regression tests
+  from the PR body pass, the two CE optimization tutorials among them (TestTutorial built separately).
 * Run-Tests.ps1 gotchas: a long comma list becomes the log file name and fails before any test runs, so use
   `@file`; TestTutorial is not part of the solution build, so build it with `-Target TestTutorial` first.
