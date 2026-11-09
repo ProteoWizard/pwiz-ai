@@ -252,3 +252,12 @@ PR #4823 squash-merged as 61591d866b (TeamCity Osprey Perf/Regression 4256524 SU
 #5011 retargeted to master (`gh pr edit --base master`), origin/master merged in cleanly (a92323be83), Osprey gate 656/656 + zero
 inspections, pushed; Osprey Perf/Regression triggered on pull/5011. Open from the #4823 review, carried here: subset-eliminated
 proteins competing as their own units, razor not constraining the group score, and the PEP fit population (Brendan to ask Mike).
+
+### 2026-11-09 - Follow-ups filed; #5011 checks on the master-based tip
+The open items from the #4823 review (subset-eliminated proteins as units, razor not constraining the group score, PEP fit
+population, double sidecar read, single-file second-pass peptide q) are filed as
+[#5013](https://github.com/ProteoWizard/pwiz/issues/5013) at Brendan's request.
+#5011 at a92323be83: Osprey Perf/Regression 4256607 SUCCESS. Two infrastructure failures: Osprey Windows .NET 4256622 passed 767
+tests and zero inspections, then Ensure-InnoSetup.ps1:144 "Could not obtain a valid Inno Setup installer from any source"
+(re-triggered as 4256790); CodeQL Analyze (python) failed on a 504 downloading its bundle, and `gh run rerun` is refused
+("cannot be retried") - only a new push re-runs it, as on #5012.
