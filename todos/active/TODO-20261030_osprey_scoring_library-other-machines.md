@@ -246,6 +246,29 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   recondecoys=0` on FirstPassFDR (writes the Stage 6 consensus), PerFileRescoring and SecondPassFDR under transfer.
   The transfer fold already carries pass-1 experiment q unchanged (`CarryPass1Experiment`), so blib membership
   cannot change; only per-run peaks and run q do.
+- **Committed f90d19aaa6 on `Skyline/work/20261109_osprey_scoring_uw8` (2026-11-09, pushed):** under transfer, (1) paired
+  decoys keep first-pass peaks, (2) reconciliation + gap fill take the blib set (`ExperimentOutputSet`), (3)
+  multi-charge consensus re-scores only reported charge states (`MultiChargeConsensus.ReportedOnly`; leader still by
+  run FDR), (4) the pass-2 peptide q floor derives from reported charge states only
+  (`ExperimentQFloors.DerivePeptideFloors(reportedTarget)`). Gate 688/688, 0 inspection. 3 files: re-scored peaks
+  203,856 -> 18,482, multi-charge targets 32,084 -> 1,013.
+  - **Floor bug found on the way:** the best-of-runs peptide floor read every charge state, so an unreported charge
+    state re-scored in pass 2 at a sibling's or consensus boundaries could lower OR raise a reported peptide's q. 3 of
+    74,210 at 3 files (GVDAQGTLSKIFK, SFLPSYDAVAASQGAVK, SKFADLSEAANR); in pass 1 the unreported states never passed
+    run FDR in any run (`peptide_runq.py`). The floor's invariant is "reported => a run has an ID line"; only reported
+    precursors have ID lines.
+  - **Verification:** with the floor fix, the old any-level rule (decoys and every charge reconciled; temporary
+    build via `old_rule_variant.py`) and the new rule give IDENTICAL blibs (74,210 RefSpectra, 222,532 RetentionTimes,
+    every column; `compare_blib.py`). vs the pre-fix baseline only those 3 PeptideQValue rows differ. Pass 2 at q 1%
+    unchanged (73,978, 0.91%); FDRBench beyond 1% moves slightly (unreported precursors keep first-pass peaks).
+  - Stage 6 per file at 3 files is now mostly fixed cost: reconciled-parquet write ~20 s (decodes all 4.4M
+    first-pass rows, every column, to keep ~180k Stage 5 survivors) and the model-diagnostics mass-error pass ~10 s.
+- **Idea for later (Brendan, 2026-11-09): shared peak boundaries for all charge states of a peptide in PASS 1**, as
+  Skyline enforces (the molecule's elution sets the time; charge comes after). Pass 1 today picks each charge state
+  independently (32,084 survivor charge states across 3 files sit outside half the leader's width), e.g. GVDAQGTLSKIFK
+  z2 picked 12.58 min (score -11.7) but scores +9.2 at z3's 13.95 min. Doing it in pass 1 for targets and decoys
+  alike keeps the null honest (no post-FDR second chance) and makes Stage 6 multi-charge consensus a no-op. Changes
+  the first pass: measure on the split audit like protein-best. After the Stage 6 efficiency work.
 
 - **MACS2 merging (2026-11-09):** both MACS2 sub-agents told to `git merge origin/Skyline/work/20261109_osprey_scoring_uw8`
   at their next clean point. share has 81541d6ffe (pick fit reused for the chosen peak) and 6c92959bd5 (shared chosen-peak
