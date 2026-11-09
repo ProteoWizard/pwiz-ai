@@ -352,6 +352,24 @@ FDP on the on-target half, r from each library's own counts (Osprey 565,555 / 1,
   DIA-NN's in Osprey's; the 4,009 Osprey-only are long peptides), so the shared-library DIA-NN rows are the reference.
 - Pass-2 FDRBench holds only rows that reached pass 2; rows at q = 1 are now excluded from find counts (`*` marks).
 
+**`--protein-best` packaged (2026-11-08, pwiz-nightbase `Skyline/work/20261108_osprey_protein_best`, local).**
+c0c2bcd43c + cherry-picks 67f7073ac1, a2a3d9c909, a35c73458e, 62b3eec217, 7f68a16cca (39fc1b55fe's shape switch
+dropped) + 227e8e40f7 (OSPREY_PROTEIN_BEST -> `--protein-best on|off`, default on; on = max, paired decoys, default
+round-2 size 200000; the old variable is refused), 9c48a5cd39 (fixed `off` ending the argument parse: the handler bound
+to the Func<..., bool> overload and dropped every later argument), ce85b50fd1 (goldens recaptured for the on default:
+Stellar 32,270 -> 32,102 precursors, StellarLibDecoy 30,468 -> 30,156, GenDecoyEntrap 31,420 -> 31,140, Astral
+117,660 -> 117,376; pass-1 accepted +7% at lower FDP on these 3-file sets, final library 0.2-1% smaller). Gate 683/683,
+0 inspection. `off` is bit-identical to c0c2bcd43c (subset digest pinned in TestProteinBestPipeline; full Stellar
+against the old golden). Snapshot `_bin
+1108-pbcli`. Agent log `ai/.tmp/agent-pbcli-status.md`.
+**SEA-AD confirmation, matched 3 files (`runs-pb\pbcli3.log`):** the packaged build reproduces the env-var arms byte
+for byte in both passes' FDRBench: default (GBDT) == m3-gbdt-pb, `--protein-best off` == m3-gbdt, SVM default ==
+m3-svm-pb. Runner: `Run-SeaAd.ps1 -ProteinBest on|off` (pwiz-ai 48ca1f1d).
+**Small-library collapse** (TestSubsetLibraryBuild `--miss-c 0`, 276 targets: 0 pass-2 precursors with PB on): agent
+pbsmall is on it (`ai/.tmp/agent-pbsmall-status.md`). So far: when round 2 would train on the same rows as round 1 the
+SVM path degenerates; guard added in PercolatorTrainer.TrainWithScorePrefilter with a red-then-green FdrTest. GBDT on
+that library fails with PB off too (classifier at the edge on tiny data), so that part is not PB.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
