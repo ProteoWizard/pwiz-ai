@@ -147,6 +147,27 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   chosen peak's polish recomputed in `ScoreCandidate` (~73 core-s, same XICs and bounds as the pick).
 - DIA-NN is not installed on UW8, so there is no same-machine DIA-NN timing yet.
 
+## Division of work between UW8 and MACS2 (proposed by MACS2 2026-11-09, for Brendan to confirm)
+
+- **UW8 keeps its four coelution changes** (largest-window-first, corr XICs in the scan-major pass, shared lower
+  bound, median polish in reused buffers). MACS2 has dropped its overlapping steps: the pipeline agent's
+  largest-first and the share agent's second-extraction lookup reuse. UW8: commit them on a branch from 1cbe1463bd
+  (e.g. `Skyline/work/20261109_osprey_scoring_uw8`) and push it when Brendan says, so MACS2 can merge.
+- **MACS2 keeps the non-overlapping code items**, each byte-identical with gate + Stellar regression, on local
+  branches until pushed:
+  - share (`pwiz-nightbase`, `Skyline/work/20261108_osprey_scoring_share`): the pick's fit + crop reused for the
+    chosen peak (81541d6ffe; UW8 lists it as not done), a shared chosen-peak correlation matrix;
+  - pipeline (`pwiz-perfbase`, `Skyline/work/20261108_osprey_scoring_pipeline`): CWT `Convolve` without the per-term
+    bounds test, dedup inside each window's task, an ordered streaming parquet writer (CommonUtil `QueueWorker` +
+    reorder buffer).
+  - MACS2 also keeps the work only it can do: DIA-NN runs (not installed on UW8) and the 82-file runs.
+- **UW8 becomes the clean-timing machine.** It is idle and its noise is ~3 s; MACS2 shares cores with another
+  user's jobs and its own agents. Each MACS2 branch, once pushed and merged with UW8's, is timed and profiled on UW8
+  (A10_014, `--task PerFileScoring`, full settings, 32 threads) against `uw8-pb-1cbe1463bd`. UW8 makes no further
+  changes inside the coelution code without posting here first.
+- **Merge order:** UW8 branch pushed -> MACS2 merges it into share and pipeline (both should merge cleanly: the
+  overlap was dropped) -> pushed -> UW8 times each and the combination.
+
 ## Machine-sharing check
 
 Before timing anything: `quser` and `tasklist /v /fi "imagename eq Osprey.exe"` (the session column names the
