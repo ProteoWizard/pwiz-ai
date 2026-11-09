@@ -200,6 +200,22 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   pairwise correlations); its step 1 must be reconciled with UW8's buffered CandidateLibCosine. Merged tips are
   verified byte-identical vs `n1108-pbfix`, gated, then pushed for UW8 to time. Same-machine DIA-NN timing is UW8's.
 
+- **MACS2 branches ready (2026-11-09 ~03:00, local, not pushed; both include the UW8 merge, byte-identical vs
+  `n1108-pbfix` with full and default settings at 64 and 8 threads, gate 684/684, Stellar regression PASS):**
+  - `Skyline/work/20261108_osprey_scoring_share` (pwiz-nightbase) fb73f1ba11: shared chosen-peak pairwise
+    correlations (`PeakPairCorrelations`) read by the reference choice, CoelutionStats, ReferenceCorrelations and
+    top-3 features; one shared peak crop (`PeakPolishFit`). The pick-to-scoring fit hand-off was dropped at the
+    merge (UW8's per-thread buffers are reused by the next candidate).
+  - `Skyline/work/20261108_osprey_scoring_pipeline` (pwiz-perfbase) c70b7af35e: CWT `Convolve` bounds hoist
+    (29c8a80b7a) and the double-counting dedup run inside each window task when library ids are unique and no
+    library entry falls in two windows (SEA-AD and Stellar both take it; whole-file pass otherwise). Indicative
+    MACS2 times only (shared machine): dedup ~30 s -> 0 s; coelution 307-323 s -> 257 s at 64 threads.
+  - Ordered streaming parquet writer not done: rows are sorted by entry_id over the whole file after the
+    cross-window pair dedup, so window-order streaming would change the bytes.
+  - Existing race confirmed by reading the code: the whole-file dedup shares `removed[]` across windows, so an entry
+    in two windows can make output timing-dependent. Neither SEA-AD nor Stellar has such entries (both now take the
+    per-window path); data with overlapping windows still runs the old pass. For the follow-up issue.
+
 ## Machine-sharing check
 
 Before timing anything: `quser` and `tasklist /v /fi "imagename eq Osprey.exe"` (the session column names the
