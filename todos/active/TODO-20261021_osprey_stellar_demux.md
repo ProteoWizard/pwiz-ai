@@ -1042,6 +1042,36 @@ options, staggered default in DemuxTool), eab28e8141 (review fixes); the memory 
   slide over the data buys nothing. The first descent's later checks are cheap for the same reason, not because of
   its screen.
 
+**2026-11-08/09 (night): ZT Scan joint-solve fit sigma, searched with the latest Osprey.** Mike: carry #4710's
+sensitivity / selectivity sigma idea (Centrix MS2 3 vs ~1.9 spacings) to the ZT Scan joint solve, judged by the
+latest Osprey (#4950 tip with #4998/#5005: two-round GBDT, `OSPREY_FEATURE_MASK=none` = 109 features, 12 XICs,
+transfer pass 2) and #4997's ppm m/z curve. Handoff `ai/.tmp/handoff-20261108-ztsigma.md`, scripts
+`ai/.tmp/sessions/20261108-ztsigma`, runs `C:\test\osprey-runs\ztsigma` (SPEEDYGONZALES; `queue.log` is the timeline).
+- Arms: `--joint-param PeakSigmaSamples` = scale x the measured {1.17,1.35,1.51,1.52} samples (merge distance follows,
+  JointMergeSigmas 2), PeakHalfWidth max(5, ceil(3.3 x 1.52 x scale)). A wider half-width crashed the MS1 survey
+  (TofPeakShape.Kernels past ISOLATION 6): fixed on local `nightlywork/zt-sigma-demux` e9ed012e76 (MS1 survey keeps
+  half-width 5; 695/695, default byte-identical), not pushed. FDP: FDRBench combined, r = 0.9937, pass 1, q <= 5%.
+- A1, pass-1 targets at FDP 0.5% / 1% | 1% run-level (decoys) | MS2 cal SD ppm | MS2 centroids:
+  0.8x 38,437 / 41,857 | - | 5.73 | 78.5 M; **1.0x** 39,709 / 43,180 | 44,352 | 5.62 | 53.4 M;
+  1.15x 40,147 / 43,603 | 44,621 | 5.20; **1.3x 40,976 / 44,566 | 44,960 | 5.10 | 39.2 M**;
+  1.45x 40,101 / 44,417 | 45,056 | 5.24; 1.6x 40,131 / 43,901 | 44,531 | 4.85 | 34.5 M; 2.0x 38,837 / 42,857 | - |
+  5.28 | 29.8 M. IDs: a broad optimum at 1.3-1.45x; both ends lose 2-3%. 0.8x splits peaks (1.8% of neighbours < 20 ppm,
+  areas -1%); wider merges pairs (neighbours < 50 ppm 29% -> 19% -> 10% at 1.3x / 1.6x), areas +0.6-1.5%.
+- 3 runs (A1, D1, G1), pass 1 at FDP 0.25 / 0.5 / 0.75 / 1 / 1.25%: 1.0x 40,134 / 45,360 / 47,736 / 49,653 / 50,936;
+  1.3x 38,750 / 45,349 / 48,294 / 49,845 / 51,270; 1.6x 39,052 / 44,456 / 47,350 / 50,135 / 51,231. Run-level 1%
+  totals 135,661 / 136,649 (+0.7%) / 134,855. A1's +3% shrinks to about +0.5% on 3 runs; entrapment hits behind the
+  levels are ~50-320.
+- Seed replicates (`OSPREY_FDR_SEED=7`, same mzMLs and caches) put the pipeline's own spread at ~1% at FDP 0.5-1.25%
+  and run-level, ~3% at 0.25%. 1.0x seed 7: 38,816 / 45,067 / 47,504 / 49,167 / 50,475, run-level 134,415; 1.3x seed 7:
+  39,634 / 45,651 / 48,160 / 49,859 / 51,405, run-level 136,087. 1.3x beats 1.0x within each seed (run-level +0.7% and
+  +1.2%; FDP 1% +0.4% and +1.4%): seed-averaged +0.6% at FDP 0.5%, +0.9% at 1%, +1.2% run-level. Small but repeatable.
+- No separate selectivity sigma: MS2 calibration SD is lowest at 1.6x (4.85-4.98 on all 3 files vs 5.29-5.62) but
+  non-monotone (1.45x 5.24), and 1.6x gives no IDs. Unlike Stellar, where the measurement sigma is the narrower one,
+  on ZT the better-precision side is the wider one and the measured sigma is slightly too narrow for IDs.
+- Default feature mask = 21 features: A1 27,097 (1.0x) vs 27,374 (1.3x) at FDP 0.5%, against ~40,000 with 109.
+- Recommendation: default the ZT fit sigma to 1.3x the measured table (-27% centroids and smaller mzMLs, IDs about
+  +1% on 3 runs and two seeds). #4997's ppm curve does not change that: see its TODO (no gain on ZT at matched width).
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):

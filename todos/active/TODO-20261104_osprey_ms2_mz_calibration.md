@@ -23,7 +23,8 @@ and it turned out to benefit HRAM data too.
   widening the tolerance to 3 SD (+-0.85 Th).
 - **HRAM (the bonus).** The same curve, with widths scaled from a ppm tolerance, helps ppm
   data too: on a demultiplexed ZenoTOF 8600 ZT Scan run it found 5.7% more precursors and
-  5.2% more protein groups at 1% FDR than the mean. There the gain is less the m/z dependence
+  5.2% more protein groups at 1% FDR than the mean. (2026-11-09: that did not hold with the current
+  Osprey on 3 ZT runs or on Astral; see Results.) There the gain is less the m/z dependence
   (the curve varies only 1.5 ppm) than centering on the bulk of skewed fragment errors
   (median 5.0 ppm, mean 4.28). It is opt-in and experimental for now
   (`OSPREY_MS2_CAL_CURVE_PPM=1`).
@@ -80,6 +81,35 @@ differing, 1% FDR:
 25,791 precursors shared, 1,871 mean only, 2,353 curve only. Data:
 `D:\ZenoTOF8600-TestData\osprey-ztscan-ab-{mean,curve}` (scripts `run-ztscan-*.sh` there).
 
+**ZT Scan 3 runs with entrapment, latest Osprey (2026-11-08/09 night).** #4950 tip (two-round GBDT, 109 features)
+with this branch merged locally (`nightlywork/zt-sigma-search` in `C:\Dev\pwiz-osprey-fdr`, not pushed), 20 ppm,
+FDRBench combined FDP. Runs `C:\test\osprey-runs\ztsigma\arms`, handoff `ai/.tmp/handoff-20261108-ztsigma.md`.
+- At 3 SD the curve LOSES: 3 runs pass-1 targets at FDP 0.5% / 1% 44,769 / 48,424 vs the mean 45,360 / 49,653;
+  run-level 1% 132,567 vs 135,661 (-2.3%). The searched window is `MzCalibration.CalibratedTolerance` = 3 SD for both
+  (`adjusted_tolerance`, |mean| + 3 SD, is written but not searched): 15.19 vs 16.86 ppm on A1, because the curve
+  removes the m/z trend and its SD is smaller. The offset only moves 1-2 ppm over m/z on these runs.
+- At the mean's width the curve is a wash. Experimental `OSPREY_MS2_CAL_CURVE_TOL_SDS` (local 32ef839639 + fix
+  06745cd1b3; in the validity key; curve only) searches the curve at k SD. A1 alone at FDP 0.5% / 1% | run-level:
+  mean 39,709 / 43,180 | 44,352; curve 3 SD 39,502 / 43,485 | 44,079; 3.33 SD (16.86 ppm, the mean's window)
+  40,404 / 43,766 | 44,837; 4 SD (20.25 ppm) 40,155 / 44,245 | 44,612. That A1 gain did not hold on 3 runs. Curve at
+  3.33 SD against the mean, same fit sigma and seed, FDP 1% | run-level:
+  - 1.0x seed 42: 48,596 vs 49,653 (-2.1%) | 132,617 vs 135,661 (-2.2%)
+  - 1.0x seed 7: 48,904 vs 49,167 (-0.5%) | 133,563 vs 134,415 (-0.6%)
+  - 1.3x seed 42: 50,123 vs 49,845 (+0.6%) | 136,654 vs 136,649 (0.0%)
+  - 1.3x seed 7: 50,614 vs 49,859 (+1.5%) | 137,547 vs 136,087 (+1.1%)
+  The seed replicates put the pipeline's own spread at ~1%. Averaged over the four, the curve at matched width is
+  even with the mean (-0.1% at FDP 1%); the sign follows the fit sigma in both seeds (behind at 1.0x, ahead at 1.3x),
+  which may be a real interaction but is no larger than the noise. At 3 SD it is 1-2% behind. Its offset moves only 1-2 ppm over m/z on these runs; the earlier +5.7%
+  (10 ppm, older Osprey, 1 run) does not reproduce with the two-round GBDT and 109 features.
+- Astral, the regression's 3 HeLa mzMLs (byte-identical to the golden set) with the 11-04 entrapment library
+  (`C:\test\osprey-runs\astral-pr4950`, 1:1 Arabidopsis, r = 0.9904), same search config, 2026-11-09, arms
+  `arms\mzcal-{mean,curve}`, `mzcal.log`. FDP 0.5% / 1% | run-level: mean 123,301 / 130,787 | 365,239; curve 3 SD
+  123,039 / 131,292 | 364,144 (-0.2% / +0.4% / -0.3%). Astral has almost no m/z trend: the curve's SD is 2.00-2.11
+  vs the mean's 2.06-2.17 ppm, searched 6.0-6.3 vs 6.2-6.5 ppm. No matched-width or golden-library arm was run.
+- **Conclusion (Mike, 2026-11-09): not worth it for HRAM data.** Neither ZT Scan nor Astral gains; the curve stays
+  opt-in for ppm (`OSPREY_MS2_CAL_CURVE_PPM`) and the work is about unit resolution, where Stellar's 0.5-0.7 Th offset
+  is the case it was built for. The +5.7% ZT line in "Why" is from an older Osprey and does not reproduce.
+
 ## Tests
 - [x] `CalibrationTest.TestMs2OffsetCurve`: synthetic ion-trap fragments, -0.40 to -0.55 Th;
   curve within 0.03 Th, M+1 step-down, small offset keeps the mean, JSON round trip; doubly
@@ -97,10 +127,8 @@ differing, 1% FDR:
 
 ## Follow-ups
 - [ ] Entrapment (FDRBench) check of the Stellar TR01-TR03 gains.
-- [ ] ppm curve as the default for ppm searches: repeat on ZT Scan D1 and G1 (demultiplexed
-  in `D:\ZenoTOF8600-TestData\demux`) and on Astral, check entrapment, then regenerate the
-  Astral golden (Astral is searched in ppm). Also test a plain median correction: it may give
-  most of the ZT Scan gain.
+- [x] ppm curve as the default for ppm searches: ZT Scan 3 runs (with seed replicates) and Astral 3 runs, both
+  with entrapment, 2026-11-09 (above): no gain on either. Dropped; the ppm path stays opt-in.
 - [ ] Calibration discovery itself matches within the uncorrected tolerance: a shift of -0.5
   to -0.7 Th on the small subset calibrated nothing (full runs had enough peptides). A
   fallback discovery at a wider tolerance, or an ID-free MS2-vs-MS1 precursor estimate, would
