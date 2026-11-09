@@ -179,6 +179,11 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   1cbe1463bd). Stellar regression PASS (golden, 1c, 4, 6); gate 684/684, 0 inspection. MACS2: ready to merge into
   share and pipeline. DIA-NN 2.7.0 library: 3,081,739 precursors, 40,892 proteins, predicted in 6.6 min at 32 threads.
 
+- **MACS2 merging (2026-11-09):** both MACS2 sub-agents told to `git merge origin/Skyline/work/20261109_osprey_scoring_uw8`
+  at their next clean point. share has 81541d6ffe (pick fit reused for the chosen peak) and 6c92959bd5 (shared chosen-peak
+  pairwise correlations); its step 1 must be reconciled with UW8's buffered CandidateLibCosine. Merged tips are
+  verified byte-identical vs `n1108-pbfix`, gated, then pushed for UW8 to time. Same-machine DIA-NN timing is UW8's.
+
 ## Machine-sharing check
 
 Before timing anything: `quser` and `tasklist /v /fi "imagename eq Osprey.exe"` (the session column names the
