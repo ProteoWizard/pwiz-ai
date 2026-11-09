@@ -99,6 +99,15 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       static Entrez fields ahead of instance fields. Dropped: 503 Retry-After (repeat), probe flag
       race, seam-on per-pass cost, uncancellable 400ms sleep, dead ENTREZ_RATELIMIT entries,
       250ms poll, timing-test flakiness. Both inspections clean. #5008 143789c4a4, #5010 d51e513c73
+- [x] /code-review high on that commit: a closed Entrez gate aborted the whole pass, holding up
+      UniProt for the full Retry-After - now it skips only its own service, and all waiting in a
+      pass shares one MAX_RATE_LIMIT_DELAY allowance. Gate closure capped at MAX_RATE_LIMIT_HONORED
+      (10 min). HasWebAccess treats a closed UniProt gate as reachable instead of asking again.
+      Asserted the real providers share one gate. Each test went red first (cap 1h > 10min;
+      UniProt 0 requests; probe 2 requests). Dropped: seam-on bypass (test-only), merging gate with
+      the Entrez clock (redesign), redundant post-refusal wait, no failure reason on gated
+      proteins, duplicated test RequestCount. #5008 c0f62bd85a, #5010 4b04b06148 (one hunk
+      hand-applied: release has HTTP_TOO_MANY_REQUESTS beside MAX_TEST_RATE_LIMIT_DELAY)
 - [ ] Carry any later #5008 review changes over to #5010; merge #5010 after #5008
 
 ## Notes
