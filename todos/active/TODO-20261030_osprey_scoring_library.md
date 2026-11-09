@@ -419,6 +419,12 @@ m/z lookups; sub-agent on local `Skyline/work/20261108_osprey_scoring_share`, by
 largest-window-first scheduling, dedup inside each window task, an ordered producer-consumer parquet writer
 (Skyline's ProducerConsumerWorker pattern).
 
+**Decision (Brendan, 2026-11-09): performance is enough for the #4950 checkpoint merge.** UW8 measures Osprey 1.33x
+faster than DIA-NN on 3 SEA-AD files on an i9 without `--parallel-files`. Further tuning goes to a follow-up issue
+(draft `ai/.tmp/sessions/20261104-night/issue-perf-draft.md`, not filed); no full feature-pruning study now, but keep
+gathering data that targets it. MACS2 re-tests `--parallel-files-scoring 4` (the earlier ~2.2x optimum) when no other
+user's jobs are running: `pf-idle.ps1`, log `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-pfidle\pf-idle.log`.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
