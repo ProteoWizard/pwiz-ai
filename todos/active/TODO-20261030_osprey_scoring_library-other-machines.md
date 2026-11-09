@@ -221,6 +221,20 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   coelution, ~6 s/file net (~3%); the CWT `Convolve` hoist is not visible. The first `t-uw8` run (277.7 s) had a
   cold OS cache after the 16-file runs (library load 97 s vs 33 s) and is not comparable. The remaining wall at 16
   files is Rescoring (~1,300 s, super-linear) and FirstPassFDR (~820 s), which no branch touches yet.
+- **Why PerFileRescoring scales super-linearly (UW8, 2026-11-09 07:30; `recon_counts.py` in the session folder).**
+  A01_005 per file, 3 -> 16 files: re-scored 62,542 -> 113,073 peaks, of which paired DECOYS 44,087 (70%) ->
+  80,364 (71%) (forced integration 34,232 / 62,454 decoy; CWT re-pick 9,855 / 17,910 decoy; gap fill targets only).
+  The planner admits a (base id, charge) when any of run/experiment x precursor/peptide q passes 1% in ANY run,
+  and pairs its decoy by base id; a decoy's apex is almost never at the consensus RT, so nearly every decoy is
+  moved. The union of run-level passers grows with run count (reconciled targets per file 101k -> 138k vs 74k ->
+  89k experiment q 1%), and per-peak rescore cost rose 0.10 -> 0.18 ms. Stage 6 per file at 16 files: rescore +
+  gap fill ~25 s, planning ~11 s, reconciled-parquet write ~24 s (248k rows; reads the 3.9 GB first-pass parquet),
+  model-diagnostics mass-error pass ~11 s.
+- **Brendan (2026-11-09): carrying decoys into PerFileRescoring is a protein-compact artifact; under transfer there
+  is no re-competition and decoys need not change past the first pass.** UW8 is implementing: `FilePlanner` takes
+  whether to reconcile decoys, and `RunReconciliationPlanner` passes false under transfer (protein-compact
+  unchanged). Stage 6 planner only - not the coelution code, not on either MACS2 branch. Verify: 3-file arm, target
+  pass-2 q and FDRBench pass 2 unchanged, then time 16 files.
 
 - **MACS2 merging (2026-11-09):** both MACS2 sub-agents told to `git merge origin/Skyline/work/20261109_osprey_scoring_uw8`
   at their next clean point. share has 81541d6ffe (pick fit reused for the chosen peak) and 6c92959bd5 (shared chosen-peak
