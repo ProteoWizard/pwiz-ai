@@ -216,6 +216,14 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
     in two windows can make output timing-dependent. Neither SEA-AD nor Stellar has such entries (both now take the
     per-window path); data with overlapping windows still runs the old pass. For the follow-up issue.
 
+- **MACS2 parallel-files re-test (2026-11-09 03:23-03:51; chrhsu's one bursty Osprey still running, total CPU ~12%):**
+  4 files (A01_005, A02_006, A06_010, A10_014), `--task PerFileScoring`, full settings, 72 threads, `n1108-pbfix`
+  (before the UW8/share/pipeline changes): sequential 933 s vs `--parallel-files-scoring 4` 707 s = **1.32x** (was
+  ~2.2x before this work), peak memory 38.7 GB -> 83.4 GB. Sequential coelution 148-167 s/file (26.6-29.6k cand/s),
+  so the evening's 13.9k cand/s single-file numbers were inflated by the other user's jobs. Lanes now buy only the
+  per-window tail and the serial calibration/dedup/write; the pushed branches attack the same tail. Logs
+  `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-pfidle\{seq4,pfs4}\run.log`.
+
 ## Machine-sharing check
 
 Before timing anything: `quser` and `tasklist /v /fi "imagename eq Osprey.exe"` (the session column names the
