@@ -263,6 +263,22 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
     unchanged (73,978, 0.91%); FDRBench beyond 1% moves slightly (unreported precursors keep first-pass peaks).
   - Stage 6 per file at 3 files is now mostly fixed cost: reconciled-parquet write ~20 s (decodes all 4.4M
     first-pass rows, every column, to keep ~180k Stage 5 survivors) and the model-diagnostics mass-error pass ~10 s.
+- **16 files on UW8, f90d19aaa6 vs master 813bf69cee vs DIA-NN (2026-11-09; night log
+  `ai/.tmp/night-session-budget-20261109.md`).** f90d19aaa6 (PerFileScoring linked from 4ecdc54fee, same code):
+  FirstPassFDR 817-889 s, PerFileRescoring 1,250 s (re-scored 2,004,773 -> 220,309), SecondPassFDR 85 s, ~84 min;
+  blib = 4ecdc54fee's except 1 PeptideQValue row (the floor fix); Stellar regression PASS. Stage 6 barely moved because
+  it is I/O-bound on UW8's SATA HDD (D:): re-scoring 8k peaks took 21 s like 113k did, the per-window cost being the
+  cold read of the 4.1 GB `.spectra.bin` (profile `runs-uw8\profile-stage6-16f.dtp`: GetCalibratedWindow 11,412 s
+  total vs ScoreWindow 709 s). The earlier "super-linear" Stage 6 was the OS cache (warm at 3 files, cold at 16), not
+  workload - the decoys and run-level-only precursors were real but small CPU.
+  Master at its defaults (protein-compact, none of the SEA-AD settings), same 16 files: 55.5 min (~50 warm; 369 s
+  one-time blib build); PerFileScoring 1,799 s (coelution 38.8 s/file vs ~122 branch), FirstPassFDR 303 s,
+  PerFileRescoring 976 s (905,753 re-scored), SecondPassFDR 253 s; 54,504 found at FDP 1% (branch 89,244, +64%;
+  DIA-NN 95,115); reported q 1% reads 1.17% FDP (branch 1.04%, DIA-NN 0.75%). Branch Stage 7 is 3x faster (no
+  re-competition); branch Stage 6 is slower (78 vs 61 s/file) because its first-pass `.scores.parquet` is 3.62 GB vs
+  1.75 GB per run (12 fragments, more features) and Stage 6 reads it twice (planning, writer). Writer (sub-agent,
+  read-only): survivors are 11-column stubs, so writing from memory changes bytes; key-first decode saves CPU not disk;
+  the HDD wins are write-behind overlap or reading fewer columns.
 - **Decision (Brendan, 2026-11-09): the MACS2 share and pipeline branches are not merged.** On UW8 share gave no
   measurable gain and pipeline ~6 s/file (~3%, the per-window dedup); not worth the added complexity. The UW8 branch
   (f90d19aaa6) carries neither. Keep for the follow-up issue only: the whole-file dedup shares `removed[]` across
