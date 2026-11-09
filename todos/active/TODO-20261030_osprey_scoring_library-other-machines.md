@@ -131,6 +131,15 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   Cumulative: coelution 182.8 -> 124.1 s (-32%), task wall 257.1 -> 196.9 s; parquet identical at every step; gate
   684/684, 0 inspection. Per file now: library load 33 s (once per process), RT calibration 12 s, coelution 124 s,
   window dedup ~9 s, parquet write 17 s.
+- **Possible work conflict (2026-11-09 00:00).** The main TODO (63152c70, MACS2, 23:17) describes a sub-agent on local
+  `Skyline/work/20261108_osprey_scoring_share` doing largest-window-first scheduling, sharing the second extraction's
+  m/z lookups and reusing the median-polish fit from the pick - items 1-4 above overlap it. Brendan is checking with
+  the MACS2 agent; UW8 makes no further coelution code changes until he decides who keeps what. UW8's changes are
+  uncommitted in `C:\proj\pwiz-pb` (snapshot of the latest: `_bin\uw8-polish`).
+- Latest profile (`runs-uw8\profile-full-polish.dtp`, report `ai/.tmp/sessions/20261108-uw8perf/profile-full-polish-report.xml`):
+  ScoreWindow 3,630 core-s (from 5,007). Largest left, core-s: scan-major extraction 746 (LowerBound 459 of it),
+  median-polish Fit 503 (all callers), PeakDominance 269, SgWeightedSweep 241, PearsonCorrelationInRange 211, CWT
+  Convolve 206, ReextractedCorrelations 207, SpectrumMatchScores 192.
 - dotTrace CLI here was 2025.3.2 and hit a CLR assert (`TS_Hijacked`) under .NET 10 with no snapshot; updated to
   2026.2.4.1, which works with the installed 2026.2 Reporter. Snapshots: `runs-uw8\profile-full-lpt.dtp`,
   `profile-full-corrsm.dtp`.
