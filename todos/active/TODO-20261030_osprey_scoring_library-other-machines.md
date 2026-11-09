@@ -178,6 +178,22 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
 - **UW8 branch pushed (2026-11-09 01:00): `Skyline/work/20261109_osprey_scoring_uw8` at 4ecdc54fee** (one commit on
   1cbe1463bd). Stellar regression PASS (golden, 1c, 4, 6); gate 684/684, 0 inspection. MACS2: ready to merge into
   share and pipeline. DIA-NN 2.7.0 library: 3,081,739 precursors, 40,892 proteins, predicted in 6.6 min at 32 threads.
+- **Same-machine Osprey vs DIA-NN, 3 files (A01_005, A06_010, A10_014), 32 threads, UW8 idle (2026-11-09 01:30).**
+
+  | run | wall | q 1% kept (FDP) | at FDP 1% |
+  |---|---|---|---|
+  | DIA-NN 2.7.0, NN, MBR (`runs-uw8\diann270-3files`) | 20.15 min | 75,028 (0.59%) | 78,667 |
+  | Osprey tip 1cbe1463bd (`...pb-gbdt-tip-warm`) | 18.6 min (1,116.9 s) | 73,978 (0.91%) | 74,643 |
+  | Osprey 4ecdc54fee (`...pb-gbdt-4ecdc54fee`) | 15.2 min (910.3 s) | 73,978 (0.91%) | 74,643 |
+
+  Osprey stages tip -> 4ecdc54fee: PerFileScoring 709.2 -> 508.9 s (coelution ~176 -> ~122 s/file), FirstPassFDR
+  249.8 -> 247.7, PerFileRescoring 137.4 -> 132.2, SecondPassFDR 18.8 -> 20.3. All three `.scores.parquet` identical,
+  both passes' split numbers identical. Both Osprey arms pinned `OSPREY_VERSION_OVERRIDE=26.1.1.312` so they read
+  the same warm `.blib` (the derived library is stamped with the daily version; a .313 build would rebuild it,
+  ~250 s). DIA-NN reproduces MACS2's row (75,125 / 0.59% / 78,668) on its own rebuild of the library. Osprey is
+  1.25x faster than DIA-NN end to end (was 1.08x) at 5.1% fewer IDs at FDP 1%. Script `arm3.ps1` in the session folder.
+  Not yet compared: DIA-NN with the Osprey library's own spectra, and 82-file walls (DIA-NN per-file cost scales
+  linearly; Osprey's FirstPassFDR does not).
 
 - **MACS2 merging (2026-11-09):** both MACS2 sub-agents told to `git merge origin/Skyline/work/20261109_osprey_scoring_uw8`
   at their next clean point. share has 81541d6ffe (pick fit reused for the chosen peak) and 6c92959bd5 (shared chosen-peak
