@@ -394,6 +394,19 @@ run these tests on a second machine (data, library rebuild, settings, expected n
 test directory (3116a4f0). First dotTrace snapshot of PerFileScoring (A10_014): `runs-timing\profile-full.dtp`;
 its report is not read yet (installed Reporter 2022.1 cannot read a 2026.2.1 snapshot).
 
+**PerFileScoring slowdown is the experiment settings, not the code (dotTrace, 2026-11-08 22:00).** A10_014,
+`--task PerFileScoring`, 64 threads, split-sized library, sampling scoped to the main search (another user's 2 Osprey
+jobs held ~26 cores throughout). Coelution scoring: master 61591d866b 64.6 s (68,745 cand/s); branch at defaults
+65.5 s (67,856 cand/s); branch with the SEA-AD experiment settings 317.8 s (13,854 cand/s). Branch-defaults and
+master profiles match method by method. With the settings: TukeyMedianPolish.Compute own 283 -> 2,437 core-s (called
+from CandidateLibCosine, ScoreWindow, CorrelationScoring.Set and the CWT fallback), MzBucketIndex.LowerBound 163 ->
+1,126, CandidateLibCosine 81 -> 682, CWT Convolve 427 -> 1,162, plus ~3,500 core-s of new feature calculators
+(dominance, reference-kth, time correlations, median-polish fits, CropToPeak). Double-counting dedup exists on master
+too (16 s vs 27 s wall; master's profiler bracket ends before it). Snapshots and reports
+`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-timing\profile-{master,branchdefault,full}.dtp` / `-report.xml`
+(read with dotTrace Reporter 2026.2.1, `_tools\dottrace-cli-2026.2.1`); diff script
+`ai/.tmp/sessions/20261104-night/profdiff.py`. Per-setting cost (each added alone to the defaults): `runs-timing\addone.log`.
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
