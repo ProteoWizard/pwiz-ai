@@ -67,7 +67,13 @@ rather than redistributed among entrapment proteins.
 
 usage:
     python Build-ProteinShuffledEntrapment.py --library-dir <dir> --out-dir <dir>
-        [--seed 20261101] [--copy] [--in-targets <fraction>]
+        [--seed 20261101] [--copy] [--in-targets <fraction> [--size-weighted]]
+
+--size-weighted draws each moved peptide's target accession in proportion to that
+accession's target peptides (uniform under-reads protein boosts: on SEA-AD, targets
+land on detected proteins 38.7% vs uniformly moved entrapment 31.3%). The SEA-AD
+size-weighted split (target+decoy+entrapment-20260817-split-sized) is
+--in-targets 0.5 --size-weighted with the default seed, from the r=1.0 drop.
 """
 import argparse
 import os
@@ -90,9 +96,13 @@ def main():
     ap.add_argument('--copy', action='store_true', help='copy library files instead of hard-linking')
     ap.add_argument('--in-targets', type=float, default=None, metavar='FRACTION',
                     help='split mode: move only this fraction of the entrapment peptides, onto target proteins only')
+    ap.add_argument('--size-weighted', action='store_true',
+                    help='split mode: draw each target accession in proportion to its target peptides, not uniformly')
     a = ap.parse_args()
     if a.in_targets is not None and not 0.0 <= a.in_targets <= 1.0:
         sys.exit('--in-targets must be a fraction in [0, 1]')
+    if a.size_weighted and a.in_targets is None:
+        sys.exit('--size-weighted needs --in-targets')
 
     src = os.path.join(a.library_dir, MANIFEST)
     if not os.path.isfile(src):
@@ -118,7 +128,16 @@ def main():
         target_pool = sorted(set(man[man.peptide_type == 'target'].proteins.str.split(';').explode()))
         n = len(entrap)
         chosen = rng.choice(n, size=round(a.in_targets * n), replace=False)
-        draw = rng.integers(0, len(target_pool), len(chosen))
+        if a.size_weighted:
+            # Draw a target accession in proportion to its target peptides, as a false target would land
+            tp = man[man.peptide_type == 'target'][['sequence', 'proteins']].drop_duplicates('sequence')
+            cnt = tp.proteins.str.split(';').explode().value_counts()
+            w = np.array([cnt.get(acc, 0) for acc in target_pool], dtype=float)
+            w /= w.sum()
+            draw = rng.choice(len(target_pool), size=len(chosen), p=w)
+            print(f'size-weighted draw: median accession weight {np.median(w):.2e}, max {w.max():.2e}')
+        else:
+            draw = rng.integers(0, len(target_pool), len(chosen))
         seqs = entrap.sequence.to_numpy()
         assign = dict(zip(seqs[chosen], (target_pool[i] for i in draw)))
         print(f'split mode: --in-targets {a.in_targets}, target accession pool {len(target_pool)}')

@@ -388,6 +388,12 @@ blib 998 s. DIA-NN 82 files took 8.1 h. Clean single-file timings and dotTrace s
 Review note for the runtime work: with PB on, round 1 is rescored over every file three times (round-2 rows, score
 pass, experiment fold; PercolatorEngine.cs ~1542, ~1762).
 
+**Branch pushed (2026-11-08 ~21:05):** `Skyline/work/20261108_osprey_protein_best` at 1cbe1463bd (no PR yet). How to
+run these tests on a second machine (data, library rebuild, settings, expected numbers, profiling, what is left):
+`TODO-20261030_osprey_scoring_library-other-machines.md`. Profile-Osprey `-OspreyArgs` no longer needs the Stellar
+test directory (3116a4f0). First dotTrace snapshot of PerFileScoring (A10_014): `runs-timing\profile-full.dtp`;
+its report is not read yet (installed Reporter 2022.1 cannot read a 2026.2.1 snapshot).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
