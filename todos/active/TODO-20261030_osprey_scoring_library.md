@@ -407,6 +407,18 @@ too (16 s vs 27 s wall; master's profiler bracket ends before it). Snapshots and
 (read with dotTrace Reporter 2026.2.1, `_tools\dottrace-cli-2026.2.1`); diff script
 `ai/.tmp/sessions/20261104-night/profdiff.py`. Per-setting cost (each added alone to the defaults): `runs-timing\addone.log`.
 
+**Per-setting PerFileScoring cost (A10_014, 64 threads, coelution scoring; another user's jobs on the machine, +-15 s
+noise; `runs-timing\addone.log`).** Each added alone to the branch defaults (65.5 s): FEATURE_MASK=none 84.2,
+XIC_FRAGMENTS=12 81.9, LOESS 0.10 + MIN_RT_TOL 1.0 + TC_HALF_WINDOW 0.40 75.5, CORR_FRAGMENT_TOLERANCE=7 69.1,
+LOCAL_RT_TOLERANCE=15 65.6, REF_XIC=corr 56.6; mask + XIC 12 together 121.6. Each dropped from the full set (267.0):
+-mask 215.9, -XIC 12 216.8, -small three 223.4, -corr tolerance 235.0, -local RT 269.9, -REF_XIC corr 292.1 (dropping
+it is slower). No single setting dominates; they multiply (more fragments, longer traces, a second XIC set, every
+feature over all of it). Brendan: several cannot be dropped without losing detection power, so the work is shared
+intermediates (median-polish fit and crops from the pick, one chosen-peak correlation matrix, the second extraction's
+m/z lookups; sub-agent on local `Skyline/work/20261108_osprey_scoring_share`, byte-identical gate) and pipelining:
+largest-window-first scheduling, dedup inside each window task, an ordered producer-consumer parquet writer
+(Skyline's ProducerConsumerWorker pattern).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
