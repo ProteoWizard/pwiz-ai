@@ -378,6 +378,16 @@ gate 683/683, 0 inspection. Open: GBDT on that tiny library fails with or withou
 the test leg passes at exactly 100 at 1%, a thin margin; at full size round 2's start still mixes out-of-fold and
 fold-mean scores (fixing it would move goldens). Logs `ai/.tmp/agent-pbsmall/`.
 
+**s82-off finished (82 files, size-weighted split, GBDT, PB off, protein-compact pass 2, refit off; 2026-11-08 19:21).**
+Experiment-level precursors, on-target split FDP (`ai/.tmp/sessions/20261104-night/s82off.out`): pass 1 at q 1% 85,471
+(FDP 0.71%), found at FDP 1% 89,086; pass 2 (protein-compact) at q 1% 92,630 at **FDP 1.29%**, found at FDP 1% 90,328.
+Protein-compact's pass 2 is anti-conservative at 82 files (q 2% -> 2.55%, q 5% -> 6.26%), as suspected from its per-run
+union; transfer arms on links come next. Wall time 66,535 s = 18.5 h on a shared machine: stages 1-4 39,782 s, stage 5
+(first-pass FDR) 2,724 s, stage 6 (pass-2 rescoring) 21,139 s, second-pass FDR 953 s, stage 7 496 s, FDRBench 444 s,
+blib 998 s. DIA-NN 82 files took 8.1 h. Clean single-file timings and dotTrace started 19:21 (`runs-timing	iming.log`).
+Review note for the runtime work: with PB on, round 1 is rescored over every file three times (round-2 rows, score
+pass, experiment fold; PercolatorEngine.cs ~1542, ~1762).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
