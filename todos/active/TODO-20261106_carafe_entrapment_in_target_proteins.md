@@ -246,3 +246,9 @@ columns. Goldens: RefSpectra and Proteins recaptured on all four datasets; verif
 656/656 + zero inspections; `regression-parallel.ps1 -Dataset All` 49/49 PASS in 41:59. PR body rewritten (no longer "draft";
 test plan current). TeamCity Osprey Perf/Regression triggered on pull/4823: build 4256524.
 #5011: merged Nick's branch (8d05d56cda), Osprey gate 656/656 + zero inspections; Stellar + StellarGenDecoyEntrap legs running.
+
+### 2026-11-08 - #4823 merged; #5011 retargeted to master
+PR #4823 squash-merged as 61591d866b (TeamCity Osprey Perf/Regression 4256524 SUCCESS at 833e1a2a31; 17/17 checks green).
+#5011 retargeted to master (`gh pr edit --base master`), origin/master merged in cleanly (a92323be83), Osprey gate 656/656 + zero
+inspections, pushed; Osprey Perf/Regression triggered on pull/5011. Open from the #4823 review, carried here: subset-eliminated
+proteins competing as their own units, razor not constraining the group score, and the PEP fit population (Brendan to ask Mike).

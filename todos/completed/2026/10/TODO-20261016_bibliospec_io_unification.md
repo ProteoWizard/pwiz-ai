@@ -1415,3 +1415,8 @@ entrapment-partner schema question stays open in the Osprey one-command TODO.
 **What comes next**: the Osprey one-command sprint,
 `todos/backlog/brendanx67/TODO-osprey_one_command.md` (designed 2026-10-19), which the
 integration TODO this sprint interrupted hands over to.
+
+### 2026-11-08 - #4823 merged
+PR #4823 merged as 61591d866b (Brendan finished it: master merged in, RefSpectra.PeptidePep and Proteins.Pep written to the blib with
+the goldens recaptured, TeamCity Osprey Perf/Regression green). The review findings carried forward are logged in
+TODO-20261106_carafe_entrapment_in_target_proteins.md.
