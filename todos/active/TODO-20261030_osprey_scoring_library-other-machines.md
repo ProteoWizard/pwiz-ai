@@ -122,6 +122,15 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
      169.7 -> 134.5 s (-26% cumulative), CPU 5,104 -> 3,995 core-s.
   Both: `.scores.parquet` identical to the baseline (4,356,316 rows x 128 columns); Debug gate 683/683, 0 inspection;
   `ScoringTest` scan-major test now also checks the corr XICs bitwise.
+  3. Shared lower bound for the two windows in the scan-major pass (`TopFragmentExtractor.FindClosestPeakInWindows`:
+     the wide window's bucket lookup seeds the narrow one): 134.5 -> 131.4 s, CPU 3,906.
+  4. Median polish of every pick candidate (`CandidateLibCosine`) in reused per-thread buffers
+     (`TukeyMedianPolish.TryLibCosineOverScans`; `Compute` now runs the same `Fit` and copies out): 131.4 -> 124.1 s,
+     CPU 3,691. New `MedianPolishMetricsTest.TestLibCosineOverScansMatchesCompute` (bitwise, 2,000 random fits).
+  Tried and dropped: insertion-sort medians for short rows (134.5 s, inside the ~3 s run-to-run noise).
+  Cumulative: coelution 182.8 -> 124.1 s (-32%), task wall 257.1 -> 196.9 s; parquet identical at every step; gate
+  684/684, 0 inspection. Per file now: library load 33 s (once per process), RT calibration 12 s, coelution 124 s,
+  window dedup ~9 s, parquet write 17 s.
 - dotTrace CLI here was 2025.3.2 and hit a CLR assert (`TS_Hijacked`) under .NET 10 with no snapshot; updated to
   2026.2.4.1, which works with the installed 2026.2 Reporter. Snapshots: `runs-uw8\profile-full-lpt.dtp`,
   `profile-full-corrsm.dtp`.
