@@ -206,6 +206,21 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   1.04x faster before, 1.24x after (1.33x at 3 files). Gap at FDP 1% 6.2% (5.1% at 3 files); reported q 1% reads
   1.04% FDP (0.91% at 3). Per-file cost 3 -> 16 files: scoring 170 -> 181 s, Rescoring 44 -> 81 s (super-linear;
   the largest stage after scoring and untouched by any branch so far), FirstPassFDR 248 -> 817 s total.
+- **MACS2 branches timed on UW8 (2026-11-09 06:40-06:55; A10_014, `--task PerFileScoring`, full settings, 32
+  threads, warm cache, `OSPREY_VERSION_OVERRIDE=26.1.1.312`):**
+
+  | build | coelution | dedup after coelution | PerFileScoring wall |
+  |---|---|---|---|
+  | UW8 4ecdc54fee (`t2-uw8`) | 124.0 s | 8 s | 193.3 s |
+  | share fb73f1ba11 (`t-share`) | 124.6 s | 7 s | 198.7 s |
+  | pipeline c70b7af35e (`t-pipeline`) | 125.8 s | 0 s | 192.4 s |
+  | share + pipeline, local merge 89557f2093 (`t-combo`) | 126.9 s | 0 s | 192.8 s |
+
+  All `.scores.parquet` identical to UW8's. share: no measurable gain on UW8 (its chosen-peak correlation sharing
+  does not move coelution). pipeline: the per-window dedup removes ~8 s of serial work per file for ~2 s more
+  coelution, ~6 s/file net (~3%); the CWT `Convolve` hoist is not visible. The first `t-uw8` run (277.7 s) had a
+  cold OS cache after the 16-file runs (library load 97 s vs 33 s) and is not comparable. The remaining wall at 16
+  files is Rescoring (~1,300 s, super-linear) and FirstPassFDR (~820 s), which no branch touches yet.
 
 - **MACS2 merging (2026-11-09):** both MACS2 sub-agents told to `git merge origin/Skyline/work/20261109_osprey_scoring_uw8`
   at their next clean point. share has 81541d6ffe (pick fit reused for the chosen peak) and 6c92959bd5 (shared chosen-peak
