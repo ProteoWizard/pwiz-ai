@@ -168,7 +168,8 @@ $ErrorActionPreference = "Stop"
 $ds = Get-DatasetConfig $Dataset
 
 $testDir = $ds.TestDir
-if (-not (Test-Path $testDir)) {
+# -OspreyArgs names its own inputs, so the dataset directory is needed only without it.
+if (-not $OspreyArgs -and -not (Test-Path $testDir)) {
     Write-Error "Test data directory not found: $testDir"
     exit 1
 }
@@ -452,7 +453,8 @@ Write-Host "  Snapshot: $OutputPath" -ForegroundColor Gray
 Write-Host ""
 
 $savedLoc = Get-Location
-Set-Location $testDir
+# -OspreyArgs carries absolute paths; only the dataset run needs its directory as the working directory.
+if (-not $OspreyArgs) { Set-Location $testDir }
 
 Write-Host "Running under dotTrace..." -ForegroundColor Cyan
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
