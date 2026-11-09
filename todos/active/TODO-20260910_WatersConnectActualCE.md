@@ -150,3 +150,7 @@ SDK-style with auto-globbed Compile items. Merged `origin/master` into the branc
 * Gotchas: the harness needs `-VendorLicenses` (no-vendor UNIFI makes Read throw) and the password in the PROCESS
   environment - user-level `setx` values are not inherited by shells spawned from an already running Claude Code, so
   copy them in with `$env:WC_PASSWORD = [Environment]::GetEnvironmentVariable("WC_PASSWORD","User")` first.
+* Pre-push inspection on the merged tree: CodeInspection test passes; tcinspect.ps1 (CI-equivalent ReSharper run) reports
+  success with no warnings. tcinspect had been failing with "inspectcode exited with code 4" on this machine because a
+  gitignored Boost.Build-era `SkylineTester/Properties/AssemblyInfo.cs` duplicated the SDK-generated attributes; moving
+  that leftover out of the checkout fixed it. PR description updated for the C# reader port and the live checks.
