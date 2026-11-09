@@ -303,6 +303,30 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   per-window tail and the serial calibration/dedup/write; the pushed branches attack the same tail. Logs
   `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-pfidle\{seq4,pfs4}\run.log`.
 
+## BRENDANX-UW25 memory scaling (2026-11-09, i9-14900 65 W, 32 threads, 64 GB)
+
+Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bounded in memory, and will
+500-1000 runs (CHS 446) fit in 64 GB? Local branch `Skyline/work/20261109_osprey_uw25_memscale` in
+`C:\proj\pwiz-uw25` = pipeline c70b7af35e + share fb73f1ba11 merged cleanly (da4eff9f63), snapshot
+`_bin\uw25-da4eff9f63`. Runs `D:\test\osprey-runs\sea-ad\runs-uw25`; ladder script + logs + perfviz PNGs in
+`ai/.tmp/sessions/20261109-uw25mem`. Full settings above, `-LogMemory` (post-GC [MEM] probes), no mdiag.
+
+- **Reproduction exact** on the merge: pass 2 73,978 at q 1% (FDP 0.91%), 74,643 at FDP 1%. Coelution ~185 s/file
+  here (65 W part) vs ~122 s on UW8; scoring ~3.9 min/file.
+- `-LinkFrom` refuses a source missing any declared file, so the ladder scores in legs (`-Task PerFileScoring
+  -SkipFirstFiles`) and each FDR rung links all legs: score 1-20, FDR 10, FDR 20, score 21-41, FDR 41, score 42-82,
+  FDR 82.
+- **Live sets flat in file count** (post-GC): entering FirstPassFDR 5.21 / 4.23 / 4.23 GB at 3 / 10 / 20 files;
+  after first-pass FDR 5.89 / 4.91 / 4.91 (13.0M / 42.7M / 86.5M rows streamed); rescoring ~3.65 GB per run;
+  Stage 7 < 3 GB. Private peaks 31-38 GB are Server-GC headroom (managed peak ~2x live). FirstPassFDR wall linear,
+  ~63 s/file (326 / 745 / 1,374 s). Only growth seen: the best-per-precursor training-feature load (5.8M x 109 at
+  20 files), O(library) - plateau 12.3 -> 16.5 GB managed from 10 to 20 files, should saturate near 6.18M.
+- Detections (on-target half): 10 files p2 85,389 at q 1% (FDP 1.01%); 20 files p2 90,189 (0.93%), 90,617 at FDP 1%.
+- **Silent gap found and fixed:** `AppendProteinBestToRows` (round-2 protein-best column, scores every row of every
+  file with the round-1 models) logged nothing for 34 / 143 / 311 s at 3 / 10 / 20 files (~20 min at 82, ~2 h at
+  446). Wrapped in `ProgressReporter.Run` - 7a615c6082 on the local branch (gate 684/684, 0 inspection; not pushed,
+  not yet run-verified). Belongs on the protein-best branch; Brendan to place.
+
 ## Machine-sharing check
 
 Before timing anything: `quser` and `tasklist /v /fi "imagename eq Osprey.exe"` (the session column names the
