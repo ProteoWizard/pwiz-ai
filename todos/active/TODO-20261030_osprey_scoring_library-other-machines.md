@@ -235,6 +235,17 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   whether to reconcile decoys, and `RunReconciliationPlanner` passes false under transfer (protein-compact
   unchanged). Stage 6 planner only - not the coelution code, not on either MACS2 branch. Verify: 3-file arm, target
   pass-2 q and FDRBench pass 2 unchanged, then time 16 files.
+- **The transfer reconciliation set is the blib set (Brendan, 2026-11-09).** The planner and gap fill admitted any
+  precursor passing at any of run/experiment x precursor/peptide in any run - run-level q inflates with run count,
+  protein-compact's need. Measured: 101,394 reconciled target precursors vs 74,210 in the blib at 3 files (1.37x),
+  139,039 vs 89,771 at 16 (1.55x) (`recon_set_size.py`). Brendan: under transfer keep every experiment-wide value from
+  pass 1 and let reconciliation improve only per-run peak picking (as Skyline does); mean-best-N has shown little
+  value after protein-best and climbers are unlikely. Code: new `ExperimentOutputSet` (Osprey.FDR.Reconciliation)
+  applies the blib writer's two experiment-level gates (peptide at FdrLevel, then charge states, best-charge
+  fallback) to first-pass q in `Stage6Planner.ScanFiles` under transfer; validity token `;reconset=output;
+  recondecoys=0` on FirstPassFDR (writes the Stage 6 consensus), PerFileRescoring and SecondPassFDR under transfer.
+  The transfer fold already carries pass-1 experiment q unchanged (`CarryPass1Experiment`), so blib membership
+  cannot change; only per-run peaks and run q do.
 
 - **MACS2 merging (2026-11-09):** both MACS2 sub-agents told to `git merge origin/Skyline/work/20261109_osprey_scoring_uw8`
   at their next clean point. share has 81541d6ffe (pick fit reused for the chosen peak) and 6c92959bd5 (shared chosen-peak
