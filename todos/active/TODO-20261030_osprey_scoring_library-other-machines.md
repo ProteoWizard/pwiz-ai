@@ -360,8 +360,25 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   Server-GC headroom, not cohort size. CHS 446 projected on this box: ~29 h scoring + ~7.7 h stage5 (~2 h of it
   the PB column) + ~10 h stage6 = ~47 h, within 64 GB. Remaining 30-57 s gaps are per-file-granularity reports in
   the first-pass score pass and training-feature load (heartbeat fires only on Report calls); pre-existing.
-- Speed target spotted: the protein-best column is ~16 s/file of round-1 GBDT scoring over every row; check
-  whether the score pass recomputes it per file (the class comment says it is recomputed on each lane).
+- **Protein-best cost, measured (82 files):** the training-time column step (1,349 s) writes nothing; it re-reads
+  every file's features (~200 GB of parquet: block reads 4.1 -> 406.6 GB across training load + this step; the score
+  pass reads 205 GB) and round-1 GBDT-scores all 359M rows to keep ~200k training values. The score pass then
+  recomputes the full column (needed: the round-2 model takes it as a feature, and pass 2 reads it). All per-file
+  sidecar writes in the score pass total 29.5 s, so writing is not the cost. The per-protein reduction itself is
+  already cheap (best per peptide, top N+1 per protein, self excluded, memoised). Accepted as an expensive score.
+- **Bug fixed, 282fe1c2e5 (local, not pushed):** protein-best grouped evidence by MODIFIED sequence, so two forms of
+  one sequence counted as two peptides and a form could read its own other form (at top-1). Now keyed on the
+  unmodified sequence (`ProteinBestMembership.FromLibrary`); new check in `TestProteinBestReduction`; gate 684/684,
+  0 inspection; Stellar regression PASS (unchanged). SEA-AD/CHS libraries carry only fixed CAM, so unaffected.
+- **Brendan's plan (2026-11-09), not yet implemented:** keep training-time compute-all-keep-training-rows; fold the
+  per-run protein-best values into `.1st-pass.fdr_scores.bin` (f64 field, record 36 -> 44 B) and retire the
+  separate `.1st-pass.protein_best.bin` (52.8 MB/run).
+- **Note for later - shrink the FirstPassFDR -> PerFileRescoring handoff** (a scale bottleneck): readers of
+  `.1st-pass.fdr_scores.bin` across tasks use only survivors (~7% of rows: the 2nd-pass file is 11.3 MB vs 158.6 MB)
+  except transfer's per-run score->q tables (`Pass2FdrSidecar.TransferOneFile`) and the recompete modes. With exact
+  tables written explicitly, recompete retired and the all-rows file kept only as a FirstPassFDR-private checkpoint,
+  the handed-off file could be survivors-only (~71 GB -> ~5 GB at 446 runs). Also consider one file-name separator
+  convention (inherited from Rust: `.1st-pass.fdr_scores.bin` vs `.scores-reconciled.parquet`).
 
 ## Machine-sharing check
 
