@@ -167,6 +167,8 @@ Same driver discipline (arms.tsv / results.tsv, restartable, STOP file, disk hyg
 this section and pushes as results land; the two sessions compare family-level effects after their screens and end
 sets after their second stages. Cost estimate on UW8: ~18 min per 20-file arm with protein-best (FirstPassFDR
 ~54 s/file at 82 files), ~40 screen arms + 5 seeds + anchors ~14 h, forward stage ~1 day.
+Brendan (2026-11-10): run it in a fresh UW8 session from the handoff `ai/.tmp/handoff-20261110-uw8-featset.md` (on
+UW8; setup steps, paths, file pattern, driver spec, pitfalls).
 
 ## Progress
 (none yet)
