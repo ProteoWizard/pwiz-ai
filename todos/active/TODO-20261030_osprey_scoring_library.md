@@ -485,7 +485,9 @@ no-refit results stand.
   non-redundant .blib test input. Skyline findings 2-5 in the TODO still unfiled.
 - Mutation-decoy library (`decoys\lib\...-mutdecoy1712`) never searched with Osprey; reverse decoys near-copy other targets
   18.6% vs 1.0% for mutation decoys, and Osprey's co-assignment gate checks only the own target.
-- Linux regression patch (regression-linux.patch) lived in an agent scratchpad; recover or redo before Linux regression runs;
+- Linux regression patch (regression-linux.patch) recovered 2026-11-10 from the session scratchpad before it was cleared:
+  MACS2 `ai/.tmp/sessions/20261104-night/scratchpad-rescue/linuxregress/regression-linux.patch` (local only, not pushed);
+  apply before Linux regression runs;
   WSL OspreyLinux was unregistered on 2026-11-07 (rootfs tarball in D:\WSL).
 - SVM path is not bitwise across Windows/Linux (PrecursorPep <= 8.6e-16); only GBDT was made deterministic.
 - #4993 decisions flagged for Brendan: per-half +1 vs one +1 for the union; lowered subset floors (0.7 -> 0.6, export floor on

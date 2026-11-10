@@ -173,7 +173,7 @@ D:\Users\brendanx\test\osprey-runs\_bin\, `sessions\` = ai\.tmp\sessions\. Tags 
   snapshot `_bin\detswitch`. [#4967]
 - Linux regression (agent linuxregress): WSL OspreyLinux had pwsh 7.6.7 + .NET 10.0.11 runtime only; pwsh-Linux Join-Path
   normalizes '\' to '/', Get-CimInstance absent. Patch in that agent's scratchpad (linuxregress/regression-linux.patch:
-  launcher prefix/-OspreyBinDir, /proc comm liveness, Linux Downloads default) - likely lost with the scratchpad. Stellar
+  launcher prefix/-OspreyBinDir, /proc comm liveness, Linux Downloads default) - recovered 2026-11-10, see the main TODO. Stellar
   PASS on Linux 452 s vs Windows 391 s from the same bin. The WSL distro was unregistered 2026-11-07. [unmerged]
 - prBmerge: B merged with the upstream PercolatorEngine refactor (RunStreamingFirstPass edits ported into PercolatorEngine);
   SEA-AD fdrbench.tsv byte-identical pre vs post merge. Clone C:/t/prBpre left behind (rm blocked) - cleanup item. [#4968]

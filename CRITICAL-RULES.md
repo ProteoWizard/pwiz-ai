@@ -159,13 +159,26 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - Do NOT use `/tmp/` (Git Bash maps it to `$env:TEMP`, invisible to
   PowerShell), `C:\tmp\`, `C:\Users\...\AppData\Local\Temp\`, or any
   other ad-hoc location
+- **This overrides Claude Code's "scratchpad directory".** The harness system
+  prompt names a per-session scratchpad under the user's home folder
+  (`C:\Users\<user>\AppData\Local\Temp\...\claude\...\scratchpad`) and says to
+  "always use it". In this project, do not: use
+  `ai/.tmp/sessions/<YYYYMMDD>-<short-session-id>/` instead. The scratchpad sits
+  on the system drive, is invisible to the developer and to other sessions, and
+  grows unbounded: one 2026-11 Osprey session left 12 GB there (regression output,
+  `.spectra.bin` copies, pickles) and stranded a patch its TODO then recorded as
+  lost. Never copy test data or run output into the home folder at all
 - If a tool needs a scratch directory, create a subfolder under
   `ai/.tmp/` (e.g. `ai/.tmp/memtest/`, `ai/.tmp/diag-before/`)
 - **Your own working files go in `ai/.tmp/sessions/<YYYYMMDD>-<short-session-id>/`**
   - patch scripts, commit message drafts, captured build logs. The ROOT of
   `ai/.tmp/` is for files exchanged with the developer (handoffs, pasted
   context, downloads); dozens of session `.py` and `.txt` files there bury it
-- Test and run output goes to the machine's test data area, NEVER to `ai/.tmp/`
+- Test and run output goes to the machine's test data area, NEVER to `ai/.tmp/`,
+  and never to the system drive or home folder when the machine has a data drive
+  (on shared servers C: belongs to everyone: a session's 400 GB `C:\test` had to
+  be deleted on request). If the data drive is short of space, ask; do not fall
+  back to C:
 - Keeping everything under `ai/.tmp/` keeps the paths consistent
   between Git Bash and PowerShell, and between sessions
 

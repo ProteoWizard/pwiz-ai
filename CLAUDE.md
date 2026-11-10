@@ -197,7 +197,13 @@ always use `ai/.tmp/`.
 drafts and captured logs - anything written to do the job rather than to hand to the
 developer. The root is the shared surface listed above, and it stops being usable when
 a session leaves scores of files in it. Test and run output goes to the machine's test
-data area, never here. Run `/pw-cleanup` when it has grown untidy; see
+data area, never here, and never to C: or the home folder on a machine with a data drive.
+
+**This replaces Claude Code's "scratchpad directory".** The harness prompt points every
+session at a scratchpad under the home folder (`AppData\Local\Temp\...\claude\...\scratchpad`)
+and says to always use it. Do not: in this project the session folder above is the
+scratchpad. Files left in the home-folder one are invisible to the developer and to other
+sessions, fill the system drive, and are lost with it (see CRITICAL-RULES.md). Run `/pw-cleanup` when it has grown untidy; see
 `ai/docs/cleanup-guide.md`.
 
 **Cite the on-disk path for anything you report from output or logs.** Whenever a
