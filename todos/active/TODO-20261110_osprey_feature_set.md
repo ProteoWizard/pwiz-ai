@@ -134,6 +134,13 @@ The load is compute, not analysis, so one session can run it for days if it neve
 ### Phase 4 - Make it the default (code)
 - [ ] Remove the dropped families from computation, not just the mask, so PerFileScoring and the parquet
       shrink; keep the mask and record-all switches for research.
+- [ ] Core features get no exemption (Brendan, 2026-11-10: the core 21 were never rigorously vetted and newer
+      families may measure the same aspect better). They are always computed and recorded today
+      (`PinFeatureMask.CORE_FEATURE_COUNT`) because code outside the classifier reads some of them
+      (`fragment_coelution_sum` as the first-pass score and training tiebreak; median-polish diagnostics; the
+      training export). Inventory each core feature's non-classifier readers: one read only by the classifier
+      is removed outright if the study drops it; one that is also a structural input stays computed but leaves
+      the classifier and the parquet's FDR columns.
 - [ ] Recapture goldens; gate; regression-parallel; Perf/Regression on TeamCity when the PR is ready.
 
 ### Phase 5 - Storage format (after the set is known)
