@@ -109,17 +109,41 @@ Both do the same work and share helpers
 
 The externally reachable actions are triggered by **wiki/HTML pages stored in the
 LabKey database**, not by anything in the module source. That is why grepping the
-enlistment finds no callers. As of this writing (verified 2026-07-23):
+enlistment finds no callers. As of this writing (verified 2026-11-09):
 
 | Action | Triggered by | Mechanism |
 |---|---|---|
-| `SignUpApiAction` | Wiki page `signup-form` in `/home/support` (`https://skyline.ms/home/support/wiki-page.view?name=signup-form`) | Form posts to `signup-SignUpApi.view`. |
+| `SignUpApiAction` | The registration form on the Skyline installer page, wiki page `SkylineInstall_64_26-1` in `/home/software/Skyline`. Most signups come from it. | Form posts to `/home/software/Skyline/signup-SignUpApi.view`. |
+| `SignUpApiAction` | Wiki page `signup-form` in `/home/support` (`https://skyline.ms/home/support/wiki-page.view?name=signup-form`). The Skyline-daily register page links to it for people without an account. | Form posts to `signup-SignUpApi.view`. |
 | `ConfirmAction` | The link in the confirmation email sent by the signup handler | User clicks `signup-confirm.view?email=...&key=...`. |
 | `ChangeGroupsApiAction` | The "Agree & Register" button on the Skyline-daily register page at `/home/software/Skyline/daily/register-form/` | Posts `signup/ChangeGroupsApi.view` with an `oldgroup`/`newgroup` pair. |
 | `BeginAction` | The "Sign Up" web part JSP (`signupPage.jsp`) | Alternative to the wiki form. Not the path used by the live `/home/support` page. |
 
 If a new self-service transition is ever added, it will be a new DB-stored page
 posting a different `oldgroup`/`newgroup`, not a module code change.
+### Changing the response or form fields
+
+Each calling page reads `json.status` and `json.error_message` and decides what to display. A change to a
+status value, an error message or a form field takes a matching edit to every calling page, and nothing
+in the build or the tests finds those pages. Before such a change, search all wiki pages site-wide for
+the action name, as described in "Searching All Wiki Pages Site-Wide" in ai/docs/mcp/wiki.md.
+
+In 26.7 `SignUpApiAction` returns `SUCCESS` in place of `USER_ADDED`, and `USER_EXISTS` was removed. On
+skyline.ms this needed the following page edits.
+
+- `SkylineInstall_64_26-1` was updated on 2026-08-11. The new `SUCCESS` branch hides the form and asks
+  the person to confirm the email and refresh. The old `USER_ADDED` branch displayed the download
+  right away, so the edit also made a confirmed account required for the download.
+
+The search matches text anywhere in the page source, including inside HTML comments.
+`SkylineInstall_32_legacy` matches because its old form is still in the source, but the form is inside a
+comment, so the page does not call the action.
+
+The module does not control the Skyline download. The installer is public, and the installer page
+decides when to display the link. Its "continue without
+registering" link (`&submit=false`) skips the form entirely. Skyline-daily is different, because only
+DailyRequests members can download it, and an account joins that group only through
+`ChangeGroupsApiAction`.
 
 ---
 
@@ -249,6 +273,26 @@ In order (`SignUpController.ChangeGroupsApiAction.execute`):
 The live skyline.ms transition satisfies step 4 because both groups are in the
 same project and the target is read-only. The admin UI can express a rule pointing
 at a write-enabled, admin, site, or cross-project target, which step 4 would reject.
+
+---
+
+## Reading the signup data
+
+The User Signups charts are at `/home/development/User Signups` on skyline.ms. They read the saved
+query `signup.temporaryuser_by_month`. Points to know before counting signups or conversions.
+
+- `temporaryuser` has one row per email address. A repeat signup reuses the row, so `Container` is the
+  folder of the first form used, not the page that later led to the account.
+- The charts assign months by `_ts`, the time the row was last modified.
+- A signup has converted when `labkeyUserId` is set. Only `ConfirmAction` sets it.
+- Grouping by `Container` separates the signup forms. `/home/software/Skyline` is the installer page
+  and `/home/support` is the support form.
+- `auditLog.MessageAuditEvent` records each registration email (`Comment` contains "registration",
+  `To` is the address). `auditLog.GroupAuditEvent` records each DailyRequests join (`Group` is the
+  `newgroup` id the register page posts, `Comment` contains "was added as a member").
+- A query that joins `signup` to `auditLog` needs `[ContainerFilter='AllFolders']` on each table. A
+  query that reads only `signup` needs the grid's folder filter set to All Folders.
+- The `signup` tables are visible only to folder admins, so these queries run as an admin.
 
 ---
 
