@@ -279,6 +279,12 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   1.75 GB per run (12 fragments, more features) and Stage 6 reads it twice (planning, writer). Writer (sub-agent,
   read-only): survivors are 11-column stubs, so writing from memory changes bytes; key-first decode saves CPU not disk;
   the HDD wins are write-behind overlap or reading fewer columns.
+- **82 files on UW8, f90d19aaa6, full pipeline, `--model-diagnostics` off (2026-11-09 13:52-21:20;
+  `runs-uw8\seaad-82files-libdecoy-r1.0-transferpb-gbdt-f90d19aaa6-nodiag`):** 7 h 27 min (26,835 s, 5.45 min/file).
+  PerFileScoring 15,092 s (184 s/file), FirstPassFDR 4,442 s (54 s/file), PerFileRescoring 6,953 s (85 s/file; re-scored
+  1,996,700 = 24.4k/file vs 13.8k at 16), SecondPassFDR 348 s; blib 96,973 precursors. Per-file costs ~linear from 16
+  to 82 files. DIA-NN 2.7.0 on the same 82 files started 21:20 (projected ~9 h at its 16-file 6.56 min/file); split
+  audit of the 82-file Osprey run deferred until DIA-NN finishes (both read the same HDD).
 - **Decision (Brendan, 2026-11-09): the MACS2 share and pipeline branches are not merged.** On UW8 share gave no
   measurable gain and pipeline ~6 s/file (~3%, the per-window dedup); not worth the added complexity. The UW8 branch
   (f90d19aaa6) carries neither. Keep for the follow-up issue only: the whole-file dedup shares `removed[]` across
