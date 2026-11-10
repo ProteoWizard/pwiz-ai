@@ -379,6 +379,16 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   tables written explicitly, recompete retired and the all-rows file kept only as a FirstPassFDR-private checkpoint,
   the handed-off file could be survivors-only (~71 GB -> ~5 GB at 446 runs). Also consider one file-name separator
   convention (inherited from Rust: `.1st-pass.fdr_scores.bin` vs `.scores-reconciled.parquet`).
+- **PUSHED for MACS2 (2026-11-10): `Skyline/work/20261110_osprey_uw25_pb_fixes` at 1c34f9c23c**, branched from
+  `Skyline/work/20261109_osprey_scoring_uw8` f90d19aaa6 (so no share/pipeline, per the decision above), carrying the
+  two fixes above re-applied by cherry-pick: 49fe80fde6 (protein-best column progress, was 7a615c6082) and 1c34f9c23c
+  (protein-best keyed on unmodified sequence, was 282fe1c2e5). Gate 688/688, 0 inspection; Stellar regression PASS
+  (unchanged vs golden). Both touch only protein-best code (`PercolatorEngine.AppendProteinBestToRows`,
+  `ProteinBestFeature`, `FirstPassFdrTask.BuildProteinBestRequest`, resources, `ProteinBestFeatureTest`).
+  **MACS2: please merge it into the protein-best line.** The local memscale branch (da4eff9f63 base) is retired.
+  The memory results above were measured on the share+pipeline build; those changes are inside-window coelution
+  scoring only, so the scaling verdict carries over to f90d19aaa6. Next on UW25 (pending Brendan): CHS 446 on a
+  snapshot of this branch.
 
 ## Machine-sharing check
 
