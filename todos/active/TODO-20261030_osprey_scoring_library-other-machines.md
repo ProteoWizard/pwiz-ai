@@ -340,8 +340,22 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
 - Detections (on-target half): 10 files p2 85,389 at q 1% (FDP 1.01%); 20 files p2 90,189 (0.93%), 90,617 at FDP 1%.
 - **Silent gap found and fixed:** `AppendProteinBestToRows` (round-2 protein-best column, scores every row of every
   file with the round-1 models) logged nothing for 34 / 143 / 311 s at 3 / 10 / 20 files (~20 min at 82, ~2 h at
-  446). Wrapped in `ProgressReporter.Run` - 7a615c6082 on the local branch (gate 684/684, 0 inspection; not pushed,
-  not yet run-verified). Belongs on the protein-best branch; Brendan to place.
+  446). Wrapped in `ProgressReporter.Run` - 7a615c6082 on the local branch (gate 684/684, 0 inspection; not pushed).
+  Belongs on the protein-best branch; Brendan to place. Run-verified in the 82-file rung (snapshot
+  `_bin\uw25-7a615c6082`): the step now reports percent lines; only a 31 s heading-to-first-percent gap remains.
+- **41 files:** live sets unchanged (4.23 / 4.92 / 2.91 GB); private peak 41.2 GB at the score-pass start with 3 FDR
+  file lanes (2 at 10, 20 and 82; lanes come from free memory at ~7 GB each). p2 96,801 at q 1% (FDP 1.05%).
+- **82 files (2026-11-09 14:53-18:12, 199 min):** entering FirstPassFDR 4.23 GB, after 4.92 GB (358.9M rows),
+  reconciliation floor 2.92, rescoring 3.75 -> 4.04 GB over the first 60 runs then flat (saturating, not O(files)),
+  Stage 7 3.08-3.20. Private peaks: FirstPassFDR 34.3 GB, PerFileRescoring 18.3, SecondPassFDR 11.6.
+  Best-per-precursor 5,978,187 (library 6.18M). Stage walls: stage5 5,082 s (protein-best 1,349 s = 27% of it),
+  stage6 6,558 s, stage7 37 s. p2 96,641 at q 1% (FDP 0.99%), 96,654 at FDP 1%.
+- **Verdict:** no O(files x entries) structure on the GBDT + PB + transfer path; peak is set by FDR file lanes and
+  Server-GC headroom, not cohort size. CHS 446 projected on this box: ~29 h scoring + ~7.7 h stage5 (~2 h of it
+  the PB column) + ~10 h stage6 = ~47 h, within 64 GB. Remaining 30-57 s gaps are per-file-granularity reports in
+  the first-pass score pass and training-feature load (heartbeat fires only on Report calls); pre-existing.
+- Speed target spotted: the protein-best column is ~16 s/file of round-1 GBDT scoring over every row; check
+  whether the score pass recomputes it per file (the class comment says it is recomputed on each lane).
 
 ## Machine-sharing check
 
