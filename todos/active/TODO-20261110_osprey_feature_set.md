@@ -228,6 +228,25 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   40 arms, design seed **8808** (UW25: 20261110), 37 factors each kept with p = 0.75, FDR seeds 1001-1040.
   ~16 min per arm, ~12 h. In the draw, `sg_weighted_xcorr` is dropped in only 4 arms (most others 5-15), so its
   effect will be loose; extend the design with `design.py screen --start 41` if the fit needs it.
+- UW8 (15:04) **Phase 0 done** (protein-best ON, 20 spread files):
+
+  | arm | kept at FDP 1% | q 1% kept (FDP) | FirstPassFDR | GB read |
+  |---|---|---|---|---|
+  | all 109, seeds 11-15 | 85,702 / 86,012 / 86,740 / 86,686 / 86,656 | 85,496-86,398 (0.91-1.03%) | 796-976 s | 142 |
+  | core 21 only (= default mask) | 67,874 | 68,503 (1.07%) | 443 s | 44.7 |
+  | all but `fragment_coelution_sum` (108) | 85,628 | 85,469 (0.98%) | 737 s | 142 |
+
+  - **Noise band: mean 86,359, SD 472 (0.55%), range 1,038 (1.2%)** - 2.5x tighter than UW25's protein-best-off
+    band (SD 1,194, 1.54%). Protein-best on makes single arms more informative, not less.
+  - **The families buy +27% with protein-best on** (86,359 vs 67,874), against UW25's +40% with it off: part of
+    what the families add, protein-best also adds. A set chosen with protein-best off may therefore over-keep.
+  - `fragment_coelution_sum` masked: -731 (z -1.55), inside 2 SD; masking it is safe.
+  - q 1% is calibrated with protein-best on (FDP 0.91-1.07%); UW25's off arms sit at ~0.58%.
+- UW8: **parquet disk ceiling** (`colbytes.py`, file 0003, `colbytes-0003.txt`): 3.65 GB per file, of which PIN
+  columns 2.30 GB (families 1.86, core 0.44) and non-PIN 1.36 GB (`cwt_candidates` 442 MB, `fragment_mzs` +
+  `fragment_intensities` 386 MB, `reference_xic_*` 267 MB). Even core 21 alone leaves ~1.8 GB per file - the
+  0.5-0.8 GB estimate in the Goal is too low unless Phase 5 also addresses those columns. Largest families:
+  peak-profile (`peak_width`, 18 cols) 382 MB, `tc_*` 274 MB, per-fragment rank 160 MB, spectrum match 156 MB.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
