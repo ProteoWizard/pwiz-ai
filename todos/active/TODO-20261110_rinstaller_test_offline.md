@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261110_rinstaller_test_offline`
 - **Base**: `master`
 - **Created**: 2026-11-10
-- **Status**: In Progress
+- **Status**: In Progress (master merged; backport #5017 open)
 - **GitHub Issue**: (none - from nightly tests, e.g. Nightly x64 run 86656)
 - **Module**: `skyline`
-- **PR**: [#5015](https://github.com/ProteoWizard/pwiz/pull/5015)
+- **PR**: [#5015](https://github.com/ProteoWizard/pwiz/pull/5015) (merged 2026-11-10)
 - **Backport PR**: [#5017](https://github.com/ProteoWizard/pwiz/pull/5017) to `Skyline/skyline_26_1_1` (probe change only), from `Skyline/work/20261110_rinstaller_probe_release` in `C:\Dev\NoWarn`
 - **Checkout**: `C:\Dev\TestIssues`
 
@@ -40,6 +40,16 @@ from rare to almost daily after 2026-10-26.
   (same failure the nightlies show)
 - With the timeout disconnected: the timeout subtest fails after 129 seconds
 - CodeInspection and tcinspect.ps1 clean
+
+## Progress Log
+
+### 2026-11-10 - Merged to master
+
+PR #5015 merged as commit c9a8cadc63. It shipped the mocked probe in RInstallerTest, the
+probe change to cran.r-project.org with a 30-second timeout, the new
+TestInternetConnectionTimeout subtest, and the HttpClientWithProgress.Head() dispose
+fix. The work branch is deleted, local and remote. This TODO stays in active/ until backport
+PR #5017 (the probe change only) merges to Skyline/skyline_26_1_1.
 
 ## Follow-up (not in this PR)
 
