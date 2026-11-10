@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none - from nightly tests, e.g. Nightly x64 run 86656)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5015](https://github.com/ProteoWizard/pwiz/pull/5015)
 - **Checkout**: `C:\Dev\TestIssues`
 
 ## Objective
