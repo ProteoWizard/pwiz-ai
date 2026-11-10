@@ -205,6 +205,30 @@ classifier ("109 features" / "108" / "21" in the Percolator input line), arm dir
 with probability 1/2 independently (core included; 43-66 kept per arm, each feature in 30-50 arms), each arm its
 own training seed. Expected ~10-14 min per arm, ~15-18 h.
 
+### UW8 replicate
+
+UW8: driver, design and results in `ai/.tmp/sessions/20261110-uw8featset/` (`arm.ps1`, `design.py`, `score.py`,
+`run-arms.ps1`, `fit.py`, `arms.tsv`, `results.tsv`, `driver.log`); arm directories
+`D:\test\osprey-runs\sea-ad\runs-uw8\featset\`. Every arm: FirstPassFDR only on links from
+`runs-uw8\seaad-82files-...-f90d19aaa6-nodiag`, `_bin\uw8-c3bdbea78d` (v26.1.1.314, version pin 26.1.1.312),
+protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session log
+`ai/.tmp/night-session-budget-20261110.md`.
+
+- UW8 (2026-11-10 13:46): **file set corrected.** The 82 SEA-AD files are 75 samples (0001-0075) and 7 pools, so
+  the planned pattern (samples 0003..0079) matched 19. Used the intent - every 4th of the 82 in name order from
+  file 3 - = samples 0003, 0007, ..., 0075 and `pool-04`.
+- UW8: the default mask is exactly the 88 family features, so the "current default" anchor IS the core-21 arm.
+- UW8: `fragment_coelution_sum` as first-pass score and training tiebreak comes from the separate CoelutionSum
+  stub column, not the feature vector, so masking it hides it from the classifier only. Kept as an ordinary factor
+  (arm `p0-nocoelsum-s11` checks it, as UW25's 108-feature arm did).
+- UW8 (13:29-13:46) wiring arm, all 109, seed 11: **85,702 kept at true FDP 1%**, q 1% 85,496 (FDP 0.97%),
+  FirstPassFDR 976 s, 141.9 GB read. Only FirstPassFDR ran. With protein-best on, q 1% is close to calibrated
+  (UW25's protein-best-off arms sit at FDP ~0.58%).
+- UW8 (13:50) driver started: phase 0 (full set seeds 12-15, core 21, all-but-coelution-sum) then the screen,
+  40 arms, design seed **8808** (UW25: 20261110), 37 factors each kept with p = 0.75, FDR seeds 1001-1040.
+  ~16 min per arm, ~12 h. In the draw, `sg_weighted_xcorr` is dropped in only 4 arms (most others 5-15), so its
+  effect will be loose; extend the design with `design.py screen --start 41` if the fit needs it.
+
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
   or MACS2. Bytes written per run by file type, and the peak free-space drop during the run.
