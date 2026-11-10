@@ -46,9 +46,9 @@ and it turned out to benefit HRAM data too.
   stored as `ms2_calibration.offset_curve` in the calibration JSON (older files load as the
   mean; Rust reads only the mean, SD and tolerance).
 - When it applies (`OspreyEnvironment.UsesMs2OffsetCurve`):
-  - Unit resolution with a Th tolerance: by default, when the shift is beyond half the
-    tolerance; otherwise the mean, so the 2024 Stellar regression and subset data (-0.06 Th)
-    is unchanged, golden and Rust parity included.
+  - Unit resolution with a Th tolerance: by default, at any shift (since 2026-11-10; it was
+    only beyond half the tolerance). The 2024 Stellar goldens are the curve's, and Rust parity
+    runs set `OSPREY_MS2_CAL_MEAN=1` (the cross-impl compare script does).
   - ppm (HRAM): only under `OSPREY_MS2_CAL_CURVE_PPM=1`, at any shift. Off by default, so
     Astral and every other ppm search is unchanged.
   - `OSPREY_MS2_CAL_MEAN=1` keeps the mean everywhere (Rust parity) and overrides the ppm
@@ -110,6 +110,25 @@ FDRBench combined FDP. Runs `C:\test\osprey-runs\ztsigma\arms`, handoff `ai/.tmp
   opt-in for ppm (`OSPREY_MS2_CAL_CURVE_PPM`) and the work is about unit resolution, where Stellar's 0.5-0.7 Th offset
   is the case it was built for. The +5.7% ZT line in "Why" is from an older Osprey and does not reproduce.
 
+**The curve at any unit-resolution offset (Mike, 2026-11-10).** The default moved from "the curve
+only beyond half the tolerance" to the curve at every unit-resolution search, and profile Stellar
+data is centroided at MS2 sigma 0.6 Th (Osprey's Centrix port default, #4710). The 2024 Stellar
+regression (3 runs, offset about -0.06 Th), its goldens regenerated, mean -> curve at 1% FDR:
+
+| Dataset | Precursors | Protein groups |
+|---|---|---|
+| Stellar | 32,705 -> 33,152 (+1.4%) | 4,478 -> 4,519 |
+| StellarLibDecoy | 31,215 -> 31,446 (+0.7%) | 4,254 -> 4,257 |
+| StellarGenDecoyEntrap | 32,174 -> 32,878 (+2.2%) | 4,361 -> 4,471 |
+
+Entrapment FDP (StellarGenDecoyEntrap, final pass): combined 0.91% -> 0.95%, paired 0.82% ->
+0.87%. The curve's 3 SD window is narrower than the mean's (about +-0.32-0.35 against
++-0.34-0.39 Th on the subset). On the one-window library-build subset that costs about ten targets
+ahead of each run's first decoy (88-98 against 100-113), under the 100 a run needs to report
+anything at 1%, so `TestSubsetLibraryBuild`'s entrapment leg runs on the mean. Logs:
+`ai/.tmp/sessions/20261106-stellar2th/regression-curvedefault-*.log`; subset arms in
+`D:\test\osprey-runs\subset-libbuild-entrap-1110\{curve,mean}`.
+
 ## Tried and not adopted: a separate 2+ fragment calibration (2026-11-09)
 
 **Decision (Mike, 2026-11-09):** unit-resolution MS2 calibration stays one m/z-based curve,
@@ -158,7 +177,7 @@ folder; searches in `D:\test\osprey-runs\stellar-2th\2th-centrix-s0{38,60}-{z,zx
 
 ## Tests
 - [x] `CalibrationTest.TestMs2OffsetCurve`: synthetic ion-trap fragments, -0.40 to -0.55 Th;
-  curve within 0.03 Th, M+1 step-down, small offset keeps the mean, JSON round trip; doubly
+  curve within 0.03 Th, M+1 step-down, a small offset gets the curve too, JSON round trip; doubly
   charged fragments do not step down; a full -0.75 Th calculation with M+1 in every fragment
   lands on the M+0; a ppm curve recovered within 0.5 ppm and applied in ppm.
 - [x] `SubsetPipelineTest.TestSubsetLargeMs2Offset`: the Stellar subset with its MS2 m/z
@@ -166,9 +185,13 @@ folder; searches in `D:\test\osprey-runs\stellar-2th\2th-centrix-s0{38,60}-{z,zx
   unshifted subset; the mean under `OSPREY_MS2_CAL_MEAN=1` does worse.
 - [x] `TaskValidityKeyTest`: the `UsesMs2OffsetCurve` truth table and the per-task keys under
   mean, curve and ppm-curve settings.
-- [x] Full Osprey.Test suite (655), ReSharper inspection clean.
+- [x] Full Osprey.Test suite (656), ReSharper inspection clean, with the curve at any offset
+  (2026-11-10).
 - [x] `regression.ps1 -Dataset All` (Stellar, StellarLibDecoy, StellarGenDecoyEntrap, Astral):
-  PASS on 8c0577c89d, in place of the TeamCity Perf/Regression run.
+  PASS on 8c0577c89d, in place of the TeamCity Perf/Regression run. Again with the curve at any
+  offset (2026-11-10): `regression-parallel.ps1 -Dataset All`, 49 PASS / 0 FAIL against the
+  regenerated Stellar goldens, Astral against its unchanged golden
+  (`ai/.tmp/sessions/20261106-stellar2th/regression-parallel-curvedefault.log`).
 - [x] Two fresh-context code reviews; findings addressed (8c0577c89d, 83a6955d46).
 
 ## Follow-ups

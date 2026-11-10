@@ -436,6 +436,9 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
                 '--work-dir', $csDir)
     $args2 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
+    # Rust calibrates MS2 by one mean offset; C# calibrates unit-resolution MS2 by an m/z offset
+    # curve (#4997) unless this asks for the mean. Ignored by a build without the curve.
+    $env:OSPREY_MS2_CAL_MEAN = '1'
     # Both implementations keep the most regularized first-pass SVM C within 1% of the best
     # (C# #4703, Rust #69). An INHERITED value would still split them at Stage 5, so the
     # variable is cleared unless -CsSvmCTolerance asks for a pre-#69 comparison.
@@ -448,6 +451,7 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
         $r = Invoke-Tool -Exe $ospreyShExe -WorkDir $csDir -CliArgs $args2 -LogName 'osprey-cs.log'
     } finally {
         Remove-Item Env:OSPREY_DUMP_STAGE7_PROTEIN_FDR -ErrorAction SilentlyContinue
+        Remove-Item Env:OSPREY_MS2_CAL_MEAN -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
     }
     $csWall = $r.wall
