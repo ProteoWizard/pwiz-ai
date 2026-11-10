@@ -52,14 +52,12 @@ remote connectors are stored with the Claude account, not in this file. (Unverif
 - [x] Verified the workaround one-liner on the 26.1.1.289 connector: checkbox enabled, registered, Claude Desktop restarted and listed `skyline`; Claude Desktop then added its own `preferences` block to the file and kept the entry
 - [x] PR [#5014](https://github.com/ProteoWizard/pwiz/pull/5014) to `Skyline/skyline_26_1_1`
 - [ ] Post updated ZIP (26.1.1.314) to the Tool Store (Brendan)
-- [ ] `/code-review high 5014`
+- [x] `/code-review high 5014`: fixed standalone-installer process detection, Remove no longer creating a config file, docs workaround (commit 4662de2e15, source only - committed ZIP unchanged). Dropped: false positive after uninstall (old code had it too), AppData folder order (hypothetical; Store build verified to use %APPDATA%), install-location refactor (out of scope for a hotfix), stale "(not installed)" label (affects every client, not this bug), Packages enumeration cost (negligible)
+- [ ] Review fixes ship with the next connector ZIP (version from that day's commit)
 - [ ] Cherry-pick to master after merge
 
 ## Follow-ups (not in this fix)
 
-- `GetClaudeDesktopProcesses()` only recognizes the Store build (`\WindowsApps\`), so a
-  standalone-installer Claude Desktop is never seen as running and is not stopped before the
-  config write.
 - The Claude Code checkbox registers through the `claude` CLI on PATH. Participants using the
   Code tab inside Claude Desktop have `~/.claude.json` (checkbox enabled) but no `claude` on
   PATH, so registration would fail for them.
