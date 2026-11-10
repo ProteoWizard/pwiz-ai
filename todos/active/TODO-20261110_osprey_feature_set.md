@@ -145,6 +145,29 @@ The load is compute, not analysis, so one session can run it for days if it neve
 - One set, or a smaller default plus an opt-in full set?
 - Unit-resolution data (Stellar): its own set, or the HRAM set minus the HRAM-only families as today?
 
+## UW8 independent replicate (proposed by UW8 2026-11-10, for Brendan to confirm)
+
+Brendan wants a second machine to reach its own default set by a deliberately different route, then compare: where
+the two converge is the robust answer, where they differ is a substitute choice to understand. UW8 differs on every
+axis that could bias the result, and keeps the oracle and the metric identical:
+
+| | UW25 (above) | UW8 |
+|---|---|---|
+| Files | 1-20 | 20 spread over the cohort: every 4th of 82 from file 3 (samples 0003, 0007, ... 0079) |
+| Scored data | UW25 legs | UW8 82-file run `runs-uw8\seaad-82files-...-f90d19aaa6-nodiag` (mask none = all 109 recorded), linked; version pin 26.1.1.312 |
+| Build | c3bdbea78d | the same c3bdbea78d (the protein-best fixes act in FirstPassFDR) |
+| Random unit | columns, random half of all 109 | families as units (16 families + the 21 core features individually = 37 factors) |
+| Keep probability | 0.5 | 0.75 (stays near the operating region where detections saturate; an additive fit learned far below it can misrank the top) |
+| Protein-best in the screen | off (Phase 3 tests it) | on (the default; tests the off-assumption from the start) |
+| Second stage | backward guided halving | forward selection: from the screen's best small set, add the family that gains most until within the noise band of the full set |
+| Noise band | `OSPREY_FDR_SEED` 1-5 | seeds 11-15 |
+| Metric | pass-1 `split_calibration.py` at true FDP 1% (on-target), q 1% FDP | identical |
+
+Same driver discipline (arms.tsv / results.tsv, restartable, STOP file, disk hygiene after each row). UW8 logs to
+this section and pushes as results land; the two sessions compare family-level effects after their screens and end
+sets after their second stages. Cost estimate on UW8: ~18 min per 20-file arm with protein-best (FirstPassFDR
+~54 s/file at 82 files), ~40 screen arms + 5 seeds + anchors ~14 h, forward stage ~1 day.
+
 ## Progress
 (none yet)
 

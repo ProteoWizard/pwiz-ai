@@ -425,6 +425,32 @@ faster than DIA-NN on 3 SEA-AD files on an i9 without `--parallel-files`. Furthe
 gathering data that targets it. MACS2 re-tests `--parallel-files-scoring 4` (the earlier ~2.2x optimum) when no other
 user's jobs are running: `pf-idle.ps1`, log `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-pfidle\pf-idle.log`.
 
+**UW8 performance work and same-machine DIA-NN (2026-11-08 to 11-10; full detail in the "BRENDANX-UW8 results"
+section of `TODO-20261030_osprey_scoring_library-other-machines.md`, night log `ai/.tmp/night-session-budget-20261109.md`).**
+Branch `Skyline/work/20261109_osprey_scoring_uw8` (pushed): 4ecdc54fee + f90d19aaa6 on 1cbe1463bd.
+- 4ecdc54fee, coelution speedups, output byte-identical: largest-window-first scheduling, the 7 ppm correlation
+  XICs in the scan-major pass with a shared m/z bucket lookup, median polish of pick candidates in per-thread
+  buffers. A10_014 coelution 182.8 -> 124.1 s (-32%). Single-setting ablations: XIC 12 and CORR_FRAGMENT_TOLERANCE
+  7 each cost ~61 s of the 105 s the SEA-AD settings add; REF_XIC and LOCAL_RT ~free.
+- f90d19aaa6, transfer second pass: paired decoys keep first-pass peaks; reconciliation, gap fill and multi-charge
+  consensus take only the blib's precursors (`ExperimentOutputSet`, the blib's experiment-level gates on pass-1 q);
+  the peptide q floor uses reported charge states only (bug: an unreported charge state re-scored at a sibling's
+  boundaries could move a reported peptide's q; 3 of 74,210 at 3 files). With the fix, old and new rules give
+  identical blibs; re-scored peaks -89%. Stage 6 time barely moved: on UW8's SATA HDD it is bound by reading the
+  4.1 GB `.spectra.bin` and the 3.6 GB `.scores.parquet` per run, not by scoring.
+- MACS2's share and pipeline branches: ~0 and ~6 s/file on UW8; not merged (Brendan).
+- Same machine (UW8 i9-14900K, 32 threads), size-weighted split library, at true FDP 1% (pass 2):
+
+  | files | Osprey f90d19aaa6 | DIA-NN 2.7.0 | Osprey vs DIA-NN |
+  |---|---|---|---|
+  | 3 | 15.2 min, 74,643 | 20.15 min, 78,667 | 1.33x faster, -5.1% |
+  | 16 | ~84 min, 89,244 | 104.9 min, 95,115 | 1.24x faster, -6.2% |
+  | 82 (Osprey diagnostics off) | 7 h 27 min, 96,654 | 9 h 49 min, 101,269 | 1.32x faster, -4.6% |
+
+  Reported q 1% reads FDP 0.99% (Osprey 82) vs 0.78% (DIA-NN). Master 813bf69cee at its defaults on the 16 files:
+  55.5 min, 54,504 (q 1% reads 1.17%). The branch's first-pass parquet is 3.62 GB/run vs master's 1.75 GB - the
+  feature set is now the main disk and FDR-read cost (TODO-20261110_osprey_feature_set.md).
+
 **Method note (Brendan).** Everything varied here (PROTEIN_BEST, OSPREY_EXPERIMENT_AGG=mean-best-N, a future qualify
 gate) acts inside FirstPassFDR, so once one baseline is scored each variant is `-Task FirstPassFDR -LinkFrom <run>`
 on hard links: ~30 min at 62-82 files instead of 6-8 h.
