@@ -110,6 +110,52 @@ FDRBench combined FDP. Runs `C:\test\osprey-runs\ztsigma\arms`, handoff `ai/.tmp
   opt-in for ppm (`OSPREY_MS2_CAL_CURVE_PPM`) and the work is about unit resolution, where Stellar's 0.5-0.7 Th offset
   is the case it was built for. The +5.7% ZT line in "Why" is from an older Osprey and does not reproduce.
 
+## Tried and not adopted: a separate 2+ fragment calibration (2026-11-09)
+
+**Decision (Mike, 2026-11-09):** unit-resolution MS2 calibration stays one m/z-based curve,
+fit to the matched fragments of both charges. Correcting the offset that the unresolved M+1
+causes is what helps, and it belongs in that single calibration. A charge-dependent shift is
+more complicated and did not help.
+
+Why it was tried: after the curve, 2+ fragments read high and 1+ fragments low at the same
+m/z, because the curve is a blend of the two. Medians of TR02's strong, isolated fragments,
+500-1150 m/z: 1+ -0.028 to -0.011 Th, 2+ +0.026 to +0.036 Th (Centrix MS2 sigma 0.38); 1+
+-0.048 to -0.038, 2+ +0.058 to +0.076 (sigma 0.6).
+
+What was tried (switches `OSPREY_MS2_CAL_BY_CHARGE=1`, `OSPREY_MS2_CAL_BY_CHARGE_XIC_ONLY=1`):
+- The curve fit to 1+ fragments only, one 2+ shift (the median of the 2+ offsets about the
+  curve), and the SD pooled from both.
+- Spectra still calibrated whole by the 1+ curve; the shift added to the library's 2+
+  fragment m/z instead, either everywhere or only for XIC extraction (the features scored
+  against the library's own m/z).
+
+Stellar HeLa 2 Th TR01-TR03, Centrix, GBDT, library decoys with entrapment, +-0.5 Th, 1% FDR:
+
+| Arm | Precursors per run | Experiment | Entrapment FDP | 2+ shift (Th) | TR02 tolerance |
+|---|---|---|---|---|---|
+| sigma 0.38, one curve | 42,572 / 43,170 / 43,208 | 49,636 | 1.04% | none | +-0.29 Th |
+| sigma 0.38, shift everywhere | 42,146 / 42,905 / 42,964 | 49,603 | 1.06% | +0.080 / +0.090 / +0.093 | +-0.28 Th |
+| sigma 0.38, XIC only | 42,228 / 42,958 / 43,152 | 49,696 | 1.06% | same | +-0.28 Th |
+| sigma 0.6, one curve | 44,341 / 44,764 / 44,505 | 51,467 | 0.88% | none | +-0.38 Th |
+| sigma 0.6, shift everywhere | 43,957 / 44,323 / 43,832 | 51,145 | 0.88% | +0.150 / +0.156 / +0.142 | +-0.33 Th |
+| sigma 0.6, XIC only | 44,469 / 44,550 / 43,989 | 51,246 | 0.82% | same | +-0.33 Th |
+
+- The tolerance narrowed 5-11%, but identifications and entrapment FDP stayed within the
+  run-to-run churn (each arm swaps 2,000-2,800 precursors each way with its baseline). 3+
+  precursors, which carry most of the 2+ fragments, did not gain.
+- XIC only beat shift-everywhere in all six runs, by 0.1-1.2%, and neither beat one curve.
+- The shift overcorrects the strong, isolated 2+ fragments (-0.042 to -0.055 Th at sigma
+  0.38, about -0.07 at sigma 0.6): the median over all matched 2+ fragments sits above them.
+- Likely why nothing changed: a 0.05-0.15 Th offset inside a +-0.28-0.38 Th window loses few
+  true matches.
+- The mass defect does separate charges below about 800 m/z (73-91% of odd-nominal-mass 2+
+  fragments sit over 0.25 Th off the 1+ lattice, against 2-8% of 1+), but the library already
+  gives Osprey each fragment's charge.
+
+Code (local only, not committed): `D:\Dev\ai\.tmp\sessions\20261106-stellar2th\ms2cal-by-charge.patch`,
+against f498d9e608. Results: `summary7-bycharge.tsv` and `bycharge_compare.txt` in the same
+folder; searches in `D:\test\osprey-runs\stellar-2th\2th-centrix-s0{38,60}-{z,zxic}`.
+
 ## Tests
 - [x] `CalibrationTest.TestMs2OffsetCurve`: synthetic ion-trap fragments, -0.40 to -0.55 Th;
   curve within 0.03 Th, M+1 step-down, small offset keeps the mean, JSON round trip; doubly
