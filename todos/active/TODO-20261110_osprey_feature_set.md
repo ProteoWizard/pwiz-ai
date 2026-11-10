@@ -1,8 +1,9 @@
 # TODO-20261110_osprey_feature_set.md
 
 ## Branch Information
-- **Branch**: not created yet (experiments need no code until Phase 4; base will be the #4950 line,
-  currently `Skyline/work/20261110_osprey_uw25_pb_fixes` on `Skyline/work/20261109_osprey_scoring_uw8`)
+- **Branch**: none of its own until Phase 4. Experiments run on `Skyline/work/20261110_osprey_uw25_pb_fixes`
+  at c3bdbea78d (on `Skyline/work/20261109_osprey_scoring_uw8` f90d19aaa6, with the protein-best fixes and the
+  round-1 run bound), snapshot `D:\test\osprey-runs\_bin\uw25-c3bdbea78d` (v26.1.1.314)
 - **Base**: #4950 (`Skyline/work/20261028_osprey_diann_fdr_gap`) and its pending branches
 - **Module**: `osprey`
 - **Created**: 2026-11-10 (designed on BRENDANX-UW25; Brendan has given UW25 to this study for a few days)

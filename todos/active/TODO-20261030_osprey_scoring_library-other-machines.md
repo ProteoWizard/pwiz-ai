@@ -398,6 +398,19 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   The memory results above were measured on the share+pipeline build; those changes are inside-window coelution
   scoring only, so the scaling verdict carries over to f90d19aaa6. Next on UW25 (pending Brendan): CHS 446 on a
   snapshot of this branch.
+- **PUSHED (2026-11-10): c3bdbea78d on the same branch - protein-best round 1 bounded to 10 runs.** Round 1's
+  training rows come from at most `OSPREY_PROTEIN_BEST_ROUND1_RUNS` (default 10) runs drawn by the training seed, so
+  its feature read is 10 files; the rest of the training-feature load is merged into the read that computes the
+  protein-best column (one full read instead of two). Validity-key term `;proteinbestround1runs=10` (every
+  protein-best directory re-runs FirstPassFDR). No change at or below the bound: Stellar regression PASS vs golden;
+  unit test pins bound = run count identical to every run. 20 SEA-AD files (bound engaged, 10 of 20): 97.9 -> 73.9 GB
+  read through training, stage 5 1,374 -> 1,282 s; pass 2 89,640 at q 1% (FDP 0.92%) and 90,376 at FDP 1%, vs
+  90,189 (0.93%) / 90,617 with every run - calibration unchanged, detections -0.27% at matched FDP, seed spread not
+  yet measured. Reproducible: 16 vs 32 threads gave byte-identical `.1st-pass`/`.2nd-pass` sidecars and model (61
+  files). Gate 688/688, 0 inspection. Brendan: bounding is the idea to keep; 10 is not settled. 82-file effect (10 of
+  82 runs) untested. **MACS2: please merge this commit too.** UW25 snapshot `_bin\uw25-c3bdbea78d`.
+- **UW25 next (Brendan, 2026-11-10): the feature-set study** (`TODO-20261110_osprey_feature_set.md`), UW25 dedicated
+  to it for a few days; the CHS 446 run waits.
 
 ## Machine-sharing check
 
