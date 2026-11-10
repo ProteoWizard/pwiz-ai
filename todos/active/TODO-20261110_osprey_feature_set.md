@@ -178,7 +178,32 @@ Brendan (2026-11-10): run it in a fresh UW8 session from the handoff `ai/.tmp/ha
 UW8; setup steps, paths, file pattern, driver spec, pitfalls).
 
 ## Progress
-(none yet)
+
+Driver, design and results: `ai/.tmp/sessions/20261109-uw25mem/featset/` (`run-arms.ps1`, `arms.tsv`,
+`design.tsv`, `results.tsv`, `driver.log`); arm directories `D:\test\osprey-runs\sea-ad\runs-featset\`.
+Every arm: 20 files, FirstPassFDR only on the UW25 links, `_bin\uw25-c3bdbea78d`, pass-1 split oracle.
+
+**Phase 0 (2026-11-10 09:41-11:33, done).** Wiring confirmed: only FirstPassFDR runs, the mask reaches the
+classifier ("109 features" / "108" / "21" in the Percolator input line), arm dirs trim to ~130 MB.
+
+| arm | kept at FDP 1% | q 1% kept (FDP) | stage 5 | GB read |
+|---|---|---|---|---|
+| all 109, protein-best off, seeds 1-5 | 78,926 / 76,840 / 76,611 / 76,121 / 78,300 | 71,454-74,296 (0.56-0.60%) | 777-860 s | 114.9 |
+| core 21 only (= today's default mask) | 55,148 | 50,172 (0.52%) | 339 s | 38.2 |
+| all but `fragment_coelution_sum` (108) | 78,463 | 73,737 (0.56%) | 846 s | 114.9 |
+| all 109, protein-best ON, seed 1 | 90,423 | 89,689 (0.92%) | 1,203 s | 139.8 |
+
+- **Noise band: mean 77,360, SD 1,194 (1.54%), range 2,805 (3.6%)** across seeds 1-5. Wider than assumed:
+  the round-1 run bound's -0.27% at matched FDP (UW25, 20 files) is well inside it, and any single-arm
+  difference under ~2,400 (2 SD) is not evidence. Halving decisions need replicate seeds (3 seeds -> SE ~690).
+- The families buy +40% over the core 21 (77,360 vs 55,148) for 3x the FDR read (114.9 vs 38.2 GB).
+- `fragment_coelution_sum` can be masked from the classifier (108-feature arm runs, result inside noise).
+- Protein-best adds +17% at 20 files (90,423 vs mean 77,360). Without it, q 1% is conservative (FDP ~0.58%);
+  read every arm at true FDP 1%.
+
+**Phase 1 (started 2026-11-10 11:3x).** 80 arms, `design_screen.py --design-seed 20261110`: each feature kept
+with probability 1/2 independently (core included; 43-66 kept per arm, each feature in 30-50 arms), each arm its
+own training seed. Expected ~10-14 min per arm, ~15-18 h.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
