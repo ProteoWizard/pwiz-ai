@@ -7,7 +7,7 @@
 - **Status**: In Progress - urgent, workshop participants blocked
 - **GitHub Issue**: (none - reported live at a workshop)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5014](https://github.com/ProteoWizard/pwiz/pull/5014)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Objective
@@ -50,7 +50,9 @@ remote connectors are stored with the Claude account, not in this file. (Unverif
       enabled, registering creates the file, the checkbox persists across reopen, and Claude
       Desktop Settings > Customize > Connectors lists `skyline`
 - [x] Verified the workaround one-liner on the 26.1.1.289 connector: checkbox enabled, registered, Claude Desktop restarted and listed `skyline`; Claude Desktop then added its own `preferences` block to the file and kept the entry
-- [ ] PR to `Skyline/skyline_26_1_1`; post updated ZIP to the Tool Store
+- [x] PR [#5014](https://github.com/ProteoWizard/pwiz/pull/5014) to `Skyline/skyline_26_1_1`
+- [ ] Post updated ZIP (26.1.1.314) to the Tool Store (Brendan)
+- [ ] `/code-review high 5014`
 - [ ] Cherry-pick to master after merge
 
 ## Follow-ups (not in this fix)
