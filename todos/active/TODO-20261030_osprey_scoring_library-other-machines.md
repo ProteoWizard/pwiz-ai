@@ -283,8 +283,17 @@ Worktree `C:\proj\pwiz-pb` at 1cbe1463bd; snapshot `D:\test\osprey-runs\_bin\uw8
   `runs-uw8\seaad-82files-libdecoy-r1.0-transferpb-gbdt-f90d19aaa6-nodiag`):** 7 h 27 min (26,835 s, 5.45 min/file).
   PerFileScoring 15,092 s (184 s/file), FirstPassFDR 4,442 s (54 s/file), PerFileRescoring 6,953 s (85 s/file; re-scored
   1,996,700 = 24.4k/file vs 13.8k at 16), SecondPassFDR 348 s; blib 96,973 precursors. Per-file costs ~linear from 16
-  to 82 files. DIA-NN 2.7.0 on the same 82 files started 21:20 (projected ~9 h at its 16-file 6.56 min/file); split
-  audit of the 82-file Osprey run deferred until DIA-NN finishes (both read the same HDD).
+  to 82 files.
+- **82 files: Osprey vs DIA-NN 2.7.0 on UW8 (same files, split-sized library, 32 threads, SATA HDD; split audit
+  `ai/.tmp/sessions/20261108-uw8perf/split-82files.txt`):**
+
+  | run | wall | per file | q 1% kept (FDP) | at FDP 1% |
+  |---|---|---|---|---|
+  | Osprey f90d19aaa6, pass 2, diagnostics off | 7 h 27 min | 5.45 min | 96,641 (0.99%) | 96,654 |
+  | DIA-NN 2.7.0 NN + MBR (`runs-uw8\diann270-82files`) | 9 h 49 min | 7.18 min | 99,575 (0.78%) | 101,269 |
+
+  Osprey 1.32x faster, 4.6% behind at FDP 1% (5.1% at 3 files, 6.2% at 16), reported q 1% honest (0.99%) where DIA-NN
+  is conservative (0.78%). DIA-NN: first pass 425 min, MBR ~146 min.
 - **Decision (Brendan, 2026-11-09): the MACS2 share and pipeline branches are not merged.** On UW8 share gave no
   measurable gain and pipeline ~6 s/file (~3%, the per-window dedup); not worth the added complexity. The UW8 branch
   (f90d19aaa6) carries neither. Keep for the follow-up issue only: the whole-file dedup shares `removed[]` across
