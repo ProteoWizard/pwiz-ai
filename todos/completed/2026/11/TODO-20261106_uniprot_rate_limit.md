@@ -4,10 +4,11 @@
 - **Branch**: `Skyline/work/20261106_uniprot_rate_limit`
 - **Base**: `master`
 - **Created**: 2026-11-06
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none - from nightly perf tests)
 - **Module**: `skyline`
-- **PR**: [#5008](https://github.com/ProteoWizard/pwiz/pull/5008)
+- **PR**: [#5008](https://github.com/ProteoWizard/pwiz/pull/5008) (merged 2026-11-10); release
+  [#5010](https://github.com/ProteoWizard/pwiz/pull/5010) (merged 2026-11-10)
 - **Checkout**: `C:\Dev\WebStuff`
 
 ## Objective
@@ -123,7 +124,20 @@ The GiveUpOnUnresponsiveWebService seam did not cover that path, so the test sat
       within a lookup; a race costs one request) and Entrez-to-UniProt conversions lost while
       UniProt is closed (pre-existing for any UniProt failure; Entrez is asked again at most once
       per 15s pass). #5008 6802fe3ee8, #5010 e0d804b6e9
-- [ ] Carry any later #5008 review changes over to #5010; merge #5010 after #5008
+- [x] Copilot on #5010: two local consts (uniprotBody, message) not ALL_CAPS - left as is, since
+      the file's other local consts (errorBody, headerlessErrorBody, urlText) are camelCase
+- [x] Carry any later #5008 review changes over to #5010; merge #5010 after #5008
+
+## Progress Log
+
+### 2026-11-10 - Merged
+
+PR #5008 merged to master as c3e3fa7a83; release backport #5010 merged to skyline_26_1_1 as
+03f43e9d55. Shipped: a 429 closes the service's shared rate-limit gate for its Retry-After (cap
+10 min) across all importers; a refusal skips only that service, and a pass that resolved nothing
+waits at most 15s for the first gate to reopen; every Entrez request spaced 400ms; UniProt batch
+cap 200 -> 100. Two Copilot threads on #5008 (per-request gate recheck, Entrez-to-UniProt
+conversions lost while UniProt is closed) were answered and left open as deliberate non-changes.
 
 ## Notes
 
