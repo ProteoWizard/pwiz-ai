@@ -8,6 +8,7 @@
 - **GitHub Issue**: (none - from nightly tests, e.g. Nightly x64 run 86656)
 - **Module**: `skyline`
 - **PR**: [#5015](https://github.com/ProteoWizard/pwiz/pull/5015)
+- **Backport PR**: [#5017](https://github.com/ProteoWizard/pwiz/pull/5017) to `Skyline/skyline_26_1_1` (probe change only), from `Skyline/work/20261110_rinstaller_probe_release` in `C:\Dev\NoWarn`
 - **Checkout**: `C:\Dev\TestIssues`
 
 ## Objective
