@@ -1081,6 +1081,34 @@ transfer pass 2) and #4997's ppm m/z curve. Handoff `ai/.tmp/handoff-20261108-zt
   slides 26-30 of the ZT deck (https://claude.ai/artifact/S7HHMWqtHTqggJLuBR6C9e): sigma here is the TOF peak model's
   SD in grid samples (11.3 ppm per sample at 300 m/z, 5.7 at 1200), not Centrix's Th; real split-ion examples.
 
+**2026-11-09/10: ZT deck slides 16-22 redone on SPEEDYGONZALES (DIA-NN's methods against ours, whole runs).** Mike:
+redo the October blencathra comparison with the latest Osprey. Scripts `ai/.tmp/sessions/20261109-ztfull`, runs
+`C:\test\osprey-runs\ztfull-20261109` (`queue.log`, `timings.tsv`, `analysis\results.json`). Deck version 90.
+- Setup: demux Osprey.DemuxTool 875203422a (#4710 with the 1.3x ZT fit sigma default), `--joint --layout centered:7
+  --threads 24`. Osprey 1eec2abfe6 = #4950 tip merged with master 4abddb97fc (#4823 protein q fix, #4993, #5011;
+  local branch `nightlywork/zt-full-redo` in `C:\Dev\pwiz-osprey-fdr`), GBDT two rounds, `OSPREY_FEATURE_MASK=none`
+  (109 features), 12 XICs, transfer pass 2, library decoys. Library: October's fine-tuned CarafeSharp library
+  (no NVIDIA GPU here), not timed; Mike: no library timing for now, so the library-time slide is gone. DIA-NN 2.6.1
+  reads ZT .wiff with SCIEX's Clearcore2 DLLs copied into `C:\DIA-NN\2.6.1-sciex` (2.6.1 ships the same
+  WiffReader.dll as 2.3.2; A1 read 699 MS1 / 299,871 MS2 scans). Each timed step waited for CPU < 15% for 2 min.
+- Matched entrapment FDP, experiment level (r = 1.0009): 0.5% DIA-NN 50,658 vs ours 45,356 (DIA-NN +12%; October
+  51,274 vs 40,478, +27%); 1% 54,864 vs 50,143. Overlap at 0.5%: 40,656 both (90% of ours), 10,002 DIA-NN only,
+  4,700 ours only. Per run at run q <= 1%: DIA-NN 46,217-48,018 at 0.27-0.34% FDP, ours 42,707-43,148 at
+  0.65-0.72%; 32,642 in all six searches (October 23,402). Protein groups at matched 1% FDP: 4,800 vs 4,205;
+  accessions 4,067 both, 760 DIA-NN only, 198 ours only.
+- Osprey's q-values are anticonservative above the run level: experiment q 1% = 1.20% entrapment FDP (q 0.0033 at
+  0.5% FDP); protein q 1% = 2.38% FDP (q 0.0020 at 1%). DIA-NN is conservative (0.43%, 0.96%). Run q 1% = 0.65-0.72%.
+- Time, three runs: ours 139 min (demux A1 / D1 / G1 34.3 / 32.5 / 32.2, Osprey 40.2: scoring 24.1, first-pass FDR
+  11.3, rescoring 4.1, pass 2 0.7); DIA-NN on the .wiff 150.6 (loading 120: about 20 min per .wiff per pass, twice
+  with --reanalyse). Other jobs (Skyline-daily 05:16, a python pool 06:06-06:22) started after the last timed step
+  ended at 04:49; only the pinned arms overlapped them.
+- Slide 22, DIA-NN 2.6.1 pinned (--window 6 --mass-acc 17 --mass-acc-ms1 19, September Carafe library): .wiff 30,572 /
+  30,721 / 31,383 at 0.98-1.15% FDP, peptides all / any 21,768 / 34,182, CV 0.094; joint demux at 1.3x 38,698 / 37,559
+  / 38,541 at 0.72-0.83%, 26,987 / 41,915, CV 0.105 (+24% over the .wiff; September's 1.0x was +19%, CV 0.106 vs 0.091).
+  Paired CV on 23,058 shared precursors: joint minus .wiff +0.010.
+- Analysis fixes: protein accessions compared after stripping Osprey's `sp|ACC|NAME` to DIA-NN's ACC (0 in common
+  before); FDP curves drawn as the monotone envelope (the per-run curves looped). Matched-FDP numbers unaffected.
+
 ## Plan (2026-10-21, original)
 
 1. **Baselines, current #4710 code** (`Run-StellarSearch.ps1`, Osprey on the `.raw`, unit resolution):
