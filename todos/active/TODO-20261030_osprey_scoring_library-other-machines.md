@@ -423,7 +423,33 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   names `--fdr-level` and `--experiment-fdr` (the blib gate), with a failing-first check in
   `TestFlippedDefaultsParticipateInTheValidityKey`; transfer run directories re-run FirstPassFDR once. Accepted, in
   the PR text: a charge a pass-2 floor pushes past the gate falls back to an unreconciled sibling charge. Gate
-  688/688, 0 inspection; regression All running.
+  688/688, 0 inspection; regression All PASSED on 4bce784f5c (4,599 s; `ai/.tmp/sessions/20261104-night/
+  pr2-regression.log`). Opened as **#5016** (into #4950); follow-up perf and disk issue **#5018**.
+- **MACS2 (2026-11-10): Osprey is not bit-identical across Windows and Linux, and has not been since before #4950.**
+  #5016's Osprey Linux .NET build (TC 4258345) failed only `TestProteinBestPipeline`: the protein-best-off digest pinned
+  on Windows (484FA69B...) came out 0D193CB9... on Linux. It is the first unit test that pins analysis bits across
+  platforms. Bisected in a re-imported WSL distro (`OspreyLinux`, D:\WSL\OspreyLinux, Ubuntu 24.04, SDK 10.0.115; the
+  tree must be a git repo for VendorPinsGenerator) on the Stellar subset, same arguments as the test
+  (`ai/.tmp/sessions/20261104-night/subset-off.sh`, `cmp_platforms.py`; outputs `D:\Users\brendanx\test\linuxrepro`):
+  - Windows vs Linux at the PR head: 6 of the parquet's feature columns differ by 1-4 ulp in a few rows per file -
+    `peak_apex`, `peak_area`, `peak_sharpness` (`PeakShapeCalculators.cs:146`, `Math.Log10`, unchanged since the port)
+    and `median_polish_cosine`, `_residual_ratio`, `_min_fragment_r2` (`TukeyMedianPolish.cs`, `Math.Exp`/`Math.Log`);
+    everything downstream follows. The platform C libraries (UCRT vs glibc) differ in the last bit; ~30 raw
+    `Math.Exp`/`Log`/`Log10`/`Pow` calls remain in scoring, FDR and peak detection outside `DeterministicMath`
+    (which has only Exp and Log).
+  - Linux, #4950 c0c2bcd43c default vs PR head `--protein-best off`, same work path: every parquet, sidecar, spectra
+    cache and model byte-identical (only the calibration.json timestamp differs). The PR's "off is the pre-column
+    analysis" holds on each OS. Fix in #5016 (520b383045): the pin is per OS (`PreProteinBestDigest`); gate
+    688/688 + 0 inspection on Windows, and the full suite 688/688 on Linux in WSL (`linuxrepro\linux-tests.log`).
+  - Two portable exp/log classes already exist, each for its own subsystem: `DeterministicMath` (Osprey.Core, fdlibm
+    5.3, #4967, GBDT only, `OSPREY_DETERMINISTIC_MATH` switch, pinned-grid test) and Mike's `PortableMath`
+    (Osprey.Demux, e1b2446b83 on the unmerged #4710 branch, with `TestDemuxPortableMath` and a "math library" item 5 in
+    `docs/16-determinism.md` saying `regression.ps1` runs on Windows only). Neither has Log10 or Pow or reaches scoring.
+    Standardize on `DeterministicMath`; Demux moves to it when the port merges.
+  - Open (own PR; changes every golden): route the scoring transcendentals through `DeterministicMath` (add Log10 and
+    an integer-exponent Pow), measure the cost on the median-polish hot path, recapture goldens. Also check how the
+    11-03 Linux Stellar regression PASS against Windows goldens was possible with `peak_apex` already diverging (what
+    the regression compares).
 
 ## Machine-sharing check
 
