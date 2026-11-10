@@ -411,6 +411,19 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   82 runs) untested. **MACS2: please merge this commit too.** UW25 snapshot `_bin\uw25-c3bdbea78d`.
 - **UW25 next (Brendan, 2026-11-10): the feature-set study** (`TODO-20261110_osprey_feature_set.md`), UW25 dedicated
   to it for a few days; the CHS 446 run waits.
+- **MACS2 (2026-11-10): next PR into #4950 assembled on `Skyline/work/20261110_osprey_gap_pr2`** (pwiz-nightbase):
+  1cbe1463bd + UW8 4ecdc54fee, f90d19aaa6 + UW25 49fe80fde6, 1c34f9c23c + 4bce784f5c. **c3bdbea78d (round-1 run
+  bound) is left out** (Brendan): a review found `Round1Pool` (`PercolatorEngine.cs` ~2025) admits each dedup row by
+  its own drawn run, and pass 0 draws a target and its paired decoy (and each charge) separately, so above the bound
+  a pooled target keeps its decoy only ~bound/N of the time (12% at 82 runs, 2% at 446) and round 1 trains on unpaired
+  competition. Brendan: an upper bound on runs is right (like the 200,000-row bound) but 10 is arbitrary; the goal
+  is that the -0.27% at 20 files goes away, perhaps at 20 or 40, then re-test at 446 files (after the feature set
+  shrinks). Fix to carry: a best-per-precursor map restricted to the chosen runs in pass 0, so pairs and charge
+  groups are complete within them. 4bce784f5c (review finding 2, from f90d19aaa6): the transfer `reconset` token now
+  names `--fdr-level` and `--experiment-fdr` (the blib gate), with a failing-first check in
+  `TestFlippedDefaultsParticipateInTheValidityKey`; transfer run directories re-run FirstPassFDR once. Accepted, in
+  the PR text: a charge a pass-2 floor pushes past the gate falls back to an unreconciled sibling charge. Gate
+  688/688, 0 inspection; regression All running.
 
 ## Machine-sharing check
 
