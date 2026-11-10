@@ -1071,6 +1071,15 @@ transfer pass 2) and #4997's ppm m/z curve. Handoff `ai/.tmp/handoff-20261108-zt
 - Default feature mask = 21 features: A1 27,097 (1.0x) vs 27,374 (1.3x) at FDP 0.5%, against ~40,000 with 109.
 - Recommendation: default the ZT fit sigma to 1.3x the measured table (-27% centroids and smaller mzMLs, IDs about
   +1% on 3 runs and two seeds). #4997's ppm curve does not change that: see its TODO (no gain on ZT at matched width).
+- 2026-11-09, on #4710's branch (local, not pushed): f424415452 = the MS1 survey fix (cherry-pick of e9ed012e76);
+  875203422a = `JointDemuxParams.UseScanningDefaults` (SCANNING_SIGMA_SCALE 1.3, PeakHalfWidth 7, each unless
+  `--joint-param` sets it), applied by DemuxTool to scanning joint solves only, so staggered solves, synthetic tests and
+  every golden are unchanged; `TofPeakShape.Kernels` zero-pads past its 6 measured samples so `--peak-shape measured`
+  works at 7. 700/700, inspection clean. A1 slice (cycles 400-411): explicit 1.0x byte-identical to the 11-08 slice;
+  the default byte-identical to explicit 1.3x given the exact doubles (1.35 x 1.3 = 1.7550000000000001; typed 1.755
+  differs in the bytes but not in substance: 26,042,560 vs 26,043,094 centroids, same total intensity). Explained on
+  slides 26-30 of the ZT deck (https://claude.ai/artifact/S7HHMWqtHTqggJLuBR6C9e): sigma here is the TOF peak model's
+  SD in grid samples (11.3 ppm per sample at 300 m/z, 5.7 at 1200), not Centrix's Th; real split-ion examples.
 
 ## Plan (2026-10-21, original)
 
