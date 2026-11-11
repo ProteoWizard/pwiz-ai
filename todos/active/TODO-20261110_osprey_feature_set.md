@@ -151,6 +151,22 @@ The load is compute, not analysis, so one session can run it for days if it neve
 ### Phase 5 - Storage format (after the set is known)
 - [ ] float32 vs float64: first FDR-only (round loaded features to float32), then the file format and bytes.
 - [ ] Parquet encoding/compression for the remaining columns.
+- [ ] **Non-feature columns (UW25, 2026-11-11; measured on A01_005, 4.4M rows, 3.89 GB compressed / 7.00 GB
+      uncompressed).** Features 2.45 GB (63%); `cwt_candidates` 490 MB (12.6%); `fragment_mzs` + `fragment_intensities`
+      408 MB (10.5%); `reference_xic_rts` + `_intensities` 270 MB (6.9%); identity/RT/sequence columns ~240 MB.
+      Readers found by name search (confirm before removing - a generic column copy or diagnostic could still read
+      them):
+      - `fragment_*`: no production reader (the only loader that fills them, `ParquetScoreCache.LoadFullFdrEntries`,
+        has no production caller).
+      - `reference_xic_*`: only the opt-in `--training-export` (`TrainingEvidence.cs:488`, from the reconciled
+        parquet). The 12 per-fragment XICs are not stored at all; the reference XIC is the only chromatogram.
+      - `cwt_candidates`: reconciliation planning only (`CwtCandidateLoader` <- `Stage6Planner`,
+        `RunReconciliationPlanner`), for the CWT re-pick of the rows it re-picks.
+      - All three are still read by PerFileRescoring, whose streaming reconciled writer copies every column of the
+        original parquet (`ReconciledParquetWriter.cs`).
+      Proposal: stop writing `fragment_*` and `reference_xic_*` unless a consumer asks (training export), and move
+      `cwt_candidates` to its own per-run file read only by the planner. ~30% of the scoring parquet - comparable to
+      the 109 -> 77 feature cut, and additive with it.
 
 ## Open decisions (Brendan)
 - Acceptable loss for the default: inside the seed noise band at FDP 1%, or an explicit bound?
