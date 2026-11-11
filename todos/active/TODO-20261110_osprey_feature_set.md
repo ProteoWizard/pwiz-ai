@@ -332,6 +332,17 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   - Worth today: the screen puts both MS1 features at ~0 (-24 / -118, |z| < 1). Cheap test of the fix's value:
     offline best-scan cosine from the cache's MS1 section (~21 MB per file), passing targets vs decoys; then an
     "MS1 absent" indicator or missing-value handling so 0 stops meaning both "absent" and "uncorrelated".
+- UW8 (04:32) **Forward step 2**, added to start + runner-up (paired with its seed-2001 arm, 84,251):
+  spectrum-across +1,138, ref corr +955, heavy +879, per-fragment rank +826, shadow +749, wide +564 - all
+  within one single-arm difference SD (~670) of each other. Accepted spectrum-across (nominal leader, cheapest:
+  2 cols, 62 MB). Confirm: 85,389 / 84,509 / 85,112, **mean 85,003** (+563 over 84,440, z ~1.5: weak).
+- UW8 (05:40) **Forward step 3 hit the method's resolution**, added to start + runner-up + spectrum-across
+  (paired with 85,389): shadow +331, ref corr -52, wide -89, heavy -189, per-fragment rank -338 - all noise. But
+  **all five together (93 features): 86,693, inside the full set's band** (86,359 +- 472). So past ~85,000 the
+  last ~1,350 comes from several families jointly, each too small to see alone. The 93-feature set drops four
+  families entirely: median-polish top-k, dominance, top-3, clean/clip (16 features).
+- UW8 (05:45) **Switched to backward elimination from the 93-feature set**: 2 more seeds of it, and each of the
+  five late families dropped in turn, 2 seeds each (12 arms, ~1.6 h).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
