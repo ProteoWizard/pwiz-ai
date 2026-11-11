@@ -141,6 +141,11 @@ The load is compute, not analysis, so one session can run it for days if it neve
       training export). Inventory each core feature's non-classifier readers: one read only by the classifier
       is removed outright if the study drops it; one that is also a structural input stays computed but leaves
       the classifier and the parquet's FDR columns.
+- [ ] Rename the KEPT features whose names came from DIA-NN internals and mislead (Brendan 2026-11-11: rename only
+      what the end set keeps, not before). Known: `heavy_sum6` / `heavy_n_good` (natural 13C M+1 of each fragment,
+      DIA-NN pHeavy) -> e.g. `frag_m1_corr_sum6` / `frag_m1_n_good`; `tight45_sum6` / `tight20_sum6` (fragment
+      re-extracted at 0.45x / 0.2x tolerance, DIA-NN pTightCorrOne/Two). Feature reference with attribution:
+      https://claude.ai/artifact/GJb8TyeS6f2MYxV5tsU19b (built by `ai/.tmp/sessions/20261110-uw8featset/build_table.py`).
 - [ ] Recapture goldens; gate; regression-parallel; Perf/Regression on TeamCity when the PR is ready.
 
 ### Phase 5 - Storage format (after the set is known)
@@ -301,6 +306,17 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   - Step 2 (queued 03:35): runner-up confirm seeds 2002-2003; then start + runner-up + each of heavy, ref corr,
     spectrum-across, wide, shadow, per-fragment rank (seed 2001, paired with the step-1 seed). The four with
     gains <= +250 are dropped as candidates; revisit at the end.
+- UW8 (04:00) **Runner-up accepted**: start + runner-up = 84,251 / 84,440 / 84,628, mean 84,440 (+2,035 over
+  the start, 4.3 SD). Gap to the full set now 1,919. Step 2 partial, vs 84,251 at seed 2001: heavy +879,
+  ref corr +955.
+- UW8 (04:00) **Feature reference** (all 109: what each measures, inputs, origin, file:line, nonzero rate, MB,
+  screen effect, step-1 gain): https://claude.ai/artifact/GJb8TyeS6f2MYxV5tsU19b, data
+  `ai/.tmp/sessions/20261110-uw8featset/featstats.json`. No feature needs a SIL standard: "heavy" is each
+  fragment's natural 13C M+1, "shadow" the M-1 position, "reference" an endogenous fragment of the same peptide.
+- UW8: **MS1 features are rarely populated** (file 0003, 4.2M rows): `ms1_precursor_coelution` nonzero on 22% of
+  targets (33% of the strongest 10% by coelution), `ms1_isotope_cosine` on 7% (18%). Astral Orbitrap MS1 should
+  give most real precursors an envelope, so this looks like an extraction/data problem, not chemistry - an MS1
+  lead DIA-NN does use. Also `median_polish_min_fragment_r2` nonzero on 0.2% (a dead column). To investigate.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
