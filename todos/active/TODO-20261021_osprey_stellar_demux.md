@@ -1071,7 +1071,7 @@ transfer pass 2) and #4997's ppm m/z curve. Handoff `ai/.tmp/handoff-20261108-zt
 - Default feature mask = 21 features: A1 27,097 (1.0x) vs 27,374 (1.3x) at FDP 0.5%, against ~40,000 with 109.
 - Recommendation: default the ZT fit sigma to 1.3x the measured table (-27% centroids and smaller mzMLs, IDs about
   +1% on 3 runs and two seeds). #4997's ppm curve does not change that: see its TODO (no gain on ZT at matched width).
-- 2026-11-09, on #4710's branch (local, not pushed): f424415452 = the MS1 survey fix (cherry-pick of e9ed012e76);
+- 2026-11-09, on #4710's branch (pushed; 875203422a is the PR head as of 11-10): f424415452 = the MS1 survey fix (cherry-pick of e9ed012e76);
   875203422a = `JointDemuxParams.UseScanningDefaults` (SCANNING_SIGMA_SCALE 1.3, PeakHalfWidth 7, each unless
   `--joint-param` sets it), applied by DemuxTool to scanning joint solves only, so staggered solves, synthetic tests and
   every golden are unchanged; `TofPeakShape.Kernels` zero-pads past its 6 measured samples so `--peak-shape measured`
