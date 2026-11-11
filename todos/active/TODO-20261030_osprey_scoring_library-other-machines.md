@@ -468,7 +468,9 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   - `git merge-tree origin/master` into #5016: conflicts only `SubsetPipelineTest.cs` (~375, union of asserts),
     `docs/12-second-pass-fdr.md` (pass-2 mode table) and the goldens master's #4823 changed.
   - `OSPREY_GBT_OOF` is in no task validity key (`OspreyEnvironment.cs` 756/1117): a resume can adopt FirstPassFDR
-    outputs made under the other setting. Research-only today; key it before it becomes a lever.
+    outputs made under the other setting. Fixed locally: 671beae0f5 (pwiz-nightbase `nightlywork/20261110_gbt_oof_key`,
+    from 520b383045) adds `;gbtoof=1` to `GbdtValidityKeySuffix` when on (FirstPassFDR, PerFileRescoring,
+    SecondPassFDR); default keys unchanged; gate 688/688 + 0 inspection.
   - Open (own PR; changes every golden): route the scoring transcendentals through `DeterministicMath` (add Log10 and
     an integer-exponent Pow), measure the cost on the median-polish hot path, recapture goldens. Also check how the
     11-03 Linux Stellar regression PASS against Windows goldens was possible with `peak_apex` already diverging (what
