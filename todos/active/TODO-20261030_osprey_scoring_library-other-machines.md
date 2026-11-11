@@ -465,6 +465,13 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   - Branch `nightlywork/20261110_master_merge` (local): 3244efc140 merges origin/master into it; the goldens merge to
     byte-equal master's current goldens (incl. #4823). Gate 691 passed + 0 inspection; regression-parallel 49 PASS /
     0 FAIL against master's goldens. So the #4950 line with the protein-best default off reproduces master's defaults.
+  - #5018 item 4, in-window candidate parallelism: b97c39dff4 (pwiz-perfbase `nightlywork/20261110_inwindow_parallel`,
+    from 520b383045, local). Each window's scan-major XIC blocks (<=512 candidates / 4 MB) are claimed by any idle
+    thread once every window is open; results join in block order; XCorr cache lanes share filled spectra. A10_014
+    `.scores.parquet` byte-identical (cmp) at recipe r72, r8 and defaults r72; gate 689/689 + 0 inspection; regression
+    All PASSED. Window threads 88-94% busy -> 100% (the slowest window was 107-130 s of a 118-209 s stage), but the
+    wall gain is unmeasured: MACS2 carried 53-75% outside load (`ai/.tmp/sessions/20261104-night/inwindow-arms-timing.log`).
+    Expected ~6-12% of coelution on a quiet machine.
   - `git merge-tree origin/master` into #5016: conflicts only `SubsetPipelineTest.cs` (~375, union of asserts),
     `docs/12-second-pass-fdr.md` (pass-2 mode table) and the goldens master's #4823 changed.
   - `OSPREY_GBT_OOF` is in no task validity key (`OspreyEnvironment.cs` 756/1117): a resume can adopt FirstPassFDR
