@@ -45,6 +45,8 @@ Nothing is pushed in either repository. Nick pushes himself.
     over 512 MB; one value over 1 GB throws `IOException` (new resource
     `ParquetReportExporter_A_value_in_the_column___0___is_too_large_to_export_to_Parquet_`); packing moved
     from the calculation stage to the writer; `ListColumnBuffer.Pack` counts in a `long`
+12. `bb50c13e85` Fixed Parquet export boxing every list element while packing (typed loop for `T[]` when T is
+    Nullable)
 
 ## Bookend commits (branch `20261110_PerformanceImprovements`, local)
 
@@ -78,6 +80,7 @@ Package: `pwsh -File build/package-tool.ps1` gives `publish\Bookend-0.8.9.zip`.
 | PeptideReport.dtp | Tracing | Lock wait gone, report 1 385 s; ~200 s waiting on the ChromDataCache lock around LoadReplicate |
 | NewPeptideReport.dtp | Sampling | 19 reports, 2,033 MB, 133.7 s. Uncompress 141 s of ReadTimeIntensities' 232 s (summed over threads) |
 | ZLibStream.dtp | Sampling | 128.4 s. Uncompress 51 s, ReadTimeIntensities 142 s. Stages ran one after another: each report was one chunk |
+| RowGroupSplit.dtp | Sampling | 1 whole-document report, 110.5 s. Calculation busy 28 s (~7.4 of 8 workers); writer's parallel loop 97 s, of which `ListColumnBuffer.Pack` 137 s summed (boxing via `Array.GetValue`), `PrepareAsync` 48 s. Writer is the bottleneck: only the two list columns have real work |
 
 Use Sampling for timings; Tracing inflates code with many small calls. Reporter command:
 `"%LOCALAPPDATA%/JetBrains/Installations/dotTrace263/Reporter.exe" report <dtp> --pattern=pattern.xml --save-to=<xml>`
