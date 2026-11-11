@@ -247,6 +247,16 @@ protein-best-off arms after the current sweep.
   set93.txt --pb on`), each of the 93 (core included) kept with p = 3/4 (61-78 kept per arm). ~20 min per arm,
   ~18 h. Then cut-point sweeps on its ranking toward 42-63 features.
 
+**UW25 Phase 2 sweep done (07:30), protein-best off.** Kept at FDP 1%, seeds 1-3 (vs all 109, seeds 1-3: 77,459):
+top 82: 76,433 +- 264 (-1.3%, inside noise; FirstPassFDR 691 s, 110 GB); top 55: 73,943 +- 2,437 (-4.5%; 388 s,
+88 GB); top 41: 68,522 +- 1,502 (-11.5%; 284 s, 77 GB); top 27: 69,513 +- 3,858 (-10.3%; 262 s, 55 GB).
+- The bottom 27 by single-feature rank go free (agrees with UW8's 93-feature set). Below ~80 single-feature
+  ranking FAILS: top 41 is worse than a random 54-feature half (70,173), because it drops substitutes together.
+  Further cuts must be judged jointly - the Phase 3 within-set screen (protein-best on, p = 3/4) is for that.
+- Seed spread grows as the set shrinks (+-264 at 82, +-3,858 at 27): a final small set needs more than 3 seeds.
+- FDR read falls ~0.75 GB per dropped feature at 20 files.
+- Phase 3 started 07:31.
+
 ### UW8 replicate
 
 UW8: driver, design and results in `ai/.tmp/sessions/20261110-uw8featset/` (`arm.ps1`, `design.py`, `score.py`,
