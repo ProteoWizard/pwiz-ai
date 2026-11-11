@@ -257,6 +257,28 @@ top 82: 76,433 +- 264 (-1.3%, inside noise; FirstPassFDR 691 s, 110 GB); top 55:
 - FDR read falls ~0.75 GB per dropped feature at 20 files.
 - Phase 3 started 07:31.
 
+**UW25 direction change (Brendan, 2026-11-11 09:40): the Phase 3 within-set screen is stopped** after 3 of 48 arms
+(the other 45 parked in `arms-p3-parked.tsv`); UW25 now independently confirms UW8's sets on its own 20 files and
+pushes toward one feature per family.
+- **Brendan, for both machines: the goal is bytes written and read.** Every column costs its bytes whether or not
+  its family is still computed (PerFileScoring writes it, FirstPassFDR reads it ~1.7x, PerFileRescoring reads it
+  again). Cutting WITHIN families is where the disk saving is, even though scoring CPU is per family. The ideal is
+  a single best score per family; unlikely to suffice everywhere, but the closer the better.
+- UW25 protein-best-ON anchors (its first 20 files): all 109 seeds 1-3 = 90,423 / 91,267 / 91,084 (mean 90,925);
+  UW8's 93 set seeds 1-3 = 90,139 / 90,539 / 90,392 (mean 90,357, -568, z ~ -1.6: slightly below, where UW8 saw
+  +236). Screen arms p3-001..003 kept 89,035 / 87,570 / (running).
+- UW25 within-family ranking from its three 93-set models (`withinfam.py` -> `withinfam-set77.tsv`, permutation
+  drop): agrees with UW8 at the top of every family - `lib_entropy_sim` 6.2%, `spec_match_prob_max` 2.6%,
+  `tc_best_sum6` 2.4%, `apex_log_intensity_excl_top` 1.6%, `peak_candidate_count` 0.45%, `window_share_rank2/1`
+  0.68/0.62%, `tc_sum6` 0.33%, `context_precursor_mz` 0.96%, `peak_spectrum_cosine_sd` 0.39%, `shadow_corr_sum6`
+  0.09%. `PROTEIN_BEST` 15.1%. **Core: `abs_rt_deviation` 3.6%; no other core feature reaches 0.3%.** At top-1
+  per family the core is 21 of 31 features, so pruning the core is now the largest lever.
+- Queued on UW25 (~09:45-13:30): all 109 seeds 4-5 (5-seed band); UW8's 77 set seeds 1-3 (`set77.txt`); UW25's own
+  top 2 per family (41, `set77-top2.txt`) and top 1 (31, `set77-top1.txt`), core untouched, seeds 1-3. Next: core
+  pruning on the top-1 set.
+- **UW8: please post the exact feature lists of each candidate set in this TODO** (UW8's `ai/.tmp` is not
+  visible from UW25), so UW25 can run them unchanged on its files.
+
 ### UW8 replicate
 
 **UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
