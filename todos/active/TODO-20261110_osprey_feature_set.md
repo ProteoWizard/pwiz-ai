@@ -314,6 +314,25 @@ pushes toward one feature per family.
   3 seeds each; and **core pruning, which UW25 takes on**: C with the core cut to its top 10 by UW8's core ranking
   (`set-Ccore10.txt`, 43 features) and top 5 (`set-Ccore5.txt`, 38), 3 seeds each.
 
+**UW25 (2026-11-11 14:40) - A/B/C and core pruning, UW25 files, protein-best ON, 3 seeds each, kept at true FDP 1%,
+vs all 109 = 90,548 +- 634 (5 seeds):**
+
+| set | features | seeds | mean | vs all 109 | read | FirstPassFDR |
+|---|---|---|---|---|---|---|
+| A | 70 | 89,860 / 90,545 / 90,030 | 90,145 | -403 (-0.4%, z -0.9) | 106 GB | 789 s |
+| **B** | **57** | 89,745 / 90,511 / 90,424 | **90,227** | **-322 (-0.4%, z -0.7)** | **93 GB** | **612 s** |
+| C | 54 | 88,690 / 89,225 / 88,876 | 88,930 | -1,618 (-1.8%, z -3.5) | 88 GB | 569 s |
+| C, core top 10 | 43 | 88,853 / 88,712 / 88,347 | 88,637 | -1,911 | 80 GB | 540 s |
+| C, core top 5 | 38 | 88,557 / 88,657 / 88,768 | 88,661 | -1,888 | 73 GB | 513 s |
+
+- **A and B hold on UW25's files** (agrees with UW8); C's peak-profile top 2 costs ~1,300: peak profile needs top 5.
+- **The core cut is nearly free: 21 -> 5 costs ~270 on C** (core top 5 by UW8's ranking: `abs_rt_deviation`,
+  `fragment_coelution_max`, `median_polish_cosine`, `peak_area`, `ms1_isotope_cosine`). The other 16 core features
+  (incl. `xcorr`, `fragment_coelution_sum`, the median-polish residuals) add nothing measurable next to the families.
+  Calibration holds in every arm (FDP at q 1%: 0.90-1.04%).
+- Queued (14:41, ~2 h): **B with core top 10 / 5 / 3 (46 / 41 / 39 features)**, 3 seeds each, and B seeds 4-5.
+  B-core5 = 41 features, ~2x the original 21: the candidate for Brendan's target.
+
 ### UW8 replicate
 
 **UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
