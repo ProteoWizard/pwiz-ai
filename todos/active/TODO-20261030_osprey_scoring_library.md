@@ -526,6 +526,17 @@ coelution scoring and its window-retention fix). Gate 693 + 0 inspection, regres
 (`ai/.tmp/sessions/20261104-night/pr3-gate.log`, `pr3-regression.log`); Perf/Regression 4259570 queued. Removed the
 stale pwiz-fdrgap worktree (clean, nothing unpushed; it held the #4950 branch at c0c2bcd43c).
 
+### 2026-11-11 - #5019 on hold (draft) until the in-window change shows a visible gain
+
+Brendan: no added complexity for a theoretical gain the user cannot see. No wall-clock gain is measured. Six interleaved
+pairs, defaults, 72 threads, MACS2 at 50-65% load: coelution 38.4 s base vs 39.7 s new, run 150 s vs 156 s (run logs
+`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-inwindow\*m[1-6]-*\run.log`; walls `ai/.tmp/sessions/20261104-night/
+def72-mem*.log`). Recipe 72-thread pairs t1/t2: 118/132 s, 151/125 s. Ceiling from 88-94% busy window threads: 6-14% of
+coelution, ~1-3% of a default run, 3-7% at the recipe. Unpaired hint: recipe 8 threads 573 s base vs 417-424 s new
+(base ran 3 h earlier); confirm with a pair before citing. Cancelled the 06:30 quiet-timing fallback (load 86%).
+Next: paired recipe 72- and 8-thread arms on a quiet machine; if no user-visible gain, revert 3cb5347997 + 245afa97c5
+(merge, no rebase) and reduce #5019 to the OSPREY_GBT_OOF key.
+
 ## Open questions and unfinished items (carried from phases 1-2)
 
 - OspreyDatasetRun.psm1 gendecoy pairing-manifest elseif is uncommitted (from 2026-10-30); gendecoy q 1% -> FDP 1.76%.
