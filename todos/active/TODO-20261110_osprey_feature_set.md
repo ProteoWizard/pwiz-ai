@@ -541,6 +541,23 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   family at a time cut to its top 2, the other nine whole, 2 seeds each - peak profile (18 cols; also a top-5
   variant, its `window_share_rank1-5` all carried weight), `tc_*` (9), ref corr (6), spectrum match (5),
   M+1/narrow-tolerance (5). 12 arms, 09:56 to ~11:40. The five 2-3-column families stay whole (little to save).
+- UW8 (11:34) **Per-family cuts** (one family cut, nine whole; 2-seed mean vs the 77 set at the same seeds,
+  86,562 / 85,991 = 86,277):
+
+  | family cut | features | seeds | mean | change | read saved |
+  |---|---|---|---|---|---|
+  | ref corr -> top 2 | 73 | 86,290 / 86,561 | 86,426 | +149 (free) | 3 GB |
+  | spectrum match -> top 2 | 74 | 85,941 / 86,450 | 86,196 | -81 (free) | 5 GB |
+  | peak profile -> top 5 | 64 | 85,737 / 85,999 | 85,868 | -409 | 13 GB |
+  | peak profile -> top 2 | 61 | 85,350 / 85,816 | 85,583 | -694 | 18 GB |
+  | M+1/narrow-tol -> top 2 | 74 | 85,478 / 85,708 | 85,593 | -684 | ~0.5 GB |
+  | `tc_*` -> top 2 | 70 | 85,346 / 85,094 | 85,220 | -1,057 | 12 GB |
+
+  - The costs add: peak profile + `tc_*` + M+1 = ~2,435 of the all-at-once top-2's 2,845.
+  - Ref corr and spectrum match cut free; `tc_*` and M+1 stay whole (M+1 saves no bytes; `tc_*` costs the most).
+  - Peak profile is the trade-off. Candidates queued (11:35, 3 seeds each, ~1.3 h): **A 70** (ref corr + spectrum
+    match at top 2), **B 57** (A + peak profile top 5), **C 54** (A + peak profile top 2). B and C sit in
+    Brendan's 42-63 target.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
