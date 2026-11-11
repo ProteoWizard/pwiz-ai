@@ -158,6 +158,11 @@ The load is compute, not analysis, so one session can run it for days if it neve
       them):
       - `fragment_*`: no production reader (the only loader that fills them, `ParquetScoreCache.LoadFullFdrEntries`,
         has no production caller).
+        **They are a verbatim copy of the library spectrum** (`CoelutionScorer.cs:570`: every library fragment's m/z
+        and relative intensity, kept "because Rust's parquet writer at pipeline.rs:1620-1631 serializes every library
+        fragment" - parity residue). Joinable by `entry_id` (library decoys are in the library; generated decoys are
+        rebuilt deterministically). Repeated per candidate row and per run: ~33 GB at 82 runs, ~180 GB at 446. The
+        clearest removal: no information lost, no new format.
       - `reference_xic_*`: only the opt-in `--training-export` (`TrainingEvidence.cs:488`, from the reconciled
         parquet). The 12 per-fragment XICs are not stored at all; the reference XIC is the only chromatogram.
       - `cwt_candidates`: reconciliation planning only (`CwtCandidateLoader` <- `Stage6Planner`,
