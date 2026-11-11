@@ -239,6 +239,14 @@ prunes WITHIN the families UW8 selects, protein-best ON, feature by feature (the
 columns, peak profile 18, `tc_*` 9), on UW8's file set or UW25's links, whichever Brendan prefers. UW25 stops
 protein-best-off arms after the current sweep.
 
+**Split accepted (Brendan, 2026-11-11 ~06:30); goal stated: cut feature growth from 5x (21 -> 109) to 2-3x
+(42-63 features).** UW25 Phase 3 queued behind the sweep, protein-best ON, UW25's 20 files:
+- Anchors: all 109 seeds 2-3 (seed 1 = `p0-full-pbon`, 90,423); UW8's 93-feature set (all minus median-polish
+  top-k, dominance, top-3, clean/clip; `set93.txt`) seeds 1-3.
+- Within-set screen: 48 arms (`design_screen.py --n 48 --design-seed 20261111 --prefix p3 --p 0.75 --pool
+  set93.txt --pb on`), each of the 93 (core included) kept with p = 3/4 (61-78 kept per arm). ~20 min per arm,
+  ~18 h. Then cut-point sweeps on its ranking toward 42-63 features.
+
 ### UW8 replicate
 
 UW8: driver, design and results in `ai/.tmp/sessions/20261110-uw8featset/` (`arm.ps1`, `design.py`, `score.py`,
