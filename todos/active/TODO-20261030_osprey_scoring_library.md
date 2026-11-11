@@ -504,6 +504,18 @@ no-refit results stand.
   resume requires it; FrozenModelScorer.ScoresProteinBest; Stage 7 verify path loads the column; ModelDiagnostics task and
   library build still refused with PB. TestProteinBestPipeline 2m04s; TestPass2ProteinBestColumn. [unmerged, c213f37184]
 
+### 2026-11-11 - #5016 merged into #4950
+
+PR [#5016](https://github.com/ProteoWizard/pwiz/pull/5016) squash-merged into `Skyline/work/20261028_osprey_diann_fdr_gap`
+as 6e3df3130c. Shipped: `--protein-best on|off` (off by default, so the default output equals master's and the
+regression goldens are master's), the identical-output coelution speedups, the transfer pass 2 reconciling only reported
+precursors, `docs/25-diann-gap-settings.md`, and a pwsh install fallback for fresh Linux agents (PowerShell 7.7.0
+reached NuGet without `powershell.linux-x64`). TeamCity: 13/13 green on 3d8b2772ae; Osprey Perf/Regression 4259333
+SUCCESS on 29495431a9 (the head differs only in the two Linux build scripts). Branch deleted. Still local, for later PRs
+onto #4950: `nightlywork/20261110_gbt_oof_key` (671beae0f5), `nightlywork/20261110_master_merge` (3244efc140, to redo
+on #4950), pwiz-perfbase `nightlywork/20261110_inwindow_parallel` (b97c39dff4 + da206d56df). Detail in
+TODO-20261030_osprey_scoring_library-other-machines.md.
+
 ## Open questions and unfinished items (carried from phases 1-2)
 
 - OspreyDatasetRun.psm1 gendecoy pairing-manifest elseif is uncommitted (from 2026-10-30); gendecoy q 1% -> FDP 1.76%.
