@@ -259,6 +259,39 @@ top 82: 76,433 +- 264 (-1.3%, inside noise; FirstPassFDR 691 s, 110 GB); top 55:
 
 ### UW8 replicate
 
+**UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
+- **Best set so far: 77 features = core 21 + 10 families, 86,374 at true FDP 1% (3 seeds), equal to all 109
+  (86,359 +- 472, 5 seeds).** Families kept: library agreement, peak profile, `tc_*`, spectrum match, context,
+  runner-up, spectrum-across-peak, reference corr, M+1/narrow-tolerance (`heavy_*`, `tight*`, `tc_best_sum6`),
+  shadow. Dropped (6): wide, per-fragment rank, median-polish top-k, dominance, top-3, clean/clip. FirstPassFDR
+  read 116 GB vs 142 GB at 20 files. Mask string: `design.py mask` on those factors, or copy column 5 of any
+  `fb2-nowide-nofrag-base-*` row of `ai/.tmp/sessions/20261110-uw8featset/arms.tsv`.
+- **Approach, and why it worked where single-feature ranking did not.** Every arm: protein-best ON, 20 files
+  spread over the cohort, pass-1 split oracle at true FDP 1%; seed SD 472 with protein-best on (2.5x tighter than
+  off), so 3 seeds resolve ~550. The unit is the FAMILY until the family set is fixed:
+  1. Screen (40 arms, families + the 21 core as 37 factors, p = 0.75): found 5 clear families, nothing else.
+  2. Forward from core + those 5 (82,405): runner-up +2,035, then spectrum-across-peak. After that, single
+     additions fell inside noise (-338..+331) while all five remaining TOGETHER reached the full set (93
+     features, 86,595): the last ~1,350 is joint, invisible one at a time.
+  3. So switched to backward from that 93-feature set, dropping one family at a time (2-3 seeds each): wide
+     and per-fragment rank go free; heavy (-837), ref corr (-929), shadow (~-650) stay.
+  Lesson matching UW25's Phase 2: cutting by single-feature rank drops substitutes together. Removing whole
+  families from a set that already matches the full set, one at a time, keeps every remaining substitute in place.
+- **In flight (10:10): within-family cuts on the 77 set**, ranked by the arms' own GBDT permutation drop
+  (`withinfam-93set.txt`): top 2 per family (41 features) and top 1 (31), 3 seeds each, core untouched. One or
+  two features carry most families (`lib_entropy_sim` 6.1% vs 0.1%; `spec_match_prob_max` 3.1%; `tc_best_sum6`
+  2.7%; `apex_log_intensity_excl_top` 1.3%; `window_share_rank1-5` in peak profile). UW25 found single-feature
+  ranking failing below ~80, so a top-k miss is expected and is handled per family, below.
+- **Next (UW8):** if top 2 holds, try top 1 per family one family at a time; if it misses, restore families to
+  full one at a time (largest first: peak profile 18 cols, `tc_*` 9) to find which family's cut costs. Then prune
+  core (UW8's screen had four core features mildly negative; a block test of them cost -755 at the 59-set stage,
+  to re-test on the final set). Target Brendan's 42-63. Then the end set at 82 files, full pipeline, cold, per
+  stage (PerFileScoring write, FirstPassFDR, PerFileRescoring) vs all 109.
+- **Suggestion for UW25 (for Brendan to decide):** point the Phase 3 within-set screen at the 77-feature set
+  instead of the 93 (the 16 extra are wide + per-fragment rank, now shown droppable), which shortens it.
+  Alternatively, give UW25 the per-family top-k confirmation on its own file set as an independent check of
+  whatever UW8 ends with: agreement across two file sets is the robustness test.
+
 UW8: driver, design and results in `ai/.tmp/sessions/20261110-uw8featset/` (`arm.ps1`, `design.py`, `score.py`,
 `run-arms.ps1`, `fit.py`, `arms.tsv`, `results.tsv`, `driver.log`); arm directories
 `D:\test\osprey-runs\sea-ad\runs-uw8\featset\`. Every arm: FirstPassFDR only on links from
