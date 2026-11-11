@@ -519,6 +519,12 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   spectrum-across-peak, reference corr, M+1/narrow-tolerance, shadow** (10 of 16 families). Dropped: wide,
   per-fragment rank, median-polish top-k, dominance, top-3, clean/clip. Within-family arms regenerated on it:
   top 2 per family (41 features), top 1 (31), 3 seeds each (09:16, ~50 min).
+- UW8 (09:56) **Cutting every family at once costs too much**: top 2 per family (41) 83,383 / 83,489 / 83,716,
+  mean 83,529 (**-2,845, -3.3%** vs the 77 set), read 75.5 GB (-35%); top 1 (31) 82,136 / 81,812 / 81,795, mean
+  81,914 (-4,460), 59 GB. The read saving is large, so the next step finds WHICH family's cut costs: one big
+  family at a time cut to its top 2, the other nine whole, 2 seeds each - peak profile (18 cols; also a top-5
+  variant, its `window_share_rank1-5` all carried weight), `tc_*` (9), ref corr (6), spectrum match (5),
+  M+1/narrow-tolerance (5). 12 arms, 09:56 to ~11:40. The five 2-3-column families stay whole (little to save).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
