@@ -475,7 +475,12 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
     Review (`ai/.tmp/sessions/20261104-night/inwindow-review.md`) found b97c39dff4 keeps every opened window (its XCorr
     cache, spectra, prefilter) alive until the last window opens: at 8 threads the "Scored peaks" memstamp is
     25.7/29.8 GB managed/private vs 15.6/20.3 GB on the base, which undoes #4398's cross-window bound. Not mergeable
-    until fixed; a fix commit is in progress.
+    until fixed. Fixed in da206d56df: finished windows are pruned on every scheduler call and their large fields
+    dropped after the join; one thread completes each window; lanes reuse the rented scratch's VisitedBins. New test
+    `TestWindowSchedulerScoresIdenticallyAndReleasesWindows` drives the scheduler (fails on b97c39dff4). Gate 690/690 +
+    0 inspection; `.scores.parquet` cmp IDENTICAL to base at r72, r8, def72. "Scored peaks" managed/private MB: r8
+    14,783/19,846 (base 15,587/20,348), r72 20,254/27,005 (base 20,930/27,170). Open: defaults r72 private 31,262 vs
+    26,133 MB at that line (managed 20,513 vs 18,943); not yet explained.
   - `git merge-tree origin/master` into #5016: conflicts only `SubsetPipelineTest.cs` (~375, union of asserts),
     `docs/12-second-pass-fdr.md` (pass-2 mode table) and the goldens master's #4823 changed.
   - `OSPREY_GBT_OOF` is in no task validity key (`OspreyEnvironment.cs` 756/1117): a resume can adopt FirstPassFDR
