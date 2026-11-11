@@ -210,6 +210,35 @@ classifier ("109 features" / "108" / "21" in the Percolator input line), arm dir
 with probability 1/2 independently (core included; 43-66 kept per arm, each feature in 30-50 arms), each arm its
 own training seed. Expected ~10-14 min per arm, ~15-18 h.
 
+**UW25 Phase 1 done (2026-11-11 06:02; a Windows Update reboot at ~04:15 interrupted arm 79, whose partial dir
+was deleted and re-run clean).** 80 arms, all exit 0, protein-best OFF. Fit `fit_screen.py` -> `effects.tsv`
+(per feature: mean in - mean out with SE, unbiased under independent p = 1/2 inclusion; per family: OLS on the
+fraction included).
+- Random half-sets: mean 70,173, SD 3,654 (full set 77,360). Joint-fit LOO RMSE 2,043 vs seed SD 1,194: the
+  excess is substitute interactions an additive fit cannot carry.
+- Robust single features: `lib_entropy_sim` +3,003 +- 744, `rt_deviation` +2,492 +- 772, `tc_corr_rank5`
+  +2,108 +- 822, `peak_rank_margin` +1,985 +- 717, `peak_coelution_margin` +1,914 +- 800. Harmful when included:
+  `median_polish_residual_correlation` (core) -2,051 +- 793; also low: `n_coeluting_fragments`, `mp_fragment_r2_median`,
+  `ms1_isotope_cosine`. Most features are within +-2 SE.
+- Families (all-in vs all-out): peak profile +8,100 +- 3,400, core +6,700 +- 3,200, `tc_*` +5,200 +- 2,300, lib
+  agreement +4,200 +- 1,200, runner-up +3,400 +- 1,300; median-polish top-k, spectrum match, clean/clip, shadow ~0.
+- The two worst arms (p1-079 53,387, p1-063 60,783) both lack `rt_deviation` AND `abs_rt_deviation`,
+  `lib_entropy_sim` and both runner-up margins: losing a substitute PAIR is what costs.
+- **Against UW8 (protein-best ON):** agree on lib agreement, peak profile, `tc_*`, runner-up. Disagree on spectrum
+  match (UW25 ~0, UW8 +576 z 3.3) and `median_polish_residual_correlation` (UW25 harmful, UW8 +347): both overlap
+  what protein-best adds, so a protein-best-off ranking can mislead in either direction. UW8's protein-best-on
+  noise (SD 472) is 2.5x tighter; it is the better instrument for the search itself.
+
+**UW25 Phase 2 (started 2026-11-11 06:10): feature-level cut sweep, protein-best off.** Keep the top 82 / 55 / 41
+/ 27 features by Phase 1 marginal rank (`ranking-p1.txt`), seeds 1-3 each, 12 arms (~2 h), against the full set's
+seeds 1-3 (mean 77,459) and random halves (70,173). Tests whether a within-family feature ranking can cut columns
+(the disk axis), which UW8's family-level forward selection does not address.
+
+**Proposed split (UW25, for Brendan):** UW8 keeps the family-level forward selection (protein-best on). UW25 then
+prunes WITHIN the families UW8 selects, protein-best ON, feature by feature (the disk axis: per-fragment rank 12
+columns, peak profile 18, `tc_*` 9), on UW8's file set or UW25's links, whichever Brendan prefers. UW25 stops
+protein-best-off arms after the current sweep.
+
 ### UW8 replicate
 
 UW8: driver, design and results in `ai/.tmp/sessions/20261110-uw8featset/` (`arm.ps1`, `design.py`, `score.py`,
