@@ -462,6 +462,9 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   - Branch `nightlywork/20261110_defaults_off` (pwiz-nightbase, local, from 520b383045): e6d98fc635 --protein-best
     default off; 9f1df780e4 goldens restored to master's; 29495431a9 `docs/25-diann-gap-settings.md` (the opt-in
     recipe, defaults, results and disk). Gate 688/688 + 0 inspection; regression-parallel 49 PASS / 0 FAIL.
+  - 2026-11-10 23:15 (Brendan): the three defaults_off commits pushed to #5016 (fast-forward 520b383045..29495431a9);
+    title and description now say protein-best off by default. TeamCity Osprey Windows/Linux .NET and Perf/Regression
+    (4259333) queued on 29495431a9; then /pw-complete into #4950. The master merge stays for #4950.
   - Branch `nightlywork/20261110_master_merge` (local): 3244efc140 merges origin/master into it; the goldens merge to
     byte-equal master's current goldens (incl. #4823). Gate 691 passed + 0 inspection; regression-parallel 49 PASS /
     0 FAIL against master's goldens. So the #4950 line with the protein-best default off reproduces master's defaults.
