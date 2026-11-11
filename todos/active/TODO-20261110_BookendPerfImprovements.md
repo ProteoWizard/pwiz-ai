@@ -45,8 +45,11 @@ Nothing is pushed in either repository. Nick pushes himself.
     over 512 MB; one value over 1 GB throws `IOException` (new resource
     `ParquetReportExporter_A_value_in_the_column___0___is_too_large_to_export_to_Parquet_`); packing moved
     from the calculation stage to the writer; `ListColumnBuffer.Pack` counts in a `long`
-12. `bb50c13e85` Fixed Parquet export boxing every list element while packing (typed loop for `T[]` when T is
-    Nullable)
+12. `bb50c13e85` Fixed Parquet export boxing every list element while packing. Had no effect: the typed loop was
+    for a Nullable T, but `ListColumnBuffer<T>` is `where T : struct`, so T is never Nullable
+13. `f5655ec2de` Fixed Parquet list columns still boxing every element while packing: `T[]` is copied with
+    `Array.Copy`, `T?[]` gets a typed loop, and `float[]` lists are no longer converted to `float?[]`
+    (`ToNullableArray` removed)
 
 ## Bookend commits (branch `20261110_PerformanceImprovements`, local)
 
@@ -81,6 +84,7 @@ Package: `pwsh -File build/package-tool.ps1` gives `publish\Bookend-0.8.9.zip`.
 | NewPeptideReport.dtp | Sampling | 19 reports, 2,033 MB, 133.7 s. Uncompress 141 s of ReadTimeIntensities' 232 s (summed over threads) |
 | ZLibStream.dtp | Sampling | 128.4 s. Uncompress 51 s, ReadTimeIntensities 142 s. Stages ran one after another: each report was one chunk |
 | RowGroupSplit.dtp | Sampling | 1 whole-document report, 110.5 s. Calculation busy 28 s (~7.4 of 8 workers); writer's parallel loop 97 s, of which `ListColumnBuffer.Pack` 137 s summed (boxing via `Array.GetValue`), `PrepareAsync` 48 s. Writer is the bottleneck: only the two list columns have real work |
+| TypedPack.dtp | Sampling | 109.1 s, unchanged: `Pack` 132 s, of which `CastHelpers.Box` 73 s (the typed path never ran). Use a pattern with `System\..*` to see such frames |
 
 Use Sampling for timings; Tracing inflates code with many small calls. Reporter command:
 `"%LOCALAPPDATA%/JetBrains/Installations/dotTrace263/Reporter.exe" report <dtp> --pattern=pattern.xml --save-to=<xml>`
