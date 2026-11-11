@@ -247,6 +247,38 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   `fragment_intensities` 386 MB, `reference_xic_*` 267 MB). Even core 21 alone leaves ~1.8 GB per file - the
   0.5-0.8 GB estimate in the Goal is too low unless Phase 5 also addresses those columns. Largest families:
   peak-profile (`peak_width`, 18 cols) 382 MB, `tc_*` 274 MB, per-fragment rank 160 MB, spectrum match 156 MB.
+- UW8 (15:04-22:20) **Phase 1 screen done**: 40 arms, all exit 0, 52-102 features kept (9-15 families), kept at
+  FDP 1% 80,599-86,317 (mean 83,688, SD 1,444); q 1% FDP 0.89-1.10% throughout. Ridge (lambda 3 by LOO CV, LOO
+  RMSE 1,105 vs seed SD 472, bootstrap SE over arms, `fit.py`, `fit-screen40.txt`). Effect = detections gained by
+  including the factor:
+
+  | factor | effect | SE | z | | factor | effect | SE | z |
+  |---|---|---|---|---|---|---|---|---|
+  | **lib agreement** (HRAM) | +884 | 190 | 4.7 | | per-fragment rank | +49 | 128 | 0.4 |
+  | **peak profile** (`peak_width`) | +823 | 158 | 5.2 | | wide | -2 | 182 | 0.0 |
+  | **time corr `tc_*`** | +792 | 173 | 4.6 | | top-3 | -146 | 160 | -0.9 |
+  | **spectrum match** (HRAM) | +576 | 173 | 3.3 | | dominance | -185 | 132 | -1.4 |
+  | **context** | +417 | 112 | 3.7 | | core, best: `rt_deviation` | +352 | 232 | 1.5 |
+  | heavy/tight | +346 | 157 | 2.2 | | `median_polish_residual_correlation` | +347 | 191 | 1.8 |
+  | shadow | +330 | 169 | 2.0 | | core, worst: `median_polish_min_fragment_r2` | -381 | 148 | -2.6 |
+  | spectrum-across-peak | +312 | 147 | 2.1 | | `abs_mass_accuracy_deviation_mean` | -302 | 106 | -2.8 |
+  | clean/clip | +308 | 197 | 1.6 | | `peak_area` | -358 | 187 | -1.9 |
+  | runner-up | +209 | 197 | 1.1 | | `sg_weighted_xcorr` (only 4 arms out) | -223 | 113 | -2.0 |
+  | reference corr | +151 | 130 | 1.2 | | | | | |
+  | median-polish top-k | +118 | 148 | 0.8 | | | | | |
+
+  - Five families are clear (z >= 3.3); arms keeping all five average 85,459 (n=7), 1 family fewer 84,225 (n=13),
+    2 fewer 83,279 (n=14): ~+1,000 per family, roughly additive at the top.
+  - No core feature is clearly positive (all |z| < 2 positive); four are mildly NEGATIVE (z -1.9 to -2.8). At
+    p = 0.75 a "negative" core effect most likely means a substitute stands in when it is out, not harm - tested
+    as a block below rather than believed.
+  - The additive fit under-predicts the full set (85,252 vs 86,359): ~1,100 of joint value the main effects miss.
+- UW8 (22:25) **Phase 2 forward selection, step 1 queued** (16 arms, ~2.7 h). Deviation from the handoff plan:
+  its start ("core features with clear positive effects, no families") is empty here, so the start is the screen's
+  best small set = **core 21 + the 5 clear families** (63 features), 3 seeds (2001-2003); plus core-prune arms
+  (the same minus the 5 negative-effect core features, 58 features, 2 seeds); plus each of the 11 other families
+  added to the start, seed 2001. Accept a family when its arm beats the start by > 2 SD (~950), then confirm with
+  3 seeds; stop when the set is within the full set's band (86,359 +- 944).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
