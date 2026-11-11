@@ -594,6 +594,26 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
 - UW8 (12:46) core pruning queued on B: B minus the 6 core features with permutation drop <= 0
   (`median_polish_min_fragment_r2` (0.2% nonzero), `ms1_precursor_coelution`, `median_polish_residual_ratio`,
   `consecutive_ions`, `peak_sharpness`, `median_polish_residual_correlation`) = 51, 3 seeds; B seeds 4-5.
+- UW8 (13:22) **Core pruning is free -> UW8 end set: 51 features, 86,077 (3 seeds), -0.3% vs all 109.**
+  B over 5 seeds: 85,661 / 85,758 / 86,142 / 85,996 / 85,950, mean 85,901 (SD 186). B minus the 6 core:
+  85,551 / 86,183 / 86,498, mean 86,077 (+223 vs B at the same seeds). FirstPassFDR read 94.7 vs 94.8 GB: the 6
+  dropped core columns barely change the read (small, or core columns read whatever the mask - unchecked).
+  **The 51** (also `ai/.tmp/sessions/20261110-uw8featset/set51.txt`; mask `mask51.txt`):
+  fragment_coelution_sum fragment_coelution_max n_coeluting_fragments peak_apex peak_area xcorr
+  explained_intensity mass_accuracy_deviation_mean abs_mass_accuracy_deviation_mean rt_deviation abs_rt_deviation
+  ms1_isotope_cosine median_polish_cosine sg_weighted_xcorr sg_weighted_cosine (15 core) | peak_coelution_margin
+  peak_rank_margin peak_candidate_count | context_peptide_length context_precursor_charge context_precursor_mz |
+  peak_spectrum_cosine_mean peak_spectrum_cosine_sd | ref_corr_rank2 apex_log_intensity_excl_top |
+  window_share_rank1-5 | tc_sum6 tc_corr_rank1-6 tc_res_sum tc_res_mean | heavy_sum6 heavy_n_good tight45_sum6
+  tight20_sum6 tc_best_sum6 | shadow_corr_sum6 shadow_frac6 | lib_cosine_coel lib_entropy_sim lib_coel_share |
+  spec_match_prob_max spec_proj_cosine_xt_max. Families computed: 10 of 16.
+- UW8 (13:25) **82-file confirmation and timing run started** (`fullrun.ps1`, ~7.5 h): the 51 mask, no
+  record-all (scoring computes the 10 families only), otherwise the baseline's exact environment, seed 1,
+  FDRBench both passes. Out: `runs-uw8\seaad-82files-libdecoy-r1.0-transferset51-c3bdbea78d`. Compare per stage
+  with the f90d19aaa6 baseline (all 109: PerFileScoring 4.2 h, FirstPassFDR 1.2 h, PerFileRescoring 1.9 h,
+  pass 1 96,710 at FDP 1%, pass 2 96,654). Build differs (c3bdbea78d adds the protein-best fixes, FirstPassFDR
+  only), so FirstPassFDR wall and detections need an all-109 c3bdbea78d reference too: an 82-file FDR-only run
+  linked from the baseline, queued after this one.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
