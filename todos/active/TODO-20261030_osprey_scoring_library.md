@@ -516,6 +516,16 @@ onto #4950: `nightlywork/20261110_gbt_oof_key` (671beae0f5), `nightlywork/202611
 on #4950), pwiz-perfbase `nightlywork/20261110_inwindow_parallel` (b97c39dff4 + da206d56df). Detail in
 TODO-20261030_osprey_scoring_library-other-machines.md.
 
+### 2026-11-11 - master merged into #4950; #5019 opened
+
+Master merged into #4950 as 10a7d56bec (fast-forward push; goldens = master's; tree = the verified trial merge
+3244efc140 plus the two Linux build scripts); Perf/Regression 4259568 queued. PR
+[#5019](https://github.com/ProteoWizard/pwiz/pull/5019) onto #4950, branch `Skyline/work/20261111_osprey_gap_pr3`
+(pwiz-perfbase): cherry-picks 5e487db3d7 (OSPREY_GBT_OOF validity key), 3cb5347997 + 245afa97c5 (in-window parallel
+coelution scoring and its window-retention fix). Gate 693 + 0 inspection, regression-parallel 49 PASS / 0 FAIL
+(`ai/.tmp/sessions/20261104-night/pr3-gate.log`, `pr3-regression.log`); Perf/Regression 4259570 queued. Removed the
+stale pwiz-fdrgap worktree (clean, nothing unpushed; it held the #4950 branch at c0c2bcd43c).
+
 ## Open questions and unfinished items (carried from phases 1-2)
 
 - OspreyDatasetRun.psm1 gendecoy pairing-manifest elseif is uncommitted (from 2026-10-30); gendecoy q 1% -> FDP 1.76%.
