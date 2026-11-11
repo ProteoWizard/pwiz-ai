@@ -417,7 +417,10 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   saving less in the scoring parquet). FirstPassFDR read so far: full 142 GB / 858 s, 93-set 129 / 580, 89-set
   124 / 630, 59-set 93 / 484, core 21 45 / 442 (20 files, warm; wall times rough). ~45 GB is core + non-PIN
   columns, a floor only Phase 5 lowers. The end set is to be timed end to end at 82 files, cold, per stage
-  (PerFileScoring write, FirstPassFDR, PerFileRescoring) against the full set.
+  (PerFileScoring write, FirstPassFDR, PerFileRescoring) against the full set. The saving multiplies: FirstPassFDR
+  reads the parquets ~1.7x (full-set arm: 74.8 GB after the training load, 125.1 GB after the score pass, of
+  ~73 GB on disk; `p0-full-s11/run.log`), PerFileRescoring reads them again, PerFileScoring wrote them: each
+  column saved is ~3-4x its bytes in I/O per run.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
