@@ -482,8 +482,10 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
     14,783/19,846 (base 15,587/20,348), r72 20,254/27,005 (base 20,930/27,170). Open: defaults r72 private 31,262 vs
     26,133 MB at that line (managed 20,513 vs 18,943). Repeated twice more (`ai/.tmp/sessions/20261104-night/def72-mem.log`):
     whole-run peak private base 30.8/29.8/31.5 GB vs fix 33.8/33.8/32.3 GB, ~+2.6 GB (+8%); the r8 and r72 recipe
-    peaks match base. Not yet explained; check whether threads open new windows while their own window still has
-    unstarted blocks (more windows partly scored at once).
+    peaks match base. Not more windows at once: `WindowScheduler.Run` (ScoringPipeline.cs ~739) has the opener score
+    its own window's blocks to exhaustion, so at most one partly scored window per thread. Likelier: per-block
+    allocation (a new OspreyScoringContext, OspreyPeakData and CorrelationScoring for every block) growing the GC
+    heap; test by reusing them per thread.
   - `git merge-tree origin/master` into #5016: conflicts only `SubsetPipelineTest.cs` (~375, union of asserts),
     `docs/12-second-pass-fdr.md` (pass-2 mode table) and the goldens master's #4823 changed.
   - `OSPREY_GBT_OOF` is in no task validity key (`OspreyEnvironment.cs` 756/1117): a resume can adopt FirstPassFDR
