@@ -275,10 +275,32 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   - The additive fit under-predicts the full set (85,252 vs 86,359): ~1,100 of joint value the main effects miss.
 - UW8 (22:25) **Phase 2 forward selection, step 1 queued** (16 arms, ~2.7 h). Deviation from the handoff plan:
   its start ("core features with clear positive effects, no families") is empty here, so the start is the screen's
-  best small set = **core 21 + the 5 clear families** (63 features), 3 seeds (2001-2003); plus core-prune arms
-  (the same minus the 5 negative-effect core features, 58 features, 2 seeds); plus each of the 11 other families
+  best small set = **core 21 + the 5 clear families** (59 features), 3 seeds (2001-2003); plus core-prune arms
+  (the same minus the 5 negative-effect core features, 54 features, 2 seeds); plus each of the 11 other families
   added to the start, seed 2001. Accept a family when its arm beats the start by > 2 SD (~950), then confirm with
   3 seeds; stop when the set is within the full set's band (86,359 +- 944).
+- UW8 (2026-11-10 ~23:30) Windows Update rebooted the machine during step 1 (8 of 16 arms done); resumed 02:30
+  (driver restartable, the partial arm re-ran clean). No results lost.
+- UW8 (03:31) **Forward step 1 done.** Start (core 21 + 5 clear families, 59 features): 82,205 / 82,406 / 82,604,
+  **mean 82,405 - 3,954 (8 SD) below the full set**; the screen's "all five kept" arms reached 85,459 only because
+  they also kept ~8 other families. Core prune (minus the 5 negative-effect core features, 54): 82,322 / 80,977
+  (-755) -> core stays. Each other family added to the start, seed 2001:
+
+  | added | kept at FDP 1% | gain | parquet |
+  |---|---|---|---|
+  | **runner-up** (`peak_coelution_margin`, 3 cols) | 84,251 | **+1,846** | 60 MB |
+  | heavy/tight | 83,630 | +1,225 | 129 MB |
+  | reference corr | 83,611 | +1,206 | 111 MB |
+  | spectrum-across-peak | 83,491 | +1,086 | 62 MB |
+  | wide / shadow | 82,931 / 82,870 | +526 / +465 | |
+  | per-fragment rank / top-3 / mp top-k | 82,671 / 82,644 / 82,590 | +266 / +239 / +185 | |
+  | clean/clip / dominance | 82,447 / 82,270 | +42 / -135 | |
+
+  - Runner-up: the screen's +209 (z 1.1) undervalued it - its value appears only when its substitutes are out,
+    which is what the forward stage is for. Cheap too: 3 columns.
+  - Step 2 (queued 03:35): runner-up confirm seeds 2002-2003; then start + runner-up + each of heavy, ref corr,
+    spectrum-across, wide, shadow, per-fragment rank (seed 2001, paired with the step-1 seed). The four with
+    gains <= +250 are dropped as candidates; revisit at the end.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
