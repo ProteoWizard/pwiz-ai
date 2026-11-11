@@ -445,7 +445,26 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
     5.3, #4967, GBDT only, `OSPREY_DETERMINISTIC_MATH` switch, pinned-grid test) and Mike's `PortableMath`
     (Osprey.Demux, e1b2446b83 on the unmerged #4710 branch, with `TestDemuxPortableMath` and a "math library" item 5 in
     `docs/16-determinism.md` saying `regression.ps1` runs on Windows only). Neither has Log10 or Pow or reaches scoring.
-    Standardize on `DeterministicMath`; Demux moves to it when the port merges.
+    Standardize on `DeterministicMath`; Demux moves to it when the port merges. #5005 (HRAM spectrum-match and
+    library-agreement families) already uses `DeterministicMath`; the raw calls left are in the older families.
+- **MACS2 night 2026-11-10: defaults audit for checkpointing #4950 into master with no default change** (Brendan:
+  merge #5016 into #4950, then #4950 into master with every gap setting opt-in). Log
+  `ai/.tmp/night-session-budget-20261110.md`.
+  - Since the master base ab7c6b21a7 the regression goldens were re-recorded once, ce85b50fd1 (--protein-best on).
+    No other change on #4950 or #5016 moves a default output on the four regression datasets.
+  - SEA-AD matched 3 files (A01_005, A06_010, A10_014; split-sized r1.0; `runs-audit`, driver
+    `ai/.tmp/sessions/20261104-night/audit3.ps1`): master 61591d866b at defaults vs #5016 (4bce784f5c) with
+    `--protein-best off`: `fdrbench.pass1/2.tsv` byte-identical, parquets equal in every column (4,325,912 rows per
+    file), 7.7 GB each. Found at true FDP 1% (pass 2): 45,858.
+  - The recipe reproduces on #5016: GBDT 74,646 at FDP 1% (-5.1% vs DIA-NN NN 78,668; q 1% kept 73,978 at 0.91%),
+    SVM 65,728 (+5.2% vs `--no-nn` 62,472; 64,415 at 0.85%); 13 GB per 3 files without the spectra caches. Wall
+    times overlapped a regression on the machine; UW8's same-machine timings remain the reference.
+  - Branch `nightlywork/20261110_defaults_off` (pwiz-nightbase, local): --protein-best default off, goldens restored
+    to master's; gate 688/688 + 0 inspection; regression against master's goldens running.
+  - `git merge-tree origin/master` into #5016: conflicts only `SubsetPipelineTest.cs` (~375, union of asserts),
+    `docs/12-second-pass-fdr.md` (pass-2 mode table) and the goldens master's #4823 changed.
+  - `OSPREY_GBT_OOF` is in no task validity key (`OspreyEnvironment.cs` 756/1117): a resume can adopt FirstPassFDR
+    outputs made under the other setting. Research-only today; key it before it becomes a lever.
   - Open (own PR; changes every golden): route the scoring transcendentals through `DeterministicMath` (add Log10 and
     an integer-exponent Pow), measure the cost on the median-polish hot path, recapture goldens. Also check how the
     11-03 Linux Stellar regression PASS against Windows goldens was possible with `peak_apex` already diverging (what
