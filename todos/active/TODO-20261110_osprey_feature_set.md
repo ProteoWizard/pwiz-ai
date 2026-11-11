@@ -390,6 +390,19 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   families entirely: median-polish top-k, dominance, top-3, clean/clip (16 features).
 - UW8 (05:45) **Switched to backward elimination from the 93-feature set**: 2 more seeds of it, and each of the
   five late families dropped in turn, 2 seeds each (12 arms, ~1.6 h).
+- UW8 (07:45) **93-feature set confirmed: 86,693 / 86,610 / 86,482, mean 86,595 (SD 106)** vs full 86,359 +- 472.
+  Backward step 1, each family dropped from it (2-seed mean; paired 93-set mean 86,652):
+
+  | dropped | kept at FDP 1% (seeds) | mean | change | parquet saved |
+  |---|---|---|---|---|
+  | wide | 86,490 / 86,415 | 86,453 | -199 | 90 MB |
+  | per-fragment rank (12 cols) | 85,954 / 86,567 | 86,261 | -391 | 160 MB |
+  | shadow | 85,887 / 86,256 | 86,072 | -580 | 62 MB |
+  | heavy (M+1) | 85,735 / 85,894 | 85,815 | -837 | 129 MB |
+  | ref corr | 85,854 / 85,592 | 85,723 | -929 | 111 MB |
+
+  Wide dropped (89 features). Heavy and ref corr stay. Backward step 2 (queued 07:46, 10 arms): no-wide seed 3;
+  no-wide + no-per-fragment-rank, no-wide + no-shadow, no-wide + both, 3 seeds each.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
