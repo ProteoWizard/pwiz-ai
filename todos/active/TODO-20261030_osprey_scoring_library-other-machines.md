@@ -459,8 +459,12 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
   - The recipe reproduces on #5016: GBDT 74,646 at FDP 1% (-5.1% vs DIA-NN NN 78,668; q 1% kept 73,978 at 0.91%),
     SVM 65,728 (+5.2% vs `--no-nn` 62,472; 64,415 at 0.85%); 13 GB per 3 files without the spectra caches. Wall
     times overlapped a regression on the machine; UW8's same-machine timings remain the reference.
-  - Branch `nightlywork/20261110_defaults_off` (pwiz-nightbase, local): --protein-best default off, goldens restored
-    to master's; gate 688/688 + 0 inspection; regression against master's goldens running.
+  - Branch `nightlywork/20261110_defaults_off` (pwiz-nightbase, local, from 520b383045): e6d98fc635 --protein-best
+    default off; 9f1df780e4 goldens restored to master's; 29495431a9 `docs/25-diann-gap-settings.md` (the opt-in
+    recipe, defaults, results and disk). Gate 688/688 + 0 inspection; regression-parallel 49 PASS / 0 FAIL.
+  - Branch `nightlywork/20261110_master_merge` (local): 3244efc140 merges origin/master into it; the goldens merge to
+    byte-equal master's current goldens (incl. #4823). Gate 691 passed + 0 inspection; regression-parallel 49 PASS /
+    0 FAIL against master's goldens. So the #4950 line with the protein-best default off reproduces master's defaults.
   - `git merge-tree origin/master` into #5016: conflicts only `SubsetPipelineTest.cs` (~375, union of asserts),
     `docs/12-second-pass-fdr.md` (pass-2 mode table) and the goldens master's #4823 changed.
   - `OSPREY_GBT_OOF` is in no task validity key (`OspreyEnvironment.cs` 756/1117): a resume can adopt FirstPassFDR
