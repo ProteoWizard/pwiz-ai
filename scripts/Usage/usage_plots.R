@@ -69,6 +69,13 @@ usage <- read_csv(csv_path, show_col_types = FALSE) |>
   filter(date >= start_date) |>  # shared baseline so longer-retained histories don't skew the comparison
   mutate(user = display_user(user))
 
+# A machine with more than one person in its rows (a shared machine such as MACS2, or a shared
+# login re-attributed by user_overrides.csv) is shown once per person - "MACS2 (Nick)",
+# "MACS2 (Brendan)" - so the machine charts attribute each share instead of merging them.
+shared_machines <- usage |> distinct(machine, user) |> count(machine) |> filter(n > 1) |> pull(machine)
+usage <- usage |> mutate(machine = if_else(machine %in% shared_machines,
+                                           paste0(machine, " (", user, ")"), machine))
+
 # Canonical category order: DESCENDING by trailing-30-day modeled cost — the same metric the
 # share pies and summed bars use — so the daily stacked chart, the pie, and the summed bar all
 # list users (and likewise machines) in one consistent order.

@@ -37,6 +37,11 @@ ai/scripts/Usage/                    (pwiz-ai repo — the tooling)
   total self-corrects); aged-out dates are preserved.
 - **One CSV per machine** (machine name is the key — matches our nightly-test convention),
   with a `user` column (`<account>@proteinms.net`, derived from the Windows account name; the Drive volume label is checked for an email first, but current Drive labels it just `Google Drive`).
+- **Shared machines** (several people, each under their own Windows account, e.g. MACS2): the
+  first reporter keeps `usage_<MACHINE>.csv`; a later one who finds another person's rows there
+  writes `usage_<MACHINE>_<account>.csv`, because each snapshot replaces every row for the dates
+  it recomputes. The `machine` column stays `<MACHINE>`; the charts label a machine with more
+  than one person as `MACHINE (Person)`.
 - **est_cost_usd is MODELED** from public per-token rates (`$Rates` in the snapshot script) —
   a relative-trend signal, not a bill on a Max subscription.
 
@@ -89,7 +94,8 @@ pwsh -File "C:\proj\ai\scripts\Usage\Combine-ClaudeUsage.ps1"    # rebuild combi
 - **Shared logins:** the `user` column comes from the Windows account name,
   which is wrong for a shared account (e.g. SKYLINE-DEV6 under `maccoss`). Add a row to
   `<store>\user_overrides.csv` (`machine,user,from,to`, inclusive dates, blank = open-ended);
-  `Combine` re-attributes matching rows. Editing the machine's own CSV does not stick — its
+  `Combine` re-attributes matching rows (every row for that machine, so on a shared machine
+  limit the dates to the shared login's period). Editing the machine's own CSV does not stick — its
   daily snapshot rewrites every date still in its transcripts.
 - `<synthetic>` rows are Claude Code placeholders (zero real cost); dated model ids collapse
   to base.

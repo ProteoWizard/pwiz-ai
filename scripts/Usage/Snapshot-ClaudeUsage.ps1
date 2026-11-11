@@ -8,7 +8,8 @@
 
     Parses the local Claude Code JSONL transcripts (~/.claude/projects) and writes a
     daily x model aggregate to data\usage_<MACHINE>.csv. Machine name is the unique key
-    (matches the nightly-test convention); a 'user' column (<account>@proteinms.net) is
+    (matches the nightly-test convention), except on a shared machine, where a second person
+    writes data\usage_<MACHINE>_<account>.csv; a 'user' column (<account>@proteinms.net) is
     derived from the Windows account ($env:USERNAME) unless the Drive volume label holds an email.
 
     IDEMPOTENT and SELF-HEALING against the 30-day transcript reaper: dates still in the
@@ -67,8 +68,6 @@ if (-not (Test-Path $TranscriptRoot)) { throw "Transcript root not found: $Trans
 if (-not $DataDir) { $DataDir = Join-Path (Resolve-UsageStore) 'data' }
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir | Out-Null }
 $DataDir = (Resolve-Path $DataDir).Path
-$csvPath = Join-Path $DataDir ("usage_{0}.csv" -f $Machine)
-
 # --- Team identity: <account>@proteinms.net from the Drive volume label if it holds an email, else the Windows account ---
 if (-not $User) {
     try {
@@ -77,6 +76,17 @@ if (-not $User) {
         if ($vol -match '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})') { $User = $matches[1] }
     } catch {}
     if (-not $User) { $User = "$env:USERNAME@proteinms.net" }
+}
+
+# --- Output file: usage_<MACHINE>.csv, or usage_<MACHINE>_<account>.csv on a shared machine ---
+# The merge below replaces every row for each recomputed date, whoever's it is, so two people
+# reporting from one machine must not share a file. The first reporter keeps usage_<MACHINE>.csv;
+# anyone who finds another person's rows there writes their own per-account file instead.
+$csvPath = Join-Path $DataDir ("usage_{0}.csv" -f $Machine)
+$accountCsvPath = Join-Path $DataDir ("usage_{0}_{1}.csv" -f $Machine, $env:USERNAME)
+if ((Test-Path $accountCsvPath) -or
+    ((Test-Path $csvPath) -and (Import-Csv $csvPath | Where-Object { $_.user -ne $User } | Select-Object -First 1))) {
+    $csvPath = $accountCsvPath
 }
 
 # --- Aggregate current transcripts: key = "date|model" ---
