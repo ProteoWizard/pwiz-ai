@@ -317,6 +317,21 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   targets (33% of the strongest 10% by coelution), `ms1_isotope_cosine` on 7% (18%). Astral Orbitrap MS1 should
   give most real precursors an envelope, so this looks like an extraction/data problem, not chemistry - an MS1
   lead DIA-NN does use. Also `median_polish_min_fragment_r2` nonzero on 0.2% (a dead column). To investigate.
+- UW8 (05:00) **MS1 correction - extraction is correct; the rate above was mostly the population.** Only
+  68,947 of 2.09M target rows of file 0003 pass 1% FDR; the rest look like decoys (21%/6% nonzero, as decoys).
+  Among PASSING targets: `ms1_precursor_coelution` nonzero 61%, `ms1_isotope_cosine` 40%; brightest MS2 decile
+  97%/91%, faintest 42%/20%. Causes (verified on file 0003, scratch scripts in the session scratchpad):
+  - The Astral MS1 is acquired centroided (`FTMS + c`, 240k, 375-985 m/z, 962 MS1 vs 160,527 MS2, ~1.5 s cycle)
+    with a noise floor: lowest centroid ~5e4-1.2e5, found M0 median 4.1e5. Weak precursors are absent from the
+    DATA; the mzML MS1 decodes identical to the `.spectra.bin` record. Not recoverable in Osprey.
+  - Tolerance ruled out (3.3 ppm around +1.27 ppm; widening to 10 ppm adds ~2%, at background density).
+  - **Fixable**: the isotope envelope reads only the MS1 scan nearest the apex (`PeakDataExtractor.cs:1427`);
+    21.4% of passing targets have M0 in another scan of the peak. Taking the best-M0 scan (or summing over the
+    peak) would lift `ms1_isotope_cosine` from 40% to up to 61% nonzero. Unmodified-sequence envelope
+    (`Ms1Calculators.cs:90`) shifts values, never zeroes them.
+  - Worth today: the screen puts both MS1 features at ~0 (-24 / -118, |z| < 1). Cheap test of the fix's value:
+    offline best-scan cosine from the cache's MS1 section (~21 MB per file), passing targets vs decoys; then an
+    "MS1 absent" indicator or missing-value handling so 0 stops meaning both "absent" and "uncorrelated".
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
