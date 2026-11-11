@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20261110_rinstaller_test_offline`
 - **Base**: `master`
 - **Created**: 2026-11-10
-- **Status**: In Progress (master merged; backport #5017 open)
+- **Status**: Completed
 - **GitHub Issue**: (none - from nightly tests, e.g. Nightly x64 run 86656)
 - **Module**: `skyline`
 - **PR**: [#5015](https://github.com/ProteoWizard/pwiz/pull/5015) (merged 2026-11-10)
-- **Backport PR**: [#5017](https://github.com/ProteoWizard/pwiz/pull/5017) to `Skyline/skyline_26_1_1` (probe change only), from `Skyline/work/20261110_rinstaller_probe_release` in `C:\Dev\NoWarn`
+- **Backport PR**: [#5017](https://github.com/ProteoWizard/pwiz/pull/5017) to `Skyline/skyline_26_1_1` (probe change only; merged 2026-11-11), from `Skyline/work/20261110_rinstaller_probe_release` in `C:\Dev\NoWarn`
 - **Checkout**: `C:\Dev\TestIssues`
 
 ## Objective
@@ -50,6 +50,15 @@ probe change to cran.r-project.org with a 30-second timeout, the new
 TestInternetConnectionTimeout subtest, and the HttpClientWithProgress.Head() dispose
 fix. The work branch is deleted, local and remote. This TODO stays in active/ until backport
 PR #5017 (the probe change only) merges to Skyline/skyline_26_1_1.
+
+### 2026-11-11 - Backport merged
+
+PR #5017 merged to Skyline/skyline_26_1_1 as commit c4ae1cf3e0. It carries only the
+probe change: cran.r-project.org as the target and the 30-second timeout with the new
+"Timed out after {0} seconds." message. The #5015 test changes (mocked probe,
+TestInternetConnectionTimeout) were not backported because they depend on the
+request-level mock check in SendRequest (#4613), which the release branch lacks.
+All release-branch TeamCity configurations passed. The work branch is deleted, local and remote.
 
 ## Follow-up (not in this PR)
 
