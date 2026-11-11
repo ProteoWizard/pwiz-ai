@@ -472,6 +472,10 @@ Question: does the #4950 tip (GBDT + OOF, protein-best, transfer pass 2) stay bo
     All PASSED. Window threads 88-94% busy -> 100% (the slowest window was 107-130 s of a 118-209 s stage), but the
     wall gain is unmeasured: MACS2 carried 53-75% outside load (`ai/.tmp/sessions/20261104-night/inwindow-arms-timing.log`).
     Expected ~6-12% of coelution on a quiet machine.
+    Review (`ai/.tmp/sessions/20261104-night/inwindow-review.md`) found b97c39dff4 keeps every opened window (its XCorr
+    cache, spectra, prefilter) alive until the last window opens: at 8 threads the "Scored peaks" memstamp is
+    25.7/29.8 GB managed/private vs 15.6/20.3 GB on the base, which undoes #4398's cross-window bound. Not mergeable
+    until fixed; a fix commit is in progress.
   - `git merge-tree origin/master` into #5016: conflicts only `SubsetPipelineTest.cs` (~375, union of asserts),
     `docs/12-second-pass-fdr.md` (pass-2 mode table) and the goldens master's #4823 changed.
   - `OSPREY_GBT_OOF` is in no task validity key (`OspreyEnvironment.cs` 756/1117): a resume can adopt FirstPassFDR
