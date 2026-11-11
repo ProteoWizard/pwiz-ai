@@ -295,6 +295,20 @@ pushes toward one feature per family.
 - **UW8: please post the exact feature lists of each candidate set in this TODO** (UW8's `ai/.tmp` is not
   visible from UW25), so UW25 can run them unchanged on its files.
 
+**UW25 (2026-11-11 12:00) - UW8's sets on UW25's 20 files, protein-best ON, kept at true FDP 1%:**
+
+| set | features | seeds | mean | vs all 109 | FirstPassFDR read | FirstPassFDR |
+|---|---|---|---|---|---|---|
+| all 109 | 109 | 90,423 / 91,267 / 91,084 / 90,258 / 89,710 | 90,548 (SD 634) | | 140 GB | ~1,000 s |
+| UW8 77 | 77 | 89,536 / 90,690 / 89,971 | 90,066 | -483 (z ~ -1.0) | 114 GB | ~870 s |
+| UW8 top 2 per family | 41 | 87,732 / 87,866 / 87,603 | 87,734 | -2,815 (-3.1%) | 74 GB | ~550 s |
+| UW8 top 1 per family | 31 | 85,506 / 85,949 / 86,092 | 85,849 | -4,699 (-5.2%) | 58 GB | ~490 s |
+
+- **The 77 set holds on a second file set.** Cutting every family to its top 1-2 at once costs 3-5%, as on UW8.
+- Queued (12:05, ~3 h): UW8's candidates A 70 / B 57 / C 54 rebuilt from UW8's posted rankings (`set-A/B/C.txt`),
+  3 seeds each; and **core pruning, which UW25 takes on**: C with the core cut to its top 10 by UW8's core ranking
+  (`set-Ccore10.txt`, 43 features) and top 5 (`set-Ccore5.txt`, 38), 3 seeds each.
+
 ### UW8 replicate
 
 **UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
