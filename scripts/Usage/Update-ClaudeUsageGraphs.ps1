@@ -33,7 +33,12 @@ if (-not $rscript) {
 }
 if (-not $rscript) { throw 'Rscript not found. Install R, or add Rscript.exe to PATH.' }
 
-# 3. Render the charts (PNGs + claude_usage.pdf) into the shared store's plots folder.
+# 3. Render the charts (PNGs + claude_usage.pdf, and claude_usage.html when plotly is installed)
+#    into the shared store's plots folder.
+& $rscript -e 'quit(status = if (requireNamespace("plotly", quietly = TRUE)) 0 else 1)'
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'R package plotly is not installed for this account: claude_usage.html will not be updated. See README.md (charting host).'
+}
 $plots = Join-Path $PSScriptRoot 'usage_plots.R'
 Write-Host ("Rendering charts with {0}" -f $rscript)
 & $rscript $plots

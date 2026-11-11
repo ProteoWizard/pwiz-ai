@@ -74,9 +74,16 @@ sleeping laptop), a little later so it folds in what has synced:
 pwsh -File "C:\proj\ai\scripts\Usage\Register-ClaudeUsageGraphTask.ps1" -At 06:30 -RunNow
 ```
 
-That host needs R (Rscript). Data is eventually consistent — a machine that was asleep at
+That host needs R (Rscript) with `tidyverse`, `scales` and `plotly`, installed as the account
+the task runs under:
+`Rscript -e 'install.packages(c("tidyverse","scales","plotly"), repos = "https://cloud.r-project.org")'`.
+`plotly` draws `plots/claude_usage.html` (with plotly.js in `plots/claude_usage_files/`): every
+chart on one page, where clicking a legend entry hides that person, machine or model. Without it
+the PNGs and PDF are still written and the run log warns that the page was skipped.
+
+Data is eventually consistent — a machine that was asleep at
 06:30 appears in the next day's charts; no run-time offset can fix a sleeping machine. The
-`plots/` folder is shared: automated charts use the `01`–`08` names, so keep any ad-hoc
+`plots/` folder is shared: automated charts use the `01`–`08` names and `claude_usage.*`, so keep any ad-hoc
 analysis on other names (or a subfolder) to avoid clobbering.
 
 ## Manual use

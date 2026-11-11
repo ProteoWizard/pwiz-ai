@@ -140,10 +140,36 @@ daily <- usage |>
   arrange(date)
 
 theme_set(theme_minimal(base_size = 12))
+
+# Web chart height: at least 600 px, taller when the legend needs it (~26 px per entry), so a
+# long legend (machines) is not cut off.
+web_height <- function(n_legend = 0) max(600, 140 + 26 * n_legend)
+
+# ggplotly cannot convert coord_polar, so the pies get a native plotly pie for the web page, with
+# the same order and colors; hiding a slice from its legend re-totals the percentages.
+web_pie <- function(df, col, colors, title) {
+  if (!web_enabled) return(NULL)
+  lv <- as.character(df[[col]])
+  plotly::plot_ly(labels = lv, values = df$est_cost_usd, type = "pie", sort = FALSE,
+                  marker = list(colors = unname(colors[lv]), line = list(color = "white", width = 1)),
+                  textinfo = "percent", hoverinfo = "label+value+percent", height = web_height(length(lv))) |>
+    plotly::layout(title = list(text = title, x = 0))
+}
 collected <- list()  # accumulate plots so we can also emit a single multi-page PDF
-save_plot <- function(p, name, w = 10, h = 5) {
+
+# Interactive page (claude_usage.html): every chart as a plotly widget - click a legend entry to
+# hide that person/machine/model (stacks and pies re-total), double-click to show only it, hover
+# for values, drag to zoom. Written only when the plotly package is installed; PNGs/PDF regardless.
+web_enabled <- requireNamespace("plotly", quietly = TRUE)
+web_widgets <- list()
+save_plot <- function(p, name, w = 10, h = 5, web = p, web_legend = TRUE, web_n_legend = 0) {
   ggsave(file.path(plot_dir, name), p, width = w, height = h, dpi = 120)
   collected[[name]] <<- p
+  if (web_enabled && !is.null(web)) {
+    if (inherits(web, "ggplot")) web <- plotly::ggplotly(web, height = web_height(web_n_legend))
+    if (!web_legend) web <- plotly::layout(web, showlegend = FALSE)   # ggplotly ignores show.legend = FALSE
+    web_widgets[[name]] <<- web
+  }
   if (interactive()) print(p)   # RStudio stepping only; under Rscript print() opens Rplots.pdf in the CWD, which fails when run from a read-only dir (e.g. a Scheduled Task's System32)
 }
 
@@ -206,6 +232,26 @@ save_plot(p4, "04_token_composition.png")
 
 # --- 5 & 6. Team views (only meaningful once >1 teammate reports) ----------------------
 if (multi_user) {
+  # 03b. Trailing 30-day modeled cost per teammate: one line each (not stacked), so hiding a
+  # teammate in the web legend leaves the others' lines unchanged. Same calendar-day rolling sum
+  # as chart 3, with each teammate's missing days filled with $0.
+  trailing30_user <- usage |>
+    group_by(date, user) |>
+    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
+    complete(date = seq(min(usage$date), max(usage$date), by = "day"), user,
+             fill = list(est_cost_usd = 0)) |>
+    arrange(user, date) |>
+    group_by(user) |>
+    mutate(roll30 = cumsum(est_cost_usd) - lag(cumsum(est_cost_usd), 30, default = 0)) |>
+    ungroup()
+  p3b <- ggplot(trailing30_user, aes(date, roll30, color = user)) +
+    geom_line(linewidth = 1) +
+    scale_color_manual(values = user_colors) +
+    scale_y_continuous(labels = label_dollar()) +
+    labs(title = "Claude usage — trailing 30-day modeled cost by teammate",
+         x = NULL, y = "USD (modeled, trailing 30 days)", color = "user")
+  save_plot(p3b, "03b_trailing_30d_cost_by_user.png", web_n_legend = nlevels(usage$user))
+
   p5 <- usage |>
     group_by(date, user) |>
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
@@ -215,7 +261,7 @@ if (multi_user) {
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
     labs(title = "Claude usage — daily tokens by teammate", x = NULL, y = "tokens", fill = "user") +
     window_marker
-  save_plot(p5, "05_tokens_by_user.png")
+  save_plot(p5, "05_tokens_by_user.png", web_n_legend = nlevels(usage$user))
 
   # 06a. Share-of-total pie. 'user' is already ordered by 30-day cost, so slices run
   # largest-first; user_colors fixes each teammate's color across all three user charts.
@@ -233,7 +279,8 @@ if (multi_user) {
     scale_fill_manual(values = user_colors) +
     theme_void(base_size = 12) +
     labs(title = "Claude usage — share of modeled cost by teammate (last 30 days)", fill = "user")
-  save_plot(p6a, "06a_cost_share_by_user.png")
+  save_plot(p6a, "06a_cost_share_by_user.png",
+            web = web_pie(user_cost, "user", user_colors, p6a$labels$title))
 
   # 06b. Same totals as a horizontal bar — same order (largest on top via fct_rev under the
   # flip) and same colors as the pie. Legend off since the axis already names each teammate.
@@ -242,7 +289,7 @@ if (multi_user) {
     scale_fill_manual(values = user_colors) +
     scale_y_continuous(labels = label_dollar()) +
     labs(title = "Claude usage — modeled cost by teammate (last 30 days)", x = NULL, y = "USD (modeled)")
-  save_plot(p6b, "06b_cost_by_user.png")
+  save_plot(p6b, "06b_cost_by_user.png", web_legend = FALSE)
 } else {
   message("Single user so far — team charts (05/06) skipped until teammates join.")
 }
@@ -258,7 +305,7 @@ if (multi_machine) {
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
     labs(title = "Claude usage — daily tokens by machine", x = NULL, y = "tokens", fill = "machine") +
     window_marker
-  save_plot(p7, "07_tokens_by_machine.png")
+  save_plot(p7, "07_tokens_by_machine.png", web_n_legend = nlevels(usage$machine))
 
   # 08a. Share-of-total pie. 'machine' is already ordered by 30-day cost (largest-first);
   # machine_colors fixes each machine's color across all three machine charts.
@@ -276,7 +323,8 @@ if (multi_machine) {
     scale_fill_manual(values = machine_colors) +
     theme_void(base_size = 12) +
     labs(title = "Claude usage — share of modeled cost by machine (last 30 days)", fill = "machine")
-  save_plot(p8a, "08a_cost_share_by_machine.png")
+  save_plot(p8a, "08a_cost_share_by_machine.png",
+            web = web_pie(machine_cost, "machine", machine_colors, p8a$labels$title))
 
   # 08b. Same totals as a horizontal bar — same order (largest on top) and colors as the pie.
   p8b <- ggplot(machine_cost, aes(x = fct_rev(machine), y = est_cost_usd, fill = machine)) +
@@ -284,7 +332,7 @@ if (multi_machine) {
     scale_fill_manual(values = machine_colors) +
     scale_y_continuous(labels = label_dollar()) +
     labs(title = "Claude usage — modeled cost by machine (last 30 days)", x = NULL, y = "USD (modeled)")
-  save_plot(p8b, "08b_cost_by_machine.png")
+  save_plot(p8b, "08b_cost_by_machine.png", web_legend = FALSE)
 } else {
   message("Single machine so far — machine charts (07/08) skipped.")
 }
@@ -297,3 +345,20 @@ dev.off()
 
 message("Plots written to: ", plot_dir)
 message("Combined PDF: ", pdf_path)
+
+# --- Interactive page: all charts on one HTML page --------------------------------------
+# save_html needs no pandoc; plotly.js goes once into the claude_usage_files folder beside it.
+if (web_enabled) {
+  html_path <- file.path(plot_dir, "claude_usage.html")
+  page <- htmltools::tagList(
+    htmltools::tags$style("body { font-family: 'Segoe UI', Arial, sans-serif; margin: 16px 24px; }"),
+    htmltools::tags$h2("Claude usage"),
+    htmltools::tags$p(sprintf("Updated %s. Click a legend entry to hide it, double-click to show only it; drag to zoom, double-click the chart to reset. Costs are modeled from public per-token rates, not a bill.",
+                              format(Sys.time(), "%Y-%m-%d %H:%M"))),
+    lapply(sort(names(web_widgets)), function(nm) htmltools::div(style = "margin-bottom: 24px", web_widgets[[nm]]))
+  )
+  htmltools::save_html(page, html_path, libdir = "claude_usage_files")
+  message("Interactive page: ", html_path)
+} else {
+  message("plotly not installed - interactive page (claude_usage.html) skipped.")
+}
