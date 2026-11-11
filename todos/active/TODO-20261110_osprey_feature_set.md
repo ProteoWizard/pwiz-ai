@@ -421,6 +421,19 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   reads the parquets ~1.7x (full-set arm: 74.8 GB after the training load, 125.1 GB after the score pass, of
   ~73 GB on disk; `p0-full-s11/run.log`), PerFileRescoring reads them again, PerFileScoring wrote them: each
   column saved is ~3-4x its bytes in I/O per run.
+- UW8 (09:15) **Backward step 2 -> family set of 77 features at the full set's level.** 3 seeds each:
+
+  | set | features | kept at FDP 1% (seeds) | mean | FirstPassFDR read |
+  |---|---|---|---|---|
+  | 89 (no wide) | 89 | 86,490 / 86,415 / 85,672 | 86,192 | 124 GB |
+  | **no wide, no per-fragment rank** | **77** | **86,562 / 85,991 / 86,569** | **86,374** | **116 GB** |
+  | no wide, no shadow | 87 | 86,095 / 85,701 / 85,390 | 85,729 | 121 GB |
+  | no wide, rank or shadow | 75 | 85,800 / 85,217 / 85,502 | 85,506 | 112 GB |
+
+  **UW8 family set: core 21 + library agreement, peak profile, `tc_*`, spectrum match, context, runner-up,
+  spectrum-across-peak, reference corr, M+1/narrow-tolerance, shadow** (10 of 16 families). Dropped: wide,
+  per-fragment rank, median-polish top-k, dominance, top-3, clean/clip. Within-family arms regenerated on it:
+  top 2 per family (41 features), top 1 (31), 3 seeds each (09:16, ~50 min).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
