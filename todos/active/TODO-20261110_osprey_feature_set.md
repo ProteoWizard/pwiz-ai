@@ -403,6 +403,21 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
 
   Wide dropped (89 features). Heavy and ref corr stay. Backward step 2 (queued 07:46, 10 arms): no-wide seed 3;
   no-wide + no-per-fragment-rank, no-wide + no-shadow, no-wide + both, 3 seeds each.
+- UW8 (08:15) **Within-family ranking** from the 93-set arms' saved GBDT models (`withinfam.py`,
+  `withinfam-93set.txt`: training-subset AUROC, permutation drop, split share, 3 seeds). As Brendan expected, one
+  or two features carry each family: lib agreement -> `lib_entropy_sim` (perm 6.1%, others 0.1%); spectrum match
+  -> `spec_match_prob_max` 3.1% (+ `spec_proj_cosine_xt_max` 0.5%, rest <= 0); M+1/narrow-tol -> `tc_best_sum6`
+  2.7%; ref corr -> `apex_log_intensity_excl_top` 1.3%; runner-up -> `peak_candidate_count` 0.9%; peak profile ->
+  `window_share_rank1-5` (0.7-1.5%; `lib_rel_*` and most shape bins ~0); `tc_*` spread; per-fragment rank all
+  <= 0.13%. Permutation drop undercounts substitutes, so this is a ranking to test. The model's 94th input
+  `PROTEIN_BEST` has perm drop 20%, larger than any PIN feature. Queued: the 89-feature family set cut to top 2
+  per family (43 features) and top 1 (32), 3 seeds each.
+- UW8: **why columns matter (Brendan)**: the cost of a feature is mostly bytes - written by PerFileScoring, read by
+  FirstPassFDR and again by PerFileRescoring (the perf session found PerFileRescoring can only get faster by
+  saving less in the scoring parquet). FirstPassFDR read so far: full 142 GB / 858 s, 93-set 129 / 580, 89-set
+  124 / 630, 59-set 93 / 484, core 21 45 / 442 (20 files, warm; wall times rough). ~45 GB is core + non-PIN
+  columns, a floor only Phase 5 lowers. The end set is to be timed end to end at 82 files, cold, per stage
+  (PerFileScoring write, FirstPassFDR, PerFileRescoring) against the full set.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
