@@ -572,6 +572,28 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   - Peak profile is the trade-off. Candidates queued (11:35, 3 seeds each, ~1.3 h): **A 70** (ref corr + spectrum
     match at top 2), **B 57** (A + peak profile top 5), **C 54** (A + peak profile top 2). B and C sit in
     Brendan's 42-63 target.
+- UW8 (12:43) **Candidates** (3 seeds; full set 86,359 +- 472):
+
+  | candidate | features | seeds | mean | vs full | FirstPassFDR read | parquet/file after Phase 4 |
+  |---|---|---|---|---|---|---|
+  | A | 70 | 85,629 / 86,307 / 86,276 | 86,071 | -0.3% | 108 GB (-24%) | ~3.0 GB |
+  | **B** | **57** | 85,661 / 85,758 / 86,142 | **85,854** | **-0.6%** | **95 GB (-33%)** | **~2.7 GB** |
+  | C | 54 | 85,483 / 85,157 / 85,634 | 85,425 | -1.1% | 90 GB (-37%) | ~2.7 GB |
+
+  **B is the leading candidate** (z ~ -1.5, inside 2 SD): core 21 + lib agreement 3, `tc_*` 9, context 3,
+  runner-up 3, spectrum-across 2, M+1/narrow-tol 5, shadow 2, ref corr top 2 (`apex_log_intensity_excl_top`,
+  `ref_corr_rank2`), spectrum match top 2 (`spec_match_prob_max`, `spec_proj_cosine_xt_max`), peak profile top 5
+  (`window_share_rank1-5`). Mask: column 5 of `candB-57-*` in `arms.tsv`.
+  - **Caveat for disk and write time:** under a mask, PerFileScoring records every column of any family that
+    keeps a feature (`PinFeatureMask.cs:37`, families computed as units), so B's within-family cuts save
+    FirstPassFDR READ today but not disk or PerFileScoring WRITE. Run today, B writes the 77 set's parquet (~3.0
+    GB/file vs 3.65); with Phase 4 recording only the kept columns, ~2.7 GB (PIN 1.38 GB of 2.30 + non-PIN 1.36).
+  - Last 82-file full pipeline on UW8 (f90d19aaa6, all 109 recorded): 7.45 h = PerFileScoring 4.2 h,
+    FirstPassFDR 1.2 h, PerFileRescoring 1.9 h, SecondPassFDR 6 min. The 82-file timing run of the end set
+    blocks all other arms, so it goes overnight, after the set is final.
+- UW8 (12:46) core pruning queued on B: B minus the 6 core features with permutation drop <= 0
+  (`median_polish_min_fragment_r2` (0.2% nonzero), `ms1_precursor_coelution`, `median_polish_residual_ratio`,
+  `consecutive_ions`, `peak_sharpness`, `median_polish_residual_correlation`) = 51, 3 seeds; B seeds 4-5.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
