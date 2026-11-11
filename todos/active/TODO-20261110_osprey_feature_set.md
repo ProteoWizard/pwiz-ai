@@ -314,6 +314,36 @@ pushes toward one feature per family.
   Alternatively, give UW25 the per-family top-k confirmation on its own file set as an independent check of
   whatever UW8 ends with: agreement across two file sets is the robustness test.
 
+**UW8 within-family rankings (for UW25 to replicate; copied here because `ai/.tmp` is not in git).** GBDT
+permutation drop in % (`TrainingAnalysis.Features[i].PermutationDrop` x 100), mean over the 3 seeds of the
+93-feature set (`f3all-base-s2001..3`), protein-best ON, UW8's 20 files. Each list is in rank order:
+  - `core`: abs_rt_deviation 3.93, fragment_coelution_max 0.36, median_polish_cosine 0.24, peak_area 0.23, ms1_isotope_cosine 0.21, explained_intensity 0.20, peak_apex 0.16, rt_deviation 0.14, mass_accuracy_deviation_mean 0.11, n_coeluting_fragments 0.10, sg_weighted_cosine 0.07, sg_weighted_xcorr 0.06, xcorr 0.06, abs_mass_accuracy_deviation_mean 0.04, fragment_coelution_sum 0.01, median_polish_min_fragment_r2 0.00, ms1_precursor_coelution -0.01, median_polish_residual_ratio -0.02, consecutive_ions -0.05, peak_sharpness -0.06, median_polish_residual_correlation -0.07
+  - library agreement: lib_entropy_sim 6.07, lib_cosine_coel 0.12, lib_coel_share 0.09
+  - spectrum match: spec_match_prob_max 3.12, spec_proj_cosine_xt_max 0.46, spec_hyperscore -0.04, spec_proj_cosine_xt -0.09, spec_match_prob -0.23
+  - M+1/narrow-tolerance: tc_best_sum6 2.74, tight45_sum6 0.57, heavy_sum6 0.50, tight20_sum6 0.12, heavy_n_good 0.08
+  - context: context_precursor_mz 2.15, context_peptide_length 1.04, context_precursor_charge -0.02
+  - peak profile: window_share_rank1 1.46, window_share_rank2 1.29, window_share_rank3 1.04, window_share_rank4 0.75, window_share_rank5 0.74, window_share_rank6 0.29, local_corr_top3_mean 0.25, shape_bin1 0.15, peak_width 0.13, shape_bin3 0.08, shape_bin5 0.05, lib_rel_rank2 0.04, shape_bin2 0.01, lib_rel_rank6 -0.03, lib_rel_rank5 -0.04, lib_rel_rank3 -0.06, shape_bin4 -0.07, lib_rel_rank4 -0.08
+  - reference corr: apex_log_intensity_excl_top 1.34, ref_corr_rank2 0.10, ref_minfilt_corr_top3_mean 0.03, ref_corr_rank5 0.01, ref_n_corr_good 0.00, ref_corr_rank3 -0.00
+  - runner-up: peak_candidate_count 0.87, peak_rank_margin 0.09, peak_coelution_margin -0.03
+  - `tc_*`: tc_corr_rank1 0.81, tc_sum6 0.46, tc_corr_rank2 0.40, tc_res_sum 0.23, tc_res_mean 0.22, tc_corr_rank5 0.21, tc_corr_rank4 0.20, tc_corr_rank3 0.16, tc_corr_rank6 0.08
+  - shadow: shadow_corr_sum6 0.30, shadow_frac6 0.12
+  - spectrum-across-peak: peak_spectrum_cosine_sd 0.24, peak_spectrum_cosine_mean 0.08
+  - (the model's 94th input `PROTEIN_BEST`: 20.39)
+
+The two within-family arms (all 21 core kept in both):
+  - **top 2 (41)** = core + peak_rank_margin, peak_candidate_count, context_peptide_length, context_precursor_mz, peak_spectrum_cosine_mean, peak_spectrum_cosine_sd, ref_corr_rank2, apex_log_intensity_excl_top, window_share_rank1, window_share_rank2, tc_sum6, tc_corr_rank1, tight45_sum6, tc_best_sum6, shadow_corr_sum6, shadow_frac6, lib_cosine_coel, lib_entropy_sim, spec_match_prob_max, spec_proj_cosine_xt_max
+  - **top 1 (31)** = core + peak_candidate_count, context_precursor_mz, peak_spectrum_cosine_sd, apex_log_intensity_excl_top, window_share_rank1, tc_corr_rank1, tc_best_sum6, shadow_corr_sum6, lib_entropy_sim, spec_match_prob_max
+
+**Deriving a ranking from UW25's own models.** `out.1st-pass.model.json` (kept in every arm dir) holds what is
+needed, no extra run: `FeatureNames` (the model's inputs in order, incl. `PROTEIN_BEST` when protein-best is on);
+`FoldGbtModels[k]` per CV fold, flat node arrays `Feature` / `Threshold` / `Left` / `Right` / `Leaf` (a node with
+`Left >= 0` is a split, `Feature[node]` the input index) - count splits per feature for split share; and
+`TrainingAnalysis.Features[i]` per input: `Auroc` (univariate, on the training subset of ~100k targets / ~99k
+decoys - the relevant population, unlike AUROC over all scored candidates, which is ~0.52 for everything),
+`CohenD`, `PermutationDrop`, `PermutationPassing`. UW8 ranked by `PermutationDrop`; split share agreed on the
+leaders. Permutation drop undercounts a feature whose substitute is present (shuffle one, its twin covers), so
+read it as an order to test, not as a value.
+
 UW8: driver, design and results in `ai/.tmp/sessions/20261110-uw8featset/` (`arm.ps1`, `design.py`, `score.py`,
 `run-arms.ps1`, `fit.py`, `arms.tsv`, `results.tsv`, `driver.log`); arm directories
 `D:\test\osprey-runs\sea-ad\runs-uw8\featset\`. Every arm: FirstPassFDR only on links from
