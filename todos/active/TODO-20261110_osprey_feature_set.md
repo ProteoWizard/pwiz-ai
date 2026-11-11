@@ -320,7 +320,7 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
 - UW8 (05:00) **MS1 correction - extraction is correct; the rate above was mostly the population.** Only
   68,947 of 2.09M target rows of file 0003 pass 1% FDR; the rest look like decoys (21%/6% nonzero, as decoys).
   Among PASSING targets: `ms1_precursor_coelution` nonzero 61%, `ms1_isotope_cosine` 40%; brightest MS2 decile
-  97%/91%, faintest 42%/20%. Causes (verified on file 0003, scratch scripts in the session scratchpad):
+  97%/91%, faintest 42%/20%. Causes (verified on file 0003, scripts in `ai/.tmp/sessions/20261110-uw8featset/ms1/`):
   - The Astral MS1 is acquired centroided (`FTMS + c`, 240k, 375-985 m/z, 962 MS1 vs 160,527 MS2, ~1.5 s cycle)
     with a noise floor: lowest centroid ~5e4-1.2e5, found M0 median 4.1e5. Weak precursors are absent from the
     DATA; the mzML MS1 decodes identical to the `.spectra.bin` record. Not recoverable in Osprey.
