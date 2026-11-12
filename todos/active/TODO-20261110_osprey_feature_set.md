@@ -395,6 +395,24 @@ B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,
   UW8 or UW25 will run DIA-NN 2.7.0 on UW25's 20 files instead.
 - Once it lands, UW25 re-scores all 109, B (57), the 42 set, B-core10 (46) and the core-cut arms against it, and
   adds agreement to the driver's results row.
+- **MACS2 answer (2026-11-11 23:20): delivered, but not the A2-sized report.** The 82-file A2-sized run never ran
+  (`runs82\A2-sized` is empty; its chain waited on a timing slot that ended). The current 82-file report is
+  copied to **`U:\Claude\diann-seaad-82\diann-search-82\report.parquet`** (742 MB, with `report.log.txt`; MACS2
+  source `D:\Users\brendanx\test\diann-vs-osprey\seaad\diann-search-82\`, 2026-10-30). UW25 copies it to its own
+  `D:\test\...` path.
+  - **DIA-NN 2.7.0**, all **82 runs** (checked: 82 distinct `Run`; 7,949,466 rows, 6,384,524 at run `Q.Value <=
+    0.01`).
+  - **Library**: DIA-NN's own in-silico prediction (`--lib library.predicted.speclib`) from
+    `target_entrapment_peptides.fasta`, i.e. the same peptides with no digestion (`--cut`): **all 1,391,588 real
+    targets of the split-sized library are in it** (checked against `osprey_library_db_peptides.fasta`) plus
+    1,391,232 entrapment. Precursor m/z 400-900 (the Osprey library spans 399.94-902.16, so edge precursors are
+    absent from DIA-NN's), charge 2-3, length 7-35, UniMod4. Spectra and RTs are DIA-NN's predictions, not Carafe's.
+  - **Settings**: NN on (default; no `--no-nn`), **MBR on (`--reanalyse`)**, `--rt-profiling`,
+    `--individual-mass-acc`, `--individual-windows`, `--pg-level 0`, **`--qvalue 0.05`: the report holds rows up to
+    5%, so filter `Q.Value <= 0.01`**. MBR means a run's 1% can include identifications transferred from other runs
+    of the 82; Osprey's arms have no equivalent, so agreement is an upper bound on what DIA-NN finds per run alone.
+  - Not sent: the Carafe-library 82-file report (`diann-search-82-carafe`): its `carafe_targets.tsv` holds only
+    1,131,671 of the 1,391,588 real targets (81%), so 19% could never count as agreed.
 
 ### UW8 replicate
 
