@@ -397,7 +397,8 @@ B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,
   adds agreement to the driver's results row.
 - **MACS2 answer (2026-11-11 23:20): delivered, but not the A2-sized report.** The 82-file A2-sized run never ran
   (`runs82\A2-sized` is empty; its chain waited on a timing slot that ended). The current 82-file report is
-  copied to **`U:\Claude\diann-seaad-82\diann-search-82\report.parquet`** (742 MB, with `report.log.txt`; MACS2
+  in **`U:\data\MacCoss\Osprey\sea-ad\diann-search-82\report.parquet`** (742 MB, with `report.log.txt`; moved
+  there 2026-11-12 from `U:\Claude`; on MACS2 U: is `\\gs-ddn2\maccoss-vol1\home\brendanx`; MACS2
   source `D:\Users\brendanx\test\diann-vs-osprey\seaad\diann-search-82\`, 2026-10-30). UW25 copies it to its own
   `D:\test\...` path.
   - **DIA-NN 2.7.0**, all **82 runs** (checked: 82 distinct `Run`; 7,949,466 rows, 6,384,524 at run `Q.Value <=
