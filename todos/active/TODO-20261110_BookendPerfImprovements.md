@@ -50,6 +50,11 @@ Nothing is pushed in either repository. Nick pushes himself.
 13. `f5655ec2de` Fixed Parquet list columns still boxing every element while packing: `T[]` is copied with
     `Array.Copy`, `T?[]` gets a typed loop, and `float[]` lists are no longer converted to `float?[]`
     (`ToNullableArray` removed)
+14. `42fe1e229e` Changed the `ReportXml` comment (superseded by 15)
+15. `56168463be` Fixed ReportXml dropping the layouts saved with the report: the default layout is used, Sort is
+    ignored like every other property, and `AddReportFromDefinition` saves the layouts (`GetReportLayout`)
+16. `b3b506d340` Fixed Parquet row group splitting ignoring the lengths of strings in list columns
+17. `ffebf3ad69` Changed `ChromatogramGroupInfo.TimeIntensitiesGroup` to lock a private object instead of `this`
 
 ## Bookend commits (branch `20261110_PerformanceImprovements`, local)
 
@@ -85,6 +90,7 @@ Package: `pwsh -File build/package-tool.ps1` gives `publish\Bookend-0.8.9.zip`.
 | ZLibStream.dtp | Sampling | 128.4 s. Uncompress 51 s, ReadTimeIntensities 142 s. Stages ran one after another: each report was one chunk |
 | RowGroupSplit.dtp | Sampling | 1 whole-document report, 110.5 s. Calculation busy 28 s (~7.4 of 8 workers); writer's parallel loop 97 s, of which `ListColumnBuffer.Pack` 137 s summed (boxing via `Array.GetValue`), `PrepareAsync` 48 s. Writer is the bottleneck: only the two list columns have real work |
 | TypedPack.dtp | Sampling | 109.1 s, unchanged: `Pack` 132 s, of which `CastHelpers.Box` 73 s (the typed path never ran). Use a pattern with `System\..*` to see such frames |
+| ArrayCopyPack.dtp | Sampling | 55.5 s. `Pack` 12 s. Writer still slightly the bottleneck (calculation waits 23 s); Zstd 28 s of `PrepareAsync`'s 62 s. Nick: fast enough for now |
 
 Use Sampling for timings; Tracing inflates code with many small calls. Reporter command:
 `"%LOCALAPPDATA%/JetBrains/Installations/dotTrace263/Reporter.exe" report <dtp> --pattern=pattern.xml --save-to=<xml>`
@@ -111,5 +117,7 @@ and report tests passed. No test was added. No test is known to export a list co
 - [ ] Pick the next lever from that profile. Last known costs (summed over threads): protobuf
       `ChromatogramGroupData.MergeFrom` 48 s, `ChromatogramCache.CallWithStream` 37 s, `ListColumnBuffer.Pack` 47 s
       own time, `ColumnData.ToNullableArray` 12 s.
-- [ ] `/code-review` on the branch before opening a PR.
+- [x] `/code-review medium` (2026-11-11): 10 findings; fixed the ReportXml layouts, string-list byte count and
+      `lock (this)` (commits 15-17); dropped the rest (cache size is by design, the others were false or unchanged
+      from master).
 - [ ] Open the PR (module `skyline`) and push the Bookend branch; both are Nick's call.
