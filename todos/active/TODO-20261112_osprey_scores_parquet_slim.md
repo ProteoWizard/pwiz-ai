@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#5023](https://github.com/ProteoWizard/pwiz/issues/5023)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#5025](https://github.com/ProteoWizard/pwiz/pull/5025)
 
 ## Objective
 
@@ -153,3 +153,14 @@ then a second SEA-AD pair (`ai/.tmp/sessions/20261112-5023/gate-and-ab2.ps1`, lo
   runs, ~355 GB at 446. (Measured; matches the metadata projection.)
 - Results: every blib table except LibInfo/LibMetadata hashes `fef0c2039041138e` in all 8 arms of
   both pairs.
+
+### 2026-11-12 - Code review, PR opened
+
+`/code-review medium`: 10 findings. Fixed: Stage 6 refuses to write a reference XIC its Stage 4
+file lacks (HPC chain with the flag on PerFileRescoring nodes only; `InvalidOperationException`
+so the run stops instead of skipping and retrying); `writeReferenceXic` made required on both
+writers (it caught a test helper passing the wrong value at once); doc 22 HPC note, the re-score
+on REMOVING the flag, doc 14 Rust column-set caveat; three comments. Dropped: DiagnosticsOnly in
+the key predicate (a render must key on how files were written), skipping the XIC read when not
+writing (only reachable via paths now refused), superset key acceptance (17 stamp-check sites).
+Gate 656/656, inspection clean. Commits f38320489d + 7a13c5ddd4; PR #5025 against master.
