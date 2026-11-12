@@ -472,6 +472,32 @@ DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Va
 - Done on UW25 (2026-11-12): the driver (`run-arms.ps1 -AgreeReport`, default the no-MBR first pass) now writes
   `diann_both` and `diann_pct` (strict definition) on every arm's results row; paired lost/gained stays in
   `paired_agreement.py`, which needs the matching all-109 seed.
+- **UW8 answer (2026-11-12 02:30): 82-file tables staged, and agreement run on UW8.** Staged (`stage82.py`) to
+  `M:\home\brendanx\data\MacCoss\Osprey\sea-ad\featset82-uw8\<arm>\` (`fdrbench.pass1.tsv.gz` + `run.log`):
+  `ref82-all109-c3bdbea78d-s1` (all 109, seed 1), `x82-A-70-s1`, `x82-77-s1`, `x82-B-57-s1`, `x82-B-core6-51-s1`,
+  `x82-uw25-42-s1`, and `full-set51-c3bdbea78d-s1` (the full-pipeline 51 run; identical pass 1 to x82-51).
+  Still to stage as they finish (~08:00): `x82-uw25-46-s1`, `x82-all109-s2/s3`, `x82-B-57-s2/s3`,
+  `x82-B-core6-51-s2`. UW8 ran `split_calibration.py --agree report-first-pass.parquet --agree-global --reference
+  ref82-all109-c3bdbea78d-s1 --lost-hist` (`ai/.tmp/sessions/20261110-uw8featset/agreement82-seed1.txt`). 82 files,
+  seed 1, strict (run q and global q <= 1%, no MBR); all 109 = 96,593 at FDP 1%, 88,025 both (91.3%):
+
+  | set | features | kept at FDP 1% | both | lost (DIA-NN %) | gained (DIA-NN %) | **net confirmed** |
+  |---|---|---|---|---|---|---|
+  | A | 70 | 96,408 | 87,868 | 2,642 (50.1%) | 2,459 (47.4%) | -157 (-0.18%) |
+  | 77 | 77 | 96,111 | 87,730 | 2,658 (51.0%) | 2,175 (48.7%) | -295 (-0.34%) |
+  | **B** | **57** | **96,055** | **87,706** | 3,009 (50.6%) | 2,474 (48.6%) | **-319 (-0.36%)** |
+  | 51 (B - 6 core) | 51 | 95,264 | 87,245 | 3,465 (52.6%) | 2,136 (48.8%) | -780 (-0.89%) |
+  | UW25 42 | 42 | 95,359 | 87,160 | 3,771 (54.9%) | 2,535 (47.6%) | -865 (-0.98%) |
+
+  - **At 82 files B costs the same in DIA-NN-confirmed precursors as on UW25's 20 files (-0.36% vs -0.34%).** Its
+    lost confirmed precursors sat at Osprey's 1% boundary: 94% had all-109 q 0.3-1% (all agreed: 8%), DIA-NN global
+    q above 1e-3 for 66% (all agreed: 15%). Boundary churn, as UW25 found.
+  - **The core cuts cost ~2.5-3x B in confirmed precursors at 82 files (-0.9 to -1.0%)**, and the exchange
+    tilts (lost 53-55% confirmed vs gained 48%). The 42 set's lost confirmed include more confident ones: 9.4%
+    with all-109 q 1e-3..3e-3 (A / 77 / B: 3-5%).
+  - **The line, on both machines and both scales: B (57) is boundary churn; cutting the core starts to cost
+    precursors both tools agree on.** The noise yardstick at 82 files (all 109 seed 2 / 3 vs seed 1) lands by
+    ~08:00 and is added here then.
   - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
     the first pass experiment-wide - another reason to keep both.
 
