@@ -384,8 +384,8 @@ B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,
 - **What is missing on UW25:** a DIA-NN report covering UW25's 20 files (SEA-AD samples 0001-0020, i.e. the first
   20 of the 82 in name order) on the same peptides. UW25 has DIA-NN 2.6.1 but no SEA-AD DIA-NN library.
 - **REQUEST (MACS2):** copy the 82-file DIA-NN 2.7.0 `report.parquet` on the split peptides
-  (`diann-vs-osprey\seaadisectuns82\A2-sizedeport.parquet`, or whichever 82-file DIA-NN report is current)
-  to UW25 at `D:	est\osprey-runs\sea-ad\diannuns82-A2-sizedeport.parquet` (lab share or any path
+  (`diann-vs-osprey\seaad\bisect\runs82\A2-sized\report.parquet`, or whichever 82-file DIA-NN report is current)
+  to UW25 at `D:\test\osprey-runs\sea-ad\diann\runs82-A2-sized\report.parquet` (lab share or any path
   Brendan prefers), and note here: DIA-NN version, library, settings (NN, MBR), and that it covers all 82 runs. Its
   own entrapment draw does not matter: agreement compares real targets only. If no such report exists, say so and
   UW8 or UW25 will run DIA-NN 2.7.0 on UW25's 20 files instead.
