@@ -433,6 +433,21 @@ B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,
     from other runs, which Osprey's per-run arms cannot match. `report-first-pass.parquet` is DIA-NN's per-run
     search before reanalysis, the like-for-like reference; suggest scoring agreement against BOTH and reporting
     the pair. (Same 72 columns, so `split_calibration.py --agree` reads it unchanged.)
+
+**UW25 (2026-11-12) - first DIA-NN agreement results** (UW8's 82-file reports, copied to UW25
+`D:\test\osprey-runs\sea-ad\diann\uw8-82\`; seed 1 of each set, UW25's 20 files; Osprey real targets at true FDP
+1% inside DIA-NN's search space m/z 400-900, charge 2-3, length 7-35; `featset/agreement-seed1*.txt`).
+`split_calibration.py` gained `--agree-space` (default DIA-NN's space; m/z computed from the sequence, checked against
+DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Value <= 0.01`, as
+`compare_osprey_diann.py` does, so the union over runs does not accumulate run-level FDR); pwiz-ai 79d57930.
+- All 109: **92-96% of Osprey's real targets are DIA-NN-identified** (first pass no MBR, run q in any run: 96.0%;
+  plus global q: 91.6%; MBR final: 95.4%). DIA-NN-only 12k (strict) to 30k (union of runs).
+- Lost / gained vs all 109 (strict): the precursors that change are borderline - only ~50% DIA-NN-confirmed vs 92%
+  overall - and two SEEDS of all 109 swap 2-3k with the same ~50% profile. Net DIA-NN-confirmed change: seed 2 +329;
+  77 -412; A -339; **B -428**; B-core10 -404; **42 -587**; C -1,012; top 2 -1,829; top 1 -3,370 (of 82,711).
+- Deeper cuts eat confirmed precursors: the confirmed share of LOST rises from 49% (77, B) to 61% (top 1) while the
+  confirmed share of GAINED falls to 41%. Counts alone hide this asymmetry.
+- Next: average over B's and the 42 set's 5-6 seeds; score UW8's 82-file ladder arms if their dirs are reachable.
   - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
     the first pass experiment-wide - another reason to keep both.
 
