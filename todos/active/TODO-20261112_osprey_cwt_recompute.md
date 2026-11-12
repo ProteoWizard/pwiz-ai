@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#5024](https://github.com/ProteoWizard/pwiz/issues/5024)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#5030](https://github.com/ProteoWizard/pwiz/pull/5030) (stacked on #4950)
 
 ## Objective
 
@@ -180,3 +180,10 @@ The base arm is #4950 with #5025 merged, so this measures #5024 alone.
   segment attribution (cosmetic).
 - Night session goal: PR open on #4950 and green on TeamCity incl. Perf/Regression
   (`ai/.tmp/night-session-budget-20261112.md`).
+
+### 2026-11-12 - PR #5030 opened
+
+- Full `regression-parallel.ps1 -Dataset All` on 235df65d51: 49 PASS / 0 FAIL in 1:00:39; the
+  reproduction check never fired (`ai/.tmp/sessions/20261112-5023/regression-review.log`).
+- Pushed the branch and opened #5030 against `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950).
+- Queued Osprey Perf/Regression on `pull/5030`: TeamCity build 4261794.
