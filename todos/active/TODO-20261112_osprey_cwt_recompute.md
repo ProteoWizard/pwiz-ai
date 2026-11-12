@@ -42,3 +42,25 @@ Working in `D:\Users\brendanx\proj\pwiz-nightbase` (MACS2), branched from #4950 
 Developer chose to stack on #4950 because its CoelutionScorer changes are not expected to move
 again. Overlap with #5023 (targets master, same ParquetScoreCache writer code): #5023 should be
 merged into #4950 before this lands, or this branch merges it in.
+
+**Code map (read-only audit of this branch, 2026-11-12; nothing run yet):** bit-identical
+recompute looks feasible - every Stage 4 input is on disk.
+- Stage 4 chain: `CoelutionScorer.ScoreCandidate` -> `PeakDataExtractor.TryExtract` (non-override
+  path) -> `CaptureCwtCandidates` -> stable descending rank-score sort, truncated to
+  `Reconciliation.TopNPeaks` (5) -> `BuildFdrEntry`. Window: Stage 3 RT calibration,
+  MAD = `rtCalibration.Stats().MAD`, `SearchWindowHalfWidth(...)`, sigma max(5*1.4826*MAD, 0.1),
+  `OSPREY_LOCAL_RT_TOLERANCE`; fragment tolerance from ms2Cal SD; spectra (RT, scan) sorted.
+- No cross-precursor dependency (per-candidate context cleared); dedup only drops rows.
+- Catch: a precursor in two overlapping isolation windows is scored per window and dedup keeps
+  one row; the window is not stored -> identify it from the apex `ScanNumber`.
+- Stage 6 has no call that reproduces it: re-pick/forced rows are rescored as boundary overrides
+  (no CWT) with the REFINED calibration. Recompute must use the Stage 3 calibration, and spectra
+  load after planning today (`LoadSpectraForRescore` follows `PlanRun`).
+- The planner reads only Apex/Start/End RT and list order (candidate index into
+  `.reconciliation.json`); Area/SNR/CoelutionScore are read by nothing.
+- Risks: wrong window choice, `refined` vs Stage 3 calibration, OSPREY_* drift between stages,
+  `OSPREY_LOAD_CALIBRATION`, demux-cache vs `.spectra.bin`, `OSPREY_REF_XIC=corr` (candidate
+  apex/area depend on which peak won).
+
+Diagnostic (`OSPREY_CWT_RECOMPUTE_CHECK=1`, compare recomputed vs stored for every non-Keep row)
+being implemented by a sub-agent in pwiz-nightbase; status in `ai/.tmp/agent-cwtcheck-status.md`.
