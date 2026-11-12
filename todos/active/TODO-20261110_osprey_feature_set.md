@@ -164,7 +164,8 @@ The load is compute, not analysis, so one session can run it for days if it neve
 ### Phase 5 - Storage format (after the set is known)
 - [ ] float32 vs float64: first FDR-only (round loaded features to float32), then the file format and bytes.
 - [ ] Parquet encoding/compression for the remaining columns.
-- [ ] **Non-feature columns (UW25, 2026-11-11; measured on A01_005, 4.4M rows, 3.89 GB compressed / 7.00 GB
+- [ ] **Now pwiz issue #5023** (2026-11-12, assigned brendanx67; a PR to master, then merged into #4950; Brendan and
+      MACS2). The notes below are its source. **Non-feature columns (UW25, 2026-11-11; measured on A01_005, 4.4M rows, 3.89 GB compressed / 7.00 GB
       uncompressed).** Features 2.45 GB (63%); `cwt_candidates` 490 MB (12.6%); `fragment_mzs` + `fragment_intensities`
       408 MB (10.5%); `reference_xic_rts` + `_intensities` 270 MB (6.9%); identity/RT/sequence columns ~240 MB.
       Readers found by name search (confirm before removing - a generic column copy or diagnostic could still read
