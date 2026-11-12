@@ -99,12 +99,33 @@ def osprey(path, assign):
     return t.q_value.values, ~(on | own), on
 
 
-def osprey_found(path, assign, n_on, n_t):
-    """Real-target precursor ids (DIA-NN Precursor.Id form) an Osprey FDRBench table reports at true FDP 1%."""
+RESIDUE_MASS = {'G': 57.02146, 'A': 71.03711, 'S': 87.03203, 'P': 97.05276, 'V': 99.06841, 'T': 101.04768,
+                'C': 103.00919, 'L': 113.08406, 'I': 113.08406, 'N': 114.04293, 'D': 115.02694, 'Q': 128.05858,
+                'K': 128.09496, 'E': 129.04259, 'M': 131.04049, 'H': 137.05891, 'F': 147.06841, 'R': 156.10111,
+                'Y': 163.06333, 'W': 186.07931}
+WATER, PROTON = 18.010565, 1.007276
+
+
+def precursor_mz(modseq, charge):
+    """Monoisotopic m/z of an Osprey modified sequence (mass deltas in brackets) at a charge."""
+    mass = WATER + sum(float(d) for d in re.findall(r'\[([+-]?[\d.]+)\]', modseq))
+    mass += sum(RESIDUE_MASS[aa] for aa in re.sub(r'\[[^]]*\]', '', modseq))
+    return (mass + charge * PROTON) / charge
+
+
+def osprey_found(path, assign, n_on, n_t, space=None):
+    """Real-target precursor ids (DIA-NN Precursor.Id form) an Osprey FDRBench table reports at true FDP 1%,
+    optionally only those inside a search space (mz_lo, mz_hi, charges, len_lo, len_hi)."""
     t = osprey_table(path, assign)
     tg = ~(t.on.values | t.own.values)
     k = fdp_cut(t.q_value.values, tg, t.on.values, n_on, n_t)
     head = t.iloc[:k][tg[:k]]
+    if space is not None:
+        mz_lo, mz_hi, charges, len_lo, len_hi = space
+        mz = [precursor_mz(m, c) for m, c in zip(head.mod_peptide, head.charge)]
+        n = head.peptide.str.len()
+        head = head[(np.array(mz) >= mz_lo) & (np.array(mz) <= mz_hi) & head.charge.isin(charges).values
+                    & (n >= len_lo).values & (n <= len_hi).values]
     return set(head.mod_peptide.map(unimod) + head.charge.astype(str))
 
 
@@ -161,6 +182,12 @@ def main():
     ap.add_argument('--agree', help='DIA-NN report.parquet to measure each Osprey arm\'s agreement against')
     ap.add_argument('--agree-q', type=float, default=0.01, help='DIA-NN run Q.Value for a confident identification')
     ap.add_argument('--reference', help='Osprey run dir to split every other arm\'s lost/gained precursors against')
+    ap.add_argument('--agree-global', action='store_true',
+                    help='also require DIA-NN Global.Q.Value <= --agree-q (an experiment-level ID, as in '
+                         'Benchmark/compare_osprey_diann.py), so the union over runs does not accumulate run-level FDR')
+    ap.add_argument('--agree-space', default='400,900,2-3,7,35',
+                    help='DIA-NN\'s search space as mz_lo,mz_hi,charges,len_lo,len_hi: Osprey precursors outside it '
+                         'cannot agree and are left out of the agreement counts; "none" keeps them all')
     a = ap.parse_args()
     assign = pd.read_csv(os.path.join(a.lib_dir, 'assign.tsv'), sep='\t', usecols=['sequence', 'on_target']) \
         .drop_duplicates('sequence').set_index('sequence').on_target
@@ -185,11 +212,19 @@ def main():
 
 
 def agreement(a, assign):
-    rep = pq.read_table(a.agree, columns=['Run', 'Precursor.Id', 'Decoy', 'Q.Value']).to_pandas()
+    rep = pq.read_table(a.agree, columns=['Run', 'Precursor.Id', 'Decoy', 'Q.Value', 'Global.Q.Value']).to_pandas()
     rep = rep[rep.Decoy == 0]
+    if a.agree_global:
+        rep = rep[rep['Global.Q.Value'] <= a.agree_q]
     rep['Run'] = rep.Run.map(lambda r: os.path.splitext(os.path.basename(str(r).replace('\\', '/')))[0])
-    print(f'\nAgreement with DIA-NN ({a.agree}; run Q.Value <= {a.agree_q} in the arm\'s runs), real targets at true '
-          f'FDP 1%:')
+    space = None
+    if a.agree_space != 'none':
+        mz_lo, mz_hi, ch, len_lo, len_hi = a.agree_space.split(',')
+        c_lo, c_hi = (int(v) for v in ch.split('-'))
+        space = (float(mz_lo), float(mz_hi), list(range(c_lo, c_hi + 1)), int(len_lo), int(len_hi))
+    print(f'\nAgreement with DIA-NN ({a.agree}; run Q.Value <= {a.agree_q} in the arm\'s runs'
+          + (f', Global.Q.Value <= {a.agree_q}' if a.agree_global else '') + '), real targets at true '
+          f'FDP 1%' + (f', inside DIA-NN\'s search space {a.agree_space} (m/z, charges, length)' if space else '') + ':')
     print(f'{"arm":40s} {"Osprey":>8s} {"both":>8s} {"% both":>7s} {"Osprey only":>12s} {"DIA-NN only":>12s} runs')
     found = {}
     for d in dict.fromkeys(([a.reference] if a.reference else []) + a.osprey):
@@ -202,7 +237,7 @@ def agreement(a, assign):
             f = fdrbench_path(d, ps)
             if not f:
                 continue
-            o = osprey_found(f, assign, a.n_on, a.n_target)
+            o = osprey_found(f, assign, a.n_on, a.n_target, space)
             found[(d, ps)] = (o, dn)
             both = len(o & dn)
             print(f'{(os.path.basename(os.path.normpath(d))[-37:] + " p" + ps):40s} {len(o):8d} {both:8d} '
