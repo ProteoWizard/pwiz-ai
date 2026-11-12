@@ -79,6 +79,17 @@ stricter; pwiz must not get a giant change set. So:
   builds. Use `--no-build` to inspect the no-vendor configuration.
 - The `ProteowizardWrapper` sources live in `pwiz_tools/Shared/ProteowizardWrapper.PwizSharp`
   (linked into ProteowizardWrapper.csproj) - a CI exclude must name that folder.
+- **Vendor readers must not warn through `Trace`.** Skyline listens: SkylineCmd's
+  `TraceWarningListener` writes warnings into command output, and the UI's
+  `ImmediateWindowWarningListener` opens the Immediate Window. Use
+  `SpectrumListBase.WarnOnce` (stderr, deduplicated by message text, so the text must not
+  vary per scan) or `Console.Error` in classes that are not spectrum lists.
+- **What no gate inspects** (C# projects in neither Pwiz.sln nor Skyline.sln): CarafeSharp
+  (own .sln), Osprey (own .sln), `build/AgilentPatcher`, `build/VendorPinsGenerator`,
+  `ProteowizardWrapper.PwizSharp.Smoke`, `BindingRedirectGenerator`. ProteomeDb,
+  PanoramaClient, BiblioSpecUtil and `Shared/Common/Common.csproj` are in Skyline.sln.
+  A stray net472 `Shared/Common/CommonUtil.csproj` (from #2495, referenced by nothing, could
+  not build) was deleted in 5a4121da6a.
 
 ## Tasks
 
@@ -92,7 +103,16 @@ stricter; pwiz must not get a giant change set. So:
 - [x] Fixed PossibleMultipleEnumeration (local ToArray) and IntDivisionByZero (Math.Max clamp);
   everything else suppressed per site with `// ReSharper disable once` (developer's call: no
   file-wide disables; `catch { ; }` rejected because it trips EmptyStatement)
-- [ ] Follow up the suppressed suspected bugs listed in the PR description
+- [x] Follow up the suppressed suspected bugs (2026-11-12, 5a4121da6a): fixed SeeMS
+  `ThresholdingProcessor.Type` (getter called itself) and the auto-filter null check that ran
+  after the dereference; `[Flags]` on SeeMS `IonSeries` removed 24 suppressions; silent
+  Thermo/Agilent SDK read failures now warn once per file on stderr. The rest were checked and
+  are false positives (reference comparison in PeakPicker, the MainLogic format string, the
+  ModuleInitializer lock, MemberInitializerValueIgnored, cpp-parity constants). Pre-existing
+  bugs found on the way filed as #5027 (SeeMS Auto ion series), #5028 (ThermoRawFile
+  EnsureMethodParsed race), #5029 (Agilent IMS TIC (0, 0) point)
+- [ ] SeeMS writes `threshold`/`mz`/`tolerance.ToString()` (current culture) into UserParams
+  that `UserParam.ValueAs` reads back invariant - minor locale bug, not filed
 
 ### Step 3 - CI
 - [ ] Add the ReSharper half to root `tcinspect.ps1` (status `Core code inspection`), modelled on
@@ -113,3 +133,13 @@ stricter; pwiz must not get a giant change set. So:
 - Baseline measured (4407 under Skyline's rules). Settings-layer injection does not work.
 - Tried two mechanical cleanups (see "Rejected"); developer set the risk-only policy instead.
   Branch reset to its base; settings regenerated from the sync script.
+
+### 2026-11-12
+- Ranked the suppressions by risk, fixed the real ones, and made silent vendor read failures
+  visible (see Step 2). A first version warned through `Trace` per scan; `/code-review high`
+  caught that Skyline surfaces Trace warnings, and that three messages misdescribed the
+  fallback (Thermo primary width is always the trailer's; an unreadable Agilent frame keeps a
+  (0, 0) TIC point; the method text also supplies the instrument model). Switched to WarnOnce /
+  stderr and fixed the messages.
+- Pwiz.sln builds with 0 warnings; Thermo.Tests 15/15, Agilent.Tests 17/17; `jb inspectcode
+  Pwiz.sln` still 0 findings. Committed and pushed 5a4121da6a. PR description update drafted.
