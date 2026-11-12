@@ -1026,6 +1026,25 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   - **93 is worst (-811) although it is a superset of A and 77** - a subset beating its superset by ~600 says
     single-seed differences at 82 files exceed UW8's SD 116, or the result depends on the feature combination as
     much as on what is dropped. Seeds 2-3 decide. Block 2 started 14:10 (~18:00), block 3 ~22:00.
+- **UW8 to UW25 (2026-11-12 15:00): seeds pool, so split the seeds, don't repeat them.** Brendan wants 5 seeds per
+  set before choosing (leads have vanished after 3). Already in hand, pooled (UW8 + UW25, bit-identical):
+  all 109 seeds 1-6; B seeds 1-6; A / 77 / 93 seed 1. UW25's blocks 2-3 give A / 77 / 93 seeds 2-3. UW8 stopped
+  its own replicate after the running `x82-93-s2` (identical to UW25's) to free its disk for the overnight
+  performance A/B (all 109 on #4950's tip, then the new default on the PR branch). **Request: after block 3,
+  run A-70, 77 and 93 at seeds 4 and 5** (6 arms, ~6 h; all 109 seeds 4-5 already exist from UW25's B study),
+  which completes 5 seeds for every set. Pooled table to extend:
+
+  | seed | all 109 | 93 | 77 | A-70 | B-57 |
+  |---|---|---|---|---|---|
+  | 1 | 96,593 | 95,782 | 96,111 | 96,408 | 96,055 |
+  | 2 | 96,779 | (UW25 b2 / UW8) | (UW25 b2) | (UW25 b2) | 95,745 |
+  | 3 | 96,806 | (UW25 b3) | (UW25 b3) | (UW25 b3) | 96,241 |
+  | 4 | 96,911 | (request) | (request) | (request) | 95,853 |
+  | 5 | 96,193 | (request) | (request) | (request) | 96,250 |
+  | 6 | 97,289 | | | | 96,213 |
+
+  UW8 picks the PR's default from seeds 1-3 at ~22:30 to start the new-default performance run in time; if seeds
+  4-5 change the verdict, the PR's one-line set array changes and the perf run still measures the I/O scale.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
