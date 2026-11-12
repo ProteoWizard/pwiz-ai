@@ -981,6 +981,10 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
 - **Reading it**: a set is "negligible" if its paired loss is inside all 109's own seed spread at 82 files (UW8:
   SD 116; DIA-NN-confirmed net change between seeds +41 / -5). UW8 adds its own seeds of 93 / A / 77 after pass 2,
   so both machines' answers sit side by side.
+- **UW25: started 2026-11-12 ~10:15** (Brendan's go-ahead), the 12 arms in the order above (`p9-82-<set>-s<seed>`),
+  UW8's mask files used unchanged (verified identical to UW25's set93 / set77 / A lists). ~1 h per arm on UW25 ->
+  ~22:00. UW25 already has all 109 at seeds 4-6 at 82 files (`p8-82-all109-s4..6`), so 93 / A / 77 at seeds 4-6
+  can follow without new all-109 arms if the first three seeds leave the answer close.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
