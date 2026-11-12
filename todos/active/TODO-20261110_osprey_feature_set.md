@@ -350,6 +350,13 @@ vs all 109 = 90,548 +- 634 (5 seeds):**
   those five, 3 seeds each - a 42-feature set at ~2x if one feature recovers it.
 - Proposal for UW8: replicate B-core10 (46) on UW8's files, the cross-file check for the candidate.
 
+**UW25 (18:52) - B-core5 (41) plus each of core 6-10, 3 seeds each** (B-core5 89,550; B-core10 90,026):
+`+mass_accuracy_deviation_mean` 89,835 (+285, -0.8% vs all 109); `+peak_apex` 89,506 (-44); `+n_coeluting_fragments`
+89,475 (-75); `+explained_intensity` 89,447 (-103); `+rt_deviation` 89,351 (-199). No single feature recovers the
+476 between core 5 and core 10, and that gap is itself only ~1.3 SE at 3 seeds. Candidates: **46 (B-core10, safe)**
+and **42 (B-core5 + `mass_accuracy_deviation_mean`, ~2x)**. Queued (18:53, ~1.6 h): seeds 4-6 of B-core10,
+B-core5 and the 42 set, for 6 seeds each.
+
 ### UW8 replicate
 
 **UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
