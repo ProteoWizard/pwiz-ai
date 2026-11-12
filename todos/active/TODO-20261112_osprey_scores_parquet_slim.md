@@ -22,11 +22,11 @@ Measured file (UW25): `..._A01_005.scores.parquet`, 4,403,242 rows, 3.89 GB comp
 
 ## Tasks
 
-- [ ] Stop writing `fragment_mzs` / `fragment_intensities` (verbatim library spectrum; joinable by `entry_id`)
-- [ ] Write `reference_xic_*` only when a consumer asks (`--training-export`)
-- [ ] Move `cwt_candidates` to its own per-run file read only by the reconciliation planner
-- [ ] Reconciled writer stops copying the dropped/moved columns into `.scores-reconciled.parquet`
-- [ ] Record PIN features at column granularity, not family granularity (coordinate with #4950)
+- [x] Stop writing `fragment_mzs` / `fragment_intensities` (verbatim library spectrum; joinable by `entry_id`)
+- [x] Write `reference_xic_*` only when a consumer asks (`--training-export`) - developer decision 2026-11-12
+- [~] Move `cwt_candidates` to its own per-run file - NOT done: no visible gain (see audit)
+- [x] Reconciled writer stops copying the dropped/moved columns into `.scores-reconciled.parquet`
+- [ ] Record PIN features at column granularity (belongs on #4950: `PinFeatureMask` is not on master)
 - [ ] *(Option, after measuring)* Normalize identity columns against the library by `entry_id`
 
 ## Verification
@@ -104,3 +104,27 @@ arm; 36 threads. master = 829aee74b6 (`_bin\master-829aee74b6`), slim = branch W
   `osprey.command` (output dir) differ.
 - On #4950's 109-feature files the same bytes are a smaller share (UW25's 3.89 GB file: fragments
   10.5%, CWT 12.6%).
+
+### 2026-11-12 - Reference XIC written only for the training export
+
+Developer decision: `reference_xic_*` has one reader, `TrainingEvidence.AlignReference` (the
+training export, i.e. Carafe fine-tuning data), so it is worth breaking the export's pay-later
+property (doc 00 P17 rule 2) to stop carrying it on every run. Implemented:
+- `ParquetScoreCache.WritesReferenceXic(config)` (= `TrainingExport.Enabled`) gates the columns in
+  both writers; `ReferenceXicValidityKeySuffix` (`;refxic`, empty without the export) is appended
+  to the PerFileScoring and PerFileRescoring keys. FDR task keys unchanged.
+- Adding `--training-export` to an analysis that ran without it now re-runs PerFileScoring and
+  PerFileRescoring; FirstPassFDR/SecondPassFDR skip. Exports byte-identical to up-front ones
+  (`TestSubsetTrainingExport`). The export-only arm stays, for an export-enabled analysis
+  missing only exports (now asserted in `AssertFailedExportIsRetriedAlone`).
+- `LoadTrainingExportRows` refuses a file without the XIC columns (would silently export rows
+  with no reference otherwise).
+- P17 in doc 00 records the exception and says the next optional product must not take it by
+  precedent; docs 22 and 14 updated.
+- Metadata projection (3-file master run): XIC is 0.519 of 5.571 GB Stage 4 (9.3%) and 0.111 of
+  1.152 GB reconciled; with the earlier cuts, per run ~0.80 GB saved (Stage 4 -30.7%, reconciled
+  -59%), ~65 GB at 82 runs, ~355 GB at 446.
+
+Gates: Debug tests 656/656, inspection 0 warnings. Running `regression-parallel.ps1 -Dataset All`
+then a second SEA-AD pair (`ai/.tmp/sessions/20261112-5023/gate-and-ab2.ps1`, log
+`gate-and-ab2.log`).
