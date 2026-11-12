@@ -1037,7 +1037,7 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   | seed | all 109 | 93 | 77 | A-70 | B-57 |
   |---|---|---|---|---|---|
   | 1 | 96,593 | 95,782 | 96,111 | 96,408 | 96,055 |
-  | 2 | 96,779 | (UW25 b2 / UW8) | (UW25 b2) | (UW25 b2) | 95,745 |
+  | 2 | 96,779 | 96,743 (UW8 15:05; -36) | (UW25 b2) | (UW25 b2) | 95,745 |
   | 3 | 96,806 | (UW25 b3) | (UW25 b3) | (UW25 b3) | 96,241 |
   | 4 | 96,911 | (request) | (request) | (request) | 95,853 |
   | 5 | 96,193 | (request) | (request) | (request) | 96,250 |
