@@ -219,6 +219,8 @@ caches so Stage 5 onward - the part usually under test - always regenerates.
 | `fdp_at_count.py <run_dir>...` | FDP against accepted target COUNT, overlaying pass 1 and pass 2 |
 | `runcount_fdp.py <run_dir>` | FDP by number-of-runs-identified (needs `--model-diagnostics`) |
 | `Compare-Pass2AB.py <a> <b> <out.html>` | two `--model-diagnostics` runs side by side |
+| `split_calibration.py --lib-dir <split lib> --osprey <run dir>... [--diann <report.parquet>]` | on a #5011 split library: kept and on-target FDP at reported q, and the count at true FDP 0.5% / 1%, for Osprey and DIA-NN arms |
+| `split_calibration.py ... --agree <DIA-NN report.parquet> [--reference <run dir>]` | **tool agreement**: of each arm's real targets at true FDP 1%, how many DIA-NN identifies (run Q.Value <= 1%) in the same runs; with `--reference`, every other arm's lost and gained precursors split by whether DIA-NN identifies them. A count that moves toward DIA-NN's only means something if the moved precursors are ones DIA-NN finds |
 
 Osprey names its FDRBench output by how the run was launched - `fdrbench.tsv` from
 `--fdrbench-pass 2`, `fdrbench.pass2.tsv` from `--fdrbench-pass both` (the runner's
@@ -256,6 +258,7 @@ Run all of these against every completed run:
 | FDP vs count | `tools/fdp_at_count.py <run dir>` | pass 1 and pass 2 overlaid on the same count axis |
 | FDP at reported q | `tools/compute_pass2_fdp.py <run dir>` | pass-2 inflation no worse than the known figure |
 | reproducibility | `tools/runcount_fdp.py <run dir>` | high-run-count peptides stay clean |
+| DIA-NN agreement | `tools/split_calibration.py ... --agree <report.parquet>` | the share of Osprey's real targets DIA-NN also identifies, and what a change gains or loses, judged against DIA-NN as well as by count |
 
 `perfviz.py` prints `gaps >= 30s : N  <-- OVER THRESHOLD` precisely so this is a gate on a
 real run rather than a review judgement. **Use `<run dir>/run.log`, not a redirected console
