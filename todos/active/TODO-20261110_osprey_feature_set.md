@@ -491,6 +491,26 @@ DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Va
 - Done on UW25 (2026-11-12): the driver (`run-arms.ps1 -AgreeReport`, default the no-MBR first pass) now writes
   `diann_both` and `diann_pct` (strict definition) on every arm's results row; paired lost/gained stays in
   `paired_agreement.py`, which needs the matching all-109 seed.
+
+**UW25 (2026-11-12 10:00) - B vs all 109 at 82 files, six paired seeds on two machines** (UW8 seeds 1-3 from the
+staged `featset82-uw8` tables; UW25 seeds 4-6 on its own links, `p8-82-*`; FirstPassFDR only, protein-best on,
+c3bdbea78d; pass 1, kept at true FDP 1%; DIA-NN-confirmed = strict, no-MBR first pass; `featset/agreement82-*.txt`):
+
+| seed | all 109 | B (57) | diff | DIA-NN-confirmed diff | lost / gained % confirmed |
+|---|---|---|---|---|---|
+| 1 UW8 | 96,593 | 96,055 | -538 | -319 | 50.6 / 48.6 |
+| 2 UW8 | 96,779 | 95,745 | -1,034 | -638 | 51.1 / 45.4 |
+| 3 UW8 | 96,806 | 96,241 | -565 | -401 | 50.9 / 46.1 |
+| 4 UW25 | 96,911 | 95,853 | -1,058 | -479 | 47.8 / 48.9 |
+| 5 UW25 | 96,193 | 96,250 | +57 | +20 | 48.6 / 48.2 |
+| 6 UW25 | 97,289 | 96,213 | -1,076 | -680 | 50.4 / 43.6 |
+| **mean +- SD** | 96,762 +- 360 | 96,060 +- 210 | **-702 +- 447 (-0.73%, z ~ -3.8)** | **-416 +- 254 (-0.47% of ~88,000)** | ~50 / ~47 |
+
+- B's cost at 82 files is real (not seed noise) but small: ~700 precursors, ~420 DIA-NN-confirmed, all boundary
+  churn - the confirmed lost sat at Osprey's 1% boundary (90-95% with all-109 q 0.3-1%, vs 8% of all agreed) and
+  are rarely DIA-NN-confident (2-3% at global q < 1e-4, vs 52%).
+- B buys 33% less FirstPassFDR read at 82 files (340 vs 505 GB on UW25) and ~12% less FirstPassFDR time on HDD
+  (3,140 vs 3,580 s), more with column-level recording (#5023). B's seed SD (210) is below all 109's (360).
 - **UW8 answer (2026-11-12 02:30): 82-file tables staged, and agreement run on UW8.** Staged (`stage82.py`) to
   `M:\home\brendanx\data\MacCoss\Osprey\sea-ad\featset82-uw8\<arm>\` (`fdrbench.pass1.tsv.gz` + `run.log`):
   `ref82-all109-c3bdbea78d-s1` (all 109, seed 1), `x82-A-70-s1`, `x82-77-s1`, `x82-B-57-s1`, `x82-B-core6-51-s1`,
