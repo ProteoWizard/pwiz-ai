@@ -97,3 +97,38 @@ that is not persisted; the check reloads each consulted precursor's windows (~on
 over the spectra cache) - the production version should share the rescore's window loads.
 Also: `Build-Osprey.ps1 -TestName 'A|B'` matches nothing and still prints "All tests passed"
 (comma-separated is the supported form) - worth a script fix.
+
+### 2026-11-12 - Production change (uncommitted in pwiz-nightbase, on 8396e56c76)
+
+8396e56c76 = merge of #5025 into this branch (conflicts in `WriteFields` / `BuildFdrEntryColumns`
+resolved as #4950's recorded-feature columns + #5025's conditional blobs; `;refxic` added to #4950's
+PerFileScoring key override; 3 #4950-only test calls given `writeReferenceXic: false`). Gate 691/691.
+
+Sub-agent production change, gate 684/684 (codec + loader tests removed), inspection clean
+(`ai/.tmp/sessions/20261112-cwtcheck/gate-p2c.log`); 41 files, +655/-1623:
+- `FilePlanner.PlanFile` takes a `CwtCandidateSource` delegate; a first pass applies the existing
+  predicates (consensus, passing, then the Keep test `IsAtExpectedRt`), the source is called once
+  with the moved entries, `DetermineAction` runs in the same order. Production source:
+  `CwtCandidateRecompute.ForRows` (first-pass calibration, `ApplySearchSettings` on a config clone,
+  `CoelutionScorer.RecomputeCwtCandidates`), window = holds the precursor m/z and the apex scan,
+  lowest index on a tie.
+- `RescoreRunSpectra`: spectra index / MS1 / mass calibrations loaded lazily once per run, shared by
+  PlanRun and RescoreOneFile. Candidate windows are an EXTRA read (planning precedes the rescore's
+  target list); not yet timed.
+- **Premise corrected:** a run whose Stage 3 calibration failed IS planned (the refit does not need
+  it), so the recompute rebuilds Stage 4's `FallbackRtMap` (Calibrator's range/mapping code moved
+  to `RtRangeMapping`, pure motion). Not exercised end to end (could not make Stage 3 fail on the
+  subset); a no-RT-model run in a task chain planned identically.
+- Removed: `cwt_candidates` (write + read), `LoadCwtCandidatesFromParquet`, `ProbeCwtRowMetadata`,
+  `CwtCandidateLoader` + Stage6Planner range validation, `CwtCandidateCodec`, `FdrEntry` /
+  `CoelutionScoredEntry.CwtCandidates`, 7 resource strings (en/ja/zh-Hans), the diagnostic.
+- Keys: every setting that shapes the candidates is already in the base key (search hash,
+  `PickValidityKeySuffix`, `xic=`); `OSPREY_LOAD_CALIBRATION` was keyed nowhere - added
+  `LoadCalibrationValidityKeySuffix()` to PerFileRescoring's key (Stage 4's gap predates this).
+- Subset A/B pre-change exe vs new (`D:\Users\brendanx\test\cwt-recompute\`): `.reconciliation.json`
+  identical for all 5 runs, reconciled parquets + FDR sidecars byte-identical, blib tables identical;
+  `.scores.parquet` 219 -> 127 KB (Stellar), 178 -> 116 KB (Astral).
+- Docs 00 (relay checklist: planning reads `.spectra.bin`), 03, 05, 06, 10, 11, 14, 15, 19, DIVERGENCES.
+
+Running: `regression-parallel.ps1 -Dataset All` on pwiz-nightbase, then a 3-file SEA-AD ABAB
+#4950 head vs stack (`gate-and-ab3.ps1`, `runs-stack5024`, caches read from E:).
