@@ -954,6 +954,34 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
     Brendan's call.
   - All arms staged for UW25 at `M:\...\sea-ad\featset82-uw8\` (13 arms incl. all 109 seeds 1-3, B seeds 1-3).
 
+**JOB FOR UW25 (written by UW8 2026-11-12 ~08:00, for Brendan to start): where is the NEGLIGIBLE-loss set at 82
+files?** Brendan's question: if we want no measurable difference from all 109, which set - did the 20-file screen
+step past the point of expelling only valueless features? At 82 files only A (70) is near zero (-185, seed 1),
+the 77 set scored BELOW its own subset A (-482, seed 1, ~2 SE apart), and the 93 set (dropping only the four
+zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with pass 2 of B.
+- **Arms** (12; FirstPassFDR only; 82 files; UW25's three all-109 legs `runs-uw25\seaad-{20,21,41}files-...-score*`
+  as `-LinkFrom` in one `;`-separated string; `OSPREY_RECORD_ALL_FEATURES=1`; protein-best ON; `-FdrBenchPass 1`;
+  `-NoModelDiagnostics`; the version pin of UW25's legs; otherwise the #4950 environment as in UW25's runs):
+
+  | order | arm | `OSPREY_FEATURE_MASK` | `OSPREY_FDR_SEED` |
+  |---|---|---|---|
+  | 1-4 | all109-s1, set93-s1, setA70-s1, set77-s1 | none / mask-set93 / mask-setA70 / mask-set77 | 1 |
+  | 5-8 | the same four | same | 2 |
+  | 9-12 | the same four | same | 3 |
+
+  Masks (comma-separated, as the env var takes them) and kept-feature lists:
+  `M:\home\brendanx\data\MacCoss\Osprey\sea-ad\featset82-uw8\masks\` - `mask-set93.txt` (16 masked: median-polish
+  top-k, dominance, top-3, clean/clip), `mask-set77.txt` (32: + wide, per-fragment rank), `mask-setA70.txt` (39: +
+  ref corr and spectrum match beyond their top 2), `mask-setB57.txt` (52, for reference); `keep-*.txt` list what
+  each keeps. A70 and 77 are byte-identical to UW8's `x82-A-70-s1` / `x82-77-s1` masks.
+- **Order matters**: each completed block of four is a full paired comparison, so a partial run still answers.
+  ~1 h per arm on UW8's HDD (FirstPassFDR 3,000-3,600 s at 82 files) -> ~12 h.
+- **Report** per arm: kept at true FDP 1%, q 1% kept and FDP, FirstPassFDR s and GB read; paired vs all 109 at the
+  same seed; and seed-paired DIA-NN agreement (UW25's driver row / `paired_agreement.py`, no-MBR first pass).
+- **Reading it**: a set is "negligible" if its paired loss is inside all 109's own seed spread at 82 files (UW8:
+  SD 116; DIA-NN-confirmed net change between seeds +41 / -5). UW8 adds its own seeds of 93 / A / 77 after pass 2,
+  so both machines' answers sit side by side.
+
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
   or MACS2. Bytes written per run by file type, and the peak free-space drop during the run.
