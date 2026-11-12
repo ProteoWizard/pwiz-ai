@@ -981,6 +981,14 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
 - **Reading it**: a set is "negligible" if its paired loss is inside all 109's own seed spread at 82 files (UW8:
   SD 116; DIA-NN-confirmed net change between seeds +41 / -5). UW8 adds its own seeds of 93 / A / 77 after pass 2,
   so both machines' answers sit side by side.
+- UW8 (13:04) **Pass 2 of B tracks pass 1** (82 files, seed 1, FirstPassFDR -> SecondPassFDR on the all-109
+  links, `featset\p2-B57-s1` / `p2-all109-s1`, `pass2-B57.txt`): all 109 pass 2 **96,556** at true FDP 1% (q 1%
+  96,516, FDP 0.99%), B **96,034 (-522, -0.54%)** (q 1% 96,054, FDP 1.00%). DIA-NN-confirmed (strict, no-MBR):
+  88,016 vs 87,708 (-308); B lost 3,006 (50.5% confirmed) / gained 2,487 (48.7%) - the pass-1 profile. Wall:
+  B 2:56 vs all 109 3:04 (FirstPassFDR 3,109 vs 3,562 s; PerFileRescoring 7,073 vs 7,123 s - record-all, so
+  rescoring computed every family in both; the 51-set full run is the rescoring-time measurement).
+- UW8 (13:05) running its own replicate of the negligible-loss job: 93 seeds 1-3, A and 77 seeds 2-3 (7 arms,
+  ~7 h, `results82.tsv`), to sit beside UW25's.
 - **UW25: started 2026-11-12 ~10:15** (Brendan's go-ahead), the 12 arms in the order above (`p9-82-<set>-s<seed>`),
   UW8's mask files used unchanged (verified identical to UW25's set93 / set77 / A lists). ~1 h per arm on UW25 ->
   ~22:00. UW25 already has all 109 at seeds 4-6 at 82 files (`p8-82-all109-s4..6`), so 93 / A / 77 at seeds 4-6
