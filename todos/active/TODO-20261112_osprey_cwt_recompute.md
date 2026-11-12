@@ -130,5 +130,33 @@ Sub-agent production change, gate 684/684 (codec + loader tests removed), inspec
   `.scores.parquet` 219 -> 127 KB (Stellar), 178 -> 116 KB (Astral).
 - Docs 00 (relay checklist: planning reads `.spectra.bin`), 03, 05, 06, 10, 11, 14, 15, 19, DIVERGENCES.
 
-Running: `regression-parallel.ps1 -Dataset All` on pwiz-nightbase, then a 3-file SEA-AD ABAB
-#4950 head vs stack (`gate-and-ab3.ps1`, `runs-stack5024`, caches read from E:).
+Regression `-Dataset All`: 49 PASS / 0 FAIL in 59:16 (`ai/.tmp/sessions/20261112-5023/regression-all-5024.log`).
+
+### 2026-11-12 - SEA-AD 3-file A/B: #4950 head vs this stack
+
+ABAB in `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-stack5024` (libdecoy, protein-compact;
+caches read from E:; exe snapshot `_bin\stack-5024`; log `ai/.tmp/sessions/20261112-5023/gate-and-ab3.log`).
+The base arm is #4950 with #5025 merged, so this measures #5024 alone.
+
+| Per run | #4950 + #5025 | + #5024 | Change |
+|---|---|---|---|
+| `.scores.parquet` | 1.857 GB | 0.751 GB | -60% |
+| `.scores-reconciled.parquet` | 0.384 GB | 0.156 GB | -59% |
+| Both scores files | 2.241 GB | 0.907 GB | -1.33 GB (-60%) |
+| Whole run directory (3 runs) | 8.25 GB | 4.25 GB | -48% |
+
+| Wall (s) | base p1 | base p2 | stack p1 | stack p2 |
+|---|---|---|---|---|
+| PerFileScoring | 389 | 271 | 241 | 240 |
+| FirstPassFDR | 154 | 151 | 148 | 148 |
+| PerFileRescoring | 132 | 131 | 90 | 89 |
+| SecondPassFDR | 58 | 55 | 53 | 53 |
+| Total | 737 | 611 | 535 | 534 |
+
+- base p1 ran first after the regression on a cold page cache; its PerFileScoring (389 s) is the
+  outlier. Against base p2: total -12.6% (611 -> 534 s), PerFileScoring -11% (smaller write),
+  PerFileRescoring -32% (131 -> 89 s): the recompute's extra spectra reads cost less than the
+  `cwt_candidates` read they replace.
+- Blib: every data table identical across all four runs (only LibInfo / LibMetadata, which carry
+  the creation time, differ).
+- At 82 runs: ~109 GB less; at 446 (CHS): ~595 GB less.
