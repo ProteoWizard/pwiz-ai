@@ -907,12 +907,57 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   - **The 6 weak core features matter at 82 files**: dropping them costs ~800 here (free at 20) - and buys no
     read (both 340 GB; the core columns are small). So core cuts look like a poor trade at cohort scale.
   - Running: UW25's 42 and 46 sets (seed 1), then seeds 2-3 of all 109 and of B, and 51 seed 2 (~7 h, by ~08:00).
+- UW8 (2026-11-12 07:15) **82-file seeds - CORRECTION to "B inside noise" above: B's loss is small but real.**
+  Kept at true FDP 1%, FirstPassFDR only on the all-109 links:
+
+  | set | seed 1 | seed 2 | seed 3 | mean | paired vs all 109 |
+  |---|---|---|---|---|---|
+  | all 109 | 96,593 | 96,779 | 96,806 | 96,726 (SD 116) | |
+  | **B (57)** | 96,055 | 95,745 | 96,241 | 96,014 (SD 251) | **-712 +- 160 (-0.74%, z ~ -4.4)** |
+  | 51 | 95,264 | 95,256 | | 95,260 | -1,426 (-1.47%) |
+  | UW25 46 / 42 | 95,203 / 95,359 | | | | -1,390 / -1,234 (seed 1) |
+
+  Seed noise at 82 files is SD ~116 (all 109), not +-300-400: the 77 < 70 inversion was a real set effect.
+  **Seed-paired DIA-NN agreement** (no-MBR first pass, run + global q <= 1%; `agreement82-s2/s3/noise.txt`):
+
+  | comparison | lost (DIA-NN %) | gained (DIA-NN %) | net confirmed |
+  |---|---|---|---|
+  | all 109 s2 vs s1 (noise) | 2,576 (50.9%) | 2,758 (49.0%) | +41 |
+  | all 109 s3 vs s1 (noise) | 2,550 (51.7%) | 2,760 (47.6%) | -5 |
+  | B vs all 109, s1 / s2 / s3 | 3,009 / 2,983 / 2,895 (50.6-51.1%) | 2,474 / 1,950 / 2,330 (45-49%) | -319 / -638 / -401 |
+  | 51 vs all 109, s2 | 3,317 (50.6%) | 1,797 (48.8%) | -803 |
+  | UW25 46 vs all 109, s1 | 3,628 (53.1%) | 2,238 (46.2%) | -893 |
+
+  - **B loses the same KIND of precursors that seed churn swaps** (~51% DIA-NN-confirmed, at the boundary), just
+    more than it gains back: net **-453 DIA-NN-confirmed (-0.51%)** over 3 seeds, -0.74% of all detections, for a
+    22% smaller FirstPassFDR read. The core cuts cost ~2x that in confirmed precursors. Accepting B's cost is
+    Brendan's call.
+  - All arms staged for UW25 at `M:\...\sea-ad\featset82-uw8\` (13 arms incl. all 109 seeds 1-3, B seeds 1-3).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
   or MACS2. Bytes written per run by file type, and the peak free-space drop during the run.
 - **Disk accounting in the log**: track bytes on disk the way `--memstamp` tracks memory, so the working
-  space a 2,000-run experiment needs is measured rather than estimated.
+  space a 2,000-run experiment needs is measured rather than estimated. **Design drafted (UW8, 2026-11-12):
+  `ai/.tmp/sessions/20261110-uw8featset/disk-design.md`** - `--diskstamp` (bytes this run owns, third log column,
+  high-water mark), an intermediates subfolder, opt-in release (keep-all stays the default; HPC chain guarded by
+  `SubsetPipelineTest`; a `--task` rerun after release must refuse, not silently re-score: the shared
+  `PipelineDriver.Run` re-runs any task that cannot rehydrate, `Shared/CommonUtil/Pipeline/PipelineDriver.cs:45-58`).
+  Finding: FirstPassFDR is a join over every run's `.scores.parquet` (`FirstPassFdrTask.cs:211`), so the disk
+  high-water mark is at the Stage 4/5 boundary and release cannot lower it; only smaller parquets can.
+  Wants its own backlog TODO.
+- **Per-file FDR as in DIA-NN (Brendan, 2026-11-12: a big design change, to consider carefully).** Score each run's
+  classifier inside PerFileScoring so its output is per-run composite score / q / PEP, not a feature table, and
+  join those for experiment-level FDR - removing the FirstPassFDR join and its disk peak. Evidence for DIA-NN 2.7.0,
+  from UW8's 82-file log (`runs-uw8\diann270-82files\report.log.txt`): 164 "Training neural networks" events = 82
+  runs x 2 passes, each on that run's own PSMs (~280-360k targets); per-run protein q-values; an empirical library
+  built across runs between the passes (122,975 target precursors); a final "Cross-run analysis" reading the per-run
+  `.quant` files (~90 MB each, vs Osprey's ~3 GB parquet) for "Target precursors at 1% global q-value: 99979".
+  Verified from the log, not the source. Open issues: (1) Osprey's most important model input, `PROTEIN_BEST`
+  (permutation drop 20%), is experiment-wide - where does it go in a per-run design? (2) per-run training and
+  experiment-level FDR control are separate choices (DIA-NN does both); OpenSWATH/PyProphet moved from per-run to
+  run-specific / experiment-wide / global contexts with a classifier learned on a pooled subsample (Rosenberger et
+  al. 2017, recalled, not checked here); (3) check DIA-NN 2.8 when out.
 - **Cache policy**: delete per-run artifacts once no later task needs them; which ones a rerun needs.
 - **Entrapment ratio**: 1:1 entrapment doubles the library and the scored rows; how much the FDP oracle needs.
 - **FirstPassFDR**: the protein-best round-1 run bound (UW25, pending commit), survivors-only intermediate
