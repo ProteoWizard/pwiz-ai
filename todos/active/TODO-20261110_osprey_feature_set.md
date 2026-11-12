@@ -771,6 +771,22 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
     82 files.**
   - Queued (21:10, ~4 h, `go82.ps1` -> `results82.tsv`): the candidate ladder at 82 files, FirstPassFDR only on the
     baseline's links, seed 1: 51 (paired with the reference on the same scoring), 57 (B), 70 (A), 77 (family set).
+- UW8 (2026-11-12 00:41) **82-file ladder, seed 1** (FirstPassFDR only, c3bdbea78d, all-109 links; all 109 =
+  96,593; `results82.tsv`):
+
+  | set | features | kept at FDP 1% | vs all 109 | q 1% (FDP) | FirstPassFDR read | FirstPassFDR |
+  |---|---|---|---|---|---|---|
+  | 51 | 51 | 95,264 | **-1.4%** | 95,786 (1.05%) | 340 GB | 3,089 s |
+  | **B** | **57** | **96,055** | **-0.6%** | 96,132 (1.00%) | **340 GB** | 3,025 s |
+  | A | 70 | 96,408 | -0.2% | 96,208 (0.97%) | 385 GB | 3,231 s |
+  | 77 | 77 | 96,111 | -0.5% | 96,481 (1.05%) | 412 GB | 3,255 s |
+  | all 109 | 109 | 96,593 | | 96,577 (0.99%) | 436 GB | 3,581 s |
+
+  - The 51 arm reproduces the full-pipeline 51 run's 95,264 exactly: same scoring, same seed, so the pairing holds.
+  - **B holds at 82 files (-0.6%)**, inside single-seed noise of A and 77 (77 < 70 puts that noise at ~+-300-400).
+  - **The 6 weak core features matter at 82 files**: dropping them costs ~800 here (free at 20) - and buys no
+    read (both 340 GB; the core columns are small). So core cuts look like a poor trade at cohort scale.
+  - Running: UW25's 42 and 46 sets (seed 1), then seeds 2-3 of all 109 and of B, and 51 seed 2 (~7 h, by ~08:00).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
