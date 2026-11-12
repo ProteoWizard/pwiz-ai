@@ -64,3 +64,36 @@ recompute looks feasible - every Stage 4 input is on disk.
 
 Diagnostic (`OSPREY_CWT_RECOMPUTE_CHECK=1`, compare recomputed vs stored for every non-Keep row)
 being implemented by a sub-agent in pwiz-nightbase; status in `ai/.tmp/agent-cwtcheck-status.md`.
+
+### 2026-11-12 - Diagnostic built; bit-identical on the subsets and on SEA-AD
+
+Sub-agent implemented `OSPREY_CWT_RECOMPUTE_CHECK=1` in pwiz-nightbase (uncommitted):
+`ScoringPipeline.ApplySearchSettings` (pure code motion out of `RunCoelutionScoring`),
+`CoelutionScorer.SortWindowSpectra` / `WindowRetentionTimes` (code motion) and the new
+`RecomputeCwtCandidates` entry point (Stage 4's own TryExtract + CaptureCwtCandidates, Stage 3
+calibration), `Osprey.Tasks\CwtRecomputeCheck.cs`, called in `RescoreOneFile` after the mass
+calibrations load; `[BISECT] cwt-recompute-check` summary + `cwt-recompute-mismatch` examples.
+Enabled in four existing SubsetPipelineTest legs (Stellar/Astral parallel, both HPC chains) with
+`AssertCwtRecomputeAgrees`. Gate 691/691, inspection clean
+(`ai/.tmp/sessions/20261112-cwtcheck/full-gate3.log`). Subsets: 368/368 rows exact, all six
+fields; HPC workers (JSON-loaded calibration) identical. Negative control (refined calibration
+instead of Stage 3): 81/82 and 92/94 rows mismatched - the check discriminates.
+
+**SEA-AD** (#4950 head + diagnostic, `_bin\cwtcheck-4950`; A01_005/A06_010/A10_014, split-sized
+r=1.0 library, defaults, fresh; `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-cwtcheck\`):
+
+| run | rows | stored candidates | exact | mismatches |
+|---|---|---|---|---|
+| A01_005 | 30,296 | 109,597 | 30,296 | 0 |
+| A06_010 | 30,225 | 104,915 | 30,225 | 0 |
+| A10_014 | 30,332 | 112,386 | 30,332 | 0 |
+
+90,853 rows / 326,898 candidates, all six fields exact; no ambiguous or missing windows, no
+apex-scan differences, no uncalibrated runs. The gate for the production change is met.
+
+Caveats for the production change: the recompute reads the process's OSPREY_* settings (must
+match Stage 4's; pin or key them); runs whose Stage 3 calibration failed used a FallbackRtMap
+that is not persisted; the check reloads each consulted precursor's windows (~one extra pass
+over the spectra cache) - the production version should share the rescore's window loads.
+Also: `Build-Osprey.ps1 -TestName 'A|B'` matches nothing and still prints "All tests passed"
+(comma-separated is the supported form) - worth a script fix.
