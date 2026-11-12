@@ -121,4 +121,4 @@ and report tests passed. No test was added. No test is known to export a list co
       `lock (this)` (commits 15-17); dropped the rest (cache size is by design, the others were false or unchanged
       from master).
 - [x] Opened PR #5021 (2026-11-11)
-- [ ] Push the Bookend branch (Nick's call)
+- [x] Pushed the Bookend branch; PR YuanyeChi/bookend-dev#2 (2026-11-11). Preview Skyline (PR #5021 build) at https://proteome.gs.washington.edu/~nicksh/SpecialSkylines/FeaturePreviews/SkylineBookendPerfImprovements.html
