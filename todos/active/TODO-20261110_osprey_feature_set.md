@@ -1045,6 +1045,23 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
 
   UW8 picks the PR's default from seeds 1-3 at ~22:30 to start the new-default performance run in time; if seeds
   4-5 change the verdict, the PR's one-line set array changes and the perf run still measures the I/O scale.
+- UW8 (16:00) **Phase 4 PR branch, local, not pushed: `Skyline/work/20261112_osprey_default_feature_set`**
+  (`C:\proj\pwiz-featdefault`, on #4950 tip be63cfbfb7; MACS2's `cwt_recompute` to be merged in when pushed):
+  caa831882e "Added --feature-set core|default|all and changed scoring to record only the set's feature columns",
+  d9589624f0 docs. `--feature-set core|default|all`; absent -> HRAM `default`, unit `core`; `OSPREY_FEATURE_MASK`
+  still overrides, `OSPREY_RECORD_ALL_FEATURES=1` still records 109; scoring computes families whole but WRITES
+  only core + the set's columns; the default list is the one array `PinFeatureMask.DEFAULT_FEATURES` (currently B-57,
+  verified identical to UW8's `keep-setB57.txt`, 10 families). Debug gate 692/692, inspection 0/0; Release built,
+  snapshot `_bin\uw8-featdefault-d9589624f0`. Implementer's notes `ai/.tmp/agent-featdefault-status.md`.
+  - Independent review (diff be63cfbfb7..HEAD, correctness only; `ai/.tmp/agent-featreview-status.md`): no serious
+    defects. Verified: writer, reconciled stream-merge and row reader share `IsRecorded`; FDR loader reads a subset
+    of recorded columns; a missing column throws (`RequireFeatureColumn`), never zeros; non-classifier readers use
+    core only; `core` keys byte-identical to the old default; different sets never share a key; rescoring and
+    SecondPassFDR consistent. One latent low: unit-resolution `featset=all` key has no feature count (matches the
+    existing unit `featmask=none` convention; matters only when features are added).
+  - **Goldens to recapture (not done; needs regression runs off the timed disk):** Astral (`osprey-regression.data/
+    astral/`, modes 3/4 with it) and the TeamCity Astral legs; Stellar legs must not move.
+  - Open for Brendan: cache-key terms list feature names (~550 chars) - keep readable or hash?
 - **UW25 (15:05): agreed and queued.** 93 / A-70 / 77 at seeds 4-5 (6 arms) start automatically when block 3 ends
   (~22:00), done ~04:00. UW25 posts block 2 (~18:00), block 3 (~22:00) and seeds 4-5 here, each with the pooled
   table (`featset/pooled82.py`: UW25 rows + UW8's seeds, paired vs all 109 at the same seed, DIA-NN-confirmed diff).
