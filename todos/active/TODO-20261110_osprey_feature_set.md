@@ -342,7 +342,7 @@ vs all 109 = 90,548 +- 634 (5 seeds):**
 | B, core top 5 | 41 | 89,784 / 89,692 / 89,174 | 89,550 | -998 (-1.1%, z -2.2) | 78 GB | 544 s |
 | B, core top 3 | 39 | 88,142 / 89,702 / 88,051 | 88,632 | -1,917 (-2.1%, z -4.1) | 75 GB | 500 s |
 
-- **46 features (2.2x the original 21) match all 109 on UW25's files**, with 40% less FirstPassFDR read and 45% less
+- (Superseded at 20:40 - see the 6-seed correction below.) **46 features (2.2x the original 21) match all 109 on UW25's files**, with 40% less FirstPassFDR read and 45% less
   FirstPassFDR time. Core kept: `abs_rt_deviation`, `fragment_coelution_max`, `median_polish_cosine`, `peak_area`,
   `ms1_isotope_cosine`, `explained_intensity`, `peak_apex`, `rt_deviation`, `mass_accuracy_deviation_mean`,
   `n_coeluting_fragments` (`set-Bcore10.txt`). Calibration holds (FDP at q 1% 0.94-0.96%).
@@ -356,6 +356,17 @@ vs all 109 = 90,548 +- 634 (5 seeds):**
 476 between core 5 and core 10, and that gap is itself only ~1.3 SE at 3 seeds. Candidates: **46 (B-core10, safe)**
 and **42 (B-core5 + `mass_accuracy_deviation_mean`, ~2x)**. Queued (18:53, ~1.6 h): seeds 4-6 of B-core10,
 B-core5 and the 42 set, for 6 seeds each.
+
+**UW25 (20:40) - 6 seeds: CORRECTION. "46 features match all 109" (16:27) was premature on 3 seeds.** Seeds 4-6
+run lower for every set (all 109 and B too), so compare paired at the same seeds (1-5, vs all 109 at seeds 1-5):
+B (57) -493 (-0.5%); B-core5 + `mass_accuracy_deviation_mean` (42) -987 (-1.1%); B-core5 (41) -1,240 (-1.4%);
+B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,168 (SD 993), B-core5 89,244 (SD
+432); all 109 = 90,548 (SD 634, 5 seeds). Calibration holds throughout (FDP at q 1% 0.94-1.07%).
+- **The core cut costs ~0.5-0.9% beyond B, at 10 core features or 5:** the value is in the 16 dropped core
+  features jointly, not in one of them (consistent with the add-back result).
+- **Choice for Brendan:** B, 57 features (2.7x; -0.5%, inside noise; read 93 GB vs 140), or the 42 set (2x; -1.1%;
+  read 80 GB). Proposed: settle it at 82 files, full pipeline, B vs 42 head to head (detections, calibration, and
+  end-to-end PerFileScoring write / FirstPassFDR / PerFileRescoring I/O and time).
 
 ### UW8 replicate
 
