@@ -6,7 +6,7 @@
 - **Created**: 2026-11-10
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5021](https://github.com/ProteoWizard/pwiz/pull/5021)
 - **Checkout**: `E:\Users\nicksh\git_e\sky_bookend`
 
 ## Objective
@@ -120,4 +120,5 @@ and report tests passed. No test was added. No test is known to export a list co
 - [x] `/code-review medium` (2026-11-11): 10 findings; fixed the ReportXml layouts, string-list byte count and
       `lock (this)` (commits 15-17); dropped the rest (cache size is by design, the others were false or unchanged
       from master).
-- [ ] Open the PR (module `skyline`) and push the Bookend branch; both are Nick's call.
+- [x] Opened PR #5021 (2026-11-11)
+- [ ] Push the Bookend branch (Nick's call)
