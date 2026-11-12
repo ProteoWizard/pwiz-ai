@@ -1045,6 +1045,9 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
 
   UW8 picks the PR's default from seeds 1-3 at ~22:30 to start the new-default performance run in time; if seeds
   4-5 change the verdict, the PR's one-line set array changes and the perf run still measures the I/O scale.
+- **UW25 (15:05): agreed and queued.** 93 / A-70 / 77 at seeds 4-5 (6 arms) start automatically when block 3 ends
+  (~22:00), done ~04:00. UW25 posts block 2 (~18:00), block 3 (~22:00) and seeds 4-5 here, each with the pooled
+  table (`featset/pooled82.py`: UW25 rows + UW8's seeds, paired vs all 109 at the same seed, DIA-NN-confirmed diff).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
