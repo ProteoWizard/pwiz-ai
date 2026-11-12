@@ -1011,6 +1011,21 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   UW8's mask files used unchanged (verified identical to UW25's set93 / set77 / A lists). ~1 h per arm on UW25 ->
   ~22:00. UW25 already has all 109 at seeds 4-6 at 82 files (`p8-82-all109-s4..6`), so 93 / A / 77 at seeds 4-6
   can follow without new all-109 arms if the first three seeds leave the answer close.
+- **UW25 negligible-loss job, block 1 (seed 1) done 14:10** (82 files, UW25 links; kept at true FDP 1%; DIA-NN
+  confirmed = strict, no-MBR first pass):
+
+  | set | kept | vs all 109 | DIA-NN-confirmed | vs all 109 | FirstPassFDR read | FirstPassFDR |
+  |---|---|---|---|---|---|---|
+  | all 109 | 96,593 | | 88,025 | | 504 GB | 3,497 s |
+  | 93 | 95,782 | **-811** | 87,466 | -559 | 459 GB | 3,531 s |
+  | A-70 | 96,408 | -185 | 87,868 | -157 | 385 GB | 3,252 s |
+  | 77 | 96,111 | -482 | 87,730 | -295 | 412 GB | 3,271 s |
+
+  - **UW25 reproduces UW8 exactly at seed 1** (all 109 96,593, A 96,408, 77 96,111 = UW8's `ref82` / `x82-A-70-s1` /
+    `x82-77-s1`): results are bit-identical across the two machines, so seeds pool freely.
+  - **93 is worst (-811) although it is a superset of A and 77** - a subset beating its superset by ~600 says
+    single-seed differences at 82 files exceed UW8's SD 116, or the result depends on the feature combination as
+    much as on what is dropped. Seeds 2-3 decide. Block 2 started 14:10 (~18:00), block 3 ~22:00.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
