@@ -111,8 +111,11 @@ stricter; pwiz must not get a giant change set. So:
   ModuleInitializer lock, MemberInitializerValueIgnored, cpp-parity constants). Pre-existing
   bugs found on the way filed as #5027 (SeeMS Auto ion series), #5028 (ThermoRawFile
   EnsureMethodParsed race), #5029 (Agilent IMS TIC (0, 0) point)
-- [ ] SeeMS writes `threshold`/`mz`/`tolerance.ToString()` (current culture) into UserParams
-  that `UserParam.ValueAs` reads back invariant - minor locale bug, not filed
+- [x] SeeMS wrote `threshold`/`mz`/`tolerance.ToString()` (current culture) into UserParams -
+  fixed with InvariantCulture in edccd57c58 (Copilot review). The readers of those params
+  (`ThresholdingProcessor(ProcessingMethod)`, `SpectrumList_Thresholder_ListViewItem(ProcessingMethod)`)
+  have no callers; they also parse `type`/`orientation` as int while the writer emits enum names -
+  dead code, left alone
 
 ### Step 3 - CI
 - [ ] Add the ReSharper half to root `tcinspect.ps1` (status `Core code inspection`), modelled on
