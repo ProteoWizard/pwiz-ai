@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261112_osprey_scores_parquet_slim`
 - **Base**: `master`
 - **Created**: 2026-11-12
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#5023](https://github.com/ProteoWizard/pwiz/issues/5023)
 - **Module**: `osprey`
-- **PR**: [#5025](https://github.com/ProteoWizard/pwiz/pull/5025)
+- **PR**: [#5025](https://github.com/ProteoWizard/pwiz/pull/5025) (merged 2026-11-12)
 
 ## Objective
 
@@ -31,10 +31,10 @@ Measured file (UW25): `..._A01_005.scores.parquet`, 4,403,242 rows, 3.89 GB comp
 
 ## Verification
 
-- [ ] Regression goldens byte-identical (`regression.ps1`, `regression-parallel.ps1 -Dataset All`)
-- [ ] Confirm every reader of each column before removing it (round-trip tests, diagnostics, generic copies)
-- [ ] `SubsetPipelineTest` and the training export pass
-- [ ] SEA-AD measurement: per-file parquet size, PerFileScoring write time, FirstPassFDR / PerFileRescoring bytes read
+- [x] Regression goldens byte-identical (`regression.ps1`, `regression-parallel.ps1 -Dataset All`)
+- [x] Confirm every reader of each column before removing it (round-trip tests, diagnostics, generic copies)
+- [x] `SubsetPipelineTest` and the training export pass
+- [x] SEA-AD measurement: per-file parquet size, PerFileScoring write time, FirstPassFDR / PerFileRescoring bytes read
 
 ## Regression Test
 
@@ -164,3 +164,16 @@ on REMOVING the flag, doc 14 Rust column-set caveat; three comments. Dropped: Di
 the key predicate (a render must key on how files were written), skipping the XIC read when not
 writing (only reachable via paths now refused), superset key acceptance (17 stamp-check sites).
 Gate 656/656, inspection clean. Commits f38320489d + 7a13c5ddd4; PR #5025 against master.
+
+### 2026-11-12 - Merged
+
+PR #5025 merged to master as a1d0220eaf (TeamCity Osprey Perf/Regression #383 SUCCESS on 7a13c5dd;
+local `regression-parallel.ps1 -Dataset All` 49/49). Shipped: no `fragment_mzs` /
+`fragment_intensities` in either scores parquet, no `cwt_candidates` in the reconciled parquet, the
+reference XIC only with `--training-export` (with refusals for a file missing it). SEA-AD per run:
+2.24 -> 1.44 GB (-0.80 GB, -36%), PerFileRescoring -26%, total wall -8.3%, results identical.
+Deferred: column-level PIN feature recording (on #4950, where `PinFeatureMask` lives); moving
+`cwt_candidates` to its own file (no visible gain) became #5024, which recomputes them in Stage 6
+instead - branch `Skyline/work/20261112_osprey_cwt_recompute`, stacked on #4950, which already
+merged this branch. #4950 now needs master merged in (conflict in ParquetScoreCache, resolved the
+same way as in the #5024 branch, 8396e56c76).
