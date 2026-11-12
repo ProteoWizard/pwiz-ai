@@ -97,8 +97,9 @@ arm; 36 threads. master = 829aee74b6 (`_bin\master-829aee74b6`), slim = branch W
 - **Bytes read** (`[PATH] block reads`, parquet): PerFileRescoring 13.5 -> 7.9 GB (-41%; Stage 6 reads
   the Stage 4 file more than once); FirstPassFDR 3.8 GB both; SecondPassFDR 1.0 GB both. Whole run
   25.0 -> 19.4 GB read (-22%).
-- **Disk**: `.scores.parquet` 5,571 -> 4,382 MB (-21.3%), `.scores-reconciled.parquet` 1,152 -> 580 MB
-  (-49.7%), whole run dir 8,249 -> 6,488 MB (-21.3%): ~0.59 GB/run, ~48 GB at 82 runs, ~262 GB at 446.
+- **Disk** (3-run TOTALS, not per run): `.scores.parquet` 5,571 -> 4,382 MB (-21.3%),
+  `.scores-reconciled.parquet` 1,152 -> 580 MB (-49.7%), whole run dir 8,249 -> 6,488 MB (-21.3%):
+  ~0.59 GB/run, ~48 GB at 82 runs, ~262 GB at 446.
 - **Results identical**: every blib result table (RefSpectra, peaks, proteins, retention times,
   source files) hashes equal across all four arms; only LibInfo (creation time) and LibMetadata
   `osprey.command` (output dir) differ.
@@ -128,3 +129,27 @@ property (doc 00 P17 rule 2) to stop carrying it on every run. Implemented:
 Gates: Debug tests 656/656, inspection 0 warnings. Running `regression-parallel.ps1 -Dataset All`
 then a second SEA-AD pair (`ai/.tmp/sessions/20261112-5023/gate-and-ab2.ps1`, log
 `gate-and-ab2.log`).
+
+### 2026-11-12 - Full regression + SEA-AD pair 2 (fragments, reconciled CWT and reference XIC removed)
+
+`regression-parallel.ps1 -Dataset All`: **49 PASS / 0 FAIL** in 42:03
+(`ai/.tmp/sessions/20261112-5023/regression-all.log`). Then master 829aee74b6 vs
+`_bin\slim5023-xic`, same 3 files and settings as pair 1, ABAB (`gate-and-ab2.ps1`, runs
+`masterr3/slimxicr3/masterr4/slimxicr4` in `runs-slim5023\`).
+
+| arm | total | PerFileScoring | FirstPassFDR | PerFileRescoring | SecondPassFDR |
+|---|---|---|---|---|---|
+| masterr3 | 605 s | 272 s | 146 s | 131 s | 54 s |
+| slimxicr3 | 551 s | 257 s | 146 s | 91 s | 55 s |
+| masterr4 | 625 s | 293 s | 148 s | 128 s | 54 s |
+| slimxicr4 | 577 s | 273 s | 147 s | 100 s | 54 s |
+
+- Total wall 615 -> 564 s (**-8.3%**); **PerFileRescoring 130 -> 96 s (-26%)**; FirstPassFDR and
+  SecondPassFDR unchanged (pair 1's FirstPassFDR -6% did not reproduce); PerFileScoring -6%, noisy.
+- Per-file scores parquet write 18.4 -> 15.4 s mean (-16%).
+- Parquet bytes read: PerFileRescoring 13.5 -> 6.9 GB (-49%); whole run 25.0 -> 18.4 GB (-26%).
+- Disk (3-run totals): `.scores.parquet` 5,571 -> 3,862 MB (-30.7%), reconciled 1,152 -> 469 MB
+  (-59.3%), run dir 8,249 -> 5,858 MB (-29.0%). **Per run 2.75 -> 1.95 GB, -0.80 GB**: ~65 GB at 82
+  runs, ~355 GB at 446. (Measured; matches the metadata projection.)
+- Results: every blib table except LibInfo/LibMetadata hashes `fef0c2039041138e` in all 8 arms of
+  both pairs.
