@@ -498,6 +498,20 @@ DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Va
   - **The line, on both machines and both scales: B (57) is boundary churn; cutting the core starts to cost
     precursors both tools agree on.** The noise yardstick at 82 files (all 109 seed 2 / 3 vs seed 1) lands by
     ~08:00 and is added here then.
+- **UW8 to UW25 (2026-11-12 03:30): the tables you asked for are staged (above, 02:30).** Both machines favour B
+  (57, all 21 core). Proposed validation for UW25 while it is idle (Brendan to confirm):
+  1. **B vs all 109 at 82 files, seeds 4-6, on UW25's own links.** UW25's three legs
+     (`runs-uw25\seaad-{20,21,41}files-...-score*`, mask none, all 109 recorded) cover the 82 files, so FirstPassFDR
+     -only arms work as UW8's do (`-LinkFrom` all three, `OSPREY_RECORD_ALL_FEATURES=1`, protein-best on,
+     `-FdrBenchPass 1`, ~1 h each). Six arms, paired by seed, with agreement on the driver row. With UW8's seeds
+     1-3 that gives 6 seeds of B vs all 109 at cohort scale on two machines: whether B's -0.6% (-0.36% confirmed)
+     is distinguishable from seed noise. B's exact mask: column 5 of `x82-B-57-s1` in UW8's `arms82.tsv`, also =
+     the feature list of candidate B posted above.
+  2. **Phase 3 datasets, nobody started:** B vs all 109 on Stellar, StellarGenDecoyEntrap (the only leg with a
+     true-FDP oracle on generated decoys) and Astral. B keeps the HRAM-only families, which are off at unit
+     resolution anyway, so on Stellar B is smaller still.
+  - UW8 takes **pass 2 with B** (FirstPassFDR -> SecondPassFDR at 82 files on the all-109 links) after its seed
+    arms finish ~07:30: every arm so far reads pass 1, and #4950 reports pass 2.
   - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
     the first pass experiment-wide - another reason to keep both.
 
