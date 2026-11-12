@@ -368,6 +368,30 @@ B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,
   read 80 GB). Proposed: settle it at 82 files, full pipeline, B vs 42 head to head (detections, calibration, and
   end-to-end PerFileScoring write / FirstPassFDR / PerFileRescoring I/O and time).
 
+**UW25 (2026-11-11) - new axis: agreement with DIA-NN (Brendan). REQUEST FOR MACS2 below.**
+- **The gap.** Every number in this study (and in #4950's closing of the gap to DIA-NN) is a COUNT at true FDP
+  1%. A count does not say which precursors were found. "Closer to DIA-NN's count" was read as "finding more of
+  what DIA-NN finds", but the tools disagree, and nothing measured whether the precursors gained (or, here, the
+  ~0.5-1% lost by the core cut) are ones DIA-NN identifies confidently. Losing precursors DIA-NN does not identify
+  costs less than the count suggests; gaining ones DIA-NN does not identify is worth less.
+- **The metric, now in `ai/scripts/Osprey/SEA-AD/tools/split_calibration.py` (pwiz-ai a5c1a4e7):** `--agree
+  <DIA-NN report.parquet>` takes each Osprey arm's real-target precursors at true FDP 1% and counts how many DIA-NN
+  identifies at run `Q.Value <= 0.01` in at least one of the SAME runs (read from the arm's `run.log`, so an 82-run
+  report compares fairly with a 20-file arm); matched on modified sequence (UniMod) + charge = `Precursor.Id`.
+  `--reference <run dir>` splits every other arm's LOST and GAINED precursors by DIA-NN status. Tested on a
+  synthetic report with a known answer; reads the gzipped FDRBench tables every featset arm kept, so all ~170 UW25
+  arms can be re-scored without re-running.
+- **What is missing on UW25:** a DIA-NN report covering UW25's 20 files (SEA-AD samples 0001-0020, i.e. the first
+  20 of the 82 in name order) on the same peptides. UW25 has DIA-NN 2.6.1 but no SEA-AD DIA-NN library.
+- **REQUEST (MACS2):** copy the 82-file DIA-NN 2.7.0 `report.parquet` on the split peptides
+  (`diann-vs-osprey\seaadisectuns82\A2-sizedeport.parquet`, or whichever 82-file DIA-NN report is current)
+  to UW25 at `D:	est\osprey-runs\sea-ad\diannuns82-A2-sizedeport.parquet` (lab share or any path
+  Brendan prefers), and note here: DIA-NN version, library, settings (NN, MBR), and that it covers all 82 runs. Its
+  own entrapment draw does not matter: agreement compares real targets only. If no such report exists, say so and
+  UW8 or UW25 will run DIA-NN 2.7.0 on UW25's 20 files instead.
+- Once it lands, UW25 re-scores all 109, B (57), the 42 set, B-core10 (46) and the core-cut arms against it, and
+  adds agreement to the driver's results row.
+
 ### UW8 replicate
 
 **UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
