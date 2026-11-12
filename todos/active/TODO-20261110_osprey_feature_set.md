@@ -7,7 +7,11 @@
 - **Base**: #4950 (`Skyline/work/20261028_osprey_diann_fdr_gap`) and its pending branches
 - **Module**: `osprey`
 - **Created**: 2026-11-10 (designed on BRENDANX-UW25; Brendan has given UW25 to this study for a few days)
-- **Status**: Design approved (2026-11-10). Phase 0 next.
+- **Status** (2026-11-11 21:30): Phases 0-2 done on both machines. Candidate sets agree across UW8's and UW25's
+  20-file sets: 77 families-only (-0.5%), B 57 (-0.4..-0.6%), 51 = B minus 6 weakest core (UW8 -0.3%), 46/42
+  (UW25 core cuts, -1.1..-1.4%). **But at 82 files the 51 set costs -1.4% (UW8, same build, 95,264 vs 96,593)**:
+  pruning costs grow with file count, so the default is chosen at 82 files. In flight on UW8 overnight: 82-file
+  FirstPassFDR ladder 51 / 57 / 70 / 77 / 42 / 46 on the all-109 links. Pending: DIA-NN agreement (MACS2 report).
 
 ## Goal
 
@@ -393,6 +397,24 @@ B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,
   adds agreement to the driver's results row.
 
 ### UW8 replicate
+
+**UW8 status (2026-11-11 21:30) - supersedes the 10:00 block below it.**
+- **Sync with UW25:** both machines now test the same candidate sets, built from the rankings posted above. UW25
+  has confirmed UW8's 77 / A / B on its files and carried the core cut further (46, 42). UW8's 51 set = B minus
+  the 6 core features with permutation drop <= 0 (15 core kept); it sits between UW25's B (21 core) and B-core10.
+- **New, for UW25's plan: 20-file losses understate 82-file losses.** The 51 set: -0.3% at 20 files, **-1.4% at 82**
+  (all 109 on the same build c3bdbea78d = 96,593; the build is not the cause). UW25's 42 set (-1.1% at 20) is
+  therefore likely to cost more at 82. Rather than a full-pipeline B-vs-42 run (7 h each), UW8 is reading the
+  whole ladder at 82 files FirstPassFDR-only on the all-109 links (~1 h each, detections + FirstPassFDR I/O):
+  51, 57 (B), 70 (A), 77, then UW25's 42 and 46 (exact UW25 core lists: core 5 = `abs_rt_deviation`,
+  `fragment_coelution_max`, `median_polish_cosine`, `peak_area`, `ms1_isotope_cosine`; 42 = B with core 5 +
+  `mass_accuracy_deviation_mean`; 46 = B with core 10). Results land in `results82.tsv` and here by morning.
+- **Full-pipeline timing is measured (51 set, 82 files, 6.77 h vs 7.45 h): PerFileRescoring does not get faster
+  from feature cuts** (-0.6%), because it reads mostly non-PIN columns. That I/O is Phase 5's, not the feature
+  set's - so a second 7-h full-pipeline run per candidate would add little beyond the FirstPassFDR numbers.
+- Proposed division for tomorrow (for Brendan): UW8 picks the 82-file cut point from the ladder and runs its
+  seeds; UW25 runs DIA-NN agreement on all arms once MACS2's report lands (its tool already reads every arm's
+  FDRBench table, UW8's included, given the run dir).
 
 **UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
 - **Best set so far: 77 features = core 21 + 10 families, 86,374 at true FDP 1% (3 seeds), equal to all 109
