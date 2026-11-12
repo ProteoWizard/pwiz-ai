@@ -333,6 +333,23 @@ vs all 109 = 90,548 +- 634 (5 seeds):**
 - Queued (14:41, ~2 h): **B with core top 10 / 5 / 3 (46 / 41 / 39 features)**, 3 seeds each, and B seeds 4-5.
   B-core5 = 41 features, ~2x the original 21: the candidate for Brendan's target.
 
+**UW25 (2026-11-11 16:27) - B with the core cut, UW25 files, protein-best ON, vs all 109 = 90,548 +- 634:**
+
+| set | features | seeds | mean | vs all 109 | read | FirstPassFDR |
+|---|---|---|---|---|---|---|
+| B | 57 | 89,745 / 90,511 / 90,424 / 90,074 / 89,523 | 90,055 (SD 425) | -493 (-0.5%, z -1.2) | 93 GB | 619 s |
+| **B, core top 10** | **46** | 89,820 / 90,112 / 90,146 | **90,026** (SD 179) | **-522 (-0.6%, z -1.1)** | **85 GB** | **558 s** |
+| B, core top 5 | 41 | 89,784 / 89,692 / 89,174 | 89,550 | -998 (-1.1%, z -2.2) | 78 GB | 544 s |
+| B, core top 3 | 39 | 88,142 / 89,702 / 88,051 | 88,632 | -1,917 (-2.1%, z -4.1) | 75 GB | 500 s |
+
+- **46 features (2.2x the original 21) match all 109 on UW25's files**, with 40% less FirstPassFDR read and 45% less
+  FirstPassFDR time. Core kept: `abs_rt_deviation`, `fragment_coelution_max`, `median_polish_cosine`, `peak_area`,
+  `ms1_isotope_cosine`, `explained_intensity`, `peak_apex`, `rt_deviation`, `mass_accuracy_deviation_mean`,
+  `n_coeluting_fragments` (`set-Bcore10.txt`). Calibration holds (FDP at q 1% 0.94-0.96%).
+- Core 10 -> 5 costs ~500: one or more of core 6-10 carries value. Queued (16:28, ~2.5 h): B-core5 plus each of
+  those five, 3 seeds each - a 42-feature set at ~2x if one feature recovers it.
+- Proposal for UW8: replicate B-core10 (46) on UW8's files, the cross-file check for the candidate.
+
 ### UW8 replicate
 
 **UW8 status (2026-11-11 10:00) - read this first; the timeline below has every number.**
