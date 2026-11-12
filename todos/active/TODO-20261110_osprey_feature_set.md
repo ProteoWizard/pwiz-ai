@@ -989,6 +989,24 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   rescoring computed every family in both; the 51-set full run is the rescoring-time measurement).
 - UW8 (13:05) running its own replicate of the negligible-loss job: 93 seeds 1-3, A and 77 seeds 2-3 (7 arms,
   ~7 h, `results82.tsv`), to sit beside UW25's.
+- UW8 (13:30) **Like-for-like DIA-NN baseline at 82 files: no experiment-wide FDR issue in Osprey.** (Prompted by
+  Brendan reading the 88,016 "both" count as DIA-NN's total - it is the OVERLAP; DIA-NN's total is ~100k.)
+  `split_calibration.py --diann` on UW8's two DIA-NN 2.7.0 reports, same split oracle (`diann-vs-osprey-82.txt`):
+
+  | 82 files | q 1% kept (measured FDP) | at true FDP 1% |
+  |---|---|---|
+  | Osprey all 109, pass 1 / pass 2 | 96,577 (0.99%) / 96,516 (0.99%) | 96,593 / 96,556 |
+  | DIA-NN first pass (no MBR) | 100,037 (1.00%) | 100,213 (+3.7%) |
+  | DIA-NN final (MBR) | 99,575 (0.78%) | 101,269 (+4.9%) |
+
+  - Both tools calibrated at q 1% (Osprey 0.99%, DIA-NN first pass 1.00%); DIA-NN's final report is conservative,
+    so its lead grows at matched true FDP. The ~4-5% gap Brendan expects.
+  - **Same oracle:** DIA-NN's library (`lib\diann-split-sized`, predicted from the split's peptide list) has
+    1,391,588 targets, 695,616 on-target and 695,616 own entrapment: r = 0.4999, as Osprey's Carafe library
+    (1,131,671 / 565,555 = 0.4998), so the tool's default r is right for both (`diann_assign_counts.py`).
+  - **Effectively the same search space:** DIA-NN searches 23% more target peptides (Carafe dropped 19% of the
+    split's targets), but 100,018 of DIA-NN's 100,037 real-target IDs at global q 1% (all but 19) are peptides
+    Osprey's library holds (`diann_space.py`). The missing Carafe targets are peptides neither tool finds.
 - **UW25: started 2026-11-12 ~10:15** (Brendan's go-ahead), the 12 arms in the order above (`p9-82-<set>-s<seed>`),
   UW8's mask files used unchanged (verified identical to UW25's set93 / set77 / A lists). ~1 h per arm on UW25 ->
   ~22:00. UW25 already has all 109 at seeds 4-6 at 82 files (`p8-82-all109-s4..6`), so 93 / A / 77 at seeds 4-6
