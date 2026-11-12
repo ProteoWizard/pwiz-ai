@@ -136,6 +136,15 @@ The load is compute, not analysis, so one session can run it for days if it neve
 - [ ] Timing and disk of the chosen set at 82 files on UW25 (same HDD), to quote against November's numbers.
 
 ### Phase 4 - Make it the default (code)
+- **Shape (from the 2026-11-12 decision):** a named feature-set setting (e.g. `core` / `default` / `all`) with
+  per-resolution defaults (HRAM `default` = B-57, unit `core`), replacing `DEFAULT_MASKED_FEATURES` as what an
+  unset `OSPREY_FEATURE_MASK` means. The set chosen at SCORING decides what PerFileScoring computes and records,
+  and `RecordedFeaturesValidityKeySuffix` already keys on that, so `all` remains the research route (score once,
+  mask in FirstPassFDR).
+- **Record at column granularity, not family granularity.** Today a family with one kept feature is recorded
+  whole (`PinFeatureMask.cs:37`), so B's within-family cuts save FirstPassFDR read but not disk or write: B
+  written today is ~3.0 GB/file, ~2.7 GB with column-level recording (82 files: 274 GB measured for the 51 set's
+  families vs 317 GB for all 109). Families are still computed as units (CPU), only the unkept columns dropped.
 - [ ] Remove the dropped families from computation, not just the mask, so PerFileScoring and the parquet
       shrink; keep the mask and record-all switches for research.
 - [ ] Core features get no exemption (Brendan, 2026-11-10: the core 21 were never rigorously vetted and newer
@@ -178,9 +187,18 @@ The load is compute, not analysis, so one session can run it for days if it neve
       the 109 -> 77 feature cut, and additive with it.
 
 ## Open decisions (Brendan)
-- Acceptable loss for the default: inside the seed noise band at FDP 1%, or an explicit bound?
-- One set, or a smaller default plus an opt-in full set?
-- Unit-resolution data (Stellar): its own set, or the HRAM set minus the HRAM-only families as today?
+- **Decided (Brendan, 2026-11-12 ~03:45): three nested, selectable feature sets: core-21 ⊂ B-57 ⊂ all-109.**
+  - **HRAM default: B-57** (pending the 82-file seed replicates and the pass-2 check; it keeps all 21 core).
+  - **Unit-resolution default: core-21** for now, with B and all-109 selectable for future testing. At unit
+    resolution B is 52 (the HRAM-only library-agreement and spectrum-match features are off there, as today).
+  - **All-109 stays selectable**: scored with all 109, FirstPassFDR can still select any subset by mask (the
+    record-all + mask route this study used throughout).
+  - Stellar validation may lag: there is no strong DIA-NN result to judge it against. Astral/SEA-AD is where
+    Osprey is judged against DIA-NN, so validation effort goes there.
+- Acceptable loss for the default: settled in practice by DIA-NN agreement - B's losses are boundary churn
+  (-0.36% DIA-NN-confirmed at 82 files, -0.34% at 20); the core cuts (-0.9 to -1.0%) are not accepted.
+- ~~One set, or a smaller default plus an opt-in full set?~~ Three nested sets (above).
+- ~~Unit-resolution data (Stellar)~~ core-21 default (above).
 
 ## UW8 independent replicate (proposed by UW8 2026-11-10, for Brendan to confirm)
 
@@ -507,9 +525,9 @@ DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Va
      1-3 that gives 6 seeds of B vs all 109 at cohort scale on two machines: whether B's -0.6% (-0.36% confirmed)
      is distinguishable from seed noise. B's exact mask: column 5 of `x82-B-57-s1` in UW8's `arms82.tsv`, also =
      the feature list of candidate B posted above.
-  2. **Phase 3 datasets, nobody started:** B vs all 109 on Stellar, StellarGenDecoyEntrap (the only leg with a
-     true-FDP oracle on generated decoys) and Astral. B keeps the HRAM-only families, which are off at unit
-     resolution anyway, so on Stellar B is smaller still.
+  2. ~~Phase 3 datasets~~ - **Stellar deferred (Brendan, 03:45)**: unit resolution keeps core-21 by default, and
+     there is no strong DIA-NN reference there. The Astral regression dataset (HRAM) is still a cheap second
+     check of B beyond SEA-AD if UW25 has time after item 1.
   - UW8 takes **pass 2 with B** (FirstPassFDR -> SecondPassFDR at 82 files on the all-109 links) after its seed
     arms finish ~07:30: every arm so far reads pass 1, and #4950 reports pass 2.
   - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
