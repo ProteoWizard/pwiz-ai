@@ -447,6 +447,12 @@ DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Va
   77 -412; A -339; **B -428**; B-core10 -404; **42 -587**; C -1,012; top 2 -1,829; top 1 -3,370 (of 82,711).
 - Deeper cuts eat confirmed precursors: the confirmed share of LOST rises from 49% (77, B) to 61% (top 1) while the
   confirmed share of GAINED falls to 41%. Counts alone hide this asymmetry.
+- **Lost-agreed q histograms (Brendan's request; `split_calibration.py --lost-hist`, `featset/lost-hist-seed1.txt`).**
+  The precursors both tools identified with all 109 that a change loses sat at the 1% boundary in BOTH tools. B
+  (1,397): Osprey q (all 109) 81% in 0.3-1% and 14% just over (vs 7.6% / 0.5% of all 82,711 agreed); DIA-NN global q
+  above 1e-3 for 60% (vs 14%), under 1e-4 for 4.6% (vs 55%). The 42 set is the same. **Seed 2 of all 109 loses the
+  same kind of precursors with the same profile**: B's and 42's losses are boundary churn, not lost signal. Top 1
+  differs: 27% of its lost-agreed had Osprey q under 0.3% (B: 5%) - deep cuts lose confident precursors.
 - Next: average over B's and the 42 set's 5-6 seeds; score UW8's 82-file ladder arms if their dirs are reachable.
   - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
     the first pass experiment-wide - another reason to keep both.

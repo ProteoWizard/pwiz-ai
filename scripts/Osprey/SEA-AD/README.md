@@ -220,7 +220,7 @@ caches so Stage 5 onward - the part usually under test - always regenerates.
 | `runcount_fdp.py <run_dir>` | FDP by number-of-runs-identified (needs `--model-diagnostics`) |
 | `Compare-Pass2AB.py <a> <b> <out.html>` | two `--model-diagnostics` runs side by side |
 | `split_calibration.py --lib-dir <split lib> --osprey <run dir>... [--diann <report.parquet>]` | on a #5011 split library: kept and on-target FDP at reported q, and the count at true FDP 0.5% / 1%, for Osprey and DIA-NN arms |
-| `split_calibration.py ... --agree <DIA-NN report.parquet> [--reference <run dir>]` | **tool agreement**: of each arm's real targets at true FDP 1%, how many DIA-NN identifies (run Q.Value <= 1%) in the same runs; with `--reference`, every other arm's lost and gained precursors split by whether DIA-NN identifies them. A count that moves toward DIA-NN's only means something if the moved precursors are ones DIA-NN finds |
+| `split_calibration.py ... --agree <DIA-NN report.parquet> [--agree-global] [--reference <run dir> [--lost-hist]]` | **tool agreement**: of each arm's real targets at true FDP 1%, how many DIA-NN identifies (run Q.Value <= 1%) in the same runs; with `--reference`, every other arm's lost and gained precursors split by whether DIA-NN identifies them; `--lost-hist` shows where the lost precursors both tools agreed on sat on each q scale (marginal or confident). A count that moves toward DIA-NN's only means something if the moved precursors are ones DIA-NN finds |
 
 Osprey names its FDRBench output by how the run was launched - `fdrbench.tsv` from
 `--fdrbench-pass 2`, `fdrbench.pass2.tsv` from `--fdrbench-pass both` (the runner's

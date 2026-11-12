@@ -182,6 +182,9 @@ def main():
     ap.add_argument('--agree', help='DIA-NN report.parquet to measure each Osprey arm\'s agreement against')
     ap.add_argument('--agree-q', type=float, default=0.01, help='DIA-NN run Q.Value for a confident identification')
     ap.add_argument('--reference', help='Osprey run dir to split every other arm\'s lost/gained precursors against')
+    ap.add_argument('--lost-hist', action='store_true',
+                    help='with --reference: q histograms (Osprey reference, Osprey arm, DIA-NN run and global) of the '
+                         'precursors each arm lost that both tools identified in the reference')
     ap.add_argument('--agree-global', action='store_true',
                     help='also require DIA-NN Global.Q.Value <= --agree-q (an experiment-level ID, as in '
                          'Benchmark/compare_osprey_diann.py), so the union over runs does not accumulate run-level FDR')
@@ -258,6 +261,57 @@ def agreement(a, assign):
             print(f'{(os.path.basename(os.path.normpath(d))[-37:] + " p" + ps):40s} {len(lost):7d} {len(lost & dn):7d} '
                   f'{100 * len(lost & dn) / max(len(lost), 1):7.1f}% {len(gained):7d} {len(gained & dn):7d} '
                   f'{100 * len(gained & dn) / max(len(gained), 1):7.1f}%')
+    if a.lost_hist:
+        lost_histograms(a, assign, rep, found)
+
+
+Q_BINS = (0.0, 1e-4, 1e-3, 3e-3, 1e-2, np.inf)
+Q_LABELS = ('<1e-4', '1e-4..1e-3', '1e-3..3e-3', '3e-3..1e-2', '>=1e-2')
+
+
+def osprey_qmap(path):
+    """Precursor id (DIA-NN form) -> q of every target row of an Osprey FDRBench table."""
+    t = pd.read_csv(path, sep='\t', usecols=['mod_peptide', 'charge', 'q_value', 'protein'])
+    t = t[~t.protein.astype(str).str.startswith('decoy_')]
+    t = t.sort_values('q_value', kind='stable').drop_duplicates(['mod_peptide', 'charge'])
+    return pd.Series(t.q_value.values, index=t.mod_peptide.map(unimod) + t.charge.astype(str))
+
+
+def lost_histograms(a, assign, rep, found):
+    """Where the precursors a change lost, that BOTH tools identified before it, sat on each q scale - against all
+    precursors both tools identified in the reference - so 'lost' can be read as marginal or confident."""
+    ref_dir = a.reference
+    for ps in ('1', '2'):
+        if (ref_dir, ps) not in found:
+            continue
+        ref, dn = found[(ref_dir, ps)]
+        agreed = ref & dn
+        runs = arm_runs(ref_dir)
+        r = rep if runs is None else rep[rep.Run.isin(runs)]
+        r = r[r['Precursor.Id'].isin(agreed)]
+        dn_run = r.groupby('Precursor.Id')['Q.Value'].min()
+        dn_glob = r.groupby('Precursor.Id')['Global.Q.Value'].min()
+        ref_q = osprey_qmap(fdrbench_path(ref_dir, ps))
+        print(f'\nWhere the precursors BOTH tools identified in the reference, and a change lost, sat (pass {ps}; % of '
+              f'each group per q bin; "all agreed" = every precursor both identified in the reference):')
+        print(f'{"group":44s} {"n":>6s} {"q on":12s} ' + ' '.join(f'{lb:>11s}' for lb in Q_LABELS))
+
+        def row(label, ids, series, scale):
+            v = series.reindex(sorted(ids)).dropna().values
+            h = np.histogram(v, bins=Q_BINS)[0]
+            print(f'{label:44s} {len(v):6d} {scale:12s} ' + ' '.join(f'{100 * c / max(len(v), 1):10.1f}%' for c in h))
+
+        for scale, series in (('Osprey ref', ref_q), ('DIA-NN run', dn_run), ('DIA-NN glob', dn_glob)):
+            row('all agreed', agreed, series, scale)
+        for d in a.osprey:
+            if d == ref_dir or (d, ps) not in found:
+                continue
+            lost_agreed = agreed - found[(d, ps)][0]
+            name = os.path.basename(os.path.normpath(d))[-34:] + ' lost'
+            arm_q = osprey_qmap(fdrbench_path(d, ps))
+            for scale, series in (('Osprey ref', ref_q), ('Osprey arm', arm_q), ('DIA-NN run', dn_run),
+                                  ('DIA-NN glob', dn_glob)):
+                row(name, lost_agreed, series, scale)
 
 
 if __name__ == '__main__':
