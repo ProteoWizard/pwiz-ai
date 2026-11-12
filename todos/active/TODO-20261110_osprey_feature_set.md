@@ -469,8 +469,9 @@ DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Va
   against the same no-MBR report. UW8 can equally run `split_calibration.py --agree <report-first-pass.parquet>
   --agree-global --reference <all-109 dir> --lost-hist` itself; posting both machines' tables side by side is the
   goal.
-- Next on UW25: add agreement columns (confirmed count, lost/gained confirmed) to the driver's results row, so every
-  future arm carries the metric without a separate pass.
+- Done on UW25 (2026-11-12): the driver (`run-arms.ps1 -AgreeReport`, default the no-MBR first pass) now writes
+  `diann_both` and `diann_pct` (strict definition) on every arm's results row; paired lost/gained stays in
+  `paired_agreement.py`, which needs the matching all-109 seed.
   - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
     the first pass experiment-wide - another reason to keep both.
 
