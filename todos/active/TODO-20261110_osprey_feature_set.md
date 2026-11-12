@@ -662,6 +662,30 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
   pass 1 96,710 at FDP 1%, pass 2 96,654). Build differs (c3bdbea78d adds the protein-best fixes, FirstPassFDR
   only), so FirstPassFDR wall and detections need an all-109 c3bdbea78d reference too: an 82-file FDR-only run
   linked from the baseline, queued after this one.
+- UW8 (20:09) **82-file 51-set run done, exit 0, 6.77 h** (`runs-uw8\seaad-82files-libdecoy-r1.0-transferset51-c3bdbea78d`).
+  Detections: pass 1 **95,264** at true FDP 1% (q 1%: 95,786 at FDP 1.05%), pass 2 95,223 - vs the f90d19aaa6
+  all-109 baseline 96,710 / 96,654: **-1.5%**, more than the 20-file -0.3%. Confounded by build: c3bdbea78d's
+  protein-best round-1 run bound (10 runs) bites at 82 files, not 20. The all-109 FirstPassFDR on c3bdbea78d
+  (`featset\ref82-all109-c3bdbea78d`, running since 20:10) separates mask from build.
+  Per stage (read = difference of the run.log's cumulative `[PATH] ... block reads ... so far` lines):
+
+  | stage | baseline 109 (f90d19aaa6) | 51 set (c3bdbea78d) | change |
+  |---|---|---|---|
+  | scores parquet, 82 files | 317 GB | 274 GB | -14% (only whole dropped families leave the file) |
+  | PerFileScoring wall | 15,092 s | 14,157 s | -6% |
+  | FirstPassFDR parquet read | 612 GB | 271 GB | **-56%** |
+  | FirstPassFDR wall | 4,442 s | 2,938 s | **-34%** (build differs) |
+  | PerFileRescoring parquet read | 644 GB | 594 GB | -8% |
+  | PerFileRescoring wall | 6,953 s | 6,913 s | **-0.6%** |
+  | SecondPassFDR | 348 s | 352 s | |
+  | total | 26,835 s (7.45 h) | 24,360 s (6.77 h) | -9% |
+
+  - **PerFileRescoring did not get faster, and the feature set cannot make it.** It reads ~2.2x the parquet,
+    mostly the NON-PIN columns (`cwt_candidates` 442 MB/file, fragment arrays 386 MB, reference XICs 267 MB), so
+    pruning features moved its read by only 8%. This matches the perf session's finding that rescoring speeds up
+    only by saving less in the scoring parquet: the bytes to cut are the non-PIN columns (Phase 5), not features.
+  - FirstPassFDR is where the feature set pays: -56% of its read. Phase 4 (record only kept columns) would also
+    cut the parquet to ~2.7 GB/file (~225 GB at 82) and the scoring write.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
