@@ -71,5 +71,36 @@ Started on MACS2 in `D:\Users\brendanx\proj\pwiz`, branch from origin/master 829
   (`Skyline/work/20261028_osprey_diann_fdr_gap`), not master - belongs on #4950.
 
 **Gates so far:** `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` 656/656 pass,
-inspection clean. Stellar regression running
+inspection clean. `regression.ps1 -Dataset Stellar` PASSED
 (`ai/.tmp/sessions/20261112-5023/regression-stellar.log`).
+
+### 2026-11-12 - SEA-AD A/B (3 files, paired ABAB, MACS2 otherwise idle)
+
+Matched files A01_005, A06_010, A10_014; split-sized r=1.0 library; Run-SeaAd defaults; fresh per
+arm; 36 threads. master = 829aee74b6 (`_bin\master-829aee74b6`), slim = branch WIP
+(`_bin\slim5023-wip`). Script `ai/.tmp/sessions/20261112-5023/ab-slim.ps1`; runs in
+`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-slim5023\`; per-task times from
+`ab_summary.py` (task end = its `[PATH] ... block reads` marker).
+
+| arm | total | PerFileScoring | FirstPassFDR | PerFileRescoring | SecondPassFDR |
+|---|---|---|---|---|---|
+| master01 | 660 s | 330 s | 148 s | 129 s | 54 s |
+| slim01 | 553 s | 263 s | 140 s | 97 s | 53 s |
+| master11 | 603 s | 273 s | 149 s | 127 s | 54 s |
+| slim21 | 564 s | 272 s | 138 s | 102 s | 52 s |
+
+- **PerFileRescoring -22%** (128 -> 100 s), consistent in both pairs. FirstPassFDR -6% (149 -> 139 s),
+  also consistent though its bytes read are identical. SecondPassFDR unchanged.
+- PerFileScoring: master01 is a cold-start outlier (its calibration pass 1 took 17.6 s vs 5-9 s);
+  the second pair is 273 vs 272 s. Per-file parquet write 17.6 -> 16.2 s mean (-8%).
+- Total: -11.6% on means, but -6.5% on the second pair alone; Stages 5-7 alone -12% (330 -> 291 s).
+- **Bytes read** (`[PATH] block reads`, parquet): PerFileRescoring 13.5 -> 7.9 GB (-41%; Stage 6 reads
+  the Stage 4 file more than once); FirstPassFDR 3.8 GB both; SecondPassFDR 1.0 GB both. Whole run
+  25.0 -> 19.4 GB read (-22%).
+- **Disk**: `.scores.parquet` 5,571 -> 4,382 MB (-21.3%), `.scores-reconciled.parquet` 1,152 -> 580 MB
+  (-49.7%), whole run dir 8,249 -> 6,488 MB (-21.3%): ~0.59 GB/run, ~48 GB at 82 runs, ~262 GB at 446.
+- **Results identical**: every blib result table (RefSpectra, peaks, proteins, retention times,
+  source files) hashes equal across all four arms; only LibInfo (creation time) and LibMetadata
+  `osprey.command` (output dir) differ.
+- On #4950's 109-feature files the same bytes are a smaller share (UW25's 3.89 GB file: fragments
+  10.5%, CWT 12.6%).
