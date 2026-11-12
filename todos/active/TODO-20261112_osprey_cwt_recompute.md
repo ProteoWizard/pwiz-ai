@@ -19,20 +19,20 @@ and stop writing the column - with candidates identical to Stage 4's, so goldens
 
 ## Tasks
 
-- [ ] Diagnostic: recompute candidates for consulted rows in PerFileRescoring, compare field by
+- [x] Diagnostic: recompute candidates for consulted rows in PerFileRescoring, compare field by
       field with the stored lists (opt-in). SEA-AD 3 files + regression datasets. Gate: 0 mismatches.
-- [ ] Planner uses recomputed candidates; Stage 4 stops writing `cwt_candidates`
-- [ ] Remove `CwtCandidateLoader`, `LoadCwtCandidatesFromParquet`, `ProbeCwtRowMetadata`,
+- [x] Planner uses recomputed candidates; Stage 4 stops writing `cwt_candidates`
+- [x] Remove `CwtCandidateLoader`, `LoadCwtCandidatesFromParquet`, `ProbeCwtRowMetadata`,
       range validation, the column
-- [ ] Goldens byte-identical (`regression-parallel.ps1 -Dataset All`), `SubsetPipelineTest`
-- [ ] SEA-AD A/B: disk, PerFileScoring write, PerFileRescoring time
+- [x] Goldens byte-identical (`regression-parallel.ps1 -Dataset All`), `SubsetPipelineTest`
+- [x] SEA-AD A/B: disk, PerFileScoring write, PerFileRescoring time
 
 ## Regression Test
 
-- **Test name**: (pending - the diagnostic's comparison, then the goldens)
+- **Test name**: SubsetPipelineTest (every leg runs the always-on reproduction check) + regression goldens
 - **Test project**: OspreySharp.Test / regression
 - **Fails on master**: n/a (storage change; goldens prove outputs unchanged)
-- **Passes on fix**: (pending)
+- **Passes on fix**: yes - gate 684/684 at 235df65d51; regression All 49/49 at 747795abb0
 
 ## Progress Log
 
@@ -160,3 +160,23 @@ The base arm is #4950 with #5025 merged, so this measures #5024 alone.
 - Blib: every data table identical across all four runs (only LibInfo / LibMetadata, which carry
   the creation time, differ).
 - At 82 runs: ~109 GB less; at 446 (CHS): ~595 GB less.
+
+### 2026-11-12 - Committed, merged #4950 head, review triage
+
+- 747795abb0 production change; 9f6c386bd2 merged #4950 head be63cfbfb7 (10 conflicts, each one where
+  the #4950 side was older than this branch: it matched 8396e56c76 or lacked only the diagnostic
+  commit; merged tree byte-identical to 747795abb0). Gate 684/684, inspection clean.
+- `/code-review high`: 9 findings. Fixed (235df65d51):
+  - Always-on reproduction check in `CwtCandidateRecompute.ForRows`: every row must be recomputed
+    with its apex at Stage 4's `ScanNumber`, else `InvalidDataException` (reported per run). Basis:
+    the diagnostic's `apex_scan_differs` was 0 on all SEA-AD and subset rows with the final code, and
+    44/82 on Stellar with a wrong calibration during development. Also covers a run with no input,
+    a missing library entry, no matching window, and a calibration that failed to load.
+  - `OSPREY_LOAD_CALIBRATION` term added to the PerFileScoring key (empty when unset).
+- Dropped: spectra-load errors escaping planning (unchanged - the base loaded them in
+  RescoreOneFile uncaught); one window sweep per row (planning <= ~12 s of ~27 s per SEA-AD file,
+  including the index load the rescore needs; no measured gain); fcorr extra work (non-default,
+  and the new check catches drift); double clone; null source (one non-null caller); progress
+  segment attribution (cosmetic).
+- Night session goal: PR open on #4950 and green on TeamCity incl. Perf/Regression
+  (`ai/.tmp/night-session-budget-20261112.md`).
