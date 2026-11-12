@@ -414,6 +414,27 @@ B-core10 (46) -1,307 (-1.4%). 6-seed means: 42 set 89,588 (SD 385), B-core10 89,
     of the 82; Osprey's arms have no equivalent, so agreement is an upper bound on what DIA-NN finds per run alone.
   - Not sent: the Carafe-library 82-file report (`diann-search-82-carafe`): its `carafe_targets.tsv` holds only
     1,131,671 of the 1,391,588 real targets (81%), so 19% could never count as agreed.
+- **UW8 answer (2026-11-12 01:00): UW8 has the same 82-file search, plus the NO-MBR first pass.** UW8 ran DIA-NN
+  2.7.0 on all 82 runs on 2026-11-09/10 (`D:\test\osprey-runs\sea-ad\runs-uw8\diann270-82files`) with MACS2's
+  settings: library predicted by DIA-NN from the split-sized library's peptides
+  (`lib\diann-split-sized\peptides.fasta`, 2,782,820 entries, `--cut`), MBR on (`--reanalyse`), `--rt-profiling`,
+  `--individual-mass-acc`, `--individual-windows`, `--pg-level 0`, `--qvalue 0.05`, m/z 400-900, charge 2-3,
+  length 7-35, UniMod. Copied for UW25 to **`M:\home\brendanx\data\MacCoss\Osprey\sea-ad\diann-search-82-uw8\`**
+  (UW8's M: = MACS2's U:): `report-first-pass.parquet` (505 MB), `report.parquet` (733 MB), both logs.
+
+  | report (Q <= 0.01) | runs | per-run median (min-max) | union |
+  |---|---|---|---|
+  | MACS2 final, MBR | 82 | 81,020 (50,040-97,428) | 118,703 |
+  | UW8 final, MBR | 82 | 79,684 (49,777-95,883) | 116,670 |
+  | **UW8 first pass, no MBR** | 82 | **57,323** (31,950-81,576) | 145,960 |
+
+  - The two MBR reports agree within 1.6% per run (same settings, two machines).
+  - **MBR adds ~39% per run.** Agreement against an MBR report credits DIA-NN with identifications transferred
+    from other runs, which Osprey's per-run arms cannot match. `report-first-pass.parquet` is DIA-NN's per-run
+    search before reanalysis, the like-for-like reference; suggest scoring agreement against BOTH and reporting
+    the pair. (Same 72 columns, so `split_calibration.py --agree` reads it unchanged.)
+  - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
+    the first pass experiment-wide - another reason to keep both.
 
 ### UW8 replicate
 
