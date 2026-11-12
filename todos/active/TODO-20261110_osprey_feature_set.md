@@ -453,7 +453,24 @@ DIA-NN's `Precursor.Mz` to 6e-5) and `--agree-global` (also require `Global.Q.Va
   above 1e-3 for 60% (vs 14%), under 1e-4 for 4.6% (vs 55%). The 42 set is the same. **Seed 2 of all 109 loses the
   same kind of precursors with the same profile**: B's and 42's losses are boundary churn, not lost signal. Top 1
   differs: 27% of its lost-agreed had Osprey q under 0.3% (B: 5%) - deep cuts lose confident precursors.
-- Next: average over B's and the 42 set's 5-6 seeds; score UW8's 82-file ladder arms if their dirs are reachable.
+- **Seed-paired agreement** (each set vs all 109 at the SAME seed, mean +- SD over seeds; DIA-NN-confirmed = run q
+  and global q <= 1%, no-MBR first pass; `featset/paired_agreement.py` -> `paired-agreement.txt`). Net change /
+  net change among DIA-NN-confirmed (of ~82,700) / confirmed share of lost / of gained:
+  B (57, 5 seeds) -493 +- 283 / **-281 +- 133 (-0.34%)** / 49.8% / 47.9%; A (70, 3) -780 / -403 / 49% / 48%;
+  77 (3) -860 / -405 / 48% / 49%; **42 (5) -988 / -633 +- 107 (-0.77%)** / 52.0% / 46.3%; B-core5 (41, 5) -1,240 /
+  -750 / 52% / 47%; B-core10 (46, 5) -1,308 / -770 / 51% / 47%; C (54, 3) -1,994 / -1,103 / 52% / 48%; top 2 (41, 3)
+  -3,188 / -1,998 / 55% / 43%; top 1 (31, 3) -5,068 / -3,322 / 59% / 42%.
+  - B's swap with all 109 is close to a neutral exchange of borderline precursors; the core cuts cost ~2x B in
+    confirmed precursors and tilt the exchange (52% vs 46%); the tilt grows with cut depth (2 -> 18 points).
+- **REQUEST (UW8): the 82-file ladder's FDRBench tables**, so UW25 can score agreement where losses are larger (B -0.6%,
+  51 set -1.4% at 82 files). For each arm in `results82.tsv` (all 109 at every seed, 51, B, A, 77, 42, 46): copy
+  `fdrbench.pass1.tsv` (gzip is fine) and `run.log` (the tool reads the run list from its command line) to
+  `M:\home\brendanx\data\MacCoss\Osprey\sea-ad\featset82-uw8\<arm>\`. UW25 then runs `paired_agreement.py` on them
+  against the same no-MBR report. UW8 can equally run `split_calibration.py --agree <report-first-pass.parquet>
+  --agree-global --reference <all-109 dir> --lost-hist` itself; posting both machines' tables side by side is the
+  goal.
+- Next on UW25: add agreement columns (confirmed count, lost/gained confirmed) to the driver's results row, so every
+  future arm carries the metric without a separate pass.
   - The first pass has the larger union (146k vs 117k): DIA-NN's second pass searches only precursors that passed
     the first pass experiment-wide - another reason to keep both.
 
