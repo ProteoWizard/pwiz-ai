@@ -697,6 +697,16 @@ protein-best ON, `OSPREY_RECORD_ALL_FEATURES=1`, pass-1 split oracle. Session lo
     only by saving less in the scoring parquet: the bytes to cut are the non-PIN columns (Phase 5), not features.
   - FirstPassFDR is where the feature set pays: -56% of its read. Phase 4 (record only kept columns) would also
     cut the parquet to ~2.7 GB/file (~225 GB at 82) and the scoring write.
+- UW8 (21:10) **The build is not the cause: the 51 set itself costs -1.4% at 82 files.** All 109, c3bdbea78d,
+  FirstPassFDR only on the baseline's links, seed 1 (`featset\ref82-all109-c3bdbea78d`): pass 1 **96,593** at FDP
+  1% (q 1% 96,577, FDP 0.99%) - the same as f90d19aaa6's 96,710 - vs the 51 set's 95,264 (-1,329). FirstPassFDR:
+  436 GB parquet read / 3,581 s (all 109) vs 271 GB / 2,938 s (51): -38% read, -18% wall on the same build.
+  - At 20 files the 51 set cost -0.3%. The cost of pruning GROWS with file count - presumably 4x the training
+    rows let the classifier use features that are redundant at 20. One seed each; -1.4% is ~2.5 SD on the
+    20-file noise scale. **The 20-file screen is not enough to pick the default; the cut point must be read at
+    82 files.**
+  - Queued (21:10, ~4 h, `go82.ps1` -> `results82.tsv`): the candidate ladder at 82 files, FirstPassFDR only on the
+    baseline's links, seed 1: 51 (paired with the reference on the same scoring), 57 (B), 70 (A), 77 (family set).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
