@@ -1183,6 +1183,31 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   rest of the recipe off - an untested pairing. Options: (1) make the recipe the default together with the feature
   set (a #4950-level decision); (2) ship `--feature-set` with the HRAM default at `all` until the recipe becomes the
   default.
+- **Brendan (2026-11-13 ~04:00 PT / 13:00 CET): #4950's goal is to make the ideal recipe (at least for Astral) the
+  DEFAULT; no user should need to know it.** UW8 proposal from the per-switch evidence (sub-agent, verified spot
+  checks; full evidence with sources: `ai/.tmp/recipe-switches-20261113.md`). A user types only inputs, library,
+  output.
+  - **Bake in, remove the knob:** GBDT + out-of-fold (HRAM; OOF needed for calibration, FDP 1.02-1.21% without it;
+    OOF is in no validity key today - open #5019 keys it); two-round training (+8.5-10%); transfer second pass
+    (calibrated 0.91-1.04% vs 1.30-1.55%); `REF_XIC=corr` (+2.8%, free); `LOCAL_RT_TOLERANCE=15` (+1.0%); no
+    consensus refit (`RECON_REFIT=off`; its commit asks for an 82-file check first - owed); ratio PEP formula
+    (`OSPREY_PEP_FORMULA=ratio`; current PEP 4-8x too pessimistic, detections unchanged).
+  - **Per-resolution defaults, no knob:** XIC count (HRAM 12, unit 6: +7-9% Astral, -15% Stellar, single seed);
+    correlation tolerance 7 ppm (HRAM; +0.7-1.3%, 3 seeds); tc window 0.40 (HRAM; +4.5%, 1 seed per point);
+    classifier (HRAM GBDT; unit SVM until GBDT's Stellar pass-2 FDP 1.15-1.19% is explained); feature set (HRAM
+    `default`, unit `core` - a placeholder: older Stellar runs say a larger set + GBDT gives +18%).
+  - **User options (3):** `--feature-set`, `--protein-best` (default ON: +6.9% at 3 files, +9.7% at 62; keep the
+    switch - only the split oracle can audit it; unmeasured on Stellar), `--fdr-model` (override only).
+  - **Developer-only env vars:** `OSPREY_FDR_SEED`, `OSPREY_FEATURE_MASK`, `OSPREY_RECORD_ALL_FEATURES`, GBDT
+    hyperparameters, prefilter sizes.
+  - **Remove:** `EXPERIMENT_AGG` (superseded by protein-best), `MEANBEST2_FLOOR_*`, `MIN_FRAGMENT_TOLERANCE` (never
+    helped), `LOAD_CALIBRATION` (Rust parity), `PROTEIN_BEST_DECOY=own` (collapses FDR).
+  - **Undecided - experiments owed:** `MIN_RT_TOLERANCE` and `LOESS_BANDWIDTH` never ablated alone (moved with
+    the tc window): drop-one from the full recipe, 3 seeds, Astral then Stellar. Two-round size: fixed 200k was
+    8% short of local-FDR-0.9 + random 500k cap on Astral (one older-build run) - re-check on the current build.
+    82-file check of no-refit.
+  - **Consequence for the feature-set PR:** its HRAM `default` belongs in the same change that makes the recipe the
+    default (#4950), not alone.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
