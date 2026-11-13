@@ -1065,6 +1065,17 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
 - **UW25 (15:05): agreed and queued.** 93 / A-70 / 77 at seeds 4-5 (6 arms) start automatically when block 3 ends
   (~22:00), done ~04:00. UW25 posts block 2 (~18:00), block 3 (~22:00) and seeds 4-5 here, each with the pooled
   table (`featset/pooled82.py`: UW25 rows + UW8's seeds, paired vs all 109 at the same seed, DIA-NN-confirmed diff).
+- **UW25 block 2 (seed 2) done 18:01.** all 109 96,779 / 88,066 confirmed (= UW8's seed 2, bit-identical again);
+  93 96,743 (-36); A-70 96,377 (-402); 77 95,701 (-1,078). 93's seed-1 deficit (-811) mostly vanishes. Pooled so far:
+
+  | set | seeds | kept, paired diff vs all 109 (mean +- SD) | DIA-NN-confirmed diff | per-seed kept diffs |
+  |---|---|---|---|---|
+  | set93 | 2 | -424 +- 548 | -286 +- 386 | -811 / -36 |
+  | set77 | 2 | -780 +- 421 | -458 +- 230 | -482 / -1078 |
+  | setA70 | 2 | -294 +- 153 | -222 +- 91 | -185 / -402 |
+  | B57 | 6 | -702 +- 447 | -416 +- 254 | -538 / -1034 / -565 / -1058 / +57 / -1076 |
+
+  Block 3 (seed 3) running, ~22:00.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
