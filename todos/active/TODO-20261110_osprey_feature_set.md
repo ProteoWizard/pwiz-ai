@@ -1214,6 +1214,24 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     parquet reads for the head; on MACS2 they are nearly free. Report per run: wall, parquet GB read, non-parquet
     (spectra) GB read, read s and gate wait s (the `[PATH] ... block reads` lines). More spectra read + more wait
     post-#5030 = an HDD-contention cost (layout-dependent); flat reads + more CPU = the recompute itself.
+- **JOB FOR UW25 (written 2026-11-13 ~13:00 PT / 22:00 CET, Brendan at bed time): 10 XICs vs 12 at 82 files.**
+  Why: 6 -> 12 XICs costs PerFileScoring +61 s of 257 s per file (+24%, `20261108-uw8perf\ablate.console.log`) and
+  is a suspected cause of lost throughput vs master (MACS2 ran master in 2-2.5 h). The evidence for 12 is thin:
+  the 6/8/12/16 sweep (`TODO-20261028_osprey_diann_fdr_gap.md` ~l.250) was 3 files, 1 seed, an older build,
+  natural entrapment, at FDP 0.5%: 88,604 / 92,594 / 94,741 / 93,311 (12 = +6.9% over 6, +2.3% over 8); with 41
+  features + GBDT, 12 vs 6 = +5.4%. 10 and 16 were "rechecked, 12 stays best" on 11-04
+  (`TODO-20261030_osprey_scoring_library-phase2.md` l.120) with NO numbers recorded. Never at 82 files, never
+  under today's recipe (109 features, protein-best, tc 0.40), never multi-seed.
+  1. **Score all 82 files with `OSPREY_XIC_FRAGMENTS=10`**, everything else identical to UW25's own XIC-12 legs
+     (`runs-uw25\seaad-{20,21,41}files-...-score*`: same snapshot c3bdbea78d, same environment, mask none / all 109
+     recorded, protein-best on). Record per-file PerFileScoring time (vs the XIC-12 legs on the same machine).
+  2. **FirstPassFDR arms on it: `default` A-70 (`masks\mask-setA70.txt`) and all 109, seeds 1-3** (pass 1, true FDP
+     1%, strict DIA-NN agreement). Pair seed-for-seed with the XIC-12 arms in hand (A-70 and all 109 seeds 1-5,
+     bit-identical across UW8/UW25).
+  - Read: if 10 holds A-70's count inside the 5-seed noise (SD of paired diffs ~274) while saving ~8-12% of
+    PerFileScoring, propose 10 for HRAM and try 8 next; if 10 costs detections, 12 stands with numbers behind it.
+  - UW8 meanwhile: leg B (default 70) to ~18:15 PT / 03:15 CET, then the #5030 rescoring A/B to ~04:00 PT / 13:00
+    CET Sat, then the final report.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
