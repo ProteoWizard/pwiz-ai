@@ -53,7 +53,7 @@ Runs so far (window 2026-11-05 07:50-08:00 PST, given as `--start 2026-11-05T08:
       cap after review), `91e68b3` review fixes (next-page/download clicks no longer folded
       into the page, library timeouts count as timeouts, cut short needs the encoded size)
 - [x] `/code-review medium` on the whole branch; PR #7 opened against `main`
-- [ ] Rebuild the `log-replay` Docker image: the one built 2026-11-13 predates `5bc623c`/`91e68b3`
+- [x] Rebuilt the `log-replay` Docker image at `91e68b3` (2026-11-13 10:20, image `af507afc53c0`)
 - [ ] Optional: `--report-only RUN_DIR` to re-render a run's report (currently done with a
       one-off script calling `report.write_report`)
 - [ ] Optional: report flag for cut-short requests on actions other than query grids
