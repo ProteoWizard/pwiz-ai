@@ -41,5 +41,7 @@ mouse tracking dot.
 ## Remaining
 
 - [ ] Settle the API shape with Brendan
-- [ ] `/code-review medium` before marking ready
+- [x] `/code-review medium`: fixed the tool returning before the spectrum loaded (waits for
+      GraphFullScan.IsLoaded); dropped the rest (persisted zoom is the open question above;
+      the others are unreachable, match the existing verbs, or are cosmetic)
 - [ ] JsonToolServerTest coverage, if wanted once the shape is settled
