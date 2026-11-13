@@ -1,6 +1,8 @@
 # Website Access Logs 
 Essential information for analyzing Tomcat (LabKey server) and Apache Access logs from MacCoss Lab webservers
 
+To replay production Tomcat-log traffic against panoramaweb-dr in a browser and compare timings, use `log-replay` in maccosslab-agents (README, "Replaying production traffic against the test server").
+
 
 ## Architecture
 
@@ -139,7 +141,7 @@ What this explains in the logs:
 | `%t` | Timestamp when the request **finished** (start = `%t` − `%D`): `[DD/Mon/YYYY:HH:MM:SS -TZOFF]`, local Pacific time (`-0700` PDT, `-0800` PST) |
 | `"%r"` | Request line: `METHOD /path?query HTTP/version` |
 | `%s` | HTTP status code |
-| `%b` | Response bytes (excluding headers); `-` means zero |
+| `%b` | Response bytes (excluding headers) as sent, i.e. after gzip: an HTML page logs at roughly a quarter to a third of its size (checked against panoramaweb-dr in Nov 2026, where 145 of 153 replayed pages matched `%b` within 10% on encoded size). `-` means zero |
 | `in:[...]` | Request `Content-Length` header; `-` if absent |
 | `out:[...]` | Response `Content-Length` header; `-` if absent |
 | `%D` | **Request processing time in microseconds**; divide by 1,000,000 for seconds |

@@ -48,7 +48,9 @@ Runs so far (window 2026-11-05 07:50-08:00 PST, given as `--start 2026-11-05T08:
       in the Playwright image
 - [x] README documents the new fields, sections and the cut-short rule
 - [x] Docker image `log-replay` rebuilt with all of the above (2026-11-13)
-- [ ] Commit on `log-replay` (load `version-control` skill first) and decide on PR
+- [x] Committed on `log-replay` as three commits (2026-11-13): `3e7973c` report timing
+      comparisons, `d8026df` cut-short detection, `3193990` shared keep-alive HTTP client
+- [ ] Decide on PR (branch not pushed yet)
 - [ ] Optional: `--report-only RUN_DIR` to re-render a run's report (currently done with a
       one-off script calling `report.write_report`)
 - [ ] Optional: report flag for cut-short requests on actions other than query grids
@@ -64,8 +66,9 @@ Runs so far (window 2026-11-05 07:50-08:00 PST, given as `--start 2026-11-05T08:
 - [ ] showPeptideList: ~300 requests per 2 h from crawlers that follow old folder URLs,
       wait 18-68 s and disconnect; 7.2 h of server time per 2 h on slow showPeptideList
 - [ ] passport-protein: Aging cohort (aging-mouse-ev-2026) pages take 30 s median, up to
-      16 min; clients re-request every ~13 s while the first is still running, so the same
-      page renders 2-3 times at once
+      16 min; a distributed crawler (03:06-18:17 on 11-05, ~1 address per request) asks
+      again every ~13 s while the first is still running, so the same page renders 2-3
+      times at once (45.5 h of server time on 11-05; 17.4 h if each page rendered once)
 - [ ] LabKey's `HTTP request timeout` logs a long download every 5 s but does not stop it
       (one ran 8 h on thread #916101 on 2026-11-05)
 
@@ -103,6 +106,19 @@ Runs so far (window 2026-11-05 07:50-08:00 PST, given as `--start 2026-11-05T08:
   cannot detect a disconnect and has no 2 s signature.
 - Open: Aging cohort median fell from 53 s before 07:50 to 21 s after; partly smaller pages
   (different proteins), but also ~2x faster per KB. Cause not found.
+
+**passport-protein on production, all of 2026-11-05** (5,548 requests; page
+`ai/.tmp/sessions/20261113_log_replay/passport-prod-24h/passport-protein-prod-20261105-24h.html`)
+- 49 h of server time; 93% (45.5 h) was the Aging cohort, all between 03:06 and 18:17,
+  none before or after.
+- That traffic is a distributed crawler: 2,551 requests from 2,546 client addresses, rotating
+  Chrome versions, 1,066 protein pages. It asks for a page again ~13 s later (1,314 of 1,485
+  repeats while the first was still running; 598 pages 3+ times). One render per page would
+  have been 17.4 h, so the repeats cost ~28 h. Aging pages got slower per KB through the day
+  (1.3 s/KB at 03:00, 2.0 at 17:00, 2.8 at 18:00) as passport-protein in flight rose to ~16.
+- Other pages were not slowed: CPTAC median 2.6 s during the crawl, 2.8 s outside; the
+  UVicPC_Borchers MousePlasma assay held 2.7-3.3 s per 10 min.
+- So the ~13 s re-requests seen 07:00-09:00 are this crawler's retries, not people.
 
 **Data handling**
 - Do not publish anything to claude.ai (developer's instruction 2026-11-13); charts are
