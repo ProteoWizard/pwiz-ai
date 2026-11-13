@@ -1365,3 +1365,18 @@ Run dir `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-featset-env\seaad-82file
 | pass 2 at true FDP 1% | 96,654 | 75,386 |
 
 UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 started 07:24.
+
+- MACS2 (2026-11-13 13:35 PT / 22:35 CET) **Night plan: default70 rerun, then the #5030 rescoring A/B on MACS2's
+  layout.** The 07:53 reboot killed default70 20 min into scoring (partial moved to `runs-featset-env\_interrupted`);
+  re-run fresh from 12:15, ETA ~15:45. Then `night-cwt.ps1`
+  (`ai/.tmp/sessions/20261112-5023/night-cwt.ps1`, log `D:\...\sea-ad\runs-cwt\night-cwt.log`):
+  1. be63cfbfb7 (pre-#5030) Release snapshot `_bin\pre5030-be63cfbfb7`; full 82-file all-109 run under the recipe
+     (`OSPREY_FEATURE_MASK=none`), ~4.3 h. Also a whole-pipeline pre/post pair with the 03:25 post-#5030 all109.
+  2. PerFileRescoring alone, each build linked from its OWN full run, arms post / pre / post / pre (~33 min each).
+     Same shape as UW8's `rescore-ab.sh`; MACS2's condition differs: spectra caches on E:, run dirs on the D: RAID,
+     511 GB RAM. No admin, so the file cache cannot be purged: each arm follows the other build's arm, and the
+     sampler records standby-cache GB. Reported per arm: wall and the `[PATH] PerFileRescoring: block reads` deltas.
+     Post-#5030 reference from the 03:25 run: rescoring 1,936 s, 490 GB read (464 GB parquet), read 906 s, gate wait
+     2,113 s.
+  3. Then the master baseline (gate, Stellar regression, master21 82-file leg), now queued behind this.
+  Night log: `ai/.tmp/night-session-budget-20261113.md`.
