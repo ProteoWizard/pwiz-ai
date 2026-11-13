@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261112_osprey_cwt_recompute`
 - **Base**: `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950, stacked)
 - **Created**: 2026-11-12
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#5024](https://github.com/ProteoWizard/pwiz/issues/5024)
 - **Module**: `osprey`
-- **PR**: [#5030](https://github.com/ProteoWizard/pwiz/pull/5030) (stacked on #4950)
+- **PR**: [#5030](https://github.com/ProteoWizard/pwiz/pull/5030) (merged 2026-11-12 into the #4950 branch)
 
 ## Objective
 
@@ -189,3 +189,12 @@ The base arm is #4950 with #5025 merged, so this measures #5024 alone.
 - Queued Osprey Perf/Regression on `pull/5030`: TeamCity build 4261794.
 - Osprey Perf/Regression build #384 (4261794) on 235df65d51: SUCCESS. All 12 PR checks green,
   PR mergeable. No Copilot review posted.
+
+### 2026-11-12 - Merged
+
+PR #5030 squash-merged as 849586af76 into `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950), not
+master: it reaches master when #4950 merges. Shipped: `cwt_candidates` removed from
+`.scores.parquet` (SEA-AD scores files -60%, PerFileRescoring -32%), recomputed in Stage 6 with an
+always-on check against Stage 4's apex scan, and the `OSPREY_LOAD_CALIBRATION` term in both
+per-file validity keys. Nothing deferred. Issue #5024 closed by hand (a PR into a non-default
+branch does not auto-close it). The work branch is deleted locally and on GitHub.
