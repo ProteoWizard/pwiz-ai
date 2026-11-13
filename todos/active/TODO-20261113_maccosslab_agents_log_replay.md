@@ -2,11 +2,11 @@
 
 ## Branch Information
 - **Repository**: `uw-maccosslab/maccosslab-agents` (local checkout `~/dev/ai-dev/maccosslab-agents`)
-- **Branch**: `log-replay` (local only, not pushed; one commit `cf6e5e5` plus uncommitted work)
+- **Branch**: `log-replay` (pushed 2026-11-13; commits `cf6e5e5`..`91e68b3`)
 - **Base**: `main`
 - **Created**: 2026-11-13 (tool first committed 2026-11-10)
 - **Status**: In progress
-- **PR**: none yet
+- **PR**: https://github.com/uw-maccosslab/maccosslab-agents/pull/7
 - **Objective**: Replay production Tomcat traffic against panoramaweb-dr with `log-replay`,
   make its report trustworthy, and use it plus the production logs to find why
   panoramaweb.org pages are slow.
@@ -48,9 +48,12 @@ Runs so far (window 2026-11-05 07:50-08:00 PST, given as `--start 2026-11-05T08:
       in the Playwright image
 - [x] README documents the new fields, sections and the cut-short rule
 - [x] Docker image `log-replay` rebuilt with all of the above (2026-11-13)
-- [x] Committed on `log-replay` as three commits (2026-11-13): `3e7973c` report timing
-      comparisons, `d8026df` cut-short detection, `3193990` shared keep-alive HTTP client
-- [ ] Decide on PR (branch not pushed yet)
+- [x] Committed on `log-replay` (2026-11-13): `3e7973c` report timing comparisons,
+      `d8026df` cut-short detection, `5bc623c` shared keep-alive HTTP client (no connection
+      cap after review), `91e68b3` review fixes (next-page/download clicks no longer folded
+      into the page, library timeouts count as timeouts, cut short needs the encoded size)
+- [x] `/code-review medium` on the whole branch; PR #7 opened against `main`
+- [ ] Rebuild the `log-replay` Docker image: the one built 2026-11-13 predates `5bc623c`/`91e68b3`
 - [ ] Optional: `--report-only RUN_DIR` to re-render a run's report (currently done with a
       one-off script calling `report.write_report`)
 - [ ] Optional: report flag for cut-short requests on actions other than query grids
