@@ -1099,6 +1099,16 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   70-feature set A" (+ docs count fix: 10 of 16 families). If seeds 4-5 overturn it, B is a one-commit revert.
   Chained (`chain-a70.sh`): after the all-109 baseline ends (~22:40) -> Debug gate -> Release snapshot ->
   82-file performance leg with the build's own default (A-70), ~7 h, to ~06:00.
+- **Brendan (22:20): four named, tested, user-selectable sets: `all` 109, `default` 70 (A), `narrow` 57 (B),
+  `core` 21** - nested core ⊂ narrow ⊂ default ⊂ all. `narrow` being added to the PR branch now (the chain was
+  paused for it and restarts after the narrow commit and gate).
+- **JOB FOR UW25 (22:25): core-21 at 82 files on the current build line**, because core no longer performs as badly
+  as it did when this study started (other fixes landed besides the feature set; at 20 files core was 67,874 vs
+  86,359, -21%, on 2026-11-10). Same arm recipe as the negligible-loss job (UW25's all-109 links, record-all,
+  protein-best on, `-FdrBenchPass 1`), `OSPREY_FEATURE_MASK` = `masks\mask-core21.txt` (the 88 family features;
+  `keep-core21.txt` lists the 21), seeds 1-3, after the seeds 4-5 job. Paired vs all 109 seeds 1-3 (in hand), with
+  DIA-NN agreement. Gives the user-facing cost of `--feature-set core` at cohort scale, and the unit-resolution
+  default's HRAM-equivalent reference point.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
