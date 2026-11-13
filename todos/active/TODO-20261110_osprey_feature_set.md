@@ -1258,6 +1258,18 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     parquet has more rows and is +2.4% larger (3.81 -> 3.90 GB). Per column (`featset\colsize.py`, file 5),
     `cwt_candidates` +52 MB and `reference_xic_*` -40 MB; the feature columns barely move. So 10 costs ~3% more
     rows for FirstPassFDR to read; whether those rows carry detections is the arms' question.
+  - **Why more peaks at 10 (from reading the code; not yet measured):** peak detection is a CWT on each fragment
+    XIC combined by a POINTWISE MEDIAN over all N fragments (`CwtPeakDetector.ConsensusMedianCwt`,
+    `Osprey.Chromatography\CwtPeakDetector.cs:265`). A scan is a consensus maximum only if about half of the N
+    fragments are positive there, so ranks 11-12 (weak, often all-zero) raise the bar by about one co-eluting
+    fragment. A candidate gets no row when every consensus peak is <3 scans or outside RT tolerance
+    (`PeakDataExtractor.cs:275/288`). The median-polish and reference-XIC fallbacks run only when CWT finds zero
+    peaks. `cwt_candidates` per row grows for the same reason (`CoelutionScorer.CaptureCwtCandidates`, capped at
+    `TopNPeaks`). To confirm: `OSPREY_DUMP_CWT_PATH` records the per-candidate CWT/RT-filter counts.
+  - **Design question this raises:** one N sets both peak DETECTION (median consensus, where extra weak fragments
+    hurt) and the SCORES (where 12 was measured to help). Separating them, e.g. consensus over the top 6-8 and
+    scores over 12, may beat both 10 and 12. It needs an env var and a build; not started tonight because the
+    machine is fully booked with the arms.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
