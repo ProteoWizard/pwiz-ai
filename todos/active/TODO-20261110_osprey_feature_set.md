@@ -1216,3 +1216,19 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   night-A: `runs\seaad-82files-libdecoy-r1.0-protein-compactn1106night-A\run.log` (72 threads, 4/8 lanes, 8 FDR
   lanes, mdiag on, ~180 GB parquet inferred); night-B ~414 GB inferred; DIA-NN
   `D:\Users\brendanx\test\diann-vs-osprey\seaad\diann-search-82\report.log.txt` (7.4 GB output).
+- MACS2 (2026-11-13 03:25) **Leg A under BUILD DEFAULTS done, then RESTARTED with the #4950 environment**
+  (Brendan's call). The 23:29 chain cleared every OSPREY_* variable, so it ran the PR build's defaults: linear SVM,
+  6 XICs, default LOESS/RT/tolerances, seed 42 - not the GBDT + 12-XIC configuration the study's ~96.5k numbers
+  come from. **all109, build defaults: 8,151 s (2 h 16 m)** = PerFileScoring 4,790 / FirstPassFDR 1,824 /
+  PerFileRescoring 1,404 / SecondPassFDR 130 s; scores parquet **201.8 GB** (82 files), run dir 233.5 GB, peak
+  216.9 GB; total CPU mean 43%. Pass 1 **75,621 at true on-target FDP 1%** (q 1%: 74,482 at FDP 0.88%), pass 2
+  75,386 (`split_calibration.py`). `runs-featset\seaad-82files-libdecoy-r1.0-transfer-fplanes16all109-20261112_232916`.
+  The default70 leg under defaults was stopped mid-scoring and is not a result.
+  - **Now running: `runs-featset-env`** (`featset-env.ps1`): same snapshot, lanes and recipe, plus the #4950 env
+    (XIC_FRAGMENTS=12, LOESS_BANDWIDTH=0.10, MIN_RT_TOLERANCE=1.0, TC_HALF_WINDOW=0.40, CORR_FRAGMENT_TOLERANCE=7,
+    REF_XIC=corr, LOCAL_RT_TOLERANCE=15, FDR_SEED=1, RECON_REFIT=off, FDR_MODEL=gbdt, GBT_OOF=1; NOT
+    FEATURE_MASK=none, which overrides --feature-set): all109 -> default70.
+  - **Queued behind it: master baseline** (`master-baseline.ps1`, `runs-master-baseline`): master fc8806b80a with
+    #5030 backported (`Skyline/work/20261113_osprey_master_cwt_baseline` in pwiz-nightbase, staged, built, not yet
+    tested), Debug gate + Stellar regression vs master's goldens, then one 82-file leg at build defaults (21-feature
+    SVM, protein-compact pass 2), same library/lanes, no model diagnostics.
