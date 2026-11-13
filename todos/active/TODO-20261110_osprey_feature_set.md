@@ -1209,6 +1209,11 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   be63cfbfb7 (links `transferall109-be63cfbfb7`), post = 849586af76 (links `transferall109-849586af76`).
   Alternating pre / post / pre / post, one Osprey at a time (asserted), `rescore-ab.sh` + `rescore82.ps1`, outputs
   `featset\rescore{1..4}-<build>`. Starts when leg B ends (~18:15 PT); ~2-2.5 h each -> ~04:00 PT / 13:00 CET Sat.
+  - **Storage layout matters (Brendan):** MACS2 reads `.spectra.bin` from an SSD (work dir on HDD); UW8 has spectra
+    AND parquets on one SATA HDD. Recomputing CWT needs spectra, so on UW8 any extra spectra reads compete with
+    parquet reads for the head; on MACS2 they are nearly free. Report per run: wall, parquet GB read, non-parquet
+    (spectra) GB read, read s and gate wait s (the `[PATH] ... block reads` lines). More spectra read + more wait
+    post-#5030 = an HDD-contention cost (layout-dependent); flat reads + more CPU = the recompute itself.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
