@@ -1090,6 +1090,27 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     screens valued at zero): no subset is free at 82 files on this evidence. A-70 is the steadiest: -316 +- 115
     (SE ~66, -0.33%), DIA-NN-confirmed -188 (-0.21%). 93 and 77 are noisier and no better than A-70.
   - Seeds 4-5 of 93 / A-70 / 77 start now (~04:00); all 109 seeds 4-5 already exist (UW25 B study).
+- **UW25 seeds 4-5 done 2026-11-13 03:44 PT (12:44 CET) - FIVE SEEDS PER SET, and the 3-seed conclusion did NOT
+  hold.** Pooled (UW25 + UW8, bit-identical), paired vs all 109 at the same seed (all 109 s4-5 = UW25 `p8-82-*`):
+
+  | set | seeds | kept, paired diff vs all 109 (mean +- SD) | DIA-NN-confirmed diff | per-seed kept diffs |
+  |---|---|---|---|---|
+  | set93 | 5 | -161 +- 458 | -87 +- 319 | -811 / -36 / -221 / -207 / +468 |
+  | set77 | 5 | -431 +- 435 | -219 +- 267 | -482 / -1078 / -293 / -435 / +132 |
+  | setA70 | 5 | -173 +- 274 | -85 +- 185 | -185 / -402 / -362 / -203 / +287 |
+  | B57 | 6 | -702 +- 447 | -416 +- 254 | -538 / -1034 / -565 / -1058 / +57 / -1076 |
+
+  - Seed 5 reversed the sign for every set (all 109's seed 5 was its weakest, 96,193). At 5 seeds **93 (-161,
+    z ~ -0.8) and A-70 (-173, z ~ -1.4) are inside noise; A-70 costs ~0.10% DIA-NN-confirmed (-85 +- 185)**; 77
+    (-431, z ~ -2.2) is borderline; B (-702, z ~ -3.8) is a real small loss.
+  - Lost/gained summed over the 5 seed pairs (strict DIA-NN, `featset/agreement82-sets-5seeds.txt`): 93 lost 11,267
+    (49.0% confirmed) / gained 10,464 (48.5%); A-70 lost 12,520 (48.4%) / gained 11,669 (48.2%); 77 lost 12,749
+    (49.3%) / gained 10,599 (49.0%). A-70 and 93 exchange borderline precursors one for one, no tilt; B tilts
+    slightly (lost ~50% vs gained ~47%).
+  - **Reading for the PR: A-70 is the largest cut shown negligible at 82 files** (39 features fewer than all 109,
+    FirstPassFDR read 385 vs 504 GB, -24%); B-57 buys ~33% less read for a real ~0.7% (~0.47% confirmed) loss.
+  - Caveat: these overnight arms (from 21:58 PT) shared D: with SkylineNightly - detection counts are deterministic
+    and unaffected, but their FirstPassFDR times are inflated; do not use them for timing.
 - **UW8 (22:10) decision for the PR's default: A-70** (pending seeds 4-5). A loses least and is steadiest
   (-316 +- 115, SE ~66, -0.33%; DIA-NN-confirmed -188, -0.21%); 93 and 77 store more and are no better; B-57 loses
   ~2x A (-702, -0.73%). The trade A vs B: +~390 precursors (+~230 DIA-NN-confirmed) for +266 MB/file of feature
