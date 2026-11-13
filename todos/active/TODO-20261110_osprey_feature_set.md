@@ -1145,6 +1145,20 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   `_bin\uw8-849586af76`), same recipe, ~7 h (`runs-uw8\seaad-82files-libdecoy-r1.0-transferall109-849586af76`).
   Then the PR branch (four sets, merged with 849586af76) runs its default leg on UW8, ~06:20 -> ~13:00. The
   branch is pushed for MACS2 once merged and gated.
+- UW8 (00:15) **PR branch PUSHED for MACS2's timing: `Skyline/work/20261112_osprey_default_feature_set` @
+  fab7e0caed** (Brendan authorized the push). Contents on #4950: caa831882e (`--feature-set`, column-level
+  recording), d9589624f0 (docs), bbca19fae0 (default = A-70), 878c0a4c6b (the four nested sets: `core` 21 ⊂
+  `efficient` 57 ⊂ `default` 70 ⊂ `all` 109; unit resolution 21 / 52 / 65 / 101), fab7e0caed (merged #4950 @
+  849586af76, i.e. with #5030; clean merge). Debug gate on the merged tree: 685/685 tests (7 fewer: #5030 removed
+  the CWT loader tests), inspection 0/0. No PR opened yet; goldens not recaptured (Astral moves).
+  **For a timing A/B on one machine** (both legs on that machine, same build):
+  - leg A: `--feature-set all` (or `OSPREY_FEATURE_MASK=none`) = all 109, written whole;
+  - leg B: no option (HRAM -> `default`, 70 columns written); also `--feature-set efficient` if time allows.
+  - UW8's recipe: `ai/.tmp/sessions/20261110-uw8featset/perf82.ps1` (82 files, fresh scoring, no record-all,
+    protein-best ON, seed 1, the #4950 environment, a 120-s `diskstamp.tsv` sampler); MACS2's runner will differ.
+  UW8: leg A = all 109 on 849586af76 (running since 23:05, ~06:20); then leg B = the default on fab7e0caed
+  (chained, ~06:20 -> ~13:00). The gate ran 23:5x-00:15 during leg A's PerFileScoring (CPU contention; window in
+  the night log) - read leg A's PerFileScoring time with that in mind.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
