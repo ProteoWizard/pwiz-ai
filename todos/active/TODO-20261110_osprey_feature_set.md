@@ -1090,6 +1090,15 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     screens valued at zero): no subset is free at 82 files on this evidence. A-70 is the steadiest: -316 +- 115
     (SE ~66, -0.33%), DIA-NN-confirmed -188 (-0.21%). 93 and 77 are noisier and no better than A-70.
   - Seeds 4-5 of 93 / A-70 / 77 start now (~04:00); all 109 seeds 4-5 already exist (UW25 B study).
+- **UW8 (22:10) decision for the PR's default: A-70** (pending seeds 4-5). A loses least and is steadiest
+  (-316 +- 115, SE ~66, -0.33%; DIA-NN-confirmed -188, -0.21%); 93 and 77 store more and are no better; B-57 loses
+  ~2x A (-702, -0.73%). The trade A vs B: +~390 precursors (+~230 DIA-NN-confirmed) for +266 MB/file of feature
+  columns (1,648 vs 1,382 MB on the pre-#5025 parquet; +19%; ~+0.5 TB at 2,000 runs; FirstPassFDR reads it ~1.7x).
+  A = B + the remaining 13 peak-profile features (`peak_width`, `shape_bin1-5`, `local_corr_top3_mean`,
+  `lib_rel_rank2-6`, `window_share_rank6`). PR branch commit **bbca19fae0** "Changed the default feature set to the
+  70-feature set A" (+ docs count fix: 10 of 16 families). If seeds 4-5 overturn it, B is a one-commit revert.
+  Chained (`chain-a70.sh`): after the all-109 baseline ends (~22:40) -> Debug gate -> Release snapshot ->
+  82-file performance leg with the build's own default (A-70), ~7 h, to ~06:00.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
