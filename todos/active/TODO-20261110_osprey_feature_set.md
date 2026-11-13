@@ -1138,6 +1138,13 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   Memory (`perfviz.py`): **FirstPassFDR is the high-water mark - 53.6 GB private, 37.0 GB managed**; PerFileScoring
   33.3 / 27.1 GB; PerFileRescoring 19.1 / 14.9 GB; SecondPassFDR 11.0 / 5.9 GB. Leg 2 (the default, PR build)
   starts after the five-set commit passes the gate.
+- UW8 (23:05) **Baseline re-run on the post-#5030 base** (Brendan: an A/B must run on one machine; MACS2 is a
+  different machine; perf numbers wanted from all 3). MACS2's #5030 ("Changed Stage 6 to recompute CWT candidates
+  instead of storing them") merged into #4950 -> tip **849586af76**, which drops `cwt_candidates` from the parquet,
+  so leg 1 above (be63cfbfb7) is not the PR's base any more. Started 23:05: all 109 on 849586af76 (snapshot
+  `_bin\uw8-849586af76`), same recipe, ~7 h (`runs-uw8\seaad-82files-libdecoy-r1.0-transferall109-849586af76`).
+  Then the PR branch (four sets, merged with 849586af76) runs its default leg on UW8, ~06:20 -> ~13:00. The
+  branch is pushed for MACS2 once merged and gated.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
