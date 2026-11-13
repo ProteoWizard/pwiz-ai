@@ -1114,8 +1114,14 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   with the named sets marked. `narrow` = the 21 core + the top 2 of each of efficient's ten families (the only
   40-something set that keeps the nesting: UW25's 42 / 46 cut the core); identical to UW8's 20-file `w-top2`
   arm (-3.3% at 20 files). Masks `masks\mask-narrow41.txt` / `keep-narrow41.txt`.
-  **Add to UW25's core job: narrow-41 at 82 files, seeds 1-3** (6 arms in all with core-21), so every named set
-  has an 82-file paired number for the curve. The PR branch is being updated to the five sets.
+  - **SUPERSEDED (Brendan, 22:30): `narrow` = UW25's 42**, the best-performing 40-something, with an asterisk: it
+    is efficient-57 with the core cut to 6 (`abs_rt_deviation`, `fragment_coelution_max`, `median_polish_cosine`,
+    `peak_area`, `ms1_isotope_cosine`, `mass_accuracy_deviation_mean`), so narrow ⊂ efficient ⊂ default ⊂ all but
+    core ⊄ narrow (*core columns are still recorded; narrow only hides 15 of them from the classifier). Masks
+    `masks\mask-narrow42.txt` / `keep-narrow42.txt` (identical to UW8's measured `x82-uw25-42-s1`: 95,359, -1,234,
+    seed 1). **UW25's job: narrow-42 at 82 files, seeds 2-3, plus core-21 seeds 1-3** (5 arms), so every named
+    set has an 82-file paired number for the curve. Five sets: core 21, narrow* 42, efficient 57, default 70,
+    all 109; the PR branch is being updated to them.
 - UW8 (22:23) **Performance A/B, leg 1 done: all 109 on #4950's tip** (be63cfbfb7, 82 files, fresh scoring,
   protein-best on, `--memstamp`, `perf82.ps1`; `runs-uw8\seaad-82files-libdecoy-r1.0-transferall109-be63cfbfb7`):
   total **26,254 s (7.29 h)** = PerFileScoring 15,000 s, FirstPassFDR 4,640 s, PerFileRescoring 6,258 s,
