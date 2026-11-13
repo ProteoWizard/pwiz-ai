@@ -1109,6 +1109,13 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   `keep-core21.txt` lists the 21), seeds 1-3, after the seeds 4-5 job. Paired vs all 109 seeds 1-3 (in hand), with
   DIA-NN agreement. Gives the user-facing cost of `--feature-set core` at cohort scale, and the unit-resolution
   default's HRAM-equivalent reference point.
+- **Brendan (22:35): FIVE named sets and a performance curve.** `core` 21 ⊂ `narrow` 41 ⊂ `efficient` 57 (B) ⊂
+  `default` 70 (A) ⊂ `all` 109, each tested and user-selectable; plot expected detections against stored bytes
+  with the named sets marked. `narrow` = the 21 core + the top 2 of each of efficient's ten families (the only
+  40-something set that keeps the nesting: UW25's 42 / 46 cut the core); identical to UW8's 20-file `w-top2`
+  arm (-3.3% at 20 files). Masks `masks\mask-narrow41.txt` / `keep-narrow41.txt`.
+  **Add to UW25's core job: narrow-41 at 82 files, seeds 1-3** (6 arms in all with core-21), so every named set
+  has an 82-file paired number for the curve. The PR branch is being updated to the five sets.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
