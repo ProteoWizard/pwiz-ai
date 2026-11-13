@@ -1,7 +1,10 @@
 # TODO-20261110_osprey_feature_set.md
 
 ## Branch Information
-- **Branch**: none of its own until Phase 4. Experiments run on `Skyline/work/20261110_osprey_uw25_pb_fixes`
+- **PR**: [#5033](https://github.com/ProteoWizard/pwiz/pull/5033) (DRAFT, opened 2026-11-13), branch
+  `Skyline/work/20261112_osprey_default_feature_set` -> base `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950);
+  to merge into #4950 before #4950's squash-merge to master (Brendan). Tip fab7e0caed (incl. #5030).
+- **Branch (study experiments)**: Experiments run on `Skyline/work/20261110_osprey_uw25_pb_fixes`
   at c3bdbea78d (on `Skyline/work/20261109_osprey_scoring_uw8` f90d19aaa6, with the protein-best fixes and the
   round-1 run bound), snapshot `D:\test\osprey-runs\_bin\uw25-c3bdbea78d` (v26.1.1.314)
 - **Base**: #4950 (`Skyline/work/20261028_osprey_diann_fdr_gap`) and its pending branches
@@ -1232,6 +1235,11 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     PerFileScoring, propose 10 for HRAM and try 8 next; if 10 costs detections, 12 stands with numbers behind it.
   - UW8 meanwhile: leg B (default 70) to ~18:15 PT / 03:15 CET, then the #5030 rescoring A/B to ~04:00 PT / 13:00
     CET Sat, then the final report.
+- UW8 (13:20 PT / 22:20 CET) **Draft PR #5033 opened** on #4950's branch (Brendan: it merges into #4950 before
+  #4950 squash-merges to master). All three machines test its tip: `Skyline/work/20261112_osprey_default_feature_set`.
+  Description lists the open items (recipe-as-default, Astral goldens, key length, latent unit `featset=all` key).
+  TeamCity per-commit builds run on it; the Astral regression legs are expected to fail until the goldens are
+  recaptured. Perf/Regression gate: ask Brendan first.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
