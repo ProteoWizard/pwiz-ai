@@ -49,6 +49,12 @@
     on|off passes --protein-best to Osprey (26.1.1.312 and later). Empty (the default) passes
     nothing, so the build's own default applies and older builds still run.
 
+.PARAMETER FeatureSet
+    all|default|efficient|core passes --feature-set to Osprey: the PIN features the FDR classifier
+    uses and scoring records. Empty (the default) passes nothing, so the build's own default
+    applies (default for HRAM, core at unit resolution) and builds without the argument still run.
+    It changes the discovery set and the scores parquet size; put it in -Tag.
+
 .PARAMETER ExperimentAgg
     First-pass EXPERIMENT-score aggregation. Empty (the default) means max - the best score
     over runs. 'mean-best-<N>' scores a precursor as the mean of its best N per-run scores
@@ -197,6 +203,7 @@ param(
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
     [ValidateSet('', 'on', 'off')] [string]$ProteinBest = '',
+    [ValidateSet('', 'all', 'default', 'efficient', 'core')] [string]$FeatureSet = '',
     [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
     [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
     [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',

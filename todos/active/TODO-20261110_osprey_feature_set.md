@@ -1188,3 +1188,22 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
 - **Entrapment ratio**: 1:1 entrapment doubles the library and the scored rows; how much the FDP oracle needs.
 - **FirstPassFDR**: the protein-best round-1 run bound (UW25, pending commit), survivors-only intermediate
   files, and a fan-out FirstPassScoring task (other-machines TODO, UW25 section).
+- MACS2 (2026-11-12 23:29) **Timing A/B started on the PR branch @ fab7e0caed** (snapshot
+  `_bin\featset-fab7e0caed`, v26.1.1.316), one build, sequential legs, fresh scoring, quiet box at launch (total
+  CPU 4-11%): **all109** (`--feature-set all`) -> **default70** (no option) -> efficient57 -> core21. Recipe:
+  split-sized r=1.0 libdecoy, transfer pass 2, protein-best on, no model diagnostics, FDRBench both passes;
+  MACS2's measured best lanes: 72 threads, `--parallel-files-scoring 4`, `--parallel-files-rescoring 8`,
+  `OSPREY_FDR_FILE_LANES=16`. Driver `ai/.tmp/sessions/20261112-5023/featset-perf.ps1` (Run-SeaAd.ps1 gained
+  `-FeatureSet`); runs, `featset.log` and per-leg `<tag>.diskstamp.tsv` (run-dir GB, D: free, total CPU every 120 s)
+  under `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-featset`. ~3-5 h per leg.
+  **Prior MACS2 82-file baselines** (none has #5023/#5025/#5030's parquet reductions; parquet sizes were never
+  measured on MACS2, only inferred from D: free):
+  | run | build | lib | wall | scoring / FDR1 / rescoring / FDR2 (s) | pass 2 q 1% |
+  |---|---|---|---|---|---|
+  | core-21 master, night-A 11-06 | .310 ab7c6b21a7 | unsplit | **9,356 s (2 h 36 m)** | 5,205 / 1,046 / 2,463 / 642 | 59,036 |
+  | core-21, fast1 10-06 | .279 #4780 | unsplit | 7,776 s (2 h 09 m) | 3,716 / 1,222 / 2,034 / 801 | |
+  | all-109 #4950, night-B 11-06 | .310 74998d3d70 | unsplit | 21,746 s (6 h 02 m), contended | 14,821 / 2,112 / 3,792 / 1,021 | 86,237 |
+  | DIA-NN 2.7.0, MBR, 10-30 | | own predicted | **485.9 min (8 h 06 m)**, upper bound | first pass 350 min | |
+  night-A: `runs\seaad-82files-libdecoy-r1.0-protein-compactn1106night-A\run.log` (72 threads, 4/8 lanes, 8 FDR
+  lanes, mdiag on, ~180 GB parquet inferred); night-B ~414 GB inferred; DIA-NN
+  `D:\Users\brendanx\test\diann-vs-osprey\seaad\diann-search-82\report.log.txt` (7.4 GB output).

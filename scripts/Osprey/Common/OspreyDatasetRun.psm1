@@ -300,6 +300,10 @@ function Invoke-OspreyDatasetRun {
         # --protein-best on|off (Osprey 26.1.1.312+). Empty passes nothing, so the exe's own
         # default applies and older builds, which do not know the argument, still run.
         [ValidateSet('', 'on', 'off')] [string]$ProteinBest = '',
+        # --feature-set all|default|efficient|core (the PIN features the FDR classifier uses and
+        # scoring records). Empty passes nothing, so the build's own default applies and builds
+        # without the argument still run.
+        [ValidateSet('', 'all', 'default', 'efficient', 'core')] [string]$FeatureSet = '',
         # Which q-value qualifies a peptide as DETECTED for the protein-compact >=2 gate:
         # 'run' (the shipped default, the union over runs) or 'experiment'. A first-class
         # parameter for exactly the reason -ExperimentAgg is one: the two arms differ in
@@ -642,6 +646,7 @@ function Invoke-OspreyDatasetRun {
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
     if ($TrainingExport) { $cliArgs += '--training-export' }
     if ($ProteinBest) { $cliArgs += @('--protein-best', $ProteinBest) }
+    if ($FeatureSet) { $cliArgs += @('--feature-set', $FeatureSet) }
     # The [PATH] / [COUNT] / [STAGE-WALL] lines are the only route and count evidence a run
     # leaves (the READMEs' route checks, Get-MemoryReport.ps1, Measure-CoAssignmentScaling.py
     # read them), and they print only under --perf-stats. -NoPerfStats is for a run whose
