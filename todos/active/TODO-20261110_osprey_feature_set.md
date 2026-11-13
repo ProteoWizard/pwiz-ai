@@ -1168,6 +1168,21 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   leg B default on fab7e0caed), exactly one Osprey.exe at start. ETA (from the clean 7.29 h baseline on
   be63cfbfb7): **leg A ~10:30 PT / 19:30 CET; leg B ~17:15 PT / 02:15 CET Sat.** The gate-contention note above no
   longer applies (it was in the discarded run).
+- **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
+  number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
+  `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
+  OSPREY_CORR_FRAGMENT_TOLERANCE=7 OSPREY_REF_XIC=corr OSPREY_LOCAL_RT_TOLERANCE=15 OSPREY_MIN_RT_TOLERANCE=1.0
+  OSPREY_TC_HALF_WINDOW=0.40 OSPREY_LOESS_BANDWIDTH=0.10 OSPREY_RECON_REFIT=off OSPREY_FDR_SEED=1` (and
+  `OSPREY_VERSION_OVERRIDE` for cached inputs). #4950's defaults reproduce master: protein-best off, SVM, 6 XICs,
+  narrower windows - 45,858 vs 74,646 at true FDP 1% on 3 files (-39%), which is MACS2's low first result. Leg A
+  adds `OSPREY_FEATURE_MASK=none` (or `--feature-set all`); leg B sets no mask. Confirm on each run.log's
+  `Environment switches:` line. UW8's exact script: `ai/.tmp/sessions/20261110-uw8featset/perf82.ps1`.
+- **Open for Brendan: the feature sets were validated ONLY under the recipe.** Several features depend on it
+  (`tc_res_*` is always 0 at the default 6 XICs; the `tc_*` window is 0.15 min by default, not 0.40), so "default
+  (70) ~ all (109)" is shown for the recipe only. The PR as built makes `default` the HRAM default even with the
+  rest of the recipe off - an untested pairing. Options: (1) make the recipe the default together with the feature
+  set (a #4950-level decision); (2) ship `--feature-set` with the HRAM default at `all` until the recipe becomes the
+  default.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
