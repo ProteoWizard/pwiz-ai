@@ -1252,6 +1252,12 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     `featset\cmp_parquet.py`), so the detection pairing holds. Per-file TIMES do not compare across the builds, so
     a same-build XIC-12 control (files 1-10, c3bdbea78d, tag `uw25x12ctl`) runs alone after the leg, before the
     arms (`featset\xic10-night2.ps1`). XIC-10 files 1-3 overlapped the check and are left out of the timing.
+  - **14:40 PT / 23:40 CET, 21 files in:** the cross-build first look is -39 +- 3 s per file (191 vs 230 s, -17%,
+    17 files paired; `featset\xic_timing.py`); the same-build control will set the real figure. **XIC 10 finds a peak
+    for 3.2% more precursors** (file 5: 4,423,955 vs 4,287,854 of 6,175,389, targets and decoys alike), so the
+    parquet has more rows and is +2.4% larger (3.81 -> 3.90 GB). Per column (`featset\colsize.py`, file 5),
+    `cwt_candidates` +52 MB and `reference_xic_*` -40 MB; the feature columns barely move. So 10 costs ~3% more
+    rows for FirstPassFDR to read; whether those rows carry detections is the arms' question.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
