@@ -1076,6 +1076,20 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   | B57 | 6 | -702 +- 447 | -416 +- 254 | -538 / -1034 / -565 / -1058 / +57 / -1076 |
 
   Block 3 (seed 3) running, ~22:00.
+- **UW25 block 3 (seed 3) done 21:57.** all 109 96,806 / 88,020 (= UW8's seed 3); 93 96,585 (-221); A-70 96,444
+  (-362); 77 96,513 (-293). Pooled, 3 seeds each (B 6):
+
+  | set | seeds | kept, paired diff vs all 109 (mean +- SD) | DIA-NN-confirmed diff | per-seed kept diffs |
+  |---|---|---|---|---|
+  | set93 | 3 | -356 +- 405 | -246 +- 282 | -811 / -36 / -221 |
+  | set77 | 3 | -618 +- 410 | -349 +- 248 | -482 / -1078 / -293 |
+  | setA70 | 3 | -316 +- 115 | -188 +- 86 | -185 / -402 / -362 |
+  | B57 | 6 | -702 +- 447 | -416 +- 254 | -538 / -1034 / -565 / -1058 / +57 / -1076 |
+
+  - **Every set is below all 109 at every seed, the 93 set included** (it drops only the four families the
+    screens valued at zero): no subset is free at 82 files on this evidence. A-70 is the steadiest: -316 +- 115
+    (SE ~66, -0.33%), DIA-NN-confirmed -188 (-0.21%). 93 and 77 are noisier and no better than A-70.
+  - Seeds 4-5 of 93 / A-70 / 77 start now (~04:00); all 109 seeds 4-5 already exist (UW25 B study).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
