@@ -1138,14 +1138,14 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   Memory (`perfviz.py`): **FirstPassFDR is the high-water mark - 53.6 GB private, 37.0 GB managed**; PerFileScoring
   33.3 / 27.1 GB; PerFileRescoring 19.1 / 14.9 GB; SecondPassFDR 11.0 / 5.9 GB. Leg 2 (the default, PR build)
   starts after the five-set commit passes the gate.
-- UW8 (23:05) **Baseline re-run on the post-#5030 base** (Brendan: an A/B must run on one machine; MACS2 is a
+- UW8 (22:41) **Baseline re-run on the post-#5030 base** (Brendan: an A/B must run on one machine; MACS2 is a
   different machine; perf numbers wanted from all 3). MACS2's #5030 ("Changed Stage 6 to recompute CWT candidates
   instead of storing them") merged into #4950 -> tip **849586af76**, which drops `cwt_candidates` from the parquet,
-  so leg 1 above (be63cfbfb7) is not the PR's base any more. Started 23:05: all 109 on 849586af76 (snapshot
+  so leg 1 above (be63cfbfb7) is not the PR's base any more. Started 22:41: all 109 on 849586af76 (snapshot
   `_bin\uw8-849586af76`), same recipe, ~7 h (`runs-uw8\seaad-82files-libdecoy-r1.0-transferall109-849586af76`).
   Then the PR branch (four sets, merged with 849586af76) runs its default leg on UW8, ~06:20 -> ~13:00. The
   branch is pushed for MACS2 once merged and gated.
-- UW8 (00:15) **PR branch PUSHED for MACS2's timing: `Skyline/work/20261112_osprey_default_feature_set` @
+- UW8 (23:10) **PR branch PUSHED for MACS2's timing: `Skyline/work/20261112_osprey_default_feature_set` @
   fab7e0caed** (Brendan authorized the push). Contents on #4950: caa831882e (`--feature-set`, column-level
   recording), d9589624f0 (docs), bbca19fae0 (default = A-70), 878c0a4c6b (the four nested sets: `core` 21 ⊂
   `efficient` 57 ⊂ `default` 70 ⊂ `all` 109; unit resolution 21 / 52 / 65 / 101), fab7e0caed (merged #4950 @
@@ -1156,8 +1156,8 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   - leg B: no option (HRAM -> `default`, 70 columns written); also `--feature-set efficient` if time allows.
   - UW8's recipe: `ai/.tmp/sessions/20261110-uw8featset/perf82.ps1` (82 files, fresh scoring, no record-all,
     protein-best ON, seed 1, the #4950 environment, a 120-s `diskstamp.tsv` sampler); MACS2's runner will differ.
-  UW8: leg A = all 109 on 849586af76 (running since 23:05, ~06:20); then leg B = the default on fab7e0caed
-  (chained, ~06:20 -> ~13:00). The gate ran 23:5x-00:15 during leg A's PerFileScoring (CPU contention; window in
+  UW8: leg A = all 109 on 849586af76 (running since 22:41, ~05:55); then leg B = the default on fab7e0caed
+  (chained, ~05:55 -> ~12:30). The gate ran 22:42-23:10 during leg A's PerFileScoring (CPU contention; window in
   the night log) - read leg A's PerFileScoring time with that in mind.
 
 ## Related (not this TODO's work)
