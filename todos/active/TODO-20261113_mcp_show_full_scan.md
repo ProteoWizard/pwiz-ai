@@ -7,7 +7,7 @@
 - **Status**: Draft PR
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5031](https://github.com/ProteoWizard/pwiz/pull/5031) (draft); screenshots in nickshulman/pr-assets `pwiz/5031-show-full-scan`
 - **Checkout**: `I:\git_i\sky_clicktobringupfullscangraph`
 
 ## Objective
