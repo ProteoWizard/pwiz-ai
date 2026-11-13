@@ -1191,6 +1191,17 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   leg B default on fab7e0caed), exactly one Osprey.exe at start. ETA (from the clean 7.29 h baseline on
   be63cfbfb7): **leg A ~10:30 PT / 19:30 CET; leg B ~17:15 PT / 02:15 CET Sat.** The gate-contention note above no
   longer applies (it was in the discarded run).
+- UW8 (2026-11-13 11:00 PT / 20:00 CET) **A/B leg A done, clean: all 109 on 849586af76** (82 files, alone on the
+  HDD; `runs-uw8\seaad-82files-libdecoy-r1.0-transferall109-849586af76`): total **27,886 s (7.75 h)** = PerFileScoring
+  14,286 s, FirstPassFDR 4,718 s, PerFileRescoring **8,512 s**, SecondPassFDR 370 s. Scores parquets **221.8 GB**
+  (2.70 GB/file). Disk high-water mark 257 GB (end). Memory: FirstPassFDR peak 57.2 GB private / 38.0 managed;
+  PerFileScoring 31.6 / 29.4; PerFileRescoring 18.0 / 13.4; SecondPassFDR 12.9 / 5.8.
+  - **vs the pre-#5030 all-109 run (be63cfbfb7, 7.29 h): #5030 traded 41 GB of parquet (262.6 -> 221.8, -16%) for
+    +2,254 s of PerFileRescoring (6,258 -> 8,512, +36%) on this HDD**, consistent with recomputing `cwt_candidates`
+    there instead of storing them. One run each (the be63 run's PerFileScoring had a 30-min gate beside it); worth
+    confirming on MACS2's A/B.
+  - Leg B (default 70 on fab7e0caed) started 11:01 PT, no mask in its environment (the build's own default); 31 of 82
+    files scored at 12:24; ETA ~18:15 PT / 03:15 CET Sat.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
