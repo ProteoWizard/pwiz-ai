@@ -1410,3 +1410,21 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
      2,113 s.
   3. Then the master baseline (gate, Stellar regression, master21 82-file leg), now queued behind this.
   Night log: `ai/.tmp/night-session-budget-20261113.md`.
+- MACS2 (2026-11-13 15:15 PT) **default70 vs all109 under the #4950 recipe, 82 files, fab7e0caed: default70 is
+  27% faster, 26% smaller and 24% lower peak memory for 0.5% fewer detections.** Same lanes (4/8/16), same library.
+  default70 run: `D:\...\sea-ad\runs-featset-env\seaad-82files-libdecoy-r1.0-transfer-fplanes16default70-20261113_121459`
+  (fresh rerun after the 07:53 reboot); all109 run: `...fplanes16all109-20261113_032511`.
+
+  | | all109 | default70 | change |
+  |---|---|---|---|
+  | Wall (s) | 14,371 | 10,548 | -26.6% |
+  | PerFileScoring / FirstPassFDR (s) | 10,330 / 1,957 | 7,570 / 1,451 | -26.7% / -25.8% |
+  | PerFileRescoring / SecondPassFDR (s) | 1,936 / 143 | 1,394 / 127 | -28.0% / -11% |
+  | Scores parquets (GiB) / run dir (GiB) | 206.6 / 241 | 153.8 / 184 | -25.6% / -23.7% |
+  | Private peak (GB, FirstPassFDR) / managed peak | 149.5 / 123.1 | 113.9 / 89.3 | -23.8% / -27.5% |
+  | Scoring / rescoring private peak (GB) | 71.2 / 82.9 | 66.4 / 61.8 | |
+  | True FDP 1%, pass 1 / pass 2 | 96,710 / 96,654 | 96,223 / 96,185 | -0.50% / -0.49% |
+
+  (True FDP: `split_calibration.py`; memory: `perfviz.py --files 82`.) Next on MACS2 tonight: the pre-#5030
+  (be63cfbfb7) all109 full run started 15:12, then the rescoring-only ABAB with spectra on E:, then again with
+  spectra copied to D: beside the parquets (UW8-like), then the master baseline.
