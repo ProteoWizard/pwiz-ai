@@ -1293,3 +1293,24 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     #5030 backported (`Skyline/work/20261113_osprey_master_cwt_baseline` in pwiz-nightbase, staged, built, not yet
     tested), Debug gate + Stellar regression vs master's goldens, then one 82-file leg at build defaults (21-feature
     SVM, protein-compact pass 2), same library/lanes, no model diagnostics.
+
+#### MACS2 82-file all109 under the #4950 environment (2026-11-13)
+
+Run dir `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-featset-env\seaad-82files-libdecoy-r1.0-transfer-fplanes16all109-20261113_032511`
+(snapshot featset-fab7e0caed, GBDT OOF, 12 XICs, 4/8/16 lanes, 72 threads, mdiag off). Disk in GiB; memory from perfviz.py.
+
+| | env all109 | build-defaults all109 |
+|---|---|---|
+| wall | 14,371 s (3 h 59 m) | 8,151 s (2 h 16 m) |
+| PerFileScoring / FirstPassFDR / Rescoring / SecondPassFDR (s) | 10,330 / 1,957 / 1,936 / 143 | 4,790 / 1,824 / 1,404 / 130 |
+| scores parquet | 206.6 GiB | 187.9 GiB |
+| run dir at end | 241 GiB | 218 GiB |
+| peak private | 149.5 GB (FirstPassFDR) | 170.6 GB (FirstPassFDR) |
+| managed peak | 123.1 GB | 123.2 GB |
+| scoring private peak | 71.2 GB | 66.1 GB |
+| rescoring private peak | 82.9 GB | 133.4 GB |
+| mean machine CPU | 55% | 43% |
+| pass 1 at true FDP 1% | 96,710 | 75,621 |
+| pass 2 at true FDP 1% | 96,654 | 75,386 |
+
+UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 started 07:24.
