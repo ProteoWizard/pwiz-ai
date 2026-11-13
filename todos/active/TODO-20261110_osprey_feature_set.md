@@ -1159,6 +1159,15 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   UW8: leg A = all 109 on 849586af76 (running since 22:41, ~05:55); then leg B = the default on fab7e0caed
   (chained, ~05:55 -> ~12:30). The gate ran 22:42-23:10 during leg A's PerFileScoring (CPU contention; window in
   the night log) - read leg A's PerFileScoring time with that in mind.
+- UW8 (2026-11-13 03:16 PT / 12:16 CET) **A/B RESTARTED - the first attempt's timings are invalid.** An earlier
+  chain (`chain-a70.sh`, "paused" with TaskStop at ~22:25 PT) had already fired: the first baseline ended 22:23, so
+  it gated and at 22:30 launched a default leg on the superseded bbca19fae0 build. TaskStop killed only its bash
+  shell; the detached pwsh/Osprey ran on. From 22:41 two 82-file runs shared the HDD for 4.5 h (found at 03:14 when
+  two Osprey.exe were listed). Both killed (`taskkill /T`), both output dirs deleted, console logs kept as
+  `perf-*.contaminated.console.log`. Re-run as ONE sequential script (`ab82.sh`: leg A all 109 on 849586af76, then
+  leg B default on fab7e0caed), exactly one Osprey.exe at start. ETA (from the clean 7.29 h baseline on
+  be63cfbfb7): **leg A ~10:30 PT / 19:30 CET; leg B ~17:15 PT / 02:15 CET Sat.** The gate-contention note above no
+  longer applies (it was in the discarded run).
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
