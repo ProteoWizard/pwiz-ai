@@ -1240,6 +1240,18 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   Description lists the open items (recipe-as-default, Astral goldens, key length, latent unit `featset=all` key).
   TeamCity per-commit builds run on it; the Astral regression legs are expected to fail until the goldens are
   recaptured. Perf/Regression gate: ask Brendan first.
+- UW25 (13:25 PT / 22:25 CET) **XIC-10 job started** as written above. One 82-file scoring leg
+  `runs-uw25\seaad-82files-libdecoy-r1.0-transferuw25x10-score0-82` on snapshot c3bdbea78d; its environment
+  differs from the XIC-12 legs' only in `OSPREY_XIC_FRAGMENTS` (diffed). ETA ~18:40 PT / 03:40 CET, then FDR arms
+  (`featset\arms-xic10.tsv`: A-70 / all 109 alternating, seeds 1-3, ~55 min each) to ~00:30 PT / 09:30 CET Sat.
+  Driver `ai/.tmp/sessions/20261109-uw25mem/featset/xic10-night.ps1`; timeline
+  `ai/.tmp/night-session-budget-20261113.md`.
+  - **Build check:** the XIC-12 legs were scored 11-09 by da4eff9f63, a merge carrying the scoring-share speedups
+    (shared pair correlations, median-polish reuse, per-window dedup) that c3bdbea78d lacks. Scoring file 1 at XIC
+    12 with c3bdbea78d reproduces the 11-09 parquet exactly (4,403,242 rows, 128 of 128 columns equal;
+    `featset\cmp_parquet.py`), so the detection pairing holds. Per-file TIMES do not compare across the builds, so
+    a same-build XIC-12 control (files 1-10, c3bdbea78d, tag `uw25x12ctl`) runs alone after the leg, before the
+    arms (`featset\xic10-night2.ps1`). XIC-10 files 1-3 overlapped the check and are left out of the timing.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
