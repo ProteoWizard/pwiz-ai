@@ -1116,6 +1116,14 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   arm (-3.3% at 20 files). Masks `masks\mask-narrow41.txt` / `keep-narrow41.txt`.
   **Add to UW25's core job: narrow-41 at 82 files, seeds 1-3** (6 arms in all with core-21), so every named set
   has an 82-file paired number for the curve. The PR branch is being updated to the five sets.
+- UW8 (22:23) **Performance A/B, leg 1 done: all 109 on #4950's tip** (be63cfbfb7, 82 files, fresh scoring,
+  protein-best on, `--memstamp`, `perf82.ps1`; `runs-uw8\seaad-82files-libdecoy-r1.0-transferall109-be63cfbfb7`):
+  total **26,254 s (7.29 h)** = PerFileScoring 15,000 s, FirstPassFDR 4,640 s, PerFileRescoring 6,258 s,
+  SecondPassFDR 355 s. Scores parquets **262.6 GB** (3.20 GB/file; 317 GB before #5025). Disk (sampler, bytes under
+  the output dir every 120 s, `diskstamp.tsv`): rises monotonically to the high-water mark 298 GB at the end.
+  Memory (`perfviz.py`): **FirstPassFDR is the high-water mark - 53.6 GB private, 37.0 GB managed**; PerFileScoring
+  33.3 / 27.1 GB; PerFileRescoring 19.1 / 14.9 GB; SecondPassFDR 11.0 / 5.9 GB. Leg 2 (the default, PR build)
+  starts after the five-set commit passes the gate.
 
 ## Related (not this TODO's work)
 - **DIA-NN on three axes** (detections, wall time, disk), same machine and files: Brendan to request of UW8
