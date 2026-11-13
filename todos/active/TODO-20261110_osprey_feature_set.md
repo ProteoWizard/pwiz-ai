@@ -1122,6 +1122,14 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     seed 1). **UW25's job: narrow-42 at 82 files, seeds 2-3, plus core-21 seeds 1-3** (5 arms), so every named
     set has an 82-file paired number for the curve. Five sets: core 21, narrow* 42, efficient 57, default 70,
     all 109; the PR branch is being updated to them.
+  - **SUPERSEDED again (Brendan, 22:45): `narrow` dropped - FOUR sets: core 21 ⊂ efficient 57 ⊂ default 70 ⊂ all
+    109.** Narrow as defined saves nothing: core columns are always recorded, and the core cut saves no FDR read
+    (51 set = 340 GB, same as efficient), while costing ~2x efficient's detections (-1.3% vs -0.7%). Only 3 core
+    features have non-classifier readers (`median_polish_cosine` PIN 15 and `explained_intensity` PIN 8 in
+    `TrainingEvidence.cs:100-103,236-238`, training diagnostics; `fragment_coelution_sum` PIN 0 as the dedup
+    fallback in `PercolatorSampling.cs:278`), so a narrow that also stopped WRITING the other 15 core columns
+    would save ~0.35 GB/file (~11%) - revisit if Phase 5 makes those bytes matter. UW25: narrow-42 seeds 2-3 are
+    optional now; core-21 seeds 1-3 still wanted (the unit-resolution default's cohort-scale reference).
 - UW8 (22:23) **Performance A/B, leg 1 done: all 109 on #4950's tip** (be63cfbfb7, 82 files, fresh scoring,
   protein-best on, `--memstamp`, `perf82.ps1`; `runs-uw8\seaad-82files-libdecoy-r1.0-transferall109-be63cfbfb7`):
   total **26,254 s (7.29 h)** = PerFileScoring 15,000 s, FirstPassFDR 4,640 s, PerFileRescoring 6,258 s,
