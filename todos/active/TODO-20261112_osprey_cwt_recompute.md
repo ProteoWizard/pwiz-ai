@@ -187,3 +187,5 @@ The base arm is #4950 with #5025 merged, so this measures #5024 alone.
   reproduction check never fired (`ai/.tmp/sessions/20261112-5023/regression-review.log`).
 - Pushed the branch and opened #5030 against `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950).
 - Queued Osprey Perf/Regression on `pull/5030`: TeamCity build 4261794.
+- Osprey Perf/Regression build #384 (4261794) on 235df65d51: SUCCESS. All 12 PR checks green,
+  PR mergeable. No Copilot review posted.
