@@ -1202,6 +1202,13 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     confirming on MACS2's A/B.
   - Leg B (default 70 on fab7e0caed) started 11:01 PT, no mask in its environment (the build's own default); 31 of 82
     files scored at 12:24; ETA ~18:15 PT / 03:15 CET Sat.
+- UW8 (12:40 PT / 21:40 CET) **Queued: the #5030 A/B, PerFileRescoring alone** (Brendan: confirm the +36% before
+  acting on it; MACS2 measured a speed-up, plausibly on a far smaller, higher-confidence pass-2 workload than the
+  full recipe's). `-Task PerFileRescoring` at 82 files, each build linked from its OWN completed all-109 run, so
+  everything upstream is that build's and the only difference is stored vs recomputed `cwt_candidates`: pre =
+  be63cfbfb7 (links `transferall109-be63cfbfb7`), post = 849586af76 (links `transferall109-849586af76`).
+  Alternating pre / post / pre / post, one Osprey at a time (asserted), `rescore-ab.sh` + `rescore82.ps1`, outputs
+  `featset\rescore{1..4}-<build>`. Starts when leg B ends (~18:15 PT); ~2-2.5 h each -> ~04:00 PT / 13:00 CET Sat.
 - **For MACS2's A/B (2026-11-13 ~03:45 PT / 12:45 CET): set the WHOLE recipe, not just the feature set.** Every
   number in this study, and UW8's A/B, runs #4950's opt-in recipe (`pwiz_tools/Osprey/docs/25-diann-gap-settings.md`):
   `--protein-best on` plus `OSPREY_FDR_MODEL=gbdt OSPREY_GBT_OOF=1 OSPREY_PASS2_QVALUE=transfer OSPREY_XIC_FRAGMENTS=12
