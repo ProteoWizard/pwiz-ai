@@ -1109,8 +1109,10 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     slightly (lost ~50% vs gained ~47%).
   - **Reading for the PR: A-70 is the largest cut shown negligible at 82 files** (39 features fewer than all 109,
     FirstPassFDR read 385 vs 504 GB, -24%); B-57 buys ~33% less read for a real ~0.7% (~0.47% confirmed) loss.
-  - Caveat: these overnight arms (from 21:58 PT) shared D: with SkylineNightly - detection counts are deterministic
-    and unaffected, but their FirstPassFDR times are inflated; do not use them for timing.
+  - ~~Caveat: these overnight arms shared D: with SkylineNightly~~ **Retracted (2026-11-13, UW8 was right):** no
+    nightly has run on UW25 since ~2026-10-19 (no scheduled task; `D:\Nightly` unchanged since 2026-10-18/19). The
+    caveat came from a stale UW25 memory note, cited without checking. The overnight FirstPassFDR times are in line
+    with the daytime arms (e.g. 77 s5 3,335 s vs 3,250-3,530 s) and are usable for timing.
 - **UW8 (22:10) decision for the PR's default: A-70** (pending seeds 4-5). A loses least and is steadiest
   (-316 +- 115, SE ~66, -0.33%; DIA-NN-confirmed -188, -0.21%); 93 and 77 store more and are no better; B-57 loses
   ~2x A (-702, -0.73%). The trade A vs B: +~390 precursors (+~230 DIA-NN-confirmed) for +266 MB/file of feature
