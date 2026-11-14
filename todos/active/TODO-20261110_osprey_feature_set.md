@@ -1557,3 +1557,17 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
   64 GB desktop (little cache) is expected to be worse still - untested.** Options, unmeasured: compute the
   candidates from the rescore's own window loads (one read per window), gate the sweep through BlockReadStream, or
   restore the stored column (38 GiB, +18% parquet). Master baseline (gate, master21 82-file) starts next.
+- MACS2 (2026-11-14 01:10 PT) **Conclusion of the #5030 question (Brendan): the defect is the second spectra load, not
+  storing vs recomputing. Perf testing of the trade-off stopped here.** `ReconciliationPlanner.FilePlanner.PlanFile`
+  (`ReconciliationPlanner.cs:307-349`) picks the rows to move WITHOUT candidates (consensus set, experiment-FDR
+  pass, apex outside tolerance); candidates only choose `UseCwtPeak` boundaries vs `ForcedIntegration`, and both
+  are rescored. So the rescored set does not depend on candidates, and the rescore already loads each isolation
+  window that holds a moved row. #5030 kept Rust's plan-then-rescore interface (`CwtCandidateSource`) and fed it
+  from a separate, parallel, ungated sweep over the same windows (`CwtCandidateRecompute.ForRows`), loading the
+  spectra twice. **Fix to make:** planning lists the moved rows (expected RT, tolerance, half-width); the rescore's
+  single window load runs the first-pass CWT detection for those rows (first-pass calibration and search
+  settings), applies `DetermineAction`, then scores the chosen range from the same spectra. Spectrum reads then
+  equal pre-#5030's, and not storing cwt_candidates saves all its writes (38 GiB on 82 files) and parquet reads,
+  leaving only an in-memory recompute for <1% of rows. To handle: same lowest-window-holding-the-apex rule as
+  Stage 4 (bit-identity), where `PlanAndWriteRun`'s plan file is written and who reads it, and whether the gap-fill
+  (`GapCwt`/`GapForced`) rows consult candidates.
