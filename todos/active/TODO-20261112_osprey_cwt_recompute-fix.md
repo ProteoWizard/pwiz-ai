@@ -172,9 +172,9 @@ guards bit-identity, including that the slice covers what detection reads.
 
 ## Request for UW8 and the i9 desktops (developer, 2026-11-14): the I/O A/B MACS2 cannot do
 
-MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured compute only. UW8 (128 GB
-RAM, SATA HDD) is the machine where #5030 measured +42%; the i9 desktops (64 GB RAM, HDD and SSD) are the
-more controlled perf environment and the decisive test. Run the same plan on each:
+MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured compute only. UW8 (an i9,
+128 GB RAM, HDD and SSD) is the machine where #5030 measured +42% and runs first; the 64 GB i9 desktops
+(HDD and SSD) follow. The i9s are the controlled perf environment. Run the same plan on each:
 
 - **Builds** (one Release snapshot each under `_bin`, see "Long runs lock Osprey.exe"):
   - `fix`: branch `Skyline/work/20261114_osprey_cwt_recompute-fix` at a43f875c51
