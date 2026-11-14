@@ -198,3 +198,9 @@ master: it reaches master when #4950 merges. Shipped: `cwt_candidates` removed f
 always-on check against Stage 4's apex scan, and the `OSPREY_LOAD_CALIBRATION` term in both
 per-file validity keys. Nothing deferred. Issue #5024 closed by hand (a PR into a non-default
 branch does not auto-close it). The work branch is deleted locally and on GitHub.
+
+## Bug Fixes
+
+- 2026-11-14: Stage 6 loads each run's spectra twice (planning sweep + rescore): +35% PerFileRescoring
+  with spectra beside the parquets on 82 files (UW8 +36%). Fix in progress:
+  `ai/todos/active/TODO-20261112_osprey_cwt_recompute-fix.md`.
