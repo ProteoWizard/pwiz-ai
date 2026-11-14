@@ -1409,6 +1409,15 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   run-specific / experiment-wide / global contexts with a classifier learned on a pooled subsample (Rosenberger et
   al. 2017, recalled, not checked here); (3) check DIA-NN 2.8 when out.
 - **Cache policy**: delete per-run artifacts once no later task needs them; which ones a rerun needs.
+  `.spectra.bin` (Brendan, 2026-11-14): write once, process many times - persistent enough that the raw data can
+  leave the processing machine; but it is a cache, so it may be deleted instead of backed up when no reprocessing
+  is expected.
+- **Comparing with DIA-NN (Brendan, 2026-11-14): Osprey's pass 2 is its MBR phase.** Like for like on UW8 (82
+  files, i9, 32 threads): DIA-NN 2.7.0 with MBR 9.82 h (first pass 7.1 h; `runs-uw8\diann270-82files\
+  report.log.txt`) vs Osprey all 109 7.75 h / default 70 6.91 h (Osprey excludes the one-time `.spectra.bin`
+  build; DIA-NN parses mzML). Disk: DIA-NN `.quant` ~90 MB/run vs Osprey default ~2.0 GB/run of scores parquet.
+  MACS2's CWT redesign (in design with Brendan) aims to keep #5030's parquet saving and be faster than storing;
+  UW8's rescoring A/B (stored vs recomputed, 2026-11-14) is its "before" on an all-HDD layout.
 - **Entrapment ratio**: 1:1 entrapment doubles the library and the scored rows; how much the FDP oracle needs.
 - **FirstPassFDR**: the protein-best round-1 run bound (UW25, pending commit), survivors-only intermediate
   files, and a fan-out FirstPassScoring task (other-machines TODO, UW25 section).
