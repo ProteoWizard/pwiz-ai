@@ -1460,3 +1460,19 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
   (True FDP: `split_calibration.py`; memory: `perfviz.py --files 82`.) Next on MACS2 tonight: the pre-#5030
   (be63cfbfb7) all109 full run started 15:12, then the rescoring-only ABAB with spectra on E:, then again with
   spectra copied to D: beside the parquets (UW8-like), then the master baseline.
+- MACS2 (2026-11-13 18:45 PT) **Whole-pipeline pre/post #5030, 82 files, all-109, #4950 recipe: identical
+  detections; pre-#5030 (be63cfbfb7) wall 12,580 s vs post (fab7e0caed) 14,371 s, but the gap is mostly in scoring,
+  which #5030 does not touch, so treat it as run-to-run/machine load until the rescoring ABAB reports.**
+  Pre run: `D:\...\sea-ad\runs-cwt\seaad-82files-libdecoy-r1.0-transfer-fplanes16pre5030all109-20261113_151215`.
+
+  | | pre-#5030 | post-#5030 |
+  |---|---|---|
+  | Scoring / FDR1 / rescoring / FDR2 (s) | 9,056 / 1,836 / 1,551 / 134 | 10,330 / 1,957 / 1,936 / 143 |
+  | Rescoring [PATH] delta: GB read (parquet) | 530.3 (504.3) | 490 (464) |
+  | Rescoring read s / gate wait s | 869 / 1,853 | 906 / 2,113 |
+  | Scores parquets (GiB) / run dir | 244.6 / 279 G | 206.6 / 241 G |
+  | Private peak (GB) scoring / FDR1 / rescoring | 76.9 / 147.4 / 52.6 | 71.2 / 149.5 / 82.9 |
+  | True FDP 1%, pass 1 / pass 2 | 96,710 / 96,654 | 96,710 / 96,654 |
+
+  The stored cwt_candidates cost 38 GiB of parquet (+18%) and 40 GB more rescoring parquet reads; #5030's spectra
+  re-read is not in [PATH] (see `runs-cwt\disk-io.tsv`). Rescoring-only ABAB (rs1post..rs4pre) started 18:42.
