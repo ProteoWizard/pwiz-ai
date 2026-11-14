@@ -191,6 +191,15 @@ RAM, SATA HDD) is the machine where #5030 measured +42%. Please run:
   `.reconciliation.json` / `.scores-reconciled.parquet` are byte-identical between `fix` and `base`.
 - **Expected**: `fix` about equal to `pre` on the HDD (spectra read once); if `fix` stays ~29 s/file
   slower than `pre`, the cost is compute, and the 1-file profile on MACS2 (in progress) should show where.
+- **UW8 (2026-11-14 ~09:30 PT / 18:30 CET): accepted; HDD layout queued, SSD layout not possible on UW8.** Snapshots
+  `_bin\uw8-cwtfix-a43f875c51` (v26.1.1.318, clean), `uw8-849586af76`, `uw8-be63cfbfb7`. Arms fix1, base1, base2,
+  fix2, pre1, pre2 (`ai/.tmp/sessions/20261110-uw8featset/cwt-ab.ps1` -> `cwt-ab.tsv`), `-Task PerFileRescoring`,
+  82 files, the recipe, fix/base linked from `transferall109-849586af76`, pre from `transferall109-be63cfbfb7`,
+  spectra and parquets both on the SATA HDD. Per arm: stage s, `[PATH]` line, summed window-thread busy s,
+  D: read GB and mean/max queue length (typeperf, 15 s), SHA-256 of `.reconciliation.json` +
+  `*.scores-reconciled.parquet` (fix vs base). Starts after UW8's median-polish sweep (~10:15 PT); ~1.6-2.3 h per
+  arm -> ~22:00-01:00 PT. SSD layout: UW8's only SSD is the system NVMe (225 GB free on C: then; 346 GB of
+  spectra caches) - left to MACS2 unless Brendan wants a ~40-file subset on C:.
 
 ### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
 
