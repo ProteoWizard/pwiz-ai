@@ -1240,6 +1240,28 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   Description lists the open items (recipe-as-default, Astral goldens, key length, latent unit `featset=all` key).
   TeamCity per-commit builds run on it; the Astral regression legs are expected to fail until the goldens are
   recaptured. Perf/Regression gate: ask Brendan first.
+- UW8 (17:56 PT / 02:56 CET) **One-machine A/B DONE (82 files, alone on the HDD, recipe + protein-best on, seed 1):**
+
+  | | all 109 (#4950 @ 849586af76) | default 70 (#5033 @ fab7e0caed) | change |
+  |---|---|---|---|
+  | total wall | 27,886 s (7.75 h) | 24,892 s (6.91 h) | **-10.7%** |
+  | PerFileScoring | 14,286 s | 13,142 s | -8.0% |
+  | FirstPassFDR | 4,718 s | 3,978 s | -15.7% |
+  | PerFileRescoring | 8,512 s | 7,469 s | -12.3% |
+  | SecondPassFDR | 370 s | 303 s | -18% |
+  | scores parquet (82 files) | 221.8 GB | 165.2 GB | **-25.5%** |
+  | disk high-water mark | 257 GB | 196 GB | **-23.7%** |
+  | memory peak, FirstPassFDR private / managed | 57.2 / 38.0 GB | 42.8 / 33.1 GB | **-25%** |
+  | PerFileScoring peak private | 31.6 GB | 28.8 GB | -9% |
+  | pass 1 / pass 2 kept at true FDP 1% | 96,710 / 96,654 | 96,223 / 96,185 | -0.50% / -0.49% |
+  | FDP at q 1% (pass 2) | 0.99% | 1.02% | |
+
+  - The default saves at every stage; disk, parquet and FirstPassFDR memory each drop ~a quarter.
+  - The -0.50% is one seed on a fresh-scoring build; it sits inside the 5-seed paired spread on shared scoring
+    (A-70 -173 +- 274; seed 1 there -185), so it does not change "inside noise".
+  - all 109 reproduces the earlier 82-file all-109 result exactly (96,710 / 96,654).
+  - Run dirs `runs-uw8\seaad-82files-libdecoy-r1.0-transfer{all109-849586af76,default70-fab7e0caed}` (run.log,
+    diskstamp.tsv). The #5030 rescoring A/B started 17:56 PT (~04:00 PT / 13:00 CET Sat).
 - UW25 (13:25 PT / 22:25 CET) **XIC-10 job started** as written above. One 82-file scoring leg
   `runs-uw25\seaad-82files-libdecoy-r1.0-transferuw25x10-score0-82` on snapshot c3bdbea78d; its environment
   differs from the XIC-12 legs' only in `OSPREY_XIC_FRAGMENTS` (diffed). ETA ~18:40 PT / 03:40 CET, then FDR arms
