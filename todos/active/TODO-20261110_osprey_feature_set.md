@@ -1316,6 +1316,20 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
       XIC-8 scoring ran alongside the XIC-10 seed-2 A-70 arm for 28 min, under memory pressure. Stopped, the
       7-file partial leg deleted, requeued with an exact pattern. The seed-2 A-70 arm's DETECTIONS are unaffected
       (deterministic), but its stage5 time is not a clean timing.
+  - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; replaces the queued XIC-8 job).**
+    Brendan: the median is the wrong order statistic when the low-ranked fragments reliably trail off. If the
+    median was right for 6 XICs, a higher percentile may be right for 12, so tune it. Slower because of more
+    detections is acceptable: the goal is closing the detection gap with DIA-NN, so XIC 8 (a speed play) is cancelled.
+    - New experiment `OSPREY_CWT_CONSENSUS_PERCENTILE` (whole number 1-99; unset or 50 = the existing median
+      code path). Search peak detection only; calibration keeps the median. Interpolated ascending percentile, so at
+      12 XICs 75 sits between the 3rd and 4th largest coefficient, about the bar the median sets at 6. Keyed
+      `;cwtpct=` through `PickValidityKeySuffix`. Branch `Skyline/work/20261114_osprey_cwt_consensus_percentile`
+      (local, 4bb43e972b on c3bdbea78d), snapshot `_bin\uw25-4bb43e972b`.
+    - Screen at 20 files (`featset\cwtpct-sweep.ps1`, log `cwtpct-sweep.log`), XIC 12: identity check first (file 1
+      unset must equal the 11-09 parquet), then the median baseline and percentiles 75, 67, 83 (in that order),
+      each with A-70 / all 109 seeds 1-3 (`arms-cwt{50,75,67,83}.tsv`). Scoring ~75 min per percentile plus ~60 min
+      of arms each, so ~8 h: starts ~01:05 PT, ends ~09:00 PT / 18:00 CET Sat. The best percentile then gets an
+      82-file confirmation.
   - **Design question this raises:** one N sets both peak DETECTION (median consensus, where extra weak fragments
     hurt) and the SCORES (where 12 was measured to help). Separating them, e.g. consensus over the top 6-8 and
     scores over 12, may beat both 10 and 12. It needs an env var and a build; not started tonight because the
