@@ -1316,7 +1316,16 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
       XIC-8 scoring ran alongside the XIC-10 seed-2 A-70 arm for 28 min, under memory pressure. Stopped, the
       7-file partial leg deleted, requeued with an exact pattern. The seed-2 A-70 arm's DETECTIONS are unaffected
       (deterministic), but its stage5 time is not a clean timing.
-  - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; replaces the queued XIC-8 job).**
+  - **00:25 PT / 09:25 CET Sat: XIC 10 is detection-neutral (seeds 1-3).** Kept at true FDP 1%, 82 files, paired:
+    A-70 +93 / +13 / -112 = **-2 +- 103** (DIA-NN-confirmed +3 +- 200); all 109 +276 / -417 (s3 pending). The 3.2%
+    more scored rows per file (targets and decoys alike) do not survive FDR: 10 saves ~12% of PerFileScoring and
+    neither gains nor loses detections.
+  - **Order changed (Brendan ~00:25 PT): XIC 8, then XIC 6, then the percentile sweep.** The 6 -> 12 gain was
+    measured on an older recipe; later scoring changes may have consumed it, as has happened elsewhere when a new
+    solution removed an earlier one's advantage. `featset\xic-chain.ps1`: after the XIC-10 arms, XIC 8 then XIC 6
+    (82 files each, c3bdbea78d, `arms-xic{8,6}.tsv`: A-70 / all 109, seeds 1-3), then `cwtpct-sweep.ps1`. ETAs:
+    XIC 8 done ~11:30 PT / 20:30 CET Sat, XIC 6 ~21:30 PT Sat / 06:30 CET Sun, sweep ~05:30 PT / 14:30 CET Sun.
+  - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; now queued after XIC 8 and 6).**
     Brendan: the median is the wrong order statistic when the low-ranked fragments reliably trail off. If the
     median was right for 6 XICs, a higher percentile may be right for 12, so tune it. Slower because of more
     detections is acceptable: the goal is closing the detection gap with DIA-NN, so XIC 8 (a speed play) is cancelled.
