@@ -76,3 +76,25 @@ pre-#5030's; the column's writes and reads stay gone; the extra cost is an in-me
 
 Branch created in `D:\Users\brendanx\proj\pwiz` from #4950 head 849586af76. Code map above read
 from that tree.
+
+**Overlapping windows (the open design question), traced:**
+- Every MS2 scan belongs to one isolation window, so exactly one window holds a row's Stage 4 apex
+  scan: the window its candidates must come from (the "apex window").
+- The rescore scores a target in EVERY window holding its precursor m/z
+  (`ScoringPipeline.RunCoelutionScoring`, parallel, largest window first, results flattened in
+  window-index order), and `OverlayRescoredEntries` keeps the LAST row per entry_id
+  (`rescoredByEntryId[entry.EntryId] = entry`) - the highest-index window that found a peak.
+- So a moved row in two windows whose apex window is not the one being scored needs the apex
+  window's candidates in the other window's job. Windows depend on each other in both directions
+  (adjacent overlaps), so no processing order resolves it, and holding windows in memory until a
+  neighbour finishes is unbounded under largest-first scheduling.
+- `SpectraWindowIndex` keeps per-record offsets and the records are in RT order, so a window's
+  RT slice can be read alone. Candidate detection should read only the first-pass search range
+  (to verify in `PeakDataExtractor.TryExtract`: any margin beyond it sets the slice bounds).
+
+Proposed: in each window's job, resolve the moved rows whose apex is in that window from the
+loaded spectra; for an overlap row whose apex window is elsewhere, read that window's RT slice
+(search range only, through the gated reader) and resolve from it. Bulk rows: no extra read; overlap
+rows: a slice of a few scans. Every window computes identical boundaries for a row, so the result is
+independent of which window's row wins. The reproduction check (apex at Stage 4's scan) still
+guards bit-identity, including that the slice covers what detection reads.
