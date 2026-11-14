@@ -204,6 +204,14 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
   `*.scores-reconciled.parquet` (fix vs base). Starts after UW8's median-polish sweep (~10:15 PT); ~1.6-2.3 h per
   arm -> ~22:00-01:00 PT. SSD layout: UW8's only SSD is the system NVMe (225 GB free on C: then; 346 GB of
   spectra caches) - left to MACS2 unless Brendan wants a ~40-file subset on C:.
+  - **Update 13:00 PT / 22:00 CET: SSD layout now queued too** - C: was cleared to 458 GB free, so after the six
+    HDD arms the 82 caches are copied to `C:\test\sea-ad-spectra` and the same six arms rerun with `--cache-dir`
+    there (`cwt-ab-ssd.sh` -> `cwt-ab-ssd.tsv`; C: and D: read GB logged), ~Sunday afternoon CET.
+  - **First pair, HDD layout: fix is byte-identical to base and 32% faster.** fix1 5,899 s vs base1 8,683 s
+    (-2,784 s). SHA-256 of all 164 outputs (82 `.reconciliation.json` + 82 `.scores-reconciled.parquet`) identical
+    (`D:\test\osprey-runs\sea-ad\runs-uw8\cwtab\{fix1,base1}.sha256.txt`). fix1 vs UW8's earlier pre-#5030 runs
+    (5,678 s mean, same machine and data, hours apart): ~+4%. fix1's D: reads 564 GB (typeperf), queue mean
+    5.7 / max 16.7. Remaining: base2, fix2, pre1, pre2 (~06:30-07:30 CET Sun).
 
 ### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
 
