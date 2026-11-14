@@ -1217,6 +1217,21 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     parquet reads for the head; on MACS2 they are nearly free. Report per run: wall, parquet GB read, non-parquet
     (spectra) GB read, read s and gate wait s (the `[PATH] ... block reads` lines). More spectra read + more wait
     post-#5030 = an HDD-contention cost (layout-dependent); flat reads + more CPU = the recompute itself.
+  - **RESULT (2026-11-14 01:35 PT / 10:35 CET): +42% in PerFileRescoring, and it is CPU, not I/O.** `-Task
+    PerFileRescoring`, 82 files, alternating, each build linked from its own all-109 run (`featset\rescore1-4-*`):
+
+    | run | build | PerFileRescoring | read: total / parquet / other | read time | gate wait |
+    |---|---|---|---|---|---|
+    | 1 | pre be63cfbfb7 (stored) | 5,696 s | 530.4 / 504.3 / 26.1 GB | 1,785 s | 0 |
+    | 2 | post 849586af76 (recomputed) | 8,076 s | 490.1 / 464.1 / 26.0 GB | 1,501 s | 0 |
+    | 3 | pre | 5,659 s | 530.4 / 504.3 / 26.1 GB | 1,781 s | 0 |
+    | 4 | post | 8,048 s | 490.1 / 464.1 / 26.0 GB | 1,504 s | 0 |
+
+    Pre 5,678 s, post 8,062 s: **+2,384 s (+42%)**, repeats within ~30 s. Post reads 40 GB LESS parquet (-282 s of
+    reading) and the same 26 GB of spectra/other, with no gate wait in either - so the storage-layout hypothesis is
+    ruled out on UW8: the cost is ~2,670 s of extra compute, ~33 s per file, in the recomputation itself. MACS2's
+    72 threads / parallel files hide it; a 32-thread machine running files sequentially pays it in full. This is
+    the baseline for MACS2's CWT redesign (recompute only what the planner consults, or cheaper).
 - **JOB FOR UW25 (written 2026-11-13 ~13:00 PT / 22:00 CET, Brendan at bed time): 10 XICs vs 12 at 82 files.**
   Why: 6 -> 12 XICs costs PerFileScoring +61 s of 257 s per file (+24%, `20261108-uw8perf\ablate.console.log`) and
   is a suspected cause of lost throughput vs master (MACS2 ran master in 2-2.5 h). The evidence for 12 is thin:
