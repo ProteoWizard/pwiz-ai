@@ -170,10 +170,11 @@ guards bit-identity, including that the slice covers what detection reads.
   - Not yet a demonstrated gain. The I/O benefit needs a machine whose RAM cannot hold the working set
     (the 64 GB i9, or UW8).
 
-## Request for UW8 (developer, 2026-11-14): the I/O A/B MACS2 cannot do
+## Request for UW8 and the i9 desktops (developer, 2026-11-14): the I/O A/B MACS2 cannot do
 
 MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured compute only. UW8 (128 GB
-RAM, SATA HDD) is the machine where #5030 measured +42%. Please run:
+RAM, SATA HDD) is the machine where #5030 measured +42%; the i9 desktops (64 GB RAM, HDD and SSD) are the
+more controlled perf environment and the decisive test. Run the same plan on each:
 
 - **Builds** (one Release snapshot each under `_bin`, see "Long runs lock Osprey.exe"):
   - `fix`: branch `Skyline/work/20261114_osprey_cwt_recompute-fix` at a43f875c51
@@ -189,6 +190,9 @@ RAM, SATA HDD) is the machine where #5030 measured +42%. Please run:
 - **Report** per arm: `[TASK] PerFileRescoring:done` seconds, the `[PATH]` block-read line, summed
   `[TIMING] Window threads busy` thread-s, drive read GB and queue length, and confirm
   `.reconciliation.json` / `.scores-reconciled.parquet` are byte-identical between `fix` and `base`.
+- **Serial reads off** (one extra SSD arm of `fix` with `OSPREY_SERIAL_WINDOW_READS=0`): the old
+  planning sweep read windows in parallel without the lock and so pre-warmed the cache on SSD; this arm
+  shows whether the fix's serial cold read costs anything there.
 - **Expected**: `fix` about equal to `pre` on the HDD (spectra read once); if `fix` stays ~29 s/file
   slower than `pre`, the cost is compute, and the 1-file profile on MACS2 (in progress) should show where.
 - **UW8 (2026-11-14 ~09:30 PT / 18:30 CET): accepted; HDD layout queued, SSD layout not possible on UW8.** Snapshots
