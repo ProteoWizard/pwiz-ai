@@ -212,6 +212,27 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
     (`D:\test\osprey-runs\sea-ad\runs-uw8\cwtab\{fix1,base1}.sha256.txt`). fix1 vs UW8's earlier pre-#5030 runs
     (5,678 s mean, same machine and data, hours apart): ~+4%. fix1's D: reads 564 GB (typeperf), queue mean
     5.7 / max 16.7. Remaining: base2, fix2, pre1, pre2 (~06:30-07:30 CET Sun).
+  - **UW8 results so far (2026-11-14 15:55 PT), HDD layout, 82 files, PerFileRescoring alone
+    (`ai/.tmp/sessions/20261110-uw8featset/cwt-ab.tsv`; per-arm logs, typeperf CSVs and hashes in
+    `D:\test\osprey-runs\sea-ad\runs-uw8\cwtab\`):**
+
+    | arm | build | PerFileRescoring | window threads busy (sum) | D: physical read | D: queue mean / max |
+    |---|---|---|---|---|---|
+    | fix1 | a43f875c51 | **5,899 s** | 63,576 s | 564 GB | 5.7 / 16.7 |
+    | base1 | 849586af76 | 8,683 s | 19,488 s | 564 GB | 16.0 / 30.5 |
+    | base2 | 849586af76 | 8,659 s | 19,172 s | 565 GB | 16.1 / 30.8 |
+
+    - **fix vs base: -2,772 s (-32%)**; the two base arms agree within 24 s. fix1 and base1 outputs byte-identical
+      (all 82 `.reconciliation.json` + 82 `.scores-reconciled.parquet`, SHA-256).
+    - **Mechanism, as MACS2 diagnosed:** physical D: reads are equal (564 GB) - #5030's second spectra sweep is
+      served from the OS cache (128 GB RAM) - but it nearly triples the disk queue (5.7 -> 16.0 mean, 16.7 -> 30.8
+      max), slowing the gated parquet reads.
+    - **CPU:** the fix spends ~3.3x the window-thread time (63,576 vs 19,488 thread-s; +44,000 thread-s, ~540
+      thread-s per file, ~17 s of wall per file at 32 threads if CPU-bound) - the candidate computation now runs in
+      the rescore's window loop. Expected (Brendan); here it is fully hidden behind the I/O it removes.
+    - vs storing the candidates: fix1 ~+4% over UW8's earlier pre-#5030 runs (5,678 s, hours apart); pre1/pre2 in
+      this run pin it. Brendan's view: that CPU is well spent against ~0.5 GB/file of parquet (41 GB at 82 files).
+    - Still running: fix2 (~17:00 PT), pre1 (~18:35), pre2 (~20:10); then the SSD layout (~05:00-06:00 PT Sun).
 
 ### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
 
