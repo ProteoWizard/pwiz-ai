@@ -1257,6 +1257,16 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   - 06:45 PT: the first pass's 9 FDR arms all failed instantly (a script bug: PowerShell names are case-
     insensitive, so `foreach ($s in $Seeds)` overwrote the script folder `$S`); scoring p50/p40/p30 is valid
     (~3,650 s each). Fixed; the FDR arms rerun when the first pass ends (~10:15 PT / 19:15 CET).
+  - **RESULT (08:51 PT / 17:51 CET): no percentile below 50 helps - the median is best.** Kept at true FDP 1%,
+    20 files, 12 XICs, `default` (A-70), seeds 1-3 (`mpsweep.tsv`):
+    p50 71,642 / 73,125 / 73,374 (mean 72,714); p40 69,677 / 69,115 / 72,016 (paired -2,445, -3.4%);
+    p30 71,947 / 70,424 / 72,140 (-1,210, -1.7%); p20 68,848 / 72,872 / 68,523 (-2,633, -3.6%). p40 and p20
+    lose at every seed, p30 at 2 of 3; scoring time unchanged (~3,650 s at each p).
+  - **Caveat: protein-best was OFF in these arms** (~72k, FDP at q 1% 0.6-0.7%): the build is on #5033, where
+    `--protein-best` defaults off, and `arm.ps1` passes no `-ProteinBest` (the study build c3bdbea78d defaulted it
+    on). Valid between percentiles (all arms alike), but not the full recipe. Percentiles ABOVE 50 untested.
+    Conclusion: the median-polish column percentile is not what holds 12 XICs back; the XIC count question stays
+    with UW25's direct 8 / 6 tests.
 - UW8 (2026-11-14 ~07:30 PT / 16:30 CET) **Disk cleanup** (Brendan: keep >= 300 GB free on D:, clean before more
   runs). D: had 282 GB free; deleted the bulky files (>50 MB, not FDRBench) of 15 finished UW8 run dirs -
   rescore1-4, p2-*, ref82, the 51 / default70 full runs, the f90d19aaa6-nodiag all-109 source (superseded by
