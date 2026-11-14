@@ -1288,6 +1288,16 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     (`PeakDataExtractor.cs:275/288`). The median-polish and reference-XIC fallbacks run only when CWT finds zero
     peaks. `cwt_candidates` per row grows for the same reason (`CoelutionScorer.CaptureCwtCandidates`, capped at
     `TopNPeaks`). To confirm: `OSPREY_DUMP_CWT_PATH` records the per-candidate CWT/RT-filter counts.
+  - **18:35 PT / 03:35 CET: the leg and the control are done; the FDR arms started.** The XIC-10 leg took 272 min
+    for 82 files (the XIC-12 legs took 322 min in total on 11-09).
+    | per-file PerFileScoring (UW25, HDD) | files | XIC 12 | XIC 10 | diff |
+    |---|---|---|---|---|
+    | **same build** c3bdbea78d (control `uw25x12ctl`, files 4-10) | 7 | 213.9 s | 187.4 s | **-26.4 +- 3.2 s (-12.4%)** |
+    | across builds (11-09 legs, da4eff9f63) | 79 | 232.9 s | 195.8 s | -37.1 +- 7.8 s (-15.9%) |
+    | XIC 12, 11-09 run vs tonight's control | 10 | 225.2 s | 214.8 s | -10.4 s (-4.6%, run conditions) |
+    Same build, 10 saves ~13 s per dropped fragment, matching UW8's 6->12 ablation (+61 s, ~10 s/fragment). The
+    parquet is +2.4% (3.87 -> 3.97 GB mean over 82) because XIC 10 scores 3.2% more precursors (above). Detections
+    are next.
   - **Design question this raises:** one N sets both peak DETECTION (median consensus, where extra weak fragments
     hurt) and the SCORES (where 12 was measured to help). Separating them, e.g. consensus over the top 6-8 and
     scores over 12, may beat both 10 and 12. It needs an env var and a build; not started tonight because the
