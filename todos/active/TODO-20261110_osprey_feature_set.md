@@ -1304,6 +1304,11 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     | A-70 | 96,408 | 96,501 | +93 | -19 | 385 -> 395 GB |
     | all 109 | 96,593 | 96,869 | +276 | +46 | 504 -> 516 GB |
     Both are well inside the paired noise (SD ~274), so no loss at seed 1. Seeds 2-3 run to ~00:45 PT / 09:45 CET.
+    Lost/gained against XIC-12 all 109 s1 (`featset\xic10-agree-s1.txt`): XIC-10 all 109 loses 3,604 and gains
+    3,881 (50.4% / 48.0% DIA-NN-confirmed). XIC-10 A-70: 3,908 / 3,811 (50.4% / 47.0%); XIC-12 A-70 for scale:
+    2,642 / 2,459 (50.1% / 47.4%). Changing the XIC count churns ~1.4x as many precursors as the A-70 feature cut,
+    but the exchange is balanced, at the same DIA-NN rate as the feature-set swaps: threshold-edge churn, not a
+    class of lost identifications.
     **Queued (UW8's read: "if 10 holds, try 8"):** `featset\xic8-night.ps1` starts when the XIC-10 arms end:
     82 files at XIC 8 (`uw25x8`, ~4.3 h) then A-70 / all 109 seeds 1-2 -> ~09:00 PT / 18:00 CET Sat. A STOP file
     in `featset\` before it starts cancels it.
