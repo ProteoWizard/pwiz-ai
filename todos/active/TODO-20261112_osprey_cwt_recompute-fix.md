@@ -245,3 +245,11 @@ blocked time counts). Fix and base reconciled parquets byte-identical.
 UW8's first HDD numbers looked promising (developer); the SSD numbers and the 64 GB i9s are still to
 come, but storing `cwt_candidates` in the parquet again is unlikely. Opened #5036 against the #4950
 branch; TeamCity Osprey Perf/Regression build 4265506 and the Osprey unit build queued on `pull/5036`.
+- Review fixes (`/code-review medium`): 0b87c86654 narrowed the per-run catch back to planning, made `Verify`
+  skip survivors an `OSPREY_MAX_SCORING_WINDOWS` run never scores, and shared `OverrideBounds` with the
+  reconciliation replay; gate 684/684, inspection 0 (`ai/.tmp/sessions/20261112-5023/fix-gate3.log`).
+  Six findings dropped (multi-window is #5034; detection after the rescore is the design; three small
+  allocation/scan costs inside an 11 thread-s path; equal window centers share one window key).
+  Pushed; Perf/Regression build 4265548 queued on the new head.
+- UW8 (i9, 128 GB), HDD: PerFileRescoring 32% faster than the #4950 baseline (developer, 2026-11-14).
+  SSD and the full set still running (~10 h).
