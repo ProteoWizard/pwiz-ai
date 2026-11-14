@@ -169,3 +169,25 @@ guards bit-identity, including that the slice covers what detection reads.
     ~2,550-4,920 thread-s.
   - Not yet a demonstrated gain. The I/O benefit needs a machine whose RAM cannot hold the working set
     (the 64 GB i9, or UW8).
+
+## Request for UW8 (developer, 2026-11-14): the I/O A/B MACS2 cannot do
+
+MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured compute only. UW8 (128 GB
+RAM, SATA HDD) is the machine where #5030 measured +42%. Please run:
+
+- **Builds** (one Release snapshot each under `_bin`, see "Long runs lock Osprey.exe"):
+  - `fix`: branch `Skyline/work/20261114_osprey_cwt_recompute-fix` at a43f875c51
+  - `base`: 849586af76 (#4950 head, the #5030 squash)
+  - `pre`: be63cfbfb7 (pre-#5030; reads `cwt_candidates` from the parquet, so it needs its own
+    pre-#5030 full run as the `-LinkFrom` source - reuse UW8's existing one)
+- **Arms**: `Run-SeaAd.ps1 -Task PerFileRescoring -LinkFrom <full run>`, the same 82 files and #4950
+  env recipe as UW8's +42% measurement, ABAB order (`fix, base, base, fix`, then `pre` twice).
+- **Layouts**: spectra caches on the HDD beside the parquets (the +42% case), and on an SSD apart from
+  the parquets. Same arms in each.
+- **Cold reads**: with 128 GB RAM and ~340 GB of caches the arms should read from disk; confirm it
+  (drive read GB per arm, e.g. perf counters) rather than assume it.
+- **Report** per arm: `[TASK] PerFileRescoring:done` seconds, the `[PATH]` block-read line, summed
+  `[TIMING] Window threads busy` thread-s, drive read GB and queue length, and confirm
+  `.reconciliation.json` / `.scores-reconciled.parquet` are byte-identical between `fix` and `base`.
+- **Expected**: `fix` about equal to `pre` on the HDD (spectra read once); if `fix` stays ~29 s/file
+  slower than `pre`, the cost is compute, and the 1-file profile on MACS2 (in progress) should show where.
