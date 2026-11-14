@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **Fixes**: [#5030](https://github.com/ProteoWizard/pwiz/pull/5030) (TODO: `ai/todos/completed/2026/11/TODO-20261112_osprey_cwt_recompute.md`)
 - **Module**: `osprey`
-- **PR**: (pending) - targets the #4950 branch directly; #5033 picks it up by merging from #4950
+- **PR**: [#5036](https://github.com/ProteoWizard/pwiz/pull/5036) - targets the #4950 branch directly; #5033 picks it up by merging from #4950
 
 ## Problem
 
@@ -231,3 +231,9 @@ blocked time counts). Fix and base reconciled parquets byte-identical.
   cold: correct for an HDD, possibly slower on SSD. Worth an `OSPREY_SERIAL_WINDOW_READS=0` arm on UW8's SSD.
 - So the 20-file E: +15% is not added compute; with everything in RAM it is most likely run-to-run noise on
   the shared machine (the same fix binary ran 443 s on E: and 296 s on D:).
+
+### 2026-11-14 - PR opened
+
+UW8's first HDD numbers looked promising (developer); the SSD numbers and the 64 GB i9s are still to
+come, but storing `cwt_candidates` in the parquet again is unlikely. Opened #5036 against the #4950
+branch; TeamCity Osprey Perf/Regression build 4265506 and the Osprey unit build queued on `pull/5036`.
