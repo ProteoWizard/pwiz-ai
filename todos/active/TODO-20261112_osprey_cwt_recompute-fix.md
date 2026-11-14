@@ -80,12 +80,49 @@ its boundaries and scores it, and the rescore keeps the best row by `CoelutionSu
 reproduction check applies in the window holding Stage 4's apex scan. Goldens may move only for
 multi-window rows; log how many there are.
 
+## UW8's "computation, not I/O" reading (2026-11-14)
+
+UW8 measured #5030 at +42% PerFileRescoring (5,678 -> 8,062 s) and attributed it to compute because
+the `[PATH]` block-read totals were flat ("other" 26.1 vs 26.0 GB). Those counters do not see
+`.spectra.bin` MS2 reads at all: 26 GB / 82 = 0.32 GB per file, against 4.2 GB of MS2 cache per file
+that both builds read in the rescore. +2,384 s / 82 = 29 s per file, about one 4.2 GB cache at a SATA
+HDD's ~145 MB/s (or a cold parallel sweep at the ~85 MB/s the serial-read comment measured). The
+recompute's compute is ~50-75 thread-s per file (MACS2 rd2post, file 4/82: rescoring 15,854 peaks
+and detecting 11,038 missing peaks each took 52 thread-s), i.e. ~2-3 s/file on 32 threads. The fixed
+build's A/B on an UW8-like layout decides it: parity with pre-#5030 = I/O; a residual ~29 s/file =
+compute.
+
 ## Progress Log
 
 ### 2026-11-14 - Session Start
 
 Branch created in `D:\Users\brendanx\proj\pwiz` from #4950 head 849586af76. Code map above read
 from that tree.
+
+### 2026-11-14 - Implementation (uncommitted), gate green
+
+- `ReconciliationPlanner.FilePlanner.SelectMoves` chooses the moved entries (no candidates) as
+  `ReconcileMove` (expected RT, half-width, RT tolerance; `Resolve` = `DetermineAction`); `PlanFile`
+  = SelectMoves + candidate source + Resolve (the test-only whole-experiment path).
+- `RunReconciliationPlanner.PlanRun` returns a `RescorePlan` (refit, gap fill, moves);
+  `CompleteRun` builds the `.reconciliation.json` from entry_id-keyed actions; `PartialRun` (no
+  actions) is what `ApplyPlan` applies before the rescore. A run with no moves is saved at once.
+- `IWindowBoundaryResolver` + `ScoringContext.BoundaryResolver`; `CoelutionScorer.ScoreWindow`
+  resolves the window's moved candidates right after sorting its spectra and scores with a
+  window-local override map (`ScoringContext.WithBoundaryOverrides`).
+- `CwtCandidateRecompute` is now that resolver: per window, `RecomputeCwtCandidates` (first-pass
+  settings) + `ReconcileMove.Resolve`; the window holding the Stage 4 apex scan sets the plan's action
+  and the reproduction check; `Verify` throws `NotReproduced` per run. The planning sweep is gone.
+- `RescoreOneFile` builds the resolver, verifies after the rescore, logs
+  `[COUNT] Moved peaks resolved in more than one isolation window`, saves the plan before the
+  reconciled parquet. `RescoreOneFileStreamed` reports a resolver failure per run.
+- Gate: `Build-Osprey.ps1 -Debug -RunTests -RunInspection` 684/684, inspection 0
+  (`ai/.tmp/sessions/20261112-5023/fix-gate2.log`). Snapshots: `_bin\cwtfix-base-849586af76`,
+  `_bin\cwtfix-wip1`.
+- Running: `regression-parallel.ps1 -Dataset All` (`fix-regression-all.log`); 20-file A/B chain
+  `ai/.tmp/sessions/20261112-5023/cwtfix-ab.ps1` -> `D:\...\sea-ad\runs-cwtfix\cwtfix-ab.log`
+  (full runs base20/pre20, then PerFileRescoring arms base/fix/pre x2 after a ~500 GB cache flush,
+  spectra on E: then copied to D:; drive I/O in `runs-cwtfix\disk-io.tsv`).
 
 **Overlapping windows (the open design question), traced:**
 - Every MS2 scan belongs to one isolation window, so exactly one window holds a row's Stage 4 apex
