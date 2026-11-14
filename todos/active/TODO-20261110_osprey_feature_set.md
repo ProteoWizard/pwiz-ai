@@ -1254,6 +1254,25 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   Sweep (`mpsweep.ps1` -> `mpsweep.tsv`): p = 50 / 40 / 30 / 20, each fresh PerFileScoring of UW8's 20 spread files
   (12 XICs, the recipe, record-all), then FirstPassFDR `default` (A-70) seeds 1-3 on it; ~6.5 h, to ~10:00 PT /
   19:00 CET. A winner gets an 82-file confirmation (20-file effects have understated 82-file ones).
+  - 06:45 PT: the first pass's 9 FDR arms all failed instantly (a script bug: PowerShell names are case-
+    insensitive, so `foreach ($s in $Seeds)` overwrote the script folder `$S`); scoring p50/p40/p30 is valid
+    (~3,650 s each). Fixed; the FDR arms rerun when the first pass ends (~10:15 PT / 19:15 CET).
+- UW8 (2026-11-14 ~07:30 PT / 16:30 CET) **Disk cleanup** (Brendan: keep >= 300 GB free on D:, clean before more
+  runs). D: had 282 GB free; deleted the bulky files (>50 MB, not FDRBench) of 15 finished UW8 run dirs -
+  rescore1-4, p2-*, ref82, the 51 / default70 full runs, the f90d19aaa6-nodiag all-109 source (superseded by
+  all109-849586af76), five 2026-11-09 16-file runs - keeping each run's logs, JSON, FDRBench tables, diskstamp:
+  **freed 1,118 GB -> 1,392 GB free.** Kept: mzml caches, lib, _bin, mpsweep, all109-be63cfbfb7 and
+  all109-849586af76 (MACS2's `-LinkFrom` sources), DIA-NN reports, Brendan's other cohorts.
+  C: (Brendan asked): **freed 233 GB -> 458 GB free** - old Osprey `TestResults` in `C:\proj\pwiz` and
+  `C:\proj\pwiz-work1` (regression-*, crossimpl-*/crossbisect-*, ~150 MSTest `Deploy_brendanx <ts>` dirs since
+  July) and SkylineTester Results; kept `_derived` and anything < 3 days old. `regression.ps1` already prunes
+  (`-KeepRunDirs`, default 1, at the next run's start); the leaks are the never-pruned MSTest `Deploy_*` dirs from
+  `Build-Osprey.ps1 -RunTests`, the Compare scripts' cross-impl dirs, and checkouts no longer run in. Proposed
+  (awaiting Brendan): `Build-Osprey.ps1 -RunTests` prunes `TestResults\Deploy_*` older than a day (pwiz-ai only;
+  TeamCity runs tctest.bat, not this script).
+  SEA-AD mzML: the shared module already treats a cache without its source as an input (OspreyDatasetRun.psm1
+  ~484-504, as TDP-43/CHS run); the share holds an identical copy (82 files, 325 GB). **Local mzML KEPT for DIA-NN**
+  (Brendan, 2026-11-14), which cannot read `.spectra.bin`; a queued deletion was cancelled before it ran.
 - **JOB FOR UW25 (written 2026-11-13 ~13:00 PT / 22:00 CET, Brendan at bed time): 10 XICs vs 12 at 82 files.**
   Why: 6 -> 12 XICs costs PerFileScoring +61 s of 257 s per file (+24%, `20261108-uw8perf\ablate.console.log`) and
   is a suspected cause of lost throughput vs master (MACS2 ran master in 2-2.5 h). The evidence for 12 is thin:
