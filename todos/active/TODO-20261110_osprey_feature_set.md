@@ -1536,3 +1536,24 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
   rescoring, but those ran 12 h apart on a shared machine; the pre full run's rescoring read only 128 GB from D:
   (vs 260 in its ABAB arms) and the same 274 GB from E:. Not yet controlled. Condition 2 (spectra copied to D:
   beside the parquets, UW8-like) started 20:53.
+- MACS2 (2026-11-14 00:50 PT) **#5030 rescoring ABAB, condition 2: spectra caches copied to D: beside the parquets
+  (UW8-like): post-#5030 is 35% SLOWER than pre-#5030, reversing condition 1 (-12%) and matching UW8's +36%.**
+  Same builds, inputs and arm design; only `-DataDir` moved (copy at `D:\...\sea-ad\spectra-on-D`, now deleted).
+  Logs `D:\...\sea-ad\runs-cwt\_kept\rd*\run.log`; drive I/O `runs-cwt\disk-io.tsv`.
+
+  | Arm | Rescoring (s) | [PATH] read s / gate wait s | D: read GB | D: avg queue | E: read GB |
+  |---|---|---|---|---|---|
+  | rd1pre | 2,509 | 1,830 / 7,312 | 533 | 15.0 | 0 |
+  | rd2post | 3,581 | 2,928 / 7,025 | 568 | 25.1 | 0 |
+  | rd3pre | 2,777 | 2,360 / 9,828 | 604 | 13.4 | 0 |
+  | rd4post | 3,554 | 2,891 / 6,988 | 567 | 25.4 | 0 |
+
+  Mean post 3,568 s vs pre 2,643 s (+35%; pair 2 alone +28%, rd1pre may have had some of the fresh copy cached).
+  The physical bytes are about the same (post 568 GB vs pre 533-604), so the cost is not volume: post's planning
+  sweep reads whole isolation windows (`GetCalibratedWindow`, full gradient) for nearly every window, in a
+  parallel, ungated FileStream sweep (CwtCandidateRecompute.cs:114-142), which doubles D:'s queue (25 vs 14) and
+  slows the gated parquet reads (read s 2,900 vs 1,830-2,360). **Conclusion: #5030 helps only when spectra sit on a
+  separate fast device with lots of cache (MACS2 E:); with spectra and parquets on one device it costs ~35%, and a
+  64 GB desktop (little cache) is expected to be worse still - untested.** Options, unmeasured: compute the
+  candidates from the rescore's own window loads (one read per window), gate the sweep through BlockReadStream, or
+  restore the stored column (38 GiB, +18% parquet). Master baseline (gate, master21 82-file) starts next.
