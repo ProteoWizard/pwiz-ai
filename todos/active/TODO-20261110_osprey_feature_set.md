@@ -1407,6 +1407,11 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     **-1,241 +- 338 (-1.3%)**, confirmed -694 +- 204. UW8's sweep found higher CWT percentiles reduced detections
     at 12 XICs, so that idea is dropped (Brendan). **XIC 6 dropped** (8 already loses). The open question is 10 vs 12:
     XIC 10 seeds 4-5 run to ~15:30 PT / 00:30 CET Sun; then UW25 is free.
+  - **12:18 PT / 21:18 CET Sat: XIC 14 and 16 queued to prove the curve above 12 (Brendan; no XIC 6).**
+    `featset\xic-chain3.ps1` starts after the XIC-10 seed 4-5 arms: 82 files each on c3bdbea78d,
+    `arms-xic{14,16}.tsv` (A-70 / all 109, seeds 1-3). ETAs: XIC 10 five seeds ~15:30 PT / 00:30 CET Sun; XIC 14
+    ~03:15 PT / 12:15 CET Sun; XIC 16 ~15:30 PT Sun / 00:30 CET Mon. Same-build XIC-12 timing control:
+    `uw25x12ctl` (files 1-10).
   - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; MOVED TO UW8 ~07:40 PT).** The
     switch is on the local UW25 branch below; UW8 needs it pushed or rebuilt.
     Brendan: the median is the wrong order statistic when the low-ranked fragments reliably trail off. If the
