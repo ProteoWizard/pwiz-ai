@@ -70,6 +70,16 @@ pre-#5030's; the column's writes and reads stay gone; the extra cost is an in-me
 - Deferred (developer, 2026-11-14): the many-hours 82-file validation, run in parallel on MACS2
   (spectra on E: and on D:) and an i9 desktop (64 GB), later.
 
+## Decision (developer, 2026-11-14): match PerFileScoring for multi-window precursors
+
+A precursor in two windows arises from isolation margins (Gillet-style SWATH), which Osprey does not
+exclude yet: #5034. For this fix, handle it the way Stage 4 does rather than reproduce Stage 4's
+choice across windows: each window computes the moved row's candidates from its own spectra, picks
+its boundaries and scores it, and the rescore keeps the best row by `CoelutionSum` (Stage 4's
+`DeduplicatePairs` rule) instead of the last window's. No cross-window reads, no slice reader. The
+reproduction check applies in the window holding Stage 4's apex scan. Goldens may move only for
+multi-window rows; log how many there are.
+
 ## Progress Log
 
 ### 2026-11-14 - Session Start
