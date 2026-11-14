@@ -191,3 +191,30 @@ RAM, SATA HDD) is the machine where #5030 measured +42%. Please run:
   `.reconciliation.json` / `.scores-reconciled.parquet` are byte-identical between `fix` and `base`.
 - **Expected**: `fix` about equal to `pre` on the HDD (spectra read once); if `fix` stays ~29 s/file
   slower than `pre`, the cost is compute, and the 1-file profile on MACS2 (in progress) should show where.
+
+### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
+
+`ai/.tmp/sessions/20261112-5023/cwtfix-profile.ps1` -> `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-cwtprof\`
+(`cwtprof.log`, `prof-{fix,base,pre}.dtp`, `-report.xml`; Reporter 2026.2.1 from
+`D:\...\osprey-runs\_tools\dottrace-clt-2026.2.1`, the installed 2022 Reporters cannot read these).
+PerFileRescoring with `-ParallelFilesRescoring 1 -Threads 72`, dotTrace sampling (thread wall time, so
+blocked time counts). Fix and base reconciled parquets byte-identical.
+
+| | fix | base (#4950) | pre-#5030 |
+|---|---|---|---|
+| PerFileRescoring wall | 205.6 s | 210.0 s | 215.9 s |
+| Window threads busy (log) | 2,111 | 2,096 | 2,190 thread-s |
+| `RecomputeCwtCandidates` | 11.1 | 56.1 | 0 thread-s |
+| `GetCalibratedWindow` (all window loads) | 1,753 | 2,238 | 1,882 thread-s |
+| `ParquetScoreCache` | 313 | 321 | 356 thread-s |
+
+- The fix does less work than #4950 head: the planning sweep's extra window loads are gone (-485
+  thread-s) and the recompute costs 11 instead of 56 thread-s (the sweep ran it on 72 oversubscribed
+  threads). Fix and pre-#5030 read the same windows.
+- The read locks hold only the raw read (`BlockReadStream.ReadFromDisk`,
+  `SpectraWindowIndex.LoadWindowSerialRead`); no compute runs inside them in any build. But the old sweep
+  read with unlocked parallel `LoadWindow`, so on cold SSD RAID it pre-warmed the cache that Stage 6's
+  serial first pass (`OSPREY_SERIAL_WINDOW_READS`, default on) then read. The fix leaves that serial read
+  cold: correct for an HDD, possibly slower on SSD. Worth an `OSPREY_SERIAL_WINDOW_READS=0` arm on UW8's SSD.
+- So the 20-file E: +15% is not added compute; with everything in RAM it is most likely run-to-run noise on
+  the shared machine (the same fix binary ran 443 s on E: and 296 s on D:).
