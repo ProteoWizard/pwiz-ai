@@ -1495,6 +1495,14 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   `.spectra.bin` (Brendan, 2026-11-14): write once, process many times - persistent enough that the raw data can
   leave the processing machine; but it is a cache, so it may be deleted instead of backed up when no reprocessing
   is expected.
+- **Disk at 1,000-2,000 runs (Brendan + UW8, 2026-11-14)**, SEA-AD per-run sizes: default 70 = 2.01 GB parquet,
+  2.39 GB run high-water, plus 4.22 GB `.spectra.bin` -> 2,000 runs ~4.8 TB working + ~8.4 TB caches = ~13 TB, over
+  one 8 TB D:. Levers: (1) float32 features (Phase 5; ~-1/3 of the default's parquet -> ~3.2 TB working at 2,000);
+  (2) an HPC-like local-staging mode: copy each run's `.spectra.bin` from the network share to local disk only for
+  PerFileScoring / PerFileRescoring and delete it after (FirstPassFDR needs none), so the local peak is the
+  parquets + a few caches (the HPC chain already ships caches this way). First step before any of it: #4950 on the
+  446-file CHS dataset - measures CHS's real per-run disk and confirms the memory floor stays flat (no
+  O(files x entries) structure; 82-file peak 42.8 GB private for the default, 57.2 GB for all 109).
 - **Comparing with DIA-NN (Brendan, 2026-11-14): Osprey's pass 2 is its MBR phase.** Like for like on UW8 (82
   files, i9, 32 threads): DIA-NN 2.7.0 with MBR 9.82 h (first pass 7.1 h; `runs-uw8\diann270-82files\
   report.log.txt`) vs Osprey all 109 7.75 h / default 70 6.91 h (Osprey excludes the one-time `.spectra.bin`
