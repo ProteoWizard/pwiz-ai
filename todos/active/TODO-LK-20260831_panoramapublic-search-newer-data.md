@@ -1,14 +1,17 @@
 # TODO-LK-20260831_panoramapublic-search-newer-data.md
 
 ## Branch Information
-- **Branch**: `26.7_fb_panoramapublic-search-newer-data`
+- **Branch**: `26.11_fb_panoramapublic-search-newer-data`, renamed from `26.7_fb_panoramapublic-search-newer-data`.
+  Deleted after the merge
 - **Checkout**: `C:\Users\vsharma\WORK\labkey\release-branch\server\modules\MacCossLabModules`
-- **Base**: `release26.7-SNAPSHOT`
+- **Base**: `release26.11-SNAPSHOT`
 - **Created**: 2026-08-31
-- **Status**: In Progress
+- **Status**: Merged into `release26.11-SNAPSHOT` as 047c6dca on 2026-11-13. Testing on PWeb-DR is next
 - **GitHub Issue**: (none)
 - **Module**: `panoramapublic`
-- **PR**: [#689](https://github.com/LabKey/MacCossLabModules/pull/689) (ready for review)
+- **PR**: [#692](https://github.com/LabKey/MacCossLabModules/pull/692). Replaces
+  [#689](https://github.com/LabKey/MacCossLabModules/pull/689), which targeted 26.7 and has Josh Eckels'
+  review and the replies
 - **Related**: builds on the publication search in PR #606 and the failure reporting in PR #675. Comes
   before `TODO-LK-20261105_panoramapublic-release-on-publication.md`, which needs the search to run for
   every private dataset.
@@ -29,14 +32,16 @@ with no response.
 - [x] `/code-review` and `lk-review` findings, and the Copilot review, which has no open issues
 - [x] PR #689 ready for review
 - [x] TeamCity build for 2f91fc59 passes
+- [x] Josh Eckels' review. Labels added for the form inputs, and his other two comments answered
+- [x] Moved to 26.11 as PR #692
+- [x] Josh Eckels approved PR #692, and it was squash-merged into `release26.11-SNAPSHOT` as 047c6dca
 
 ### Remaining
-- [ ] Human review, and merge into `release26.7-SNAPSHOT`
-- [ ] Deploy on PanoramaWeb, following "Deployment on PanoramaWeb"
+- [ ] Test on PWeb-DR for a week, then deploy on PanoramaWeb, following "Deployment on PanoramaWeb"
 
 ## Work done
 
-Commits on PR #689
+Commits on PR #692, squash-merged as 047c6dca. All but the last two were also on #689
 - bd0409c9 - the feature
 - 46b0888e - code review fixes
 - abec0b1d - Copilot fixes
@@ -46,6 +51,8 @@ Commits on PR #689
 - 8bc6015b - page title on the error page of the dataset status actions
 - acc48264 - reminders and extensions for a dataset with a saved paper
 - 2f91fc59 - Selenium test for a publication found for a dataset at the reminder limit
+- c1c5eda7 - labels for the inputs on the settings and Send Reminders pages
+- 6ff7c966 - merge of `release26.11-SNAPSHOT`, which TeamCity needed to start the tests
 
 - **Search split from the reminder decision.** `PrivateDataReminderJob.processExperiment` searches
   every dataset that is not excluded (public, old version, pending resubmission, deletion request) and
@@ -112,6 +119,9 @@ Commits on PR #689
 
 ## Deployment on PanoramaWeb
 
+Run these steps on PWeb-DR first, after its data is synced from PanoramaWeb, and test there for a week
+before deploying on PanoramaWeb. The changes ship in 26.11.
+
 1. Before deploying, check that the daily reminder schedule is off on the Private Data Reminder
    Settings page.
 2. After the upgrade, and before any reminder job runs, check the rows the backfill will change.
@@ -135,7 +145,72 @@ Commits on PR #689
 4. Open the Stopped Reminders grid and check that it lists the 18 datasets.
 5. On the Private Data Reminder Settings page, change "Publication search frequency (months)" from 3
    to 1. PanoramaWeb has 3 saved, so the new default does not apply there.
-6. Count the private datasets that get a reminder naming their saved paper on the first run, because the
+6. Set the first publication search dates. Every private dataset has an empty `LastPublicationSearchDate`
+   after the upgrade, so the first run would search all of them, 80 on 2026-11-13. Save the script below
+   to a file and run it with `frequency_months` set to the value from step 5, and `user_id` set to a site
+   admin's user ID.
+   ```
+   psql -d <database> -v frequency_months=1 -v user_id=<site admin user id> -f <script file>
+   ```
+   - A row with a `LastReminderDate` in the past month gets that date, because the job searched when it
+     posted that reminder. The reminders for the datasets submitted in 2020 to 2025 were posted one year
+     per day in November 2026
+   - Any other dataset, including one with no `DatasetStatus` row, gets a random date that makes its first
+     search due on one of the next 30 days
+   - It ends with ROLLBACK. Check the number of datasets due each day, then change it to COMMIT and run
+     it again
+   ```sql
+   \set ON_ERROR_STOP on
+
+   BEGIN;
+
+   -- The current version of each private dataset in the Panorama Public project, with no deletion request.
+   CREATE TEMP TABLE targets ON COMMIT DROP AS
+   WITH RECURSIVE pp_folders AS (
+       SELECT j.Project AS EntityId FROM panoramapublic.Journal j WHERE j.Name = 'Panorama Public'
+       UNION ALL
+       SELECT c.EntityId FROM core.Containers c JOIN pp_folders p ON c.Parent = p.EntityId
+   )
+   SELECT ea.Id AS ExperimentAnnotationsId,
+          ds.Id AS DatasetStatusId,
+          CASE WHEN ds.LastReminderDate > now() - make_interval(months => :frequency_months)
+               THEN ds.LastReminderDate
+               ELSE now() - make_interval(months => :frequency_months)
+                    + make_interval(days => floor(random() * 30)::int)
+          END AS SearchDate
+   FROM panoramapublic.ExperimentAnnotations ea
+   JOIN pp_folders f ON f.EntityId = ea.Container
+   LEFT JOIN panoramapublic.DatasetStatus ds ON ds.ExperimentAnnotationsId = ea.Id
+   WHERE ea.DataVersion = (SELECT MAX(v.DataVersion) FROM panoramapublic.ExperimentAnnotations v
+                           WHERE v.SourceExperimentId = ea.SourceExperimentId)
+     AND NOT EXISTS (SELECT 1 FROM core.RoleAssignments ra
+                     WHERE ra.ResourceId = ea.Container
+                       AND ra.UserId = -3 -- Guests
+                       AND ra.Role = 'org.labkey.api.security.roles.ReaderRole')
+     AND ds.DeletionRequestedDate IS NULL
+     AND ds.LastPublicationSearchDate IS NULL;
+
+   UPDATE panoramapublic.DatasetStatus ds
+   SET LastPublicationSearchDate = t.SearchDate, Modified = now(), ModifiedBy = :user_id
+   FROM targets t
+   WHERE ds.Id = t.DatasetStatusId;
+
+   INSERT INTO panoramapublic.DatasetStatus
+       (ExperimentAnnotationsId, LastPublicationSearchDate, Created, CreatedBy, Modified, ModifiedBy)
+   SELECT ExperimentAnnotationsId, SearchDate, now(), :user_id, now(), :user_id
+   FROM targets
+   WHERE DatasetStatusId IS NULL;
+
+   -- Datasets due for their first search on each day.
+   SELECT (SearchDate + make_interval(months => :frequency_months))::date AS first_search_due,
+          count(*) AS datasets
+   FROM targets
+   GROUP BY 1
+   ORDER BY 1;
+
+   ROLLBACK;
+   ```
+7. Count the private datasets that get a reminder naming their saved paper on the first run, because the
    first-reminder delay and a current extension no longer apply to them. A paper saved with Notify on the
    Search Publications page can be on a dataset in either period. Set the two intervals to "Delay until
    first reminder" and "Extension duration", and the limit to "Stop reminders after", from the settings
@@ -155,15 +230,16 @@ Commits on PR #689
          AND (ea.Created > NOW() - INTERVAL '12 months'
               OR ds.ExtensionRequestedDate > NOW() - INTERVAL '6 months');
    ```
-7. Turn the daily reminder schedule back on.
+8. Turn the daily reminder schedule back on.
 
 If a reminder job runs before step 3, each of the 18 datasets gets one more reminder, and the backfill
 still stops them. Datasets whose extension has expired start at 0 and get a few more reminders before
-stopping. Repeat steps 2 to 4 on any staging copy of PanoramaWeb.
+stopping.
 
 ## Known limitations, accepted
 - A submitter who replies in the thread without using Make Public, Request Extension or Request
-  Deletion is not detected, and reminders stop after the limit
+  Deletion is not detected, and reminders stop after the limit. Replies are rare, and an admin answers
+  and usually asks the submitter to request an extension or deletion
 - A failed `DatasetStatus` update after a successful post sends the message a second time on the next
   run. An update that fails on every run sends it on every run, because `LastReminderDate` and
   `ReminderCount` never change. The job ends in ERROR each time
@@ -187,8 +263,16 @@ stopping. Repeat steps 2 to 4 on any staging copy of PanoramaWeb.
 ### 2026-11-12
 - The TeamCity build for acc48264 passed
 - Checked the deployment steps against a PanoramaWeb export. The backfill matches 68 rows, 18 of them
-  private. Removed the step that spread the first publication searches, because a search of the 49
-  private datasets submitted in 2026 found one paper. Fixed the join in the saved-paper count query
+  private
 - Committed and pushed 2f91fc59, the Selenium test for a dataset at the reminder limit
 - PR #689 marked ready for review
 - The TeamCity build for 2f91fc59 passed
+
+### 2026-11-13
+- Josh Eckels approved PR #689 with three comments. Committed and pushed c1c5eda7, the input labels.
+  `PrivateDataReminderTest`, `PublicationSearchTest` and `NcbiApiKeyTest` pass
+- Moved to 26.11 so it can be tested on PWeb-DR first. Renamed the branch to
+  `26.11_fb_panoramapublic-search-newer-data`, which closed #689, and opened PR #692
+- Merged `release26.11-SNAPSHOT` into the branch in 6ff7c966, so the TeamCity tests would start. They
+  passed
+- Josh Eckels approved PR #692. Squash-merged into `release26.11-SNAPSHOT` as 047c6dca and deleted the branch
