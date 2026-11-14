@@ -145,3 +145,27 @@ loaded spectra; for an overlap row whose apex window is elsewhere, read that win
 rows: a slice of a few scans. Every window computes identical boundaries for a row, so the result is
 independent of which window's row wins. The reproduction check (apex at Stage 4's scan) still
 guards bit-identity, including that the slice covers what detection reads.
+
+### 2026-11-14 - Regression and 20-file A/B (MACS2)
+
+- `regression-parallel.ps1 -Dataset All`: 49 PASS / 0 FAIL in 1:00:50, unchanged output; multi-window
+  resolutions 0 in every leg (`ai/.tmp/sessions/20261112-5023/fix-regression-all.log`).
+- Commit a43f875c51 (local, not pushed).
+- 20-file PerFileRescoring A/B, #4950 head (849586af76) vs the fix, chain `cwtfix-ab.ps1`, results under
+  `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-cwtfix\` (`cwtfix-ab.log`, `disk-io.tsv`):
+
+  | Spectra on | #4950 head | Fix |
+  |---|---|---|
+  | E: | 397, 375 s | 450, 436 s |
+  | D: (copied beside parquets) | 450, 307 s | 294, 298 s |
+
+  - Output: `.reconciliation.json` and `.scores-reconciled.parquet` byte-identical across all arms
+    (40 files per comparison).
+  - The runs were NOT cold. MACS2 has 511 GB RAM; the 263 GB "flush" left ~450 GB standby, and
+    `disk-io.tsv` shows ~0 GB of disk reads in 7 of 8 arms. Only d1base read from disk (21 GB, D: queue 12),
+    so its 450 s is the one cold-ish number. The A/B therefore measures compute, not I/O.
+  - Warm, the same fix binary took 443 s (E: arms) and 296 s (D: arms), so run-to-run noise on the shared
+    machine is as large as the effect. Window-thread busy time: base ~2,550-3,700 thread-s, fix
+    ~2,550-4,920 thread-s.
+  - Not yet a demonstrated gain. The I/O benefit needs a machine whose RAM cannot hold the working set
+    (the 64 GB i9, or UW8).
