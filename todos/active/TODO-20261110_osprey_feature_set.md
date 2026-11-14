@@ -1412,6 +1412,12 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     `arms-xic{14,16}.tsv` (A-70 / all 109, seeds 1-3). ETAs: XIC 10 five seeds ~15:30 PT / 00:30 CET Sun; XIC 14
     ~03:15 PT / 12:15 CET Sun; XIC 16 ~15:30 PT Sun / 00:30 CET Mon. Same-build XIC-12 timing control:
     `uw25x12ctl` (files 1-10).
+  - **Cleanup 12:35 PT:** removed the finished UW25 runs (the XIC-8 leg, `x12chk`, `x12ctl`, and the 11-09/10
+    memory-ladder FDR rungs fdr10/20/41/82, r1, r1t16, ladder, repro) and snapshot `_bin\uw25-4bb43e972b`; freed
+    458 GB (the rungs hard-linked the score legs). Their small files (`run.log`, json, tsv under 5 MB) are in
+    `runs-uw25\_kept\<run>\`, so `xic_timing.py` and `perfviz.py` still work from the logs. Kept: the three
+    XIC-12 score legs (every arm's baseline) and the XIC-10 leg until its seed 4-5 arms end. Each XIC 14/16 leg goes
+    the same way once its arms are recorded.
   - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; MOVED TO UW8 ~07:40 PT).** The
     switch is on the local UW25 branch below; UW8 needs it pushed or rebuilt.
     Brendan: the median is the wrong order statistic when the low-ranked fragments reliably trail off. If the
