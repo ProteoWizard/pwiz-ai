@@ -682,6 +682,28 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 - Only menu items in `menuMain` should have mnemonics and keyboard shortcuts
 - Context menus should not have mnemonics or keyboard shortcuts
 
+### Plain-English user-facing text
+
+Skyline is described at three levels, each with its own vocabulary. Keep each level
+consistent with itself; never expect one level to mirror another.
+
+1. **User interface** (dialogs, menus, messages, tooltips, tool descriptions): keep it
+   simple and do not over-explain. Say what happened and what the user can do. No
+   class names, no file extensions such as .exe or .dll, no internal mechanism.
+2. **Published papers, wiki pages, tutorials**: plain English about what the software
+   does. A paper may name a component ("the Skyline MCP Server") that the UI never
+   shows, and it still does not descend to EXE, DLL, or class names.
+3. **Developers** (code, comments, pwiz and pwiz-ai documentation): identifiers, file
+   names, and mechanism belong here and nowhere above.
+
+Developer speak creeps into level 1 as features are built, so run a **plain-English
+review** of user-facing strings before a release or after a burst of new UI: read every
+new or changed string in the `.resx` files as a user who has never seen the code, and
+rewrite any that name an identifier, describe the implementation, or explain more than
+the user needs. The same review applies to MCP tool descriptions, which an LLM repeats
+back to the user in its own words. See also "User-facing exception messages vs diagnostic
+details" above.
+
 ## File headers and AI attribution
 
 ### Standard file header
