@@ -1312,6 +1312,10 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     **Queued (UW8's read: "if 10 holds, try 8"):** `featset\xic8-night.ps1` starts when the XIC-10 arms end:
     82 files at XIC 8 (`uw25x8`, ~4.3 h) then A-70 / all 109 seeds 1-2 -> ~09:00 PT / 18:00 CET Sat. A STOP file
     in `featset\` before it starts cancels it.
+    - **Mishap 20:43-21:11 PT (fixed):** the XIC-8 driver's wait pattern matched its own "waiting" log line, so
+      XIC-8 scoring ran alongside the XIC-10 seed-2 A-70 arm for 28 min, under memory pressure. Stopped, the
+      7-file partial leg deleted, requeued with an exact pattern. The seed-2 A-70 arm's DETECTIONS are unaffected
+      (deterministic), but its stage5 time is not a clean timing.
   - **Design question this raises:** one N sets both peak DETECTION (median consensus, where extra weak fragments
     hurt) and the SCORES (where 12 was measured to help). Separating them, e.g. consensus over the top 6-8 and
     scores over 12, may beat both 10 and 12. It needs an env var and a build; not started tonight because the
