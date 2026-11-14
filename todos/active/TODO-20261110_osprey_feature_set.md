@@ -1296,8 +1296,17 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     | across builds (11-09 legs, da4eff9f63) | 79 | 232.9 s | 195.8 s | -37.1 +- 7.8 s (-15.9%) |
     | XIC 12, 11-09 run vs tonight's control | 10 | 225.2 s | 214.8 s | -10.4 s (-4.6%, run conditions) |
     Same build, 10 saves ~13 s per dropped fragment, matching UW8's 6->12 ablation (+61 s, ~10 s/fragment). The
-    parquet is +2.4% (3.87 -> 3.97 GB mean over 82) because XIC 10 scores 3.2% more precursors (above). Detections
-    are next.
+    parquet is +2.4% (3.87 -> 3.97 GB mean over 82) because XIC 10 scores 3.2% more precursors (above).
+  - **20:42 PT / 05:42 CET, seed 1: XIC 10 holds** (kept at true FDP 1%, paired with the XIC-12 arm, same seed;
+    `featset\xic_pair.py`):
+    | set | XIC 12 | XIC 10 | diff | DIA-NN-confirmed diff | FirstPassFDR read |
+    |---|---|---|---|---|---|
+    | A-70 | 96,408 | 96,501 | +93 | -19 | 385 -> 395 GB |
+    | all 109 | 96,593 | 96,869 | +276 | +46 | 504 -> 516 GB |
+    Both are well inside the paired noise (SD ~274), so no loss at seed 1. Seeds 2-3 run to ~00:45 PT / 09:45 CET.
+    **Queued (UW8's read: "if 10 holds, try 8"):** `featset\xic8-night.ps1` starts when the XIC-10 arms end:
+    82 files at XIC 8 (`uw25x8`, ~4.3 h) then A-70 / all 109 seeds 1-2 -> ~09:00 PT / 18:00 CET Sat. A STOP file
+    in `featset\` before it starts cancels it.
   - **Design question this raises:** one N sets both peak DETECTION (median consensus, where extra weak fragments
     hurt) and the SCORES (where 12 was measured to help). Separating them, e.g. consensus over the top 6-8 and
     scores over 12, may beat both 10 and 12. It needs an env var and a build; not started tonight because the
