@@ -1243,6 +1243,17 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
   `ai/.tmp/sessions/20261110-uw8featset/build_report.py`). UW8 is idle. Open for the next session: Astral goldens on
   #5033; the recipe-as-default decision (proposal above); UW25's 10-vs-12 XIC job; core-21 at 82 files; the two
   undecided switches (`MIN_RT_TOLERANCE`, `LOESS_BANDWIDTH`). Night log `ai/.tmp/night-session-budget-20261112.md`.
+- UW8 (2026-11-14 03:26 PT / 12:26 CET) **Median-polish column-percentile sweep running** (Brendan, from UW25's
+  hypothesis that the median across fragments may hold 12 XICs back as the fragment count grows; UW25 is busy
+  with 8 / 6 XICs, where 10 vs 12 was nominal). Developer switch `OSPREY_MP_COL_PERCENTILE` (default 50): only the
+  per-scan column effect ACROSS FRAGMENTS in Tukey median polish (`TukeyMedianPolish.cs` Fit, `ColumnCenter`)
+  takes the p-th percentile (linear interpolation of order statistics via `MedianMath.SelectInPlace`); row
+  medians and the medians of medians unchanged; 50 = the existing `MedianInPlace` path (bit-identical, unit test);
+  non-default values key the scoring (`;mpcolpct=<p>`). Local branch `nightlywork/20261114_mp_percentile` @
+  02c7dbf43b on #5033's tip (not pushed; gate 686/686, inspection 0/0), snapshot `_bin\uw8-mppct-02c7dbf43b`.
+  Sweep (`mpsweep.ps1` -> `mpsweep.tsv`): p = 50 / 40 / 30 / 20, each fresh PerFileScoring of UW8's 20 spread files
+  (12 XICs, the recipe, record-all), then FirstPassFDR `default` (A-70) seeds 1-3 on it; ~6.5 h, to ~10:00 PT /
+  19:00 CET. A winner gets an 82-file confirmation (20-file effects have understated 82-file ones).
 - **JOB FOR UW25 (written 2026-11-13 ~13:00 PT / 22:00 CET, Brendan at bed time): 10 XICs vs 12 at 82 files.**
   Why: 6 -> 12 XICs costs PerFileScoring +61 s of 257 s per file (+24%, `20261108-uw8perf\ablate.console.log`) and
   is a suspected cause of lost throughput vs master (MACS2 ran master in 2-2.5 h). The evidence for 12 is thin:
