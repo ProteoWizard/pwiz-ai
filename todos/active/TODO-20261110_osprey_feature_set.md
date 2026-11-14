@@ -1490,3 +1490,22 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
 
   The stored cwt_candidates cost 38 GiB of parquet (+18%) and 40 GB more rescoring parquet reads; #5030's spectra
   re-read is not in [PATH] (see `runs-cwt\disk-io.tsv`). Rescoring-only ABAB (rs1post..rs4pre) started 18:42.
+- MACS2 (2026-11-13 21:00 PT) **#5030 rescoring ABAB, spectra on the E: SSD RAID, parquets on D:, 82 files all-109:
+  post-#5030 (recompute) is 12% FASTER than pre-#5030 (stored cwt_candidates).** Each arm is PerFileRescoring alone,
+  linked from its own build's full run, alternating so no arm starts with its own parquets warm. Logs:
+  `D:\...\sea-ad\runs-cwt\_kept\<arm>\run.log`; drive I/O `runs-cwt\disk-io.tsv` (30 s averages over each arm window).
+
+  | Arm | Rescoring (s) | [PATH] GB read (parquet) | read s / gate wait s | D: read GB | E: read GB |
+  |---|---|---|---|---|---|
+  | rs1post | 1,804 | 490.1 (464.1) | 1,139 / 3,416 | 222 | 290 |
+  | rs2pre | 2,040 | 530.4 (504.3) | 1,363 / 3,780 | 260 | 274 |
+  | rs3post | 1,842 | 490.1 (464.1) | 1,143 / 3,313 | 221 | 311 |
+  | rs4pre | 2,109 | 530.4 (504.3) | 1,418 / 3,895 | 261 | 274 |
+
+  Mean post 1,823 s vs pre 2,074 s (-12.1%; both pairs agree, -236 / -267 s). The recompute's extra spectra sweep
+  costs only 16-37 GB more E: reads (the SSD RAID absorbs it), while the stored column costs ~39 GB more physical
+  D: reads and ~420 s more gate wait. About half of [PATH] parquet reads hit the file cache (D: 222 of 464 GB).
+  Caveat, in-pipeline (parquets just written, warm): the full runs showed the opposite, pre 1,551 s vs post 1,936 s
+  rescoring, but those ran 12 h apart on a shared machine; the pre full run's rescoring read only 128 GB from D:
+  (vs 260 in its ABAB arms) and the same 274 GB from E:. Not yet controlled. Condition 2 (spectra copied to D:
+  beside the parquets, UW8-like) started 20:53.
