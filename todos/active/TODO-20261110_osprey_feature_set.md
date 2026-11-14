@@ -1381,7 +1381,18 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     solution removed an earlier one's advantage. `featset\xic-chain.ps1`: after the XIC-10 arms, XIC 8 then XIC 6
     (82 files each, c3bdbea78d, `arms-xic{8,6}.tsv`: A-70 / all 109, seeds 1-3), then `cwtpct-sweep.ps1`. ETAs:
     XIC 8 done ~11:30 PT / 20:30 CET Sat, XIC 6 ~21:30 PT Sat / 06:30 CET Sun, sweep ~05:30 PT / 14:30 CET Sun.
-  - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; now queued after XIC 8 and 6).**
+  - **07:40 PT / 16:40 CET Sat: XIC 8 shows the first clear loss (seed 1).** Kept at true FDP 1%, 82 files, paired
+    with XIC 12: A-70 94,944 vs 96,408 = **-1,464 (-1.5%)**, DIA-NN-confirmed -822; all 109 94,997 vs 96,593 =
+    **-1,596 (-1.7%)**, confirmed -923. That is ~5-15x the paired noise, and over half the loss is DIA-NN-confirmed.
+    PerFileScoring -46.5 +- 5.1 s per file vs the same-build XIC-12 control (-21.6%, 10 files); the parquet is +6.2%
+    (file 5 scores 4,587,382 rows vs 4,287,854 at 12). Seeds 2-3 to ~11:30 PT.
+    - **Correction to XIC 10, all 109:** seed 3 is 95,888 vs 96,806 = **-918**, so all 109 is +276 / -417 / -918 =
+      -353 +- 600 (two of three negative). A-70 stays neutral (-2 +- 103). A loss may already begin at 10 with
+      the full feature set.
+    - **Percentile sweep moved to UW8 (Brendan).** `xic-chain2.ps1` replaces the chain: XIC 6 only, after the XIC-8
+      arms -> ~21:30 PT Sat / 06:30 CET Sun.
+  - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; MOVED TO UW8 ~07:40 PT).** The
+    switch is on the local UW25 branch below; UW8 needs it pushed or rebuilt.
     Brendan: the median is the wrong order statistic when the low-ranked fragments reliably trail off. If the
     median was right for 6 XICs, a higher percentile may be right for 12, so tune it. Slower because of more
     detections is acceptable: the goal is closing the detection gap with DIA-NN, so XIC 8 (a speed play) is cancelled.
