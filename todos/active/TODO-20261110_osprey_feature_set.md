@@ -1232,6 +1232,11 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     ruled out on UW8: the cost is ~2,670 s of extra compute, ~33 s per file, in the recomputation itself. MACS2's
     72 threads / parallel files hide it; a 32-thread machine running files sequentially pays it in full. This is
     the baseline for MACS2's CWT redesign (recompute only what the planner consults, or cheaper).
+- UW8 (2026-11-14 01:40 PT / 10:40 CET) **Final report published:** https://claude.ai/artifact/MvPDXFW2YMt6ZdJsLtAVeo
+  (detections vs stored bytes per set at 82 files, the one-machine A/B, the #5030 A/B, open items; built by
+  `ai/.tmp/sessions/20261110-uw8featset/build_report.py`). UW8 is idle. Open for the next session: Astral goldens on
+  #5033; the recipe-as-default decision (proposal above); UW25's 10-vs-12 XIC job; core-21 at 82 files; the two
+  undecided switches (`MIN_RT_TOLERANCE`, `LOESS_BANDWIDTH`). Night log `ai/.tmp/night-session-budget-20261112.md`.
 - **JOB FOR UW25 (written 2026-11-13 ~13:00 PT / 22:00 CET, Brendan at bed time): 10 XICs vs 12 at 82 files.**
   Why: 6 -> 12 XICs costs PerFileScoring +61 s of 257 s per file (+24%, `20261108-uw8perf\ablate.console.log`) and
   is a suspected cause of lost throughput vs master (MACS2 ran master in 2-2.5 h). The evidence for 12 is thin:
