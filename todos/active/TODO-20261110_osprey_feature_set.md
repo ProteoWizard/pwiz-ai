@@ -1227,11 +1227,17 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     | 3 | pre | 5,659 s | 530.4 / 504.3 / 26.1 GB | 1,781 s | 0 |
     | 4 | post | 8,048 s | 490.1 / 464.1 / 26.0 GB | 1,504 s | 0 |
 
-    Pre 5,678 s, post 8,062 s: **+2,384 s (+42%)**, repeats within ~30 s. Post reads 40 GB LESS parquet (-282 s of
-    reading) and the same 26 GB of spectra/other, with no gate wait in either - so the storage-layout hypothesis is
-    ruled out on UW8: the cost is ~2,670 s of extra compute, ~33 s per file, in the recomputation itself. MACS2's
-    72 threads / parallel files hide it; a 32-thread machine running files sequentially pays it in full. This is
-    the baseline for MACS2's CWT redesign (recompute only what the planner consults, or cheaper).
+    Pre 5,678 s, post 8,062 s: **+2,384 s (+42%)**, repeats within ~30 s. Post reads 40 GB less parquet (-282 s of
+    gated reading) and the same 26 GB of GATED spectra/other, with no gate wait in either.
+    - **CORRECTION (2026-11-14, Brendan/MACS2): the "compute, not I/O" reading above was WRONG.** The `[PATH] ...
+      block reads` lines count only gated reads. #5030's planning step (`CwtCandidateRecompute.ForRows`) loads nearly
+      every window's spectra in a parallel UNGATED FileStream sweep, and the rescore then loads them again - a second
+      spectra read invisible to those counters (and to gate wait). MACS2's split settles it: spectra on an SSD apart
+      from the parquets -12%; on the parquets' disk +35%; UW8 (one HDD) +42%. The cost is the doubled spectra read
+      contending with the parquet reads on one disk. Fix in progress:
+      `TODO-20261112_osprey_cwt_recompute-fix.md` (load each run's spectra once, recompute the <1% moved rows'
+      candidates in the rescore's own window loop). Expected on UW8: the +42% turns into a saving, as on MACS2's SSD.
+      UW8's runs above are its HDD "before" for that fix.
 - UW8 (2026-11-14 01:40 PT / 10:40 CET) **Final report published:** https://claude.ai/artifact/MvPDXFW2YMt6ZdJsLtAVeo
   (detections vs stored bytes per set at 82 files, the one-machine A/B, the #5030 A/B, open items; built by
   `ai/.tmp/sessions/20261110-uw8featset/build_report.py`). UW8 is idle. Open for the next session: Astral goldens on
