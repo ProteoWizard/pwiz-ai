@@ -1389,8 +1389,9 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     - **Correction to XIC 10, all 109:** seed 3 is 95,888 vs 96,806 = **-918**, so all 109 is +276 / -417 / -918 =
       -353 +- 600 (two of three negative). A-70 stays neutral (-2 +- 103). A loss may already begin at 10 with
       the full feature set.
-    - **Percentile sweep moved to UW8 (Brendan).** `xic-chain2.ps1` replaces the chain: XIC 6 only, after the XIC-8
-      arms -> ~21:30 PT Sat / 06:30 CET Sun.
+    - **Percentile sweep moved to UW8 (Brendan).** `xic-chain2.ps1` replaces the chain: after the XIC-8 arms,
+      **XIC 10 seeds 4-5** (Brendan: 5 seeds for final decisions; 10 is the marginal one; the XIC-12 pairs exist as
+      `p9-82-setA70-s4/5` and `p8-82-all109-s4/5`), ~4 h, then XIC 6 (seeds 1-3) -> ~01:30 PT Sun / 10:30 CET Sun.
   - **CWT consensus percentile sweep (Brendan 2026-11-14 ~00:10 PT / 09:10 CET; MOVED TO UW8 ~07:40 PT).** The
     switch is on the local UW25 branch below; UW8 needs it pushed or rebuilt.
     Brendan: the median is the wrong order statistic when the low-ranked fragments reliably trail off. If the
