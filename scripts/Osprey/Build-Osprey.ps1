@@ -683,6 +683,16 @@ try {
         } else {
             Remove-Item Env:OSPREYDEV_TEST_CULTURE -ErrorAction SilentlyContinue
         }
+        # vstest leaves a TestResults\Deploy_<user> <timestamp> folder per run and nothing removes
+        # them: ~150 had piled up in one checkout (2026-11-14). Prune those older than a day. Only
+        # Deploy_* - regression.ps1 prunes its own regression-* dirs, and _derived is its cache.
+        $deployDirs = @(Get-ChildItem (Join-Path $ospreyRoot 'TestResults') -Directory -Filter 'Deploy_*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) })
+        if ($deployDirs.Count -gt 0) {
+            $deployDirs | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Pruned $($deployDirs.Count) test deployment folder(s) older than a day from TestResults" -ForegroundColor Gray
+        }
+
         $testStart = Get-Date
         if ($Coverage) {
             # Wrap vstest.console.exe with dotCover. Filters keep the Osprey.*
