@@ -193,8 +193,9 @@ Astral regression (3 files, HRAM) under the HRAM defaults vs #5033's default-70 
 15:00 -> 19:24 (+29%). `regression-parallel.ps1 -Dataset All`: 49 PASS / 0 FAIL, 52:30 (46:07 before); Stellar
 unchanged. Logs: `ai/.tmp/sessions/20261112-5023/hd-astral-golden.log`, `hd-regression-all.log`, gates `hd-gate*.log`.
 
-For review: the TeamCity Perf/Regression perf leg will see the slower HRAM defaults (+29% straight-through on
-Astral); decide whether that baseline moves with this PR. The ja / zh-Hans resx have no `--protein-best` entry,
+Timing: TeamCity Perf/Regression (tctest.bat) has no timing gate - it is regression-parallel.ps1 -Dataset All plus
+CarafeSharp's nightly checks - so the slower HRAM defaults (+29% straight-through on Astral) only lengthen the
+Astral lane (local -Dataset All 46:07 -> 50:58-52:30); nothing fails on it. The ja / zh-Hans resx have no `--protein-best` entry,
 so those help pages show the new English text until it is translated.
 
 `/code-review medium` on 1b3156778a..HEAD: 9 findings. Fixed in 12127bb099 (gate 686/686):
