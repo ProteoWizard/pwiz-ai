@@ -230,6 +230,12 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
     - **CPU:** the fix spends ~3.3x the window-thread time (63,576 vs 19,488 thread-s; +44,000 thread-s, ~540
       thread-s per file, ~17 s of wall per file at 32 threads if CPU-bound) - the candidate computation now runs in
       the rescore's window loop. Expected (Brendan); here it is fully hidden behind the I/O it removes.
+    - **CORRECTION (Brendan, 16:05 PT): the 3.3x is a metric artifact, not more CPU.** Base ALSO recomputes the
+      candidates (#5030's planning sweep), but outside the window loop, so "Window threads busy" never counted it.
+      Window-loop wall vs the rest of the stage, 82 files: base1 637 s loop + 8,046 s elsewhere (the sweep and its
+      disk contention); fix1 2,136 s loop + 3,763 s elsewhere. The fix moved ~1,500 s of wall (~44,000 thread-s)
+      into the loop and removed ~4,280 s outside it. Total process CPU was not logged for these arms; the SSD-layout
+      arms now record Osprey's TotalProcessorTime (`cwtab-ssd\<arm>.cpu.txt`).
     - vs storing the candidates: fix1 ~+4% over UW8's earlier pre-#5030 runs (5,678 s, hours apart); pre1/pre2 in
       this run pin it. Brendan's view: that CPU is well spent against ~0.5 GB/file of parquet (41 GB at 82 files).
     - Still running: fix2 (~17:00 PT), pre1 (~18:35), pre2 (~20:10); then the SSD layout (~05:00-06:00 PT Sun).
