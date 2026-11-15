@@ -74,15 +74,20 @@ Settings > Developer > Edit Config no longer exists in current Claude Desktop.
 - [x] Store fix (2): 26.1.1.315 posted; all but one participant connected
 - [x] Claude Code check (3): verified in the 26.1.1.316 binary (true with `claude` on PATH, false without)
 - [x] Post 26.1.1.316 to the Tool Store (Brendan, 2026-11-11)
-- [x] TeamCity triage on the PR (2026-11-15). Two failures, one ours: `TestSkylineMcp` failed
-      on `EXPECTED_ZIP_VERSION`, the test's deliberate pin on the connector ZIP version (289 vs
-      the rebuilt 316) - fixed in 03667f3383, verified locally (`TestSkylineMcp 0 failures`).
-      The two msconvert failures on the Wine Docker configuration (Bruker
-      `Sample_1-A,1_01_985.d` and the CJK-named Shimadzu `.lcd`) are environmental and
-      pre-date the PR: identical on release-branch Docker build #1319 (Nov 6), green on that
-      configuration since. Causes in the log: a dirty agent work dir (`tar: ... File exists`
-      during test-data unpack) and the CJK filename garbled under Wine. Brendan merged the
-      release tip (6376edde) into the branch, so it is current with `Skyline/skyline_26_1_1`.
+- [x] TeamCity triage on the PR (2026-11-15). `TestSkylineMcp` failed on `EXPECTED_ZIP_VERSION`,
+      the test's deliberate pin on the connector ZIP version (289 vs the rebuilt 316) - fixed in
+      03667f3383, verified locally (`TestSkylineMcp 0 failures`). The Wine Docker configuration
+      never failed on its own tests: every run reports 45 passed, 0 failed, 2 muted (the Bruker
+      `Sample_1-A,1_01_985.d` and CJK-named Shimadzu `.lcd` conversions, muted on the release
+      branch since about Nov 7; the green release build 4261876 has the same counts). Its first
+      three PR failures were snapshot-dependency propagation from the failing Windows build
+      (`snapshot dependency failed: Skyline Release Branch x86_64`). The run after the fix
+      (4266146) died at checkout on agent `pwiz-linux-i-0ca643e68453cd2f3`, whose JVM could not
+      spawn any process (`Failed to exec spawn helper ... JDK version mismatch`; hostname,
+      /bin/sh and git all failed) - the same agent failed #4950's Docker build 4266140 the same
+      way. That agent has since been recycled; a re-run lands on a healthy agent. Brendan merged
+      the release tip (6376edde) into the branch, so it is current with
+      `Skyline/skyline_26_1_1`.
 - [ ] Cherry-pick to master after merge
 
 ## Not fixed: locked-down machine (2026-11-11)
