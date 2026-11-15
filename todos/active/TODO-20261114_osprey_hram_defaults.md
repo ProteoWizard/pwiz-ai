@@ -1,13 +1,15 @@
 # TODO-20261114_osprey_hram_defaults.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20261115_osprey_hram_defaults` on MACS2, LOCAL ONLY (not pushed), from #5033's
+- **Branch**: `Skyline/work/20261115_osprey_hram_defaults`, from #5033's
   head 1b3156778a (which carries #4950's tip with #5036 and #5037).
 - **Base**: #5033 -> #4950
+- **PR**: [#5038](https://github.com/ProteoWizard/pwiz/pull/5038) (stacked on #5033; retarget after it merges)
 - **Module**: `osprey`
 - **Created**: 2026-11-14 (plan by UW8; Brendan is handing implementation to MACS2)
-- **Status** (2026-11-15 ~00:30, MACS2 night session): the HRAM half of the per-resolution table is implemented
-  and gated locally (see "MACS2 night 2026-11-14" below); not pushed, no PR. Still to do: the all-resolution items
+- **Status** (2026-11-15, MACS2): the HRAM half of the per-resolution table is implemented and gated locally
+  (see "MACS2 night 2026-11-14" below). Brendan approved pushing it as the way to lock the SEA-AD Astral gains
+  into the defaults; pushed at 12127bb099 as #5038, Perf/Regression build 4266112 queued. Still to do: the all-resolution items
   (transfer, refit off, PEP ratio, OOF knob removal), the leftover-variable removals, the settings log block, and
   MIN_RT_TOLERANCE / LOESS_BANDWIDTH once UW8's drop-one experiment lands here.
 
