@@ -1426,7 +1426,14 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
       DIA-NN-confirmed counts, with 8 clearly lower: **12 is the best measured count**, at a cost of ~12% of
       PerFileScoring over 10. XIC 14 scores fewer rows (file 5: 4,201,572 vs 4,287,854 at 12), consistent with the
       median-consensus mechanism; its parquet is -0.9%.
-    - XIC 16 scoring started 03:30 PT (~6 h), arms to ~15:45 PT / 00:45 CET Mon. The XIC-10 and XIC-14 legs were
+    - **DECISION (Brendan, 2026-11-15): keep 12 XICs.** Fewer XICs only buys speed (XIC 10: -12.4%
+      PerFileScoring); it costs disk (+2.4% parquet, +2.4-2.9% FirstPassFDR read, because the median consensus
+      gives more candidates a peak) and likely some borderline detections (XIC 10 A-70 -250, 95% CI about
+      -725..+225 over 5 seeds; unpaired against 12's five seeds, Welch p ~0.1). Osprey still trails DIA-NN on
+      detections, so a detection loss is not traded for speed. More fragments (14) are slower, ~1% smaller, and
+      also below 12. 12 is backed by 82-file, multi-seed numbers at 8/10/12/14.
+    - XIC 16 scoring started 03:30 PT (~6 h), arms to ~15:45 PT / 00:45 CET Mon: the curve's upper point only,
+      not needed for the decision. The XIC-10 and XIC-14 legs were
       removed after their arms (596 GB; logs in `runs-uw25\_kept\`).
   - **Cleanup 12:35 PT:** removed the finished UW25 runs (the XIC-8 leg, `x12chk`, `x12ctl`, and the 11-09/10
     memory-ladder FDR rungs fdr10/20/41/82, r1, r1t16, ladder, repro) and snapshot `_bin\uw25-4bb43e972b`; freed
