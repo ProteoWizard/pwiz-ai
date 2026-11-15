@@ -1412,6 +1412,22 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
     `arms-xic{14,16}.tsv` (A-70 / all 109, seeds 1-3). ETAs: XIC 10 five seeds ~15:30 PT / 00:30 CET Sun; XIC 14
     ~03:15 PT / 12:15 CET Sun; XIC 16 ~15:30 PT Sun / 00:30 CET Mon. Same-build XIC-12 timing control:
     `uw25x12ctl` (files 1-10).
+  - **03:50 PT / 12:50 CET Sun: 12 is the top of the curve; 10 does not come out ahead.** Kept at true FDP 1%, 82
+    files, paired with XIC 12 at the same seed (`featset\xic_pair.py <N>`):
+    | XIC | seeds | A-70 diff | A-70 DIA-NN-confirmed | all 109 diff | all 109 confirmed | PerFileScoring (same build) |
+    |---|---|---|---|---|---|---|
+    | 8 | 3 | **-1,268 +- 407 (-1.3%)** | -731 +- 175 | **-1,241 +- 338** | -694 +- 204 | -46.5 s (-21.6%) |
+    | 10 | 5 | -250 +- 383 | -140 +- 250 | -227 +- 537 | -119 +- 277 | -26.4 s (-12.4%) |
+    | 12 | | 0 | 0 | 0 | 0 | 214.8 s/file |
+    | 14 | 3 | -459 +- 409 | -200 +- 282 | -394 +- 393 | -181 +- 129 | +34.9 s (+16.2%) |
+    - XIC 10 per seed, A-70: +93 / +13 / -112 / -848 / -398; all 109: +276 / -417 / -918 / -433 / +359. Seeds 4-5
+      moved A-70 from neutral (3 seeds) to -250 (~1.5 SE): Brendan's 3-vs-5-seed caution held again.
+    - Neither neighbour is significant alone (~1.5-2 SE), but both sit below 12 for both feature sets and both
+      DIA-NN-confirmed counts, with 8 clearly lower: **12 is the best measured count**, at a cost of ~12% of
+      PerFileScoring over 10. XIC 14 scores fewer rows (file 5: 4,201,572 vs 4,287,854 at 12), consistent with the
+      median-consensus mechanism; its parquet is -0.9%.
+    - XIC 16 scoring started 03:30 PT (~6 h), arms to ~15:45 PT / 00:45 CET Mon. The XIC-10 and XIC-14 legs were
+      removed after their arms (596 GB; logs in `runs-uw25\_kept\`).
   - **Cleanup 12:35 PT:** removed the finished UW25 runs (the XIC-8 leg, `x12chk`, `x12ctl`, and the 11-09/10
     memory-ladder FDR rungs fdr10/20/41/82, r1, r1t16, ladder, repro) and snapshot `_bin\uw25-4bb43e972b`; freed
     458 GB (the rungs hard-linked the score legs). Their small files (`run.log`, json, tsv under 5 MB) are in
