@@ -3,8 +3,8 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20261115_osprey_hram_defaults`, from #5033's
   head 1b3156778a (which carries #4950's tip with #5036 and #5037).
-- **Base**: #5033 -> #4950
-- **PR**: [#5038](https://github.com/ProteoWizard/pwiz/pull/5038) (stacked on #5033; retarget after it merges)
+- **Base**: #4950 (`Skyline/work/20261028_osprey_diann_fdr_gap`); #5033 merged into it 2026-11-15 as ec9a9e77fb
+- **PR**: [#5038](https://github.com/ProteoWizard/pwiz/pull/5038) (retargeted to the #4950 branch when #5033 merged)
 - **Module**: `osprey`
 - **Created**: 2026-11-14 (plan by UW8; Brendan is handing implementation to MACS2)
 - **Status** (2026-11-15, MACS2): the HRAM half of the per-resolution table is implemented and gated locally

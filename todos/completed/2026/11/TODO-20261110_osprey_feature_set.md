@@ -1,7 +1,7 @@
 # TODO-20261110_osprey_feature_set.md
 
 ## Branch Information
-- **PR**: [#5033](https://github.com/ProteoWizard/pwiz/pull/5033) (DRAFT, opened 2026-11-13), branch
+- **PR**: [#5033](https://github.com/ProteoWizard/pwiz/pull/5033) (merged 2026-11-15 into #4950 as ec9a9e77fb), branch
   `Skyline/work/20261112_osprey_default_feature_set` -> base `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950);
   to merge into #4950 before #4950's squash-merge to master (Brendan). Tip fab7e0caed (incl. #5030).
 - **Branch (study experiments)**: Experiments run on `Skyline/work/20261110_osprey_uw25_pb_fixes`
@@ -10,7 +10,8 @@
 - **Base**: #4950 (`Skyline/work/20261028_osprey_diann_fdr_gap`) and its pending branches
 - **Module**: `osprey`
 - **Created**: 2026-11-10 (designed on BRENDANX-UW25; Brendan has given UW25 to this study for a few days)
-- **Status** (2026-11-11 21:30): Phases 0-2 done on both machines. Candidate sets agree across UW8's and UW25's
+- **Status**: Completed. #5033 merged into #4950 on 2026-11-15 as ec9a9e77fb (see "2026-11-15 - Merged" at the
+  end). Earlier status (2026-11-11 21:30): Phases 0-2 done on both machines. Candidate sets agree across UW8's and UW25's
   20-file sets: 77 families-only (-0.5%), B 57 (-0.4..-0.6%), 51 = B minus 6 weakest core (UW8 -0.3%), 46/42
   (UW25 core cuts, -1.1..-1.4%). **But at 82 files the 51 set costs -1.4% (UW8, same build, 95,264 vs 96,593)**:
   pruning costs grow with file count, so the default is chosen at 82 files. In flight on UW8 overnight: 82-file
@@ -1724,3 +1725,13 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
   - 22:10 Perf/Regression #389 (4265768) SUCCESS on 1b3156778a. Osprey Linux .NET failed 4x on agent connection
     (infrastructure); re-queued as 4266082, SUCCESS. All 12 checks green, MERGEABLE; marked ready for review.
   Night log: `ai/.tmp/night-session-budget-20261114.md`.
+
+### 2026-11-15 - Merged
+
+PR #5033 squash-merged into the #4950 branch (`Skyline/work/20261028_osprey_diann_fdr_gap`) as ec9a9e77fb, after
+Perf/Regression #389 (4265768) passed on 1b3156778a and all 14 checks were green. Shipped: `--feature-set
+core|efficient|default|all` (21/57/70/109; HRAM data defaults to default, unit resolution to core), PerFileScoring
+recording only the chosen set's columns, `osprey.feature_set` in the blib LibMetadata, and `all` keyed like
+`OSPREY_FEATURE_MASK=none`. Decided at merge (Brendan): the cache keys keep the readable feature-name terms (~550
+characters) rather than a hash. Deferred: Phase 5 (storage format). Follow-up: the HRAM recipe defaults, #5038
+(TODO-20261114_osprey_hram_defaults.md), retargeted to the #4950 branch.
