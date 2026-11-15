@@ -280,7 +280,19 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
       <- `Pass2FdrSidecar.TransferOneFile` <- `Pass2PerFileWorker.TransferAndStamp` <- `PerFileRescoreTask.WritePass2Answer`,
       after 38 files (`cwtab-ssd\pre1\run.log` line 1192). pre2 (same exe, same inputs) passed, and none of the
       other 11 arms failed, so it is nondeterministic. Those files are unchanged between be63cfbfb7 and #4950's tip
-      2fca953602, so the path may still exist; under investigation (below / feature-set TODO).
+      2fca953602, so the path may still exist.
+      - Code reading (03:30 PT): no managed route to an NRE inside `ScoreSingle` found. Its arrays are `readonly`,
+        set once from validated model data (`FirstPassModelIO.LoadTreeModel`, `IsLoadableTree`), never mutated;
+        `x` is null-checked and per-thread (`FrozenModelScorer._scratch` ThreadLocal); a bad index would throw
+        IndexOutOfRange, not NRE. A null element of the fold list would fault at the caller (`AverageGbtScore`,
+        inlined into TransferOneFile), not inside ScoreSingle. Osprey has no `unsafe` / Marshal / P/Invoke code.
+      - UW8 hardware: WHEA logs corrected errors - Processor Core internal parity (Id 19, ~1 per 1-3 days in Oct,
+        last 11-06) and PCIe AER bursts from the Samsung NVMe (C:, Id 17, last 11-13 14:35). None near 01:35 on
+        11-15. Corrected errors should not corrupt data, but this box is not error-free.
+      - Not concluded. Next: pre1 rerun on the SSD layout is queued after the drop-one experiment (`pre1-rerun.sh`;
+        the crashed arm is kept as `cwtab-ssd\pre1-crashed\`). If it recurs on any build, the pipeline catch logs
+        only the stack, so add a message naming the fold index and array lengths in `AverageGbtScore` / `ScoreSingle`
+        before chasing it further.
 
 ### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
 
