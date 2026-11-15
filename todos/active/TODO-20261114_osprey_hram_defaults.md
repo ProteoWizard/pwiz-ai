@@ -190,6 +190,28 @@ targets kept at true FDP 1%, pass 1. q-1% FDP 0.99-1.08% in every arm (all calib
   (FDR seeds 1 and 2: two scoring repeats for wall time and disk) plus seed 3 FDR-only; one warm-up run first;
   seed-1 runs ascending, seed-2 descending, so cache warmth and drift do not track bandwidth. Records detections,
   PerFileScoring / PerFileRescoring s, scores and reconciled parquet GB, calibrated RT tolerance. ~3 h.
+- **LOESS sweep results (08:17 PT).** Kept at true FDP 1% (3 seeds), PerFileScoring and the scores parquet (two full
+  runs each; the repeats agree within 5 s and to the byte), calibrated RT tolerance:
+
+  | LOESS | kept (s1 / s2 / s3) | mean | SD | vs 0.10 | PerFileScoring | scores parquet | reconciled | RT tol |
+  |---|---|---|---|---|---|---|---|---|
+  | 0.05 | 74,044 / 73,518 / 74,601 | 74,054 | 542 | -21 | 415 / 415 s | 5.922 GB | 0.254 GB | 0.54 |
+  | 0.10 (recipe) | 73,408 / 74,685 / 74,133 | 74,075 | 640 | | 411 / 415 s | 5.981 GB | 0.255 GB | 0.59 |
+  | 0.2 | 73,218 / 73,701 / 73,533 | 73,484 | 245 | -591 (-0.8%) | 418 / 416 s | 5.984 GB | 0.254 GB | 0.60 |
+  | **0.3 (master)** | 73,808 / 74,201 / 74,003 | 74,004 | 197 | -71 (-0.1%) | 420 / 423 s | 6.033 GB | 0.256 GB | 0.58 |
+  | 0.5 | 72,410 / 73,292 / 73,154 | 72,952 | 474 | -1,123 (-1.5%) | 407 / 412 s | 5.936 GB | 0.250 GB | 0.59 |
+  | 0.75 | 73,002 / 73,175 / 72,564 | 72,914 | 315 | -1,161 (-1.6%) | 409 / 409 s | 5.946 GB | 0.252 GB | 0.61 |
+
+  (0.10 and 0.3 rows include the earlier lrt arms at identical settings; scoring is deterministic - the warm-up at
+  0.3 reproduced lrt's loess0.3 seed 1 exactly, 73,808.)
+  - **0.3 vs 0.10 has no meaningful cost:** scoring +8 s per 3 files (+2%, ~3 s/file), scores parquet +0.9%,
+    reconciled, rescoring and FDR unchanged, detections -0.1% (sign flips by seed), calibration 0.98-1.12% everywhere.
+  - **The response is a plateau from 0.05 to 0.3, then falls ~1.5% at 0.5 and 0.75.** 0.5 is not a missed optimum.
+    The 0.2 dip (-0.8%, all three seeds) is inside the between-bandwidth scatter: a bandwidth change moves the
+    calibration and so the candidate set, which acts like a fresh scoring draw (~0.5-1%).
+  - Time and disk are flat across the whole range (407-423 s, 5.92-6.03 GB): the RT tolerance is set by the 1.0
+    floor (computed 0.54-0.61 min), so the bandwidth barely changes the search window.
+  - **Recommendation: keep master's 0.3 (no change).** MACS2's branch already leaves LOESS at 0.3.
 - 20-file check queued behind the LOESS sweep (~05:30 PT start): recipe, tc0.15, minrt0.5 on the feature-set
   study's 20 spread files, 3 seeds each (`lrt20-chain.sh` -> `lrt-20.tsv`). ~1.5-2 h per arm.
 
