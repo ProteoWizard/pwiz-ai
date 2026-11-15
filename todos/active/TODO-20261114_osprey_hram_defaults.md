@@ -9,7 +9,7 @@
 - **Created**: 2026-11-14 (plan by UW8; Brendan is handing implementation to MACS2)
 - **Status** (2026-11-15, MACS2): the HRAM half of the per-resolution table is implemented and gated locally
   (see "MACS2 night 2026-11-14" below). Brendan approved pushing it as the way to lock the SEA-AD Astral gains
-  into the defaults; pushed at 12127bb099 as #5038, Perf/Regression build 4266112 queued. Still to do: the all-resolution items
+  into the defaults; pushed as #5038 (Perf/Regression #390 passed on 12127bb099); the settings then moved onto OspreyConfig (d95004c521), #4950 merged, head d29717e81d, Perf/Regression 4266161 queued. Still to do: the all-resolution items
   (transfer, refit off, PEP ratio, OOF knob removal), the leftover-variable removals, the settings log block, and
   MIN_RT_TOLERANCE / LOESS_BANDWIDTH once UW8's drop-one experiment lands here.
 
@@ -283,3 +283,21 @@ LibMetadata included); only LibInfo's creation time differs. The defaults build 
 all four tasks (`outputs valid`, 212 ms), so recipe output directories are adopted. Runs:
 `D:\Users\brendanx\test\osprey-runs\hd-equiv\{fs,hd}` (`run.log`, `fs\adopt.log`); scripts
 `ai/.tmp/sessions/20261112-5023/hd-equiv.ps1`, `hd-equiv-compare.py`. Final regression on 12127bb099: 49 PASS / 0 FAIL, 50:58.
+
+**Settings moved onto OspreyConfig (2026-11-15, Brendan's call).** The split left classifier and protein-best on the
+config but the other six in process-wide state (`OspreyEnvironment.ApplyResolutionDefaults`, called from Program),
+so a host that set up a config without Program got half the recipe, and the tests had to save and restore that
+state around each in-process run. Brendan: values going into production belong in a production data structure, not
+the form that was expedient for testing. Now `ScoringSettings` (XIC count, correlation tolerance, reference XIC,
+local RT tolerance, tc window, gbdt out-of-fold) is `OspreyConfig.Scoring`, set by `ApplyResolutionMode` from
+`ResolutionDefaults` with the env vars applied as overrides (`OspreyEnvironment.OverrideScoringSettings`); about 15
+read sites, the validity keys and the parquet XIC-count check read the config; `ApplyResolutionDefaults`,
+`AppliedDefaultsResolution` and the InProcessOsprey save/restore are gone. Commit d95004c521. Gates: 686/686 tests,
+inspection 0 (`ai/.tmp/sessions/20261112-5023/build-scoring-settings3.log`); `regression-parallel.ps1 -Dataset All`
+49 PASS / 0 FAIL, 1:05:44 (`cfg-regression.log` there); the Astral equivalence check (`cfg` arm, snapshot
+`D:\Users\brendanx\test\osprey-runs\_bin\hd-cfg-uncommitted`) identical to the env-var recipe run in every blib
+table but LibInfo's time (`cfg-equiv-compare.txt`), and pointed at that run's work dir it skipped all four tasks
+(`D:\Users\brendanx\test\osprey-runs\hd-equiv\fs\adopt-cfg.log`). The #4950 branch (with the #5033 squash,
+ec9a9e77fb, the same tree as 1b3156778a) merged with `-s ours` at d29717e81d. Still process-wide: #5033's feature
+mask (`PinFeatureMask.ApplySearchSettings`), the same shape; a follow-up. Also committed (pwiz-ai 353e9fe6):
+`Run-DiannEntrapment.ps1` gains `osprey-svm`, the classifier comparison on HRAM data now that `osprey` trains gbdt.
