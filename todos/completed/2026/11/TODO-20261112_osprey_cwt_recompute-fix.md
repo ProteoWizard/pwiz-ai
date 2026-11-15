@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261114_osprey_cwt_recompute-fix`
 - **Base**: `Skyline/work/20261028_osprey_diann_fdr_gap` (#4950) at 849586af76 (the #5030 squash)
 - **Created**: 2026-11-14
-- **Status**: In Progress
+- **Status**: Completed
 - **Fixes**: [#5030](https://github.com/ProteoWizard/pwiz/pull/5030) (TODO: `ai/todos/completed/2026/11/TODO-20261112_osprey_cwt_recompute.md`)
 - **Module**: `osprey`
-- **PR**: [#5036](https://github.com/ProteoWizard/pwiz/pull/5036) - targets the #4950 branch directly; #5033 picks it up by merging from #4950
+- **PR**: [#5036](https://github.com/ProteoWizard/pwiz/pull/5036) (merged 2026-11-14 into the #4950 branch); #5033 picks it up by merging from #4950
 
 ## Problem
 
@@ -52,20 +52,20 @@ pre-#5030's; the column's writes and reads stay gone; the extra cost is an in-me
 
 ## Tasks
 
-- [ ] Design detail: where in `RunCoelutionScoring`'s window loop a deferred override resolves.
+- [x] Design detail: where in `RunCoelutionScoring`'s window loop a deferred override resolves.
       Bit-identity needs Stage 4's window (holds the precursor m/z and the apex scan, lowest index).
       Open: a precursor in two overlapping windows is scored in both and deduped - every window
       that scores it must use the same resolved boundaries.
-- [ ] `ReconcileAction` (or the boundary-override record) gains a deferred form; `PlanFile` stops
+- [x] `ReconcileAction` (or the boundary-override record) gains a deferred form; `PlanFile` stops
       calling the candidate source in production (the test-only whole-experiment `Plan` may keep it)
-- [ ] `PlanAndWriteRun` writes the resolved plan after the rescore; keep the stamp rule (a killed
+- [x] `PlanAndWriteRun` writes the resolved plan after the rescore; keep the stamp rule (a killed
       run is a run that is not done)
-- [ ] Keep the always-on reproduction check (apex at Stage 4's `ScanNumber`, else fail the run)
-- [ ] Remove the planning sweep in `CwtCandidateRecompute.ForRows`
-- [ ] Gate: `Build-Osprey.ps1 -RunTests -RunInspection`; `SubsetPipelineTest`; `.reconciliation.json`,
+- [x] Keep the always-on reproduction check (apex at Stage 4's `ScanNumber`, else fail the run)
+- [x] Remove the planning sweep in `CwtCandidateRecompute.ForRows`
+- [x] Gate: `Build-Osprey.ps1 -RunTests -RunInspection`; `SubsetPipelineTest`; `.reconciliation.json`,
       reconciled parquets, FDR sidecars and blib tables byte-identical to 849586af76 on the subsets
-- [ ] `regression-parallel.ps1 -Dataset All` goldens unchanged
-- [ ] Same-scale check #5030 used: SEA-AD 3-file ABAB vs 849586af76 (PerFileRescoring time; the
+- [x] `regression-parallel.ps1 -Dataset All` goldens unchanged
+- [x] Same-scale check #5030 used: SEA-AD 3-file ABAB vs 849586af76 (PerFileRescoring time; the
       `[PATH]` block-read lines now include all spectra reads)
 - Deferred (developer, 2026-11-14): the many-hours 82-file validation, run in parallel on MACS2
   (spectra on E: and on D:) and an i9 desktop (64 GB), later.
@@ -285,3 +285,12 @@ branch; TeamCity Osprey Perf/Regression build 4265506 and the Osprey unit build 
   Pushed; Perf/Regression build 4265548 queued on the new head.
 - UW8 (i9, 128 GB), HDD: PerFileRescoring 32% faster than the #4950 baseline (developer, 2026-11-14).
   SSD and the full set still running (~10 h).
+
+### 2026-11-14 - Merged
+
+PR #5036 squash-merged into the #4950 branch (`Skyline/work/20261028_osprey_diann_fdr_gap`) as 2fca953602. Shipped: the
+Stage 6 CWT candidate recompute runs inside the rescore's own window loads (spectra read once per run), the always-on
+Stage 4 apex reproduction check, and `.reconciliation.json` written after each run's rescore. Gates: Osprey Debug
+684/684, inspection 0; Perf/Regression #387 (4265663) SUCCESS on the head 0b87c86654 (#385/#386 had built the
+pre-review a43f875c51). Deferred: UW8's SSD arms (HDD was 32% faster than the #4950 baseline) and the 64 GB i9
+desktops; their numbers belong in this TODO when they land. Split from #5019 alongside: #5037 (OSPREY_GBT_OOF key).
