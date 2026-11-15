@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261110_ai_connector_claude_desktop_detection`
 - **Base**: `Skyline/skyline_26_1_1` (current Skyline-daily release branch)
 - **Created**: 2026-11-10
-- **Status**: In Progress - fixes posted to the Tool Store, PR awaiting review
+- **Status**: Completed (cherry-pick to master pending)
 - **GitHub Issue**: (none - reported live at a workshop)
 - **Module**: `skyline`
-- **PR**: [#5014](https://github.com/ProteoWizard/pwiz/pull/5014)
+- **PR**: [#5014](https://github.com/ProteoWizard/pwiz/pull/5014) (merged 2026-11-15)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Objective
@@ -100,3 +100,21 @@ which Controlled Folder Access protects by default and OneDrive often redirects.
 (`JsonToolServer`), the server (`SkylineConnection`) and the connector (`McpServerDeployer`) all
 use `JsonToolConstants.GetConnectionDirectory()`, so it needs a Skyline-daily release too, with
 the server reading both locations.
+
+## Progress Log
+
+### 2026-11-15 - Merged
+
+PR #5014 squash-merged into `Skyline/skyline_26_1_1` as commit f79bd4274f. Shipped: Claude Desktop
+detected from its data folder, Store package or installer folder rather than its config file; the
+Skyline entry written into every Claude Desktop config, the Store package copy first; the Claude
+Code checkbox enabled only when the `claude` CLI is on PATH; standalone-installer process
+detection, Remove no longer creating a config file, and docs updates from code review;
+`SkylineAiConnector.zip` 26.1.1.316 (posted to the Tool Store 2026-11-11) with
+`TestSkylineMcp`'s `EXPECTED_ZIP_VERSION` pinned to match. Merged with `--admin` by Brendan's
+decision: branch protection requires the release Perf and Tutorial check, which the smart build
+trigger does not queue for this PR's paths. That configuration (4+ hours) passed on this PR
+earlier but did not run on the final head, after the `EXPECTED_ZIP_VERSION` fix. Deferred:
+cherry-pick to master; moving `~\.skyline-mcp` to `%LOCALAPPDATA%` if the locked-down-machine
+case recurs. Lesson for the next connector ZIP: rebuilding it requires bumping
+`EXPECTED_ZIP_VERSION` in `TestFunctional\SkylineMcpTest.cs` in the same PR.
