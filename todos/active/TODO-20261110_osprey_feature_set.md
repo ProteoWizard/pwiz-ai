@@ -1682,3 +1682,20 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
   leaving only an in-memory recompute for <1% of rows. To handle: same lowest-window-holding-the-apex rule as
   Stage 4 (bit-identity), where `PlanAndWriteRun`'s plan file is written and who reads it, and whether the gap-fill
   (`GapCwt`/`GapForced`) rows consult candidates.
+
+- MACS2 (2026-11-14 night, Brendan: get #5033 ready to merge by morning) **#5033 brought to merge-ready, pending
+  Perf/Regression.** Pushed `Skyline/work/20261112_osprey_default_feature_set` @ 1b3156778a:
+  - Merged #4950's tip twice: 461225a0f9 (#5036, the CWT fix) and 1b3156778a (#5037, OSPREY_GBT_OOF key), both clean.
+  - `/code-review medium`: 10 findings; fixed 5 in 1735e50441 (`--feature-set all` now keys as `featmask=none`, so it
+    adopts the existing all-109 OSPREY_FEATURE_MASK=none outputs; blib LibMetadata `osprey.feature_set` when not core;
+    the override log line claimed --feature-set was given when it was not; doc counts 36->49 and 41->109; a broken
+    table row). Dropped 5: the static-vs-config set (the hram_defaults settings object is where that belongs);
+    unit-resolution HRAM-only drop (logged as 101 of 109); duplicated name lists (startup check + test catch drift);
+    per-call allocations (unmeasured); key length (Brendan's open decision).
+  - Astral regression results recaptured (f8503b3b77): 117,660 -> 132,654 library precursors at 1% (+12.7%), 8,310 ->
+    8,612 proteins. `regression-parallel.ps1 -Dataset All` on f8503b3b77: 49 PASS / 0 FAIL, 46:07 wall
+    (`ai/.tmp/sessions/20261112-5023/fs-regression-all.log`; capture log `astral-golden.log` there).
+  - Gates 685/685, inspection 0 after each change (`fs-gate.log`, `fs-gate2.log`, `fs-gate3.log` there).
+  - Perf/Regression 4265768 queued on pull/5033 at 1b3156778a. PR description updated (open items, test plan).
+  - Still Brendan's call: hash the ~550-character feature-name key terms, or keep them readable.
+  Night log: `ai/.tmp/night-session-budget-20261114.md`.
