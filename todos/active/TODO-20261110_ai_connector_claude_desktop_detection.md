@@ -53,7 +53,7 @@ Make the AI Connector connect Claude Desktop to Skyline for the participants of 
 The version comes from the generated, untracked `Properties\AssemblyInfo.cs`, which Jam stamps
 from the HEAD commit's date (day of year). 315 and 316 were stamped by hand a day ahead so the
 Tool Store would accept them, so **the next official connector build needs a commit dated
-2026-11-13 or later** (day 317) to be accepted.
+2026-11-13 or later** (day 317) to be accepted. (Moot as of 2026-11-15, day 319.)
 
 ## Workaround for the old connector (participants who cannot update)
 
@@ -73,7 +73,16 @@ Settings > Developer > Edit Config no longer exists in current Claude Desktop.
 - [x] `/code-review high 5014`: fixed standalone-installer process detection, Remove creating a config file, docs workaround. Dropped: false positive after uninstall (old code had it too), install-location refactor (out of scope for a hotfix), stale "(not installed)" label (affects every client), Packages enumeration cost (negligible). The dropped AppData folder-order finding turned out to be problem (2).
 - [x] Store fix (2): 26.1.1.315 posted; all but one participant connected
 - [x] Claude Code check (3): verified in the 26.1.1.316 binary (true with `claude` on PATH, false without)
-- [ ] Post 26.1.1.316 to the Tool Store (Brendan)
+- [x] Post 26.1.1.316 to the Tool Store (Brendan, 2026-11-11)
+- [x] TeamCity triage on the PR (2026-11-15). Two failures, one ours: `TestSkylineMcp` failed
+      on `EXPECTED_ZIP_VERSION`, the test's deliberate pin on the connector ZIP version (289 vs
+      the rebuilt 316) - fixed in 03667f3383, verified locally (`TestSkylineMcp 0 failures`).
+      The two msconvert failures on the Wine Docker configuration (Bruker
+      `Sample_1-A,1_01_985.d` and the CJK-named Shimadzu `.lcd`) are environmental and
+      pre-date the PR: identical on release-branch Docker build #1319 (Nov 6), green on that
+      configuration since. Causes in the log: a dirty agent work dir (`tar: ... File exists`
+      during test-data unpack) and the CJK filename garbled under Wine. Brendan merged the
+      release tip (6376edde) into the branch, so it is current with `Skyline/skyline_26_1_1`.
 - [ ] Cherry-pick to master after merge
 
 ## Not fixed: locked-down machine (2026-11-11)
