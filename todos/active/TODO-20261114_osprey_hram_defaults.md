@@ -108,4 +108,16 @@ experiment shows they pay.
 
 ## UW8 experiment: MIN_RT_TOLERANCE / LOESS_BANDWIDTH drop-one
 
-(Design and results below as they land.)
+Queued on UW8 behind the SSD-layout cwt A/B (starts ~06:00-07:00 PT Sun 11-15; one Osprey at a time on UW8).
+Script `ai/.tmp/sessions/20261110-uw8featset/lrt.ps1` (chain `lrt-chain.sh`), results `lrt.tsv` there, runs in
+`D:\test\osprey-runs\sea-ad\runs-uw8\lrt\`.
+
+- Build: #5033 snapshot `_bin\uw8-featdefault-fab7e0caed` (default-70 features), `--protein-best on`, transfer,
+  gbdt + OOF, 12 XICs, 7 ppm, REF_XIC corr, LOCAL_RT 15, refit off.
+- Files: A01_005 / A06_010 / A10_014. Oracle: split entrapment, real targets kept at true FDP 1%, pass 1 (`score.py`).
+- Arms (only these three settings move): `recipe` (MIN_RT 1.0, LOESS 0.10, TC 0.40), `minrt0.5`, `loess0.3`,
+  `both-def` (0.5 / 0.3), `tc0.15`. Each scores once (FDR seed 1, full pipeline), then FirstPassFDR reruns at
+  seeds 2 and 3 on that scoring (scoring is seed-independent).
+- Decision rule: a setting ships at its recipe value only if dropping it loses more than the seed spread at
+  3 seeds; otherwise today's default. If an arm is within ~1%, rerun that pair at 20 files before deciding
+  (pruning effects grew with file count in the feature-set study).
