@@ -537,6 +537,14 @@ coelution, ~1-3% of a default run, 3-7% at the recipe. Unpaired hint: recipe 8 t
 Next: paired recipe 72- and 8-thread arms on a quiet machine; if no user-visible gain, revert 3cb5347997 + 245afa97c5
 (merge, no rebase) and reduce #5019 to the OSPREY_GBT_OOF key.
 
+### 2026-11-14 - #5019 closed; OSPREY_GBT_OOF key split into #5037
+
+No visible gain was ever measured for the parallel scoring, so #5019 is closed unmerged. The standalone key commit
+5e487db3d7 was cherry-picked onto the #4950 head 849586af76 as 6997607462, branch `Skyline/work/20261114_osprey_gbtoof_key`,
+[#5037](https://github.com/ProteoWizard/pwiz/pull/5037) against #4950. Gate 684/684, inspection 0
+(`ai/.tmp/sessions/20261112-5023/gbtoof-gate.log`). Caveat: it re-keys existing OSPREY_GBT_OOF=1 output directories, so
+they are not adopted by a build with it; keep UW8's #5036 runs on #5036 builds until they finish.
+
 ## Open questions and unfinished items (carried from phases 1-2)
 
 - OspreyDatasetRun.psm1 gendecoy pairing-manifest elseif is uncommitted (from 2026-10-30); gendecoy q 1% -> FDP 1.76%.
