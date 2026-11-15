@@ -221,6 +221,11 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
     | fix1 | a43f875c51 | **5,899 s** | 63,576 s | 564 GB | 5.7 / 16.7 |
     | base1 | 849586af76 | 8,683 s | 19,488 s | 564 GB | 16.0 / 30.5 |
     | base2 | 849586af76 | 8,659 s | 19,172 s | 565 GB | 16.1 / 30.8 |
+    | fix2 | a43f875c51 | **5,593 s** | 64,242 s | 564 GB | 6.0 / 15.2 |
+
+    - **Update 17:00 PT, fix2 landed: fix mean 5,746 s vs base mean 8,671 s = -2,925 s (-33.7%).** fix2 vs base2
+      byte-identical (164 files, SHA-256) and fix1 == fix2. `[PATH]` gated reads identical in all four arms
+      (447,931 reads, 490.1 GB). The two fix arms differ by 306 s (5%), the base arms by 24 s.
 
     - **fix vs base: -2,772 s (-32%)**; the two base arms agree within 24 s. fix1 and base1 outputs byte-identical
       (all 82 `.reconciliation.json` + 82 `.scores-reconciled.parquet`, SHA-256).
@@ -238,7 +243,7 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
       arms now record Osprey's TotalProcessorTime (`cwtab-ssd\<arm>.cpu.txt`).
     - vs storing the candidates: fix1 ~+4% over UW8's earlier pre-#5030 runs (5,678 s, hours apart); pre1/pre2 in
       this run pin it. Brendan's view: that CPU is well spent against ~0.5 GB/file of parquet (41 GB at 82 files).
-    - Still running: fix2 (~17:00 PT), pre1 (~18:35), pre2 (~20:10); then the SSD layout (~05:00-06:00 PT Sun).
+    - Still running: pre1 (started 16:58, ~18:30 PT), pre2 (~20:00); then the SSD layout (~05:00-06:00 PT Sun).
 
 ### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
 
