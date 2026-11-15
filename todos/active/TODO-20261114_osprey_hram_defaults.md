@@ -196,3 +196,23 @@ unchanged. Logs: `ai/.tmp/sessions/20261112-5023/hd-astral-golden.log`, `hd-regr
 For review: the TeamCity Perf/Regression perf leg will see the slower HRAM defaults (+29% straight-through on
 Astral); decide whether that baseline moves with this PR. The ja / zh-Hans resx have no `--protein-best` entry,
 so those help pages show the new English text until it is translated.
+
+`/code-review medium` on 1b3156778a..HEAD: 9 findings. Fixed in 12127bb099 (gate 686/686):
+- `regression.ps1` still called the goldens the linear SVM's; now the default classifier's, and any set
+  OSPREY_FDR_MODEL is refused under -CreateGolden (warned on compare).
+- OSPREY_CORR_FRAGMENT_TOLERANCE and OSPREY_TC_HALF_WINDOW accepted any text, so a typo fell through to the HRAM
+  default: both now refuse unparseable values at startup. (OSPREY_REF_XIC was already refused by its Values list.)
+- OSPREY_TC_HALF_WINDOW=0.15 keyed `;tcwin=0.15`, unlike legacy outputs: 0.15 (`LEGACY_TC_HALF_WINDOW_MINUTES`,
+  now also the scorer's constant) adds no term.
+- A library phase under `--resolution auto` applied HRAM developer defaults while its config kept legacy ones:
+  Program now passes null (legacy) while the resolution is undetected.
+- The OSPREY_FDR_MODEL startup error still called svm the unset default; the test's inconclusive guard missed
+  variables that switch a default off (now checks the six variables directly).
+Dropped: the XIC-mismatch message already says to set OSPREY_XIC_FRAGMENTS to match the files.
+**Decisions for Brendan:**
+- The table is applied in two places: the classifier and protein-best per config (ApplyResolutionMode, like the
+  tolerances), the six developer variables as process statics (ApplyResolutionDefaults, like PinFeatureMask). A
+  host calling only ApplyResolutionMode gets half the recipe; production and InProcessOsprey get both. One option:
+  hold all eight on OspreyConfig, which means threading config through the scorers that read the statics.
+- `ai/scripts/Osprey/Benchmark/Run-DiannEntrapment.ps1`: its `osprey` step was the SVM baseline beside
+  `osprey-gbdt`; at HRAM both now train gbdt with the recipe. Not changed: what should the baseline arm be?
