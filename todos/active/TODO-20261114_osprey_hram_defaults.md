@@ -98,6 +98,42 @@ experiment shows they pay.
 - HPC chain: every task must resolve the same settings; the resolution is in the task/identity, so derive the
   defaults from it rather than from the process env alone.
 
+### Consumer survey (2026-11-14 20:30, read-only agent; traps spot-checked by UW8)
+
+Paths under `pwiz_tools/Osprey`; OE = `Osprey.Core/OspreyEnvironment.cs`. Every chain task (PerFileScoring,
+FirstPassFDR, PerFileRescoring, SecondPassFDR) is its own process and re-runs resolution detection
+(`Program.cs:541`, `ResolutionDetector.cs:77-104`: measures inputs, else the mode recorded in the scores parquet,
+else `Program.cs:542` falls back to HRAM), so each must resolve the defaults identically.
+
+**Values captured before resolution is known (must be re-assigned after `Program.cs:542`):**
+1. `Osprey.Scoring/TopFragmentExtractor.cs:50` `SearchTopNFragments` (static readonly): stackalloc sizes,
+   extraction and the base key `;xic=`. `ParquetScoreCache.cs:2698` checks the live `OE.SearchXicFragments`
+   instead, so making only one resolution-aware makes them disagree.
+2. `Osprey/OspreyCommandArgs.cs:918` copies `OE.FdrModel` into `config.FdrClassifier` at parse.
+3. `Osprey.Core/RTCalibrationConfig.cs:38,50`: `LoessBandwidth` / `MinRtTolerance` instance initializers read OE on
+   every construction (at parse via `OspreyConfig.cs:141`, the factories at :64/:70, and the
+   `Default(() => new OspreyConfig())` help lambdas). Both feed `SearchParameterHash` (`SearchIdentity.cs:116,118`),
+   which is also parquet `META_SEARCH_HASH`.
+4. OE:1239 `PROTEIN_BEST_PREFILTER_SIZE` is a `const` (also in the help text at OE:1143).
+5. `--protein-best` default: `OspreyConfig.ProteinBest` plain auto-prop (false); the help default
+   (`OspreyCommandArgs.cs:460`) reads `new OspreyConfig()`. Protein-best forces two-round training, not gbdt
+   (`PrefilterSizeFor`, OE:1281-1286; `PercolatorEngine.cs:1070`).
+Everything else is read live from OE at its use sites; only OE's resolution changes.
+
+**Keying gaps:**
+- `OSPREY_GBT_OOF` is in no key (OE:774, 1131). Baking it in for gbdt removes the gap.
+- Base-key and FDR-key terms are emitted only when the env var is set (`;tcwin`, `;fcorr`, `;refxic`, `;rtlocal`,
+  OE:1834-1842; likewise `;pep=ratio`, `;reconrefit=off`, `;gbtprefilter=`, `;fdrmodel=`). Once a default is
+  non-null they must come from the RESOLVED value, or an env-unset run keys like a different default.
+- Parquet metadata records only the XIC count and (via the search hash) MIN_RT / LOESS. The rest are checked only
+  through the task stamps' ValidityKey (`ArtifactStamp`, `FdrScoresSidecar.cs:155-157`).
+- `PercolatorEngine.cs:385` (projection path) uses raw `GbtPrefilterSize` while the key uses `PrefilterSizeFor`
+  (:294); harmless today, two rules once the size is resolution-dependent.
+- A Rescore / SecondPassFDR process without its inputs relies on the parquet's recorded mode; if that is missing it
+  falls to HRAM. Keyed terms catch a mismatch; an unkeyed one would not.
+
+Per-variable table (consumers, keys, tasks): the agent report is in this session's transcript; ask UW8 if needed.
+
 ## Costs to plan for
 
 - Every HRAM regression-test result changes (Astral legs); the Stellar legs change through the all-resolution
