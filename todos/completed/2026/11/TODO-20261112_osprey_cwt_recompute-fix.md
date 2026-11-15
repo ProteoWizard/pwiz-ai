@@ -264,6 +264,11 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
     | fix2 | a43f875c51 | 3,767 s | 19,962 s | 20,898 | 355 GB | 218 GB | 5.0 |
     | pre1 | be63cfbfb7 | **crashed** after 38 of 82 files (NullReferenceException, below) | | | | | |
     | pre2 | be63cfbfb7 | 4,137 s | 19,878 s | | 348 GB | | |
+    | pre1 rerun (05:27) | be63cfbfb7 | 4,144 s | 19,954 s | 20,277 | | 256 GB | 4.5 |
+
+    - **Rerun 2026-11-15 05:27 PT: pre1 passed** (byte-identical to base1), so the crash did not recur. pre mean 4,140 s:
+      **fix -4.9% vs pre on SSD** with both pre arms. CPU: pre 19,916 vs fix 22,234 vs base 23,018 s (fix +12% CPU
+      vs storing candidates, within the fix arms' own +-10%). `C:\test\sea-ad-spectra` deleted (C: 455 GB free).
 
     - **fix vs base: a tie on SSD** (means 3,937 vs 3,900 s, +1%, inside the fix arms' 339 s spread; CPU 22,234 vs
       23,018 s). The NVMe absorbs #5030's second spectra read (+10 GB physical at most), so base loses nothing here.
