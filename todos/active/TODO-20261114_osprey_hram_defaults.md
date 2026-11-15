@@ -159,6 +159,26 @@ Script `ai/.tmp/sessions/20261110-uw8featset/lrt.ps1` (chain `lrt-chain.sh`), re
   3 seeds; otherwise today's default. If an arm is within ~1%, rerun that pair at 20 files before deciding
   (pruning effects grew with file count in the feature-set study).
 
+**Results, 3 files (2026-11-15 04:14 PT; `lrt.tsv`, runs `D:\test\osprey-runs\sea-ad\runs-uw8\lrt\`).** Real
+targets kept at true FDP 1%, pass 1. q-1% FDP 0.99-1.08% in every arm (all calibrated).
+
+| arm | seed 1 | seed 2 | seed 3 | mean | SD | vs recipe | per-seed difference |
+|---|---|---|---|---|---|---|---|
+| recipe (MIN_RT 1.0, LOESS 0.10, TC 0.40) | 73,408 | 74,685 | 74,133 | 74,075 | 640 | | |
+| minrt0.5 | 73,035 | 73,182 | 73,113 | 73,110 | 74 | **-965 (-1.30%)** | -373 / -1,503 / -1,020 |
+| loess0.3 | 73,808 | 74,201 | 74,003 | 74,004 | 197 | -71 (-0.10%) | +400 / -484 / -130 |
+| both-def (0.5 / 0.3) | 73,191 | 73,335 | 73,152 | 73,226 | 96 | -849 (-1.15%) | -217 / -1,350 / -981 |
+| tc0.15 | 72,806 | 73,795 | 73,915 | 73,505 | 609 | -570 (-0.77%) | -602 / -890 / -218 |
+
+- **MIN_RT_TOLERANCE 1.0 pays (+1.3%).** Every minrt0.5 seed is below the recipe's lowest seed; both-def loses the
+  same amount, so it is MIN_RT that matters. Proposed: HRAM default 1.0 (unit stays 0.5 until measured).
+- **LOESS_BANDWIDTH 0.10 does not pay** (-0.1%, sign flips by seed). Proposed: keep 0.3 at every resolution; it
+  also avoids the 0.10 span's fragility with few calibration points.
+- **TC_HALF_WINDOW 0.40: -0.8% without it, every seed negative but inside the recipe's own seed spread.** Within ~1%,
+  so per the rule a 20-file check is queued. Keep 0.40 (MACS2's branch already has it) unless 20 files reverses it.
+- 20-file check queued behind the SSD pre1 rerun (~05:30 PT start): recipe, tc0.15, minrt0.5 on the feature-set
+  study's 20 spread files, 3 seeds each (`lrt20-chain.sh` -> `lrt-20.tsv`). ~1.5-2 h per arm.
+
 ## MACS2 night 2026-11-14 (Brendan asleep; night log `ai/.tmp/night-session-budget-20261114.md`)
 
 Scope chosen: the **HRAM-only** rows of the table, because they leave every unit-resolution result unchanged, so a
