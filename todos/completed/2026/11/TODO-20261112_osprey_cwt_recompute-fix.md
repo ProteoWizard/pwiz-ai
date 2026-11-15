@@ -222,6 +222,15 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
     | base1 | 849586af76 | 8,683 s | 19,488 s | 564 GB | 16.0 / 30.5 |
     | base2 | 849586af76 | 8,659 s | 19,172 s | 565 GB | 16.1 / 30.8 |
     | fix2 | a43f875c51 | **5,593 s** | 64,242 s | 564 GB | 6.0 / 15.2 |
+    | pre1 | be63cfbfb7 | 5,659 s | 63,374 s | 602 GB | 5.9 / 10.5 |
+    | pre2 | be63cfbfb7 | 5,660 s | 63,362 s | 602 GB | 5.9 / 10.5 |
+
+    - **Update 20:10 PT, HDD layout complete. fix (#5036) mean 5,746 s vs pre-#5030 (stored candidates) 5,659 s:
+      +87 s (+1.5%), inside the fix arms' own 306 s spread; vs #4950 base 8,671 s: -33.7%.** All six arms' outputs
+      byte-identical (pre1 == pre2 == base1 == fix1, SHA-256 of 164 files). pre reads 40 GB more gated parquet
+      (530.4 vs 490.1 GB; 467,049 vs 447,931 reads), the stored candidates; the fix pays that back in CPU at no wall
+      cost on this layout. Window threads busy is ~63,400 for pre too, so base's 19,000 is the outlier (its
+      window loop waits on the contended disk), consistent with the correction below.
 
     - **Update 17:00 PT, fix2 landed: fix mean 5,746 s vs base mean 8,671 s = -2,925 s (-33.7%).** fix2 vs base2
       byte-identical (164 files, SHA-256) and fix1 == fix2. `[PATH]` gated reads identical in all four arms
@@ -243,7 +252,7 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
       arms now record Osprey's TotalProcessorTime (`cwtab-ssd\<arm>.cpu.txt`).
     - vs storing the candidates: fix1 ~+4% over UW8's earlier pre-#5030 runs (5,678 s, hours apart); pre1/pre2 in
       this run pin it. Brendan's view: that CPU is well spent against ~0.5 GB/file of parquet (41 GB at 82 files).
-    - Still running: pre1 (started 16:58, ~18:30 PT), pre2 (~20:00); then the SSD layout (~05:00-06:00 PT Sun).
+    - Running: the SSD layout (spectra on C: NVMe, parquets on D:), same six arms, ~05:00-07:00 PT Sun 11-15.
 
 ### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
 
