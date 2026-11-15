@@ -1698,4 +1698,6 @@ UW8's same arm: 26,254 s, 262.6 GB parquet (before #5030), ~96.5k. default70 sta
   - Gates 685/685, inspection 0 after each change (`fs-gate.log`, `fs-gate2.log`, `fs-gate3.log` there).
   - Perf/Regression 4265768 queued on pull/5033 at 1b3156778a. PR description updated (open items, test plan).
   - Still Brendan's call: hash the ~550-character feature-name key terms, or keep them readable.
+  - 22:10 Perf/Regression #389 (4265768) SUCCESS on 1b3156778a. Osprey Linux .NET failed 4x on agent connection
+    (infrastructure); re-queued as 4266082, SUCCESS. All 12 checks green, MERGEABLE; marked ready for review.
   Night log: `ai/.tmp/night-session-budget-20261114.md`.
