@@ -252,7 +252,35 @@ MACS2 (511 GB RAM) keeps every spectra cache in memory, so its A/B measured comp
       arms now record Osprey's TotalProcessorTime (`cwtab-ssd\<arm>.cpu.txt`).
     - vs storing the candidates: fix1 ~+4% over UW8's earlier pre-#5030 runs (5,678 s, hours apart); pre1/pre2 in
       this run pin it. Brendan's view: that CPU is well spent against ~0.5 GB/file of parquet (41 GB at 82 files).
-    - Running: the SSD layout (spectra on C: NVMe, parquets on D:), same six arms, ~05:00-07:00 PT Sun 11-15.
+  - **UW8 SSD layout (2026-11-15 02:46 PT): spectra caches on C: (NVMe), parquets on D: (HDD), same six arms
+    (`cwt-ab.ps1 -CacheDir C:/test/sea-ad-spectra -Tag -ssd` -> `cwt-ab-ssd.tsv`; logs, counters, hashes and
+    `<arm>.cpu.txt` = Osprey TotalProcessorTime in `D:\test\osprey-runs\sea-ad\runs-uw8\cwtab-ssd\`):**
+
+    | arm | build | PerFileRescoring | Osprey CPU | window busy | C: read | D: read | D: queue mean |
+    |---|---|---|---|---|---|---|---|
+    | fix1 | a43f875c51 | 4,106 s | 24,505 s | 21,710 | 348 GB | 228 GB | 4.6 |
+    | base1 | 849586af76 | 3,871 s | 22,967 s | 18,935 | 358 GB | 218 GB | 4.8 |
+    | base2 | 849586af76 | 3,928 s | 23,068 s | 19,078 | 348 GB | 218 GB | 4.8 |
+    | fix2 | a43f875c51 | 3,767 s | 19,962 s | 20,898 | 355 GB | 218 GB | 5.0 |
+    | pre1 | be63cfbfb7 | **crashed** after 38 of 82 files (NullReferenceException, below) | | | | | |
+    | pre2 | be63cfbfb7 | 4,137 s | 19,878 s | | 348 GB | | |
+
+    - **fix vs base: a tie on SSD** (means 3,937 vs 3,900 s, +1%, inside the fix arms' 339 s spread; CPU 22,234 vs
+      23,018 s). The NVMe absorbs #5030's second spectra read (+10 GB physical at most), so base loses nothing here.
+    - **fix vs pre: fix ~5% faster** (3,937 vs 4,137 s, one pre arm). pre reads 40 GB more gated parquet (530.4 vs
+      490.1 GB), the stored candidates, as on HDD.
+    - So #5036 is never slower than #4950 base beyond noise and beats it by 34% on the HDD layout; vs storing the
+      candidates it is +1.5% (HDD, noise) and -5% (SSD). The concern at merge ("slower on SSD than pre-#5030") is
+      not borne out.
+    - All completed arms byte-identical (fix1 == fix2 == base1 == base2 == pre2, SHA-256 of 164 files).
+    - "Window threads busy" fell from ~63,500 thread-s (HDD) to ~21,000 (SSD) for the same build and output, so it
+      counts I/O waits inside the window loop; it is not CPU. Use the CPU column.
+    - CPU spread is wide (fix 19,962-24,505 s), so the per-arm CPU is good to ~+-10%.
+    - **pre1 crash:** `NullReferenceException` at `GradientBoostedTrees.ScoreSingle` (GradientBoostedTrees.cs:496)
+      <- `Pass2FdrSidecar.TransferOneFile` <- `Pass2PerFileWorker.TransferAndStamp` <- `PerFileRescoreTask.WritePass2Answer`,
+      after 38 files (`cwtab-ssd\pre1\run.log` line 1192). pre2 (same exe, same inputs) passed, and none of the
+      other 11 arms failed, so it is nondeterministic. Those files are unchanged between be63cfbfb7 and #4950's tip
+      2fca953602, so the path may still exist; under investigation (below / feature-set TODO).
 
 ### 2026-11-14 - 3-file profile, one file at a time (MACS2, warm)
 
