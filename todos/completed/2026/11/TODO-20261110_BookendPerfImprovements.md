@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261110_BookendPerfImprovements`
 - **Base**: `master`
 - **Created**: 2026-11-10
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#5021](https://github.com/ProteoWizard/pwiz/pull/5021)
+- **PR**: [#5021](https://github.com/ProteoWizard/pwiz/pull/5021) (merged 2026-11-15)
 - **Checkout**: `E:\Users\nicksh\git_e\sky_bookend`
 
 ## Objective
@@ -20,9 +20,7 @@ Test document: `E:\Users\nicksh\bugs\chiyy\20261110_Bookend\hcd-mmcc-subset-dian
 9,830 peptides, 40 replicates). dotTrace snapshots are in `E:\Users\nicksh\bookend\profiles\`. Bookend writes its
 log to `%LOCALAPPDATA%\Bookend\logs\last-run.log`.
 
-Nothing is pushed in either repository. Nick pushes himself.
-
-## Skyline commits on the branch (local)
+## Skyline commits on the branch
 
 1. `323a5d5739` Fixed ChromDataCache re-reading a precursor's chromatograms for every cell
 2. `df3abc6294` Refactored ChromDataCache into one flat cache
@@ -55,6 +53,15 @@ Nothing is pushed in either repository. Nick pushes himself.
     ignored like every other property, and `AddReportFromDefinition` saves the layouts (`GetReportLayout`)
 16. `b3b506d340` Fixed Parquet row group splitting ignoring the lengths of strings in list columns
 17. `ffebf3ad69` Changed `ChromatogramGroupInfo.TimeIntensitiesGroup` to lock a private object instead of `this`
+18. `b22d4d26f0`..`769b685d70` ChromDataCache cleanups (`GetGroups`, `ChromatogramGroupKey` record struct) and
+    Copilot review feedback
+19. `bcf4cd0637` Changed the new lock fields to `System.Threading.Lock` and simplified `UtilDB.Uncompress`
+20. `897587a418` Fixed report exports dropping the clustering of a layout without row transforms (pre-existing in
+    `RowFactories.ExportReport`, exposed by ReportXml)
+21. `0a293b87b0` Fixed second code review findings: ChromDataCache loads scan ids outside its lock, ReportXml is read
+    as text (XML declaration encoding ignored), a ReportXml report uses its own default layout without the totals
+    sort and Name replaces its name, `RowFactories.CanStreamRows` shared with JsonToolServer
+22. `6f59be04a6` Fixed an ambiguous cref that failed CodeInspection
 
 ## Bookend commits (branch `20261110_PerformanceImprovements`, local)
 
@@ -112,9 +119,9 @@ and report tests passed. No test was added. No test is known to export a list co
 
 ## Remaining
 
-- [ ] Run the whole-document export with the new Bookend and the current Skyline build, and take a Sampling
-      profile. Check that calculating and writing overlap, and how busy the PopulateChunk workers are.
-- [ ] Pick the next lever from that profile. Last known costs (summed over threads): protobuf
+- [ ] (Deferred) Run the whole-document export with the new Bookend and the current Skyline build, and take a
+      Sampling profile. Check that calculating and writing overlap, and how busy the PopulateChunk workers are.
+- [ ] (Deferred) Pick the next lever from that profile. Last known costs (summed over threads): protobuf
       `ChromatogramGroupData.MergeFrom` 48 s, `ChromatogramCache.CallWithStream` 37 s, `ListColumnBuffer.Pack` 47 s
       own time, `ColumnData.ToNullableArray` 12 s.
 - [x] `/code-review medium` (2026-11-11): 10 findings; fixed the ReportXml layouts, string-list byte count and
@@ -122,3 +129,19 @@ and report tests passed. No test was added. No test is known to export a list co
       from master).
 - [x] Opened PR #5021 (2026-11-11)
 - [x] Pushed the Bookend branch; PR YuanyeChi/bookend-dev#2 (2026-11-11). Preview Skyline (PR #5021 build) at https://proteome.gs.washington.edu/~nicksh/SpecialSkylines/FeaturePreviews/SkylineBookendPerfImprovements.html
+- [x] `/code-review high` (2026-11-14, second cycle): fixed the UTF-16 XML declaration, scan-id loading under the
+      lock, totals sort on ReportXml, Name override and the shared streaming check (commit 21); dropped ZLibStream
+      truncation (callers size-check), cache memory (by design), ReadPeaks/ReadScores without lock, Lock per
+      instance, and the serial SplitIntoRowGroups pass.
+
+## Progress Log
+
+### 2026-11-15 - Merged
+
+PR #5021 merged as commit 57a45cc0da. Shipped: ChromDataCache keeps every replicate of the most recent
+2x thread-count precursors and loads outside its lock; GetLocations no longer walks every protein per peptide;
+Pivoter filters while expanding; `ReportDefinition.ReportXml`; ZLibStream decompression; Parquet list columns
+copied as arrays; row groups capped at 50,000 rows and split so no column chunk exceeds 512 MB. Whole-document
+Bookend export went from minutes to 55.5 s. Deferred: the follow-up profile and next lever above; renaming
+`MIN/MAX_ROWS_PER_GROUP` to chunk names; tests for ReportXml UTF-16, Name override and clustered export; letting
+the Parquet.Net fork write several pages per column chunk.
