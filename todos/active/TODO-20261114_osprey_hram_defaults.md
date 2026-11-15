@@ -216,3 +216,13 @@ Dropped: the XIC-mismatch message already says to set OSPREY_XIC_FRAGMENTS to ma
   hold all eight on OspreyConfig, which means threading config through the scorers that read the statics.
 - `ai/scripts/Osprey/Benchmark/Run-DiannEntrapment.ps1`: its `osprey` step was the SVM baseline beside
   `osprey-gbdt`; at HRAM both now train gbdt with the recipe. Not changed: what should the baseline arm be?
+
+**Equivalence check (01:45):** the HRAM defaults reproduce the recipe exactly. Same 3 Astral files and arguments as
+regression mode 1, two arms: #5033's build (1b3156778a, snapshot `D:\Users\brendanx\test\osprey-runs\_bin\fs-1b3156778a`)
+with OSPREY_FDR_MODEL=gbdt, OSPREY_GBT_OOF=1, OSPREY_XIC_FRAGMENTS=12, OSPREY_CORR_FRAGMENT_TOLERANCE=7, OSPREY_REF_XIC=corr,
+OSPREY_LOCAL_RT_TOLERANCE=15, OSPREY_TC_HALF_WINDOW=0.40 and `--protein-best on`, vs this branch (12127bb099,
+`_bin\hd-12127bb099`) with nothing set. Every blib table is identical row for row (138,820 RefSpectra, 9,065 Proteins,
+LibMetadata included); only LibInfo's creation time differs. The defaults build pointed at the env arm's work dir skipped
+all four tasks (`outputs valid`, 212 ms), so recipe output directories are adopted. Runs:
+`D:\Users\brendanx\test\osprey-runs\hd-equiv\{fs,hd}` (`run.log`, `fs\adopt.log`); scripts
+`ai/.tmp/sessions/20261112-5023/hd-equiv.ps1`, `hd-equiv-compare.py`. Final regression on 12127bb099: 49 PASS / 0 FAIL, 50:58.
