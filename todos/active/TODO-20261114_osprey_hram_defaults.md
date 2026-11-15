@@ -9,7 +9,7 @@
 - **Created**: 2026-11-14 (plan by UW8; Brendan is handing implementation to MACS2)
 - **Status** (2026-11-15, MACS2): the HRAM half of the per-resolution table is implemented and gated locally
   (see "MACS2 night 2026-11-14" below). Brendan approved pushing it as the way to lock the SEA-AD Astral gains
-  into the defaults; pushed as #5038 (Perf/Regression #390 passed on 12127bb099); the settings then moved onto OspreyConfig (d95004c521), #4950 merged, head d29717e81d, Perf/Regression 4266161 queued. Still to do: the all-resolution items
+  into the defaults; pushed as #5038 (Perf/Regression #390 passed on 12127bb099); the settings then moved onto OspreyConfig (d95004c521), #4950 merged, head d29717e81d, Perf/Regression #391 (4266161) passed there; all 12 PR checks green, mergeable. Still to do: the all-resolution items
   (transfer, refit off, PEP ratio, OOF knob removal), the leftover-variable removals, the settings log block, and
   MIN_RT_TOLERANCE / LOESS_BANDWIDTH once UW8's drop-one experiment lands here.
 
