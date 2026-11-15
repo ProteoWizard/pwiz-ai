@@ -172,6 +172,12 @@ targets kept at true FDP 1%, pass 1. q-1% FDP 0.99-1.08% in every arm (all calib
 
 - **MIN_RT_TOLERANCE 1.0 pays (+1.3%).** Every minrt0.5 seed is below the recipe's lowest seed; both-def loses the
   same amount, so it is MIN_RT that matters. Proposed: HRAM default 1.0 (unit stays 0.5 until measured).
+  **Cost (Brendan asked; one scoring run per arm, so no spread):** on these files the calibrated RT tolerance is
+  +-0.55-0.59 min, so the 1.0 floor widens the window ~70%. PerFileScoring 329 / 352 s at the 0.5 floor
+  (minrt0.5, both-def) vs 421 / 398 s at 1.0 (loess0.3, tc0.15): ~+20%, ~25 s/file. (recipe's 551 s ran first
+  after the SSD arms, likely cold spectra reads.) Scores parquet 5.49 / 5.64 GB vs 5.91-6.03 GB per 3 files: +7-8%,
+  ~0.15 GB/file. Reconciled parquet, FirstPassFDR, PerFileRescoring and SecondPassFDR unchanged. So MIN_RT 1.0 is
+  +1.3% detections for ~+20% scoring time and ~+8% scores-parquet disk; the 20-file runs record both too.
 - **LOESS_BANDWIDTH 0.10 does not pay** (-0.1%, sign flips by seed). Proposed: keep 0.3 at every resolution; it
   also avoids the 0.10 span's fragility with few calibration points.
 - **TC_HALF_WINDOW 0.40: -0.8% without it, every seed negative but inside the recipe's own seed spread.** Within ~1%,
