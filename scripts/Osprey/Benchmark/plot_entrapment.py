@@ -41,8 +41,9 @@ from plot_diann_comparison import draw_upset, run_label, INK, MUTED, GRID  # noq
 
 DATASETS = ('stellar', 'astral')
 # Arms: DIA-NN, then each Osprey search folder that exists (label -> folder under the dataset dir).
-OSPREY_ARMS = (('Osprey', 'osprey'), ('Osprey gbdt', 'osprey-gbdt'))
-COLORS = {'DIA-NN': '#4a6fb0', 'Osprey': '#e08a3c', 'Osprey gbdt': '#2b8a6c'}
+# 'osprey' trains its resolution's default classifier (gbdt for HRAM data since #5038); the pinned ones follow.
+OSPREY_ARMS = (('Osprey', 'osprey'), ('Osprey svm', 'osprey-svm'), ('Osprey gbdt', 'osprey-gbdt'))
+COLORS = {'DIA-NN': '#4a6fb0', 'Osprey': '#e08a3c', 'Osprey svm': '#8a5cb0', 'Osprey gbdt': '#2b8a6c'}
 NOMINAL = 0.01
 TABLE_LEVELS = (0.002, 0.003, 0.004, 0.005, 0.0075, 0.01)
 

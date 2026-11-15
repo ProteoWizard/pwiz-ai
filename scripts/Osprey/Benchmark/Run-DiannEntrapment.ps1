@@ -177,21 +177,31 @@ if ($stepList -contains 'osprey') {
     }
 }
 
-# Osprey again on the 'osprey' step's predicted library (-l; its DecoyPairs pair the decoys), with
-# gradient-boosted trees in place of the linear SVM (OSPREY_FDR_MODEL=gbdt): only the classifier differs.
-if ($stepList -contains 'osprey-gbdt') {
+# Osprey again on the 'osprey' step's predicted library (-l; its DecoyPairs pair the decoys), with the
+# first-pass classifier pinned (OSPREY_FDR_MODEL): 'osprey-svm' the linear SVM, 'osprey-gbdt' gradient-boosted
+# trees. The 'osprey' step trains its resolution's default (#5038: gbdt for HRAM data, the SVM at unit
+# resolution), so the comparison step is the other one: osprey-svm on Astral and ZTScan, osprey-gbdt on Stellar.
+$defaultClassifier = if ($preset.Resolution -eq 'hram') { 'gbdt' } else { 'svm' }
+foreach ($classifier in @('svm', 'gbdt')) {
+    $stepName = "osprey-$classifier"
+    if ($stepList -notcontains $stepName) { continue }
     if (-not (Test-Path $predicted)) { throw "Run the 'osprey' step first: no $predicted" }
-    $gbdtDir = Join-Path $WorkDir 'osprey-gbdt'
-    $env:OSPREY_FDR_MODEL = 'gbdt'
+    if ($classifier -eq $defaultClassifier) {
+        Write-Warning ("$stepName on $Dataset trains the same classifier as the 'osprey' step ($($preset.Resolution) " +
+            "default); only the library route differs. For the classifier comparison run osprey-" +
+            $(if ($classifier -eq 'gbdt') { 'svm' } else { 'gbdt' }) + '.')
+    }
+    $classifierDir = Join-Path $WorkDir $stepName
+    $env:OSPREY_FDR_MODEL = $classifier
     try {
-        Invoke-Step 'osprey-gbdt' $OspreyExe (@('-i') + $runs + @(
+        Invoke-Step $stepName $OspreyExe (@('-i') + $runs + @(
             '-l', $predicted, '--decoys-in-library',
-            '-o', (Join-Path $gbdtDir 'osprey.blib'), '--output-dir', $gbdtDir,
+            '-o', (Join-Path $classifierDir 'osprey.blib'), '--output-dir', $classifierDir,
             '--cache-dir', $cacheDir,
-            '--fdrbench', (Join-Path $gbdtDir 'FDRBench-Input.tsv'), '--log-file', (Join-Path $gbdtDir 'osprey.log'),
+            '--fdrbench', (Join-Path $classifierDir 'FDRBench-Input.tsv'), '--log-file', (Join-Path $classifierDir 'osprey.log'),
             '--resolution', $preset.Resolution, '--fragment-tolerance', $preset.FragTol, '--fragment-unit', $preset.FragUnit,
             '--run-fdr', '0.01', '--experiment-fdr', '0.01', '--protein-fdr', '0.01',
-            '--threads', "$Threads", '--timestamp')) $gbdtDir
+            '--threads', "$Threads", '--timestamp')) $classifierDir
     } finally {
         Remove-Item Env:OSPREY_FDR_MODEL -ErrorAction SilentlyContinue
     }
