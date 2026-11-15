@@ -4,14 +4,15 @@
 - **Branch**: `Skyline/work/20261115_osprey_hram_defaults`, from #5033's
   head 1b3156778a (which carries #4950's tip with #5036 and #5037).
 - **Base**: #4950 (`Skyline/work/20261028_osprey_diann_fdr_gap`); #5033 merged into it 2026-11-15 as ec9a9e77fb
-- **PR**: [#5038](https://github.com/ProteoWizard/pwiz/pull/5038) (retargeted to the #4950 branch when #5033 merged)
+- **PR**: [#5038](https://github.com/ProteoWizard/pwiz/pull/5038) (merged 2026-11-15 into the #4950 branch as e7f8b17820;
+  work branch deleted). Follow-up: one PR on the #4950 branch, three commits (see "Follow-up PR" below)
 - **Module**: `osprey`
 - **Created**: 2026-11-14 (plan by UW8; Brendan is handing implementation to MACS2)
 - **Status** (2026-11-15, MACS2): the HRAM half of the per-resolution table is implemented and gated locally
   (see "MACS2 night 2026-11-14" below). Brendan approved pushing it as the way to lock the SEA-AD Astral gains
-  into the defaults; pushed as #5038 (Perf/Regression #390 passed on 12127bb099); the settings then moved onto OspreyConfig (d95004c521), #4950 merged, head d29717e81d, Perf/Regression #391 (4266161) passed there; all 12 PR checks green, mergeable. Still to do: the all-resolution items
-  (transfer, refit off, PEP ratio, OOF knob removal), the leftover-variable removals, the settings log block, and
-  MIN_RT_TOLERANCE / LOESS_BANDWIDTH once UW8's drop-one experiment lands here.
+  into the defaults; pushed as #5038 (Perf/Regression #390 passed on 12127bb099); the settings then moved onto OspreyConfig (d95004c521), #4950 merged, head d29717e81d, Perf/Regression #391 (4266161) passed there; **#5038 merged into the #4950 branch as e7f8b17820**.
+  This TODO stays active for the follow-up PR, which finishes the defaults; it waits for UW8's 20-file check
+  (tc0.15, minrt0.5), not yet recorded here.
 
 ## Goal
 
@@ -301,3 +302,23 @@ table but LibInfo's time (`cfg-equiv-compare.txt`), and pointed at that run's wo
 ec9a9e77fb, the same tree as 1b3156778a) merged with `-s ours` at d29717e81d. Still process-wide: #5033's feature
 mask (`PinFeatureMask.ApplySearchSettings`), the same shape; a follow-up. Also committed (pwiz-ai 353e9fe6):
 `Run-DiannEntrapment.ps1` gains `osprey-svm`, the classifier comparison on HRAM data now that `osprey` trains gbdt.
+
+### 2026-11-15 - #5038 merged
+
+PR #5038 merged into the #4950 branch as e7f8b17820 (tree identical to the PR head d29717e81d); the work branch is
+deleted locally and on GitHub. It shipped the HRAM rows of the table (gbdt + OOF, `--protein-best on`, 12 XICs,
+7 ppm, REF_XIC corr, LOCAL_RT 15, TC 0.40) on `OspreyConfig.Scoring`, and re-recorded the Astral regression results
+once (12127bb099); Stellar unchanged.
+
+## Follow-up PR (Brendan, 2026-11-15)
+
+One PR on the #4950 branch with one re-record of the regression results, as three commits. It is a separate PR
+only because the #4950 squash to master compresses the second re-record; otherwise it would have been part of
+#5038.
+1. Move #5033's feature mask (`PinFeatureMask.ApplySearchSettings`) onto the config. Output unchanged.
+2. Remove the leftover variables (list under "Stays developer-only") and add the resolved-settings log block.
+   Output unchanged.
+3. The defaults: MIN_RT_TOLERANCE 1.0 for HRAM (`RTCalibrationConfig`, set in `ApplyResolutionMode`; it changes
+   `SearchParameterHash`), OOF built in for gbdt, transfer / refit off / PEP ratio at every resolution, validity-key
+   terms from the resolved values, `docs/25-diann-gap-settings.md` updated; LOESS stays 0.3; TC 0.40 unless the
+   20-file check reverses it. One re-record of Astral and Stellar.
