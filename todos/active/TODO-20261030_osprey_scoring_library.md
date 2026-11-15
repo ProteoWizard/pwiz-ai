@@ -545,6 +545,11 @@ No visible gain was ever measured for the parallel scoring, so #5019 is closed u
 (`ai/.tmp/sessions/20261112-5023/gbtoof-gate.log`). Caveat: it re-keys existing OSPREY_GBT_OOF=1 output directories, so
 they are not adopted by a build with it; keep UW8's #5036 runs on #5036 builds until they finish.
 
+### 2026-11-14 - #5037 merged
+
+Perf/Regression #388 (4265713) SUCCESS on 6997607462; squash-merged into the #4950 branch as a571fb447b. Work branch
+deleted (local and remote).
+
 ## Open questions and unfinished items (carried from phases 1-2)
 
 - OspreyDatasetRun.psm1 gendecoy pairing-manifest elseif is uncommitted (from 2026-10-30); gendecoy q 1% -> FDP 1.76%.
