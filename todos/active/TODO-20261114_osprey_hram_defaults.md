@@ -1,14 +1,15 @@
 # TODO-20261114_osprey_hram_defaults.md
 
 ## Branch Information
-- **Branch**: not created. Proposed: `Skyline/work/20261115_osprey_hram_defaults`, stacked on #5033
-  (`Skyline/work/20261112_osprey_default_feature_set`), which is stacked on #4950
-  (`Skyline/work/20261028_osprey_diann_fdr_gap`). Merge #4950's tip first (2fca953602 = #5036).
+- **Branch**: `Skyline/work/20261115_osprey_hram_defaults` on MACS2, LOCAL ONLY (not pushed), from #5033's
+  head 1b3156778a (which carries #4950's tip with #5036 and #5037).
 - **Base**: #5033 -> #4950
 - **Module**: `osprey`
 - **Created**: 2026-11-14 (plan by UW8; Brendan is handing implementation to MACS2)
-- **Status**: plan only, no code. The open experiment (MIN_RT_TOLERANCE / LOESS_BANDWIDTH drop-one) is queued
-  on UW8; results land in this TODO.
+- **Status** (2026-11-15 ~00:30, MACS2 night session): the HRAM half of the per-resolution table is implemented
+  and gated locally (see "MACS2 night 2026-11-14" below); not pushed, no PR. Still to do: the all-resolution items
+  (transfer, refit off, PEP ratio, OOF knob removal), the leftover-variable removals, the settings log block, and
+  MIN_RT_TOLERANCE / LOESS_BANDWIDTH once UW8's drop-one experiment lands here.
 
 ## Goal
 
@@ -157,3 +158,41 @@ Script `ai/.tmp/sessions/20261110-uw8featset/lrt.ps1` (chain `lrt-chain.sh`), re
 - Decision rule: a setting ships at its recipe value only if dropping it loses more than the seed spread at
   3 seeds; otherwise today's default. If an arm is within ~1%, rerun that pair at 20 files before deciding
   (pruning effects grew with file count in the feature-set study).
+
+## MACS2 night 2026-11-14 (Brendan asleep; night log `ai/.tmp/night-session-budget-20261114.md`)
+
+Scope chosen: the **HRAM-only** rows of the table, because they leave every unit-resolution result unchanged, so a
+byte-identical Stellar regression checks them. The all-resolution items move the Stellar results and the plan
+wants them reviewed first; MIN_RT / LOESS wait for UW8.
+
+Design (follows the code survey's notes above):
+- `Osprey.Core/ResolutionDefaults.cs`: the one table (`LEGACY`, `HRAM`, `UNIT_RESOLUTION` = `LEGACY`) for the
+  classifier, protein-best, XIC count, correlation tolerance, reference XIC, local RT tolerance, TC window and OOF.
+- The classifier and `--protein-best` follow the precedent of the fragment tolerance: `OspreyConfig.ApplyResolutionMode`
+  fills them unless given (`FdrClassifierGiven`, set when OSPREY_FDR_MODEL is set; `ProteinBestGiven`, set by the
+  argument). Both the explicit `--resolution` and the detected route go through it.
+- The developer variables: `OspreyEnvironment.ApplyResolutionDefaults(mode)`, called in Program beside
+  `PinFeatureMask.ApplySearchSettings` (so every `--task` node resolves the same values); `InProcessOsprey` restores it.
+  Each variable overrides, with explicit off spellings for what is now on: `OSPREY_GBT_OOF=0`, `OSPREY_REF_XIC=intensity`,
+  `OSPREY_LOCAL_RT_TOLERANCE=off`, `OSPREY_CORR_FRAGMENT_TOLERANCE=off` (and the existing `OSPREY_FDR_MODEL=svm`,
+  `OSPREY_XIC_FRAGMENTS=6`, `OSPREY_TC_HALF_WINDOW=0.15`, `--protein-best off`).
+- Validity keys need no new terms: each term is spelled when the RESOLVED value differs from the legacy one, so an
+  HRAM default keys exactly like the variable that once chose it (`;tcwin=0.4;fcorr=7;refxic=corr;rtlocal=15`,
+  `;xic=12`, the gbdt and protein-best terms), and recipe outputs are adopted. Pinned by
+  `TaskValidityKeyTest.TestResolutionDefaultsKeyLikeTheirVariables`.
+- `TopFragmentExtractor.SearchTopNFragments` was a static readonly capture of the XIC count; now read live.
+
+Commits (local): 11d13a33ba plumbing with legacy values at both resolutions (gate 685/685); cecff38a40 HRAM = recipe
+(gate 686/686, help regenerated, docs 07 and 25); 5e27a2d80a **fix: an unset OSPREY_FDR_MODEL parsed to svm, so the
+classifier always counted as given and HRAM silently trained the SVM** (caught because the first Astral recapture's
+log showed SVM C sweeps; my first unit test skipped itself whenever FdrModel had a value, which hid it; now it parses
+with no classifier); e32943ddcd the Astral results below and the gbdt log line without EXPERIMENTAL (gate 686/686).
+
+Astral regression (3 files, HRAM) under the HRAM defaults vs #5033's default-70 set with the old defaults:
+132,654 -> 138,820 library precursors at 1% (+4.6%), 8,612 -> 9,065 proteins (+5.3%), straight-through wall
+15:00 -> 19:24 (+29%). `regression-parallel.ps1 -Dataset All`: 49 PASS / 0 FAIL, 52:30 (46:07 before); Stellar
+unchanged. Logs: `ai/.tmp/sessions/20261112-5023/hd-astral-golden.log`, `hd-regression-all.log`, gates `hd-gate*.log`.
+
+For review: the TeamCity Perf/Regression perf leg will see the slower HRAM defaults (+29% straight-through on
+Astral); decide whether that baseline moves with this PR. The ja / zh-Hans resx have no `--protein-best` entry,
+so those help pages show the new English text until it is translated.
