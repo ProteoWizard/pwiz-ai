@@ -182,7 +182,13 @@ targets kept at true FDP 1%, pass 1. q-1% FDP 0.99-1.08% in every arm (all calib
   also avoids the 0.10 span's fragility with few calibration points.
 - **TC_HALF_WINDOW 0.40: -0.8% without it, every seed negative but inside the recipe's own seed spread.** Within ~1%,
   so per the rule a 20-file check is queued. Keep 0.40 (MACS2's branch already has it) unless 20 files reverses it.
-- 20-file check queued behind the SSD pre1 rerun (~05:30 PT start): recipe, tc0.15, minrt0.5 on the feature-set
+- **LOESS sweep queued first (Brendan, 04:40 PT: prove 0.3 vs 0.10 has no cost; look for a better value, e.g. 0.5).**
+  `lsweep.ps1` -> `lsweep.tsv`, runs `D:\test\osprey-runs\sea-ad\runs-uw8\lsweep\`. Bandwidths 0.05 / 0.10 / 0.2 /
+  0.3 / 0.5 / 0.75, recipe otherwise (MIN_RT 1.0, TC 0.40), same 3 files. Per bandwidth: two full-pipeline runs
+  (FDR seeds 1 and 2: two scoring repeats for wall time and disk) plus seed 3 FDR-only; one warm-up run first;
+  seed-1 runs ascending, seed-2 descending, so cache warmth and drift do not track bandwidth. Records detections,
+  PerFileScoring / PerFileRescoring s, scores and reconciled parquet GB, calibrated RT tolerance. ~3 h.
+- 20-file check queued behind the LOESS sweep (~05:30 PT start): recipe, tc0.15, minrt0.5 on the feature-set
   study's 20 spread files, 3 seeds each (`lrt20-chain.sh` -> `lrt-20.tsv`). ~1.5-2 h per arm.
 
 ## MACS2 night 2026-11-14 (Brendan asleep; night log `ai/.tmp/night-session-budget-20261114.md`)
