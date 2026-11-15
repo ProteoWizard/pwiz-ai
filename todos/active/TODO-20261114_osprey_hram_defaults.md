@@ -213,7 +213,25 @@ targets kept at true FDP 1%, pass 1. q-1% FDP 0.99-1.08% in every arm (all calib
   - Time and disk are flat across the whole range (407-423 s, 5.92-6.03 GB): the RT tolerance is set by the 1.0
     floor (computed 0.54-0.61 min), so the bandwidth barely changes the search window.
   - **Recommendation: keep master's 0.3 (no change).** MACS2's branch already leaves LOESS at 0.3.
-- 20-file check queued behind the LOESS sweep (~05:30 PT start): recipe, tc0.15, minrt0.5 on the feature-set
+- **20-file check results (2026-11-15 13:26 PT; `lrt-20.tsv`, runs `D:\test\osprey-runs\sea-ad\runs-uw8\lrt-20\`),**
+  the feature-set study's 20 spread files, 3 FDR seeds, time and disk from each arm's seed-1 full run:
+
+  | arm | kept (s1 / s2 / s3) | mean | vs recipe | PerFileScoring | FirstPassFDR | scores parquet | reconciled |
+  |---|---|---|---|---|---|---|---|
+  | recipe (MIN_RT 1.0, TC 0.40) | 85,694 / 85,547 / 86,616 | 85,952 | | 3,161 s* | 570 s | 40.5 GB | 2.22 GB |
+  | minrt0.5 | 83,801 / 83,209 / 83,833 | 83,614 | **-2,338 (-2.7%)** | 2,582 s | 491 s | 36.9 GB | 2.07 GB |
+  | tc0.15 | 85,177 / 85,982 / 85,663 | 85,607 | -345 (-0.4%) | 3,048 s | 524 s | 40.0 GB | 2.19 GB |
+
+  *recipe ran first after the LOESS sweep; the sweep's warm-up showed a first run pays ~140 s of cold reads.
+  q-1% FDP 0.91-1.11% everywhere.
+  - **MIN_RT_TOLERANCE 1.0: the gain grows with files (+1.3% at 3 files, +2.8% at 20).** Cost at 20 files:
+    PerFileScoring +17-22% (~23-29 s/file), FirstPassFDR +16%, scores parquet +9.8% (~0.18 GB/file), reconciled
+    +7%; PerFileRescoring and SecondPassFDR unchanged. Recommend HRAM default 1.0; unit stays 0.5 until measured.
+  - **TC_HALF_WINDOW 0.40: no demonstrated value.** -0.8% at 3 files, -0.4% at 20 (per seed -517 / +435 / -953),
+    both inside the seed spread (recipe SD ~580). Cost also within noise (scoring +4% before the cold-start
+    allowance, ~0 after; disk +1%). By Brendan's bar (no change without value and proven no cost) this favours
+    **keeping master's 0.15**; MACS2's branch currently has 0.40 - decision for Brendan / MACS2.
+- 20-file check (done, above) ran behind the LOESS sweep (~05:30 PT start): recipe, tc0.15, minrt0.5 on the feature-set
   study's 20 spread files, 3 seeds each (`lrt20-chain.sh` -> `lrt-20.tsv`). ~1.5-2 h per arm.
 
 ## MACS2 night 2026-11-14 (Brendan asleep; night log `ai/.tmp/night-session-budget-20261114.md`)
