@@ -760,7 +760,20 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   .cs files (`ai/.tmp/sessions/20261030-night/inspect_branch.py`). Tutorial/perf tests NOT run (hours);
   item 1 (tooltips) and the DIA top clips still need a 150% run.
 - `C:\proj\pwiz` review branch still holds Brendan's 1,798 uncommitted 150% PNGs (en/ja/zh); merge
-  d4894ec20b into it before the next 150% runs.
+  d4894ec20b into it before the next 150% runs. Do NOT use run-arm.ps1 there: it ends with
+  `git checkout -- Tutorials`, which would wipe them. Run single tests in pwiz-work3 instead.
+- Click failures at 150% (runs in pwiz-work3, DpiAware, `D:\test\skyline-runs\20261030_screenshot_waits\click150`
+  and `\drift150`): **TestTargetedMSMSTutorial now passes** (a5e0ff4146 tooltip points verified).
+  **TestDriftTimePredictorTutorial still fails at line 248** (`ClickChromatogram(41.02, 5.8E+4, PRODUCTS)`),
+  now in CheckFullScanSelection: "selection dot is not visible". Passes offscreen at 96 DPI, so 150%-only.
+  Uncommitted diagnostic in pwiz-work3 GraphChromatogram.TestFullScanSelection (keep or drop) shows the
+  click is INSIDE the PRODUCTS chart (mouse 448,877; chart y 782..1336; y axis 0..70000) - so not an
+  axis/pane problem. The tracking dot showed (ClickChromatogram requires it), so not the label case.
+  Mouse-down (GraphChromatogram ~3485) checks, in order: peak-boundary grab (starts a drag; mouse-up then
+  DoDrag instead of selecting), label, FindFullScanPoint (DpiUtil.Scale 20). Suspect the press is taken
+  as a peak-boundary grab at 150% (boundary grab zone vs point radius scale differently). Next: report
+  in TestFullScanSelection whether `_peakBoundDragInfos` / `_mouseDownClickPoint` were set by the press,
+  rerun the test alone at 150% (~4 min), then make the boundary grab tolerance consistent with DPI.
 
 ### 2026-11-05 - TC inspection fix (4c783aedc8) and second master merge (75eb2b0df7), pushed
 
