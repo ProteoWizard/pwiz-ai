@@ -419,6 +419,22 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
   93,695 / 93,774 at true FDP 1% (+0.4% over user), 1.10% at q 1%.** Seed and PEP do not explain the 82-file gap;
   the remaining -2.6% vs the recipe is in scoring, i.e. TC 0.15 and/or LOESS 0.3. UW8 measured each alone at
   20 files (-0.4% / not run for LOESS beyond 3 files), never the pair at 82 files.
+- **Bisection (Brendan: reproduce the original result, then apply the changes one at a time).**
+  - Reproduced: the branch build's FDR (8 auto lanes) on the recipe run's own 82-file scoring with the recipe
+    variables (`runs-validate\recipe-scoring-newfdr-82files`, `recipe-fdr-82.ps1`) gives 96,223 / 96,185 at true
+    FDP 1%, identical to the recipe in every column of the scorer. The branch build's scoring of A01_005 with the
+    recipe variables (`runs-score1\recipe`, `score1.ps1`) matches the recipe's parquet in every row and feature.
+    So the branch reproduces the original exactly; the drop is entirely from the scoring defaults (TC, LOESS).
+  - A01_005 alone, one setting moved: LOESS 0.10 -> 0.3 reproduces ALL of the recipe-vs-user difference in peak
+    choice (12.2% of matched precursors pick another peak; ~120k candidates scored in one run only); TC 0.40 -> 0.15
+    moves no peak and changes only the tc_*/shadow/tight/heavy features (`feature_diff.py`).
+  - The two RT curves differ by median 0.021 min (p90 0.08) except past library RT 18.5 (sparse end). Moved peaks
+    are near-ties (peak_rank_margin median 0.30 vs 1.62 unmoved). Among recipe-detected targets 4.6% moved; where
+    both runs detect the precursor, the recipe's peak has higher fragment coelution (median 3.30 vs 2.21)
+    (`moved_detected.py`). Mechanism: the HRAM pick model weights rt_penalty (z-scale 0.053), whose sigma is
+    widened by the 15-neighbour local tolerance built from LOESS residuals; max local half-width median 2.16 min
+    at 0.3 vs 1.79 at 0.10 across files.
+  - 82-file single-change runs queued: `loess03` (recipe + LOESS 0.3), then `tc015` (recipe + TC 0.15).
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
