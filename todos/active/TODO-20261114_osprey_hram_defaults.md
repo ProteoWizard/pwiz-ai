@@ -340,3 +340,31 @@ only because the #4950 squash to master compresses the second re-record; otherwi
    `SearchParameterHash`), OOF built in for gbdt, transfer / refit off / PEP ratio at every resolution, validity-key
    terms from the resolved values, `docs/25-diann-gap-settings.md` updated; LOESS stays 0.3; TC 0.40 unless the
    20-file check reverses it. One re-record of Astral and Stellar.
+
+### 2026-11-15 - Follow-up PR in progress (MACS2, branch `Skyline/work/20261115_osprey_defaults_final`)
+
+Local commits on the #4950 branch (e7f8b17820), not pushed:
+1. 61de280c64 - `PinFeatureSelection` (new, `Osprey.IO/PinFeatureSelection.cs`): the features one search uses,
+   computes and records, from `PinFeatureMask.For(config)` (its resolution and `--feature-set`). Replaces the
+   process-wide `ApplySearchSettings` state; the scores parquet reader/writer, the first-pass model loader and the
+   pass-2 worker take it explicitly. `FeatureSetScope` and the InProcessOsprey save/restore are gone. 686/686,
+   inspection clean (`ai/.tmp/sessions/20261112-5023/build-featsel2.log`).
+2. 0a206a5162 - removed `OSPREY_EXPERIMENT_AGG` (mean-best-N) with `MEANBEST2_FLOOR_*`, `MIN_FRAGMENT_TOLERANCE`,
+   `LOAD_CALIBRATION` and `PROTEIN_BEST_DECOY` (done by a subagent in worktree `D:\Users\brendanx\proj\pwiz-defaults-c2`).
+   Default-run keys unchanged: `;proteinbestdecoy=paired` kept as a literal, the model JSON still writes
+   `"ExperimentAgg": "max"`. 670/670 (16 mean-best-only tests removed), inspection clean (`gate-c2-leftovers.log`).
+   Still to update in pwiz-ai: runners that pass `OSPREY_EXPERIMENT_AGG` (`Common/OspreyDatasetRun.psm1`
+   `-ExperimentAgg`, `SEA-AD/Run-SeaAd.ps1`, `CohortAnalysis/Run-CohortArms.ps1`,
+   `Entrapment/coassign_decoy_estimate.py`) now hit the unknown-variable error if they set it.
+   The resolved-settings log block is not done yet.
+3. d65934dd4d - the defaults. HRAM: MIN_RT 1.0 (`ResolutionDefaults.MinRtTolerance`, applied in
+   `ApplyResolutionMode`; same search hash as `OSPREY_MIN_RT_TOLERANCE=1.0`), TC back to 0.15 (Brendan, from UW8's
+   20-file result). Every resolution: out-of-fold gbdt (legacy settings too), transfer, refit off (`on` restores
+   it), ratio PEP (`mixture` restores it); the keys carry the old variables' terms, so recipe-variable runs adopt.
+   Unit tests now run the default as transfer and pin `protein-compact` where they test the competition; the
+   pre-protein-best digest runs with the three old defaults set. Found and fixed: a library build's tuning search
+   keyed on the output's `--experiment-fdr` under transfer (`reconset=output@Precursor,<fdr>`), so
+   `--experiment-fdr 1` re-ran the tuning; `TrainingSearchConfig` now gives it the default. 686/686, inspection
+   clean (`build-c3c.log`).
+
+Re-record running: `regression-parallel.ps1 -Dataset All -CreateGolden` at d65934dd4d (`final-golden.log`).
