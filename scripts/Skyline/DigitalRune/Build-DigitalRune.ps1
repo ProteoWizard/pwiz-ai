@@ -149,6 +149,8 @@ $projectXml = @"
     <UseWindowsForms>$useWinForms</UseWindowsForms>
     <AssemblyName>DigitalRune.Windows.Docking</AssemblyName>
     <RootNamespace>DigitalRune.Windows.Docking</RootNamespace>
+    <!-- C# 8 using declarations; net472 would otherwise default to C# 7.3 -->
+    <LangVersion>8.0</LangVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <!-- The legacy csproj sets DocumentationFile, and pwiz ships the XML beside the DLL under
          pwiz_tools/Shared/Lib/DigitalRune/<tfm>/. With this off, the 2026-09-11 net10 build had
