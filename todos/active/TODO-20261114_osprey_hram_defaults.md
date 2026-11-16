@@ -435,6 +435,9 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
     widened by the 15-neighbour local tolerance built from LOESS residuals; max local half-width median 2.16 min
     at 0.3 vs 1.79 at 0.10 across files.
   - 82-file single-change runs queued: `loess03` (recipe + LOESS 0.3), then `tc015` (recipe + TC 0.15).
+  - `loess03` (82 files, recipe + LOESS 0.3 only, `runs-validate\loess03-82files`): 94,531 at true FDP 1%
+    (split_calibration), -1.76% from the recipe's 96,223. LOESS alone is about 60% of the -2.99% user-default
+    loss (93,349). `tc015` (recipe + TC 0.15 only) running, ETA about 16:20.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
