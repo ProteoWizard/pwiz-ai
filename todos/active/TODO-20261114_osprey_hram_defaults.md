@@ -396,7 +396,12 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
 - `user` is +1.2% over the recipe (pass 1): 74,295 vs the docs' 74,646 (recipe, other build) and DIA-NN's 78,668 (-5.6%).
 - 82-file recipe run on MACS2 (`sea-ad\runs-featset-env\...default70-20261113_121459`, #5033 build, variables, seed 1):
   pass 1 96,223 / pass 2 96,185 at true FDP 1%, 1.02% at q 1% (docs: 96,654 on UW8; DIA-NN 101,269). 2 h 55 min.
-- 82-file `user` run started 2026-11-15 ~18:45.
+- **82-file `user` run (`runs-validate\user-82files`, 18:30-21:25): pass 1 93,349 / pass 2 93,382 at true FDP 1%,
+  1.04% at q 1%; 2 h 54.6 min (10,476 s vs the recipe's 10,541 s).** That is -3.0% against the recipe's 96,223,
+  where 3 files gave +1.2% and UW8's 20-file drop-ones put TC 0.15 at -0.4% and LOESS 0.3 at -0.1%. The drop is
+  in pass 1: per-file first-pass total 4,365,265 vs 4,517,400 (-3.4%); scored candidates 360.19 M vs 358.90 M.
+  First-pass FDR chose 8 lanes (cap; 409 GB free, 7.3 GB/lane). Next: FDR-only re-run on the same scoring with
+  seed 1 + PEP mixture (`seed-pep-82.ps1` -> `user-seed1-mixture-82files`) to split seed/PEP from TC/LOESS.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
