@@ -41,8 +41,8 @@ param(
     # disk carries '-percolator' and stays harvestable under it; a new arm is named for the mode
     # it actually ran. Arms in different modes are not comparable, so do not mix them in one
     # surface.
-    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
-    [string]$Pass2Mode = 'protein-compact',
+    [ValidateSet('default', 'transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'default',
     [int]$EveryNthFile = 1,
     [string]$ExcludePattern = '',
     [string]$TagPrefix = 'f',

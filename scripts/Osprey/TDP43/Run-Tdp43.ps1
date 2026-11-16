@@ -73,8 +73,8 @@
 param(
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$Ratio = '1.0',
-    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
-    [string]$Pass2Mode = 'protein-compact',
+    [ValidateSet('default', 'transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'default',
     [switch]$PickProduct,
     [int]$NumFiles,
     [int]$SkipFirstFiles = 0,

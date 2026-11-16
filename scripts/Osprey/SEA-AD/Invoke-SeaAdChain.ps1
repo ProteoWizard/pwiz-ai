@@ -36,7 +36,7 @@
 param(
     [string[]]$DecoyModes = @('libdecoy'),
     [string[]]$Ratios = @('1.0'),
-    [string[]]$Pass2Modes = @('protein-compact'),
+    [string[]]$Pass2Modes = @('default'),
     [int]$NumFiles = 82,
     [int]$Threads = 30,
     [string]$Tag = '',

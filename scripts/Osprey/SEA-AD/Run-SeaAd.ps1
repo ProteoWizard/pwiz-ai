@@ -33,8 +33,9 @@
     only comparable on ID counts when they share a ratio. See README.
 
 .PARAMETER Pass2Mode
-    transfer / transfer-compete / protein-compact, defaulting to protein-compact. See the
-    module's help; `transfer` is the one that forces the resident O(files) first-pass pool.
+    default / transfer / transfer-compete / protein-compact, defaulting to 'default': no
+    OSPREY_PASS2_QVALUE, so the binary's own pass-2 mode runs (protein-compact on master,
+    transfer on #4950's follow-up). See the module's help.
     `percolator` was removed from Osprey and is no longer accepted here.
 
 .PARAMETER PickProduct
@@ -183,8 +184,8 @@
 param(
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$Ratio = '1.0',
-    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
-    [string]$Pass2Mode = 'protein-compact',
+    [ValidateSet('default', 'transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'default',
     [switch]$PickProduct,
     [switch]$LogMemory,
     [int]$NumFiles,

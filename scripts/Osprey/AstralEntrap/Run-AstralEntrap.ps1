@@ -31,8 +31,8 @@
 param(
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$Ratio = '1.0',
-    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
-    [string]$Pass2Mode = 'protein-compact',
+    [ValidateSet('default', 'transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'default',
     [switch]$PickProduct,
     [int]$Threads = 30,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,

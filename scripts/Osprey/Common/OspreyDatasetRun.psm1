@@ -192,10 +192,16 @@ function Get-SourceOspreyVersion {
                       (Stage 7 join).
     transfer-compete: frozen model, then a fresh target-decoy competition over the full
                       reconciled population (non-depleted null).
-    protein-compact : default. Frozen model, competition CONSTRAINED to peptides of proteins
+    protein-compact : frozen model, competition CONSTRAINED to peptides of proteins
                       detected in the first pass (>= 2 peptides), target+decoy pairs kept.
+                      Not statistically valid (pwiz #4581, #4538), and refused with
+                      --protein-best on builds that carry the refusal.
+    default         : (the default) sets no OSPREY_PASS2_QVALUE, so the binary's own default
+                      runs - protein-compact on master, transfer once #4950's follow-up lands.
+                      The same command then works on either build; Osprey's log records the
+                      mode it resolved (`[PATH] pass2-qvalue:` and the "Search settings" line).
     Passed through OSPREY_PASS2_QVALUE, which this function clears first so a stale shell
-    variable can never silently change an arm, and then ALWAYS sets - see below.
+    variable can never silently change an arm, and then sets for every mode but 'default'.
 
     `percolator` is gone. Osprey removed the second-pass Percolator retrain and now raises a
     startup ERROR on an unrecognized OSPREY_PASS2_QVALUE, so it is out of the ValidateSet
@@ -213,8 +219,8 @@ function Invoke-OspreyDatasetRun {
         [Parameter(Mandatory)] [hashtable]$Dataset,
         [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
         [string]$Ratio = '1.0',
-        [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
-        [string]$Pass2Mode = 'protein-compact',
+        [ValidateSet('default', 'transfer', 'transfer-compete', 'protein-compact')]
+        [string]$Pass2Mode = 'default',
         [switch]$PickProduct,
         # Emit Osprey's post-GC [MEM ...] probes (OSPREY_LOG_MEMORY=1). Those probes are what
         # answer "will it fit" - --memstamp includes uncollected garbage and shows shape, not
@@ -883,7 +889,7 @@ function Invoke-OspreyDatasetRun {
         }
         $outDirExisted = Test-Path $OutDir
         $priorPass2 = $env:OSPREY_PASS2_QVALUE
-        $env:OSPREY_PASS2_QVALUE = $Pass2Mode
+        $env:OSPREY_PASS2_QVALUE = if ($Pass2Mode -eq 'default') { $null } else { $Pass2Mode }
         $declaredByStage = @{}
         try {
             $stagesToPrint = if ($nodeTask) { @($nodeTask) } else { $PIPELINE }
@@ -1040,11 +1046,12 @@ function Invoke-OspreyDatasetRun {
         Remove-Item "Env:\$k" -ErrorAction SilentlyContinue
     }
     # Both levers are set UNCONDITIONALLY, in both directions. Leaving a variable unset used to
-    # mean "the old default", and both defaults have since flipped - OSPREY_PASS2_QVALUE unset is
-    # now protein-compact and OSPREY_PICK_LDA unset is now the learned model. An arm that only
-    # exported its ON value would therefore run a DIFFERENT configuration than its banner and
-    # run.log claim, and the two arms of an A/B would be the same run under two labels.
-    $env:OSPREY_PASS2_QVALUE = $Pass2Mode
+    # mean "the old default", and both defaults have since flipped - OSPREY_PICK_LDA unset is now
+    # the learned model. An arm that only exported its ON value would therefore run a DIFFERENT
+    # configuration than its banner and run.log claim, and the two arms of an A/B would be the
+    # same run under two labels. The one exception is -Pass2Mode default, which is named as
+    # such and leaves OSPREY_PASS2_QVALUE unset (cleared above) so the binary's default runs.
+    if ($Pass2Mode -ne 'default') { $env:OSPREY_PASS2_QVALUE = $Pass2Mode }
     $env:OSPREY_PICK_LDA = if ($PickProduct) { '0' } else { '1' }
     $env:OSPREY_LOG_MEMORY = if ($LogMemory) { '1' } else { '0' }
     if ($ExperimentAgg) { $env:OSPREY_EXPERIMENT_AGG = $ExperimentAgg }
