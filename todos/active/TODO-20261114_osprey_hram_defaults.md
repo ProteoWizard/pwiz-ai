@@ -368,3 +368,39 @@ Local commits on the #4950 branch (e7f8b17820), not pushed:
    clean (`build-c3c.log`).
 
 Re-record running: `regression-parallel.ps1 -Dataset All -CreateGolden` at d65934dd4d (`final-golden.log`).
+
+### 2026-11-15 - SEA-AD validation: the defaults reproduce the recipe (MACS2)
+
+Brendan: prove the branch, run as a user runs it (no `OSPREY_*` variable), gives what the recipe was optimized to.
+Script `ai/.tmp/sessions/20261112-5023/validate-seaad.ps1` calls Osprey.exe directly with the `OSPREY_*`
+environment cleared (Run-SeaAd.ps1 always exports `OSPREY_PASS2_QVALUE`, `OSPREY_PICK_LDA` and
+`OSPREY_LOG_MEMORY`); split-sized library `D:\Users\brendanx\test\osprey-runs\lib\astral\target+decoy+entrapment-20260817-split-sized`;
+runs in `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-validate\`; scored with `SEA-AD/tools/split_calibration.py`.
+Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings log line).
+- `old`: #5033's build (`_bin\featset-fab7e0caed`) with the recipe variables, exactly as `runs-featset-env` ran.
+- `exact`: this branch with only LOESS 0.10, TC 0.40, seed 1 and PEP mixture set back.
+- `user`: this branch with no variable, and no `--resolution` / `--protein-best` / `--fdr-level`.
+
+3 files (A01_005 / A06_010 / A10_014):
+
+| arm | pass 1 at true FDP 1% | pass 2 at true FDP 1% | pass 2 at q 1% (FDP) | wall |
+|---|---|---|---|---|
+| old | 73,408 | 73,976 | 73,566 (0.95%) | 13 min 1 s |
+| exact | 73,408 | 73,976 | 73,566 (0.95%) | 11 min 30 s |
+| user | 74,295 | 74,205 | 73,926 (0.95%) | 11 min 14 s |
+
+- `exact` = `old` in every blib table, row for row (RefSpectra 73,810, peaks, RetentionTimes 221,350, proteins);
+  only LibInfo's time and LibMetadata (version, and the `osprey.feature_set` row #5033 added) differ. So every
+  setting of the recipe but the four is now the default. Pass 1 73,408 is UW8's recipe seed-1 number exactly:
+  MACS2 reproduces UW8.
+- `user` is +1.2% over the recipe (pass 1): 74,295 vs the docs' 74,646 (recipe, other build) and DIA-NN's 78,668 (-5.6%).
+- 82-file recipe run on MACS2 (`sea-ad\runs-featset-env\...default70-20261113_121459`, #5033 build, variables, seed 1):
+  pass 1 96,223 / pass 2 96,185 at true FDP 1%, 1.02% at q 1% (docs: 96,654 on UW8; DIA-NN 101,269). 2 h 55 min.
+- 82-file `user` run started 2026-11-15 ~18:45.
+
+Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
+run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
+after the resolution is known (HRAM turns the column on by default). 670/670, inspection clean (`build-pbpc.log`).
+Regression Astral reference points (not like for like, other library): DIA-NN 2.7.0 145,788 at global q 1% with its
+own predicted library (`D:\Users\brendanx\test\diann-vs-osprey\astral3-mike`); master 117,660, #5038 138,820,
+this branch 133,766 at reported q 1% on `SkylineAI_spectral_library.tsv`.
