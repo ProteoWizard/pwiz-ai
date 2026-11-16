@@ -748,6 +748,25 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-11-16 - DriftTimePredictor 150% click fixed (7972422bde, pushed)
+
+- Root cause (instrumented, not the suspected peak-boundary grab): line 248's click (41.02, 5.8E+4, PRODUCTS)
+  sits at the y8 apex, and the peak label "41.0 / -0.8 ppm" ends right above it - 1 px clear at 100%
+  (label bottom y=431.0, click y=432). At 150% the press landed ON the label, and a press on a label
+  never selects a full scan. ClickChromatogram's guard (IsOverFullScanPoint) only checked for a nearby
+  curve point, so the failure surfaced later as "selection dot is not visible".
+- Fix: click at 5.5E+4 (`clickIntensity2`, also used by the cover-shot click): 13 px clear at 100%, 17 px
+  at 150%, same y8 curve and 41.02 scan. New test support `GraphChromatogram.IsOverLabel`, asserted in
+  `MoveMouseOverFullScanPoint`, so ClickChromatogram / MouseOverChromatogram fail with "(x, y) is on a
+  label" up front. Labels exist only on a painted graph: offscreen runs never hit it.
+- Verified: onscreen 100% (drift100b: 0 failures, changedPngs=0), 150% DpiAware (drift150d, and drift150e
+  with the guard: 0 failures), runs in `D:\test\skyline-runs\20261030_screenshot_waits\`; CodeInspection
+  test; full inspectcode 423 issues, the same environmental set, 0 in the 118 branch .cs files.
+- The guard is stricter than before: the next full 150% screenshot pass may surface hover/click points
+  that sit on labels (previously a silent missing tracking dot). Brendan schedules that run.
+- Remaining: TODO item 4b by cause (menu-bounds clip helper, docked-window border redraw, size grips,
+  highlight rectangles, singles).
+
 ### 2026-11-16 - Test window scaling pushed (d4894ec20b)
 
 - Pushed the 10-31 sizing commits (b8aecfddd9, faee6bdb4b, 8dc27e495d: ScaledSize/ScaledWidth/
