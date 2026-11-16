@@ -748,6 +748,20 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-11-16 - Test window scaling pushed (d4894ec20b)
+
+- Pushed the 10-31 sizing commits (b8aecfddd9, faee6bdb4b, 8dc27e495d: ScaledSize/ScaledWidth/
+  ScaledHeight/Scaled and 289 converted sites) and a5e0ff4146 (the uncommitted 11-06 edits, found in
+  pwiz-work3 and not recorded anywhere: TargetedMSMS tooltip hover points from the y8 peak's data
+  coordinates; ClipDockingRect moved from DiaSwath/DiaUmpire into AbstractFunctionalTest with Scaled
+  borders), merged with origin (4c783aedc8, 75eb2b0df7).
+- Verified: solution build, TestTutorial + TestPerf builds, CodeInspection test, full inspectcode: 423
+  issues, all environmental in ..\Shared (CommonUtil/CommonMsData unresolved symbols), 0 in the 117 branch
+  .cs files (`ai/.tmp/sessions/20261030-night/inspect_branch.py`). Tutorial/perf tests NOT run (hours);
+  item 1 (tooltips) and the DIA top clips still need a 150% run.
+- `C:\proj\pwiz` review branch still holds Brendan's 1,798 uncommitted 150% PNGs (en/ja/zh); merge
+  d4894ec20b into it before the next 150% runs.
+
 ### 2026-11-05 - TC inspection fix (4c783aedc8) and second master merge (75eb2b0df7), pushed
 
 - TC Skyline code inspection on 7707c2cffe: 2 RedundantArgumentDefaultValue in OspreySearchDlg
