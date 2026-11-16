@@ -775,6 +775,9 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   in TestFullScanSelection whether `_peakBoundDragInfos` / `_mouseDownClickPoint` were set by the press,
   rerun the test alone at 150% (~4 min), then make the boundary grab tolerance consistent with DPI.
 
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260820_dpiAwareness.md` before starting work.
+
 ### 2026-11-05 - TC inspection fix (4c783aedc8) and second master merge (75eb2b0df7), pushed
 
 - TC Skyline code inspection on 7707c2cffe: 2 RedundantArgumentDefaultValue in OspreySearchDlg
