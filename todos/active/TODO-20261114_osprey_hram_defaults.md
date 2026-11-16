@@ -410,9 +410,11 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
   library, no OSPREY_* vars; `D:\Usersrendanx	est\osprey-runsstral-entrap\<arm>`, `compute_pass2_fdp.py`).**
   Pass 2 at reported q 1%: master 102,860 (FDP 0.17%); #5038 127,073 (0.23%); branch (transfer) 121,537 (0.79%);
   branch + protein-compact 131,073 (0.24%). Wall 678 / 669 / 731 / 788 s. The regression decline is the pass-2
-  mode: transfer vs protein-compact (-7.3%); the branch's other defaults are +3.1% (branch-pc vs #5038). This library
-  has whole-protein entrapment, which protein-level compaction suppresses, so its low protein-compact FDP is not
-  evidence against SEA-AD's split-library 1.47% (protein-best + protein-compact).
+  mode: transfer vs protein-compact (-7.3%); the branch's other defaults are +3.1% (branch-pc vs #5038). None of
+  these FDPs is a valid audit: protein-best and protein-compact act on protein evidence, and this library's
+  entrapment is not split into own-protein and on-target-protein peptides. protein-compact is also not statistically
+  valid on its own (#4581: target-conditioned stratum gate the entrapment oracle cannot audit; #4538, #4580). So the
+  pr5038/branch-pc counts are not a loss to recover; the transfer count is the honest one, judged on SEA-AD's split library.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
