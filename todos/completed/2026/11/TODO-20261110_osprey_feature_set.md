@@ -1433,8 +1433,13 @@ zero-value families) was never run at 82 files. UW8's machine is busy ~5 h with 
       -725..+225 over 5 seeds; unpaired against 12's five seeds, Welch p ~0.1). Osprey still trails DIA-NN on
       detections, so a detection loss is not traded for speed. More fragments (14) are slower, ~1% smaller, and
       also below 12. 12 is backed by 82-file, multi-seed numbers at 8/10/12/14.
-    - XIC 16 scoring started 03:30 PT (~6 h), arms to ~15:45 PT / 00:45 CET Mon: the curve's upper point only,
-      not needed for the decision. The XIC-10 and XIC-14 legs were
+    - **XIC 16 (16:15 PT Sun): clearly below 12.** A-70 -867 / -959 / -668 = **-831 +- 149 (-0.9%)**, DIA-NN-
+      confirmed -392 +- 70; all 109 -1,387 / -1,542 / -634 = **-1,188 +- 486 (-1.2%)**, confirmed -681 +- 319.
+      PerFileScoring +75.4 +- 7.1 s per file vs the same-build control (+35.1%); parquet -0.5%, FirstPassFDR read
+      376 / 495 GB (-2.3% / -2.0%); file 5 scores 4,166,569 rows. **The full curve, A-70 kept vs 12:** 8 -1,268, 10
+      -250, 12 0, 14 -459, 16 -831; time per file -21.6% / -12.4% / 0 / +16.2% / +35.1%; parquet +6.2% / +2.4% / 0 /
+      -0.9% / -0.5%. 12 is the peak on detections, as the 3-file sweep of 11-04 claimed, now measured at 82 files
+      with multiple seeds. The XIC-16 leg was removed after its arms (logs in `runs-uw25\_kept\`); UW25 is free. The XIC-10 and XIC-14 legs were
       removed after their arms (596 GB; logs in `runs-uw25\_kept\`).
   - **Cleanup 12:35 PT:** removed the finished UW25 runs (the XIC-8 leg, `x12chk`, `x12ctl`, and the 11-09/10
     memory-ladder FDR rungs fdr10/20/41/82, r1, r1t16, ladder, repro) and snapshot `_bin\uw25-4bb43e972b`; freed
