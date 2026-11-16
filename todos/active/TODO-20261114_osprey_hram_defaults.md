@@ -415,6 +415,10 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
   entrapment is not split into own-protein and on-target-protein peptides. protein-compact is also not statistically
   valid on its own (#4581: target-conditioned stratum gate the entrapment oracle cannot audit; #4538, #4580). So the
   pr5038/branch-pc counts are not a loss to recover; the transfer count is the honest one, judged on SEA-AD's split library.
+- **Seed 1 + PEP mixture on the user run's scoring (`runs-validate\user-seed1-mixture-82files`, FDR-only, 59.5 min):
+  93,695 / 93,774 at true FDP 1% (+0.4% over user), 1.10% at q 1%.** Seed and PEP do not explain the 82-file gap;
+  the remaining -2.6% vs the recipe is in scoring, i.e. TC 0.15 and/or LOESS 0.3. UW8 measured each alone at
+  20 files (-0.4% / not run for LOESS beyond 3 files), never the pair at 82 files.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
