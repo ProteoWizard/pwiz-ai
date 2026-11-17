@@ -402,12 +402,12 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
   in pass 1: per-file first-pass total 4,365,265 vs 4,517,400 (-3.4%); scored candidates 360.19 M vs 358.90 M.
   First-pass FDR chose 8 lanes (cap; 409 GB free, 7.3 GB/lane). Next: FDR-only re-run on the same scoring with
   seed 1 + PEP mixture (`seed-pep-82.ps1` -> `user-seed1-mixture-82files`) to split seed/PEP from TC/LOESS.
-- **82-file `auto` run (bare `--parallel-files`, `runs-validateuto-82files`): identical counts to `user` (93,349 /
+- **82-file `auto` run (bare `--parallel-files`, `runs-validate\auto-82files`): identical counts to `user` (93,349 /
   93,382), 3 h 5.7 min (11,144 s) vs 2 h 54.6 min with the hand-tuned `--threads 72 --parallel-files-scoring 4
   --parallel-files-rescoring 8` (+6.4%).** Auto chose 19 files x ~4 threads (409 GB free x 80% / 17.2 GB per file);
   first-pass FDR 8 lanes as before. First attempt died at 41 min on a full D: (old runs deleted, 1,080 GB free).
 - **Astral entrapment arms (`astral-entrap.ps1`, regression files 49/55/60, original target+decoy+entrapment-20260817
-  library, no OSPREY_* vars; `D:\Usersrendanx	est\osprey-runsstral-entrap\<arm>`, `compute_pass2_fdp.py`).**
+  library, no OSPREY_* vars; `D:\Users\brendanx\test\osprey-runs\astral-entrap\<arm>`, `compute_pass2_fdp.py`).**
   Pass 2 at reported q 1%: master 102,860 (FDP 0.17%); #5038 127,073 (0.23%); branch (transfer) 121,537 (0.79%);
   branch + protein-compact 131,073 (0.24%). Wall 678 / 669 / 731 / 788 s. The regression decline is the pass-2
   mode: transfer vs protein-compact (-7.3%); the branch's other defaults are +3.1% (branch-pc vs #5038). None of
@@ -438,9 +438,13 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
   - `loess03` (82 files, recipe + LOESS 0.3 only, `runs-validate\loess03-82files`): 94,531 at true FDP 1%
     (split_calibration), -1.76% from the recipe's 96,223. LOESS alone is about 60% of the -2.99% user-default
     loss (93,349).
-  - `tc015` (82 files, recipe + TC 0.15 only, `runs-validate	c015-82files`): 95,521, -0.73%. The two single
+  - `tc015` (82 files, recipe + TC 0.15 only, `runs-validate\tc015-82files`): 95,521, -0.73%. The two single
     changes sum to -2.49%; the user defaults with the recipe's seed and PEP (93,695) are -2.63%, so the pair is
     close to additive. Root cause: both default changes lose at 82 files. Way back: LOESS 0.10 and TC 0.40.
+  - `final` (82 files, the restored defaults LOESS 0.10 / TC 0.40, no OSPREY_* variable, `runs-validate\final-82files`,
+    exe `_bin\defaults-loess010-tc040`): 97,120 at true FDP 1%, +0.93% over the recipe (96,223) and +4.0% over the
+    shipped defaults (93,349). Seed 42 with ratio PEP, kept from the new defaults, gained rather than cost. 4.1% behind
+    DIA-NN's 101,269, inside the #4950 goal (96,654). Bulk files trimmed after scoring; run.log and TSVs kept.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
