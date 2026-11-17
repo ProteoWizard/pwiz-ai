@@ -454,6 +454,16 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
   detected-protein gate hides the entrapment, so these FDPs do not audit either protein mode (see above).
   Brendan: a protein boost by default at every resolution, preferably protein-best, heading towards removing
   protein-compact; reinstate it for Stellar only if protein-best leaves Stellar behind in this PR.
+- **`--protein-boost best|compact|off` replaced `--protein-best` (719ada795c, Brendan's call).** protein-best is a
+  first-pass model option and protein-compact a second-pass one, but to a user both are how a detection is boosted
+  by its protein, so one option names the intent: `best` (the column, with the transfer second pass), `compact`
+  (protein-compact) and `off` (transfer alone). `OspreyConfig.Pass2QValue` follows the boost; `OSPREY_PASS2_QVALUE`
+  is a developer override. HRAM defaults to `best`, unit resolution to `compact` until Stellar is compared with DIA-NN
+  on the lab's larger Stellar data (the researcher Mike named), after which `compact` goes and the choice becomes
+  `best|off`. Re-recorded: Astral 133,716 (unchanged); Stellar 32,270, StellarLibDecoy 30,469, StellarGenDecoyEntrap
+  31,419, #5038's counts within one row. 670/670, inspection clean (`build-boost.log`). `Run-SeaAd.ps1` /
+  `OspreyDatasetRun.psm1` gained `-ProteinBoost`; `-ProteinBest` stays for older builds. PR #5043; TeamCity
+  Perf/Regression 4269049.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked

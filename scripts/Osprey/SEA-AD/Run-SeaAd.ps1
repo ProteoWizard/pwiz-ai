@@ -47,8 +47,13 @@
     directions, so the arm is pinned rather than inherited.
 
 .PARAMETER ProteinBest
-    on|off passes --protein-best to Osprey (26.1.1.312 and later). Empty (the default) passes
-    nothing, so the build's own default applies and older builds still run.
+    on|off passes --protein-best to Osprey (26.1.1.312 until #5043 replaced it with --protein-boost).
+    Empty (the default) passes nothing, so the build's own default applies and older builds still run.
+
+.PARAMETER ProteinBoost
+    best|compact|off passes --protein-boost to Osprey (#5043 and later): best is the protein-best
+    column with the transfer second pass, compact the protein-compact second pass, off neither.
+    Empty (the default) passes nothing, so the build's own default applies (best for HRAM data).
 
 .PARAMETER FeatureSet
     all|default|efficient|core passes --feature-set to Osprey: the PIN features the FDR classifier
@@ -204,6 +209,7 @@ param(
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
     [ValidateSet('', 'on', 'off')] [string]$ProteinBest = '',
+    [ValidateSet('', 'best', 'compact', 'off')] [string]$ProteinBoost = '',
     [ValidateSet('', 'all', 'default', 'efficient', 'core')] [string]$FeatureSet = '',
     [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
     [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',

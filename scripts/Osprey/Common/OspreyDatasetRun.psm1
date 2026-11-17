@@ -195,7 +195,7 @@ function Get-SourceOspreyVersion {
     protein-compact : frozen model, competition CONSTRAINED to peptides of proteins
                       detected in the first pass (>= 2 peptides), target+decoy pairs kept.
                       Not statistically valid (pwiz #4581, #4538), and refused with
-                      --protein-best on builds that carry the refusal.
+                      --protein-best on (--protein-boost best) on builds that carry the refusal.
     default         : (the default) sets no OSPREY_PASS2_QVALUE, so the binary's own default
                       runs - protein-compact on master, transfer once #4950's follow-up lands.
                       The same command then works on either build; Osprey's log records the
@@ -303,9 +303,13 @@ function Invoke-OspreyDatasetRun {
         # indistinguishable from each other. This lands in the banner, the run.log START line,
         # and the default output-directory name.
         [string]$ExperimentAgg = '',
-        # --protein-best on|off (Osprey 26.1.1.312+). Empty passes nothing, so the exe's own
-        # default applies and older builds, which do not know the argument, still run.
+        # --protein-best on|off (Osprey 26.1.1.312 until #5043 replaced it). Empty passes nothing, so the
+        # exe's own default applies and older builds, which do not know the argument, still run.
         [ValidateSet('', 'on', 'off')] [string]$ProteinBest = '',
+        # --protein-boost best|compact|off (#5043 and later), which replaced --protein-best: best is the
+        # protein-best column with the transfer second pass, compact the protein-compact second pass.
+        # Empty passes nothing, so the exe's own default applies (best for HRAM, compact at unit).
+        [ValidateSet('', 'best', 'compact', 'off')] [string]$ProteinBoost = '',
         # --feature-set all|default|efficient|core (the PIN features the FDR classifier uses and
         # scoring records). Empty passes nothing, so the build's own default applies and builds
         # without the argument still run.
@@ -652,6 +656,7 @@ function Invoke-OspreyDatasetRun {
     if ($mdiag) { $cliArgs += '--model-diagnostics' }
     if ($TrainingExport) { $cliArgs += '--training-export' }
     if ($ProteinBest) { $cliArgs += @('--protein-best', $ProteinBest) }
+    if ($ProteinBoost) { $cliArgs += @('--protein-boost', $ProteinBoost) }
     if ($FeatureSet) { $cliArgs += @('--feature-set', $FeatureSet) }
     # The [PATH] / [COUNT] / [STAGE-WALL] lines are the only route and count evidence a run
     # leaves (the READMEs' route checks, Get-MemoryReport.ps1, Measure-CoAssignmentScaling.py
