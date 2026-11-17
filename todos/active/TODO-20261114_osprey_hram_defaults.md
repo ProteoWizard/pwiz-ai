@@ -445,6 +445,15 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
     exe `_bin\defaults-loess010-tc040`): 97,120 at true FDP 1%, +0.93% over the recipe (96,223) and +4.0% over the
     shipped defaults (93,349). Seed 42 with ratio PEP, kept from the new defaults, gained rather than cost. 4.1% behind
     DIA-NN's 101,269, inside the #4950 goal (96,654). Bulk files trimmed after scoring; run.log and TSVs kept.
+- **Stellar protein modes (PR #5043; `stellar-entrap.ps1`, regression files 20/21/22, StellarGenDecoyEntrap's
+  library, `D:\Users\brendanx\test\osprey-runs\stellar-entrap\<arm>`, `compute_pass2_fdp.py`).** Unit resolution
+  ran protein-compact before this branch and runs neither protein mode on it. Pass 2 at reported q 1%: master and
+  #5038 31,379 (FDP 0.26%); branch (transfer, protein-best off) 27,868 (1.18%); branch + `--protein-best on`
+  29,895 (0.63%, -4.7% vs master); branch + protein-compact 31,378 (0.26%). The branch arm reproduces the
+  regression's 28,034 rows (27,868 + 166 entrapment). protein-compact reads 0.47% FDP at q 5% (39,356): its
+  detected-protein gate hides the entrapment, so these FDPs do not audit either protein mode (see above).
+  Brendan: a protein boost by default at every resolution, preferably protein-best, heading towards removing
+  protein-compact; reinstate it for Stellar only if protein-best leaves Stellar behind in this PR.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
