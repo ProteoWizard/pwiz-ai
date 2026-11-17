@@ -748,6 +748,39 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-11-16 (evening) - First 150% review batch fixed (b992a0abb8, pushed)
+
+- Brendan's full 150% run (pwiz-work3, SkylineTester): 1 failure, TestTargetedMSMSTutorial - the stick
+  hover at half the y8 height also reached the unmatched 952.6021 peak (1,924,828 > 1,907,258) less than a
+  pixel away, so rounding picked either stick. Now hovers above every stick within 10 m/z.
+- Brendan's review through screenshot 446 (AuditLog .. DIA-PASEF), all fixed and confirmed by him:
+  - AuditLog s-03/s-04/s-20, CustomReports s-16: DPI-aware runs make `ScreenCapture.GetScalingFactor()` 1
+    (DESKTOPVERTRES == VERTRES), so `ClipBitmap` no longer scales literal rects. Clips now use
+    `ScaledSize`/`ScaledWidth(SkylineWindow, ...)`; `ShowReportsDropdown` form height `ddHeight + Scaled(75)`.
+  - AuditLog s-06, CustomReports s-24 (rounded corners on docked panes): `CleanupBorder` guessed "docked"
+    from the edge color; `ScreenshotManager` now calls new `ScreenshotBorder.CleanupDockedBorder` when
+    `ScreenCapture.IsDocked` (now public). The light bar left inside them was a DigitalRune bug: font
+    autoscaling scaled `SplitterBase` a second time (6 px -> 10 beside left/right zones, 9 above/below)
+    while `DockZone` reserved 6, covering the pane's inner border. Developers branch
+    `Skyline/work/20261116_splitter_autoscale` (fd551d0, `SplitterBase.ScaleControl` keeps the size); DLL
+    built from it is in this commit. Brendan opens that developers PR.
+  - DIA-PASEF s-05 (product bug): three iRT dialogs sized `GraphRegression` to raw 800x600; new
+    `GraphRegression.SetDialogSize()` scales it. s-16: `AddAnnotation` helper set Height 442 unscaled; now
+    `ScaledHeight`, and `DefineAnnotationDlg` got MinimumSize 376x442 (en/ja/zh-Hans resx).
+- Nick's developers PR #8 (drag exception ends the message loop): reworked on his branch (9be3623) to
+  `ResumeScope` + C# 8 using declarations instead of 24 try/finally blocks; LangVersion 8.0 in the legacy
+  csproj and in `Build-DigitalRune.ps1`'s generated project (pwiz-ai d5ebee13). Not in the pwiz DLL yet -
+  picked up when Nick merges.
+- Targets caption text at 150%: measured ~2 px lower than the 100% layout implies (cap 1 px below band
+  center vs 1 px above at 100%). Not a scaling bug: gaps scale symmetrically; Segoe UI's glyphs sit lower
+  in the 144-DPI font cell. Optional cosmetic nudge `textArea.Y -= DpiHelper.Scale(1) - 1` not applied.
+- ImageComparer 2,003 vs 1,845 changed: 61 cover.png + DDASearch 51 (not run) + 45 legacy folders
+  (issue #5042: PRMOrbitrap-PRBB, ImportingAssayLibraries, ImportingIntegrationBoundaries) + AuditLog s-26
+  (needs a PanoramaWeb account).
+- Verified: Brendan built and screenshot-tested through 446; not re-verified here (SkylineTester running,
+  so no local inspectcode before this push - watch TeamCity's inspection).
+- Next: Brendan's overnight full 150% run and review from DIA-Umpire on; developers splitter PR.
+
 ### 2026-11-16 - DriftTimePredictor 150% click fixed (7972422bde, pushed)
 
 - Root cause (instrumented, not the suspected peak-boundary grab): line 248's click (41.02, 5.8E+4, PRODUCTS)
