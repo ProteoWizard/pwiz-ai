@@ -437,7 +437,10 @@ Build snapshot `_bin\final-d65934dd4d-log` (the three commits plus the settings 
   - 82-file single-change runs queued: `loess03` (recipe + LOESS 0.3), then `tc015` (recipe + TC 0.15).
   - `loess03` (82 files, recipe + LOESS 0.3 only, `runs-validate\loess03-82files`): 94,531 at true FDP 1%
     (split_calibration), -1.76% from the recipe's 96,223. LOESS alone is about 60% of the -2.99% user-default
-    loss (93,349). `tc015` (recipe + TC 0.15 only) running, ETA about 16:20.
+    loss (93,349).
+  - `tc015` (82 files, recipe + TC 0.15 only, `runs-validate	c015-82files`): 95,521, -0.73%. The two single
+    changes sum to -2.49%; the user defaults with the recipe's seed and PEP (93,695) are -2.63%, so the pair is
+    close to additive. Root cause: both default changes lose at 82 files. Way back: LOESS 0.10 and TC 0.40.
 
 Also: added a startup refusal of `--protein-best` with `OSPREY_PASS2_QVALUE=protein-compact` (Brendan: they must not
 run together; on SEA-AD the pair read 1.47% true FDP at q 1%, TODO-20261030_osprey_scoring_library.md). Checked
