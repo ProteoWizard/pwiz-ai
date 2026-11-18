@@ -158,7 +158,9 @@ so CHS tracks the scoring-cost growth of the #4950 defaults; per file it is 1.19
 ~50 of 72 cores in scoring. FirstPassFDR running (8 lanes, max). perfviz (`--files 446`): private peak
 213.1 GB at 18:18 in scoring (managed 189.6 GB), scoring plateau ~165-180 GB, FirstPassFDR 94.3 GB so far; one
 287 s gap at 17:28 (scoring start). Plot `ai/.tmp/sessions/20261117-chs/perfviz-chs446-0930.png`.
-**D: 691 GB free** at 09:30 (446 scores.parquet ~1.4 GB each); the 0.615 GB/GB-raw rule predicts ~1.09 TB total.
+**D: 691 GB free** at 09:30: 446 `.scores.parquet` = 544.9 GB, 1st-pass sidecars 42 GB so far. On SEA-AD 82
+(`sea-aduns-validateecipe-scoring-newfdr-82files`) `.scores.parquet` is 165.2 of ~197 GB (84%), so the rest of
+the run should add only ~60-80 GB (end near 570-590 GB free); the doc's 0.615 GB/GB-raw (~1.09 TB) does not fit this run.
 
 ### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
 
