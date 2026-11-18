@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261113_mcp_show_full_scan`
 - **Base**: `master`
 - **Created**: 2026-11-13
-- **Status**: Draft PR
+- **Status**: Ready to merge (approved by Brendan 2026-11-18)
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#5031](https://github.com/ProteoWizard/pwiz/pull/5031) (draft); screenshots in nickshulman/pr-assets `pwiz/5031-show-full-scan`
+- **PR**: [#5031](https://github.com/ProteoWizard/pwiz/pull/5031) (ready, approved); screenshots in nickshulman/pr-assets `pwiz/5031-show-full-scan`
 - **Checkout**: `I:\git_i\sky_clicktobringupfullscangraph`
 
 ## Objective
@@ -18,8 +18,8 @@ Add an MCP tool, requested by Brendan, that brings up the Full-Scan graph for a 
 - Replicate defaults to the active one.
 - With a transition: select it, put the chromatogram selection circle on its curve, zoom the
   Full-Scan graph to it.
-- Without one: circle on the transition most intense at that time, graph unzoomed, but the
-  zoom (magnifier) button zooms to that transition.
+- Without one: selection left alone, circle on the transition most intense at that time, graph
+  zoomed to it (changed 2026-11-18; the first version left it unzoomed).
 
 "Circle" = the selected-scan marker GraphChromatogram draws (FULLSCAN_SELECTED_INDEX), not the
 mouse tracking dot.
@@ -33,15 +33,34 @@ mouse tracking dot.
       default, zoom button, transition + replicate, error cases
 - [x] CodeInspection passes
 
-## Open questions (for Brendan)
+## Decisions (Brendan, 2026-11-18)
 
-- The tool sets the magnifier (a persisted setting, AutoZoomFullScanGraph) every call. OK?
-- A given transition is selected in the Targets tree. Alternative: require it to be displayed.
+- The tool no longer turns the persisted Zoom to Selection setting off: both forms zoom to the
+  transition the circle is on, matching a click with the default setting (MS1Filtering s-25/s-26).
+- A given transition is selected in the Targets tree (kept: it makes the zoom target right).
+- No long blocking: wait at most 10 s for the spectrum, then report what is shown or that it is
+  still loading - never return as if done when it is not.
 
 ## Remaining
 
-- [ ] Settle the API shape with Brendan
-- [x] `/code-review medium`: fixed the tool returning before the spectrum loaded (waits for
-      GraphFullScan.IsLoaded); dropped the rest (persisted zoom is the open question above;
-      the others are unreachable, match the existing verbs, or are cosmetic)
-- [ ] JsonToolServerTest coverage, if wanted once the shape is settled
+- [x] Settle the API shape with Brendan
+- [x] `/code-review medium`: fixed the tool returning before the spectrum loaded; dropped the rest
+- [x] Test coverage: `ShowFullScanJsonToolTest` (new; a focused functional test rather than
+      JsonToolServerTest)
+
+## Progress log
+
+### 2026-11-18 - Finished by Brendan's session for merge
+
+Tested live over the MCP at PauseTest() pauses in MS1Filtering, IMS Filtering (Agilent) and Small
+Molecule IMS Libraries; see the PR's approving review for the details. Commits on the branch:
+- `98282d8b52` Default call zooms; fixed IndexOutOfRange on dense (IMS) chromatograms
+  (`curve.Points` is screen-binned once drawn - read `ChromGraphItem.Points`); waits up to 10 s
+  and reports what is shown or "still loading"; `FireClickedChromatogram` returns bool; Full-Scan
+  wrench tooltip fixed (resx keyed `propertyBtn`, designer `propertiesBtn`) as "Spectrum
+  Properties"; `ShowFullScanJsonToolTest`
+- `8520ce1924` merge of master; `a12fb4ad60` SkylineAiConnector.zip 26.1.2.322 +
+  EXPECTED_ZIP_VERSION
+Follow-ups filed for Nick: #5049 property sheets, #5050 toolbar combos, #5051 docking (overlaps
+#4671's window verbs), #5052 silent timeouts. Design guide draft:
+`ai/docs/skyline-mcp-design-guide.md` (for Brendan and Nick to review).

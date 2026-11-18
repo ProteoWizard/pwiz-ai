@@ -21,7 +21,10 @@ description: Use this skill when asked for a demo deck of a new Skyline feature,
    (`PauseAndContinueForm.Show()` inside a static helper), `Run-Tests.ps1 -AiConnector`, then
    `skyline_get_form_image` at each pause and Continue on `PauseAndContinueForm:Pause Test`.
    Which pause is up is the pause form's Message in `skyline_get_open_forms`; do not wait on the
-   run log, which prints the description late. The
+   run log, which prints the description late. Wait for a pause in short fixed steps with that
+   listing between them, never with a loop that waits for the run to end: it blocks the session
+   while the test sits paused for it. Build with `-VendorLicenses`, or vendor data will not import.
+   After driving Skyline yourself at a pause, stop the TestRunner instead of continuing. The
    pauses live in a CRLF-aware patch script in the session folder, are reverted with
    `git checkout --` before any commit, and `TestFunctional` is rebuilt afterwards
    (ai/TESTING.md, "Demos Are Temporary").

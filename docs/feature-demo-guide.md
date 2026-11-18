@@ -29,7 +29,22 @@ pwsh -File ./ai/scripts/Skyline/Build-Skyline.ps1 -SourceRoot C:/proj/pwiz -Targ
 pwsh -File ./ai/scripts/Skyline/Run-Tests.ps1 -SourceRoot C:/proj/pwiz -TestName BuildLibraryCarafeWizardTest -AiConnector
 ```
 
-Launch the run in the background and wait for `skyline_get_instances` to list the test's Skyline.
+**Build so the test can read its data.** Pass `-VendorLicenses` to every `Build-Skyline.ps1` call
+(or run `i-agree-to-the-vendor-licenses.bat` in the checkout once). Without it the vendor readers
+build as 6.6 KB `NO_VENDOR_SUPPORT` stubs over whatever `bs.bat` left, the script's only sign is a
+yellow "Vendor support DISABLED" line, and a tutorial on `.wiff` or `.d` data fails in seconds with
+"Expected document to have results". `TestPerf` (the IMS, DIA and other perf tutorials) is not in the
+solution build: build it with `-Target TestPerf`, or the pause you added never runs.
+
+**Wait for the pause in short steps, never for the run to end.** Launch the run in the background
+and wait for `skyline_get_instances` to list the test's Skyline. Then arm a Monitor that prints a
+tick every minute and a line when the run's output shows PASSED/FAILED, and call
+`skyline_get_open_forms` on each tick until the pause form is listed (the harness blocks a bare
+`sleep`, and a Monitor leaves the session free between ticks). A shell loop
+that waits for the run's PASSED/FAILED line blocks the session at the very moment the test pauses
+for it: the test sits paused, the session sits waiting, and the developer watches nothing happen
+until they push the command to the background.
+
 At each pause: `skyline_get_open_forms` (the pause is `PauseAndContinueForm:Pause Test`, and its
 **Message column is the pause's description**, so one call says which pause is up; the form to
 capture is listed with it), `skyline_get_form_image(formId, returnFormat="file", filePath=...)`,
@@ -98,6 +113,13 @@ When the feature has a real dataset on disk (the Astral HeLa runs in `D:\test\os
 with spectra caches and a predicted library beside them), a temporary block in the test can drive
 the wizard over it and pause on the result; the Osprey Search on three Astral runs took 12 minutes
 and the chromatogram import 10. A tutorial dataset is the other source of good-looking peaks.
+
+**Trying a feature at a pause.** A pause also puts a tutorial at the step where you want to drive
+Skyline yourself over the MCP (a new tool tried at the step where the tutorial clicks). Once you
+have changed anything there - the selection, a setting, a graph - the rest of the test is not
+expected to pass. Stop the TestRunner as soon as you have what you need; do not click Continue,
+and do not read a failure after it as a finding. No need to ask first: that is how the developer
+ends such a session too.
 
 **Ending a run.** Letting the test finish is best: it passes and tears down. To stop early, cancel
 the wizard the test is on and then click Continue: the test fails at its next step and exits. On
