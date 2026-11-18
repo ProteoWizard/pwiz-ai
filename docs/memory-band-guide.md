@@ -39,12 +39,13 @@ Two readers over the same log. Use both; they answer different questions.
 
 | tool | for | gives |
 |---|---|---|
-| `ai/scripts/perfviz.html` | a human, visually | interactive plot of the three series |
+| `ai/scripts/perfviz.html` | a human, visually | interactive two-pane plot: memory (and pasted disk) above, log gaps below |
 | `ai/scripts/perfviz.py` | terminal / CI / an agent | numbers: peak, floor drift, gap list |
 | `ai/scripts/phase_mem_shape.py` | either | memory shape WITHIN each phase, by decile, with a fan-out-vs-join verdict |
 
 ```
 python ai/scripts/perfviz.py run.log --files 20 --png run.png
+python ai/scripts/perfviz.py run.log --png run.png --disk disk.csv   # + disk use
 python ai/scripts/perfviz.py before.log after.log       # A/B two runs
 python ai/scripts/phase_mem_shape.py run.log            # per-phase shape + verdict
 ```
@@ -85,9 +86,18 @@ inside the plotting function, so without it you still get every number and just 
 the plot was skipped.
 
 The PNG exists so a plot can be handed to a person directly, rather than asking them to
-find the log and paste it into `perfviz.html`. It draws the same three series with a second
-y-axis for the time gap. For deciding anything, read the numbers - they are less lossy than
-a picture, and they are what a CI check can assert on.
+find the log and paste it into `perfviz.html`. Both draw two panes on one time axis:
+resources above (managed and private memory, and disk on its own axis when given), the gap
+between log lines below with the 30 s threshold drawn, and `[TASK]` boundaries on both. The
+gaps used to share the memory chart on a second axis; at cohort scale (tens of thousands of
+samples) that trace hid the memory lines entirely. For deciding anything, read the numbers -
+they are less lossy than a picture, and they are what a CI check can assert on.
+
+**Disk use is not in the log yet.** Until Osprey stamps it beside `--memstamp`, sample it
+alongside the run - a CSV whose first column is the time (`yyyy-MM-dd HH:mm:ss`) and which
+has a `dir_gb` column, the run directory's size - and pass it with `--disk` (or paste it into
+the page's second box). The summary gains a disk peak/final line. `ai/scripts/Sample-RunDisk.ps1`
+writes that CSV: start it detached beside the run and it exits when Osprey does.
 
 ### What the shape means
 

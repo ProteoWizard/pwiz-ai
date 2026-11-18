@@ -12,7 +12,7 @@
 >
 > Then read the result with **`ai/scripts/perfviz.py <log> --png <out>.png`** (a terminal, or an
 > agent that cannot open a browser - it prints peak, floor drift, sustained level and every
-> reporting gap) or **`ai/scripts/perfviz.html`** (a human eye, same three series,
+> reporting gap) or **`ai/scripts/perfviz.html`** (a human eye, the same two panes,
 > interactive). Details in [memory-band-guide.md](memory-band-guide.md).
 
 **Do not judge a long run by tailing its `[MEM ...]` lines.** They look like progress and

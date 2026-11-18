@@ -18,9 +18,13 @@ during reconciliation planning. Every number was correct; none of them described
 LEVEL THAT PERSISTED, so the summary disagreed with the plot and the plot was right.
 A peak can be one sample of garbage; an endpoint floor says only where the run ended.
 
-perfviz.html renders the same three series interactively. Use it to look; use this
-to decide, to diff two runs, or to check a run from a terminal / an agent that
-cannot open a browser.
+perfviz.html renders the same two panes interactively - memory (and disk) above,
+log gaps below. Use it to look; use this to decide, to diff two runs, or to check a
+run from a terminal / an agent that cannot open a browser.
+
+Disk use is not in the log yet, so --disk takes it from a CSV sampled alongside the
+run (time first, then a dir_gb column - the run directory's size). It joins the
+summary and draws on the memory pane's second axis.
 
 Zero dependencies - stdlib only, like every other tool in this repo, so it runs on
 a fresh machine with nothing installed. The numeric summary is stdlib-only, so it runs
@@ -36,6 +40,7 @@ Log format (one line per emitted message):
 Usage:
     python perfviz.py run.log
     python perfviz.py run.log --png run.png --gap-threshold 30
+    python perfviz.py run.log --png run.png --disk disk.csv
     python perfviz.py a.log b.log          # compare two runs
 """
 
@@ -291,10 +296,55 @@ def summarize(path, threshold, force, files=0):
 
 # --- PNG output (matplotlib; optional dependency) ----------------------------
 
-def plot(path, samples, out):
-    """Render the same three series perfviz.html draws, so a PNG can be handed
+def parse_disk(path):
+    """Read an external disk-use series: a CSV with a header row whose first column is
+    the sample time (yyyy-MM-dd HH:mm:ss) and which has a dir_gb column - the run
+    directory's size in GB, the form ai/scripts/Osprey sampling writes. Returns
+    [(datetime, gb)] in file order.
+
+    A stopgap: disk use is not in the log yet. Once Osprey writes a --diskstamp column
+    beside --memstamp, the plot reads it from the log and this option goes away."""
+    out = []
+    with open(path, 'r', encoding='utf-8-sig') as fh:
+        header = [h.strip() for h in fh.readline().split(',')]
+        if 'dir_gb' not in header:
+            raise ValueError('%s: no dir_gb column (header: %s)' % (path, ','.join(header)))
+        col = header.index('dir_gb')
+        for line in fh:
+            parts = line.strip().split(',')
+            if len(parts) <= col:
+                continue
+            try:
+                t = datetime.datetime.strptime(parts[0], '%Y-%m-%d %H:%M:%S')
+                out.append((t, float(parts[col])))
+            except ValueError:
+                continue
+    return out
+
+
+def summarize_disk(disk):
+    """One line for the disk series, printed after the memory summary."""
+    if not disk:
+        print('disk          : no samples')
+        return
+    peak_t, peak = max(disk, key=lambda d: d[1])
+    print('disk          : peak %.1f GB at %s   final %.1f GB   (%d samples)' % (
+        peak, peak_t.strftime('%H:%M:%S'), disk[-1][1], len(disk)))
+
+
+def plot(path, samples, out, threshold=30.0, disk=None):
+    """Render the run as two panes sharing one time axis, so a PNG can be handed
     straight to a person instead of asking them to locate the log and paste it
-    into the page.
+    into the page (perfviz.html draws the same panes):
+
+      * top - resources: managed and private memory (GB), and disk use (GB) on its
+        own axis when a disk series is given;
+      * bottom - the reporting gap between log lines, with the gap threshold drawn.
+
+    The gaps used to share the memory pane on a second axis. At cohort scale - tens
+    of thousands of samples - that trace covered the memory lines entirely, and the
+    gaps answer a different question anyway (is the run still observable?), so they
+    get their own pane. [TASK] boundaries are marked on both.
 
     matplotlib is imported HERE, not at module scope, so the numeric summary -
     which is what actually decides anything - keeps working on a machine with
@@ -311,40 +361,55 @@ def plot(path, samples, out):
         return
 
     ts = [s.t for s in samples]
-    managed = [s.managed for s in samples]
-    total = [s.total for s in samples]
+    managed = [s.managed / 1024.0 for s in samples]
+    total = [s.total / 1024.0 for s in samples]
     # Time gap belongs to the interval ENDING at each sample; the first has none.
     gapx = ts[1:]
     gapy = [(samples[i].t - samples[i - 1].t).total_seconds()
             for i in range(1, len(samples))]
 
-    fig, ax = plt.subplots(figsize=(16, 6.5))
-    ax2 = ax.twinx()
-    # Same colours and z-order as perfviz.html so the two are read the same way.
-    ax2.plot(gapx, gapy, '-o', color='#1f77b4', ms=2.0, lw=0.8,
-             label='Time gap (sec)', zorder=1)
-    ax.plot(ts, managed, '-o', color='#ff7f0e', ms=2.0, lw=0.8,
-            label='Managed memory (MB)', zorder=2)
-    ax.plot(ts, total, '-o', color='#2ca02c', ms=2.0, lw=0.8,
-            label='Private memory (MB)', zorder=3)
-
-    ax.set_ylabel('Memory (MB)')
-    ax2.set_ylabel('Time gap (sec)')
-    ax.set_xlabel('')
+    fig, (ax, axg) = plt.subplots(2, 1, figsize=(16, 8.5), sharex=True,
+                                  gridspec_kw={'height_ratios': [3, 1]})
+    # Same colours as perfviz.html so the two are read the same way.
+    ax.plot(ts, total, color='#2ca02c', lw=0.8, label='Private memory (GB)')
+    ax.plot(ts, managed, color='#ff7f0e', lw=0.8, label='Managed memory (GB)')
+    ax.set_ylabel('Memory (GB)')
     ax.set_ylim(bottom=0)
-    ax2.set_ylim(bottom=0)
     ax.grid(True, alpha=0.25, lw=0.5)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+    handles, labels = ax.get_legend_handles_labels()
+    if disk:
+        axd = ax.twinx()
+        axd.plot([d[0] for d in disk], [d[1] for d in disk], color='#d62728', lw=2.0,
+                 label='Disk (GB)')
+        axd.set_ylabel('Disk (GB)', color='#d62728')
+        axd.tick_params(axis='y', colors='#d62728')
+        axd.set_ylim(bottom=0)
+        h, l = axd.get_legend_handles_labels()
+        handles += h
+        labels += l
+    # Below the [TASK] labels that run along the top of the pane.
+    ax.legend(handles, labels, loc='upper left', bbox_to_anchor=(0.005, 0.93), fontsize=9)
+
+    axg.vlines(gapx, 0, gapy, color='#1f77b4', lw=0.8)
+    axg.axhline(threshold, color='#d62728', lw=1, ls=':')
+    axg.set_ylabel('Log gap (sec)')
+    axg.set_ylim(bottom=0, top=max(max(gapy), threshold) * 1.1)
+    axg.grid(True, alpha=0.25, lw=0.5)
+    axg.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+
+    top = ax.get_ylim()[1]
+    for i, name in ((i, m.group(1)) for i, s in enumerate(samples)
+                    for m in [TASK_RE.search(s.msg)] if m and m.group(2) == 'starting'):
+        for a in (ax, axg):
+            a.axvline(samples[i].t, color='#999999', lw=0.8, ls='--')
+        ax.text(samples[i].t, top * 0.98, ' ' + name, fontsize=9, va='top', color='#555555')
     fig.autofmt_xdate()
 
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax.legend(h1 + h2, l1 + l2, loc='upper center', bbox_to_anchor=(0.5, -0.12),
-              ncol=3, frameon=False)
-
-    peak = max(max(managed), max(total))
-    ax.set_title('%s   -   peak %.1f GB, max gap %.0fs, %d samples'
-                 % (os.path.basename(path), peak / 1024.0, max(gapy), len(samples)))
+    title = '%s   -   peak %.1f GB, max gap %.0fs, %d samples' % (
+        os.path.basename(path), max(max(managed), max(total)), max(gapy), len(samples))
+    if disk:
+        title += ', disk peak %.0f GB' % max(d[1] for d in disk)
+    ax.set_title(title)
     fig.tight_layout()
     fig.savefig(out, dpi=110)
     plt.close(fig)
@@ -444,6 +509,10 @@ def main():
     ap.add_argument('--gap-threshold', type=float, default=30.0,
                     help='report gaps at least this many seconds (default 30)')
     ap.add_argument('--png', help='also write a PNG (single log only)')
+    ap.add_argument('--disk', metavar='CSV',
+                    help='disk-use samples to summarize and plot (single log only): a CSV '
+                         'with a time column first and a dir_gb column. A stopgap until '
+                         'disk use is stamped into the log itself')
     ap.add_argument('--files', type=int, default=0,
                     help='file count, to report floor drift per file (the scaling number)')
     ap.add_argument('--force', action='store_true',
@@ -460,10 +529,14 @@ def main():
             rc = 1
             continue
         rc |= summarize(p, a.gap_threshold, a.force, a.files)
+        disk = None
+        if a.disk and len(a.logs) == 1:
+            disk = parse_disk(a.disk)
+            summarize_disk(disk)
         if a.png and len(a.logs) == 1:
             s, failed, _ = parse(p)
             if len(s) >= 2 and (not failed or a.force):
-                plot(p, s, a.png)
+                plot(p, s, a.png, a.gap_threshold, disk)
     if len(a.logs) == 2 and all(os.path.exists(p) for p in a.logs):
         rc |= compare(a.logs[0], a.logs[1], a.force, a.every)
     return rc

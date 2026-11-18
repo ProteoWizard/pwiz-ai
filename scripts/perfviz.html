@@ -1,15 +1,43 @@
 <!-- Code by Yuval Boss yuval(at)uw.edu -->
 <!-- Enhanced 2026-07: Time Diff moved to its own secondary y-axis (in seconds) so a large
      time gap no longer flattens the memory scale; memory (MB) and time-gap (sec) axes labeled. -->
+<!-- Enhanced 2026-11: two panes on one time axis, as perfviz.py --png draws them - memory
+     (and disk, from an optional pasted CSV) above, the log gap between lines below. At cohort
+     scale the gap trace on the memory chart's second axis hid the memory lines entirely.
+     Zooming either pane zooms both. -->
 <html>
 <head>
-	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>	
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
 	<link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.css">
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>	
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.min.js"></script>	
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.min.js"></script>
 <script type="text/javascript">
 	function isBlank(str) {
 	    return (!str || /^\s*$/.test(str));
+	}
+	// Disk samples pasted as CSV: a header row, the time (yyyy-MM-dd HH:mm:ss) first and a
+	// dir_gb column (run directory size in GB) - what the Osprey disk sampler writes. A stopgap
+	// until disk use is stamped into the log beside the memory columns.
+	function parseDisk(text) {
+		var xs = ['xdisk'], gb = ['Disk (GB)'];
+		var lines = text.split("\n").filter(function (l) { return !isBlank(l); });
+		if (lines.length < 2)
+			return null;
+		var header = lines[0].split(',').map(function (h) { return h.trim(); });
+		var col = header.indexOf('dir_gb');
+		if (col < 0) {
+			console.log("ERROR: disk CSV has no dir_gb column");
+			return null;
+		}
+		for (var i = 1; i < lines.length; i++) {
+			var parts = lines[i].split(',');
+			var t = new Date(parts[0].trim().replace(' ', 'T')).getTime();
+			if (isNaN(t) || parts.length <= col)
+				continue;
+			xs.push(t);
+			gb.push(parseFloat(parts[col]));
+		}
+		return xs.length > 1 ? { xs: xs, gb: gb } : null;
 	}
 	var messages = {};
 	$( document ).ready(function() {
@@ -20,7 +48,7 @@
 	  		if($('#logtext').val().length == 0 || logLines.length == 0) {
 	  			console.log("ERROR: No log given")
 	  			return;
-	  		} 
+	  		}
 	  		var dates = ['x'];
 	  		var difference = ['Time Diff'];
 	  		var managedMems = ['Managed Memory'];
@@ -64,7 +92,7 @@
                 else {
                     message = text.substring(1);
                 }
-	  			var diff = (new Date(date).getTime() - new Date(dateBefore).getTime())/1000; // time gap in seconds (its own y2 axis)
+	  			var diff = (new Date(date).getTime() - new Date(dateBefore).getTime())/1000; // time gap in seconds (its own pane)
 	  			// Keep x strictly increasing: the log is second-resolution, so multiple events in
 	  			// one second (e.g. 84 per-file result lines at the same timestamp) would collapse
 	  			// onto one x and drop points. Bump 1ms per duplicate; Time Diff above still uses the
@@ -79,63 +107,92 @@
 	  			messages[t] = (message);
 	  			dateBefore = date;
 	  		}
-        
-            var cols = hasMemStamps
-                ? [ dates, difference, managedMems, totalMems ]
-                : [ dates, difference ];
-	  		var chart = c3.generate({
-	  			 bindto: '#chart',	
-			    data: {
-			        x: 'x',
-			        xFormat: '%H:%M:%S', // 'xFormat' can be used as custom format of 'x'
-			        columns: cols,
-			        axes: {
-			            'Time Diff': 'y2' // time gap on its own axis so a large gap doesn't swamp the memory scale
-			        }
-			    },
-			    size: {
-			        height: Math.max(400, window.innerHeight - 230) // fill the viewport below the textarea/button
-			    },
-			    zoom: {
-			        enabled: true
-			    },
-			    axis: {
-			        x: {
-			            type: 'timeseries',
-			            tick: {
-			                format: '%H:%M:%S'
-			            }
-			        },
-			        y: {
-			            label: { text: 'Memory (MB)', position: 'outer-middle' }
-			        },
-			        y2: {
-			            show: true,
-			            label: { text: 'Time gap (sec)', position: 'outer-middle' }
-			        }
-			    },
-			    tooltip: {
-			        format: {
-			            title: function (d) {
-		            		var str = d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds();
-			            	return str + " - " + messages[d.getTime()]; },
-			            value: function (value, ratio, id) {
-			            	if(id == "Time Diff")
-			                	return value + "sec";
-			                return value + "mb";
-			            }
-			        }
-			    }
-			});
+
+            var disk = parseDisk($('#disktext').val());
+            var height = Math.max(400, window.innerHeight - 300); // fill the viewport below the inputs
+            // A fixed tick count: left to itself c3 draws a tick per sample, a solid band at
+            // cohort scale.
+            var xTick = { type: 'timeseries', tick: { format: '%H:%M:%S', count: 12 } };
+            // The same fixed padding on both panes, so their plot areas - and time axes - line
+            // up whatever width each pane's axis labels need.
+            var padding = { left: 70, right: 70 };
+            var title = function (d) {
+                var str = d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds();
+                var msg = messages[d.getTime()];
+                return msg === undefined ? str : str + " - " + msg;
+            };
+            var gapChart;
+            var syncing = false;
+            // Zooming one pane zooms the other, so the gap under a memory spike stays in view.
+            function syncZoom(other) {
+                return function (domain) {
+                    if (syncing || !other())
+                        return;
+                    syncing = true;
+                    other().zoom(domain);
+                    syncing = false;
+                };
+            }
+
+            // Top pane: memory, and disk on y2 when a disk CSV was pasted. Without memstamps
+            // there is nothing to draw here, so the gap pane is the whole chart.
+            var memChart = null;
+            if (hasMemStamps) {
+                var cols = [ dates, managedMems, totalMems ];
+                var xsMap = { 'Managed Memory': 'x', 'Total Memory': 'x' };
+                var axes = {};
+                if (disk) {
+                    cols.push(disk.xs, disk.gb);
+                    xsMap['Disk (GB)'] = 'xdisk';
+                    axes['Disk (GB)'] = 'y2';
+                }
+                memChart = c3.generate({
+                    bindto: '#chart',
+                    data: { xs: xsMap, columns: cols, axes: axes,
+                            colors: { 'Managed Memory': '#ff7f0e', 'Total Memory': '#2ca02c', 'Disk (GB)': '#d62728' } },
+                    point: { show: false },
+                    padding: padding,
+                    size: { height: Math.round(height * 0.72) },
+                    zoom: { enabled: true, onzoom: syncZoom(function () { return gapChart; }) },
+                    axis: {
+                        x: xTick,
+                        y: { label: { text: 'Memory (MB)', position: 'outer-middle' } },
+                        y2: { show: !!disk, label: { text: 'Disk (GB)', position: 'outer-middle' } }
+                    },
+                    tooltip: { format: { title: title,
+                        value: function (value, ratio, id) { return id == 'Disk (GB)' ? value + "gb" : value + "mb"; } } }
+                });
+            }
+            // Bottom pane: the gap between log lines, with the 30 s threshold perfviz.py flags.
+            gapChart = c3.generate({
+                bindto: '#gapchart',
+                data: { x: 'x', columns: [ dates, difference ], colors: { 'Time Diff': '#1f77b4' } },
+                point: { show: false },
+                padding: padding,
+                size: { height: hasMemStamps ? Math.round(height * 0.28) : height },
+                zoom: { enabled: true, onzoom: syncZoom(function () { return memChart; }) },
+                grid: { y: { lines: [ { value: 30, text: '30 s', class: 'gap-threshold' } ] } },
+                axis: {
+                    x: xTick,
+                    y: { min: 0, padding: { bottom: 0 }, label: { text: 'Time gap (sec)', position: 'outer-middle' } }
+                },
+                tooltip: { format: { title: title, value: function (value) { return value + "sec"; } } }
+            });
 		});
 	});
 </script>
+<style>
+	.c3-ygrid-line.gap-threshold line { stroke: #d62728; stroke-dasharray: 3 3; }
+	.c3-ygrid-line.gap-threshold text { fill: #d62728; }
+</style>
 </head>
 <body style="margin:8px;">
 <form id="loginput">
-  <textarea id="logtext" style="width:100%; height:160px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
+  <textarea id="logtext" placeholder="Paste a --timestamp --memstamp log" style="width:100%; height:120px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
+  <textarea id="disktext" placeholder="Optional: paste a disk CSV (time,dir_gb,...) to plot disk use on the memory pane" style="width:100%; height:48px; margin-top:4px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
   <div style="margin-top:4px;"><input type="submit" value="Submit"></div>
 </form>
 <div id="chart"></div>
+<div id="gapchart"></div>
 </body>
 </html>
