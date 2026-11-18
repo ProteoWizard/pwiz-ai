@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261113_mcp_show_full_scan`
 - **Base**: `master`
 - **Created**: 2026-11-13
-- **Status**: Ready to merge (approved by Brendan 2026-11-18)
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#5031](https://github.com/ProteoWizard/pwiz/pull/5031) (ready, approved); screenshots in nickshulman/pr-assets `pwiz/5031-show-full-scan`
+- **PR**: [#5031](https://github.com/ProteoWizard/pwiz/pull/5031) (merged 2026-11-18); screenshots in nickshulman/pr-assets `pwiz/5031-show-full-scan`
 - **Checkout**: `I:\git_i\sky_clicktobringupfullscangraph`
 
 ## Objective
@@ -64,3 +64,15 @@ Molecule IMS Libraries; see the PR's approving review for the details. Commits o
 Follow-ups filed for Nick: #5049 property sheets, #5050 toolbar combos, #5051 docking (overlaps
 #4671's window verbs), #5052 silent timeouts. Design guide draft:
 `ai/docs/skyline-mcp-design-guide.md` (for Brendan and Nick to review).
+
+### 2026-11-18 - Merged
+
+PR #5031 merged as commit 1d51837d27. Shipped `skyline_show_full_scan`: shows the Full-Scan graph
+for the scan at a measured retention time through the chromatogram click path, with the selection
+circle on the given transition or the one most intense at that time, zoomed to it; returns within
+10 s with a description of what is shown or "still loading, read again shortly"; and the Full-Scan
+properties button got its tooltip back ("Spectrum Properties"). SkylineAiConnector.zip 26.1.2.322.
+All 17 checks green, including the full Skyline Windows run. Follow-ups filed for Nick: #5049
+(property sheets as text), #5050 (toolbar combos and item state), #5051 (docking; overlaps #4671),
+#5052 (silent timeouts), #5053 (MCP vs external-tool callers). Design guide:
+`ai/docs/skyline-mcp-design-guide.md` (awaiting Nick's review).
