@@ -7,7 +7,7 @@
 - **Module**: `skyline`
 - **Status**: In progress
 - **GitHub Issue**: partly addresses #5049 (assigned to Nick)
-- **PR**: (none yet)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/5056 (opened 2026-11-18)
 
 ## Objective
 
@@ -52,3 +52,9 @@ GitHub, upstream unset so a bare push cannot target master).
 
 Committed `01a774d77e` (local, not pushed). Full Skyline build clean (0 warnings, 0 errors).
 `TestFullScanProperties`, `TestSetItemMcpConnector` and CodeInspection pass.
+
+`/code-review medium`: 10 findings; fixed 5 in `199446f198` (sheet toolbar stayed reachable - was a
+regression; category headings nameable; bare-string path; leaf mid-path error; reuse
+`ListItems.BestMatch`). Dropped 5 as consistent with TreeViewElement (first match wins, collapse
+expands intermediates) or not worth it (RootItem duplicate, ToTreePath location, test label source).
+Pushed and opened #5056 with tcinspect still running.
