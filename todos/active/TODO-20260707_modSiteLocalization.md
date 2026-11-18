@@ -296,6 +296,14 @@ phospho PRM dataset, PXD074030; local copy under `D:\Users\RitaCh\Downloads\V008
 Both items are cheap, analytic, and need no results data. More datasets are being collected to
 look for further common patterns before the larger analysis tools are scoped.
 
+Test data provenance: Panorama Public experiment "BayBioMS - Zhang_Schuler_HRI" (2026),
+ProteomeXchange PXD074030, https://panoramaweb.org/Panorama%20Public/2026/BayBioMS%20-%20Zhang_Schuler_HRI/project-begin.view
+HRI = heme-regulated inhibitor / EIF2AK1, UniProt Q9BQI3; PRM phosphosite monitoring, 40
+replicates, library built by BiblioSpec from MaxQuant DDA results; raw PRM files on Panorama in
+the RawFiles subfolder (40 x ~550 MB); publication not available as of 2026-11-18. The Skyline
+document `V0088-02_Q9BQI3_PRM_phos_2026-02-02_16-17-30(3)` is the submitter's shared document
+downloaded as-is (local copy on D:, untouched; all analysis ran on a copy).
+
 - [x] **S1 Neutral-loss ions are never "uniquely localizing".** A phospho fragment minus H3PO4 has
       exactly the composition of the unmodified fragment minus H2O (HPO3 - H3PO4 = -H2O), so the
       m/z the analyzer calls unique to S4 (b4-98) is produced by every other isomer as b4-H2O. Seen in
@@ -358,3 +366,113 @@ look for further common patterns before the larger analysis tools are scoped.
   to true, run once, restore the file from git), 6 files / +18 lines (proteomic + mixed, en/ja/zh-Hans;
   small-molecule pages unchanged). Commit c771ba25dc, pushed. Lesson: any new Document Grid column
   needs this regeneration; the local 7-test batch does not include it.
+
+## Possible further scope (2026-11-18, candidates for discussion with Brendan; not committed)
+Context: Mike's 2026-11-17 feedback took Thesaurus off the table (scoring needs site-determining
+fragments; stats did not hold up) and pointed at predicted RT + predicted fragment abundances with
+isomer competition, with a peptidoform score as an Osprey research item. Skyline's user base is
+MRM/PRM first, so every item below is acquisition-agnostic unless marked. Ranked by cost.
+
+Tier A - extensions of the existing analyzer (no results data needed)
+- [ ] **A1 Must-be-absent ions.** For isomer A, the union of the other isomers' unique ions.
+      Report as "excluding" transitions (column + tooltip + pick list), subject to the same
+      neutral-loss / isobar exclusion as S1. Display/explanation layer, not a score.
+- [ ] **A2 Producing-set grade instead of a unique flag.** Expose `GetProducingSetSize` as
+      "unique / discriminates N of M / shared" so partially discriminating ions (e.g. y13u =
+      S4 or S5 only in NDESSSSSIIFAEPTPEK) are visible and sortable.
+- [ ] **A3 Residue-class diagnostic ions.** Fixed table per modification (pY immonium 216.04,
+      acetyl-K 126.09/143.12, HexNAc oxonium 204.09/138.06, precursor -98 => S/T not Y). Seed
+      via Transition Settings > Special ions, or show in the spectrum annotation. Complements S2.
+
+Tier B - library / input data (DDA-first, benefits every workflow that builds a library)
+- [ ] **B1 Site-probability pass-through in BiblioSpec.** Read the search engine's localization
+      column (MaxQuant "Phospho (STY) Probabilities", Proteome Discoverer ptmRS, MSFragger /
+      PTMProphet localization, DIA-NN PTM.Site.Confidence / PTM.Q.Value, Spectronaut PTM
+      probabilities) into a new blib column; show it in the Library Explorer and on isomer nodes;
+      optional min-probability filter at library build so low-probability placements stop
+      seeding unsupported isomer nodes (data finding 5). Schema change: coordinate with Matt.
+- [ ] **B2 Isomer-group reporting.** `LocalizationGroupKey` / isomer count as Document Grid
+      columns and a tree filter "show isomer groups", so a user can review groups in one place.
+
+Tier C - chromatogram-based diagnostics (PRM/DIA; need results)
+- [ ] **C1 Co-assigned peak warning.** Flag isomers of one group whose chosen peaks overlap in
+      RT in a replicate (data finding 6); cheapest form of isomer competition.
+- [ ] **C2 Purity / ratio-across-peak diagnostic.** Ratio of a unique (or nested-set) ion to a
+      shared ion across the peak, per replicate; drift indicates a co-eluting isomer mixture
+      (HRI peak A = S4/S5). Could be a graph overlay plus a per-peak metric.
+- [ ] **C3 Predicted RT per isomer.** Show predicted RT delta per isomer vs the observed apex
+      (Chronologer / Carafe / AlphaPeptDeep via Koina handle phospho; Prosit does not) and an
+      "RT consistent" flag. Feasibility first: predict isomer RTs for the HRI peptides and compare
+      with the measured apexes (S4/S8/T15 separated 0.5-1 min; S4/S5 co-elute).
+- [ ] **C4 Predicted-spectrum dotp per isomer at the chosen peak.** Library dotp against a
+      predicted spectrum for each isomer; delta best-vs-second as the localization margin.
+
+Tier D - out of PR scope (Osprey)
+- Isomer competition in search and a DIA-NN-style peptidoform score; Skyline reads the result.
+
+### Unifying model (2026-11-18, Rita's idea: Bayesian posterior over isomers)
+Treat each transition's producing set as the likelihood structure: under isomer k the ion is
+expected intense if k produces it, at noise otherwise. Observed peak areas update a posterior
+over the isomer group; the prior slot takes outside evidence (uniform, B1 site probability,
+C3 predicted RT). Mixture form = the deferred deconvolution `area[t] = sum_k x[k] * expected[t,k]`
+with non-negative fractions x; producing sets are the zero pattern of `expected`. Then A1
+(must-be-absent) is the absent branch of the likelihood, A2 (grade) is the ion's information
+content, C2 (ratio across the peak) is the posterior per time bin, C4 is the same model with
+predicted intensities. Caveats: binary matrix + uniform prior reduces to Ascore; posterior is
+uncalibrated (report as a score, calibrate later against shuffled/relocalized forms as DIA-NN
+is believed to do); isobaric collisions (S1) must be modeled as shared in m/z space; "absent"
+needs an expected intensity and a per-replicate noise floor.
+
+### Dev observation (2026-11-18): weak unique ions make absence uninformative
+In the HRI document every isomer of NDESSSSSIIFAEPTPEK has a weak y14 (long y ions and the
+short serine-run b ions are weak in HCD whatever the site), so "y14 unmodified absent" says
+nothing against S5. Absence is evidence only in proportion to the expected intensity under
+the competing isomer. Consequences: A1 must not ship as a bare flag (needs an expected
+intensity per ion; without one show "would distinguish S4/S5, too weak here"); for clustered
+candidate sites the evidence lives in intensity shifts of the strong shared ions and in RT,
+i.e. C3/C4, not in the unique ions; C2 should report an uncertainty, since it is a ratio of
+weak ions.
+
+### Noise-weighted presence score (2026-11-18, Rita's idea; first concrete scoring step)
+Evidence per ion = log-likelihood ratio of its intensity against the noise level at the peak,
+credited to the ion's producing set (shared ions contribute 0). Presence evidence needs only
+S/N, so this works with no library and no predictor (PRM hand-built documents). Absence
+evidence still needs an expected intensity (prediction, reference spectrum, or the same ion in
+a clean replicate/peak), so it waits for C4. Per replicate, then aggregated across replicates
+(HRI: y14u above noise in 33/38 files at peak A is strong in aggregate, marginal per file).
+Propagate the same noise into the C2 ratio for error bars. Skyline side: transition peaks
+store background; chromatogram outside the boundaries gives sigma per transition per replicate;
+check whether an existing peak-scoring feature already exposes S/N before adding one.
+Noise estimation (2026-11-18): reuse the per-transition part of `NextGenSignalNoiseCalc`
+(`Model/Results/Scoring/NextGenFeatureCalc.cs`: median of points within 500 on each side of the
+boundaries, log10(height/median)) but (1) add sigma = 1.4826 * MAD of the same points (level vs
+fluctuation), (2) exclude the other isomers' peak regions from the noise window (HRI peaks are
+~1.2 min apart), (3) handle zero-floored traces with sigma from successive differences
+(median |x[i+1]-x[i]| / sqrt 2). Presence gate without sigma: shape correlation of the weak unique
+ion's trace with the summed shared-ion trace across the peak (what Thesaurus/Osprey use; Skyline
+has co-elution features already).
+
+### Deconvolution as the peak-picking fix (2026-11-18, Rita's idea: use the fit quality)
+The mixture fit `area[t] = sum_k x[k] * expected[t,k]` gives three things:
+1. A peak-scoring feature: residual of the best non-negative fit per candidate peak (library
+   dotp generalized to "best combination of isomer spectra"); report best-single-isomer residual
+   and mixture residual, the gap flags a mixed peak; penalize the number of non-zero fractions.
+2. Mixed-peak detection: fit per scan / time bin with a smoothness constraint; constant fractions
+   = pure peak, drifting fractions = partially separated isomers (the y14u/y13u ratio generalized
+   to all ions with expected intensities and noise weights).
+3. Per-isomer chromatograms: fraction profile x_k(t) times the summed fragment trace is a trace
+   that belongs to isomer k alone; pick peaks on those, so S4 and S5 get their own apex,
+   boundaries and areas at peak A. Fits the existing data model (each isomer node already has its
+   own boundaries/areas per replicate); no schema change.
+Needs: expected intensities per isomer (binary matrix is under-determined when the unique ions
+are weak, so predicted spectra are essential here), per-ion per-scan noise weights inside the
+fit, and the residual trace shown as an interference chromatogram. Supersedes the deferred
+"#2 isomer deconvolution" line with a concrete purpose: localization-aware peak picking.
+Scope note (2026-11-18, Rita): with predicted spectra the fit is a generic mixed-peak resolution
+problem (near-isobaric DIA co-elution, light/heavy cross-talk, in-source fragments, isomeric
+lipids/metabolites in molecule mode), not an isomer feature. Proposed split: a generic module
+(closed candidate set from the document + expected spectra + shared chromatograms -> fractions
+over time + residual trace) with mod localization as the first client. Mod-specific layers stay
+on top: candidate enumeration by the analyzer, isobar row merging (S1), relocalized decoys,
+FLR, site display. Boundary: closed candidate sets only (open sets = library search = Osprey).
+Molecule mode would run on library spectra (no predictor) and is a later step.
