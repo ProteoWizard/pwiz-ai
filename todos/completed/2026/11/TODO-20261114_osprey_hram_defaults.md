@@ -5,14 +5,12 @@
   head 1b3156778a (which carries #4950's tip with #5036 and #5037).
 - **Base**: #4950 (`Skyline/work/20261028_osprey_diann_fdr_gap`); #5033 merged into it 2026-11-15 as ec9a9e77fb
 - **PR**: [#5038](https://github.com/ProteoWizard/pwiz/pull/5038) (merged 2026-11-15 into the #4950 branch as e7f8b17820;
-  work branch deleted). Follow-up: one PR on the #4950 branch, three commits (see "Follow-up PR" below)
+  work branch deleted). Follow-up: [#5043](https://github.com/ProteoWizard/pwiz/pull/5043) (merged 2026-11-17
+  into the #4950 branch as d2821694bc)
 - **Module**: `osprey`
 - **Created**: 2026-11-14 (plan by UW8; Brendan is handing implementation to MACS2)
-- **Status** (2026-11-15, MACS2): the HRAM half of the per-resolution table is implemented and gated locally
-  (see "MACS2 night 2026-11-14" below). Brendan approved pushing it as the way to lock the SEA-AD Astral gains
-  into the defaults; pushed as #5038 (Perf/Regression #390 passed on 12127bb099); the settings then moved onto OspreyConfig (d95004c521), #4950 merged, head d29717e81d, Perf/Regression #391 (4266161) passed there; **#5038 merged into the #4950 branch as e7f8b17820**.
-  This TODO stays active for the follow-up PR, which finishes the defaults; it waits for UW8's 20-file check
-  (tc0.15, minrt0.5), not yet recorded here.
+- **Status**: Completed. #5038 and #5043 merged into the #4950 branch; they reach master with #4950's
+  squash. Stellar tuning (and removing `--protein-boost compact`) is a separate push.
 
 ## Goal
 
@@ -471,3 +469,13 @@ after the resolution is known (HRAM turns the column on by default). 670/670, in
 Regression Astral reference points (not like for like, other library): DIA-NN 2.7.0 145,788 at global q 1% with its
 own predicted library (`D:\Users\brendanx\test\diann-vs-osprey\astral3-mike`); master 117,660, #5038 138,820,
 this branch 133,766 at reported q 1% on `SkylineAI_spectral_library.tsv`.
+
+### 2026-11-17 - Merged
+
+PR #5043 merged into the #4950 branch as commit d2821694bc, after Perf/Regression #392 (4269049) passed on its
+head 719ada795c. It shipped `PinFeatureSelection` on the search's configuration, the removal of the leftover
+research variables, the resolved-settings block in the run log, the HRAM defaults measured on 82 SEA-AD files
+(LOESS 0.10, TC 0.40, ratio PEP, out-of-fold gbdt, MIN_RT 1.0: 97,120 at true FDP 1%, +0.93% over the recipe,
+4.1% behind DIA-NN's 101,269), and `--protein-boost best|compact|off` in place of `--protein-best` (HRAM `best`,
+unit `compact`). Deferred: Stellar compared with DIA-NN on the lab's larger Stellar data, then removing `compact`
+so the choice is `best|off`.
