@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260820_dpiAwareness` (pwiz1)
 - **Base**: `Skyline/work/20260612_net8_port` (retargeted 2026-10-07; was `master`)
 - **Created**: 2026-08-20
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4599](https://github.com/ProteoWizard/pwiz/issues/4599)
 - **Module**: `skyline`
-- **PR**: [#4602](https://github.com/ProteoWizard/pwiz/pull/4602) (draft)
+- **PR**: [#4602](https://github.com/ProteoWizard/pwiz/pull/4602) (merged 2026-11-17)
 
 ## Objective
 
@@ -747,6 +747,20 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
 - Files: Util/DpiUtil.cs, Util/FormEx.cs, Util/DockableFormEx.cs, Menus/TreeNodeContextMenu.cs,
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
+
+### 2026-11-17 - Merged
+
+PR #4602 merged as commit f304ff36a2 (squash), with all 18 checks green and the branch current with
+master. Shipped: system DPI awareness for the .NET build, DpiScale/DpiUtil and per-DPI icon loading,
+.NET high-DPI layout fixes (grids, tab pages, persisted geometry, ZedGraph), the rebuilt DigitalRune DLL
+(DPI constants, tab icon frames, splitter double-scaling fix), DPI-aware tutorial screenshot runs, and
+the fixes from Brendan's first complete review of all 1,896 screenshots at 150%. Merged before the
+planned second full 150% pass; anything it finds goes to a follow-up PR. Deferred (unchecked above):
+QuaSAR/MSstats tool package re-publish, waters_connect dialog check, uncaptured/unreviewed sweep forms,
+sweep harness revert, DDASearchSettingsPage question, icon assets (#4887). Open elsewhere: developers PR
+for the splitter fix (branch `Skyline/work/20261116_splitter_autoscale`, fd551d0, whose build is the
+shipped DLL), Nick's developers PR #8 (using-scope rework 9be3623), pwiz #4951 (screenshot waits,
+updated to master 95970a4b86), issue #5042 (legacy tutorial folders).
 
 ### 2026-11-17 - First complete 150% pass done; master merged (8ce7d0f284, 9db57289b3, dc4bffb7f2, pushed)
 
