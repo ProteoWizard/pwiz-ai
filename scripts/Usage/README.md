@@ -77,8 +77,9 @@ pwsh -File "C:\proj\ai\scripts\Usage\Register-ClaudeUsageGraphTask.ps1" -At 06:3
 That host needs R (Rscript) with `tidyverse`, `scales` and `plotly`, installed as the account
 the task runs under:
 `Rscript -e 'install.packages(c("tidyverse","scales","plotly"), repos = "https://cloud.r-project.org")'`.
-`plotly` draws `plots/claude_usage.html` (with plotly.js in `plots/claude_usage_files/`): every
-chart on one page, where clicking a legend entry hides that person, machine or model. Without it
+`plotly` draws `plots/claude_usage.html`: every chart on one page, where clicking a legend entry
+hides that person, machine or model. The page is self-contained (~4 MB, plotly.js inlined), so a
+downloaded or emailed copy works on its own; Drive's web preview does not run it. Without `plotly`
 the PNGs and PDF are still written and the run log warns that the page was skipped.
 
 Data is eventually consistent — a machine that was asleep at

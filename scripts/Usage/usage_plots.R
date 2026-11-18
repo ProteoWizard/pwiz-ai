@@ -162,11 +162,57 @@ collected <- list()  # accumulate plots so we can also emit a single multi-page 
 # for values, drag to zoom. Written only when the plotly package is installed; PNGs/PDF regardless.
 web_enabled <- requireNamespace("plotly", quietly = TRUE)
 web_widgets <- list()
+
+# ggplotly converts a ggplot that is already stacked: each bar segment keeps a fixed 'base' and the
+# axes keep fixed ranges and tick labels, so hiding a legend entry leaves the other segments floating
+# and never rescales. Undo that: let plotly do the stacking (barmode "stack", no base), autorange the
+# value axes with plotly's own ticks, and turn geom_vline traces (which would pin the old y range)
+# into full-height layout shapes.
+make_web_live <- function(w) {
+  w <- plotly::plotly_build(w)
+  tr <- w$x$data
+  is_vline <- vapply(tr, function(t) identical(t$type, "scatter") && identical(t$mode, "lines") &&
+                       length(t$x) > 1 && length(unique(t$x[!is.na(t$x)])) == 1, logical(1))
+  shapes <- lapply(tr[is_vline], function(t)
+    list(type = "line", xref = "x", yref = "paper", x0 = t$x[1], x1 = t$x[1], y0 = 0, y1 = 1,
+         line = list(dash = "dash", color = "#666666", width = 1)))
+  tr <- tr[!is_vline]
+  is_bar <- vapply(tr, function(t) identical(t$type, "bar"), logical(1))
+  stacked <- sum(is_bar) > 1
+  if (stacked) {
+    for (i in which(is_bar)) tr[[i]]$base <- NULL
+    # plotly stacks in trace order from the bottom; ggplot puts the first level on top. Reverse the
+    # traces to match the PNGs, and reverse the legend so it still lists the first level first.
+    tr[is_bar] <- rev(tr[is_bar])
+  }
+  w$x$data <- tr
+  lay <- w$x$layout
+  if (stacked) {
+    lay$barmode <- "stack"
+    lay$legend$traceorder <- "reversed"
+  }
+  if (length(shapes)) lay$shapes <- c(lay$shapes, shapes)
+  for (ax in grep("^[xy]axis[0-9]*$", names(lay), value = TRUE)) {
+    a <- lay[[ax]]
+    lbl <- as.character(unlist(a$ticktext))
+    # Only value axes rescale; date and category axes keep their full range so hiding a series
+    # does not shift the timeline.
+    if (length(lbl) && all(grepl("^\\$?-?[0-9][0-9.,]*[KMBT]?$", lbl))) {
+      a$autorange <- TRUE; a$range <- NULL; a$rangemode <- "tozero"   # tozero: no padding below $0 on line charts
+      a$tickmode <- "auto"; a$tickvals <- NULL; a$ticktext <- NULL; a$nticks <- NULL
+      if (all(startsWith(lbl, "$"))) { a$tickprefix <- "$"; a$tickformat <- ",.0f" }
+      else { a$tickformat <- NULL; a$exponentformat <- "B" }
+    }
+    lay[[ax]] <- a
+  }
+  w$x$layout <- lay
+  w
+}
 save_plot <- function(p, name, w = 10, h = 5, web = p, web_legend = TRUE, web_n_legend = 0) {
   ggsave(file.path(plot_dir, name), p, width = w, height = h, dpi = 120)
   collected[[name]] <<- p
   if (web_enabled && !is.null(web)) {
-    if (inherits(web, "ggplot")) web <- plotly::ggplotly(web, height = web_height(web_n_legend))
+    if (inherits(web, "ggplot")) web <- make_web_live(plotly::ggplotly(web, height = web_height(web_n_legend)))
     if (!web_legend) web <- plotly::layout(web, showlegend = FALSE)   # ggplotly ignores show.legend = FALSE
     web_widgets[[name]] <<- web
   }
@@ -347,7 +393,32 @@ message("Plots written to: ", plot_dir)
 message("Combined PDF: ", pdf_path)
 
 # --- Interactive page: all charts on one HTML page --------------------------------------
-# save_html needs no pandoc; plotly.js goes once into the claude_usage_files folder beside it.
+# save_html needs no pandoc, but it writes the scripts (plotly.js etc.) to a folder beside the page,
+# so a downloaded or emailed copy of the page alone shows no charts. Build it in a temp folder, then
+# inline every script and stylesheet into one self-contained file (~4 MB) in plot_dir.
+# Files are handled as raw bytes: a readLines/writeLines round trip drops bytes from
+# plotly-latest.min.js (303 of them with plotly 4.12.1) and the page fails with a SyntaxError.
+inline_html_deps <- function(src_html, dest_html) {
+  base <- dirname(src_html)
+  read_bytes <- function(f) rawToChar(readBin(f, "raw", file.info(f)$size))
+  html <- read_bytes(src_html)
+  tags <- regmatches(html, gregexpr('<script src="[^"]+"></script>|<link href="[^"]+" rel="stylesheet" />',
+                                    html, useBytes = TRUE))[[1]]
+  for (tag in tags) {
+    path <- sub('^<(script src|link href)="([^"]+)".*$', "\\2", tag, useBytes = TRUE)
+    body <- read_bytes(file.path(base, path))
+    inlined <- if (startsWith(tag, "<script")) {
+      # "</script" inside the code would end the tag early; "<\/script" is the same text to JS.
+      paste0("<script>", gsub("</script", "<\\/script", body, fixed = TRUE, useBytes = TRUE), "</script>")
+    } else {
+      paste0("<style>", body, "</style>")
+    }
+    html <- sub(tag, inlined, html, fixed = TRUE, useBytes = TRUE)
+  }
+  if (grepl('<script src=|rel="stylesheet"', html, useBytes = TRUE))
+    warning("claude_usage.html still references external files - it may not work on its own.")
+  writeBin(charToRaw(html), dest_html)
+}
 if (web_enabled) {
   html_path <- file.path(plot_dir, "claude_usage.html")
   page <- htmltools::tagList(
@@ -357,7 +428,15 @@ if (web_enabled) {
                               format(Sys.time(), "%Y-%m-%d %H:%M"))),
     lapply(sort(names(web_widgets)), function(nm) htmltools::div(style = "margin-bottom: 24px", web_widgets[[nm]]))
   )
-  htmltools::save_html(page, html_path, libdir = "claude_usage_files")
+  build_dir <- file.path(tempdir(), "claude_usage_html")
+  unlink(build_dir, recursive = TRUE)
+  dir.create(build_dir)
+  build_html <- file.path(build_dir, "claude_usage.html")
+  htmltools::save_html(page, build_html, libdir = "claude_usage_files")
+  inline_html_deps(build_html, html_path)
+  unlink(build_dir, recursive = TRUE)
+  # Remove the folder that earlier versions wrote beside the page; it is no longer used.
+  unlink(file.path(plot_dir, "claude_usage_files"), recursive = TRUE)
   message("Interactive page: ", html_path)
 } else {
   message("plotly not installed - interactive page (claude_usage.html) skipped.")
