@@ -118,11 +118,15 @@ stricter; pwiz must not get a giant change set. So:
   dead code, left alone
 
 ### Step 3 - CI
-- [ ] Add the ReSharper half to root `tcinspect.ps1` (status `Core code inspection`), modelled on
-  `pwiz_tools/Skyline/tcinspect.ps1`
-- [ ] Add `jetbrains.resharper.globaltools` 2025.3.3 to the root `.config/dotnet-tools.json`
-- [ ] `--exclude` the 7 shared projects (Skyline's gate owns them)
-- [ ] Decide: enable at zero, or enable now with a shrinking per-project exclude list
+- [x] Add the ReSharper half to root `tcinspect.ps1` (status `Core code inspection`), modelled on
+  `pwiz_tools/Skyline/tcinspect.ps1` (06c0cd4a4d, asked for by Matt on the PR). Vendor builds
+  only; skipped if the pre-build fails. `-UseExistingReport` re-parses the last report
+- [x] Add `jetbrains.resharper.globaltools` 2025.3.3 to the root `.config/dotnet-tools.json`
+- [x] `--exclude` the 7 shared projects (Skyline's gate owns them) - folder masks
+  `pwiz_tools/Shared/<dir>/**`, plus `ProteowizardWrapper.PwizSharp/**`; the inspectcode log
+  confirms none of their files were inspected (720 files were)
+- [x] Decide: enabled at zero
+- [ ] Confirm on TeamCity that the Core Windows vendor build posts the status and the Inspections tab
 
 ### Step 4 - loose ends
 - [ ] Osprey and CarafeSharp copies have drifted from Skyline's (only Skyline has the
@@ -146,3 +150,8 @@ stricter; pwiz must not get a giant change set. So:
   stderr and fixed the messages.
 - Pwiz.sln builds with 0 warnings; Thermo.Tests 15/15, Agilent.Tests 17/17; `jb inspectcode
   Pwiz.sln` still 0 findings. Committed and pushed 5a4121da6a. PR description update drafted.
+
+### 2026-11-17
+- Wired the inspection into CI in this PR (06c0cd4a4d). Local run of the root `tcinspect.ps1
+  -IAgreeToVendorLicenses`: pre-build 0 warnings (1:14 incremental), inspection 0 findings,
+  verdict success.
