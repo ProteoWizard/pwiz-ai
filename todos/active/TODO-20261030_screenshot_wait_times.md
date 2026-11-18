@@ -5,10 +5,10 @@
 - **Checkout**: `C:\proj\pwiz-work3` (NOT `C:\proj\pwiz`, which holds PR #4947)
 - **Base**: `master`
 - **Created**: 2026-10-30
-- **Status**: In Progress - levers in place, ready for the night session
+- **Status**: Completed
 - **GitHub Issue**: none (planned as a night session by Brendan)
 - **Module**: `skyline`
-- **PR**: [#4951](https://github.com/ProteoWizard/pwiz/pull/4951)
+- **PR**: [#4951](https://github.com/ProteoWizard/pwiz/pull/4951) (merged 2026-11-17)
 
 ## Objective
 
@@ -229,3 +229,16 @@ NOT been run on screen - next screenshot run should be n3/fP4 against bA/bP via 
 
 Translated set (from the folders): 1,001 en + 551 ja + 551 zh-CHS = 2,103 committed screenshots;
 at ~2.3 s saved each, ~81 min per full run.
+
+### 2026-11-17 - Merged
+
+PR #4951 merged as commit 96baad5371 (squash), all 18 checks green. Before the merge: ReSharper
+fixes (3225993d85: unused using, redundant cast/delegate in ScreenshotManager, redundant
+System.Diagnostics qualifiers); master merged twice (95970a4b86, then e3c3569c6c after #4602 landed:
+ActiveWindowShot conflict resolved keeping the capture-until-stable loop with #4602 frame-aware
+GetWindowRectangle; DwmapiTest import count raised to 6 since each branch added one P/Invoke).
+The "Core code inspection" failures were MSB3270 build warnings from pwiz core vendor readers
+(Thermo once, Bruker once) - not this PR; pwiz/ has no Directory.Build.props demoting MSB3270 as
+pwiz_tools/ does, so it can recur on other PRs. Deferred: PeakBoundaryImputationDia s-19 (volcano
+updates ~0.8 s after IsComplete) and the ja/zh-CHS screenshot runs; the first full 150% runs on
+master will exercise the waits.
