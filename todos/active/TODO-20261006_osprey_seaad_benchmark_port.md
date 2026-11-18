@@ -162,6 +162,16 @@ so CHS tracks the scoring-cost growth of the #4950 defaults; per file it is 1.19
 (`sea-aduns-validateecipe-scoring-newfdr-82files`) `.scores.parquet` is 165.2 of ~197 GB (84%), so the rest of
 the run should add only ~60-80 GB (end near 570-590 GB free); the doc's 0.615 GB/GB-raw (~1.09 TB) does not fit this run.
 
+The 287 s silence at 17:28:08 (all 27 first-wave files at 50%) is progress granularity, not a stall. Per-file
+progress is 4 segments (`PerFileScoringTask.cs:77`): spectra 0-25, calibration 25-50, coelution 50-75, parquet
+75-100; per-file log text is buffered until the file completes (`MultiProgressReporter.cs:150,171`). File 1: segment
+start 17:26:20 + calibration pass 1 scoring 107.2 s = 50% at 17:28:07; then pass 2 scoring 63.7 s, which reports into
+the already-full segment (RT calibration total 177.8 s, so ~17:29:18); then coelution reports per finished window,
+largest first (`ScoringPipeline.cs:169`), and 1% needs 8 of 200 windows at 2 threads (median 26 s, max 73 s) =
+~215 s -> 17:32:55, the first 51%. SEA-AD at 4 and 8 files in parallel shows no such gap; here 27 files started
+together, so none moved. Possible fixes: give pass 2 its own share of the calibration segment, and weight coelution
+progress by candidates rather than window count.
+
 ### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
 
 19:48:45 -> 05:22:52, **9 h 34 m 30 s** (`Total pipeline: 34470.3s`), exit 0, 5,573 protein groups at 1%.
