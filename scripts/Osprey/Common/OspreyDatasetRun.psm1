@@ -253,7 +253,8 @@ function Invoke-OspreyDatasetRun {
         # DIVIDED across concurrent files, so this does not add cores - it overlaps the
         # per-file work that does not saturate them. On this dataset calibration (31% of
         # per-file scoring time) and the parquet write (14%) are the candidates; the main
-        # search (55%) should be roughly throughput-neutral.
+        # search (55%) should be roughly throughput-neutral. -1 passes a bare --parallel-files,
+        # Osprey's RAM/CPU-aware automatic count, which is what a user types.
         [int]$ParallelFiles = 0,
         # Per-stage overrides of -ParallelFiles (--parallel-files-caching / -scoring / -rescoring),
         # each for its stage only; 0 = not passed, so the stage falls back to -ParallelFiles. The
@@ -637,6 +638,7 @@ function Invoke-OspreyDatasetRun {
     }
     if ($Task) { $cliArgs += @('--task', $Task) }
     if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
+    elseif ($ParallelFiles -lt 0) { $cliArgs += @('--parallel-files') }
     if ($ParallelFilesCaching -gt 0) { $cliArgs += @('--parallel-files-caching', "$ParallelFilesCaching") }
     if ($ParallelFilesScoring -gt 0) { $cliArgs += @('--parallel-files-scoring', "$ParallelFilesScoring") }
     if ($ParallelFilesRescoring -gt 0) { $cliArgs += @('--parallel-files-rescoring', "$ParallelFilesRescoring") }
@@ -716,7 +718,7 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  lib file : {0}" -f $libFingerprint)
     Write-Host ("  arm      : {0}  r={1}" -f $DecoyMode, $Ratio)
     Write-Host ("  files at once: {0}   threads {1}{2}" -f
-                $(if ($ParallelFiles -gt 0) { $ParallelFiles } else { '1 (sequential)' }), $Threads,
+                $(if ($ParallelFiles -gt 0) { $ParallelFiles } elseif ($ParallelFiles -lt 0) { 'auto' } else { '1 (sequential)' }), $Threads,
                 $(if ($ParallelFiles -gt 1) {
                     " -> ~$([int]($Threads / $ParallelFiles)) per file (--threads is DIVIDED across them)" }
                   else { '' }))

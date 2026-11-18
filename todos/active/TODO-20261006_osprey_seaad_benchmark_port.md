@@ -136,6 +136,17 @@ runs of `490a4d3825` are the comparisons that mean something.
 - Output: 6,654 protein groups at 1%; FDRBench inputs for both passes written to the run dir.
   Entrapment FDP not yet computed (SEA-AD README harvest tools).
 
+### 2026-11-17 - MACS2 CHS 446 launched on PR #5045 (the #4950 defaults), run as a user runs it
+
+Brendan: the first CHS run since #4950 work began, as proof the new code still runs it here in reasonable time
+(expected ~1.5x the 10-08 run, ~16-18 h). Started 17:23:46. PR #5045 head b9bd065862 (UW8's review commit
+included), snapshot `D:\Users\brendanx\test\osprey-runs\_bin\pr5045-b9bd065862`; 670/670. Launcher
+`ai/.tmp/sessions/20261117-chs/Launch-Chs446.ps1`: no OSPREY_* or DOTNET_GC* variable, bare `--parallel-files`
+(auto; `Run-Chs.ps1 -ParallelFiles -1`, added for this run), `--threads 72`, default pass 2 (`protein boost
+best`), model diagnostics on, same library as 10-08 (`lib\astral\target+decoy+entrapment-20260817`), caches
+read from E:. Run dir `D:\Users\brendanx\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-default-pr5045`.
+D: 1.2 TB free at launch; box CPU ~54% from other users (sqlservr, webviews) before the start.
+
 ### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
 
 19:48:45 -> 05:22:52, **9 h 34 m 30 s** (`Total pipeline: 34470.3s`), exit 0, 5,573 protein groups at 1%.
