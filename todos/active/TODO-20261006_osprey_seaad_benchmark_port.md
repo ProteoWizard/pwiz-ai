@@ -180,10 +180,13 @@ MACS2 72 threads 327 s at 4 files vs 318 s at 8, a plateau (2026-10-06 sweep abo
 dataset: 10-08 (both 4 x 18) CHS/SEA-AD scoring per file 49.6 / 45.3 = 1.10; now CHS 27 x 2 vs SEA-AD featset-env
 4 x 18 = 120.8 / 92.3 = 1.31, so CHS scoring ran ~20% slower than at SEA-AD's setting. Per-core coelution cost did not
 rise (core-us per candidate ratio 1.86 now vs 2.25 on 10-08): the loss is ~20 idle cores, plus 213 GB vs ~58 GB.
-Fix on `Skyline/work/20261118_osprey_parallel_files_cap` (74c9815ff3, local, off the #4950 branch): auto keeps at
-least `MIN_THREADS_PER_FILE = 8` threads per scoring/re-scoring file (cap `--threads` / 8: MACS2 9, i9 3); caching
-keeps one per core; explicit counts unchanged. 670/670 Debug + inspection clean (ja/zh-Hans strings updated). Needs the
-82-file SEA-AD bare `--parallel-files` A/B against the 2 h 54.6 m hand-tuned run once this CHS run finishes.
+Fixes added to PR #5045 (Brendan: one squash of #5045 into #4950, then #4950 to master), head 06dece8a60:
+`3bcc1573ad` auto keeps at least `MIN_THREADS_PER_FILE = 8` threads per scoring/re-scoring file (cap `--threads` / 8:
+MACS2 9, i9 3; caching keeps one per core; explicit counts unchanged; ja/zh-Hans strings updated); `06dece8a60` closes
+the scoring-start silence: segments weighted 2/10/80/8, calibration passes 1 and 2 in sub-ranges 0-70/70-100
+(`MultiProgressReporter.BeginSubrange`), coelution progress by library precursors per window. Retried pass-1 attempts
+still show no motion. 671/671 Debug + inspection clean, `regression.ps1 -Dataset Stellar` PASS on the combined head.
+Next: re-run CHS 446 on this head after the current run ends; compare wall, memory and gaps with the b9bd065862 run.
 
 ### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
 
