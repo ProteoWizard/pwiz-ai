@@ -6,7 +6,7 @@
 - **Created**: 2026-11-18
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (not yet)
+- **PR**: [#5055](https://github.com/ProteoWizard/pwiz/pull/5055)
 
 ## Objective
 
@@ -23,7 +23,7 @@ second column with each ion's percent of the replicate total.
       present since the tooltip was added in #2708)
 - [x] Add a tooltip check to TestPeakAreaDotpGraph (default normalization, replicate 0)
 - [x] Build; run TestPeakAreaDotpGraph in en, fr, ja
-- [ ] Inspection (inspectcode + CodeInspection test) before push
+- [x] Inspection (inspectcode + CodeInspection test) before push
 
 ## Files
 
@@ -41,3 +41,5 @@ second column with each ion's percent of the replicate total.
   and Total use percent format; all other methods (TIC, global standards, calibrated, which
   previously got empty cells) use the number format. Added a TIC check to the test; rebuilt and
   passed en, fr, ja.
+- Committed c420e152a0; CodeInspection test passed, inspectcode clean for the changed files;
+  pushed and opened PR #5055.
