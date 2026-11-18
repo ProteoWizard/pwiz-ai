@@ -5,9 +5,9 @@
 - **Checkout**: `C:\Dev\CodeInspection`
 - **Module**: `pwiz`
 - **Base**: `origin/master`
-- **Status**: PR open. Settings, plus every finding fixed or suppressed in place (inspection at 0).
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: [#4945](https://github.com/ProteoWizard/pwiz/pull/4945)
+- **PR**: [#4945](https://github.com/ProteoWizard/pwiz/pull/4945) (merged 2026-11-18)
 
 ## Objective
 
@@ -126,7 +126,8 @@ stricter; pwiz must not get a giant change set. So:
   `pwiz_tools/Shared/<dir>/**`, plus `ProteowizardWrapper.PwizSharp/**`; the inspectcode log
   confirms none of their files were inspected (720 files were)
 - [x] Decide: enabled at zero
-- [ ] Confirm on TeamCity that the Core Windows vendor build posts the status and the Inspections tab
+- [x] Confirm on TeamCity that the Core Windows vendor build posts the status (bt83 build 4270978
+  for afa4925cab: "No build warnings and no inspections at WARNING or above")
 
 ### Step 4 - loose ends
 - [ ] Osprey and CarafeSharp copies have drifted from Skyline's (only Skyline has the
@@ -155,3 +156,14 @@ stricter; pwiz must not get a giant change set. So:
 - Wired the inspection into CI in this PR (06c0cd4a4d). Local run of the root `tcinspect.ps1
   -IAgreeToVendorLicenses`: pre-build 0 warnings (1:14 incremental), inspection 0 findings,
   verdict success.
+
+### 2026-11-18 - Merged
+
+PR #4945 merged as commit 1fa007f878 (approved by Matt). Shipped: Pwiz.sln.DotSettings (risk-only
+rules), the ReSharper half of the root tcinspect.ps1 under "Core code inspection", fixes for
+the real bugs the inspection found, once-per-file warnings for silent Thermo/Agilent read
+failures, and per-site suppressions for the rest. The last master merge brought 2 findings in
+the new CvOnlineUpdater.cs (both false positives, suppressed) - the gate caught them locally
+before CI did. Pre-existing bugs filed as #5027, #5028, #5029. Deferred: Step 4 loose ends
+(Osprey/CarafeSharp settings drift, CodeInspectionTests.cs still walking the removed `Tools/`)
+and inspection of the no-vendor configuration.
