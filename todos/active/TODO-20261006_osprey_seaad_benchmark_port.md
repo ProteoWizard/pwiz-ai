@@ -145,7 +145,11 @@ included), snapshot `D:\Users\brendanx\test\osprey-runs\_bin\pr5045-b9bd065862`;
 (auto; `Run-Chs.ps1 -ParallelFiles -1`, added for this run), `--threads 72`, default pass 2 (`protein boost
 best`), model diagnostics on, same library as 10-08 (`lib\astral\target+decoy+entrapment-20260817`), caches
 read from E:. Run dir `D:\Users\brendanx\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-default-pr5045`.
-D: 1.2 TB free at launch; box CPU ~54% from other users (sqlservr, webviews) before the start.
+D: 1.2 TB free at launch. Box CPU before the start read 54% (Win32_Processor), not attributed to anyone; in
+PerFileScoring at 17:50, per user from `\Process(*)` counters mapped PID -> session -> quser
+(`ai/.tmp/sessions/20261117-chs/cpu-by-user.ps1`): Osprey 50 cores, other users ~1 core (nicksh 0.6, chiyy 0.1),
+services 0.5; box 71.5%. On this 2-group box `\Processor(_Total)` covers one group only (read 45%):
+use `\Processor Information(_Total)`.
 
 ### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
 
