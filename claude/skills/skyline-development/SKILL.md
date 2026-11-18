@@ -47,6 +47,9 @@ Read these files to understand project constraints and patterns:
   (peak, memory-floor drift per unit of work, and every reporting gap over 30s) or
   `ai/scripts/perfviz.html` (plot). This is how memory that scales with workload size gets
   found without a profiler; it is a different problem from a leak (see leak-debugging).
+- **Adding or changing an AI Connector (MCP) verb or anything in ToolsUI/JsonToolServer**: Read
+  ai/docs/skyline-mcp-design-guide.md. The server is shared with external tools (no AI behind
+  them); for MCP callers, never block for long and never return as if done when a wait timed out.
 - **For detailed patterns**: Read files in ai/docs/
 
 ## Key Constraints (Quick Reference)
