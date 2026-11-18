@@ -5,7 +5,8 @@
 - **Base**: `master`
 - **Module**: `skyline`
 - **Created**: 2026-10-21
-- **Status**: In progress
+- **Status**: Closed without merging - superseded by [#5046](https://github.com/ProteoWizard/pwiz/issues/5046)
+- **PR**: [#4892](https://github.com/ProteoWizard/pwiz/pull/4892) (closed 2026-11-17, not merged; head `5ecb327`)
 - **Supersedes**: `Skyline/work/20260428_zedgraph_antialiasing` (deleted, never had a PR) - an
   experiment that set `FontSpec.Default.IsAntiAlias = true` globally behind a
   `SKYLINE_ZEDGRAPH_ANTIALIASING` env var / TestRunner `zedgraphantialiasing` switch.
@@ -39,12 +40,20 @@ annotations (unselected peptide labels in `ChromGraphItem`). `FontSpec.Default.I
       borders/fills unchanged); dropped 180-degree, allocation, design-alternative, screenshot findings
 - [x] CodeInspection
 - [x] PR [#4892](https://github.com/ProteoWizard/pwiz/pull/4892)
-- [ ] TeamCity green, review, merge
-- [ ] Look at the real mobilogram in Skyline
-- [ ] Tutorial screenshots with vertical text will show diffs at the next screenshot refresh -
-      expected, accept them (see ai/docs/screenshot-update-workflow.md "Font Rendering Differences")
+- [ ] ~~TeamCity green, review, merge~~ - closed, see 2026-11-17
+- [ ] ~~Look at the real mobilogram in Skyline~~ - deferred to #5046
+- [ ] ~~Tutorial screenshots with vertical text will show diffs~~ - deferred to #5046
 
 ## Progress Log
 ### 2026-10-21
 - Merged master into the old experiment branch, then narrowed scope: mobilogram-only, then
   all rotated text. Moved the result onto this fresh branch from master.
+
+### 2026-11-17 - Closed without merging
+Review (Brendan) judged the change too narrow: it fixes rotated text at 100% scaling only, and
+it looks different at 150% under the system-DPI-awareness work (#4602). Filed #5046 to compare
+four options (no change, rotated text only, all text, global `IsAntiAlias`) at 100/150/200%
+after #4602 merges, weighing redraw speed on dense graphs, soft axis-aligned geometry, bicubic
+image interpolation, horizontal text quality/layout, and screenshot churn. Closed #4892 in favor
+of #5046 and deleted the branch. The `FontSpec.AntiAliasIfRotated` implementation (option 2)
+remains recoverable from the closed PR (head `5ecb327`, `refs/pull/4892/head`).
