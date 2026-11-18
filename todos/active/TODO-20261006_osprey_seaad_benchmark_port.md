@@ -147,9 +147,18 @@ best`), model diagnostics on, same library as 10-08 (`lib\astral\target+decoy+en
 read from E:. Run dir `D:\Users\brendanx\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-default-pr5045`.
 D: 1.2 TB free at launch. Box CPU before the start read 54% (Win32_Processor), not attributed to anyone; in
 PerFileScoring at 17:50, per user from `\Process(*)` counters mapped PID -> session -> quser
-(`ai/.tmp/sessions/20261117-chs/cpu-by-user.ps1`): Osprey 50 cores, other users ~1 core (nicksh 0.6, chiyy 0.1),
+(`ai/scripts/Get-CpuByUser.ps1`): Osprey 50 cores, other users ~1 core (nicksh 0.6, chiyy 0.1),
 services 0.5; box 71.5%. On this 2-group box `\Processor(_Total)` covers one group only (read 45%):
 use `\Processor Information(_Total)`.
+
+2026-11-18 09:30 progress: **PerFileScoring done at 08:21, 53,873.0 s (14 h 58 m, 120.8 s/file)** against
+22,105.1 s (49.6 s/file) on 10-08: 2.44x. SEA-AD 82 scoring grew 2.23x over the same span (3,715.6 -> 8,297.3 s),
+so CHS tracks the scoring-cost growth of the #4950 defaults; per file it is 1.19x SEA-AD's 101 s. Auto
+`--parallel-files` chose 27 files x 2 threads (RAM-limited: 434.7 GB free / ~12.5 GB per file), and Osprey held
+~50 of 72 cores in scoring. FirstPassFDR running (8 lanes, max). perfviz (`--files 446`): private peak
+213.1 GB at 18:18 in scoring (managed 189.6 GB), scoring plateau ~165-180 GB, FirstPassFDR 94.3 GB so far; one
+287 s gap at 17:28 (scoring start). Plot `ai/.tmp/sessions/20261117-chs/perfviz-chs446-0930.png`.
+**D: 691 GB free** at 09:30 (446 scores.parquet ~1.4 GB each); the 0.615 GB/GB-raw rule predicts ~1.09 TB total.
 
 ### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
 

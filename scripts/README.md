@@ -51,6 +51,7 @@ This directory contains PowerShell scripts for maintaining code quality, automat
 |--------|-------------|
 | `analyze-http-json.ps1` | Analyze HTTP recording JSON files for request sizes |
 | `Get-DiskUsage.ps1` | True disk use per folder when runs share files through hard links (Osprey run directories): unique size, and what deleting each folder would actually free |
+| `Get-CpuByUser.ps1` | CPU per logged-in user on a shared machine (MACS2) without elevation: per-process counters mapped to sessions, box CPU across all processor groups |
 
 ### Skyline/ — Build & Test
 

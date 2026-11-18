@@ -408,6 +408,27 @@ trusted silently. A cache-format bump has the same shape: old caches are rejecte
 step 3 - and hence the caches are **data** from then on, not intermediates. Nothing in the run
 directory rebuilds them; recovery means re-downloading (375 GB/h, so ~5 h for CHS).
 
+## Checking for other users on a shared machine
+
+MACS2 is shared, so a cohort run's wall time depends on who else is computing. Before
+comparing a run with an earlier one, and whenever a run looks slower than expected, measure it:
+
+```bash
+pwsh -File './ai/scripts/Get-CpuByUser.ps1'
+```
+
+It lists logical processors busy per logged-in user, services as `(services)`, and the top
+processes. No elevation needed. Three common readings are wrong on this machine:
+
+- `Get-Process` and a non-admin Task Manager show no CPU for other users' processes, so the
+  box looks idle apart from your own work.
+- `\Processor(_Total)` covers one processor group. MACS2 has two groups of 36, and the counter
+  read 45% while the machine was at 71.5% (CHS 446 scoring, 2026-11-17). The script uses
+  `\Processor Information(_Total)`, which covers both.
+- `Win32_Processor` `LoadPercentage` is per socket and read 100% on both at that moment.
+
+Record the result with the run in the TODO, so a slow run can be told apart from a busy machine.
+
 ## How to get these numbers for a new dataset
 
 The counts and sizes here are not read off a portal page - they are computed from WebDAV
