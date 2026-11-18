@@ -748,6 +748,39 @@ tagged LOCAL DPI SWEEP). Runs launched 15:4x.
   Controls/Graphs/FileProgressControl.cs, FileUI/WatersConnectSaveMethodFileDialog.cs,
   Test/DpiIconLookupTest.cs (new). Committed on developer approval, amended before push with the one ReSharper finding (object initializer inside a using in the test), pushed as 895e28c4cc. Inspection: CodeInspection test passed; ReSharper's 2522 errors are the known unresolved-symbol set in Shared (2491 on the Oct 13 pre-push run), none in the committed files.
 
+### 2026-11-17 - First complete 150% pass done; master merged (8ce7d0f284, 9db57289b3, dc4bffb7f2, pushed)
+
+- Brendan's overnight 150% run: first with no failures. His review covered all 1,896 changed screenshots.
+- Fixed, all confirmed by Brendan at 150%:
+  - ClipTargets (ExistingQuant s-15/s-18 and every Targets clip): the tree sits at a negative offset in
+    its Panel to hide its border; the offset scales (-1 -> -2) but the border does not. Clip = tree
+    client area intersected with the Panel, in tree coordinates (the method converts to pane coords at
+    its end - a first attempt in bitmap coords double-counted the caption).
+  - GroupedStudies s-08: SkylineWindow 1920x1032 now ScaledSize.
+  - LiteDropDownList (product, Identify Columns + Edit Modifications): text was laid out across the arrow
+    (TextImageRelation.Overlay); now drawn by OnPaint with EndEllipsis left of the arrow image, which has
+    a 4 px transparent gap. TextBeforeImage was tried and dropped/moved arrows.
+  - New TestFunctional.ScaledContentWidth/Height (font layout ratio, no frame): HiResMetabolomics
+    SetColumnWidth x4, MethodEdit Insert Protein List SetColumnWidths and Unique Peptides SplitHeight,
+    MethodEdit auto-complete clip (735 wide, aboveAutoComplete rows). ResizeFloatingFrame now takes 100%
+    sizes (SMQ s-16/18/20).
+  - PopupPickList (product, MethodEdit s-20): find box placed from the measured check box glyph.
+  - LiveReports s-42: new DrawBoxOnColumnToBottom (to the data-area bottom). MS1Filtering s-17: box
+    from new SkylineWindow.StatusPeptidesScreenBounds. Both may move a pixel at 100%.
+  - Identify Columns (product, SMQ s-02/s-03): comboPanelInner was anchored on all sides; at 150% the
+    anchor layout clamped it to 1200 px, clipping columns 9+, and collapsed it after Show unused columns
+    off/on. Anchor now Top, Left (en/ja/zh-Hans resx). Found with a ResizeComboBoxes trace.
+- Merged master (37 commits): OspreySearchDlg conflict with #5011 entrapment resolved keeping
+  `DpiUtil.ScaleToLogical`; scaled #5011's EntrapmentPercentControls.Layout gaps.
+- Verified: solution + TestTutorial + TestPerf build, CodeInspection, inspectcode 423 environmental and
+  0 in the 126 branch .cs files, 8 targeted tests (LiteDropdownList, OspreySearch, BuildLibraryCarafe-
+  Wizard, PasteTransitionList, PasteMolecules, StartPageImportTransitionList, PickChildrenMcpConnector,
+  Insert). All 150% PNGs reverted in pwiz-work3 for Brendan's next full run.
+- Not in this branch: #4951 (shorter screenshot waits) still open with a "Core code inspection" failure.
+- Next: Brendan's second complete 150% run and pass; if clean here and on TeamCity, merge #4602, then
+  PR #4887 (complete high-DPI screenshots). Ideas not on this PR: "No unused columns" hint in an empty
+  Identify Columns grid.
+
 ### 2026-11-16 (evening) - First 150% review batch fixed (b992a0abb8, pushed)
 
 - Brendan's full 150% run (pwiz-work3, SkylineTester): 1 failure, TestTargetedMSMSTutorial - the stick
