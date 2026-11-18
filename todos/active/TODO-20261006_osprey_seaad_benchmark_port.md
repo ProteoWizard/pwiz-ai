@@ -172,6 +172,19 @@ largest first (`ScoringPipeline.cs:169`), and 1% needs 8 of 200 windows at 2 thr
 together, so none moved. Possible fixes: give pass 2 its own share of the calibration segment, and weight coelution
 progress by candidates rather than window count.
 
+**Auto `--parallel-files` over-commits on a large box.** `FileParallelismResolver.ResolveAuto` capped the count at
+`Environment.ProcessorCount` (one file per logical CPU, ignoring `--threads`), so free RAM was the only real limit:
+27 x 2 here, 19 x ~4 on SEA-AD (+6.4% wall vs 4 / 8 by hand, `todos/completed/2026/11/TODO-20261114_osprey_hram_defaults.md`).
+The measured optima: i9 30 threads fastest at 3 files, slower at 4 (`todos/completed/2026/10/TODO-20261005_osprey_per_stage_parallel_files.md`);
+MACS2 72 threads 327 s at 4 files vs 318 s at 8, a plateau (2026-10-06 sweep above). Speed per file, normalized by
+dataset: 10-08 (both 4 x 18) CHS/SEA-AD scoring per file 49.6 / 45.3 = 1.10; now CHS 27 x 2 vs SEA-AD featset-env
+4 x 18 = 120.8 / 92.3 = 1.31, so CHS scoring ran ~20% slower than at SEA-AD's setting. Per-core coelution cost did not
+rise (core-us per candidate ratio 1.86 now vs 2.25 on 10-08): the loss is ~20 idle cores, plus 213 GB vs ~58 GB.
+Fix on `Skyline/work/20261118_osprey_parallel_files_cap` (74c9815ff3, local, off the #4950 branch): auto keeps at
+least `MIN_THREADS_PER_FILE = 8` threads per scoring/re-scoring file (cap `--threads` / 8: MACS2 9, i9 3); caching
+keeps one per core; explicit counts unchanged. 670/670 Debug + inspection clean (ja/zh-Hans strings updated). Needs the
+82-file SEA-AD bare `--parallel-files` A/B against the 2 h 54.6 m hand-tuned run once this CHS run finishes.
+
 ### 2026-10-08 - MACS2 CHS 446 first full run: 9 h 34 m
 
 19:48:45 -> 05:22:52, **9 h 34 m 30 s** (`Total pipeline: 34470.3s`), exit 0, 5,573 protein groups at 1%.
