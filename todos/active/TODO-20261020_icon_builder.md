@@ -338,9 +338,11 @@ Done on the branch:
 - [x] StartPage: mode button positioned by code only, from ClientSize; Open File icon uses
       the Folder vector above 100%; tutorial section headers get the scaled label height
 - [x] FragmentS / FragmentLibS removed (never used); dead `Filter1` twin removed
-- [x] DigitalRune: drawn close X (matches the Windows title bar glyph) and pins above 100%,
-      on `Skyline/work/20261118_caption_button_glyphs` in uw-maccosslab/developers, stacked
-      on the unmerged `Skyline/work/20261116_splitter_autoscale` (the shipped DLL has both)
+- [x] DigitalRune: drawn close X (matches the Windows title bar glyph) and pins above 100%.
+      uw-maccosslab/developers master is now current (2026-11-19): #8, the splitter fix
+      (bcba6cc) and the glyphs (f5d20c1) as linear commits; the branches are deleted. The DLL
+      in #4887 is built from that source. pwiz master's #5047 DLL, built before, had dropped
+      the splitter fix #4602 shipped; #4887 restores it
 - [x] Scripts: Build-DigitalRune.ps1 .NET 10 only, installs into Shared/Lib/DigitalRune/net10;
       new ai/scripts/Skyline/IconBuilder/Run-IconBuilder.ps1
 
