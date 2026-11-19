@@ -107,5 +107,8 @@ all windows in 37 s, so a single producer's 19 s overlaps only if it runs ahead.
 Reading so far: a single analysis needs no `.spectra.bin` - reading the raw file directly costs less than
 building the cache does today (a full read plus a 4.3 GB write). The open question is cohort scale on spinning
 disk: raw is 1.4x the cache's bytes, read up to three times per file, and parallel files' readers compete for
-one disk. Next: (1) metadata-only reads in pwiz-sharp, then re-measure A; (2) a disk read gate like
-`serialBlockReads` for raw reads; (3) the same single-file and 9-file measurements on UW8's SSD.
+one disk. The 9-file case is 9 files' producers, one per file as designed, sharing one disk - not
+parallel readers within a file. Next: (1) metadata-only reads in pwiz-sharp (issue #5059, assigned to Matt,
+with an audit of every reader), then re-measure A; (2) measure whether 9 producers on one spinning disk need
+to take turns across files, as `serialBlockReads` does for cache blocks; (3) the same single-file and
+9-file measurements on UW8's SSD.
