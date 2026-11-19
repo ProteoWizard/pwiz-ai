@@ -136,6 +136,26 @@ runs of `490a4d3825` are the comparisons that mean something.
 - Output: 6,654 protein groups at 1%; FDRBench inputs for both passes written to the run dir.
   Entrapment FDP not yet computed (SEA-AD README harvest tools).
 
+### 2026-11-18 - MACS2 CHS 446 b9bd065862 done (19 h 23 m); re-run launched at 06dece8a60
+
+**b9bd065862 result**: exit 0 at 12:47, `Total pipeline: 69833.3s` (19 h 23 m) against 34,470.3 s on 10-08 (2.03x).
+PerFileScoring 53,873.0 s, FirstPassFDR 9,100.4 s, PerFileRescoring 6,026.6 s, SecondPassFDR 833.1 s (10-08:
+22,105 / 4,660 / 5,265 / 2,424). 83,547 precursors at 1% experiment-level FDR, 6,301 protein groups at 1% (10-08:
+5,573), 83,385 blib spectra. perfviz: private peak 213.1 GB (scoring, 27 x 2), FirstPassFDR 94.3, rescoring 36.0,
+SecondPassFDR 24.7 GB; floors FALLING; 39 gaps >= 30 s (max 287 s at 17:28). Plot
+`ai/.tmp/sessions/20261117-chs/perfviz-chs446-pr5045-final.png`; log copied to the lab share as
+`chs-seer\macs2-pr5045-run.log` for UW8. UW8 (i9, 128 GB) on the same data scored in ~18 h 45 m with a 39.2 GB
+peak and no gap over 30 s, so 27 x 2 on MACS2 bought only ~1.25x over UW8.
+
+**Re-run** at PR #5045 head 06dece8a60 (auto `--parallel-files` cap + scoring-start progress fix), started
+16:04:25; snapshot `_bin\pr5045-06dece8a60` (fresh Release build); launcher
+`ai/.tmp/sessions/20261117-chs/Launch-Chs446-06dece8a60.ps1`, otherwise identical. D: 1,129 GB free at launch
+after deleting the b9bd065862 run's 446 `*.scores.parquet` (507.5 GB). Disk sampled once a minute as the drop in D:
+free space (`Sample-DiskUse.ps1`, `chs-seer\runs\disk-chs446-pr5045-06dece8a60-*.csv`, for `perfviz.py --disk`).
+Osprey chose `File parallelism: 9 (... -> 25 by RAM, capped to 9 by 72 threads at 8+ per file, 446 files)`.
+First 11 min: max log gap 25 s, 0 gaps >= 30 s; first 9 files at 57-72% at 16:15:53, private 56.3 GB and rising.
+Run dir `D:\Users\brendanx\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-default-pr5045-06dece8a60`.
+
 ### 2026-11-17 - MACS2 CHS 446 launched on PR #5045 (the #4950 defaults), run as a user runs it
 
 Brendan: the first CHS run since #4950 work began, as proof the new code still runs it here in reasonable time
