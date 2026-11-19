@@ -156,6 +156,17 @@ Osprey chose `File parallelism: 9 (... -> 25 by RAM, capped to 9 by 72 threads a
 First 11 min: max log gap 25 s, 0 gaps >= 30 s; first 9 files at 57-72% at 16:15:53, private 56.3 GB and rising.
 Run dir `D:\Users\brendanx\test\osprey-runs\chs-seer\runs\chs-446files-libdecoy-r1.0-default-pr5045-06dece8a60`.
 
+2026-11-19 06:00: file ~413 of 446, still PerFileScoring. 0 gaps >= 30 s outside 23:15-02:00. In that window 30 gaps
+(max 140 s), private memory dropped to ~20 GB and disk writes stalled: for files 252-290 `RT calibration` took
+400-1,660 s (normal ~45 s), all of it in the FIRST `Calibration pass 1 scoring` (956-1,647 s) while the retry with
+twice the targets took 6-22 s, and `mzML parsing` reached 73 s (normal 0.6 s). That is the first read of the
+`.spectra.bin` caches from E: - and E:\Users\chrhsu gained 12 raw files (143.4 GB, created 23:00-00:52) in exactly
+that window: another user's large write to E: (the known slow-under-write disk) starved Osprey's cache reads. Not
+an Osprey defect; costs roughly 1 h of wall (~39 files x ~800 s / 9 lanes). Coelution core-seconds per file at
+8 threads are ~6,500-7,000 vs ~6,000 at 2 threads (files 1-300), and 7,900-9,400 for files 301-450 against
+6,000-6,700 on the 27 x 2 run - extra CPU contention after 01:30 not attributed (box CPU was not sampled).
+Plot `ai/.tmp/sessions/20261117-chs/perfviz-chs446-06dece8a60-0600.png`.
+
 ### 2026-11-17 - MACS2 CHS 446 launched on PR #5045 (the #4950 defaults), run as a user runs it
 
 Brendan: the first CHS run since #4950 work began, as proof the new code still runs it here in reasonable time
