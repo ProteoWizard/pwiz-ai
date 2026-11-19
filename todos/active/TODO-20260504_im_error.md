@@ -452,6 +452,25 @@ Plan:
 - [ ] E. Nick #4 (#5 done in e9e34436c8, #6 done in 7d827f1a2f).
 - [x] Reply to Nick's six threads (Brian replied to all six, 2026-10-13).
 
+## IMSFiltering tutorial update (2026-11-18/19, uncommitted in C:\Dev\ObservedIM)
+- Full Scan graph in MS1 view now shows the precursor's observed IM/CCS (same
+  `ObservedIonMobilityCalculator.Calculate` as the Document Grid) plus mobilogram area/height/FWHM;
+  dashed target line and filter follow `MsDataFileScanHelper.DisplayedTransition` (clicked
+  transition if its Source matches the scan type, else the first that does). Red->green in
+  `FullScanGraphTest.TestMs1ShowsPrecursorObservedIonMobility`; precursor golden now 3.377 (-2.89%).
+  TestFullScanGraph, TestFullScanProperties, CodeInspection green after the 2026-11-19 master merge.
+- `DriftTimePredictorTutorialTest`: data moved to `tutorials/IMSFiltering/`, new s-26 (MS1
+  observed-IM tooltip) and s-28 (pivoted "Observed CCS" report); old s-26 is now s-27.
+- **Screenshots in the working tree are NOT usable**: the 2026-11-19 run was over RDP at 125%
+  scaling (log: `Screen ... 1536x864`, `TerminalServerSession=True`), so shots are 1.25x and
+  stretched. Content is right (s-26 shows 24.607 ms / CCS 517.54, both 0.41%, plus metrics).
+  **Next**: rerun `Run-Tests.ps1 -TestName TestDriftTimePredictorTutorial -TakeScreenshots
+  -SourceRoot 'C:\Dev\ObservedIM'` at the physical console (100%, 1920x1200); check the log's
+  Screen line first; keep the desktop clear for the whole run.
+- Then: s-26 heatmap labels `precursor+++` / `[M+1]` / `[M+2]` overlap (cosmetic; adjust zoom or
+  label layout); reword index.html "less than half a row, well under 1%" (actual gap 0.10 ms vs
+  ~0.16 ms rows); resolve the `<!-- TODO: confirm the water replicate statement -->`; ja/zh-CHS.
+
 ## Remaining before merge
 - [x] Push branch; open PR #4301; Copilot rounds + `/pw-respond`; Nick's review addressed
 - [x] `/code-review max` on the branch (2026-09-24/25, fixes in `f1f68ea37c`, `7e3163eecb`)
