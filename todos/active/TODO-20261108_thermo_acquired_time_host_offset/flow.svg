@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1116" height="492" viewBox="0 0 1116 492" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<title>Acquired time on master and on this branch</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#777777"/></marker></defs>
+<rect width="1116" height="492" fill="#ffffff"/>
+<text x="20" y="28" font-size="14" fill="#222222">A Thermo file stores 2025-05-19 15:47:11, acquired in Seattle in PDT. It is imported in Seattle in winter (PST),</text>
+<text x="20" y="48" font-size="14" fill="#222222">then the document is opened and saved in Boston. The acquired time in the document should be the stored 15:47:11.</text>
+<text x="20" y="78" font-size="15" font-weight="bold" fill="#222222">master</text>
+<rect x="20" y="90" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="20" y1="122" x2="216" y2="122" stroke="#cccccc"/>
+<text x="30" y="112" font-size="13" font-weight="bold" fill="#222222">.raw file</text>
+<text x="30" y="144" font-size="13" fill="#555555">instrument clock time</text>
+<text x="30" y="164" font-size="13" fill="#555555">no time zone</text>
+<text x="30" y="226" font-size="18" font-weight="bold" fill="#222222">15:47:11</text>
+<line x1="218" y1="165" x2="238" y2="165" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="240" y="90" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="240" y1="122" x2="436" y2="122" stroke="#cccccc"/>
+<text x="250" y="112" font-size="13" font-weight="bold" fill="#222222">(A) pwiz reader</text>
+<text x="250" y="144" font-size="13" fill="#555555">startTimeStamp =</text>
+<text x="250" y="164" font-size="13" fill="#555555">stored - UTC offset</text>
+<text x="250" y="184" font-size="13" fill="#555555">offset today (PST, -8h)</text>
+<text x="250" y="226" font-size="18" font-weight="bold" fill="#c62828">23:47:11Z</text>
+<line x1="438" y1="165" x2="458" y2="165" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="460" y="90" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="460" y1="122" x2="656" y2="122" stroke="#cccccc"/>
+<text x="470" y="112" font-size="13" font-weight="bold" fill="#222222">(B) RunStartTime</text>
+<text x="470" y="144" font-size="13" fill="#555555">UTC + UTC offset</text>
+<text x="470" y="164" font-size="13" fill="#555555">offset on May 19 (-7h)</text>
+<text x="470" y="184" font-size="13" fill="#555555">Kind=Local</text>
+<text x="470" y="226" font-size="18" font-weight="bold" fill="#c62828">16:47:11</text>
+<line x1="658" y1="165" x2="678" y2="165" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="680" y="90" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="680" y1="122" x2="876" y2="122" stroke="#cccccc"/>
+<text x="690" y="112" font-size="13" font-weight="bold" fill="#222222">(C)(D) .skyd</text>
+<text x="690" y="144" font-size="13" fill="#555555">stores a UTC moment</text>
+<text x="690" y="164" font-size="13" fill="#555555">opened in Boston:</text>
+<text x="690" y="184" font-size="13" fill="#555555">converted to EDT (-4h)</text>
+<text x="690" y="226" font-size="18" font-weight="bold" fill="#c62828">19:47:11</text>
+<line x1="878" y1="165" x2="898" y2="165" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="900" y="90" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="900" y1="122" x2="1096" y2="122" stroke="#cccccc"/>
+<text x="910" y="112" font-size="13" font-weight="bold" fill="#222222">(E) .sky</text>
+<text x="910" y="144" font-size="13" fill="#555555">saved in Boston</text>
+<text x="910" y="164" font-size="13" fill="#555555">acquired_time,</text>
+<text x="910" y="184" font-size="13" fill="#555555">no offset</text>
+<text x="910" y="226" font-size="18" font-weight="bold" fill="#c62828">19:47:11</text>
+<text x="20" y="278" font-size="15" font-weight="bold" fill="#222222">this branch</text>
+<rect x="20" y="290" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="20" y1="322" x2="216" y2="322" stroke="#cccccc"/>
+<text x="30" y="312" font-size="13" font-weight="bold" fill="#222222">.raw file</text>
+<text x="30" y="344" font-size="13" fill="#555555">instrument clock time</text>
+<text x="30" y="364" font-size="13" fill="#555555">no time zone</text>
+<text x="30" y="426" font-size="18" font-weight="bold" fill="#222222">15:47:11</text>
+<line x1="218" y1="365" x2="238" y2="365" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="240" y="290" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="240" y1="322" x2="436" y2="322" stroke="#cccccc"/>
+<text x="250" y="312" font-size="13" font-weight="bold" fill="#222222">(A) pwiz reader</text>
+<text x="250" y="344" font-size="13" fill="#555555">startTimeStamp =</text>
+<text x="250" y="364" font-size="13" fill="#555555">stored - UTC offset</text>
+<text x="250" y="384" font-size="13" fill="#555555">offset on May 19 (PDT, -7h)</text>
+<text x="250" y="426" font-size="18" font-weight="bold" fill="#2e7d32">22:47:11Z</text>
+<line x1="438" y1="365" x2="458" y2="365" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="460" y="290" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="460" y1="322" x2="656" y2="322" stroke="#cccccc"/>
+<text x="470" y="312" font-size="13" font-weight="bold" fill="#222222">(B) RunStartTime</text>
+<text x="470" y="344" font-size="13" fill="#555555">UTC + UTC offset</text>
+<text x="470" y="364" font-size="13" fill="#555555">offset on May 19 (-7h)</text>
+<text x="470" y="384" font-size="13" fill="#555555">Kind=Unspecified</text>
+<text x="470" y="426" font-size="18" font-weight="bold" fill="#2e7d32">15:47:11</text>
+<line x1="658" y1="365" x2="678" y2="365" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="680" y="290" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="680" y1="322" x2="876" y2="322" stroke="#cccccc"/>
+<text x="690" y="312" font-size="13" font-weight="bold" fill="#222222">(C)(D) .skyd</text>
+<text x="690" y="344" font-size="13" fill="#555555">stores the clock time</text>
+<text x="690" y="364" font-size="13" fill="#555555">opened in Boston:</text>
+<text x="690" y="384" font-size="13" fill="#555555">returned unchanged</text>
+<text x="690" y="426" font-size="18" font-weight="bold" fill="#2e7d32">15:47:11</text>
+<line x1="878" y1="365" x2="898" y2="365" stroke="#777777" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="900" y="290" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
+<line x1="900" y1="322" x2="1096" y2="322" stroke="#cccccc"/>
+<text x="910" y="312" font-size="13" font-weight="bold" fill="#222222">(E) .sky</text>
+<text x="910" y="344" font-size="13" fill="#555555">saved in Boston</text>
+<text x="910" y="364" font-size="13" fill="#555555">acquired_time,</text>
+<text x="910" y="384" font-size="13" fill="#555555">no offset</text>
+<text x="910" y="426" font-size="18" font-weight="bold" fill="#2e7d32">15:47:11</text>
+<text x="20" y="462" font-size="13" fill="#c62828">Red: differs from the stored 15:47:11, or uses the wrong offset.</text>
+<text x="20" y="480" font-size="13" fill="#2e7d32">Green: the value this branch produces, the stored 15:47:11 or its UTC on the acquisition date.</text>
+</svg>
