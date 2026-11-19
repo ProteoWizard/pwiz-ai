@@ -196,7 +196,6 @@ no use outside spectrum filters):
   hiding by ONTOLOGY (a fixed property of the term), not by document context, which Brian rejected for the
   dropdown - but confirm with him before implementing; a cue may be preferable to a hide. userParams have
   no ontology entry, so this can only apply to catalog terms.
-- **Autocomplete** of CV filter values (SpectrumFilterAutoComplete): include CV columns. Deferred (nicety).
 - Editing an existing CV filter whose accession isn't in the catalog nor discovered still drops the row
   in the editor (pre-existing unknown-column behavior) - minor.
 
@@ -207,6 +206,18 @@ no use outside spectrum filters):
   its live-read path would need the capture the extraction path already does.)
 
 ## Progress Log
+
+### 2026-11-19 - Autocomplete of CV filter values
+Brian asked for it (it had been deferred as a nicety). The editor's value box now suggests values for a
+CV column, from two sources: the terms stored in the .skyd (all spectra; only present when the document
+already filtered on a CV term at import), and the head-of-file read `SpectrumColumnScanner` already does
+for the styling, which now keeps the distinct values per accession rather than only the accession
+(`GetDistinctOtherParams` now returns one entry per accession *and value*; still capped at the first 100
+spectra). Stored values take precedence. CV values are text even for a numeric column, so they are read
+from the terms directly rather than through `SpectrumMetadataList`'s typed column arrays (which would
+throw putting a string into a `double[]`). The Transition Settings editor does not run the scanner, so it
+suggests stored values only. `TestCvSpectrumFilter` covers both sources (FAIMS filter strings with
+cv=-50 and cv=-70 offered). Merged master on 2026-11-18 (CV.cs conflict, ValueType re-applied).
 
 ### 2026-08-11 - Declared operators replaced by absent-means-blank (commit `89548ee77`, pushed)
 
