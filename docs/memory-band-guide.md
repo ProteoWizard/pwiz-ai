@@ -46,6 +46,7 @@ Two readers over the same log. Use both; they answer different questions.
 ```
 python ai/scripts/perfviz.py run.log --files 20 --png run.png
 python ai/scripts/perfviz.py run.log --png run.png --disk disk.csv   # + disk use
+python ai/scripts/perfviz.py run.log --html run.html --disk disk.csv # interactive, one file
 python ai/scripts/perfviz.py before.log after.log       # A/B two runs
 python ai/scripts/phase_mem_shape.py run.log            # per-phase shape + verdict
 ```
@@ -88,7 +89,12 @@ the plot was skipped.
 The PNG exists so a plot can be handed to a person directly, rather than asking them to
 find the log and paste it into `perfviz.html`. Both draw two panes on one time axis:
 resources above (managed and private memory, and disk on its own axis when given), the gap
-between log lines below with the 30 s threshold drawn, and `[TASK]` boundaries on both. The
+between log lines below with the 30 s threshold drawn, and `[TASK]` boundaries on both, each
+labelled with the stage's duration. The time axis is elapsed time from 0:00:00 (`--wall-clock`
+on the PNG, or the page's toggle, for the log's clock), so runs that started at different
+times read on one scale, and the title or page summary gives the total. `--html` writes the
+page with the run embedded - fly-over tips give the elapsed and wall-clock time, the stage
+with time into it and its total, and the log line. The
 gaps used to share the memory chart on a second axis; at cohort scale (tens of thousands of
 samples) that trace hid the memory lines entirely. For deciding anything, read the numbers -
 they are less lossy than a picture, and they are what a CI check can assert on.

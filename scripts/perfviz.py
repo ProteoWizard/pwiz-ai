@@ -41,6 +41,7 @@ Usage:
     python perfviz.py run.log
     python perfviz.py run.log --png run.png --gap-threshold 30
     python perfviz.py run.log --png run.png --disk disk.csv
+    python perfviz.py run.log --html run.html --disk disk.csv   # interactive, one file
     python perfviz.py a.log b.log          # compare two runs
 """
 
@@ -332,7 +333,13 @@ def summarize_disk(disk):
         peak, peak_t.strftime('%H:%M:%S'), disk[-1][1], len(disk)))
 
 
-def plot(path, samples, out, threshold=30.0, disk=None):
+def format_elapsed(sec):
+    """h:mm:ss with unbounded hours, so a 28 h run reads 28:08:40."""
+    sec = int(round(sec))
+    return '%d:%02d:%02d' % (sec // 3600, sec % 3600 // 60, sec % 60)
+
+
+def plot(path, samples, out, threshold=30.0, disk=None, wall_clock=False):
     """Render the run as two panes sharing one time axis, so a PNG can be handed
     straight to a person instead of asking them to locate the log and paste it
     into the page (perfviz.html draws the same panes):
@@ -344,7 +351,12 @@ def plot(path, samples, out, threshold=30.0, disk=None):
     The gaps used to share the memory pane on a second axis. At cohort scale - tens
     of thousands of samples - that trace covered the memory lines entirely, and the
     gaps answer a different question anyway (is the run still observable?), so they
-    get their own pane. [TASK] boundaries are marked on both.
+    get their own pane. [TASK] boundaries are marked on both, each labelled with
+    the stage's duration, and the title carries the run's total.
+
+    The time axis is ELAPSED time from 0:00:00 by default: what a reader wants from
+    it is how long things took, and two runs read on the same scale whenever they
+    started. wall_clock=True keeps the log's clock time instead.
 
     matplotlib is imported HERE, not at module scope, so the numeric summary -
     which is what actually decides anything - keeps working on a machine with
@@ -355,18 +367,27 @@ def plot(path, samples, out, threshold=30.0, disk=None):
         matplotlib.use('Agg')                     # no display on a build agent
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
+        import matplotlib.ticker as mticker
     except ImportError:
         print('png           : skipped, matplotlib not installed'
               ' (pip install matplotlib). Text summary above is unaffected.')
         return
 
-    ts = [s.t for s in samples]
+    t0 = samples[0].t
+    if wall_clock:
+        def when(t):
+            return t
+    else:
+        def when(t):
+            return (t - t0).total_seconds()
+    ts = [when(s.t) for s in samples]
     managed = [s.managed / 1024.0 for s in samples]
     total = [s.total / 1024.0 for s in samples]
     # Time gap belongs to the interval ENDING at each sample; the first has none.
     gapx = ts[1:]
     gapy = [(samples[i].t - samples[i - 1].t).total_seconds()
             for i in range(1, len(samples))]
+    duration = (samples[-1].t - t0).total_seconds()
 
     fig, (ax, axg) = plt.subplots(2, 1, figsize=(16, 8.5), sharex=True,
                                   gridspec_kw={'height_ratios': [3, 1]})
@@ -379,7 +400,7 @@ def plot(path, samples, out, threshold=30.0, disk=None):
     handles, labels = ax.get_legend_handles_labels()
     if disk:
         axd = ax.twinx()
-        axd.plot([d[0] for d in disk], [d[1] for d in disk], color='#d62728', lw=2.0,
+        axd.plot([when(d[0]) for d in disk], [d[1] for d in disk], color='#d62728', lw=2.0,
                  label='Disk (GB)')
         axd.set_ylabel('Disk (GB)', color='#d62728')
         axd.tick_params(axis='y', colors='#d62728')
@@ -388,25 +409,42 @@ def plot(path, samples, out, threshold=30.0, disk=None):
         handles += h
         labels += l
     # Below the [TASK] labels that run along the top of the pane.
-    ax.legend(handles, labels, loc='upper left', bbox_to_anchor=(0.005, 0.93), fontsize=9)
+    ax.legend(handles, labels, loc='upper left', bbox_to_anchor=(0.005, 0.88), fontsize=9)
 
     axg.vlines(gapx, 0, gapy, color='#1f77b4', lw=0.8)
     axg.axhline(threshold, color='#d62728', lw=1, ls=':')
     axg.set_ylabel('Log gap (sec)')
     axg.set_ylim(bottom=0, top=max(max(gapy), threshold) * 1.1)
     axg.grid(True, alpha=0.25, lw=0.5)
-    axg.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+    if wall_clock:
+        axg.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+        fig.autofmt_xdate()
+    else:
+        # Ticks at a round step - a minute up to hours - so about ten fit the run.
+        step = next((s for s in (60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 14400,
+                                 21600, 43200) if duration / s <= 12), 86400)
+        axg.xaxis.set_major_locator(mticker.MultipleLocator(step))
+        axg.xaxis.set_major_formatter(mticker.FuncFormatter(
+            lambda x, _: format_elapsed(x) if x >= 0 else ''))
+        axg.set_xlim(0, duration)
+        axg.set_xlabel('elapsed (h:mm:ss)')
 
     top = ax.get_ylim()[1]
-    for i, name in ((i, m.group(1)) for i, s in enumerate(samples)
-                    for m in [TASK_RE.search(s.msg)] if m and m.group(2) == 'starting'):
+    for name, i, j in phases(samples):
+        start = samples[i].t
+        # A stage runs to the next stage's start, or the end of the log.
+        end = samples[j + 1].t if j + 1 < len(samples) else samples[j].t
         for a in (ax, axg):
-            a.axvline(samples[i].t, color='#999999', lw=0.8, ls='--')
-        ax.text(samples[i].t, top * 0.98, ' ' + name, fontsize=9, va='top', color='#555555')
-    fig.autofmt_xdate()
+            a.axvline(when(start), color='#999999', lw=0.8, ls='--')
+        # A stage starting near the end is labelled to the left of its line, or the
+        # label runs off the plot.
+        near_end = (start - t0).total_seconds() > 0.85 * duration
+        ax.text(when(start), top * 0.98, '%s\n%s' % (name, format_elapsed((end - start).total_seconds())),
+                fontsize=9, va='top', color='#555555', ha='right' if near_end else 'left')
 
-    title = '%s   -   peak %.1f GB, max gap %.0fs, %d samples' % (
-        os.path.basename(path), max(max(managed), max(total)), max(gapy), len(samples))
+    title = '%s   -   total %s, peak %.1f GB, max gap %.0fs, %d samples' % (
+        os.path.basename(path), format_elapsed(duration), max(max(managed), max(total)),
+        max(gapy), len(samples))
     if disk:
         title += ', disk peak %.0f GB' % max(d[1] for d in disk)
     ax.set_title(title)
@@ -414,6 +452,38 @@ def plot(path, samples, out, threshold=30.0, disk=None):
     fig.savefig(out, dpi=110)
     plt.close(fig)
     print('png           : %s' % out)
+
+
+def write_html(path, out, disk_path=None):
+    """Write perfviz.html with this run's log (and disk CSV) embedded, so the
+    interactive view - fly-over tips, zoom, the elapsed/wall-clock toggle - can be
+    handed to a person as one file instead of a log they must find and paste.
+
+    The page is the template beside this script with the data injected at its
+    PERFVIZ_DATA marker, so there is one renderer, not two that drift. It still loads
+    jQuery, d3 and c3 from their CDNs, so it needs a network connection to draw."""
+    import json
+    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'perfviz.html')
+    with open(template_path, 'r', encoding='utf-8') as fh:
+        template = fh.read()
+    marker = '<!--PERFVIZ_DATA-->'
+    if marker not in template:
+        print('html          : skipped, %s has no %s marker' % (template_path, marker))
+        return
+    with open(path, 'r', encoding='utf-8', errors='replace') as fh:
+        log_text = fh.read()
+    disk_text = ''
+    if disk_path:
+        with open(disk_path, 'r', encoding='utf-8-sig') as fh:
+            disk_text = fh.read()
+    data = {'name': os.path.basename(os.path.dirname(os.path.abspath(path))) + os.sep +
+                    os.path.basename(path),
+            'log': log_text, 'disk': disk_text}
+    # '</' would close the script element early if a log line contained '</script>'.
+    payload = json.dumps(data).replace('</', '<\\/')
+    with open(out, 'w', encoding='utf-8') as fh:
+        fh.write(template.replace(marker, '<script>window.PERFVIZ_DATA = %s;</script>' % payload))
+    print('html          : %s' % out)
 
 
 def compare(path_a, path_b, force, every_min=10):
@@ -509,6 +579,10 @@ def main():
     ap.add_argument('--gap-threshold', type=float, default=30.0,
                     help='report gaps at least this many seconds (default 30)')
     ap.add_argument('--png', help='also write a PNG (single log only)')
+    ap.add_argument('--html', help='also write perfviz.html with this log (and --disk) '
+                                   'embedded: the interactive view as one file (single log only)')
+    ap.add_argument('--wall-clock', action='store_true',
+                    help='label the PNG time axis with the log clock instead of elapsed time')
     ap.add_argument('--disk', metavar='CSV',
                     help='disk-use samples to summarize and plot (single log only): a CSV '
                          'with a time column first and a dir_gb column. A stopgap until '
@@ -533,10 +607,13 @@ def main():
         if a.disk and len(a.logs) == 1:
             disk = parse_disk(a.disk)
             summarize_disk(disk)
-        if a.png and len(a.logs) == 1:
+        if (a.png or a.html) and len(a.logs) == 1:
             s, failed, _ = parse(p)
             if len(s) >= 2 and (not failed or a.force):
-                plot(p, s, a.png, a.gap_threshold, disk)
+                if a.png:
+                    plot(p, s, a.png, a.gap_threshold, disk, a.wall_clock)
+                if a.html:
+                    write_html(p, a.html, a.disk)
     if len(a.logs) == 2 and all(os.path.exists(p) for p in a.logs):
         rc |= compare(a.logs[0], a.logs[1], a.force, a.every)
     return rc

@@ -1,197 +1,361 @@
+<!DOCTYPE html>
 <!-- Code by Yuval Boss yuval(at)uw.edu -->
 <!-- Enhanced 2026-07: Time Diff moved to its own secondary y-axis (in seconds) so a large
      time gap no longer flattens the memory scale; memory (MB) and time-gap (sec) axes labeled. -->
 <!-- Enhanced 2026-11: two panes on one time axis, as perfviz.py --png draws them - memory
-     (and disk, from an optional pasted CSV) above, the log gap between lines below. At cohort
-     scale the gap trace on the memory chart's second axis hid the memory lines entirely.
-     Zooming either pane zooms both. -->
+     (and disk, from an optional pasted CSV) above, the log gap between lines below; zooming
+     either pane zooms both. The time axis reads as elapsed time from 0:00:00 by default, with a
+     toggle back to the log's wall clock; a summary gives the total and each [TASK] stage's
+     duration, and the fly-over tip gives elapsed time, wall clock, the stage and how far into
+     it, and the log line. perfviz.py --html writes this page with a run's data embedded. -->
 <html>
 <head>
+	<meta charset="utf-8">
+	<title>perfviz</title>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
 	<link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.css">
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.min.js"></script>
+	<!--PERFVIZ_DATA-->
 <script type="text/javascript">
+	var GAP_THRESHOLD = 30;
+
 	function isBlank(str) {
 	    return (!str || /^\s*$/.test(str));
 	}
-	// Disk samples pasted as CSV: a header row, the time (yyyy-MM-dd HH:mm:ss) first and a
-	// dir_gb column (run directory size in GB) - what the Osprey disk sampler writes. A stopgap
+	function escapeHtml(s) {
+		return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	}
+	function pad2(n) {
+		return (n < 10 ? '0' : '') + n;
+	}
+	// Elapsed seconds as h:mm:ss, with hours unbounded so a 28 h run reads 28:08:40.
+	function formatElapsed(sec) {
+		sec = Math.max(0, Math.round(sec));
+		return Math.floor(sec / 3600) + ':' + pad2(Math.floor(sec % 3600 / 60)) + ':' + pad2(sec % 60);
+	}
+	function formatClock(ms) {
+		var d = new Date(ms);
+		return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+	}
+	function parseLogDate(s) {
+		// yyyy/MM/dd HH:mm:ss, local time.
+		var m = s.match(/^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+		if (!m)
+			return new Date(s).getTime();
+		return new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+	}
+
+	// One sample per log line: x is elapsed seconds since the first line, kept strictly
+	// increasing (the log is second-resolution, so same-second lines get 1 ms apart) and the
+	// gap is the true second gap to the previous line.
+	function parseLog(text) {
+		var lines = text.split("\n");
+		var hasMemStamps = false;
+		// Detect memstamp format from ANY bracketed line with tab-delimited columns, so a log
+		// that begins with non-memstamp preamble (e.g. a launcher banner) still charts memory.
+		for (var s = 0; s < lines.length; s++) {
+			var ps = lines[s].match(/^\[(.*?)\](.*)/);
+			if (ps && ps[2].split('\t').length > 2) { hasMemStamps = true; break; }
+		}
+		var samples = [];
+		var t0 = null, lastMs = null, lastX = -1;
+		for (var i = 0; i < lines.length; i++) {
+			var line = lines[i];
+			if (isBlank(line))
+				continue;
+			var parsed = line.match(/^\[(.*?)\](.*)/);
+			if (parsed == null)
+				continue;
+			var items = parsed[2].split('\t');
+			// With memstamps, skip lines carrying no memory columns (preamble / interstitial).
+			if (hasMemStamps && items.length <= 2)
+				continue;
+			var ms = parseLogDate(parsed[1]);
+			if (isNaN(ms))
+				continue;
+			if (t0 == null)
+				t0 = ms;
+			var x = (ms - t0) / 1000;
+			if (x <= lastX)
+				x = lastX + 0.001;
+			samples.push({
+				x: x, ms: ms,
+				gap: lastMs == null ? 0 : (ms - lastMs) / 1000,
+				managed: hasMemStamps ? +items[1] / 1024 : null,
+				total: hasMemStamps ? +items[2] / 1024 : null,
+				msg: hasMemStamps ? (items.length > 3 ? items.slice(3).join('\t') : '') : parsed[2].substring(1)
+			});
+			lastMs = ms;
+			lastX = x;
+		}
+		// [TASK] stages, each running to the next stage's start or the end of the log.
+		var phases = [];
+		for (var k = 0; k < samples.length; k++) {
+			var tm = samples[k].msg.match(/\[TASK\] (\w+):starting/);
+			if (tm)
+				phases.push({ name: tm[1], start: samples[k].x });
+		}
+		var end = samples.length ? samples[samples.length - 1].x : 0;
+		for (var p = 0; p < phases.length; p++)
+			phases[p].end = p + 1 < phases.length ? phases[p + 1].start : end;
+		return { samples: samples, phases: phases, hasMemStamps: hasMemStamps, t0: t0, end: end };
+	}
+
+	// Disk samples as CSV: a header row, the time (yyyy-MM-dd HH:mm:ss) first and a dir_gb
+	// column (run directory size in GB) - what ai/scripts/Sample-RunDisk.ps1 writes. A stopgap
 	// until disk use is stamped into the log beside the memory columns.
-	function parseDisk(text) {
-		var xs = ['xdisk'], gb = ['Disk (GB)'];
-		var lines = text.split("\n").filter(function (l) { return !isBlank(l); });
-		if (lines.length < 2)
+	function parseDisk(text, t0) {
+		if (isBlank(text) || t0 == null)
 			return null;
+		var lines = text.split("\n").filter(function (l) { return !isBlank(l); });
 		var header = lines[0].split(',').map(function (h) { return h.trim(); });
 		var col = header.indexOf('dir_gb');
 		if (col < 0) {
 			console.log("ERROR: disk CSV has no dir_gb column");
 			return null;
 		}
+		var xs = ['xdisk'], gb = ['Disk (GB)'];
 		for (var i = 1; i < lines.length; i++) {
 			var parts = lines[i].split(',');
-			var t = new Date(parts[0].trim().replace(' ', 'T')).getTime();
-			if (isNaN(t) || parts.length <= col)
+			var ms = new Date(parts[0].trim().replace(' ', 'T')).getTime();
+			if (isNaN(ms) || parts.length <= col)
 				continue;
-			xs.push(t);
+			xs.push((ms - t0) / 1000);
 			gb.push(parseFloat(parts[col]));
 		}
 		return xs.length > 1 ? { xs: xs, gb: gb } : null;
 	}
-	var messages = {};
-	$( document ).ready(function() {
-	    $( "#loginput" ).submit(function( event ) {
-	  		event.preventDefault();
-	  		var logLines = $('#logtext').val().split("\n");
-            var hasMemStamps = false;
-	  		if($('#logtext').val().length == 0 || logLines.length == 0) {
-	  			console.log("ERROR: No log given")
-	  			return;
-	  		}
-	  		var dates = ['x'];
-	  		var difference = ['Time Diff'];
-	  		var managedMems = ['Managed Memory'];
-	  		var totalMems = ['Total Memory'];
-	  		// Detect memstamp format from ANY bracketed line with tab-delimited columns, so a log
-	  		// that begins with non-memstamp preamble (e.g. a launcher banner) still charts memory.
-	  		for(var s = 0; s < logLines.length; s++) {
-	  			var ps = logLines[s].match(/\[(.*?)\](.*)/);
-	  			if (ps && ps[2].split('\t').length > 2) { hasMemStamps = true; break; }
-	  		}
-	  		var dateBefore;
-	  		var lastTime = 0; // strictly-increasing x tiebreak so same-second lines don't collapse
-	  		for(var i = 0; i < logLines.length; i++) {
-	  			var line = logLines[i];
-	  			if(isBlank(line))
-	  				continue;
-	  			var parsed = line.match(/\[(.*?)\](.*)/);
-	  			if (parsed == null || parsed.length < 2) {
-	  				console.log(parsed + "NOT VALID")
-	  				continue;
-	  			}
-	  			var date = parsed[1];
-	  			var text = parsed[2];
-	  			var items = text.split('\t');
-	  			// With memstamps, skip lines carrying no memory columns (preamble / interstitial).
-	  			if(hasMemStamps && items.length <= 2)
-	  				continue;
-	  			if(dateBefore == null) {
-	  				dateBefore = date;
-	  				continue;
-	  			}
-	  			var message = "";
-	  			var avgMem = 0;
-	  			var totalMem = 0;
-                if (hasMemStamps) {
-	  			    avgMem = items[1];
-	  			    totalMem = items[2];
-    	  			if(items.length>3)
-	      				message = items[3];
-                }
-                else {
-                    message = text.substring(1);
-                }
-	  			var diff = (new Date(date).getTime() - new Date(dateBefore).getTime())/1000; // time gap in seconds (its own pane)
-	  			// Keep x strictly increasing: the log is second-resolution, so multiple events in
-	  			// one second (e.g. 84 per-file result lines at the same timestamp) would collapse
-	  			// onto one x and drop points. Bump 1ms per duplicate; Time Diff above still uses the
-	  			// true second gap (0 for same-second lines).
-	  			var t = new Date(date).getTime();
-	  			if (t <= lastTime) t = lastTime + 1;
-	  			lastTime = t;
-	  			difference.push(diff);
-	  			dates.push(t);
-	  			managedMems.push(avgMem);
-	  			totalMems.push(totalMem);
-	  			messages[t] = (message);
-	  			dateBefore = date;
-	  		}
 
-            var disk = parseDisk($('#disktext').val());
-            var height = Math.max(400, window.innerHeight - 300); // fill the viewport below the inputs
-            // A fixed tick count: left to itself c3 draws a tick per sample, a solid band at
-            // cohort scale.
-            var xTick = { type: 'timeseries', tick: { format: '%H:%M:%S', count: 12 } };
-            // The same fixed padding on both panes, so their plot areas - and time axes - line
-            // up whatever width each pane's axis labels need.
-            var padding = { left: 70, right: 70 };
-            var title = function (d) {
-                var str = d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds();
-                var msg = messages[d.getTime()];
-                return msg === undefined ? str : str + " - " + msg;
-            };
-            var gapChart;
-            var syncing = false;
-            // Zooming one pane zooms the other, so the gap under a memory spike stays in view.
-            function syncZoom(other) {
-                return function (domain) {
-                    if (syncing || !other())
-                        return;
-                    syncing = true;
-                    other().zoom(domain);
-                    syncing = false;
-                };
-            }
+	// Tick positions at a round step - a minute up to hours - so about ten fit the span.
+	function tickValues(end) {
+		var steps = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 14400, 21600, 43200, 86400];
+		var step = steps[steps.length - 1];
+		for (var i = 0; i < steps.length; i++) {
+			if (end / steps[i] <= 12) { step = steps[i]; break; }
+		}
+		var v = [];
+		for (var t = 0; t <= end; t += step)
+			v.push(t);
+		return v;
+	}
 
-            // Top pane: memory, and disk on y2 when a disk CSV was pasted. Without memstamps
-            // there is nothing to draw here, so the gap pane is the whole chart.
-            var memChart = null;
-            if (hasMemStamps) {
-                var cols = [ dates, managedMems, totalMems ];
-                var xsMap = { 'Managed Memory': 'x', 'Total Memory': 'x' };
-                var axes = {};
-                if (disk) {
-                    cols.push(disk.xs, disk.gb);
-                    xsMap['Disk (GB)'] = 'xdisk';
-                    axes['Disk (GB)'] = 'y2';
-                }
-                memChart = c3.generate({
-                    bindto: '#chart',
-                    data: { xs: xsMap, columns: cols, axes: axes,
-                            colors: { 'Managed Memory': '#ff7f0e', 'Total Memory': '#2ca02c', 'Disk (GB)': '#d62728' } },
-                    point: { show: false },
-                    padding: padding,
-                    size: { height: Math.round(height * 0.72) },
-                    zoom: { enabled: true, onzoom: syncZoom(function () { return gapChart; }) },
-                    axis: {
-                        x: xTick,
-                        y: { label: { text: 'Memory (MB)', position: 'outer-middle' } },
-                        y2: { show: !!disk, label: { text: 'Disk (GB)', position: 'outer-middle' } }
-                    },
-                    tooltip: { format: { title: title,
-                        value: function (value, ratio, id) { return id == 'Disk (GB)' ? value + "gb" : value + "mb"; } } }
-                });
-            }
-            // Bottom pane: the gap between log lines, with the 30 s threshold perfviz.py flags.
-            gapChart = c3.generate({
-                bindto: '#gapchart',
-                data: { x: 'x', columns: [ dates, difference ], colors: { 'Time Diff': '#1f77b4' } },
-                point: { show: false },
-                padding: padding,
-                size: { height: hasMemStamps ? Math.round(height * 0.28) : height },
-                zoom: { enabled: true, onzoom: syncZoom(function () { return memChart; }) },
-                grid: { y: { lines: [ { value: 30, text: '30 s', class: 'gap-threshold' } ] } },
-                axis: {
-                    x: xTick,
-                    y: { min: 0, padding: { bottom: 0 }, label: { text: 'Time gap (sec)', position: 'outer-middle' } }
-                },
-                tooltip: { format: { title: title, value: function (value) { return value + "sec"; } } }
-            });
+	function phaseAt(run, x) {
+		for (var p = run.phases.length - 1; p >= 0; p--) {
+			if (x >= run.phases[p].start)
+				return run.phases[p];
+		}
+		return null;
+	}
+
+	function summaryHtml(run, disk, name) {
+		var s = run.samples;
+		var maxGap = 0, nOver = 0, peak = 0;
+		for (var i = 0; i < s.length; i++) {
+			maxGap = Math.max(maxGap, s[i].gap);
+			if (s[i].gap >= GAP_THRESHOLD)
+				nOver++;
+			if (run.hasMemStamps)
+				peak = Math.max(peak, s[i].total, s[i].managed);
+		}
+		var html = '<b>' + escapeHtml(name || 'run.log') + '</b> &nbsp; total <b>' + formatElapsed(run.end) +
+			'</b> (' + formatClock(run.t0) + ' &rarr; ' + formatClock(run.t0 + run.end * 1000) + ')';
+		if (run.hasMemStamps)
+			html += ' &nbsp; peak <b>' + peak.toFixed(1) + ' GB</b>';
+		html += ' &nbsp; max gap <b>' + Math.round(maxGap) + ' s</b>, ' + nOver + ' gap(s) &ge; ' + GAP_THRESHOLD + ' s';
+		if (disk) {
+			var dmax = Math.max.apply(null, disk.gb.slice(1));
+			html += ' &nbsp; disk peak <b>' + dmax.toFixed(0) + ' GB</b>';
+		}
+		if (run.phases.length) {
+			html += '<table class="phases"><tr><th>stage</th><th>starts at</th><th>duration</th><th>share</th></tr>';
+			run.phases.forEach(function (p) {
+				var d = p.end - p.start;
+				html += '<tr><td>' + escapeHtml(p.name) + '</td><td>' + formatElapsed(p.start) + '</td><td><b>' +
+					formatElapsed(d) + '</b></td><td>' + (run.end > 0 ? (100 * d / run.end).toFixed(1) : '0') + '%</td></tr>';
+			});
+			html += '</table>';
+		}
+		return html;
+	}
+
+	var current = null;     // { run, disk, name } - kept so the time-axis toggle can redraw
+
+	function render(logText, diskText, name) {
+		var run = parseLog(logText);
+		if (run.samples.length < 2) {
+			$('#summary').text('No timestamped lines found. Was the run given --timestamp (and --memstamp)?');
+			return;
+		}
+		current = { run: run, disk: parseDisk(diskText, run.t0), name: name };
+		draw();
+	}
+
+	function draw() {
+		if (!current)
+			return;
+		var run = current.run, disk = current.disk;
+		var wall = $('#axis-wall').is(':checked');
+		$('#summary').html(summaryHtml(run, disk, current.name));
+
+		var s = run.samples;
+		var xs = ['x'], gaps = ['Time gap'], managed = ['Managed memory'], total = ['Private memory'];
+		var byX = {};
+		for (var i = 0; i < s.length; i++) {
+			xs.push(s[i].x);
+			gaps.push(s[i].gap);
+			managed.push(s[i].managed);
+			total.push(s[i].total);
+			byX[s[i].x] = s[i];
+		}
+		var fmtTick = function (x) {
+			return wall ? formatClock(run.t0 + x * 1000) : formatElapsed(x);
+		};
+		var xAxis = { type: 'indexed', min: 0, max: run.end, padding: { left: 0, right: 0 },
+		              tick: { values: tickValues(run.end), format: fmtTick, outer: false } };
+		// The same fixed padding on both panes, so their plot areas - and time axes - line up
+		// whatever width each pane's axis labels need.
+		var padding = { left: 70, right: 70 };
+		var phaseLines = run.phases.map(function (p) {
+			return { value: p.start, text: p.name + ' ' + formatElapsed(p.end - p.start) };
 		});
+		// The fly-over: elapsed and wall-clock time, the stage and how far into it, the log line.
+		var tipHeader = function (x) {
+			var sample = byX[x];
+			var p = phaseAt(run, x);
+			var t = '<div class="tip-time">' + formatElapsed(x) + ' elapsed &nbsp; ' + formatClock(run.t0 + x * 1000) + '</div>';
+			if (p) {
+				t += '<div class="tip-phase">' + escapeHtml(p.name) + ': ' + formatElapsed(x - p.start) +
+					' of ' + formatElapsed(p.end - p.start) + '</div>';
+			}
+			if (sample && sample.msg)
+				t += '<div class="tip-msg">' + escapeHtml(sample.msg.length > 160 ? sample.msg.substring(0, 160) + '...' : sample.msg) + '</div>';
+			return t;
+		};
+		// c3 0.4 escapes a tooltip TITLE, so the header is built here through the contents
+		// hook, which takes HTML. Each row is one series' value at the hovered x.
+		var tipContents = function (formatValue) {
+			return function (d, defaultTitleFormat, defaultValueFormat, color) {
+				var rows = d.filter(function (p) { return p && p.value != null; });
+				if (!rows.length)
+					return '';
+				var html = '<table class="c3-tooltip"><tr><th colspan="2">' + tipHeader(rows[0].x) + '</th></tr>';
+				rows.forEach(function (p) {
+					html += '<tr><td class="name"><span style="background-color:' + color(p.id) + '"></span>' +
+						escapeHtml(p.name) + '</td><td class="value">' + formatValue(p.value) + '</td></tr>';
+				});
+				return html + '</table>';
+			};
+		};
+		var memChart = null, gapChart = null, syncing = false;
+		// Zooming one pane zooms the other, so the gap under a memory spike stays in view.
+		function syncZoom(other) {
+			return function (domain) {
+				if (syncing || !other())
+					return;
+				syncing = true;
+				other().zoom(domain);
+				syncing = false;
+			};
+		}
+		var height = Math.max(400, window.innerHeight - 330);
+
+		if (run.hasMemStamps) {
+			var cols = [ xs, managed, total ];
+			var xsMap = { 'Managed memory': 'x', 'Private memory': 'x' };
+			var axes = {};
+			if (disk) {
+				cols.push(disk.xs, disk.gb);
+				xsMap['Disk (GB)'] = 'xdisk';
+				axes['Disk (GB)'] = 'y2';
+			}
+			memChart = c3.generate({
+				bindto: '#chart',
+				data: { xs: xsMap, columns: cols, axes: axes,
+				        colors: { 'Managed memory': '#ff7f0e', 'Private memory': '#2ca02c', 'Disk (GB)': '#d62728' } },
+				point: { show: false },
+				padding: padding,
+				size: { height: Math.round(height * 0.72) },
+				zoom: { enabled: true, onzoom: syncZoom(function () { return gapChart; }) },
+				grid: { x: { lines: phaseLines } },
+				axis: {
+					x: xAxis,
+					y: { min: 0, padding: { bottom: 0 }, label: { text: 'Memory (GB)', position: 'outer-middle' } },
+					y2: { show: !!disk, min: 0, padding: { bottom: 0 }, label: { text: 'Disk (GB)', position: 'outer-middle' } }
+				},
+				tooltip: { contents: tipContents(function (v) { return v.toFixed(1) + ' GB'; }) }
+			});
+		} else {
+			$('#chart').empty();
+		}
+		// Bottom pane: the gap between log lines, with the threshold perfviz.py flags.
+		gapChart = c3.generate({
+			bindto: '#gapchart',
+			data: { x: 'x', columns: [ xs, gaps ], colors: { 'Time gap': '#1f77b4' } },
+			point: { show: false },
+			padding: padding,
+			size: { height: run.hasMemStamps ? Math.round(height * 0.28) : height },
+			zoom: { enabled: true, onzoom: syncZoom(function () { return memChart; }) },
+			grid: { x: { lines: run.phases.map(function (p) { return { value: p.start }; }) },
+			        y: { lines: [ { value: GAP_THRESHOLD, text: GAP_THRESHOLD + ' s', class: 'gap-threshold' } ] } },
+			axis: {
+				x: xAxis,
+				y: { min: 0, padding: { bottom: 0 }, label: { text: 'Log gap (sec)', position: 'outer-middle' } }
+			},
+			tooltip: { contents: tipContents(function (v) { return Math.round(v) + ' s'; }) }
+		});
+		// For the console and scripted checks: perfvizCharts.mem.tooltip.show({ x: 3600 }).
+		window.perfvizCharts = { mem: memChart, gap: gapChart };
+	}
+
+	$( document ).ready(function() {
+		$('input[name=axis]').change(draw);
+		$( "#loginput" ).submit(function( event ) {
+			event.preventDefault();
+			if (isBlank($('#logtext').val())) {
+				console.log("ERROR: No log given");
+				return;
+			}
+			render($('#logtext').val(), $('#disktext').val(), null);
+		});
+		// Written by perfviz.py --html: the run's log (and disk CSV) embedded in the page.
+		if (window.PERFVIZ_DATA) {
+			$('#inputs').prop('open', false);
+			render(window.PERFVIZ_DATA.log, window.PERFVIZ_DATA.disk || '', window.PERFVIZ_DATA.name);
+		}
 	});
 </script>
 <style>
+	body { margin: 8px; font-family: sans-serif; font-size: 13px; }
+	#summary { margin: 6px 0; }
+	table.phases { border-collapse: collapse; margin-top: 4px; }
+	table.phases th, table.phases td { padding: 1px 10px 1px 0; text-align: left; font-size: 12px; }
+	table.phases th { color: #555; font-weight: normal; border-bottom: 1px solid #ccc; }
 	.c3-ygrid-line.gap-threshold line { stroke: #d62728; stroke-dasharray: 3 3; }
 	.c3-ygrid-line.gap-threshold text { fill: #d62728; }
+	.c3-xgrid-line line { stroke: #999; stroke-dasharray: 4 3; }
+	.c3-xgrid-line text { fill: #555; font-size: 11px; }
+	.c3-tooltip th { text-align: left; font-weight: normal; }
+	.tip-time { font-weight: bold; }
+	.tip-phase { color: #333; }
+	.tip-msg { color: #666; font-family: monospace; font-size: 11px; max-width: 520px; white-space: normal; }
 </style>
 </head>
-<body style="margin:8px;">
-<form id="loginput">
-  <textarea id="logtext" placeholder="Paste a --timestamp --memstamp log" style="width:100%; height:120px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
-  <textarea id="disktext" placeholder="Optional: paste a disk CSV (time,dir_gb,...) to plot disk use on the memory pane" style="width:100%; height:48px; margin-top:4px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
-  <div style="margin-top:4px;"><input type="submit" value="Submit"></div>
-</form>
+<body>
+<details id="inputs" open>
+  <summary>Log input</summary>
+  <form id="loginput">
+    <textarea id="logtext" placeholder="Paste a --timestamp --memstamp log" style="width:100%; height:120px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
+    <textarea id="disktext" placeholder="Optional: paste a disk CSV (time,dir_gb,...) to plot disk use on the memory pane" style="width:100%; height:48px; margin-top:4px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
+    <div style="margin-top:4px;"><input type="submit" value="Submit"></div>
+  </form>
+</details>
+<div style="margin-top:6px;">
+  Time axis:
+  <label><input type="radio" name="axis" id="axis-elapsed" value="elapsed" checked> elapsed</label>
+  <label><input type="radio" name="axis" id="axis-wall" value="wall"> wall clock</label>
+</div>
+<div id="summary"></div>
 <div id="chart"></div>
 <div id="gapchart"></div>
 </body>
