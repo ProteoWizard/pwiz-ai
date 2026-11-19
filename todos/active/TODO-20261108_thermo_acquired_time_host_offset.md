@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20261108_thermo_acquired_time_host_offset`
 - **Base**: `master`
 - **Module**: `pwiz`
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: Draft PR
+- **PR**: [#5058](https://github.com/ProteoWizard/pwiz/pull/5058)
 
 ## Objective
 
@@ -17,8 +17,9 @@ Two separate defects
 
 - The pwiz reader (`ReaderConfig.FormatStartTimeStamp`) converts the stored time to UTC with the offset on the date
   the file is read, not the date of acquisition
-- Skyline stores the acquired time in the .skyd as a `Kind=Local` value, so opening a document in another time
-  zone changes it
+- Skyline writes `acquired_time` to the .sky without its zone. The .skyd keeps a `Kind=Local` value, which does
+  not change, and Skyline shows it in the zone of the computer that opens the document. So the .sky holds the
+  time in the zone of the last save. Showing the local time may be by design, **see "Open decision"**
 
 Thermo stores the instrument's local clock time with no time zone, and the SDK labels it UTC. SCIEX `.wiff` files
 store the same kind of value and go through the same code.
@@ -72,13 +73,19 @@ store the same kind of value and go through the same code.
   time and returns the PST offset (-8h), so for a file acquired in the first pass the UTC value from step A is an
   hour late. Step B converts it back to the same clock time, so Skyline still shows the stored time. Not tested
 
-## Defect 2 - acquired time changes when the .skyd is opened in another time zone
+## Defect 2 - `acquired_time` in the .sky depends on where the document was last saved
+
+Showing the acquired time in the zone of the computer that opens the document may be by design. What is wrong
+with either design is that `acquired_time` is written to the .sky without its zone. The same file then gets a
+different value depending on where the document was last saved, and Panorama cannot tell which zone it is in.
+**See "Open decision"**.
 
 - `MsDataFileImpl.RunStartTime` returned a `Kind=Local` value
-- `ToBinary()` stores a `Local` value as a UTC moment, and `FromBinary()` converts it to the zone of the computer
-  that opens the .skyd
-- A file that stores 15:47:11, imported in Seattle in summer, is shown as 18:47:11 when the document is opened in
-  Boston, and a save there writes 18:47:11 to `acquired_time` in the .sky. Not yet tried in Skyline
+- `ToBinary()` stores a `Local` value as a UTC point in time, and `FromBinary()` converts it to the zone of the
+  computer that opens the .skyd
+- A document imported in Pacific and opened in Eastern shows the acquired time 3 hours later, before any save,
+  and a save there writes the shifted time to `acquired_time` in the .sky. Measured in Skyline, see "Both defects
+  together"
 
 ### Fix
 
@@ -89,6 +96,7 @@ store the same kind of value and go through the same code.
   `ProteowizardWrapper/MsDataFileImpl.cs` for parity, which is not compiled or tested
 - .skyd files written before the fix keep their `Local` values and still shift in another zone. The .skyd does not
   record the original zone, so they cannot be corrected on read. Re-importing fixes them
+- This keeps the clock time, one of the two designs in "Open decision"
 
 ## Both defects together
 
@@ -98,10 +106,17 @@ and D. With this branch, the acquired time in the Skyline document is `15:47:11`
 computer. The conversion to UTC assumes the file is read on a computer in the time zone where it was acquired,
 but not in the same DST period.
 
-The master values in steps C to E follow from how `ToBinary` and `FromBinary` handle a `Local` value and have
-not yet been tried in Skyline.
-
 ![Acquired time on master and on this branch](TODO-20261108_thermo_acquired_time_host_offset/flow.svg)
+
+A test on a VM matched both rows in steps B to E. Skyline-daily 26.1.1.309 for master and a build of this branch,
+with the file imported in Pacific in November, then the document opened and saved in Eastern and in Pacific again
+
+| Step | Master, Document Grid | Master, .sky | This branch, Document Grid | This branch, .sky |
+|---|---|---|---|---|
+| Imported in Pacific, saved | 4:47 PM | 16:47:11 | 3:47 PM | 15:47:11 |
+| Opened in Eastern, before saving | 7:47 PM | | 3:47 PM | |
+| Saved in Eastern | 7:47 PM | 19:47:11 | 3:47 PM | 15:47:11 |
+| Opened and saved in Pacific again | 4:47 PM | 16:47:11 | 3:47 PM | 15:47:11 |
 
 ## Tests
 
@@ -111,6 +126,8 @@ not yet been tried in Skyline.
 - `PwizFileInfoTest.TestRunStartTime` (Skyline, needs vendor readers) reads a real Thermo raw file through
   `MsDataFileImpl.RunStartTime`. It expects the stored clock time and `Kind=Unspecified`
 - Both were run failing on the unfixed code and passing with the fix
+- A test on a VM reproduced both defects in Skyline-daily and gave the stored time at every step with this
+  branch's build, see "Both defects together"
 
 ## Open question - Shimadzu shifted twice
 
@@ -136,9 +153,28 @@ Not fixed on this branch, pending a check with Matt Chambers.
 The second file's name gives 2014-03-12, which matches the UTC date and not the Pacific one. That supports the
 adjustment-off value as the true UTC.
 
+## Open decision - acquired time as a point in time with the importer's offset
+
+This branch stores the instrument's clock time. The alternative is to keep the acquisition as a point in time and
+write `acquired_time` in the .sky as an ISO 8601 time with the importing computer's UTC offset on the acquisition
+date, such as `2025-05-19T15:47:11-07:00`. That one value gives the UTC point in time (22:47:11Z) and the
+importer's local time. Panorama could compare the point in time, and display the importer's local time in the QC
+plots and on Panorama Public.
+
+- The offset is known only at import, in `MsDataFileImpl.RunStartTime`, from the importing computer's zone. The
+  .skyd stores the point in time but not the offset, so the .skyd needs a new field and a new `CacheFormatVersion`
+- The value does not change when the document is opened or saved in another zone. A May file imported in Seattle
+  keeps `-07:00` when opened in Boston, and a save there writes the same text
+- The offset is the one on the acquisition date, so a May file imported in Seattle in winter also gets `-07:00`
+- Panorama needs to read the offset, and to accept documents without one
+- Defect 1 must be fixed with either design
+- If chosen, it replaces this branch's defect 2 fix (`SpecifyKind`). It can follow as a separate change
+
 ## Tasks
 
 - [x] Fix defect 1 in `FormatStartTimeStamp`, with `FormatStartTimeStampTests`
 - [x] Fix defect 2 in both `MsDataFileImpl.RunStartTime` implementations, with `TestRunStartTime`
-- [ ] Open the PR
+- [x] Test both defects in Skyline on a VM, before and after the fix
+- [x] Open the PR, [#5058](https://github.com/ProteoWizard/pwiz/pull/5058) (draft)
 - [ ] Decide the Shimadzu change
+- [ ] Decide between the clock time and a point in time with the importer's offset for `acquired_time`

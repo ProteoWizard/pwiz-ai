@@ -31,7 +31,7 @@
 <rect x="680" y="90" width="196" height="150" rx="6" fill="#fafafa" stroke="#999999"/>
 <line x1="680" y1="122" x2="876" y2="122" stroke="#cccccc"/>
 <text x="690" y="112" font-size="13" font-weight="bold" fill="#222222">(C)(D) .skyd</text>
-<text x="690" y="144" font-size="13" fill="#555555">stores a UTC moment</text>
+<text x="690" y="144" font-size="13" fill="#555555">stores a UTC point in time</text>
 <text x="690" y="164" font-size="13" fill="#555555">opened in Boston:</text>
 <text x="690" y="184" font-size="13" fill="#555555">converted to EDT (-4h)</text>
 <text x="690" y="226" font-size="18" font-weight="bold" fill="#c62828">19:47:11</text>
