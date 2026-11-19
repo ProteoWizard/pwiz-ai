@@ -6,7 +6,7 @@
 - **Created**: 2026-11-18
 - **Status**: In Progress
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#5057](https://github.com/ProteoWizard/pwiz/pull/5057)
 
 ## Objective
 
@@ -51,4 +51,4 @@ regrowth and gen-2 GCs. Write the points straight into the spectrum's arrays ins
 
 ### 2026-11-18 - Implemented, benchmarked, reviewed
 
-- Committed 3d77134f66; CodeInspection passed; opened PR.
+- Committed 3d77134f66; CodeInspection passed; opened PR #5057.
