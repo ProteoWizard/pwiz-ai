@@ -4,7 +4,7 @@
 - **Branch**: (not started) - measurement first, branch when the prototype begins
 - **Base**: `master`, after #4950 merges
 - **Created**: 2026-11-19
-- **Status**: Planning; raw-read harness to run on MACS2 once the CHS 446 re-run stops
+- **Status**: Measured A-C, E, F on MACS2; next is a metadata-only read in pwiz-sharp
 - **Module**: `osprey`
 - **PR**: (none yet)
 
@@ -77,3 +77,35 @@ core-hours on CHS, ~4%).
 
 Discussion with Brendan after the CHS 446 runs on MACS2 (benchmark TODO
 `TODO-20261006_osprey_seaad_benchmark_port.md`).
+
+### 2026-11-19 - First measurements (MACS2, SEA-AD Astral)
+
+Harness `ai/.tmp/sessions/20261119-rawread/harness` (one mode per process), vendor build of #4950 at 0970eb0431
+(`D:\Users\brendanx\test\osprey-runs\_bin\vendor-0970eb0431`); logs and per-window TSVs in
+`D:\Users\brendanx\test\osprey-runs\rawread` (`run1.log`, `run2.log`, `par9\`). One file: 6.1 GB `.raw`,
+4.3 GB `.spectra.bin`, 163,594 spectra, 167 windows. Raw files on D:, caches on E:.
+
+- Exactness: reading each window's spectra from the raw file gives the same spectrum and peak counts as the
+  cache for all 167 windows of both files tested.
+- Raw, window by window, warm: 19 s for all windows (117 ms median, 158 ms max), single thread.
+- Cache, warm: 3.5 s for all windows (20 ms median). Cold from E: 34 and 104 min for the two files - E: was
+  badly contended again, cause not found (no recent writes under E:\Users\chrhsu).
+- Today's cache-miss read (`LoadAllSpectra`, acquisition order): 39 s warm, 58 s cold, 12.7 GB peak.
+- The "metadata" pass is not cheap: 22 s warm, because pwiz-sharp's Thermo reader decodes every spectrum's
+  peaks even without binary data (`SpectrumList_Thermo.cs:722`, "Always retrieve the mass list"); C++ pwiz skips
+  this below `DetailLevel_FullData`. It is a second full read. A metadata-only path is the first fix.
+- Memory: the reader's 6 GB working set is memory-mapped file pages; private memory 0.15 GB.
+- CPU: Osprey's server GC (72 heaps) put ~10x CPU on the harness's allocations (300 vs 32 core-s for the
+  metadata pass with workstation GC). Inside Osprey that cost is shared with scoring; worth a check there.
+- 9 files at once, cold (F): the metadata pass took 430-520 s per file, D: delivering ~112 MB/s in total against
+  218 MB/s for one sequential stream - D: is spinning disk and 9 interleaved readers thrash it.
+
+Budget (SEA-AD `runs-validate\final-82files\run.log`, 18 threads per file): coelution scores a window in 28 s
+median per thread against 0.12 s to load it, so loading disappears behind coelution. Calibration pass 1 scores
+all windows in 37 s, so a single producer's 19 s overlaps only if it runs ahead.
+
+Reading so far: a single analysis needs no `.spectra.bin` - reading the raw file directly costs less than
+building the cache does today (a full read plus a 4.3 GB write). The open question is cohort scale on spinning
+disk: raw is 1.4x the cache's bytes, read up to three times per file, and parallel files' readers compete for
+one disk. Next: (1) metadata-only reads in pwiz-sharp, then re-measure A; (2) a disk read gate like
+`serialBlockReads` for raw reads; (3) the same single-file and 9-file measurements on UW8's SSD.
