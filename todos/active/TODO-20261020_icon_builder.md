@@ -317,6 +317,53 @@ SequenceTreeForm icon to master (= SkylineDoc.ico).
 - [ ] README for the tool is written; mention in ai/docs/github-repo-guide.md if a script
       wrapper is added
 
+## Review and finish (2026-11-18/19, Brendan with Claude, reviewed at 150% and 200%)
+
+Done on the branch:
+- [x] Title-bar and Alt-Tab icons: `DpiFormIcons` (CommonBaseUI) adds frames at
+      SmallIconSize/IconSize to a form's icon, resampled from the smallest larger frame or
+      taken from an IconBuilder drawing (`DpiUtil.GetFormIcon`). Forms that set no icon read
+      back WinForms' default (.NET) icon; they get `DpiFormIcons.ApplicationIcon`
+      (Resources.Skyline, set in Program.Main). Screenshot mode's release icon goes through it
+      (TestFunctional `RunTest`, `EnsureScreenshotIcon`)
+- [x] Files tab icon (FilesTreeForm): frames from the `Folder` vector
+- [x] Files view root (`Skyline_FilesTree`): raster from Skyline_Release.ico's 32 px frame,
+      matching the title bar; trash drop target loaded by name, its panel scaled
+- [x] Image-list icons found by key (`DpiIcons.LoadKeyedIcon`, `ImageListScaler`,
+      `DpiIcons.GetListIcon`): AllChromatogramsGraph lock/pin (lists hold 32 px magenta copies),
+      file dialog folders and MethodFile; file list copies keys; `folder.png` key fixed
+- [x] File dialog: Look in list rows scale (icons, height, indent), GDI text, white line
+      under the nav strip removed (borderless renderer); `MassSpecFile` vector with 20/24 px
+      hinted XAML (IconBuilder now takes `<Name>.<Size>.xaml`)
+- [x] StartPage: mode button positioned by code only, from ClientSize; Open File icon uses
+      the Folder vector above 100%; tutorial section headers get the scaled label height
+- [x] FragmentS / FragmentLibS removed (never used); dead `Filter1` twin removed
+- [x] DigitalRune: drawn close X (matches the Windows title bar glyph) and pins above 100%,
+      on `Skyline/work/20261118_caption_button_glyphs` in uw-maccosslab/developers, stacked
+      on the unmerged `Skyline/work/20261116_splitter_autoscale` (the shipped DLL has both)
+- [x] Scripts: Build-DigitalRune.ps1 .NET 10 only, installs into Shared/Lib/DigitalRune/net10;
+      new ai/scripts/Skyline/IconBuilder/Run-IconBuilder.ps1
+
+Follow-ups (separate PRs):
+- [ ] Tutorial Start Page images from the covers (Documentation/Tutorials/*/en/cover.png,
+      1200x800, 3.7 MB en; 2x thumbnails would be 3.0 MB): embed the covers, load lazily when
+      the Tutorials tab first shows, downscale once; one-time Start Page screenshot refresh;
+      localized covers belong in the satellite assemblies
+- [ ] Skyline/Osprey .ico files: designer to add 16, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72,
+      80, 96, 256 (32-bit). Also SkylineDoc.ico / SkylineData.ico (graph windows); Targets tab
+      icon has no vector yet
+- [ ] Raster icons (Undo/Redo, Save, Cut, Delete, ...) stay soft at 125/150%: hand-drawn
+      20/24 px or a flat restyle of the toolbar file/edit set
+- [ ] DigitalRune restyle after Visual Studio (flat captions, 1 px borders, thin glyphs);
+      would also remove the 2 px sunken edge on the right/bottom of docked trees (pre-existing)
+- [ ] TreeViewMS expand/collapse: 9x9 plus/minus bitmaps stretched; draw in code
+- [ ] File dialog: File/UnknownFile and places-bar icons have no vectors; folder access
+      colors (green/orange/red) are not colorblind-friendly (ask Rita)
+- [ ] `FolderSampleSet` wired but unverified (needs a real waters_connect server); ask Rita
+      whether `noAccess` (unused native, waters_connect) stays
+- [ ] Reverse check in IconResourcesTest (every embedded file named by a resx entry or a
+      known image-list key) once the image-list icons are settled
+
 ## Notes
 
 - The 14 px tree icons (Blank, PeakBlank, ChromLib, AllIonsStatusButton, FragmentS,
