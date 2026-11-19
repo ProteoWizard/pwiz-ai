@@ -5,9 +5,9 @@
 - **Base**: `master`
 - **Created**: 2026-11-18
 - **Module**: `skyline`
-- **Status**: In progress
+- **Status**: Completed
 - **GitHub Issue**: partly addresses #5049 (assigned to Nick)
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/5056 (opened 2026-11-18)
+- **PR**: [#5056](https://github.com/ProteoWizard/pwiz/pull/5056) (merged 2026-11-19)
 
 ## Objective
 
@@ -37,12 +37,11 @@ values as text through `get_value`) is left for Nick, who owns that issue.
   through the connector.
 
 ## Remaining
-- ReSharper gate (`tcinspect.ps1`) before the PR.
+Deferred, not part of the merged PR:
 - Decide whether to update the MCP server's `skyline_perform_action` description (needs the
   connector ZIP rebuilt and `EXPECTED_ZIP_VERSION` bumped). `get_actions` already reports the new
   descriptions, so this is optional.
 - Try it live over the MCP on a paused Full-Scan test (design guide section 7).
-- Push the branch and open the PR (awaiting approval).
 
 ## Progress Log
 
@@ -58,3 +57,10 @@ regression; category headings nameable; bare-string path; leaf mid-path error; r
 `ListItems.BestMatch`). Dropped 5 as consistent with TreeViewElement (first match wins, collapse
 expands intermediates) or not worth it (RootItem duplicate, ToTreePath location, test label source).
 Pushed and opened #5056 with tcinspect still running.
+
+### 2026-11-19 - Merged
+PR #5056 merged as commit 4ac3704c9c. Shipped `PropertyGridElement` (listed under `MsGraphExtension`,
+expand/collapse by item label or index, the sheet's toolbar kept reachable) and the shared
+`ToTreePath`. tcinspect clean and all CI checks green before merge; Nick requested as reviewer.
+Copilot did not attach (likely quota). Deferred: the MCP server description update and a live MCP
+try. #5049 stays open for its `get_value` half (Nick).
