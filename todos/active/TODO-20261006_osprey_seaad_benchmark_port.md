@@ -167,6 +167,15 @@ an Osprey defect; costs roughly 1 h of wall (~39 files x ~800 s / 9 lanes). Coel
 6,000-6,700 on the 27 x 2 run - extra CPU contention after 01:30 not attributed (box CPU was not sampled).
 Plot `ai/.tmp/sessions/20261117-chs/perfviz-chs446-06dece8a60-0600.png`.
 
+2026-11-19 09:22: stopped at `PerFileRescoring:starting` as planned (Brendan: the run had shown what it was for).
+PerFileScoring 53,366.4 s (vs 53,873.0 s on b9bd065862, despite ~1 h lost to the E: stall), FirstPassFDR
+8,917.7 s (vs 9,100.4 s). Per-phase managed p50 / private peak: PerFileScoring 37.3 / 93.6 GB (vs 92.0 / 213.1 GB
+at 27 x 2), FirstPassFDR 24.1 / 56.2 GB (vs 25.3 / 94.3 GB). Disk 510 GB at the end of PerFileScoring (scores
+parquets), 568 GB at the stop. Conclusion: 9 x 8 with the progress fix bounds memory at well under half the
+27 x 2 peak with no throughput loss; no reporting gap >= 30 s outside the E: stall. Plot
+`ai/.tmp/sessions/20261117-chs/perfviz-chs446-06dece8a60-final.png`; disk CSV
+`D:\Users\brendanx\test\osprey-runs\chs-seer\runs\disk-chs446-pr5045-06dece8a60-20261118_160425.csv`.
+
 ### 2026-11-17 - MACS2 CHS 446 launched on PR #5045 (the #4950 defaults), run as a user runs it
 
 Brendan: the first CHS run since #4950 work began, as proof the new code still runs it here in reasonable time
