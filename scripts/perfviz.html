@@ -335,10 +335,14 @@
 	.c3-ygrid-line.gap-threshold text { fill: #d62728; }
 	.c3-xgrid-line line { stroke: #999; stroke-dasharray: 4 3; }
 	.c3-xgrid-line text { fill: #555; font-size: 11px; }
-	.c3-tooltip th { text-align: left; font-weight: normal; }
-	.tip-time { font-weight: bold; }
-	.tip-phase { color: #333; }
-	.tip-msg { color: #666; font-family: monospace; font-size: 11px; max-width: 520px; white-space: normal; }
+	/* c3's default header is white text on #aaa at 0.9 opacity; dark text on a light,
+	   opaque header reads far better with the stage and log line in it. */
+	.c3-tooltip { opacity: 1; box-shadow: 1px 1px 4px #999; }
+	.c3-tooltip th { text-align: left; font-weight: normal; background-color: #f2f2f2; color: #222;
+	                 border-bottom: 1px solid #ccc; padding: 4px 6px; }
+	.tip-time { font-weight: bold; color: #000; }
+	.tip-phase { color: #222; }
+	.tip-msg { color: #555; font-family: monospace; font-size: 11px; max-width: 520px; white-space: normal; }
 </style>
 </head>
 <body>
