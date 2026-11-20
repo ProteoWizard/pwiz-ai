@@ -479,3 +479,21 @@ research variables, the resolved-settings block in the run log, the HRAM default
 4.1% behind DIA-NN's 101,269), and `--protein-boost best|compact|off` in place of `--protein-best` (HRAM `best`,
 unit `compact`). Deferred: Stellar compared with DIA-NN on the lab's larger Stellar data, then removing `compact`
 so the choice is `best|off`.
+
+### 2026-11-19 night (UW8) - Rust cross-impl parity restored after #4950
+
+Night log `ai/.tmp/night-session-budget-20261119.md`; run logs `ai/.tmp/sessions/20261117-5ada8293/`.
+- With C# on Rust's recipe (svm, `--feature-set core`, `--protein-boost compact`, refit on, mixture PEP, and at HRAM
+  6 XICs, no correlation tolerance, intensity reference XIC, no local RT tolerance, 0.5 min floor, 0.15 min tc window,
+  LOESS 0.3), master after #4950 matched Rust at 1e-9 through pass 1; pass 2 diverged only through #4993 and #4823,
+  which reached master in early November without their Rust ports.
+- Ported both to Rust: maccoss/osprey#75 (branch `pass2-stratum-complement-protein-q`, f1cd55a + 4cf32a5); protein PEPs
+  left C#-only.
+- `Compare-EndToEnd-Crossimpl.ps1` now runs C# on that recipe by default (`-CsRecipe Rust`, each setting gated on the
+  build's --help / --help-env), plus `-CsEnv` / `-CsArgs`; fixed `OSPREY_MS2_CAL_MEAN` being set for builds without
+  #4997, which failed every run at startup (pwiz-ai 9d04b7c5).
+- Against pwiz master 4cc5a55baf, plain runs: Stellar 32,270, Astral 117,660, StellarLibraryDecoy 30,807 precursors,
+  all PASS at 1e-9 (3-file). AstralLibraryDecoy's data is not in the Perftests download; run from junctions in
+  `D:\test\osprey-runs\crossimpl-base` (Astral mzML + SEA-AD `target+decoy+entrapment` library).
+- pwiz docs follow-up committed locally, not pushed: 726f9534bd on `Skyline/work/20261120_osprey_rust_parity_docs`
+  (DIVERGENCES.md, docs 08 and 12, a ProteinFdrEngine.cs comment).
