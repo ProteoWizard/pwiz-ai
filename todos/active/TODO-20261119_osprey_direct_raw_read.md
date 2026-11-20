@@ -264,3 +264,25 @@ level that returns precursors, so Skyline would have taken triple-play precursor
 `SpectrumListThermoDetailLevelTests` (7 fixtures, every spectrum). Thermo.Tests 16/16 (needs
 `-p:IAgreeToVendorLicenses=true`). Dropped: the shared `ToDetailLevel` helper, the instant-path scan duplication, and
 the `SpectrumListWrapper` bool collapse (#5059 part 2).
+
+**2026-11-20 - Cold start measured: `.raw` in, `.spectra.bin` written during scoring** (arm
+`runs-directread82\seaad-82files-libdecoy-r1.0-defaultrawcache`, 72 threads, 4 scoring / 8 rescoring lanes):
+
+| Stage | Direct read | Cold start (writes cache) | Cache hit |
+|---|---|---|---|
+| PerFileScoring | 8,175 s / 75.8 GB | 9,739 s / 53.9 GB | 7,735 s / 66.4 GB |
+| FirstPassFDR | 1,588 s | 1,782 s | 1,574 s |
+| PerFileRescoring | 6,695 s / 30.5 GB | 1,565 s / 25.1 GB | 1,373 s / 24.7 GB |
+| SecondPassFDR | 140 s | 130 s | 128 s |
+| Total vs cache hit | 16,598 s (+53.5%) | 13,217 s (+22.3%) | 10,811 s |
+
+- Results identical in all three (97,191 precursors, 97,122 library spectra, same FDRBench sha256).
+- Cold start is 20.4% faster than direct read: writing the cache costs scoring +1,564 s, rescoring from it saves 5,130 s.
+- The cache it writes: 82 files, 371.4 GB (345.9 GiB) in `sea-ad\raw`, 71.5% of the 483.6 GB of `.raw`.
+- So with today's reader, a `.raw` run should keep writing `.spectra.bin` by default; a no-cache flag is a disk-for-time
+  option (+25.6% wall vs cold start). The warm-pass arm (`...-defaultdirectwarm`, now running) tests whether a sequential
+  pre-read closes the rescoring gap; that decides whether direct read can become the default.
+- Brendan's framing: a lab reanalyzing later either keeps 72% extra storage or pays the cold start again, and no
+  lossless `.raw` alternative feeds Skyline yet.
+- Thermo PR #5062: Matt asked to stack it on #5057 (its harness adds a detail-level agreement check). Merged #5057 in
+  (5dd68b0015), retargeted, Thermo.Tests 16/16; listed what the Thermo test still covers beyond the harness.
