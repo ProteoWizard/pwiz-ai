@@ -160,3 +160,24 @@ Net of the library load, direct scoring is 473 s against 456 s for building the 
 read is ~35-40 s per file either way, and the cache write it skips is cheap here. The re-score's second full
 read adds ~73 s over 3 files. So for one file direct read costs about what building the cache costs, and each
 later run of the same file costs about 30 s per read more than a cache hit. Peak memory is ~7 GB higher.
+
+### 2026-11-19 - Direction: direct read as the default, cache as the iterative option
+
+Agreed with Brendan: direct reading is worth continued effort, because the prize is not writing a
+`.spectra.bin` (71% of the raw's size) for most runs. `--task SpectraCache` stays for iterative work, where a
+user may choose to pay the disk to go faster, and may even delete the raw files.
+
+Constraint on overlap: a forward read completes no isolation window until it reaches the end of the file
+(every window spans the whole gradient), and calibration samples every window. So reading cannot hide behind
+scoring of the SAME file; it can hide behind scoring of the PREVIOUS file. Design, in order of measurement:
+
+1. Free each window's spectra after its last use in the file (main scoring, after both calibration passes),
+   so a file's resident peaks fall as scoring proceeds instead of holding until the file ends.
+2. Read file N+1 while file N scores, in a `ProducerConsumerWorker` (pwiz_tools/Shared/CommonUtil, already
+   referenced by Osprey) gated on memory: the producer waits until file N releases enough windows, so the
+   high-water mark stays under two files' spectra. Same for the rescore's second read.
+3. Decode in parallel behind the one forward read (the Thermo decode is single-threaded; ~32 s per 6 GB
+   file at 180 MB/s), keeping the read itself sequential for spinning disks.
+
+Measure each step on SEA-AD at 3 and 20 files against the cache-hit arm: wall time, peak private memory, and
+identical counts. The O(files) memory rule rules out keeping more than the in-flight files resident.
