@@ -112,3 +112,26 @@ parallel readers within a file. Next: (1) metadata-only reads in pwiz-sharp (iss
 with an audit of every reader), then re-measure A; (2) measure whether 9 producers on one spinning disk need
 to take turns across files, as `serialBlockReads` does for cache blocks; (3) the same single-file and
 9-file measurements on UW8's SSD.
+
+### 2026-11-19 - Thermo metadata fix, and why window-by-window fails cold
+
+Thermo fix (pwiz worktree `D:\Users\brendanx\proj\pwiz-thermo`, branch
+`Skyline/work/20261119_thermo_detail_level`, local commit 16b43b04eb, not pushed): `SpectrumList_Thermo` now
+honours DetailLevel the way the C++ reader does (instant: index only; fast: no zoom-scan search; precursor
+intensity and mass list only at full metadata). Metadata pass 22 s -> 2.1 s warm, 33-50 s -> 2.9 s cold,
+working set 0.6 GB. Window checksums, intensity sums included, unchanged. Thermo.Tests 15/15.
+
+9 files at once, cold, window-by-window with the fix (`D:\Users\brendanx\test\osprey-runs\rawread\par9t\`):
+4,300-5,800 s per file (median window 25-34 s), against 445-540 s before the fix (`par9\`). The fix did not
+slow reading. It removed the full sequential pass that, before the fix, warmed the OS page cache: before, the
+metadata pass took ~510 s and the 167 windows then took 19-23 s from memory; now the metadata pass takes
+~20 s and every window gathers ~1,000 spectra scattered across the 6 GB file from a cold spinning disk.
+(File 9 was a second copy of a file `par9` had just read and finished in 27 s from cache.)
+
+So the window-major access pattern, not the number of producers, is what a cold spinning disk cannot serve.
+This matches Skyline's experience: it reads forward in RT order. A direct-read producer has to read the file
+sequentially, once, and route each spectrum to its window. Holding every window costs about LoadAllSpectra's
+12.7 GB per file, so the open design question is how few windows can be in flight at once: a single
+sequential pass that keeps all windows, or bounded passes over RT. `.spectra.bin` stays for now: its layout is
+window-major, which is exactly what this access pattern needs. The single-file cold case was not measured
+because all 21 raw files on D: are now in the page cache.
