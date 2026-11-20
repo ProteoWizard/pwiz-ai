@@ -535,3 +535,8 @@ analyzer's span logic; MS2 sequence ruler is halfway there).
   11-12 out to column 0. Free area in both: columns 0-2, rows 0-10 => bar is 3x11 (a 3x12 would
   sit on the baseline tail and hide a 1/5 fill). Fill from the bottom, rounded to whole pixels.
   Verify the FragmentLib variant still reads as bar + glyph.
+- **D1/D3 decisions 2026-11-19 (Rita, after the mock `ai/.tmp/sessions/20261102-modsite/badge_bar_mock.png`):**
+  keep the current blue (0,90,200) (the mock's first two rows); placement on the left confirmed.
+  Tooltip sequence: candidate mod sites bold + underlined, matching the tree's modified-residue
+  convention. Merge origin/master into the branch before coding (DPI icon work landed in
+  `SequenceTree.cs` / `PeptideTreeNode.cs`); the branch now lives in the pwiz2 checkout.
