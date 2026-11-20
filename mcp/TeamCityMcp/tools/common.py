@@ -9,12 +9,41 @@ This module contains:
 
 import json
 import logging
+import ssl
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 logger = logging.getLogger("teamcity_mcp")
+
+
+# =============================================================================
+# HTTPS Certificate Trust
+# =============================================================================
+
+def _create_https_context() -> ssl.SSLContext:
+    """Build the SSL context every urllib request in this server verifies against.
+
+    Python's default context on Windows trusts only the roots already in the Windows
+    certificate store, which a new machine fills on demand, so urllib can fail with
+    CERTIFICATE_VERIFY_FAILED on a host a browser accepts. The certifi bundle is added
+    to it for that reason. Same fix, with the full account, in
+    ai/mcp/LabKeyMcp/tools/common.py.
+    """
+    context = ssl.create_default_context()
+    try:
+        import certifi
+        context.load_verify_locations(cafile=certifi.where())
+    except Exception as e:  # certifi comes with httpx, a dependency of mcp
+        logger.warning(f"certifi roots not loaded, using the system store only: {e}")
+    return context
+
+
+# urllib.request.urlopen() goes through the installed opener.
+urllib.request.install_opener(
+    urllib.request.build_opener(urllib.request.HTTPSHandler(context=_create_https_context()))
+)
 
 
 # =============================================================================

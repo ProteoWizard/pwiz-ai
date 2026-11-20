@@ -15,6 +15,7 @@ import os
 import base64
 import http.cookiejar
 import netrc
+import ssl
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -24,6 +25,42 @@ import labkey
 from labkey.query import ServerContext
 
 logger = logging.getLogger("labkey_mcp")
+
+
+# =============================================================================
+# HTTPS Certificate Trust
+# =============================================================================
+
+def _create_https_context() -> ssl.SSLContext:
+    """Build the SSL context every urllib request in this server verifies against.
+
+    Python's default context on Windows trusts only the roots ALREADY in the Windows
+    certificate store, and Windows downloads a root the first time one of its own
+    clients needs it. On a new machine nothing has asked for the server's root yet,
+    so urllib fails with CERTIFICATE_VERIFY_FAILED ("unable to get local issuer
+    certificate") while the labkey SDK, which uses requests and its certifi bundle,
+    works. Observed 2026-11-20 on a new laptop: the wiki read tools worked and
+    update_wiki_page / list_wiki_attachments failed against skyline.ms.
+
+    Adding the certifi bundle to the default context gives urllib the same roots the
+    SDK has, and keeps the Windows store for any locally installed (corporate) root.
+    """
+    context = ssl.create_default_context()
+    try:
+        import certifi
+        context.load_verify_locations(cafile=certifi.where())
+    except Exception as e:  # certifi comes with requests and httpx, so this is unexpected
+        logger.warning(f"certifi roots not loaded, using the system store only: {e}")
+    return context
+
+
+HTTPS_CONTEXT = _create_https_context()
+
+# urllib.request.urlopen() goes through the installed opener, so this covers every
+# urlopen call in the tools package without touching the call sites.
+urllib.request.install_opener(
+    urllib.request.build_opener(urllib.request.HTTPSHandler(context=HTTPS_CONTEXT))
+)
 
 # =============================================================================
 # Default Server Configuration
@@ -373,6 +410,7 @@ class LabKeySession:
         # Set up cookie jar for session management
         self.cookie_jar = http.cookiejar.CookieJar()
         self.opener = urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=HTTPS_CONTEXT),
             urllib.request.HTTPCookieProcessor(self.cookie_jar)
         )
 
