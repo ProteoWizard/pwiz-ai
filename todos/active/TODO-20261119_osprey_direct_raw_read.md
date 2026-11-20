@@ -256,3 +256,11 @@ Logs: `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-directread82\seaad-82files
 - Next (running): `OSPREY_DIRECT_READ_WARM_MB=16` (uncommitted; snapshot `_bin\directread-warm`) reads each file
   start to end in 16 MB blocks, one file at a time, before the decode, so the decoder works from the OS file cache.
   82-file arm `...-defaultdirectwarm` started after the direct arm.
+
+**2026-11-20 - Thermo metadata fix opened as #5062 for Matt (part 1 of #5059).** `/code-review medium` raised one real
+issue: fast metadata skipped the zoom-scan search (as cpp does), but `MsDataFileImpl.GetPrecursors` settles on the first
+level that returns precursors, so Skyline would have taken triple-play precursors without the zoom correction. Commit
+1079d177d1 keeps the search at fast metadata (no measurable cost: 2.6-3.6 s metadata pass either way) and adds
+`SpectrumListThermoDetailLevelTests` (7 fixtures, every spectrum). Thermo.Tests 16/16 (needs
+`-p:IAgreeToVendorLicenses=true`). Dropped: the shared `ToDetailLevel` helper, the instant-path scan duplication, and
+the `SpectrumListWrapper` bool collapse (#5059 part 2).
