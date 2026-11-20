@@ -109,3 +109,30 @@ Regression tests: harness `AssertLowerDetailLevelsAgree` (red baseline above); n
 `SpectrumListDetailLevelTests.Wrappers_MetadataLevels_ReachInnerListWithoutPeaks` and
 `SpectrumListUnifiTests.GetSpectrum_MetadataLevels_ReadNoPeaks`, both verified red with the source
 changes reverted and green with them.
+
+### 2026-11-20 - Code review fixes and the non-MS MsDataFileImpl fix (pushed)
+
+Pushed dc75a8bb8d (readers + wrappers) and 9095671e65 to #5062; PR retitled
+"pwiz: Fixed pwiz-sharp readers decoding peaks for metadata requests" with `Fixes #5059`.
+
+`/code-review high` (first pass) fixes folded into dc75a8bb8d: DIA-Umpire re-reads at full metadata when a
+fast read lacks the representation term or MS2 precursors; Thermo PDA stops before the trace read;
+IndexRange fixtures checked only over their range; PeakPicker picks in-memory (RetainedByList) spectra in
+place; harness requires ms level and start time at fast metadata for MS spectra. Dropped: Waters combined
+IMS count at full metadata (#5057 design, cpp parity), wrapper TIC/base peak below full, a #5057 re-read nit.
+
+MsDataFileImpl (9095671e65): `GetMetaDataValue` raised its per-file detail level for good at the first
+non-MS (EMR) spectrum, because such spectra have no ms level at any level (and Agilent DAD has no start
+time below full metadata). Now the per-file GetMsLevel maps EMR spectra to 0, and an EMR spectrum missing
+a value escalates for itself only. The static GetMsLevel(Spectrum) still returns null for EMR: the Waters
+lockspray-function loop relies on that to skip leading DAD spectra (caught by the second review).
+SpectrumListTitleMaker now sets titles only from full metadata up. Test:
+`PwizFileInfoTest.TestNonMsSpectraKeepMetadataDetailLevels` (internal `MetadataDetailLevels`,
+InternalsVisibleTo("TestData") in ProteowizardWrapper/Properties/AssemblyInfo.cs because the project sets
+GenerateAssemblyInfo=false); red with each half of the fix removed, green with it; Skyline TestData 166/166.
+
+Skyline was built in this worktree with `pwiz_tools\Skyline\build.bat Release --i-agree-to-the-vendor-licenses`
+and `SKYLINE_TEST_ARGS=test=...`; root build.bat fails here only on stale untracked
+pwiz_tools/{SeeMS,MSConvertGUI}/Properties/AssemblyInfo.cs from the old Boost.Build.
+
+Remaining: re-measure the Astral metadata pass (Brendan); #5057 must merge first.
