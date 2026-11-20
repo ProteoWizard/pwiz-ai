@@ -68,6 +68,28 @@
     (it has no opt-out). Pass '0' only to compare against a Rust build from before #69, which
     kept the strict maximum.
 
+.PARAMETER CsRecipe
+    Rust (default) or Default. C# Osprey's defaults moved past Rust osprey's in pwiz #4950 (GBDT,
+    the default feature set, protein boost best and the transfer second pass, and at HRAM the
+    SEA-AD scoring recipe), none of which Rust has. 'Rust' puts the C# run back on Rust's recipe:
+    --feature-set core --protein-boost compact, OSPREY_FDR_MODEL=svm, OSPREY_RECON_REFIT=on,
+    OSPREY_PEP_FORMULA=mixture, and at HRAM 6 XICs, no correlation tolerance, the most-intense
+    reference XIC, no local RT tolerance, a 0.5 min RT floor, a 0.15 min tc_* window and LOESS
+    0.3. Each setting is passed only when the build knows it, so a build from before #4950
+    (whose defaults already were Rust's) runs unchanged. 'Default' runs C# on its own defaults,
+    which is expected to fail the gate. -CsEnv / -CsArgs are applied after the recipe and win.
+
+.PARAMETER CsEnv
+    Environment variables for the C# run ONLY, as 'NAME=VALUE' pairs separated by ';'
+    (one quoted argument: pwsh -File cannot bind an array). Set just before the C# run and
+    cleared after it, so the Rust run never sees them. This is how a C# build whose defaults
+    have moved past Rust is put back on Rust's recipe, e.g.
+      -CsEnv 'OSPREY_FDR_MODEL=svm;OSPREY_RECON_REFIT=on;OSPREY_PEP_FORMULA=mixture'
+
+.PARAMETER CsArgs
+    Extra command-line arguments for the C# run ONLY, split on whitespace, e.g.
+      -CsArgs '--feature-set core --protein-boost compact'
+
 .PARAMETER SourceRoot
     The pwiz checkout whose C# Osprey build to compare, e.g. C:\proj\pwiz-work1. Default:
     Get-PwizRoot (<project root>\pwiz, or $env:PWIZ_ROOT). Same meaning as Build-Osprey.ps1's
@@ -91,8 +113,49 @@ param(
     [string]$SourceRoot,
     [int]$Threads = 16,
     [string]$CsSvmCTolerance = '',
+    [ValidateSet('Rust','Default')]
+    [string]$CsRecipe = 'Rust',
+    [string]$CsEnv = '',
+    [string]$CsArgs = '',
     [string]$Files = 'All'
 )
+
+# The C# settings that reproduce Rust osprey's recipe (see .PARAMETER CsRecipe). Env pairs are
+# @(name, value); Args pairs are @(option, value).
+function Get-RustRecipe {
+    param([string]$Resolution)
+    $envPairs = @(
+        ,@('OSPREY_FDR_MODEL', 'svm')
+        ,@('OSPREY_RECON_REFIT', 'on')
+        ,@('OSPREY_PEP_FORMULA', 'mixture'))
+    if ($Resolution -eq 'hram') {
+        $envPairs += @(
+            ,@('OSPREY_XIC_FRAGMENTS', '6')
+            ,@('OSPREY_CORR_FRAGMENT_TOLERANCE', 'off')
+            ,@('OSPREY_REF_XIC', 'intensity')
+            ,@('OSPREY_LOCAL_RT_TOLERANCE', 'off')
+            ,@('OSPREY_MIN_RT_TOLERANCE', '0.5')
+            ,@('OSPREY_TC_HALF_WINDOW', '0.15')
+            ,@('OSPREY_LOESS_BANDWIDTH', '0.3'))
+    }
+    return @{
+        Env = $envPairs
+        Args = @(
+            ,@('--feature-set', 'core')
+            ,@('--protein-boost', 'compact'))
+    }
+}
+
+# -CsEnv: validated up front so a typo fails before the Rust run, not after it.
+$csEnvPairs = @()
+foreach ($pair in ($CsEnv -split ';' | Where-Object { $_.Trim() })) {
+    if ($pair -notmatch '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+        Write-Host "-CsEnv entry '$pair' is not NAME=VALUE" -ForegroundColor Red
+        exit 2
+    }
+    $csEnvPairs += ,@($Matches[1], $Matches[2].Trim())
+}
+$csExtraArgs = @($CsArgs -split '\s+' | Where-Object { $_ })
 
 $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $PSCommandPath
@@ -435,10 +498,36 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
                 '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
                 '--work-dir', $csDir)
     $args2 += $libDecoyArgs
+    # What this C# build knows, so the recipe below asks only for settings it has: Osprey
+    # refuses to start on an OSPREY_* variable it does not read, or an argument it does not take.
+    $helpEnv = (& $ospreyShExe --help-env 2>&1) -join "`n"
+    $helpArgs = (& $ospreyShExe --help 2>&1) -join "`n"
+    $recipePairs = @()
+    $recipeArgs = @()
+    if ($CsRecipe -eq 'Rust') {
+        foreach ($pair in (Get-RustRecipe -Resolution $resolution).Env) {
+            if ($helpEnv -match [regex]::Escape($pair[0])) { $recipePairs += ,$pair }
+        }
+        foreach ($arg in (Get-RustRecipe -Resolution $resolution).Args) {
+            if ($helpArgs -match [regex]::Escape($arg[0])) { $recipeArgs += $arg }
+        }
+    }
+    # -CsEnv / -CsArgs come after the recipe, so they override it.
+    $allPairs = @($recipePairs) + @($csEnvPairs)
+    $args2 += $recipeArgs
+    $args2 += $csExtraArgs
+    if ($allPairs.Count -or $recipeArgs.Count -or $csExtraArgs.Count) {
+        Write-Host ("  C#-only settings ({0} recipe): env [{1}] args [{2}]" -f $CsRecipe, `
+            (($allPairs | ForEach-Object { "$($_[0])=$($_[1])" }) -join '; '), ((@($recipeArgs) + @($csExtraArgs)) -join ' ')) -ForegroundColor DarkCyan
+    }
+    foreach ($p in $allPairs) { Set-Item -Path "Env:$($p[0])" -Value $p[1] }
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
     # Rust calibrates MS2 by one mean offset; C# calibrates unit-resolution MS2 by an m/z offset
-    # curve (#4997) unless this asks for the mean. Ignored by a build without the curve.
-    $env:OSPREY_MS2_CAL_MEAN = '1'
+    # curve (#4997) unless this asks for the mean. Set ONLY for a build that knows the variable:
+    # setting it for a build without #4997 failed every comparison at startup.
+    if ($helpEnv -match 'OSPREY_MS2_CAL_MEAN') {
+        $env:OSPREY_MS2_CAL_MEAN = '1'
+    }
     # Both implementations keep the most regularized first-pass SVM C within 1% of the best
     # (C# #4703, Rust #69). An INHERITED value would still split them at Stage 5, so the
     # variable is cleared unless -CsSvmCTolerance asks for a pre-#69 comparison.
@@ -453,6 +542,7 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
         Remove-Item Env:OSPREY_DUMP_STAGE7_PROTEIN_FDR -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_MS2_CAL_MEAN -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_SVM_C_TOLERANCE -ErrorAction SilentlyContinue
+        foreach ($p in $allPairs) { Remove-Item -Path "Env:$($p[0])" -ErrorAction SilentlyContinue }
     }
     $csWall = $r.wall
     $csPrec = Get-PrecursorCount -LogPath $r.logPath

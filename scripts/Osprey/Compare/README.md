@@ -72,6 +72,26 @@ pwsh -File ./ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1 -Dataset S
 pwsh -File ./ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All -Force
 ```
 
+### C# defaults past Rust: the Rust recipe is the default
+
+pwiz #4950 moved C# Osprey's defaults past anything Rust osprey has (GBDT, the `default` feature
+set, `--protein-boost best` and the transfer second pass, and at HRAM the SEA-AD scoring recipe).
+The gate therefore runs C# on **Rust's recipe by default** (`-CsRecipe Rust`): `--feature-set core
+--protein-boost compact`, `OSPREY_FDR_MODEL=svm`, `OSPREY_RECON_REFIT=on`,
+`OSPREY_PEP_FORMULA=mixture`, and at HRAM `OSPREY_XIC_FRAGMENTS=6`,
+`OSPREY_CORR_FRAGMENT_TOLERANCE=off`, `OSPREY_REF_XIC=intensity`, `OSPREY_LOCAL_RT_TOLERANCE=off`,
+`OSPREY_MIN_RT_TOLERANCE=0.5`, `OSPREY_TC_HALF_WINDOW=0.15`, `OSPREY_LOESS_BANDWIDTH=0.3`. Each is
+passed only when the build lists it in `--help` / `--help-env`, so a pre-#4950 build runs as
+before. `-CsRecipe Default` runs C# on its own defaults (expected to FAIL); `-CsEnv
+'NAME=VALUE;...'` and `-CsArgs '...'` add C#-only settings after the recipe. None of these reach
+the Rust run.
+
+With the recipe, the first pass matched Rust at 1e-9 on master after #4950, and pass 2 diverged
+only through #4993 and #4823 (protein-compact stratum/complement competition, library-wide
+protein FDR); their Rust port (maccoss/osprey branch `pass2-stratum-complement-protein-q`,
+2026-11-19) restores end-to-end parity. A pass-2 q divergence with pass-1 sidecars still at 1e-9
+is the signature of a C# second-pass change not yet ported.
+
 The two sub-scripts `Compare-Stage7-Crossimpl.ps1` and
 `Compare-Blib-Crossimpl.ps1` are invoked internally by the
 end-to-end gate; you can call them directly to compare just one
