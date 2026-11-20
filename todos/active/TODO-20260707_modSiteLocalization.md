@@ -503,3 +503,14 @@ Re-prioritized candidate list under this direction (no code on the data thread; 
 - [ ] D6 A3 residue-class diagnostic ions (table per mod; UI only).
 - [ ] B1 site-probability pass-through stays a candidate (data, not quantitative) but is a
       BiblioSpec change; separate PR if pursued.
+
+### D3 visualization idea (2026-11-19, Rita): transition-to-isomer Sankey
+Bipartite Sankey: transitions left, isomers right (in site order), ribbon where the isomer
+produces the transition. Producing sets are nested along the ladder, so the ribbons form
+staircases. Width options: (a) 1 / producing-set size (unique = one thick ribbon; all-isomer
+ions collapsed into one "shared" node) for the document-only view; (b) observed area or S/N
+in the selected replicate split across producing isomers, absent ions greyed = evidence-flow
+view (the D3 narrowing view as a picture). Hover/click links to the tree selection. Custom
+GDI+ in a dockable form (ZedGraph has no Sankey). Cheaper sibling to compare: sequence with
+candidate sites marked and each transition as a bracket spanning its residues (maps onto the
+analyzer's span logic; MS2 sequence ruler is halfway there).
