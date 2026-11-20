@@ -324,7 +324,15 @@ function Get-DatasetConfig {
             # Mike's FDRBench FDP plots.
             @{
                 Name             = "AstralLibraryDecoy"
-                TestDir          = Join-Path $baseDir "astral-libdecoy"
+                # The Perftests download carries no astral-libdecoy folder. When it is absent,
+                # fall back to the canonical SEA-AD library (target+decoy+entrapment-20260817,
+                # under $env:OSPREYDEV_SEAAD_LIB), the same Carafe target+decoy+entrapment build.
+                # Not Mike's original 07-27 delivery: Rust refuses that one at load, because 35
+                # rows merge a decoy with an identical target (see SEA-AD/README.md).
+                TestDir          = $(
+                    $local = Join-Path $baseDir "astral-libdecoy"
+                    $seaad = if ($env:OSPREYDEV_SEAAD_LIB) { Join-Path $env:OSPREYDEV_SEAAD_LIB "target+decoy+entrapment-20260817" }
+                    if (-not (Test-Path $local) -and $seaad -and (Test-Path $seaad)) { $seaad } else { $local })
                 # Library + manifest only; the acquisition is shared with Astral rather
                 # than duplicated, so mzML resolve from there (see MzmlDir in the header).
                 MzmlDir          = Join-Path $baseDir "astral"
