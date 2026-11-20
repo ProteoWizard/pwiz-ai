@@ -181,3 +181,35 @@ scoring of the SAME file; it can hide behind scoring of the PREVIOUS file. Desig
 
 Measure each step on SEA-AD at 3 and 20 files against the cache-hit arm: wall time, peak private memory, and
 identical counts. The O(files) memory rule rules out keeping more than the in-flight files resident.
+
+### 2026-11-19 night - Read-ahead reader built; 82-file assessment running
+
+Night log: `ai/.tmp/night-session-budget-20261119.md`.
+
+Local commit a3bd386a46 on `Skyline/work/20261119_osprey_direct_raw_read` (worktree
+`D:\Users\brendanx\proj\pwiz-directread`, not pushed). Under `OSPREY_DIRECT_READ=1`:
+- `SpectraPrefetcher` (Osprey.Tasks): a `QueueWorker` from CommonUtil whose producer thread reads the stage's
+  inputs in input order (the order `OrderedFileLanes` hands them out) and whose consumer thread hands each
+  finished file to the lane waiting on it. Started by the first lane's request, so a stage that reads nothing
+  reads no file; reads with the stage's own demux settings and falls back to the normal path for a multiplexed run.
+- Memory: a byte budget over every file's resident peaks, (lanes + `OSPREY_DIRECT_READ_AHEAD`, default 1) x the
+  first file's bytes. The reader holds back spectrum by spectrum (a hook added to `LoadAllSpectra`) while the
+  next would exceed the budget and another file holds memory, so it can never wait on itself.
+- Per-file scoring calls `SpectraWindowIndex.ReleaseWindowsAsLoaded()` before the main search: each window's
+  spectra are handed over without a copy and dropped as it is scored (a second load throws). Calibration still
+  gets copies. Each lane releases what remains of its file when it finishes (try/finally), and the rescore uses
+  the same reader with whole-file release.
+- Tests: 671/671; `TestSubsetOptionVariants` now runs direct read on one lane, a lane per file, and one lane at a
+  1.5-file budget (the reader must wait mid-file), each blib equal to the cached run's. Inspection clean.
+
+3 SEA-AD files, one lane (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-directread2\direct\run.log`; the
+download was writing to D: at the time): identical counts (75,214 / 74,566), 858 s against 770 s for a cache hit
+and ~951 s for direct read without the reader. Files 2 and 3 waited 0.0 s for their spectra in both scoring and
+rescoring; peak resident spectra 8.13 GB, the two-file budget. What remains is the first file's read in each
+stage (37 s and 30 s), which nothing precedes to hide behind.
+
+82-file assessment: downloaded the 61 missing SEA-AD raw files from Panorama (82/82 on D:, sizes verified,
+`D:\Users\brendanx\test\osprey-runs\sea-ad\raw`). Two arms with the 2026-11-16 final-82 arguments (split-sized
+library, 72 threads, 4 scoring / 8 rescoring lanes, FDRBench both passes), same binary, OS file cache cleared
+before each: DIRECT from D: raw (started 22:38), then CACHE from the E: `.spectra.bin` set. Outputs under
+`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-directread82\`.
