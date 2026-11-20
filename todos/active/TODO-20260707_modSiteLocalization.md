@@ -540,3 +540,30 @@ analyzer's span logic; MS2 sequence ruler is halfway there).
   Tooltip sequence: candidate mod sites bold + underlined, matching the tree's modified-residue
   convention. Merge origin/master into the branch before coding (DPI icon work landed in
   `SequenceTree.cs` / `PeptideTreeNode.cs`); the branch now lives in the pwiz2 checkout.
+
+### D1 + D3 implemented (2026-11-19, pwiz2 checkout, after merging master 8bbeebb956)
+- Merge: `SequenceTree.cs` conflicted with master's DPI icon work (`AddNodeImage` /
+  `DpiUtil.GetIcon`); resolved by building the badged icons from the DPI-scaled icon. An
+  untracked `Pwiz.sln.DotSettings` (local, 2026-10-29) blocked the merge because master now
+  tracks the file; moved to `ai/.tmp/sessions/20261102-modsite/Pwiz.sln.DotSettings.pwiz2-untracked-20261029`.
+- D1 badge: `SequenceTree.AddLocalizingBadge(Image, double fraction)` paints a 3x11 bar at the
+  left edge (columns 0-2, rows 0-10, scaled by icon height / 16), blue (0,90,200), filled from
+  the bottom by 1 / producing-set size. `ImageId.fragment_localizing_1..6` and
+  `fragment_lib_localizing_1..6` (`LOCALIZING_BADGE_LEVELS = 6`, level 6 serves all larger
+  sizes); `SequenceTree.GetLocalizingImageId(size, hasLibInfo)`. `fragment_unique` /
+  `fragment_lib_unique` are gone. `TransitionTreeNode.LocalizingSetSize` and
+  `TransitionGroupTreeNode.GetLocalizingSetSize(choice)` drive tree and pick list.
+- Analyzer: `GetLocalizingSetSize` (producing-set size when 0 < size < IsomerCount, else 0),
+  `CandidateSites`, `UnmodifiedSequence`, public `TryGetSpan`.
+- D3 tooltip (tree and pick list, `TransitionTreeNode.AddLocalizationRows`): rows "Ion span"
+  (sequence with the span in brackets, candidate sites bold + underlined via the new
+  `TextSequenceCellDesc` and `RenderTools.FontBoldUnderline`), "Produced by" ("{0} of {1}
+  isomers"), and the existing "Uniquely localizes" for unique ions. `CellDesc` gained virtual
+  `Measure` / `Draw`; `TableDesc.AddDetailRow(name, CellDesc, rt)`. Pick tip now shows for any
+  fragment of a localizable peptide. New resources in `SeqNodeResources.resx` + designer.
+- Tests: functional test asserts `fragment_localizing_1` for b3 and, for the serine run, no
+  full bar but partial bars present (`AssertNoUniquelyLocalizingIons(message, expectPartial)`,
+  `IsSameImage`). Gate (build + TestSiteDeterminingIonAnalyzer, TestSiteDeterminingIonFunctional,
+  SerializeTransitionFilterTest, TestNeutralLoss, TestAutoSelect, TestLibraryRankedNeutralLosses,
+  CodeInspection) green locally on 2026-11-19.
+- Not done: D2 (restore the Pick Children toggle), D4-D6.
