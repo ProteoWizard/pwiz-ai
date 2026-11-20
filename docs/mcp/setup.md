@@ -198,4 +198,32 @@ password your-password-here
 "@ | Out-File -FilePath "$env:USERPROFILE\.netrc" -Encoding ASCII
 ```
 
+**Prefer an API key to the account password.** skyline.ms and panoramaweb.org both let a user
+create API keys, and the netrc entry then holds a key that can be revoked on its own, without
+changing the password:
+
+1. Sign in to the server **as the +claude account**, so the key carries that account's
+   Site:Agents permissions and attribution.
+2. **username > External Tool Access > Generate API Key**. Describe it with the machine name
+   (e.g. `BRENDANX-LT26 Claude Code`); the description appears in the audit log. The key is
+   shown once.
+3. Use the literal login `apikey` and the key as the password. One block per server:
+
+```
+machine skyline.ms
+login apikey
+password <key generated on skyline.ms>
+
+machine panoramaweb.org
+login apikey
+password <key generated on panoramaweb.org>
+```
+
+Create one key per machine and do not copy a netrc between machines: retiring a machine is
+then a matter of deleting its keys. Generate an **API key**, not a *session key* - a session
+key dies with the browser session that created it. No MCP code change is needed; the server
+sends the netrc login and password as HTTP Basic auth, which LabKey accepts for `apikey`.
+Verified 2026-11-20 against both servers with `python ai/mcp/LabKeyMcp/test_connection.py`
+and the `labkey` MCP tools.
+
 > **Deferring LabKey setup:** If you don't have a +claude account yet, use `-Skip netrc` when running `Verify-Environment.ps1`. The LabKey MCP server will still be registered but will have limited functionality until credentials are configured.

@@ -52,6 +52,27 @@ You don't need to do anything special to record these. I'll take notes as we go 
 
 - **Pristine mode**: The developer followed `new-machine-bootstrap.md`, so Git and Claude Code are already installed and working. Proceed through each phase without checking for existing installations—install commands will run directly. Start at Phase 1.1 (Node.js).
 
+  > **For LLM assistants - clone pwiz-ai FIRST in pristine mode too.** The repository is public,
+  > so it needs no SSH key: as soon as Git exists, clone it over HTTPS and point the remote at
+  > SSH for later pushes. That gives you `Verify-Environment.ps1`, `CLAUDE.md` and the rest of
+  > the project context before any installer runs, instead of after Phase 1.10.
+  >
+  > ```powershell
+  > git clone https://github.com/ProteoWizard/pwiz-ai.git ai
+  > git -C ai remote set-url origin git@github.com:ProteoWizard/pwiz-ai.git
+  > ```
+  >
+  > `Verify-Environment.ps1` needs PowerShell 7, so install that (1.3) next, then let the
+  > verifier drive the order of everything else. Observed 2026-11-20 on a new laptop: a session
+  > that followed the phases in order installed Visual Studio before it had read any project
+  > documentation.
+  >
+  > **Pristine mode also covers a machine with Claude Desktop and no console `claude`.** The
+  > Code tab runs the same engine and can follow this guide from a session opened in the project
+  > root. The console is still worth installing (`winget install Anthropic.ClaudeCode`, which
+  > sets PATH itself): `claude mcp add` (7.2) and `claude plugin` (7.6) are run from a shell, and
+  > the statusline (1.12) and taskbar launcher (7.7) exist only for console sessions.
+
 - **Existing mode**: The machine has a working Skyline development environment (via HowToBuildSkylineTip or prior setup).
 
   > **For LLM assistants — CRITICAL: Clone pwiz-ai FIRST.**
@@ -220,6 +241,12 @@ If not found, install Python 3.12:
 ```powershell
 winget install Python.Python.3.12 --accept-source-agreements --accept-package-agreements
 ```
+
+> **On a fresh Windows 11 install `python` is "found" but is not Python.** It resolves to the
+> zero-byte Microsoft Store alias in `%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe`, so
+> `Get-Command python` succeeds and `python --version` prints *"Python was not found; run
+> without arguments to install from the Microsoft Store"*. Treat that message as not found and
+> run the winget install above. Observed 2026-11-20.
 
 After installation, **restart the terminal** (type `exit`, then <kbd>Win</kbd>+<kbd>X</kbd>, <kbd>I</kbd>) and verify `python --version` works.
 
@@ -451,6 +478,11 @@ This resumes the same conversation but with full project context loaded. You sho
 
 > **For LLM assistants:** After the restart, you will have access to project-specific skills and commands. The setup continues from where you left off.
 
+> **In Claude Desktop there is no `/exit` or `claude --continue`.** The hooks in `.claude/`
+> start firing in the running session as soon as the junction exists, but skills, slash
+> commands and MCP servers load only at session start: quit and reopen the app (or start a new
+> session in the project root) to get them. Observed 2026-11-20.
+
 ### 1.12 Configure Claude Code Statusline (Recommended)
 
 **For LLM assistants:** You MUST offer to configure the statusline. Do not skip this step silently. Ask: "Would you like me to configure the Claude Code statusline? It shows the current project, git branch, model, and context usage."
@@ -538,6 +570,27 @@ Expected output shows a version folder:
 - **VS 2026**: Folder named `18`
 
 If no Visual Studio folder exists, install **Visual Studio 2022 Community** (required for nightly testing).
+
+> **A machine that will only build master can install VS 2026 alone.** Master has been .NET 10
+> since 2026-10-08 (see the VS 2026 note below and Phase 4), so VS 2022 is needed only for the
+> older Boost.Build release branches. Same command with the VS 2026 package id:
+>
+> ```powershell
+> winget install Microsoft.VisualStudio.Community --source winget --override "--add Microsoft.VisualStudio.Workload.ManagedDesktop --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.Net.Component.4.7.2.TargetingPack --includeRecommended --passive --norestart"
+> ```
+>
+> **Then install the .NET 10 SDK separately - VS 2026 no longer brings it.** VS 18.12 ships the
+> .NET 11 SDK only, and `pwiz\global.json` pins `10.0.100` with `rollForward: latestFeature`,
+> which accepts 10.0.x and nothing else. Without a 10.0.x SDK the verifier reports `.NET 10 SDK
+> [MISSING]` and no build can start.
+>
+> ```powershell
+> winget install Microsoft.DotNet.SDK.10 --source winget
+> ```
+>
+> Verified 2026-11-20 on a new laptop with VS 2026 18.12.1 (MSVC 14.52) and SDK 10.0.404 beside
+> 11.0.100: `.\bs.bat`, `Build-Skyline.ps1`, `CodeInspection` and `TestAuditLogSerialization`
+> all passed with no VS 2022 installed.
 
 **Option A - Winget (recommended):**
 
@@ -703,13 +756,28 @@ winget install Notepad++.Notepad++ --accept-source-agreements --accept-package-a
 3. A JetBrains license is required (30-day trial available)
 4. Restart Visual Studio after installation
 
+> **Do not use `winget install JetBrains.ReSharper`.** On a VS 2026 machine it printed
+> *"Successfully installed"* and installed nothing: no entry under
+> `%LOCALAPPDATA%\JetBrains\Installations`, no Visual Studio extension, and `winget list` no
+> longer showed the package. Use the JetBrains installer (or the install offer Visual Studio
+> itself makes), with Visual Studio closed - a running instance shows as *"In use"* and blocks
+> the integration. Verify on disk, not from the installer's exit message:
+>
+> ```powershell
+> Get-ChildItem "$env:LOCALAPPDATA\JetBrains\Installations" | Select-Object Name
+> # expect ReSharperPlatformVs18_<id> (VS 2026) or ReSharperPlatformVs17_<id> (VS 2022)
+> ```
+>
+> Selecting standalone **dotTrace** in the same installer also provides the `Reporter.exe` that
+> `Run-Tests.ps1 -PerformanceProfile` needs. Observed 2026-11-20.
+
 > **Note:** ReSharper requires a paid license but is highly recommended. The Skyline team uses it extensively.
 
 ### 3.2 Optional Utilities
 
 These are useful but not required.
 
-> **For LLM assistants:** You MUST explicitly offer these to the user. Do not skip this section. Ask: "Would you like me to install the optional utilities (WinMerge, EmEditor, WinSCP)? They're quick winget installs and useful for development."
+> **For LLM assistants:** You MUST explicitly offer these to the user. Do not skip this section. Ask: "Would you like me to install the optional utilities (WinMerge, EmEditor, WinSCP, PuTTY)? They're quick winget installs and useful for development."
 
 > **Do NOT probe for these with `Test-Path "C:\Program Files\<tool>\<tool>.exe"`.** All three
 > commonly install somewhere else — WinMerge in particular registers as
@@ -742,6 +810,14 @@ winget install Emurasoft.EmEditor --accept-source-agreements --accept-package-ag
 ```powershell
 winget install WinSCP.WinSCP --accept-source-agreements --accept-package-agreements
 ```
+
+**PuTTY** - SSH/telnet/serial terminal client:
+```powershell
+winget install PuTTY.PuTTY --accept-source-agreements --accept-package-agreements
+```
+
+> PuTTY is for terminal sessions only. Git and TortoiseGit stay on OpenSSH and the `id_ed25519`
+> key from Phase 1.6 - do not switch TortoiseGit's SSH client to PuTTY's `plink` (see 3.1).
 
 ### 3.3 AI Development Tools
 
@@ -1006,6 +1082,18 @@ runtime when opening Thermo, Bruker, Waters, Agilent or Sciex data, rather than 
 time. `build.bat --i-agree-to-the-vendor-licenses` covers command-line builds only.
 
 Run it once per checkout, and note it lives in `pwiz-sharp\`, not the checkout root.
+
+> **On current master the script is in the checkout ROOT and there is no `pwiz-sharp\` folder.**
+> Observed 2026-11-20 on a fresh clone of master: `i-agree-to-the-vendor-licenses.bat`,
+> `build.bat` and `Directory.Build.props` sit at `<checkout>\`, and the script writes
+> `<checkout>\Directory.Build.user.props`. Look before you `cd`:
+>
+> ```powershell
+> Get-ChildItem <checkout> -Filter i-agree-to-the-vendor-licenses.bat -Recurse -Depth 1
+> ```
+>
+> Run it as `.\i-agree-to-the-vendor-licenses.bat`, with the leading `.\`, for the reasons
+> given under 4.3. The `pwiz-sharp\` paths elsewhere in this section predate that move.
 There is no Linux equivalent; on Linux pass the property or set it in your own props file.
 
 **The real entry point is in the repository:** `pwiz_tools\Skyline\build.bat`. It is
@@ -1403,6 +1491,17 @@ In Claude Code (these are slash commands, not shell commands):
 /reload-plugins
 ```
 
+The same three steps work from a shell, which is the only way to do them from a Claude
+Desktop session (verified 2026-11-20, plugin v0.5.1):
+
+```powershell
+claude plugin marketplace add C:/proj/ai/claude/plugins/pwiz-lsp
+claude plugin install csharp-lsp@pwiz-lsp
+claude plugin list
+```
+
+The plugin is picked up by sessions started afterwards.
+
 > **Note on slash paths:** `/plugin marketplace add` requires forward
 > slashes - backslashes get interpreted as escape characters and the path
 > fails. This is the same gotcha as the statusline path in Phase 1.12.
@@ -1687,6 +1786,13 @@ Copy-Item $s "$s.bak-$(Get-Date -Format yyyy-MM-dd)"
     "startingDirectory": "<project-root>"
 }
 ```
+
+> **Check that the `pwsh.exe` path exists before writing it.** `winget install Microsoft.PowerShell`
+> can install the Store-packaged build, which has no `C:\Program Files\PowerShell\7` folder:
+> `(Get-Command pwsh).Source` is then under `%LOCALAPPDATA%\Microsoft\WindowsApps`. In that case
+> use `"commandline": "pwsh.exe -NoLogo -NoExit -Command claude"` and let PATH resolve it.
+> The same goes for the icon: a winget-installed Claude Code is not in `.local\bin`, so take
+> the path from `(Get-Command claude).Source`. Observed 2026-11-20 (PowerShell 7.7.0).
 
 Make this change with the Edit tool. Don't round-trip the file through
 `ConvertFrom-Json`/`ConvertTo-Json`: the settings file is JSON with comments, and a
