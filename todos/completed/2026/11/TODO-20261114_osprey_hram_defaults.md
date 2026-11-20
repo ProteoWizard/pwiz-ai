@@ -503,3 +503,9 @@ Night log `ai/.tmp/night-session-budget-20261119.md`; run logs `ai/.tmp/sessions
   7 lanes both), PerFileRescoring 3,482 vs 5,185 (-33%), SecondPassFDR 237 vs 478. 97,120 at true FDP 1%, identical.
   Peak private 51.5 GB vs 47.1, floors falling, disk 183 GB both. One gap: 42 s right after the library load, before
   the "File parallelism" line (absent in the sequential run). So file parallelism DOES pay on UW8 at 3 lanes.
+- The 42 s gap of the bare `--parallel-files` run is the auto sizing's per-file footprint estimate:
+  `FileParallelismResolver.TargetLength` opened a handle on every input (so a symbolic link reports its target).
+  Timed on UW8: 82 SEA-AD mzML by handle 42.4 s (~0.52 s each, most likely on-open scanning of multi-GB files), by
+  FileInfo metadata 0.01 s; a 2-file probe sized in 2 s. Fix, local and not pushed: c654066882 on
+  `nightlywork/20261120_parallel_files_link_length` (metadata length, handle only when `FileInfo.LinkTarget` is set);
+  671/671 tests, inspection clean. The symlink branch is unchanged code but untested here (symlink creation needs admin).
