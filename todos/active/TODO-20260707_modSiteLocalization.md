@@ -528,3 +528,10 @@ analyzer's span logic; MS2 sequence ruler is halfway there).
   (2) candidate sites inside the span vs outside; (3) the conclusion, e.g. "no loss on y14 =>
   site outside the span: S4". Uses the analyzer's span logic; no monospace alignment needed.
   The Sankey stays a per-peptide pane candidate.
+- **D1 badge refinement (2026-11-19, Rita):** no outline; a plain filled rectangle on the LEFT
+  of the peak image so it never overlaps the library glyph; darker blue than the current
+  (0,90,200), e.g. (0,50,150). Pixel check of `Resources/Fragment.bmp` and `fragmentlib.bmp`
+  (16x16): peak at columns 4-10, library glyph columns 7-15 rows 8-14, baseline tail on rows
+  11-12 out to column 0. Free area in both: columns 0-2, rows 0-10 => bar is 3x11 (a 3x12 would
+  sit on the baseline tail and hide a 1/5 fill). Fill from the bottom, rounded to whole pixels.
+  Verify the FragmentLib variant still reads as bar + glyph.
