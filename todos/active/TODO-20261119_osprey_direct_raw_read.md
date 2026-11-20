@@ -213,3 +213,19 @@ stage (37 s and 30 s), which nothing precedes to hide behind.
 library, 72 threads, 4 scoring / 8 rescoring lanes, FDRBench both passes), same binary, OS file cache cleared
 before each: DIRECT from D: raw (started 22:38), then CACHE from the E: `.spectra.bin` set. Outputs under
 `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-directread82\`.
+
+**23:05 - one reader cannot keep four lanes fed; fixed with two above-normal-priority readers.** The first
+82-file direct arm (stopped after 12 files; logs kept in `runs-directread82\v1-onereader-defaultdirect`) read file 1
+in 40.7 s while the library loaded, then took 77-120 s per file once four lanes (72 threads) were scoring, and
+every lane waited 100-140 s for each file. Resident spectra stayed at 5.5-8.6 GB of the 20.3 GB budget, so
+the budget was not the limit: one decode thread competing with every scoring thread was. Four lanes finish a
+file about every 97 s (the final-82 run's 7,980 s over 82 files), so the reader needs to do better than that
+per file with room to spare. Local commit 6b1c6d9304: `OSPREY_DIRECT_READ_THREADS` (default 2) readers at
+`ThreadPriority.AboveNormal`; with more than one read in flight, the oldest read waits only on memory held by
+files lanes have taken (which scoring frees), and later reads also wait on other reads, so reads never wait on
+each other. Each reader publishes its own file, because `ProducerConsumerWorker` stops its consumer as soon as
+the first producer runs out of work and would strand a file another producer is still reading. Tests 671/671
+(the 1.5-file-budget leg now runs two readers), inspection clean.
+
+Order changed: the CACHE arm started at 23:09 (`runs-directread82\seaad-82files-libdecoy-r1.0-defaultcache`);
+the fixed DIRECT arm is chained after it (`Chain-Direct82.ps1`), with the file cache cleared before each.
