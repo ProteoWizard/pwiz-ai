@@ -476,3 +476,30 @@ over time + residual trace) with mod localization as the first client. Mod-speci
 on top: candidate enumeration by the analyzer, isobar row merging (S1), relocalized decoys,
 FLR, site display. Boundary: closed candidate sets only (open sets = library search = Osprey).
 Molecule mode would run on library spectra (no predictor) and is a later step.
+
+## Direction from Brendan (2026-11-19, relayed by Rita)
+1. **Badge visibility.** The 5x5 "U" in the icon corner (`AddLocalizingBadge`) is not prominent
+   enough; needs something clearly visible at a glance in the Targets tree and the pick list.
+2. **Ions that limit the isomer set: keep going in that direction.** The producing-set view
+   (which isomers an observed ion leaves possible, which ones it excludes) is the part to grow:
+   A1 must-be-absent / A2 producing-set grade as UI, an "isomers still consistent with the
+   observed ions" view per peptide and replicate.
+3. **Scope = UI features for working with positional isomers, not quantitative methods.** The
+   scoring model, decoy-trained localization score, deconvolution / per-isomer traces, predicted
+   RT and spectrum items (C3, C4, the Bayesian and generic mixed-peak notes above) are parked as
+   background for later work, not this PR's scope.
+4. **Re-instate the Pick Children toggle** (`tbbSiteDetermining`, removed 2026-11-02 as a dev
+   decision, see "Pick Children toggle removed"): the transition-selection dialog gets its
+   site-determining filter button back.
+
+Re-prioritized candidate list under this direction (no code on the data thread; for the PR agent):
+- [ ] D1 Badge redesign (item 1).
+- [ ] D2 Restore the Pick Children toggle (item 4); reuse the 2026-07 implementation and tests.
+- [ ] D3 Isomer-set narrowing view (item 2): per peptide and replicate, list isomers consistent
+      with the ions present above noise and those excluded by a must-be-absent ion; show the
+      ions that did the narrowing. Noise gate from `NextGenSignalNoiseCalc` per transition.
+- [ ] D4 B2 isomer-group reporting (group key + isomer count columns, tree filter).
+- [ ] D5 C1 co-assigned peak warning (isomers of a group sharing a peak in a replicate).
+- [ ] D6 A3 residue-class diagnostic ions (table per mod; UI only).
+- [ ] B1 site-probability pass-through stays a candidate (data, not quantitative) but is a
+      BiblioSpec change; separate PR if pursued.
