@@ -514,3 +514,17 @@ view (the D3 narrowing view as a picture). Hover/click links to the tree selecti
 GDI+ in a dockable form (ZedGraph has no Sankey). Cheaper sibling to compare: sequence with
 candidate sites marked and each transition as a bracket spanning its residues (maps onto the
 analyzer's span logic; MS2 sequence ruler is halfway there).
+
+### Dev decisions 2026-11-19 (Rita): D1 badge = fill bar; D3 per-ion "why" = tooltip text
+- **D1 badge.** Replace the 5x5 "U" with a small vertical bar in the icon corner, filled from
+  the bottom by 1 / producing-set size: full for a unique ion, 1/2 for two candidates left,
+  1/3 for three, ... ; no bar at all for ions produced by every isomer. Faint outline of the
+  full bar behind partial fills so a 1/5 fill reads as a bar, not a stray pixel. Paint pixel by
+  pixel at the ImageList size (as `AddLocalizingBadge` does) so DPI scaling stays crisp; keep
+  the existing blue; both Fragment and FragmentLib variants. Fill = 1/|P| chosen over
+  "fraction of isomers excluded" because it does not depend on the group size.
+- **D3 per-ion explanation = tooltip rows, not a drawing.** Add to the existing tree / pick-list
+  tips: (1) the sequence with the ion's span bracketed inline, e.g. `y14  NDES[SSSSIIFAEPTPEK]`;
+  (2) candidate sites inside the span vs outside; (3) the conclusion, e.g. "no loss on y14 =>
+  site outside the span: S4". Uses the analyzer's span logic; no monospace alignment needed.
+  The Sankey stays a per-peptide pane candidate.
