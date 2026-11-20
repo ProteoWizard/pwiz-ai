@@ -229,3 +229,30 @@ the first producer runs out of work and would strand a file another producer is 
 
 Order changed: the CACHE arm started at 23:09 (`runs-directread82\seaad-82files-libdecoy-r1.0-defaultcache`);
 the fixed DIRECT arm is chained after it (`Chain-Direct82.ps1`), with the file cache cleared before each.
+
+**2026-11-20 06:53 - 82-file assessment: direct read gives identical results; scoring +5.7%, rescoring 4.9x (disk-bound).**
+Same binary family, file cache cleared before each arm, final-82 arguments. CACHE = existing E: `.spectra.bin` (a cache
+hit, the fastest case; builds nothing). DIRECT = local commit 6b1c6d9304 reading the D: `.raw` files.
+Logs: `D:\Users\brendanx\test\osprey-runs\sea-ad\runs-directread82\seaad-82files-libdecoy-r1.0-default{cache,direct}\run.log`.
+
+| Stage | Direct read | Cache hit | final-82 (2026-11-16) |
+|---|---|---|---|
+| PerFileScoring | 8,175 s / 75.8 GB | 7,735 s / 66.4 GB | 7,980 s / 67.7 GB |
+| FirstPassFDR | 1,588 s | 1,574 s | 1,602 s |
+| PerFileRescoring | 6,695 s / 30.5 GB | 1,373 s / 24.7 GB | 1,345 s / 23.8 GB |
+| SecondPassFDR | 140 s | 128 s | 140 s |
+| Total | 16,598 s | 10,811 s | 11,067 s |
+
+- Results: 97,191 precursors and 97,122 library spectra in all three; FDRBench pass1/pass2 TSVs byte-identical
+  (sha256 431e7bc0.../5811d02b...).
+- Scoring: reads averaged 185 s per file beside four lanes; lanes waited 5,435 s summed, mostly overlapped (wall
+  +440 s). Peak resident spectra 14.2 GB of a 20.3 GB budget, so memory was not the limit.
+- Rescoring: disk-bound. D: 98% busy at ~90 MB/s, CPU 3.5%; 160 s per file read, eight lanes waited 34,783 s summed.
+  The cache arm re-reads a window-grouped `.spectra.bin`; direct read decodes every `.raw` a second time.
+- Cause of the slow reads: the vendor reader maps the file and faults it in ~264 KB pieces (330 reads/s, 9.6 ms each;
+  the process's own IO counters read 0). Two such readers interleave on the RAID-5 spindles.
+- Not measured: a cold start from `.raw` that BUILDS the caches (the guide's ~70 min / ~340 GB at 82 files). That is
+  the like-for-like comparison for a first run; the cache hit above is the comparison for iterative runs.
+- Next (running): `OSPREY_DIRECT_READ_WARM_MB=16` (uncommitted; snapshot `_bin\directread-warm`) reads each file
+  start to end in 16 MB blocks, one file at a time, before the decode, so the decoder works from the OS file cache.
+  82-file arm `...-defaultdirectwarm` started after the direct arm.
