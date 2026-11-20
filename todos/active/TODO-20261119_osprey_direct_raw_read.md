@@ -135,3 +135,28 @@ sequentially, once, and route each spectrum to its window. Holding every window 
 sequential pass that keeps all windows, or bounded passes over RT. `.spectra.bin` stays for now: its layout is
 window-major, which is exactly what this access pattern needs. The single-file cold case was not measured
 because all 21 raw files on D: are now in the page cache.
+
+### 2026-11-19 - Direct read built and timed
+
+`OSPREY_DIRECT_READ=1` (pwiz worktree `D:\Users\brendanx\proj\pwiz-directread`, branch
+`Skyline/work/20261119_osprey_direct_raw_read` from #4950 0970eb0431, local commit 5909cf752f, not pushed):
+per-file scoring reads the input in full, forward (the same LoadAllSpectra the cache build uses), and a
+resident `SpectraWindowIndex.FromSpectra` hands out copies of each window (callers calibrate m/z in place); no
+`.spectra.bin` is written or read, and the re-score reads the source again. Unit tests 671/671, inspection
+clean; Stellar regression passes unchanged from mzML. From raw, mode 1 reports 4 issues, all `.raw` vs `.mzML`
+file-name keys, and the default build reports the same 4, so `-Source raw` is already broken on #4950.
+
+SEA-AD, 3 raw files on D: (0001, 0005, 0009; already in the OS file cache), 82-file settings, 72 threads,
+one file at a time (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-directread\<arm>\run.log`). All three
+arms report the same counts at every stage (75,214 precursors at 1% experiment FDR, 74,566 blib spectra).
+
+| Arm | Total | Library load | PerFileScoring | PerFileRescoring | Peak private, scoring |
+|---|---|---|---|---|---|
+| direct | 1,040 s | 139 s (first run, cold) | 612 s | 186 s | 38.0 GB |
+| cachebuild | 860 s | 50 s | 506 s | 113 s | 30.4 GB |
+| cachehit | 770 s | 45 s | 409 s | 115 s | 31.2 GB |
+
+Net of the library load, direct scoring is 473 s against 456 s for building the cache and 364 s for a hit: the
+read is ~35-40 s per file either way, and the cache write it skips is cheap here. The re-score's second full
+read adds ~73 s over 3 files. So for one file direct read costs about what building the cache costs, and each
+later run of the same file costs about 30 s per read more than a cache hit. Peak memory is ~7 GB higher.
