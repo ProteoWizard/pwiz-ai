@@ -27,7 +27,7 @@ These wiki pages are synced with committed files in the repository:
 | Wiki Page | Source File | Sync Pattern |
 |-----------|-------------|--------------|
 | AIDevSetup | ai/docs/developer-setup-guide.md | Body (wiki body = file content) |
-| NewMachineBootstrap | ai/docs/new-machine-setup.md | Attachment |
+| NewMachineBootstrap | ai/docs/new-machine-bootstrap.md | Body (wiki body = file content) |
 
 **Source of truth**: The ai/docs files are canonical; wiki pages are updated from them.
 

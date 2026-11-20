@@ -185,7 +185,7 @@ Some wiki pages are kept in sync with files committed to the repository. The ai/
 | Wiki Page | Source File | Sync Pattern |
 |-----------|-------------|--------------|
 | AIDevSetup | ai/docs/developer-setup-guide.md | **Body** - wiki body content = file content |
-| NewMachineBootstrap | ai/docs/new-machine-setup.md | **Attachment** - file attached to wiki page |
+| NewMachineBootstrap | ai/docs/new-machine-bootstrap.md | **Body** - wiki body content = file content |
 
 **Update workflow:**
 1. Edit the ai/docs source file
