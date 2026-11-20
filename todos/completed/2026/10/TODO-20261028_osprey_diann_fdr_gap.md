@@ -1,7 +1,7 @@
 # TODO-20261028_osprey_diann_fdr_gap.md
 
 ## Branch Information
-- **PR**: [#4950](https://github.com/ProteoWizard/pwiz/pull/4950) (opened 2026-10-30; Auto-fix off)
+- **PR**: [#4950](https://github.com/ProteoWizard/pwiz/pull/4950) (merged 2026-11-19 as 4cc5a55baf)
 - **Module**: `osprey`
 - **Branch**: `Skyline/work/20261028_osprey_diann_fdr_gap` (pushed; merged with master at 4145709c7d), cut from
   `origin/master` at 406fd374c0 (2026-10-28), which holds all of Brendan's Osprey work to date,
@@ -9,15 +9,14 @@
 - **Checkout**: `D:\Dev\pwiz-osprey-fdr` (new worktree)
 - **Base**: `master`
 - **Created**: 2026-10-28
-- **Status**: Phases 1-3 done and Phase 4 begun (2026-10-28, one day). Headline: Osprey's FDR is NOT too
+- **Status**: Completed (merged 2026-11-19 as 4cc5a55baf; see the final Progress Log entry). Earlier status, kept
+  for the record: Phases 1-3 done and Phase 4 begun (2026-10-28, one day). Headline: Osprey's FDR is NOT too
   conservative - that was an entrapment-design artifact (Finding 2/3); compaction has no effect (Finding 5); the
   real gap is single-run scoring (38-40% at matched FDP). On the branch, 12 XICs + 20 new features + GBDT close a
   third of it (106,630 vs 142,619 at FDP 0.5%; was 88,604) but GBDT's reported q runs ~1.5x anti-conservative.
   #4823 fixes protein FDR. REQUIREMENT (Mike): single-peptide proteins must be detectable, so the default
   >= 2-peptide stratum competition must go (section below). Next: transfer-mode arms, symmetric decoy reconciliation
 - **GitHub Issue**: (none)
-- **Module**: `osprey`
-- **PR**: (none)
 - **Continues**: `TODO-20261021_osprey_diann_timing.md` (the matched-FDP comparison; its runner and
   plot scripts are reused here)
 - **Machine**: i9-9900K (8 cores / 16 threads), 64 GB, GeForce GTX 1650 (4 GB)
@@ -946,3 +945,18 @@ clean; results posted on the PR (issuecomment-6651116749). Local FDR 0.9, real t
 Branch and worktree created from origin/master 406fd374c0. Read the compaction gate
 (`FirstPassFdrTask.cs:2597`), the second-pass modes (`docs/12-second-pass-fdr.md`) and #4823's
 description; test-merged #4823 against master (one conflict).
+
+### 2026-11-19 - Merged
+
+PR #4950 merged as commit 4cc5a55baf (squash). Shipped: 88 new PIN features (109 in all) in four nested
+`--feature-set` sets (#5033), gradient-boosted trees as the first-pass classifier, `--protein-boost best|compact|off`,
+and HRAM searches defaulting to the measured SEA-AD recipe (#5038, #5043): 97,120 precursors at true FDP 1% on 82
+SEA-AD files, within 4% of DIA-NN's 101,269, reproduced exactly on BRENDANX-UW8 and MACS2 (6 h 20 m on UW8). #5045
+fixed the FirstPassFDR log silences and over-parallel scoring; the CHS 446-file run on UW8 finished in 28 h 09 m
+(1.44x the October master-era run) at 39.2 GB peak, one 30 s gap, 615 GB disk, output byte-identical to MACS2's.
+Cross-impl parity: with C# put back on Rust's recipe (svm, `--feature-set core`, `--protein-boost compact`, refit on,
+mixture PEP, and the HRAM scoring reversions), pass 1 matches Rust at 1e-9; pass 2 diverged only through #4993 and
+#4823 (both on master before this merge), which are ported to Rust on local branch
+`pass2-stratum-complement-protein-q` in C:\proj\osprey (Stellar and Astral, 1 and 3 files, all PASS) awaiting commit.
+Deferred: Stellar tuning (unit resolution keeps protein-compact), the per-file-model feasibility study, and
+`--diskstamp`; the DIVERGENCES.md cleanup goes with the Rust port.
