@@ -567,3 +567,8 @@ analyzer's span logic; MS2 sequence ruler is halfway there).
   SerializeTransitionFilterTest, TestNeutralLoss, TestAutoSelect, TestLibraryRankedNeutralLosses,
   CodeInspection) green locally on 2026-11-19.
 - Not done: D2 (restore the Pick Children toggle), D4-D6.
+- Dev notes 2026-11-19 after review, applied: in the tip sequence the placed site is bold +
+  underlined and the other candidate sites bold only (`PlacedSites` on the analyzer); the span /
+  produced-by rows and the pick-list tip appear only for ions with a badge
+  (`GetLocalizingSetSize > 0`), not for ions every isomer produces. Gate rerun green; committed on
+  the branch (not pushed).
