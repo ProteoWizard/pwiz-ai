@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261020_icon_assets` (tool, assets, csproj wildcard, test)
 - **Base**: `master`
 - **Created**: 2026-10-20
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#4887](https://github.com/ProteoWizard/pwiz/pull/4887) (artwork review by a human; nothing waits on it)
+- **PR**: [#4887](https://github.com/ProteoWizard/pwiz/pull/4887) (merged 2026-11-19)
 - **Superseded**: `Skyline/work/20261020_icon_builder` / [#4886](https://github.com/ProteoWizard/pwiz/pull/4886),
   closed 2026-10-20: it was stacked on the DPI branch and carried the loader too. Its
   `DpiUtil.GetIcon` goes into #4602 via `TODO-20261020_icon_builder-DpiUtil-GetIcon.patch`
@@ -372,3 +372,19 @@ Follow-ups (separate PRs):
   FragmentLibS, LabKey, RedXTransparentBackground) scale to 14/18/21/28, not 16/20/24/32.
 - 41 Resources bitmaps are opaque with white backgrounds (tree glyphs, UI mode icons); their
   vector versions draw the glyph only on transparent, which the gallery shows.
+
+## Progress Log
+
+### 2026-11-19 - Merged
+
+PR #4887 merged as commit 9e33bace28. Shipped IconBuilder with vector and hq2x raster
+sources (and per-size hinted XAML), the generated 20/24/32 px sets for Skyline and
+pwiz.Common, per-DPI icons for forms, dock tabs, image lists and the file dialogs, the
+150%/200% layout fixes found in review (file dialog, Start Page, Files view), and a
+DigitalRune build from developers master f5d20c1 (drawn close X and pins, splitter fix
+restored after #5047 dropped it). Deferred, as listed under "Review and finish": tutorial
+Start Page images from the covers, full .ico size sets from the designer, soft raster
+icons at 125/150%, a Visual Studio style DigitalRune restyle, TreeViewMS plus/minus
+glyphs, the remaining file dialog icons, and Rita's answers on noAccess, FolderSampleSet
+and the folder colors. The open tasks above for window icons (.ico output kind) and the
+IconResourcesTest cleanup were not done in this PR.
