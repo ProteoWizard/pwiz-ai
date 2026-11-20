@@ -497,3 +497,9 @@ Night log `ai/.tmp/night-session-budget-20261119.md`; run logs `ai/.tmp/sessions
   `D:\test\osprey-runs\crossimpl-base` (Astral mzML + SEA-AD `target+decoy+entrapment` library).
 - pwiz docs follow-up committed locally, not pushed: 726f9534bd on `Skyline/work/20261120_osprey_rust_parity_docs`
   (DIVERGENCES.md, docs 08 and 12, a ProteinFdrEngine.cs comment).
+- SEA-AD 82, master 4cc5a55baf, bare `--parallel-files` (runs\seaad-82files-libdecoy-r1.0-default-master-pfauto): auto
+  chose 3 files ("99.6 GB free x 80% / ~15.3 GB est per file -> 5 by RAM, capped to 3 by 30 threads at 8+ per file").
+  5 h 11 m vs 6 h 20 m sequential (-18%): PerFileScoring 10,655 s vs 13,119 (-19%), FirstPassFDR 4,337 vs 4,061 (+7%,
+  7 lanes both), PerFileRescoring 3,482 vs 5,185 (-33%), SecondPassFDR 237 vs 478. 97,120 at true FDP 1%, identical.
+  Peak private 51.5 GB vs 47.1, floors falling, disk 183 GB both. One gap: 42 s right after the library load, before
+  the "File parallelism" line (absent in the sequential run). So file parallelism DOES pay on UW8 at 3 lanes.
