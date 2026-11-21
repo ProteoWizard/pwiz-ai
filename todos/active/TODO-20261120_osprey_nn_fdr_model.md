@@ -61,3 +61,18 @@ close half of it.
 ### 2026-11-20 - Planned
 
 Planned with Brendan after reading DIA-NN 1.7.12's classifier (`NNClassifier`, `nnBagging`, `nnHidden` in `diann.cpp`).
+
+### 2026-11-20 - First implementation (uncommitted, `pwiz-nnfdr`)
+
+- `Osprey.ML/NeuralNetClassifier.cs` (+ `NnParams`, `NnModelData`) and `INonlinearFoldModel`, which `GradientBoostedTrees` now
+  implements; the score paths, `PercolatorResults.FoldGbtModels` and the frozen scorer take the interface, so the network
+  is trained and scored through the trees' per-fold path (`PercolatorConfig.UseGradientBoostedTrees` plus `UseNeuralNet`).
+- Deterministic: double precision, `XorShift64` init (sum of 12 uniforms) and shuffle, tanh and sigmoid on
+  `DeterministicMath.Exp`, Adam bias correction from running products (no `Math.Pow`), one thread per network.
+- `OSPREY_FDR_MODEL=nn`; `OSPREY_NN_ALL_TARGETS`, `OSPREY_NN_BAGGING`, `OSPREY_NN_EPOCHS`, `OSPREY_NN_LEARNING_RATE`; the
+  validity key carries every setting (`PercolatorEngine.NnValidityKeySuffix`); `FirstPassModelIO` persists `FoldNnModels`.
+- Tests: `MLTest.TestNeuralNetClassifier` (learns, thread-count identical, persisted form identical, refuses bad input);
+  `SubsetPipelineTest.TestSubsetOptionVariants` gains an nn leg, same blib on 1 and 4 threads. Both pass; FirstPassModelIoTest 8/8.
+- Queued on MACS2 (`ai/.tmp/sessions/20261120-nnfdr/Chain-Nn82.ps1`): full Osprey tests + inspection, then three 82-file
+  SEA-AD arms resumed from FirstPassFDR on the direct-read write-cache arm's scoring (`runs-nn82\...-defaultnn`,
+  `-defaultnnalltargets`, `-defaultgbdtresume`), per-user CPU logged every 5 minutes.
