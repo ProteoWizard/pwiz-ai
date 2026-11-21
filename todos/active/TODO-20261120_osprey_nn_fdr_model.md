@@ -76,3 +76,17 @@ Planned with Brendan after reading DIA-NN 1.7.12's classifier (`NNClassifier`, `
 - Queued on MACS2 (`ai/.tmp/sessions/20261120-nnfdr/Chain-Nn82.ps1`): full Osprey tests + inspection, then three 82-file
   SEA-AD arms resumed from FirstPassFDR on the direct-read write-cache arm's scoring (`runs-nn82\...-defaultnn`,
   `-defaultnnalltargets`, `-defaultgbdtresume`), per-user CPU logged every 5 minutes.
+
+### 2026-11-20 night - Committed; 82-file arms running
+
+- First full gate failed on inspection: one `PossibleNullReferenceException` at `PercolatorEngine.cs:298`
+  (`config.Scoring` where `config` may be null); fixed to `config?.Scoring.GbtOutOfFold ?? false`. Then Osprey tests
+  672/672 and zero-warning inspection. Committed locally as `3309785f9d` on `Skyline/work/20261120_osprey_nn_fdr_model`
+  (not pushed). Release snapshot with vendor readers: `D:\Users\brendanx\test\osprey-runs\_bin\nnfdr`.
+- Arms started 23:00 (`runs-nn82\...-defaultnn`, then `-defaultnnalltargets`, `-defaultgbdtresume`), each resumed
+  from FirstPassFDR on the write-cache arm's scoring (`runs-directread82\...-defaultdirectwritecache`, 97,191
+  precursors, GBDT). The log confirms `classifier nn`.
+- Reference for the comparison, the October `plot_entrapment` view against DIA-NN 2.7 (own library, first pass,
+  `D:\Users\brendanx\test\diann-vs-osprey\seaad\cmp82-fp-pass1-now`): GBDT pass 1 94,007 vs 99,548 at FDP 0.5%
+  (-5.6%), 100,174 vs 107,129 at FDP 1% (-6.5%). October's master was 43,675 (-56%).
+- Timeline: `ai/.tmp/night-session-budget-20261120.md`.
