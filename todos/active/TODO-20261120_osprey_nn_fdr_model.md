@@ -56,6 +56,42 @@ close half of it.
 - A default change needs an 82-file run of the combination that would ship.
 - Log per-user CPU (`ai/scripts/Get-CpuByUser.ps1`) every 10 minutes for the whole length of every timing run.
 
+## Result: the network loses to the trees; branch discarded
+
+All arms on identical inputs: 82-file SEA-AD, FirstPassFDR onward resumed from one scoring
+(`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-directread82\...-defaultdirectwritecache`), protein-best on,
+exe `_bin\nnfdr`. Pass 1 counts are the October `plot_entrapment` view against DIA-NN 2.7 on its own first pass
+(`D:\Users\brendanx\test\diann-vs-osprey\seaad\cmp82-fp-pass1-<tag>\plot.log`).
+
+| Model | Precursors at 1% | vs GBDT | Pass 1 at FDP 0.5% (DIA-NN 99,548) | at FDP 1% (DIA-NN 107,129) | FirstPassFDR |
+|---|---|---|---|---|---|
+| GBDT (shipped HRAM default) | 97,191 | - | 94,007 (-5.6%) | 100,174 (-6.5%) | 1,727-1,780 s |
+| NN, q-value labels | 90,703 | -6.7% | 87,830 (-11.8%) | 93,979 (-12.3%) | 5,742 s |
+| NN, all-targets labels (DIA-NN's) | 88,219 | -9.2% | 84,547 (-15.1%) | 91,987 (-14.1%) | 5,808 s |
+| Linear SVM | (arm `-defaultsvm` running since 05:51) | | | | |
+
+All of these use the default 70 of 109 features (`FDR features: default (70 of 109, ...)` in each run.log; 71 in the
+second round with the protein-best column). The verdict is for that feature set; all 109 is untested for any model.
+
+**Where GBDT stood against the SVM before tonight** (no 82-file SVM record exists: the 11-08 `svm82` run never got
+past reading the candidate peaks, `runs-pb\svm82-off.out`):
+- 62 files, first pass, protein-best off, 11-08 features (`TODO-20261030_osprey_scoring_library.md`, "Osprey SVM,
+  62 files"): SVM 70,900 vs GBDT 84,576 targets at q 1%; at on-target FDP 1%, 76,722 vs 87,738 (SVM -12.6%).
+- 3 matched files, protein-best on (same TODO, "Matched 3 files"): at FDP 1%, SVM 65,753 vs GBDT 74,378 (GBDT +13%).
+- So GBDT was worth roughly 13-14% over the SVM, more than the 5% recalled; the network sits between the two.
+
+**Earlier network results agreed.** Offline classifier bench (`TODO-20261030_osprey_scoring_library-phase1.md`,
+2026-10-31 and 11-01, session agents): a bagged sklearn MLP near the SVM (41,673 vs GBDT 45,850); later, on all rows,
+a torch MLP at 51,959 vs xgboost 52.2k, and all-vs-all labels hurt there too (46,800). Tonight's in-pipeline result
+repeats both: no gain from the network, and DIA-NN's labelling costs more.
+
+**History of the trees.** Mike contributed the GBDT, after a Noble-lab graduate student's success with boosted trees
+for DDA spectrum matching (Brendan, 2026-11-21).
+
+**Disposition.** The branch (`3309785f9d`, never pushed) is discarded. Levers nobody tested, if anyone returns:
+per-file feature standardisation, a wider first layer, more epochs, scoring only rows above an SVM floor. The FDR
+gap to DIA-NN is not a classifier-strength problem on these features (the same conclusion as 10-31).
+
 ## Progress Log
 
 ### 2026-11-20 - Planned
