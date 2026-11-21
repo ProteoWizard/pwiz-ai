@@ -175,3 +175,18 @@ FDR. The code stays on the local branch (`3309785f9d`, unpushed) as an experimen
 variant that beats the trees. Untested levers, if anyone returns to it: features standardised per file rather than
 experiment-wide, a wider first layer, more epochs, scoring only rows above an SVM floor.
 - FDRBench outputs byte-identical to the bed: pass 1 sha256 `431e7bc040c7ed78...`, pass 2 `5811d02b0defd3f5...` in both.
+
+### 2026-11-21 - TDP-43 (21 files) repeats the SEA-AD result
+
+nn arm resumed from FirstPassFDR on the TDP-43 every-8th GBDT run (`tdp43\runs\...-defaultevery8-nn` vs
+`...-defaultevery8-now`; 70 of 109 features), against the same DIA-NN 2.7 report:
+
+| | GBDT | nn | nn vs GBDT |
+|---|---|---|---|
+| Precursors at 1% | 43,702 | 40,490 | -7.3% |
+| Pass 1 at FDP 0.2% (DIA-NN 39,638) | 43,256 | 40,424 | -6.5% |
+| Pass 1 at FDP 0.3% (DIA-NN 41,922) | 44,841 | 42,104 | -6.1% |
+| FirstPassFDR | 563 s | 1,668 s | 3.0x |
+
+The second dataset gives the same loss (6-7%) and the same 3x first-pass cost as SEA-AD. Stage times contended by the
+82-file SVM arm. Outputs `ai/.tmp/sessions/20261120-nnfdr/cmp-tdp43-every8-nn-pass{1,2}.txt`.
