@@ -15,12 +15,13 @@
 .PARAMETER RetentionDays
     Value for cleanupPeriodDays. Default 365.
 .PARAMETER At
-    Daily run time for the task. Default 06:00.
+    Daily run time for the task. Default 13:00 UTC (06:00 Pacific daylight time, 05:00
+    Pacific standard time), the same instant on every machine. See Register-ClaudeUsageTask.ps1.
 #>
 [CmdletBinding()]
 param(
     [int]$RetentionDays = 365,
-    [datetime]$At = '06:00'
+    [datetime]$At = '13:00Z'
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Resolve-UsageStore.ps1')

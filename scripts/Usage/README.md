@@ -17,6 +17,7 @@ ai/scripts/Usage/                    (pwiz-ai repo — the tooling)
   Snapshot-ClaudeUsage.ps1           # parse THIS machine's transcripts -> data/usage_<MACHINE>.csv
   Combine-ClaudeUsage.ps1            # union all usage_<MACHINE>.csv -> data/usage_combined.csv
   Register-ClaudeUsageTask.ps1       # install the daily snapshot task (every machine)
+  UsageTask.ps1                      # shared helper: register a daily task, run it, log the result
   Setup-ThisMachine.ps1              # one-command onboarding (retention + task + first run)
   Update-ClaudeUsageGraphs.ps1       # combine + render charts (run on ONE host)
   Register-ClaudeUsageGraphTask.ps1  # install the daily graph task (ONE always-on host)
@@ -59,6 +60,29 @@ ai/scripts/Usage/                    (pwiz-ai repo — the tooling)
 
 `Setup-ThisMachine.ps1` backs up `settings.json` before editing and is safe to re-run.
 
+## The scheduled task
+
+- **Runs at 13:00 UTC on every machine**, which is 06:00 Pacific during daylight time and
+  05:00 Pacific during standard time. The time is one fixed instant on purpose, not a local
+  time: every machine, in any time zone, has reported before the charts are drawn at 13:30 UTC.
+  `-At` takes another time, but a local value such as `06:00` is stored as the instant it
+  names on the day of registration, which differs between summer and winter.
+- **Opens no window.** The task launches PowerShell through `conhost.exe --headless`.
+- **Read the run log, not the task's Last Run Result.** The headless launch always reports
+  exit code 0 to Task Scheduler, so each run appends one line to
+  `ai\.tmp\usage\<TaskName>.log` instead: the start time, `OK` or `FAILED`, the duration, and
+  either the scripts that ran or the error with its file and line. Warnings are added to the line.
+  ```
+  2026-11-21 06:00:02  OK        20.8 s  Snapshot-ClaudeUsage.ps1, Combine-ClaudeUsage.ps1
+  ```
+- **A machine set up before this behavior existed keeps its old task** until the task is
+  registered again: it shows a console window and writes no run log. Its time is whatever
+  06:00 local was on the day it was set up. For a Pacific machine set up during daylight time
+  that is the same 13:00 UTC; one set up during standard time runs at 14:00 UTC, after the
+  charts, so its numbers are a day behind there. Run `/pw-usage-reporting on` (or
+  `Setup-ThisMachine.ps1`) once more on a machine to refresh it. The same applies to the
+  charting host and `Register-ClaudeUsageGraphTask.ps1`.
+
 **WSL2:** Claude Code running inside WSL2 keeps its transcripts in the Linux `~/.claude`, so
 use `wsl/` instead (Python port + systemd user timer; same CSV format, pricing read from
 `Snapshot-ClaudeUsage.ps1`). See `/pw-usage-reporting-wsl` or run
@@ -66,12 +90,12 @@ use `wsl/` instead (Python port + systemd user timer; same CSV format, pricing r
 
 ## Daily charts (one host only)
 
-Each machine's snapshot task already runs `Combine` at 06:00, so `usage_combined.csv` stays
+Each machine's snapshot task already runs `Combine` at 13:00 UTC, so `usage_combined.csv` stays
 fresh. Rendering the **charts** is centralized on ONE always-on machine (a workstation, not a
-sleeping laptop), a little later so it folds in what has synced:
+sleeping laptop), half an hour later (13:30 UTC) so it folds in what has synced:
 
 ```powershell
-pwsh -File "C:\proj\ai\scripts\Usage\Register-ClaudeUsageGraphTask.ps1" -At 06:30 -RunNow
+pwsh -File "C:\proj\ai\scripts\Usage\Register-ClaudeUsageGraphTask.ps1" -RunNow
 ```
 
 That host needs R (Rscript) with `tidyverse`, `scales` and `plotly`, installed as the account
@@ -80,10 +104,11 @@ the task runs under:
 `plotly` draws `plots/claude_usage.html`: every chart on one page, where clicking a legend entry
 hides that person, machine or model. The page is self-contained (~4 MB, plotly.js inlined), so a
 downloaded or emailed copy works on its own; Drive's web preview does not run it. Without `plotly`
-the PNGs and PDF are still written and the run log warns that the page was skipped.
+the PNGs and PDF are still written and the run log (`ai\.tmp\usage\ClaudeUsageGraphs.log`) warns
+that the page was skipped.
 
 Data is eventually consistent — a machine that was asleep at
-06:30 appears in the next day's charts; no run-time offset can fix a sleeping machine. The
+chart time appears in the next day's charts; no run-time offset can fix a sleeping machine. The
 `plots/` folder is shared: automated charts use the `01`–`08` names and `claude_usage.*`, so keep any ad-hoc
 analysis on other names (or a subfolder) to avoid clobbering.
 

@@ -50,13 +50,19 @@ Run the one-command onboarding (idempotent; backs up `settings.json` first):
 pwsh -File './ai/scripts/Usage/Setup-ThisMachine.ps1'
 ```
 This (1) sets `cleanupPeriodDays = 365` in `~/.claude/settings.json` so raw transcripts
-survive long enough to backfill, (2) registers the daily `ClaudeUsageSnapshot` task at 06:00,
-and (3) takes a first capture. Confirm `LastResult: 0x0`, then verify the per-machine CSV was
-written:
+survive long enough to backfill, (2) registers the daily `ClaudeUsageSnapshot` task at 13:00
+UTC (06:00 Pacific daylight time, 05:00 Pacific standard time; the same instant on every
+machine), with no window, and (3) takes a first capture. Confirm the `Result:`
+line it prints reads `OK` (a `FAILED` line carries the error), then verify the per-machine CSV
+was written:
 ```
 pwsh -Command '$s = . "./ai/scripts/Usage/Resolve-UsageStore.ps1"; Get-Item (Join-Path (Resolve-UsageStore) ("data\usage_{0}.csv" -f $env:COMPUTERNAME))'
 ```
 Report the row/day count printed by the script.
+
+`on` is also how a machine picks up a change to the task itself. A task registered before the
+run log existed shows a console window, and if it was set up during standard time it reports
+at 14:00 UTC, after the charts are drawn at 13:30 UTC. Running `on` again replaces it in place.
 
 **Note on charts (do NOT do this for a teammate):** the daily chart-rendering task
 (`ClaudeUsageGraphs`, via `Register-ClaudeUsageGraphTask.ps1`) runs on exactly **one**
@@ -79,7 +85,12 @@ that's the team's central charting host, separate from this machine's participat
 
 Report, without changing anything:
 ```
-pwsh -Command 'Get-ScheduledTask -TaskName ClaudeUsage* -ErrorAction SilentlyContinue | Get-ScheduledTaskInfo | Select-Object TaskName, LastRunTime, @{n="LastResult";e={"0x{0:X}" -f $_.LastTaskResult}}, NextRunTime'
+pwsh -Command '. "./ai/scripts/Usage/UsageTask.ps1"; Get-ScheduledTask -TaskName ClaudeUsage* -ErrorAction SilentlyContinue | ForEach-Object { $log = Get-UsageTaskLogPath $_.TaskName; [pscustomobject]@{ Task = $_.TaskName; NextRun = ($_ | Get-ScheduledTaskInfo).NextRunTime; LastRun = $(if (Test-Path $log) { Get-Content $log -Tail 1 } else { "no run log" }) } } | Format-List'
 ```
+`LastRun` is the last line of the task's run log (`ai\.tmp\usage\<TaskName>.log`): start time,
+`OK` or `FAILED`, duration, and the error if there was one. Do not use the task's Last Run
+Result; it reads 0 whatever happened. `no run log` means the task was registered before the
+run log existed: say so, and offer `on` to refresh it.
+
 Also report `cleanupPeriodDays` from `~/.claude/settings.json` (the transcript-retention
 horizon) and whether the Drive store resolves.

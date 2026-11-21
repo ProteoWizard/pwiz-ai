@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Meant to run on ONE always-on machine, a little after the per-machine snapshot tasks
-    (e.g. 06:30), so it folds in whatever has synced from Google Drive and refreshes the
+    (13:30 UTC by default), so it folds in whatever has synced from Google Drive and refreshes the
     shared charts in <store>\plots. Data is eventually consistent: a machine that was
     asleep at run time appears in the next day's charts.
 

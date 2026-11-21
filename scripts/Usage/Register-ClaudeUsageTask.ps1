@@ -10,45 +10,27 @@
     -StartWhenAvailable, so a missed day is caught up at next logon. Re-running updates
     the task in place.
 
+    The task opens no window. Each run appends one result line to
+    ai\.tmp\usage\<TaskName>.log; that line, not the task's Last Run Result, says whether the
+    run worked. See UsageTask.ps1.
+
 .PARAMETER At
-    Time of day to run. Default 06:00.
+    Time of day to run. Default 13:00 UTC, which is 06:00 Pacific daylight time and 05:00
+    Pacific standard time: the same instant on every machine, half an hour before the charts
+    are drawn. A local value such as '06:00' is stored as the instant it names today.
 .PARAMETER TaskName
     Scheduled task name. Default 'ClaudeUsageSnapshot'.
 .PARAMETER RunNow
-    Also trigger the task immediately after registering, to verify it works.
+    Also trigger the task immediately after registering, and print its result line.
 #>
 [CmdletBinding()]
 param(
-    [datetime]$At = '06:00',
+    [datetime]$At = '13:00Z',
     [string]$TaskName = 'ClaudeUsageSnapshot',
     [switch]$RunNow
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'UsageTask.ps1')
 
-$pwsh = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
-if (-not $pwsh) { throw 'pwsh.exe (PowerShell 7) not found on PATH.' }
-
-$snapshot = Join-Path $PSScriptRoot 'Snapshot-ClaudeUsage.ps1'
-$combine  = Join-Path $PSScriptRoot 'Combine-ClaudeUsage.ps1'
-foreach ($p in @($snapshot, $combine)) { if (-not (Test-Path $p)) { throw "Missing script: $p" } }
-
-$cmd = "& '$snapshot'; & '$combine'"
-$action = New-ScheduledTaskAction -Execute $pwsh -Argument "-NoProfile -NonInteractive -Command `"$cmd`""
-
-$trigger   = New-ScheduledTaskTrigger -Daily -At $At
-$settings  = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
-$principal = New-ScheduledTaskPrincipal -UserId ("{0}\{1}" -f $env:USERDOMAIN, $env:USERNAME) -LogonType Interactive -RunLevel Limited
-
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-    -Settings $settings -Principal $principal -Force | Out-Null
-
-Write-Host ("Registered task '{0}' -> daily at {1:HH:mm} on {2}" -f $TaskName, $At, $env:COMPUTERNAME)
-Write-Host ("Action: {0} -NoProfile -NonInteractive -Command <snapshot; combine>" -f $pwsh)
-
-if ($RunNow) {
-    Write-Host 'Triggering once now to verify...'
-    Start-ScheduledTask -TaskName $TaskName
-    Start-Sleep -Seconds 8
-    $info = Get-ScheduledTaskInfo -TaskName $TaskName
-    Write-Host ("LastRunTime: {0}  LastResult: 0x{1:X}" -f $info.LastRunTime, $info.LastTaskResult)
-}
+Register-UsageDailyTask -TaskName $TaskName -At $At `
+    -Script 'Snapshot-ClaudeUsage.ps1', 'Combine-ClaudeUsage.ps1' -RunNow:$RunNow
