@@ -286,3 +286,18 @@ the `SpectrumListWrapper` bool collapse (#5059 part 2).
   lossless `.raw` alternative feeds Skyline yet.
 - Thermo PR #5062: Matt asked to stack it on #5057 (its harness adds a detail-level agreement check). Merged #5057 in
   (5dd68b0015), retargeted, Thermo.Tests 16/16; listed what the Thermo test still covers beyond the harness.
+
+**2026-11-20 - Warm pass (`OSPREY_DIRECT_READ_WARM_MB=16`) measured at 82 files: slower** (arm `...-defaultdirectwarm`,
+third attempt after two snapshots without working vendor DLLs). Scoring 10,263 s / 97.6 GB, FirstPassFDR 2,237 s,
+rescoring 8,842 s, SecondPassFDR 212 s, total 21,554 s (direct 16,598 s); results identical. The pre-read averaged 45 s
+per file (~130 MB/s) and the decode after it stayed slow. Caveat: the two FDR stages, which read no `.raw`, ran 41% and
+51% slower too, so the machine was busier during this arm and the comparison is confounded; still no sign of a gain.
+Not carried into a PR.
+
+**2026-11-20 - Direct read that writes the cache (no read-back), committed locally as 3dc7d70e4b** (`pwiz-directread`,
+not pushed). `OSPREY_DIRECT_READ_WRITE_CACHE=1`: the scoring reader writes each `.spectra.bin` from the read-ahead
+spectra before handing them over, scoring uses memory, the re-score reads the cache. The old cache path did
+read `.raw` -> write -> read `.spectra.bin` back for scoring, with no read-ahead (`ScoringTaskShared.cs` EnsureSpectraCache).
+Osprey tests 671/671 with a new SubsetPipelineTest leg (same blib; caches byte-identical to the cached run's). 82-file
+arm `...-defaultdirectwritecache` queued behind the warm arm (Chain-WriteCache82.ps1), no warm pass; three caches
+hashed before/after to confirm identical output.
