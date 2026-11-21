@@ -90,3 +90,23 @@ Planned with Brendan after reading DIA-NN 1.7.12's classifier (`NNClassifier`, `
   `D:\Users\brendanx\test\diann-vs-osprey\seaad\cmp82-fp-pass1-now`): GBDT pass 1 94,007 vs 99,548 at FDP 0.5%
   (-5.6%), 100,174 vs 107,129 at FDP 1% (-6.5%). October's master was 43,675 (-56%).
 - Timeline: `ai/.tmp/night-session-budget-20261120.md`.
+
+### 2026-11-21 night - nn arm: 6.7% fewer than GBDT, first pass 3.2x slower
+
+82-file SEA-AD, resumed from FirstPassFDR on the same scoring (`runs-nn82\...-defaultnn` vs
+`runs-directread82\...-defaultdirectwritecache`). Machine quiet: other users peaked at 1.7 logical processors
+(services, 25 samples, `ai/.tmp/sessions/20261120-nnfdr/load-nn.log`).
+
+| | GBDT | nn | nn vs GBDT |
+|---|---|---|---|
+| Precursors at 1% (Osprey) | 97,191 | 90,703 | -6.7% |
+| Pass 1 at FDP 0.5% (vs DIA-NN 99,548) | 94,007 (-5.6%) | 87,830 (-11.8%) | -6.6% |
+| Pass 1 at FDP 1% (vs DIA-NN 107,129) | 100,174 (-6.5%) | 93,979 (-12.3%) | -6.2% |
+| FirstPassFDR | 1,780 s | 5,742 s | 3.2x |
+| PerFileRescoring / SecondPassFDR | 1,722 / 136 s | 1,843 / 128 s | |
+
+- The SVM folds behave alike (iteration 1 at 49.9% vs 45.3% of training targets). The network costs 59 s of
+  training against 10 s for the trees; the rest of the 3,960 s is scoring 359M candidate peaks through 12 networks.
+- As implemented (DIA-NN 1.7's 25-20-15-10-5 tanh MLP bag, decoy-vs-target-at-q labels), the network is worse
+  than the trees on both counts. nnalltargets (DIA-NN's labelling) and a GBDT resume control follow.
+- Comparison: `D:\Users\brendanx\test\diann-vs-osprey\seaad\cmp82-fp-pass1-nn\plot.log`.
