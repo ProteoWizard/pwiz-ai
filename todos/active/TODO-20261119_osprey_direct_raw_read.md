@@ -301,3 +301,28 @@ read `.raw` -> write -> read `.spectra.bin` back for scoring, with no read-ahead
 Osprey tests 671/671 with a new SubsetPipelineTest leg (same blib; caches byte-identical to the cached run's). 82-file
 arm `...-defaultdirectwritecache` queued behind the warm arm (Chain-WriteCache82.ps1), no warm pass; three caches
 hashed before/after to confirm identical output.
+
+**2026-11-20 night - Write-cache arm measured: no faster than the old cold start** (arm
+`runs-directread82\seaad-82files-libdecoy-r1.0-defaultdirectwritecache`, 18:54-22:33, exit 0; table from
+`ai/.tmp/sessions/20261119-rawread/compare-arms82.py`):
+
+| Stage | Direct read | Old cold start | Write cache, no read-back | Cache hit |
+|---|---|---|---|---|
+| PerFileScoring | 8,175 s | 9,739 s | 9,526 s / 71.5 GB | 7,735 s |
+| FirstPassFDR | 1,588 s | 1,782 s | 1,780 s | 1,574 s |
+| PerFileRescoring | 6,695 s | 1,565 s | 1,722 s | 1,373 s |
+| SecondPassFDR | 140 s | 130 s | 136 s | 128 s |
+| Total vs cache hit | 16,598 s (+53.5%) | 13,217 s (+22.3%) | 13,165 s (+21.8%) | 10,811 s |
+
+- Results identical (97,191 precursors, 97,122 library spectra, same FDRBench sha256), and the sampled caches hash the
+  same before and after (`cache-hash-before.txt` / `-after.txt`, 8 lines each, no diff).
+- Skipping the read-back saved 52 s (0.4%), because scoring is reader-bound on this disk. The cache writes took only
+  1,207 s in total (14.7 s per file), but they share the RAID-5 HDD with the `.raw` reads: read-ahead took 18,156 s
+  summed against direct read's 15,196 s, and scoring lanes waited 12,209 s against 5,435 s.
+- So from `.raw`, writing the cache costs ~22% over a cache hit by either route, and the extra switch buys nothing
+  here. It might help where the cache goes to a different device than the `.raw`; not measured. Not carried forward.
+- Load: other users peaked at 0.2 logical processors (`load-writecache82.log`, 43 samples). Overlaps of my own: ~5 min
+  of builds and tests during scoring (noted earlier), and a `du` walk of `D:\Users\brendanx\test` plus a trim of
+  ~520 GB of old run outputs from 21:30 to 22:15, i.e. during FirstPassFDR and rescoring. FirstPassFDR is +13% over
+  the cache hit here, and equally in the old cold-start arm, which had neither, so the +13% more likely comes from
+  ~350 GB of cache writes evicting the score parquets from the file cache than from my overlap.
