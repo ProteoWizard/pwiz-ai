@@ -39,14 +39,15 @@ Two readers over the same log. Use both; they answer different questions.
 
 | tool | for | gives |
 |---|---|---|
-| `ai/scripts/perfviz.html` | a human, visually | interactive two-pane plot: memory (and pasted disk) above, log gaps below |
+| `ai/scripts/perfviz.html` | a human, visually | interactive two-pane plot: memory (and disk, from `[DISK]` lines or a pasted CSV) above, log gaps below |
 | `ai/scripts/perfviz.py` | terminal / CI / an agent | numbers: peak, floor drift, gap list |
 | `ai/scripts/phase_mem_shape.py` | either | memory shape WITHIN each phase, by decile, with a fan-out-vs-join verdict |
 
 ```
 python ai/scripts/perfviz.py run.log --files 20 --png run.png
-python ai/scripts/perfviz.py run.log --png run.png --disk disk.csv   # + disk use
-python ai/scripts/perfviz.py run.log --html run.html --disk disk.csv # interactive, one file
+python ai/scripts/perfviz.py run.log --png run.png                  # + disk use, from [DISK] lines
+python ai/scripts/perfviz.py run.log --html run.html                # interactive, one file
+python ai/scripts/perfviz.py run.log --png run.png --disk disk.csv  # a build without --diskstamp
 python ai/scripts/perfviz.py before.log after.log       # A/B two runs
 python ai/scripts/phase_mem_shape.py run.log            # per-phase shape + verdict
 ```
@@ -99,11 +100,25 @@ gaps used to share the memory chart on a second axis; at cohort scale (tens of t
 samples) that trace hid the memory lines entirely. For deciding anything, read the numbers -
 they are less lossy than a picture, and they are what a CI check can assert on.
 
-**Disk use is not in the log yet.** Until Osprey stamps it beside `--memstamp`, sample it
-alongside the run - a CSV whose first column is the time (`yyyy-MM-dd HH:mm:ss`) and which
-has a `dir_gb` column, the run directory's size - and pass it with `--disk` (or paste it into
-the page's second box). The summary gains a disk peak/final line. `ai/scripts/Sample-RunDisk.ps1`
-writes that CSV: start it detached beside the run and it exits when Osprey does.
+**Disk use is in the log with `--diskstamp`** (Osprey only; the dataset runners pass it
+whenever the exe's `--help` lists it). Osprey writes a line of its own rather than a stamp
+column, so the shared `CommandStatusWriter` format stays Skyline's:
+
+```
+[2026/11/21 14:03:00]<TAB>812<TAB>1530<TAB>[DISK] used: +12.34 GB since start, 812.50 GB free on D:
+```
+
+at start (`+0.00`), every 60 s from a timer, after each `[TASK] ...:done`, and at the end.
+The value is the change in USED space on the drive holding `--output-dir` (else `-o`'s
+folder) since the process started, so it is honest about hard links and cheap to take, but
+it also counts anything ELSE writing that drive - read it on a controlled run. perfviz.py and
+the page read these lines as the disk series (the summary's `disk` line says `from log`).
+
+For a build without `--diskstamp`, sample it alongside the run instead - a CSV whose first
+column is the time (`yyyy-MM-dd HH:mm:ss`) and which has a `dir_gb` column, the run
+directory's size - and pass it with `--disk` (or paste it into the page's second box).
+`ai/scripts/Sample-RunDisk.ps1` writes that CSV: start it detached beside the run and it exits
+when Osprey does. A log with `[DISK]` lines wins over `--disk`, and the summary says so.
 
 ### What the shape means
 

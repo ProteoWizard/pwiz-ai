@@ -2,6 +2,8 @@
 <!-- Code by Yuval Boss yuval(at)uw.edu -->
 <!-- Enhanced 2026-07: Time Diff moved to its own secondary y-axis (in seconds) so a large
      time gap no longer flattens the memory scale; memory (MB) and time-gap (sec) axes labeled. -->
+<!-- Enhanced 2026-11: disk use from the log's own [DISK] lines (Osprey --diskstamp) when it
+     has them, which win over a pasted CSV. -->
 <!-- Enhanced 2026-11: two panes on one time axis, as perfviz.py --png draws them - memory
      (and disk, from an optional pasted CSV) above, the log gap between lines below; zooming
      either pane zooms both. The time axis reads as elapsed time from 0:00:00 by default, with a
@@ -102,9 +104,29 @@
 		return { samples: samples, phases: phases, hasMemStamps: hasMemStamps, t0: t0, end: end };
 	}
 
+	// Disk samples from the log itself: the [DISK] lines Osprey writes under --diskstamp,
+	// "[DISK] used: +12.34 GB since start, 812.50 GB free on D:" after the stamp columns. The
+	// series is the used-space change on the output drive since the run started.
+	var DISK_LINE = /^\[(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2})\].*?\[DISK\] used: ([+-]\d+\.\d+) GB since start, (\d+\.\d+) GB free on (\S+)/;
+	function parseLogDisk(text, t0) {
+		if (isBlank(text) || t0 == null)
+			return null;
+		var lines = text.split("\n");
+		var xs = ['xdisk'], gb = ['Disk (GB)'], free = null;
+		for (var i = 0; i < lines.length; i++) {
+			var m = lines[i].match(DISK_LINE);
+			if (!m)
+				continue;
+			xs.push((parseLogDate(m[1]) - t0) / 1000);
+			gb.push(parseFloat(m[2]));
+			free = parseFloat(m[3]);
+		}
+		return xs.length > 1 ? { xs: xs, gb: gb, free: free, fromLog: true } : null;
+	}
+
 	// Disk samples as CSV: a header row, the time (yyyy-MM-dd HH:mm:ss) first and a dir_gb
-	// column (run directory size in GB) - what ai/scripts/Sample-RunDisk.ps1 writes. A stopgap
-	// until disk use is stamped into the log beside the memory columns.
+	// column (run directory size in GB) - what ai/scripts/Sample-RunDisk.ps1 writes, for a
+	// build without --diskstamp. A log with [DISK] lines wins over it (see loadDisk).
 	function parseDisk(text, t0) {
 		if (isBlank(text) || t0 == null)
 			return null;
@@ -125,6 +147,25 @@
 			gb.push(parseFloat(parts[col]));
 		}
 		return xs.length > 1 ? { xs: xs, gb: gb } : null;
+	}
+
+	// The disk series: the log's own [DISK] lines when it has them, else the pasted CSV. A CSV
+	// given beside a --diskstamp log is noted as ignored, so the summary says which was drawn.
+	function loadDisk(logText, diskText, t0) {
+		var disk = parseLogDisk(logText, t0);
+		if (disk) {
+			disk.source = 'from log [DISK], used since start' +
+				(isBlank(diskText) ? '' : '; the pasted CSV is ignored, the log wins');
+			return disk;
+		}
+		disk = parseDisk(diskText, t0);
+		if (disk)
+			disk.source = 'from CSV, dir_gb';
+		return disk;
+	}
+
+	function diskLabel(disk) {
+		return disk && disk.fromLog ? 'Disk used since start (GB)' : 'Disk (GB)';
 	}
 
 	// Tick positions at a round step - a minute up to hours - so about ten fit the span.
@@ -164,8 +205,12 @@
 			html += ' &nbsp; peak <b>' + peak.toFixed(1) + ' GB</b>';
 		html += ' &nbsp; max gap <b>' + Math.round(maxGap) + ' s</b>, ' + nOver + ' gap(s) &ge; ' + GAP_THRESHOLD + ' s';
 		if (disk) {
-			var dmax = Math.max.apply(null, disk.gb.slice(1));
-			html += ' &nbsp; disk peak <b>' + dmax.toFixed(0) + ' GB</b>';
+			var dvals = disk.gb.slice(1);
+			var dmax = Math.max.apply(null, dvals);
+			html += ' &nbsp; disk peak <b>' + dmax.toFixed(1) + ' GB</b>, final ' + dvals[dvals.length - 1].toFixed(1) + ' GB';
+			if (disk.free != null)
+				html += ', ' + disk.free.toFixed(1) + ' GB free at end';
+			html += ' (' + escapeHtml(disk.source) + ')';
 		}
 		if (run.phases.length) {
 			html += '<table class="phases"><tr><th>stage</th><th>starts at</th><th>duration</th><th>share</th></tr>';
@@ -187,7 +232,7 @@
 			$('#summary').text('No timestamped lines found. Was the run given --timestamp (and --memstamp)?');
 			return;
 		}
-		current = { run: run, disk: parseDisk(diskText, run.t0), name: name };
+		current = { run: run, disk: loadDisk(logText, diskText, run.t0), name: name };
 		draw();
 	}
 
@@ -281,7 +326,9 @@
 				axis: {
 					x: xAxis,
 					y: { min: 0, padding: { bottom: 0 }, label: { text: 'Memory (GB)', position: 'outer-middle' } },
-					y2: { show: !!disk, min: 0, padding: { bottom: 0 }, label: { text: 'Disk (GB)', position: 'outer-middle' } }
+					// A used-space change goes below zero when the run deletes more than it writes.
+					y2: { show: !!disk, min: disk ? Math.min(0, Math.min.apply(null, disk.gb.slice(1))) : 0, padding: { bottom: 0 },
+					      label: { text: diskLabel(disk), position: 'outer-middle' } }
 				},
 				tooltip: { contents: tipContents(function (v) { return v.toFixed(1) + ' GB'; }) }
 			});
@@ -350,7 +397,7 @@
   <summary>Log input</summary>
   <form id="loginput">
     <textarea id="logtext" placeholder="Paste a --timestamp --memstamp log" style="width:100%; height:120px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
-    <textarea id="disktext" placeholder="Optional: paste a disk CSV (time,dir_gb,...) to plot disk use on the memory pane" style="width:100%; height:48px; margin-top:4px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
+    <textarea id="disktext" placeholder="Optional, for a build without --diskstamp: paste a disk CSV (time,dir_gb,...) to plot disk use on the memory pane (a log with [DISK] lines needs none)" style="width:100%; height:48px; margin-top:4px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
     <div style="margin-top:4px;"><input type="submit" value="Submit"></div>
   </form>
 </details>

@@ -4,16 +4,19 @@
     perfviz.py --disk (and perfviz.html's disk box), until no Osprey process is left.
 
 .DESCRIPTION
-    Disk use is not stamped into the log the way --memstamp stamps memory, so a long
-    run's disk curve has to be sampled beside it. Start this detached when the run
-    starts; it waits for an Osprey process to appear, samples every -IntervalSec, and
+    For an Osprey build WITHOUT --diskstamp. A build that has it writes [DISK] lines into
+    the log itself (the dataset runners pass it whenever the exe's --help lists it), and
+    perfviz.py / perfviz.html read those - prefer them; a log with [DISK] lines wins over
+    this CSV. On an older build, a long run's disk curve has to be sampled beside it.
+    Start this detached when the run starts; it waits for an Osprey process to appear, samples every -IntervalSec, and
     exits after the last Osprey exits (one final sample included).
 
     Columns: time (yyyy-MM-dd HH:mm:ss), dir_gb (run directory, recursive), drive_free_gb.
     dir_gb counts hard-linked files at full size, so a -LinkFrom run reads larger than
     the disk it actually consumed; drive_free_gb is the honest number there.
 
-    A stopgap: once Osprey writes disk use into the log, perfviz reads it from there.
+    The two measure different things: dir_gb is the run directory's size; [DISK] is the
+    change in used space on the output drive since Osprey started.
 
 .EXAMPLE
     Start-Process pwsh -WindowStyle Hidden -ArgumentList '-NoProfile','-File',

@@ -22,9 +22,13 @@ perfviz.html renders the same two panes interactively - memory (and disk) above,
 log gaps below. Use it to look; use this to decide, to diff two runs, or to check a
 run from a terminal / an agent that cannot open a browser.
 
-Disk use is not in the log yet, so --disk takes it from a CSV sampled alongside the
-run (time first, then a dir_gb column - the run directory's size). It joins the
-summary and draws on the memory pane's second axis.
+Disk use comes from the log when the run was given --diskstamp: its [DISK] lines
+carry the change in used space on the output directory's drive since the run started
+(and the drive's free space). For a build without --diskstamp, --disk takes it from a
+CSV sampled alongside the run (ai/scripts/Sample-RunDisk.ps1: time first, then a
+dir_gb column - the run directory's size). When the log has [DISK] lines they win over
+--disk, and the summary says so. Either series joins the summary and draws on the
+memory pane's second axis.
 
 Zero dependencies - stdlib only, like every other tool in this repo, so it runs on
 a fresh machine with nothing installed. The numeric summary is stdlib-only, so it runs
@@ -36,11 +40,14 @@ at all - that exact false pass happened during this tool's own development.
 
 Log format (one line per emitted message):
     [yyyy/MM/dd HH:mm:ss]<TAB>managedMB<TAB>totalMB<TAB>message
+and, with --diskstamp, messages of the form
+    [DISK] used: +12.34 GB since start, 812.50 GB free on D:
 
 Usage:
     python perfviz.py run.log
     python perfviz.py run.log --png run.png --gap-threshold 30
-    python perfviz.py run.log --png run.png --disk disk.csv
+    python perfviz.py run.log --png run.png                 # disk from [DISK] lines, if any
+    python perfviz.py run.log --png run.png --disk disk.csv  # a build without --diskstamp
     python perfviz.py run.log --html run.html --disk disk.csv   # interactive, one file
     python perfviz.py a.log b.log          # compare two runs
 """
@@ -53,6 +60,11 @@ import sys
 
 LINE_RE = re.compile(
     r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\]\t(\d+)\t(\d+)\t(.*)$')
+# A --diskstamp line (Osprey's DiskStamper.FormatLine), after the stamp columns. The used
+# change is signed GB since the run started; the free space is the drive's, in GB.
+DISK_RE = re.compile(
+    r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\].*?\[DISK\] used: ([+-]\d+\.\d+) GB since start, '
+    r'(\d+\.\d+) GB free on (\S+)')
 # A run failed if it wrote an "Error:" line - in any language Osprey and Skyline ship, at the
 # start of the message or after the stamp columns (CommandStatusWriter.IsErrorLine) - or a
 # crash trace. "[ERROR]" is Osprey's prefix before 2026-09-24, kept so older logs still read.
@@ -303,8 +315,8 @@ def parse_disk(path):
     directory's size in GB, the form ai/scripts/Osprey sampling writes. Returns
     [(datetime, gb)] in file order.
 
-    A stopgap: disk use is not in the log yet. Once Osprey writes a --diskstamp column
-    beside --memstamp, the plot reads it from the log and this option goes away."""
+    For a build without --diskstamp: a log with [DISK] lines supplies its own series
+    (parse_log_disk), which wins over this one."""
     out = []
     with open(path, 'r', encoding='utf-8-sig') as fh:
         header = [h.strip() for h in fh.readline().split(',')]
@@ -323,14 +335,45 @@ def parse_disk(path):
     return out
 
 
-def summarize_disk(disk):
+def parse_log_disk(path):
+    """Read the [DISK] lines a --diskstamp run wrote: [(datetime, used_delta_gb, free_gb)]
+    in log order, or [] when the run was not given --diskstamp."""
+    out = []
+    with open(path, 'r', encoding='utf-8', errors='replace') as fh:
+        for line in fh:
+            m = DISK_RE.match(line)
+            if m:
+                t = datetime.datetime.strptime(m.group(1), '%Y/%m/%d %H:%M:%S')
+                out.append((t, float(m.group(2)), float(m.group(3))))
+    return out
+
+
+def load_disk(log_path, csv_path):
+    """The disk series for one log: (series, source, free), where series is [(datetime, gb)],
+    source says where it came from, and free is the last free-space reading (log only).
+
+    The log's [DISK] lines win over a --disk CSV: they are the run's own measurement, taken
+    on the drive it wrote to. Returns (None, None, None) when there is neither."""
+    from_log = parse_log_disk(log_path)
+    if from_log:
+        source = 'from log [DISK], used since start'
+        if csv_path:
+            source += '; --disk %s ignored, the log wins' % os.path.basename(csv_path)
+        return [(t, gb) for t, gb, _ in from_log], source, from_log[-1][2]
+    if csv_path:
+        return parse_disk(csv_path), 'from CSV %s, dir_gb' % os.path.basename(csv_path), None
+    return None, None, None
+
+
+def summarize_disk(disk, source='from CSV', free=None):
     """One line for the disk series, printed after the memory summary."""
     if not disk:
-        print('disk          : no samples')
+        print('disk          : no samples (%s)' % source)
         return
     peak_t, peak = max(disk, key=lambda d: d[1])
-    print('disk          : peak %.1f GB at %s   final %.1f GB   (%d samples)' % (
-        peak, peak_t.strftime('%H:%M:%S'), disk[-1][1], len(disk)))
+    extra = '   %.1f GB free at end' % free if free is not None else ''
+    print('disk          : peak %.1f GB at %s   final %.1f GB%s   (%d samples, %s)' % (
+        peak, peak_t.strftime('%H:%M:%S'), disk[-1][1], extra, len(disk), source))
 
 
 def format_elapsed(sec):
@@ -339,13 +382,14 @@ def format_elapsed(sec):
     return '%d:%02d:%02d' % (sec // 3600, sec % 3600 // 60, sec % 60)
 
 
-def plot(path, samples, out, threshold=30.0, disk=None, wall_clock=False):
+def plot(path, samples, out, threshold=30.0, disk=None, wall_clock=False, disk_label='Disk (GB)'):
     """Render the run as two panes sharing one time axis, so a PNG can be handed
     straight to a person instead of asking them to locate the log and paste it
     into the page (perfviz.html draws the same panes):
 
       * top - resources: managed and private memory (GB), and disk use (GB) on its
-        own axis when a disk series is given;
+        own axis when a disk series is given (disk_label names it: the used change
+        from the log's [DISK] lines, or a CSV's run directory size);
       * bottom - the reporting gap between log lines, with the gap threshold drawn.
 
     The gaps used to share the memory pane on a second axis. At cohort scale - tens
@@ -401,10 +445,11 @@ def plot(path, samples, out, threshold=30.0, disk=None, wall_clock=False):
     if disk:
         axd = ax.twinx()
         axd.plot([when(d[0]) for d in disk], [d[1] for d in disk], color='#d62728', lw=2.0,
-                 label='Disk (GB)')
-        axd.set_ylabel('Disk (GB)', color='#d62728')
+                 label=disk_label)
+        axd.set_ylabel(disk_label, color='#d62728')
         axd.tick_params(axis='y', colors='#d62728')
-        axd.set_ylim(bottom=0)
+        # A used-space change goes below zero when the run deletes more than it writes.
+        axd.set_ylim(bottom=min(0.0, min(d[1] for d in disk)))
         h, l = axd.get_legend_handles_labels()
         handles += h
         labels += l
@@ -580,13 +625,14 @@ def main():
                     help='report gaps at least this many seconds (default 30)')
     ap.add_argument('--png', help='also write a PNG (single log only)')
     ap.add_argument('--html', help='also write perfviz.html with this log (and --disk) '
-                                   'embedded: the interactive view as one file (single log only)')
+                                   'embedded: the interactive view as one file (single log only). '
+                                   'The page reads [DISK] lines from the log itself')
     ap.add_argument('--wall-clock', action='store_true',
                     help='label the PNG time axis with the log clock instead of elapsed time')
     ap.add_argument('--disk', metavar='CSV',
                     help='disk-use samples to summarize and plot (single log only): a CSV '
-                         'with a time column first and a dir_gb column. A stopgap until '
-                         'disk use is stamped into the log itself')
+                         'with a time column first and a dir_gb column, for a build without '
+                         '--diskstamp. A log with [DISK] lines wins over it')
     ap.add_argument('--files', type=int, default=0,
                     help='file count, to report floor drift per file (the scaling number)')
     ap.add_argument('--force', action='store_true',
@@ -603,15 +649,18 @@ def main():
             rc = 1
             continue
         rc |= summarize(p, a.gap_threshold, a.force, a.files)
-        disk = None
-        if a.disk and len(a.logs) == 1:
-            disk = parse_disk(a.disk)
-            summarize_disk(disk)
+        disk, disk_source = None, None
+        if len(a.logs) == 1:
+            disk, disk_source, free = load_disk(p, a.disk)
+            if disk is not None:
+                summarize_disk(disk, disk_source, free)
         if (a.png or a.html) and len(a.logs) == 1:
             s, failed, _ = parse(p)
             if len(s) >= 2 and (not failed or a.force):
                 if a.png:
-                    plot(p, s, a.png, a.gap_threshold, disk, a.wall_clock)
+                    from_log = disk_source is not None and disk_source.startswith('from log')
+                    plot(p, s, a.png, a.gap_threshold, disk, a.wall_clock,
+                         'Disk used since start (GB)' if from_log else 'Disk (GB)')
                 if a.html:
                     write_html(p, a.html, a.disk)
     if len(a.logs) == 2 and all(os.path.exists(p) for p in a.logs):

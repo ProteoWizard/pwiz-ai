@@ -148,6 +148,27 @@ function Get-SourceOspreyVersion {
 
 <#
 .SYNOPSIS
+    True when an Osprey.exe's --help names an argument, so a runner passes a newer flag
+    (e.g. --diskstamp) only to a build that accepts it - an older one rejects any unknown
+    argument and the run fails at start. Asked once per exe path per session.
+#>
+$script:HelpTextByExe = @{}
+function Test-OspreyArgument {
+    param(
+        [Parameter(Mandatory)] [string]$Exe,
+        [Parameter(Mandatory)] [string]$Argument
+    )
+    if (-not $script:HelpTextByExe.ContainsKey($Exe)) {
+        $text = ''
+        try { $text = (& $Exe '--help' 'ascii' 2>&1 | ForEach-Object { "$_" }) -join "`n" } catch { }
+        $script:HelpTextByExe[$Exe] = $text
+    }
+    # The table draws its borders with characters, so match the argument as a whole token.
+    return $script:HelpTextByExe[$Exe] -match ('(^|[^\w-])' + [regex]::Escape($Argument) + '([^\w-]|$)')
+}
+
+<#
+.SYNOPSIS
     Run Osprey over one large dataset: decoy arm x ratio x pass-2 mode x pick model.
 
 .PARAMETER Dataset
@@ -633,6 +654,10 @@ function Invoke-OspreyDatasetRun {
         '--timestamp', '--memstamp',
         '--output-dir', $OutDir
     )
+    # Disk use in the log ([DISK] lines, read by perfviz.py), on builds that have --diskstamp;
+    # for an older exe, sample it beside the run with ai/scripts/Sample-RunDisk.ps1.
+    $diskStamp = Test-OspreyArgument -Exe $ospreyExe -Argument '--diskstamp'
+    if ($diskStamp) { $cliArgs += '--diskstamp' }
     if ($FdrBenchPass -ne 'none') {
         $cliArgs += @('--fdrbench', (Join-Path $OutDir 'fdrbench.tsv'), '--fdrbench-pass', $FdrBenchPass)
     }
@@ -742,6 +767,9 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  memprobe : {0}" -f $(if ($LogMemory) {
                 'post-GC [MEM] probes ON (OSPREY_LOG_MEMORY=1) - forces GCs, do NOT compare wall time to an arm without it' }
                 else { 'off (default) - --memstamp shape only, no [MEM]-probe GCs' }))
+    Write-Host ("  disk     : {0}" -f $(if ($diskStamp) {
+                '--diskstamp: [DISK] lines in the log (used-space change on the output drive)' }
+                else { 'not in the log - this exe has no --diskstamp; use Sample-RunDisk.ps1' }))
     Write-Host "  train set: one run per precursor (pickrun3 default; OSPREY_TRAIN_PICK_RUN cleared)"
     Write-Host ("  exp agg  : {0}" -f $(if ($ExperimentAgg) {
                 "$ExperimentAgg (OSPREY_EXPERIMENT_AGG) - moves the experiment-wide discovery set" }
