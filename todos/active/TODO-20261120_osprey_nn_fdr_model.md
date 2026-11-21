@@ -68,7 +68,11 @@ exe `_bin\nnfdr`. Pass 1 counts are the October `plot_entrapment` view against D
 | GBDT (shipped HRAM default) | 97,191 | - | 94,007 (-5.6%) | 100,174 (-6.5%) | 1,727-1,780 s |
 | NN, q-value labels | 90,703 | -6.7% | 87,830 (-11.8%) | 93,979 (-12.3%) | 5,742 s |
 | NN, all-targets labels (DIA-NN's) | 88,219 | -9.2% | 84,547 (-15.1%) | 91,987 (-14.1%) | 5,808 s |
-| Linear SVM | (arm `-defaultsvm` running since 05:51) | | | | |
+| Linear SVM | 83,753 | -13.8% | 80,575 (-19.1%) | 86,202 (-19.5%) | 2,300 s |
+
+GBDT is +16.0% over the SVM at 82 files; the network (+8.3% over the SVM) recovers about half of that
+(6,950 of 13,438 precursors). SVM arm: `runs-nn82\...-defaultsvm`, other users peaked at 2.3 logical processors;
+its stage times shared the machine with the TDP-43 runs.
 
 All of these use the default 70 of 109 features (`FDR features: default (70 of 109, ...)` in each run.log; 71 in the
 second round with the protein-best column). The verdict is for that feature set; all 109 is untested for any model.
@@ -78,7 +82,7 @@ past reading the candidate peaks, `runs-pb\svm82-off.out`):
 - 62 files, first pass, protein-best off, 11-08 features (`TODO-20261030_osprey_scoring_library.md`, "Osprey SVM,
   62 files"): SVM 70,900 vs GBDT 84,576 targets at q 1%; at on-target FDP 1%, 76,722 vs 87,738 (SVM -12.6%).
 - 3 matched files, protein-best on (same TODO, "Matched 3 files"): at FDP 1%, SVM 65,753 vs GBDT 74,378 (GBDT +13%).
-- So GBDT was worth roughly 13-14% over the SVM, more than the 5% recalled; the network sits between the two.
+- So GBDT was worth roughly 13-14% over the SVM, more than the 5% recalled; tonight's 82-file arm puts it at 16%.
 
 **Earlier network results agreed.** Offline classifier bench (`TODO-20261030_osprey_scoring_library-phase1.md`,
 2026-10-31 and 11-01, session agents): a bagged sklearn MLP near the SVM (41,673 vs GBDT 45,850); later, on all rows,
