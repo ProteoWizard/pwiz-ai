@@ -138,3 +138,4 @@ loses 6.7% of precursors, with DIA-NN's all-targets labels 9.2%, and either cost
 FDR. The code stays on the local branch (`3309785f9d`, unpushed) as an experiment; nothing to carry forward without a
 variant that beats the trees. Untested levers, if anyone returns to it: features standardised per file rather than
 experiment-wide, a wider first layer, more epochs, scoring only rows above an SVM floor.
+- FDRBench outputs byte-identical to the bed: pass 1 sha256 `431e7bc040c7ed78...`, pass 2 `5811d02b0defd3f5...` in both.
