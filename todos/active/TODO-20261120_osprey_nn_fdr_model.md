@@ -126,3 +126,15 @@ processors (services, 25 samples, `load-nnalltargets.log`).
 - Training on every target as a positive (DIA-NN 1.7's labelling) costs a further 2.7% against our q-value labels.
   Neither network variant approaches the trees; the GBDT resume control is running.
 - Comparison: `D:\Users\brendanx\test\diann-vs-osprey\seaad\cmp82-fp-pass1-nnalltargets\plot.log`.
+
+### 2026-11-21 night - GBDT control reproduces the bed; verdict on the network
+
+`runs-nn82\...-defaultgbdtresume` (same resume, trees) gives 97,191 precursors and the same pass 1 curve as the
+write-cache bed (94,007 at FDP 0.5%, 100,174 at FDP 1%); FirstPassFDR 1,727 s vs the bed's 1,780 s. So the resume
+path is exact and the nn losses are the model's, not the harness's.
+
+**Verdict:** the DIA-NN 1.7 network does not help Osprey's first pass on SEA-AD at 82 files. With our labels it
+loses 6.7% of precursors, with DIA-NN's all-targets labels 9.2%, and either costs about 66 extra minutes of first-pass
+FDR. The code stays on the local branch (`3309785f9d`, unpushed) as an experiment; nothing to carry forward without a
+variant that beats the trees. Untested levers, if anyone returns to it: features standardised per file rather than
+experiment-wide, a wider first layer, more epochs, scoring only rows above an SVM floor.
