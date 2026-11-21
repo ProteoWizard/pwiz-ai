@@ -1,10 +1,10 @@
 # TODO: Read raw data directly by default, so a single analysis writes no .spectra.bin
 
 ## Branch Information
-- **Branch**: (not started) - measurement first, branch when the prototype begins
-- **Base**: `master`, after #4950 merges
+- **Branch**: `Skyline/work/20261119_osprey_direct_raw_read` (worktree `D:\Users\brendanx\proj\pwiz-directread`)
+- **Base**: `master` (#4950 merged 2026-11-20; merged in as 2881dd85b5)
 - **Created**: 2026-11-19
-- **Status**: Measured A-C, E, F on MACS2; next is a metadata-only read in pwiz-sharp
+- **Status**: PR in preparation: the read-ahead cache write becomes the default cache-miss path, plus `--spectra-cache off`
 - **Module**: `osprey`
 - **PR**: (none yet)
 
@@ -326,3 +326,27 @@ hashed before/after to confirm identical output.
   ~520 GB of old run outputs from 21:30 to 22:15, i.e. during FirstPassFDR and rescoring. FirstPassFDR is +13% over
   the cache hit here, and equally in the old cold-start arm, which had neither, so the +13% more likely comes from
   ~350 GB of cache writes evicting the score parquets from the file cache than from my overlap.
+
+### 2026-11-21 - Direction changed: keep the cache by default, ship direct read as an option
+
+Brendan, after the 82-file arms: the cache keeps enough benefit, especially written from the
+read-ahead spectra with no read-back, that it stays the default; users willing to trade speed for disk
+get an option to run without it. Local commit 3d7a9eaae8 on the branch (not pushed):
+
+- Default: per-file scoring starts the read-ahead reader (`SpectraPrefetcher`) for the inputs that have
+  no `.spectra.bin` (nor `.demux.spectra.bin`) when the stage begins; it writes each cache from the
+  spectra it read and scoring uses them from memory. Inputs with a cache stream from it as before; a
+  cache found stale still goes through the old read, write, read-back path, as does `--task SpectraCache`.
+- `--spectra-cache on|off` (`OspreyConfig.SpectraCache`, not in the search hash): off writes no cache,
+  and the re-score starts the reader again for inputs with no cache. An existing cache is read either way.
+- Removed `OSPREY_DIRECT_READ`, `_WRITE_CACHE` and `_WARM_MB`; `_AHEAD` and `_THREADS` renamed
+  `OSPREY_READ_AHEAD` / `OSPREY_READ_THREADS`. Docs: 14-intermediate-files, 15-hpc-scoring-split,
+  20-command-line; help pages regenerated.
+- Tests 671/671, inspection clean (`ai/.tmp/sessions/20261119-rawread/tests-spectracache2.log`).
+  `TestSubsetOptionVariants` now asserts that the default run reads ahead, that the caches it writes are
+  byte-identical to `--task SpectraCache`'s, and that the three `--spectra-cache off` legs write no cache.
+  An earlier run reported a second failure that did not recur; its truncated log lost the name.
+- Measured basis (82 SEA-AD files, sections above): default path 13,165 s vs 13,217 s for the old cold
+  start (-0.4%), scoring peak 71.5 vs 53.9 GB; off is +26% wall over the default path.
+- Next: `regression-parallel.ps1 -Dataset All` (regression tests should pass without change) after the
+  109-feature SVM arm on MACS2 finishes, `/code-review medium` (running), then the PR.
