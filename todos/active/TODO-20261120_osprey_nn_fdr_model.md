@@ -110,3 +110,19 @@ Planned with Brendan after reading DIA-NN 1.7.12's classifier (`NNClassifier`, `
 - As implemented (DIA-NN 1.7's 25-20-15-10-5 tanh MLP bag, decoy-vs-target-at-q labels), the network is worse
   than the trees on both counts. nnalltargets (DIA-NN's labelling) and a GBDT resume control follow.
 - Comparison: `D:\Users\brendanx\test\diann-vs-osprey\seaad\cmp82-fp-pass1-nn\plot.log`.
+
+### 2026-11-21 night - nnalltargets arm: DIA-NN's labelling is worse again
+
+Same resume (`runs-nn82\...-defaultnnalltargets`, `OSPREY_NN_ALL_TARGETS=1`); other users peaked at 2.0 logical
+processors (services, 25 samples, `load-nnalltargets.log`).
+
+| | GBDT | nn | nnalltargets |
+|---|---|---|---|
+| Precursors at 1% | 97,191 | 90,703 | 88,219 (-9.2% vs GBDT) |
+| Pass 1 at FDP 0.5% (DIA-NN 99,548) | 94,007 | 87,830 | 84,547 (-15.1%) |
+| Pass 1 at FDP 1% (DIA-NN 107,129) | 100,174 | 93,979 | 91,987 (-14.1%) |
+| FirstPassFDR | 1,780 s | 5,742 s | 5,808 s |
+
+- Training on every target as a positive (DIA-NN 1.7's labelling) costs a further 2.7% against our q-value labels.
+  Neither network variant approaches the trees; the GBDT resume control is running.
+- Comparison: `D:\Users\brendanx\test\diann-vs-osprey\seaad\cmp82-fp-pass1-nnalltargets\plot.log`.
