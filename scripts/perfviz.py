@@ -64,7 +64,7 @@ LINE_RE = re.compile(
 # change is signed GB since the run started; the free space is the drive's, in GB.
 DISK_RE = re.compile(
     r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\].*?\[DISK\] used: ([+-]\d+\.\d+) GB since start, '
-    r'(\d+\.\d+) GB free on (\S+)')
+    r'(\d+\.\d+) GB free on (.+?)\s*$')   # the volume is last: a mount point may hold spaces
 # A run failed if it wrote an "Error:" line - in any language Osprey and Skyline ship, at the
 # start of the message or after the stamp columns (CommandStatusWriter.IsErrorLine) - or a
 # crash trace. "[ERROR]" is Osprey's prefix before 2026-09-24, kept so older logs still read.

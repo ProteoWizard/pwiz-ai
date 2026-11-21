@@ -109,9 +109,11 @@ column, so the shared `CommandStatusWriter` format stays Skyline's:
 ```
 
 at start (`+0.00`), every 60 s from a timer, after each `[TASK] ...:done`, and at the end.
-The value is the change in USED space on the drive holding `--output-dir` (else `-o`'s
-folder) since the process started, so it is honest about hard links and cheap to take, but
-it also counts anything ELSE writing that drive - read it on a controlled run. perfviz.py and
+The value is the change in USED space since the process started on the volume (mount point,
+not just the path root) holding the run's per-file outputs - `--output-dir`, else the first
+input's folder. It is honest about hard links and cheap to take, but it also counts anything
+ELSE writing that volume - read it on a controlled run - and a run spread over several
+volumes is measured on the first only. The volume name is the last field and may hold spaces. perfviz.py and
 the page read these lines as the disk series (the summary's `disk` line says `from log`).
 
 For a build without `--diskstamp`, sample it alongside the run instead - a CSV whose first

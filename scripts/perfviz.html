@@ -107,7 +107,7 @@
 	// Disk samples from the log itself: the [DISK] lines Osprey writes under --diskstamp,
 	// "[DISK] used: +12.34 GB since start, 812.50 GB free on D:" after the stamp columns. The
 	// series is the used-space change on the output drive since the run started.
-	var DISK_LINE = /^\[(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2})\].*?\[DISK\] used: ([+-]\d+\.\d+) GB since start, (\d+\.\d+) GB free on (\S+)/;
+	var DISK_LINE = /^\[(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2})\].*?\[DISK\] used: ([+-]\d+\.\d+) GB since start, (\d+\.\d+) GB free on (.+?)\s*$/;	// the volume is last: a mount point may hold spaces
 	function parseLogDisk(text, t0) {
 		if (isBlank(text) || t0 == null)
 			return null;
