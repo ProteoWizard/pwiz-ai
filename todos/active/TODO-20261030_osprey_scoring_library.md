@@ -575,3 +575,26 @@ deleted (local and remote).
 - Cleanup: C:/t/prBpre clone; protshuf libs (22 GB) and runs (11 GB); diann1712 (9.6 GB); pwiz-cdexp worktree; decomp ablation
   process 61340 may have kept running.
 - Decomp ablation finished only 2 variants; per-family offline ablation of the late features is incomplete.
+
+### 2026-11-21 - Second dataset: TDP-43 every-8th (21 files), Osprey now ahead of DIA-NN
+
+Master-equivalent exe (`_bin\nnfdr`, GBDT, default 70 of 109 features, protein-best), 21 files from the E: caches,
+library `target+decoy+entrapment-20260817` (the October library), FDRBench both passes. Run
+`D:\Users\brendanx\test\osprey-runs\tdp43\runs\tdp43-21files-libdecoy-r1.0-defaultevery8-now`; 43,702 precursors at 1%.
+Compared with the same DIA-NN 2.7 reports as October (`compare-view.ps1`):
+
+| | DIA-NN | Osprey | Osprey vs DIA-NN |
+|---|---|---|---|
+| Pass 1 at FDP 0.2% | 39,638 | 43,256 | +9.1% |
+| Pass 1 at FDP 0.3% | 41,922 | 44,841 | +7.0% |
+| Pass 1 at matched FDP 0.35% | 42,490 | 45,158 | +6.3% |
+| Pass 2 vs MBR at matched FDP 0.35% | 43,149 | 45,200 | +4.8% |
+| q 1%: kept, FDP | 46,015 at 0.63% | 43,650 at 0.24% | |
+
+- October on the same files and DIA-NN report: Osprey 18,316 vs 44,467 (-59%, `tdp43\cmp21-fp-pass1`,
+  `ai/.tmp/handoff-20261030.md`). SEA-AD at 82 files is still -5.6% at FDP 0.5%; TDP-43 plasma EV is not SEA-AD-shaped.
+- Osprey is very conservative here: q 1% gives FDP 0.24%, so its curve ends at FDP 0.35% and nothing above that can be
+  matched. At reported q 1% DIA-NN keeps 5% more, at 2.6x Osprey's FDP.
+- Stage times are contended (the TDP-43 .raw download ran 04:21-05:50, then an 82-file SVM arm): PerFileScoring 6,665 s,
+  FirstPassFDR 563 s, PerFileRescoring 232 s, SecondPassFDR 38 s.
+- Outputs: `D:\Users\brendanx\test\diann-vs-osprey\tdp43\cmp21-fp-pass1-every8-now`, `cmp21-mbr-pass2-every8-now`.
