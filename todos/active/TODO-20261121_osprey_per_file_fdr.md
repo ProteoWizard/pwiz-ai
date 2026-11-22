@@ -1,23 +1,30 @@
-# TODO: Feasibility of a per-file first-pass FDR model (DIA-NN style), to drop the feature parquet
+# TODO: Per-file first-pass FDR model (DIA-NN style) - moves FirstPassFDR's work into the fan-out
 
 ## Branch Information
-- **Branch**: `nightlywork/20261121_osprey_per_file_fdr` (local only, C:\proj\pwiz)
+- **Branch**: `Skyline/work/20261122_osprey_per_file_fdr` (pushed to origin; was `nightlywork/20261121_osprey_per_file_fdr`)
 - **Base**: `master` (b3dcb52e07)
 - **Created**: 2026-11-21
-- **Status**: Study complete 2026-11-22 - fully per-file (A4) is +1.2% at true FDP 1%; recommend a sprint
+- **Status**: Feasibility done (A4 +1.2% at true FDP 1%); cutting the per-file training cost, then a draft PR
 - **Module**: `osprey`
-- **PR**: (none - developer-only experiment switch, not for merge as is)
+- **PR**: (pending - draft, experimental)
 
 ## Goal
 
-Osprey finds 97,120 precursors at true FDP 1% (pass 1) on SEA-AD 82 files, within 4% of
-DIA-NN's 101,269, but writes ~183 GB, ~165 GB of it `.scores.parquet`, where DIA-NN writes
-7.5 GB. The parquet exists to feed FirstPassFDR's experiment-wide feature join; after
-FirstPassFDR the later stages read only its scalar stub columns. A model trained PER FILE
-inside PerFileScoring (as DIA-NN trains one per run) would emit only per-run scores/q/PEP,
-shrink FirstPassFDR to calibration + planning, and remove the feature parquet.
+**The key benefit is HPC** (Brendan, 2026-11-22). FirstPassFDR is the single-node join. Today it
+accumulates per-file work - the training-feature loads, the two-round training, scoring all
+~359 M rows - and must be shipped every run's ~2 GB `.scores.parquet` (~165 GB at 82 files).
+Training the first-pass model per file moves that work into the fan-out stage, where it scales
+with nodes, and shrinks the join to a competition over ~0.2 GB/file stubs (~15 GB shipped).
 
-Question: does a per-file model keep the detections? Measured on real data before any redesign.
+Storage (the ~165 GB of feature parquet a cohort writes, against DIA-NN's 7.5 GB total) and
+MACS2's file parallelism are secondary benefits. Single-box wall time may be roughly a wash -
+first guess PerFileScoring +40-80 min, FirstPassFDR down to ~15-30 min, total ~5.5-6 h against
+5 h 11 m with `--parallel-files` on UW8. That is a guess to be measured; interpret performance
+with caution until it is.
+
+The question this study answered first: does a per-file model keep the detections? Osprey finds
+97,120 precursors at true FDP 1% (pass 1) on SEA-AD 82 files, within 4% of DIA-NN's 101,269.
+Measured on real data before any redesign.
 
 ## Design (study hook)
 
@@ -41,6 +48,30 @@ Question: does a per-file model keep the detections? Measured on real data befor
 
 Measured at FirstPassFDR only: the persisted model stays global, so pass 2 under transfer is not
 valid for these arms.
+
+## How to run the A4 arm (any machine)
+
+Branch `Skyline/work/20261122_osprey_per_file_fdr` (pwiz). Build Release, snapshot the
+output dir (`D:\test\osprey-runs\_bin\<tag>` or the machine's equivalent), then with a
+completed 82-file SEA-AD run of the same build line as the input (its `.scores.parquet` are
+what FirstPassFDR reads; the runner pins `OSPREY_VERSION_OVERRIDE` from it):
+
+```powershell
+$env:OSPREY_PER_FILE_FDR = 'file'      # per-file two-round model with its own protein-best column
+# optional cost levers (unset = A4 as measured):
+#   $env:OSPREY_PER_FILE_FDR_TRAIN_SIZE = '100000'   # round-1 rows per file (round 2 = 2/3)
+#   $env:OSPREY_GBT_N_TREES = '100'; $env:OSPREY_GBT_MAX_ITERATIONS = '10'
+pwsh -File ai/scripts/Osprey/SEA-AD/Run-SeaAd.ps1 -Exe <snapshot>\Osprey.exe `
+    -LibraryDir '<lib root>\target+decoy+entrapment-20260817-split-sized' `
+    -Task FirstPassFDR -LinkFrom '<completed 82-file run dir>' -Tag '-pfA4'
+python -I ai/scripts/Osprey/SEA-AD/tools/split_calibration.py `
+    --lib-dir '<lib root>\target+decoy+entrapment-20260817-split-sized' --osprey '<new run dir>'
+```
+
+The runner does not strip `OSPREY_PER_FILE_FDR*` or `OSPREY_GBT_*`, so they pass through from
+the launching shell; the run.log "Environment switches:" line records them. Leave
+`-FdrFileLanes` to the resolver unless measuring per-file cost at full threads (`-FdrFileLanes 1`).
+A0 reference on BRENDANX-UW25: 97,120 at true FDP 1%, A4 98,280.
 
 ## Arms
 
