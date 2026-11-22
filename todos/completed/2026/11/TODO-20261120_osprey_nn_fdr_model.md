@@ -5,8 +5,8 @@
 - **Base**: `master` (b3dcb52e07; #4950 has merged)
 - **Worktree**: `D:\Users\brendanx\proj\pwiz-nnfdr` (MACS2)
 - **Created**: 2026-11-20
-- **Status**: In progress
-- **PR**: (pending)
+- **Status**: Completed - experiment, not merged; branch discarded 2026-11-21
+- **PR**: none (the network lost to GBDT; see Result)
 - **Module**: `osprey`
 - **Objective**: Add a bagged feed-forward neural network as a third FDR model beside the linear SVM and GBDT, and measure it against GBDT on SEA-AD
 
@@ -75,7 +75,18 @@ GBDT is +16.0% over the SVM at 82 files; the network (+8.3% over the SVM) recove
 its stage times shared the machine with the TDP-43 runs.
 
 All of these use the default 70 of 109 features (`FDR features: default (70 of 109, ...)` in each run.log; 71 in the
-second round with the protein-best column). The verdict is for that feature set; all 109 is untested for any model.
+second round with the protein-best column). With all 109 features (below) the order and the gaps are the same.
+
+**All 109 features** (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs-all109\seaad-82files-libdecoy-r1.0-defaultall109{gbdt,nn,svm}`,
+GBDT re-scored from the start, nn and SVM resumed on its scoring; all exit 0):
+
+| Model | Precursors at 1%, 109 features | vs 70 features | vs GBDT | FirstPassFDR |
+|---|---|---|---|---|
+| GBDT | 96,597 | -0.6% | - | 2,051 s |
+| NN, q-value labels | 90,409 | -0.3% | -6.4% | 7,432 s |
+| Linear SVM | 82,385 | -1.6% | -14.7% | 2,202 s (contended by builds) |
+
+The extra 39 features help no model, cost first-pass time and disk, so the 70-feature default stands.
 
 **Where GBDT stood against the SVM before tonight** (no 82-file SVM record exists: the 11-08 `svm82` run never got
 past reading the candidate peaks, `runs-pb\svm82-off.out`):
@@ -194,3 +205,9 @@ nn arm resumed from FirstPassFDR on the TDP-43 every-8th GBDT run (`tdp43\runs\.
 
 The second dataset gives the same loss (6-7%) and the same 3x first-pass cost as SEA-AD. Stage times contended by the
 82-file SVM arm. Outputs `ai/.tmp/sessions/20261120-nnfdr/cmp-tdp43-every8-nn-pass{1,2}.txt`.
+
+### 2026-11-21 - All 109 features; completed
+
+All 109 features changed no ranking (GBDT 96,597, nn 90,409, SVM 82,385 precursors at 1%; table under Result), so
+the 70-feature default stays. The local branch (`3309785f9d`, never pushed) and the `pwiz-nnfdr` worktree were
+removed; the `runs-all109` arms were trimmed to run.log, FDRBench TSVs and JSON sidecars.
