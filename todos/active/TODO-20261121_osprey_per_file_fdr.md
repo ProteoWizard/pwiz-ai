@@ -447,4 +447,28 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
   `--keep-scores-parquet` and the composites (step 3); no SubsetPipelineTest coverage, since the
   arm is a static environment switch.
 
+## Session 2026-11-22 (evening): the stub parquet, and the 82-file performance run
+
+- Committed 926b3140d8 (milestone 1 checkpoint) and 71f668b219: under `OSPREY_PER_FILE_FDR=file`
+  each run's model trains from the features IN MEMORY right after the parquet write (rows in
+  parquet order via the ParquetIndex the write assigns; values `Finite()` as the parquet stores
+  them), and the parquet is a STUB: scalar columns + `fragment_coelution_sum` (the stub readers'
+  coelution sum), footer `osprey.feature_columns=stub`, key term `;parquet=stub`.
+  `OSPREY_PER_FILE_FDR_KEEP_PARQUET=1` writes the full parquet (becomes `--keep-scores-parquet`
+  at step 5). A stub-writing run accepts a stub or a full parquet (`OutputValidityKey` reads the
+  footer); a run that needs features refuses a stub (verified: "key term 12: stored
+  'parquet=stub', this run '(none)'"), and a stub whose own scores are stale re-extracts.
+- Verified: 3-file run from spectra, run-level sum 200,832 and 80,026 at experiment q 1% -
+  identical to the parquet-read route. Stub parquet 309 MB vs 2,026 MB full (file 1), written in
+  5.7 s vs 9.4 s. A stub-mode rerun skips PerFileScoring ("outputs valid").
+- Bug caught at launch, fixed, NOT yet committed: the in-memory route passed ProcessFile's config
+  copy, whose threads are already divided by the file lanes, and `PerFileFirstPassModel` divided
+  again (3 threads/model at 3 lanes). `WriteOwnModelScores` now takes `ctx.Config`. Gate green.
+- 82-file performance run, launched 15:15: `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-default-m1perf`,
+  exe `D:\test\osprey-runs\_bin\perfile-m1-stub3` (71f668b219 + the thread fix), bare
+  `--parallel-files` -> 3 files, 10 threads each (148 s/model). PerFileScoring then FirstPassFDR
+  `-Resume`, `--diskstamp`. Baseline on this box (TODO-20261114_osprey_hram_defaults, master
+  pfauto, run dir deleted): PerFileScoring 10,655 s, FirstPassFDR 4,337 s, 97,120 at true FDP 1%,
+  disk 183 GB, peak private 51.5 GB. Read with `perfviz.py <run>/run.log` and `split_calibration.py`.
+
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261122_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
