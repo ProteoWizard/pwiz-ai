@@ -414,4 +414,37 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
 - Unmeasured: pass 2 under per-file models, single-box and HPC throughput, unit resolution
   (SVM), and small cohorts where a file has few precursors to train on.
 
+## Session 2026-11-22 (afternoon): milestone 1, first working version (uncommitted)
+
+- Step 1 done: `docs/00-pipeline-architecture.md` - two corollaries under P3 (per-file tasks
+  write every per-run artifact, joins only experiment-wide; joins read fixed-size mergeable
+  per-run summaries) and In flight item 5 (per-run first-pass models, the target contract).
+- Step 2, first version, under `OSPREY_PER_FILE_FDR=file` only (other arms unchanged):
+  - `PerFileScoringTask.WithOwnFirstPassScores`: after a run's parquet is written or kept, reads
+    it back (same rows and features FirstPassFDR would load), trains the run's own model
+    (`PercolatorEngine.ScoreRunWithOwnModel`, a public wrapper on `PerFileFirstPassModel`), and
+    writes `<stem>.1st-pass.fdr_scores.bin` stamped by PerFileScoring under the MODEL key
+    (task key + `GbdtValidityKeySuffix`). Declared as a PerFileScoring output with that key
+    through `OutputValidityKey`; a current sidecar is kept, so a model change re-models from a
+    current parquet without re-extracting (the two keys, step 3, mostly come free).
+  - FirstPassFDR: adopts only PerFileScoring-stamped sidecars, refuses the run when any file
+    lacks one, and calls the engine with `scoresPrecomputed` (no training-subset load, no
+    training, no per-file lanes training). Its Outputs no longer list the per-run sidecars; its
+    Inputs do. No protein-best sidecar is written in this arm.
+  - `[PATH] not current: <file> (<first differing key term>)` when a PerFileScoring output exists
+    but is refused.
+- Verified: 3-file smoke (`-NumFiles 3`, A4 settings) - PerFileScoring re-modeled the linked
+  parquets at 78-90 s/file (30 threads), FirstPassFDR 102.6 s total (pass 1 13.0 s wall, no
+  feature load). Run-level sum 62,251 + 69,469 + 69,112 = **200,832, exactly A4's 3-file
+  reference**. 80,026 at experiment q 1%. Run dir
+  `D:\test\osprey-runs\sea-ad\runs\seaad-3files-libdecoy-r1.0-default-m1smoke`, snapshot
+  `D:\test\osprey-runs\_bin\perfile-m1-wip3`.
+- GOTCHA: pr5043 searched the SPLIT library. A PerFileScoring run linked from it needs
+  `-LibraryDir D:\test\osprey-runs\sea-ad\lib\target+decoy+entrapment-20260817-split-sized`;
+  the runner's default library has another pairing manifest, so the search hash differs and every
+  file re-extracts (FirstPassFDR-only reruns never check PerFileScoring's stamp, so A0-A5 did not see it).
+- Not yet: pass 2 under this arm (no global model, no protein-best sidecar - step 4);
+  `--keep-scores-parquet` and the composites (step 3); no SubsetPipelineTest coverage, since the
+  arm is a static environment switch.
+
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261122_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
