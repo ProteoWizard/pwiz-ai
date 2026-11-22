@@ -4,7 +4,7 @@
 - **Branch**: `nightlywork/20261121_osprey_per_file_fdr` (local only, C:\proj\pwiz)
 - **Base**: `master` (b3dcb52e07)
 - **Created**: 2026-11-21
-- **Status**: In progress - measurement study (A0 control launched)
+- **Status**: Study complete 2026-11-22 - fully per-file (A4) is +1.2% at true FDP 1%; recommend a sprint
 - **Module**: `osprey`
 - **PR**: (none - developer-only experiment switch, not for merge as is)
 
@@ -34,6 +34,10 @@ Question: does a per-file model keep the detections? Measured on real data befor
   way, and the existing global two-round trainer then trains on one feature, the per-file
   calibrated score (+ PROTEIN_BEST computed from round 1 on that single feature). This is the
   shape that could ship: after PerFileScoring nothing would need the feature parquet.
+- `OSPREY_PER_FILE_FDR_ROUNDS=2` (A1b, A2b, A3): each per-file model trains in two rounds, as the
+  global model does (`PercolatorTrainer.TrainWithScorePrefilter`).
+- `file` (A4): `model`, two rounds, with each file computing PROTEIN_BEST from its OWN round-1
+  model - no input to the file's model crosses files. The design that would ship.
 
 Measured at FirstPassFDR only: the persisted model stays global, so pass 2 under transfer is not
 valid for these arms.
@@ -53,6 +57,11 @@ Scored with `split_calibration.py` (pass-1 row `p1`).
 | A2b two-level, two-round level 1 | 96,151 | -969 (-1.0%) | 95,705 (0.95%) | 4805 s | 21,385 s lane; pre-pass 3834 s wall | 72.2 GB |
 | A3 per-file, two rounds, no PROTEIN_BEST | 90,349 | -6,771 (-7.0%) | 86,276 (0.60%) | 5852 s | 22,067 s lane | 75.1 GB |
 | A2 two-level (one-round level 1) | 89,796 | -7,324 (-7.5%) | 89,088 (0.95%) | 2985 s | 9,140 s lane; pre-pass 2003 s wall | 45.4 GB |
+| **A4 fully per-file, own PROTEIN_BEST** | **98,280** | **+1,160 (+1.2%)** | 97,433 (0.93%) | 7509 s | 25,490 s lane | 98.0 GB |
+
+Wall and memory of A1-A4 are study numbers, not production ones: the per-file models train on
+FirstPassFDR's 7 file lanes at 4 threads each, every lane holds its file's ~4.5 M candidate
+feature vectors for the two-round training, and the global training still runs beside them.
 
 ## Progress
 
@@ -133,5 +142,46 @@ Scored with `split_calibration.py` (pass-1 row `p1`).
   sibling-peptide score on its proteins within the same run); only the round-1 model that scores
   the run is global. So a fully per-file design can compute it from the FILE's own round-1
   model. Added `OSPREY_PER_FILE_FDR=file` (always two rounds) to measure that (A4).
+- A4 (`file`, 22:35-00:40): **98,280 at true FDP 1%, +1,160 (+1.2%) vs A0**, +1,047 vs A1b;
+  q 1% kept 97,433 at FDP 0.93%; experiment q 1% 97,748. Per-file run-level passing: median
+  0.0% vs A0 (files 1-40 -0.6%, 41-75 +0.4%, pools +1.4%, pool-07 +4.1%), range -1.3% to
+  +4.1%; -0.8% vs A1b at run level but +1.1% at experiment level. FirstPassFDR 7509 s; per-file
+  training 25,490 s summed lane time (~311 s a file at 4 threads); peak private 98.0 GB (7 lanes
+  x the two-round candidate features plus the file's own column; the global training also ran).
+  No gap >= 30 s. Logs: `perfile/run-A4.log`, `split-A4.txt`, `perfile-A4.txt`, `perfviz-A4.txt`.
+  Every arm's run dir is deleted; logs under `ai/.tmp/sessions/20261117-5ada8293/perfile/`.
 
 ## Decisions
+
+- A0 reproduced 97,120 exactly, so the harness is valid.
+- The 7% loss of the first arms was the ONE-round per-file training, not the per-file split:
+  with two rounds the per-file model matches (A1b) or beats (A4) the global one.
+- PROTEIN_BEST is worth ~7% and does not need an experiment-wide model: computed per run from
+  the file's own round-1 model (A4) it does better than from the global round 1 (A1b). Stacking
+  it at a global level 2 (A2b) keeps only 84% of its value and costs 1% of detections, so the
+  stacked design is not needed.
+- Per-file models gain most on the weak late files and pools (+1.4% median pools, +4.1% on the
+  last pool), as expected of a model fitted to each run's own quality.
+- Calibration stayed honest in every arm (q 1% kept at FDP 0.90-0.97%; A3 without the column
+  is conservative at 0.60%).
+
+## Production design (what a sprint would build)
+
+- PerFileScoring trains the file's two-round model (with its own protein-best column) after
+  scoring, scores every row out of fold, calibrates (run q 1% -> 0, median best decoy -> -1),
+  and writes a scalar stub (entry_id, charge, peptide, apex RT, score, run q, PEP) instead of
+  the feature parquet. Memory: one file's ~4.5 M candidate feature vectors (~2.5 GB) plus the
+  column during training; with files sequential at 30 threads that is the lane cost once, not x7.
+  Compute: ~100,000 thread-seconds at 82 files in this study (~20 thread-minutes a file).
+- FirstPassFDR shrinks to the experiment competition on calibrated scores (max over runs),
+  experiment q/PEP, protein FDR and planning: no feature loads (A2's pass 1 on cached scores
+  took 297-327 s wall vs 1299 s).
+- Second pass: PerFileRescoring re-scores reconciled peaks with the FILE's frozen first-pass
+  model, so each file's model and calibration must be persisted (FirstPassModelIO per file,
+  read by Pass2PerFileWorker), with the transfer score->q table built on calibrated scores.
+- Validity keys: the per-file model and stub stamped per file from PerFileScoring's key plus
+  the classifier terms (GbdtValidityKeySuffix); FirstPassFDR's key then covers only the
+  competition settings. The `.scores.parquet` contract in `docs/00-pipeline-architecture.md`
+  changes (no feature columns), and HPC fan-out gets simpler: no node needs another file's features.
+- Unmeasured: pass 2 under per-file models, cohorts other than SEA-AD (Stellar/unit resolution
+  uses the SVM), and small cohorts where a file has few precursors to train on.
