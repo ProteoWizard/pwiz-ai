@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261121_dpi_review_fixes`
 - **Base**: `master`
 - **Created**: 2026-11-21
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#5069](https://github.com/ProteoWizard/pwiz/pull/5069)
+- **PR**: [#5069](https://github.com/ProteoWizard/pwiz/pull/5069) (merged 2026-11-22)
 - **Related**: issue #4599 (DPI awareness), #4602 (system-DPI-aware Skyline), #4887 (IconBuilder and
   per-DPI icons); uw-maccosslab/developers master (DigitalRune docking source)
 
@@ -67,3 +67,15 @@ Code review of owner-drawn controls, image lists, self-painting controls and cod
 layouts across pwiz_tools/Skyline and pwiz_tools/Shared, then fixes as Brendan tested each
 area at 150% and 250%. Most review candidates turned out fine in practice (Full-Scan tab is
 AutoSize, node tooltips, column-type drop-down, message box Copy button).
+
+### 2026-11-22 - Merged
+
+PR #5069 merged as commit c6f235a7c5. Shipped: the CommonFormEx fix for narrow dialogs clamped
+to Windows' minimum width before autoscaling, list view column and tile scaling, per-DPI icon
+lookup across size sets and assemblies (Panorama trees), Panorama window and document icons
+matched to their menus and the Targets tab, a 24 px hinted Panorama drawing, DigitalRune
+triangles drawn as shapes (developers master 5040ca9), a scaling and sizable Edit List Share
+dialog, and four GDI leak fixes in paint handlers. Before merge, master was merged in and a
+VirtualMemberCallInConstructor finding fixed by sealing ShareListDlg<TItem>. Deferred, listed
+under Follow-ups: the Hardklor Top = 12 positions, the reports Share selection hint, merging
+the two Share dialogs, Panorama.20.xaml, and the unchecked success message icon.
