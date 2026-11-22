@@ -49,7 +49,8 @@ Scored with `split_calibration.py` (pass-1 row `p1`).
 | pr5043 source | 97,120 | | 96,870 (0.97%) | 4061 s | - | |
 | A0 control | 97,120 | 0 | 96,870 (0.97%) | 4015 s | - | 45.7 GB |
 | A1 per-file (one round) | 90,202 | -6,918 (-7.1%) | 89,615 (0.97%) | 5212 s | 10,602 s lane (~25 min wall of 7 lanes) | 48.9 GB |
-| A2 two-level | | | | | | |
+| A1b per-file, two rounds | 97,233 | +113 (+0.1%) | 96,394 (0.90%) | 7004 s | 22,751 s lane (~54 min wall) | 74.6 GB |
+| A2 two-level (one-round level 1) | 89,796 | -7,324 (-7.5%) | 89,088 (0.95%) | 2985 s | 9,140 s lane; pre-pass 2003 s wall | 45.4 GB |
 
 ## Progress
 
@@ -76,5 +77,36 @@ Scored with `split_calibration.py` (pass-1 row `p1`).
   targets at 1% to start), while the global model trains two rounds, round 2 seeded by round 1's
   scores on the 200k groups round 1 scores best. Added `model2` / `stacked2` (per-file two-round)
   to remove it.
+- A2 (`stacked`, 16:09-16:58): 89,796 at true FDP 1%, -7.5%; q 1% kept 89,088 at FDP 0.95%.
+  FirstPassFDR 2985 s, 1030 s FASTER than A0: the feature parquet is read once (161 GB of
+  parquet reads vs 443 GB), the pre-pass is 2003 s wall (train 9,140 s summed), and the global
+  training and pass 1 then run on one cached feature (pass-1 wall 327 s vs 1299 s; the
+  protein-best column for round 2 took 48 s vs 1031 s). Peak private 45.4 GB (the resident
+  per-file scores, 2.9 GB, are inside A0's peak). One reporting gap of 69 s (the pre-pass
+  reports per finished file).
+  Per-file run-level passing fell more than in A1: median -11.7% (1-40 -11.1%, 41-75 -12.2%,
+  pools -11.7%), range -6.7% to -27.2%; total 3,994,208. The run-level q in A2 comes from the
+  level-2 model's score, which sees only the per-file score and PROTEIN_BEST.
+  PROTEIN_BEST at level 2: round 1 on the single per-file score, round 2 with the column
+  reached 46.9-48.8% of training targets at 1% (A0's round 2: 49.9-53.5%). Experiment-level
+  A2 lands within 406 of A1, whose per-file models had the column as a raw feature, so the
+  stacked column recovers about what the per-file column gave; it does not recover the global
+  model's 7%.
+  Logs: `perfile/run-A2.log`, `split-A2.txt`, `perfile-A2.txt`, `perfviz-A2.txt`.
+- pwiz 32d8922bba: `OSPREY_PER_FILE_FDR_ROUNDS=2` trains each per-file model the way the
+  global one is (`PercolatorTrainer.TrainWithScorePrefilter`: every best-per-precursor row of
+  the file is a candidate, ~4-5 M; round 2 on the 200k best groups, seeded by round 1). 3-file
+  smoke: per-file run-level passes 61,466 / 70,448 / 69,309 vs one round 55,145 / 66,049 /
+  64,835. The one-round training, not the per-file split, was the 7% loss.
+- A1b (`model`, rounds 2, 17:19-19:16): **97,233 at true FDP 1%, +113 (+0.1%) vs A0** - parity.
+  q 1% kept 96,394 at FDP 0.90% (slightly conservative); experiment q 1% 96,692.
+  Per-file run-level passing: median +0.7% (files 1-40 +0.4%, 41-75 +1.1%, pools +1.9%),
+  range -1.9% to +4.5%; the weakest late files and pools gain most (pool-07 +4.5%, pool-05
+  +3.1%). Total run-level 4,523,486 -> 4,556,711.
+  Cost: FirstPassFDR 7004 s (+2989 s vs A0); per-file training 22,751 s summed lane time at
+  4 threads/file (~54 min of wall across 7 lanes), pass-1 wall 4450 s. Peak private 74.6 GB
+  (A0 45.7): each lane holds its file's ~4.5 M candidate feature vectors (~2.5 GB) through
+  round 1's scoring. No gap >= 30 s. Logs: `perfile/run-A1b.log`, `split-A1b.txt`,
+  `perfile-A1b.txt`, `perfviz-A1b.txt`.
 
 ## Decisions
