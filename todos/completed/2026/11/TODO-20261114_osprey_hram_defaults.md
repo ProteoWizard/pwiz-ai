@@ -509,3 +509,7 @@ Night log `ai/.tmp/night-session-budget-20261119.md`; run logs `ai/.tmp/sessions
   FileInfo metadata 0.01 s; a 2-file probe sized in 2 s. Fix, local and not pushed: c654066882 on
   `nightlywork/20261120_parallel_files_link_length` (metadata length, handle only when `FileInfo.LinkTarget` is set);
   671/671 tests, inspection clean. The symlink branch is unchanged code but untested here (symlink creation needs admin).
+
+### 2026-11-22 - --diskstamp merged
+
+PR #5066 merged as c90567c9e0: Osprey-only `--diskstamp` ([DISK] lines every 5 minutes, at task boundaries and at start/end; review changed 60 s to 5 min, a using declaration, the tag name from LogTag.DISK). pwiz-ai perfviz/runner support c1c3e76c. Merged before the TeamCity Osprey Linux/Windows and CodeQL checks reported (not required checks).
