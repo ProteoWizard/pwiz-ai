@@ -6,7 +6,7 @@
 - **Created**: 2026-11-21
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (to be created)
+- **PR**: [#5069](https://github.com/ProteoWizard/pwiz/pull/5069)
 - **Related**: issue #4599 (DPI awareness), #4602 (system-DPI-aware Skyline), #4887 (IconBuilder and
   per-DPI icons); uw-maccosslab/developers master (DigitalRune docking source)
 
