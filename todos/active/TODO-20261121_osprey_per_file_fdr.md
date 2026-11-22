@@ -50,6 +50,8 @@ Scored with `split_calibration.py` (pass-1 row `p1`).
 | A0 control | 97,120 | 0 | 96,870 (0.97%) | 4015 s | - | 45.7 GB |
 | A1 per-file (one round) | 90,202 | -6,918 (-7.1%) | 89,615 (0.97%) | 5212 s | 10,602 s lane (~25 min wall of 7 lanes) | 48.9 GB |
 | A1b per-file, two rounds | 97,233 | +113 (+0.1%) | 96,394 (0.90%) | 7004 s | 22,751 s lane (~54 min wall) | 74.6 GB |
+| A2b two-level, two-round level 1 | 96,151 | -969 (-1.0%) | 95,705 (0.95%) | 4805 s | 21,385 s lane; pre-pass 3834 s wall | 72.2 GB |
+| A3 per-file, two rounds, no PROTEIN_BEST | 90,349 | -6,771 (-7.0%) | 86,276 (0.60%) | 5852 s | 22,067 s lane | 75.1 GB |
 | A2 two-level (one-round level 1) | 89,796 | -7,324 (-7.5%) | 89,088 (0.95%) | 2985 s | 9,140 s lane; pre-pass 2003 s wall | 45.4 GB |
 
 ## Progress
@@ -108,5 +110,28 @@ Scored with `split_calibration.py` (pass-1 row `p1`).
   (A0 45.7): each lane holds its file's ~4.5 M candidate feature vectors (~2.5 GB) through
   round 1's scoring. No gap >= 30 s. Logs: `perfile/run-A1b.log`, `split-A1b.txt`,
   `perfile-A1b.txt`, `perfviz-A1b.txt`.
+- A2b (`stacked`, rounds 2, 19:16-20:36) - the shape that could ship: **96,151 at true FDP 1%,
+  -969 (-1.0%) vs A0**; q 1% kept 95,705 at FDP 0.95%; experiment q 1% 96,038.
+  FirstPassFDR 4805 s (+790 s vs A0): pre-pass 3834 s wall (train 21,385 s summed), then the
+  global two-round training on [per-file score, PROTEIN_BEST] and pass 1 take minutes (pass-1
+  wall 297 s; the round-2 protein-best column 36 s vs 1031 s). Peak private 72.2 GB (the
+  per-file two-round candidates again). One 68 s reporting gap at the start of the pre-pass.
+  Level-1 strength: each file's round 2 started at 24k-66k targets at 1% (of 200k).
+  Level 2: round 2 with PROTEIN_BEST reached 49.4-50.7% of training targets at 1% (A0 49.9-53.5%).
+  Per-file run-level passing: median -4.8% (1-40 -4.6%, 41-75 -5.2%, pools -4.2%), range -3.3%
+  to -7.6%; total 4,309,160. Run level loses more than experiment level: the level-2 model's
+  score (per-file score + PROTEIN_BEST) separates within a run less well than A1b's per-file
+  model, which took PROTEIN_BEST as one of its 71 raw features.
+  Logs: `perfile/run-A2b.log`, `split-A2b.txt`, `perfile-A2b.txt`, `perfviz-A2b.txt`.
+- A3 (`model`, rounds 2, `--protein-boost off`, 20:38-22:15): per-file two-round models with no
+  PROTEIN_BEST anywhere: **90,349 at true FDP 1%, -7.0% vs A0**; q 1% kept 86,276 at FDP 0.60%
+  (conservative). Per-file run-level -11.4% median vs A0, -12.0% vs A1b. FirstPassFDR 5852 s,
+  peak 75.1 GB. So PROTEIN_BEST is worth +6,884 (+7.6%) as a per-file raw feature (A3 -> A1b)
+  and +5,802 (+6.4%) when added only at level 2 (A3 -> A2b): the stacked design keeps 84% of the
+  column's value. Logs: `perfile/run-A3.log`, `split-A3.txt`, `perfile-A3.txt`.
+- The protein-best column is per RUN already (`ProteinBestFeature.ComputeColumn`: each row's best
+  sibling-peptide score on its proteins within the same run); only the round-1 model that scores
+  the run is global. So a fully per-file design can compute it from the FILE's own round-1
+  model. Added `OSPREY_PER_FILE_FDR=file` (always two rounds) to measure that (A4).
 
 ## Decisions
