@@ -413,3 +413,5 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
   changes, with the two new principles (the per-file/join split, and B's map-reduce rule).
 - Unmeasured: pass 2 under per-file models, single-box and HPC throughput, unit resolution
   (SVM), and small cohorts where a file has few precursors to train on.
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261122_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
