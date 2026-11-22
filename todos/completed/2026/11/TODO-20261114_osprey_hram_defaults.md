@@ -513,3 +513,7 @@ Night log `ai/.tmp/night-session-budget-20261119.md`; run logs `ai/.tmp/sessions
 ### 2026-11-22 - --diskstamp merged
 
 PR #5066 merged as c90567c9e0: Osprey-only `--diskstamp` ([DISK] lines every 5 minutes, at task boundaries and at start/end; review changed 60 s to 5 min, a using declaration, the tag name from LogTag.DISK). pwiz-ai perfviz/runner support c1c3e76c. Merged before the TeamCity Osprey Linux/Windows and CodeQL checks reported (not required checks).
+
+### 2026-11-22 - --parallel-files sizing fix merged
+
+PR #5061 merged as 98fbccafcf: the auto --parallel-files footprint estimate reads lengths from metadata and opens only reparse points (82 SEA-AD inputs: 42.4 s by handle, 0.01 s by metadata).
