@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261119_osprey_direct_raw_read` (worktree `D:\Users\brendanx\proj\pwiz-directread`)
 - **Base**: `master` (#4950 merged 2026-11-20; merged in as 2881dd85b5)
 - **Created**: 2026-11-19
-- **Status**: PR in preparation: the read-ahead cache write becomes the default cache-miss path, plus `--spectra-cache off`
+- **Status**: PR #5067 open, narrowed to `--spectra-cache off` only (default unchanged); UW25 measurements next
+- **PR**: [#5067](https://github.com/ProteoWizard/pwiz/pull/5067)
 - **Module**: `osprey`
-- **PR**: (none yet)
 
 ## Goal
 
@@ -350,3 +350,36 @@ get an option to run without it. Local commit 3d7a9eaae8 on the branch (not push
   start (-0.4%), scoring peak 71.5 vs 53.9 GB; off is +26% wall over the default path.
 - Next: `regression-parallel.ps1 -Dataset All` (regression tests should pass without change) after the
   109-feature SVM arm on MACS2 finishes, `/code-review medium` (running), then the PR.
+
+### 2026-11-21 - Narrowed #5067 to `--spectra-cache off`; the cache write is not cheap on a shared disk
+
+PR [#5067](https://github.com/ProteoWizard/pwiz/pull/5067) opened, then narrowed on Brendan's review of the
+numbers: the default first-run path stays the old read, write, read-back, and the read-ahead reader runs only
+under `--spectra-cache off`, for both scoring and the re-score. The read-ahead cache write (3dc7d70e4b's
+switch, made the default in the PR's first version) is removed: it saved 52 s of 13,217 s and raised scoring's
+peak memory from 53.9 to 71.5 GB. Branch rebuilt on master as six cherry-picked commits (the original base was
+#4950's tip, which master holds only as a squash), tree byte-identical, force-pushed with a lease.
+
+Correction to the 2026-11-20 night entry: the cache writes' 1,207 s is the time of the write calls only. Their
+cost to scoring is larger, because they share the RAID-5 HDD with the `.raw` reads (82 files, same disk):
+
+| | Straight read (no cache) | Write cache from read-ahead | Difference |
+|---|---|---|---|
+| Read-ahead, summed over files | 15,196 s | 18,156 s | +2,960 s |
+| Lanes waiting for spectra, summed | 5,435 s | 12,209 s | +6,774 s |
+| PerFileScoring wall | 8,175 s | 9,526 s | +1,351 s |
+
+So writing the cache costs scoring 1,351 s and saves the re-score ~4,970 s (6,695 -> 1,722 s) plus every later
+run. Reading `.raw` itself costs scoring only +440 s (5.7%) over a cache hit. Untested ideas: a cache on a
+different drive from the `.raw` (estimate ~11,300 s for a first run, within ~5% of a cache hit - an
+extrapolation from these four arms, not a measurement), or writing caches after scoring's reads.
+
+- Code review (`/code-review medium`): ten findings; fixed seven (stale cache under `off` in the re-score,
+  `--task SpectraCache --spectra-cache off` writing nothing, a double demultiplexing read under `--demux`,
+  a failed write failing scoring, the missing multiplexed-run warning and saved-cache line, read-ahead
+  settings in the log); two dropped (mzML reads bypass the read gate; a resume can read ahead files it then
+  skips); the memory cost resolved by the narrowing.
+- Regression on the pre-narrowing branch: `regression-parallel.ps1 -Dataset All` 48 PASS / 0 FAIL / 1 SKIP in
+  46:10 on MACS2 (`ai/.tmp/sessions/20261119-rawread/regression-5067.log`).
+- Next: Brendan measures on UW25 (i9, 64 GB): `--spectra-cache off` with `OSPREY_READ_AHEAD` 1 vs 0 (and
+  `OSPREY_READ_THREADS=1`). Windows are freed as the main search takes them; calibration holds the whole file.
