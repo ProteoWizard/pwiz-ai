@@ -566,4 +566,18 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
   into the reconciled stub and retire `.2nd-pass.fdr_scores.bin`. Then milestone B (default + retire old mode +
   goldens). Developer's 5th reason (expected): PerFileRescoring faster from less parquet I/O.
 
-**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261123_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
+- 2026-11-23 afternoon: milestones A2, B and the regression are done on the LOCAL branch
+  `Skyline/work/20261123_osprey_per_file_pass2` (on top of #5070's d589a6b422; not pushed): da29b82f0d (transfer
+  default everywhere, `score` column, pass-2 records in the reconciled stub, no `.2nd-pass.fdr_scores.bin`),
+  9a03ee4995 (per-run models are THE pipeline; old mode, model/stacked arms and OSPREY_PER_FILE_FDR retired;
+  `--keep-scores-parquet`; calibration fallback anchoring 0 at the best decoy when no target passes q 1% - the
+  subset runs failed on the run-q floor 1/(targets above the first decoy), not on weak models;
+  OSPREY_FIRST_PASS_TRAIN_SIZE/_ROUND2_SIZE), 8df306114a (FirstPassFDR declares each run's model as an input -
+  HPC staging bug only regression mode 3 caught), e401430a7a docs, 911a12aa4e regression harness (reads stubs via
+  FdrScoresSidecar.ReadRecords), d9e80fde4f re-recorded goldens. Gate 672/672, 0 warnings; regression-parallel
+  -Dataset All 47 PASS / 0 FAIL / 2 SKIP. Goldens: Astral up both passes; Stellar pass 1 up, pass 2 down 7-12% with
+  entrapment FDP 0.09/0.26% -> 0.76/1.34% (losing protein-compact, the old unit default). Developer wants Stellar on
+  the HRAM recipe (gbdt + protein-best), maybe a DIA-NN side-by-side on the regression Stellar data; a measurement
+  is running (`ai/.tmp/agent-stellar-recipe-status.md`).
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261123b_osprey_per_file_fdr.md` before starting work.
