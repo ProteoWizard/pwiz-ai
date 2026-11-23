@@ -156,6 +156,22 @@ visible in that arm's `run.log` and in the chain log.
 Output lands in `<dataset root>\runs\seaad-<N>files-<arm>-r<ratio>-<pass2>[<tag>]\`,
 matching the layout of the runs already there.
 
+### Reading the .raw files directly (`--spectra-cache off`, #5067)
+
+```powershell
+.\Clear-StandbyCache.ps1
+.\Run-SeaAd.ps1 -InputFormat raw -SpectraCache off                  # read-ahead 1 (Osprey's default)
+.\Run-SeaAd.ps1 -InputFormat raw -SpectraCache off -ReadAhead 0
+.\Run-SeaAd.ps1 -InputFormat raw -SpectraCache off -ReadThreads 1
+```
+
+`-InputFormat raw` searches the vendor files (`$env:OSPREYDEV_SEAAD_RAW_DIR`, else `raw\` beside
+the mzML directory) into `runs\seaad-raw-...`. It needs a `-VendorReader` build. `off` only
+exercises the direct read on inputs with NO `.spectra.bin` beside them - an existing cache is
+read either way, and the banner says how many inputs have one. `-ReadAhead` / `-ReadThreads`
+set `OSPREY_READ_AHEAD` / `OSPREY_READ_THREADS` (an exe without them refuses to start) and land
+in the directory name as `-ra<N>` / `-rt<N>`.
+
 ## Where everything lives
 
 **Every run goes under `<dataset root>\runs\`.** One place, so someone on another machine

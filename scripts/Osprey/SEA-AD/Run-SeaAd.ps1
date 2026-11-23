@@ -61,6 +61,23 @@
     applies (default for HRAM, core at unit resolution) and builds without the argument still run.
     It changes the discovery set and the scores parquet size; put it in -Tag.
 
+.PARAMETER InputFormat
+    mzML (the default) searches the mzML directory and its .spectra.bin caches. raw searches the
+    82 vendor .raw files instead (OSPREYDEV_SEAAD_RAW_DIR, else the 'raw' folder beside the mzML
+    directory) - the input for a --spectra-cache off measurement, which needs inputs with no
+    cache beside them. Run directories are named seaad-raw-... so the two never share one.
+
+.PARAMETER SpectraCache
+    on|off passes --spectra-cache to Osprey (#5067 and later). Empty passes nothing. 'off' only
+    exercises the direct read on inputs without a .spectra.bin, i.e. -InputFormat raw here.
+
+.PARAMETER ReadAhead
+    OSPREY_READ_AHEAD for --spectra-cache off: files read ahead per lane beyond the one being
+    scored (Osprey's default 1). -1 leaves it unset. The knob that decides peak memory.
+
+.PARAMETER ReadThreads
+    OSPREY_READ_THREADS for --spectra-cache off (Osprey's default 2). -1 leaves it unset.
+
 .PARAMETER ExperimentAgg
     First-pass EXPERIMENT-score aggregation. Empty (the default) means max - the best score
     over runs. 'mean-best-<N>' scores a precursor as the mean of its best N per-run scores
@@ -215,6 +232,10 @@ param(
     [ValidatePattern('^$|^(0|0?\.\d+)$')] [string]$SvmCTolerance = '',
     [ValidatePattern('^$|^[0-9.eE+-]+(,[0-9.eE+-]+)*$')] [string]$SvmCValues = '',
     [ValidateRange(0, 64)] [int]$FdrFileLanes = 0,
+    [ValidateSet('mzML', 'raw')] [string]$InputFormat = 'mzML',
+    [ValidateSet('', 'on', 'off')] [string]$SpectraCache = '',
+    [ValidateRange(-1, 64)] [int]$ReadAhead = -1,
+    [ValidateRange(-1, 64)] [int]$ReadThreads = -1,
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
@@ -260,6 +281,20 @@ $dataset = @{
     MissingCacheNote = 'Convert-SeaAdRaw.ps1 builds them; ~4.5 min/file uncached from HDD.'
     Readme           = (Join-Path $PSScriptRoot 'README.md')
 }
+if ($InputFormat -eq 'raw') {
+    # The vendor files sit in 'raw' beside the mzML directory, so the dataset root (and its
+    # runs\) is the same. Their own variable wins; the sibling of the mzML one is the fallback.
+    $rawFallbacks = @()
+    if ($env:OSPREYDEV_SEAAD_DIR) { $rawFallbacks += Join-Path (Split-Path $env:OSPREYDEV_SEAAD_DIR -Parent) 'raw' }
+    $dataset.Key              = 'seaad-raw'
+    $dataset.Extension        = 'raw'
+    $dataset.InputLabel       = 'raw dir'
+    $dataset.EnvDataVar       = 'OSPREYDEV_SEAAD_RAW_DIR'
+    $dataset.DataFallbacks    = $rawFallbacks
+    $dataset.MissingCacheNote = 'Expected for a --spectra-cache off measurement; with the default (on) the first run writes them.'
+}
+# Only the module's parameters may be splatted to it.
+[void]$PSBoundParameters.Remove('InputFormat')
 
 # @PSBoundParameters carries only what the caller passed, never this script's defaults, and the
 # module's own default for -LibraryBuild is '' (the 07-27 set). Forward SEA-AD's default explicitly.

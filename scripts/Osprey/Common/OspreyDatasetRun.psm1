@@ -359,6 +359,18 @@ function Invoke-OspreyDatasetRun {
         # parameter for the same reason as -SvmCTolerance: stripped below, recorded in the
         # banner, run.log START/DONE lines and the directory name (-fplanes<N>).
         [ValidateRange(0, 64)] [int]$FdrFileLanes = 0,
+        # --spectra-cache on|off (pwiz #5067 and later). Empty passes nothing, so the build's own
+        # default (on) applies and builds without the argument still run. 'off' writes no
+        # .spectra.bin; a cache that already exists beside the data is read either way, so an
+        # off arm measures nothing unless the inputs have none (the banner says how many do).
+        # Recorded in the banner, run.log START/DONE lines and the directory name (-cacheoff).
+        [ValidateSet('', 'on', 'off')] [string]$SpectraCache = '',
+        # Read-ahead reader knobs for --spectra-cache off (OSPREY_READ_AHEAD: files read ahead
+        # per lane beyond the one being scored; OSPREY_READ_THREADS: reader threads). -1 (the
+        # default) leaves the variable unset, which an exe without them requires: Osprey refuses
+        # an OSPREY_* variable it does not read. Directory name: -ra<N> / -rt<N>.
+        [ValidateRange(-1, 64)] [int]$ReadAhead = -1,
+        [ValidateRange(-1, 64)] [int]$ReadThreads = -1,
         [string]$Tag = '',
         [string]$DataDir,
         [string]$LibraryDir,
@@ -596,6 +608,10 @@ function Invoke-OspreyDatasetRun {
         $csel = if ($SvmCTolerance) { "-csel$SvmCTolerance" } else { '' }
         if ($SvmCValues) { $csel += "-cvals$($SvmCValues -replace ',', '_')" }
         if ($FdrFileLanes -gt 0) { $csel += "-fplanes$FdrFileLanes" }
+        # Empty when unset, so existing arms keep their names.
+        if ($SpectraCache) { $csel += "-cache$SpectraCache" }
+        if ($ReadAhead -ge 0) { $csel += "-ra$ReadAhead" }
+        if ($ReadThreads -ge 0) { $csel += "-rt$ReadThreads" }
         $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$csel$Tag"
         if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
         $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
@@ -685,6 +701,7 @@ function Invoke-OspreyDatasetRun {
     if ($ProteinBest) { $cliArgs += @('--protein-best', $ProteinBest) }
     if ($ProteinBoost) { $cliArgs += @('--protein-boost', $ProteinBoost) }
     if ($FeatureSet) { $cliArgs += @('--feature-set', $FeatureSet) }
+    if ($SpectraCache) { $cliArgs += @('--spectra-cache', $SpectraCache) }
     # The [PATH] / [COUNT] / [STAGE-WALL] lines are the only route and count evidence a run
     # leaves (the READMEs' route checks, Get-MemoryReport.ps1, Measure-CoAssignmentScaling.py
     # read them), and they print only under --perf-stats. -NoPerfStats is for a run whose
@@ -786,6 +803,13 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  fdr lanes: {0}" -f $(if ($FdrFileLanes -gt 0) {
                 "OSPREY_FDR_FILE_LANES=$FdrFileLanes (forced; wall clock and memory only)" }
                 else { "Osprey's FdrLaneResolver (OSPREY_FDR_FILE_LANES cleared)" }))
+    Write-Host ("  spectra  : {0}" -f $(if ($SpectraCache) { "--spectra-cache $SpectraCache" } else { "the build's default (no --spectra-cache)" }) +
+                $(if ($ReadAhead -ge 0) { "  OSPREY_READ_AHEAD=$ReadAhead" } else { '' }) +
+                $(if ($ReadThreads -ge 0) { "  OSPREY_READ_THREADS=$ReadThreads" } else { '' }))
+    if ($SpectraCache -eq 'off' -and $cached -gt 0) {
+        Write-Host "  NOTE: --spectra-cache off, but $cached input(s) already have a .spectra.bin, which" -ForegroundColor Yellow
+        Write-Host "        Osprey reads either way - those files do not exercise the direct read." -ForegroundColor Yellow
+    }
     # Since pwiz #4507 (2026-09-12) every pass selection streams: pass 1 is emitted off the
     # per-file 1st-pass sidecars, so `1` no longer forces the resident pool and `both` really
     # writes .pass1 and .pass2. The two yellow banners that stood here - a resident-pool
@@ -1072,7 +1096,7 @@ function Invoke-OspreyDatasetRun {
     foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
                    'OSPREY_TRAIN_PICK_RUN', 'OSPREY_SVM_C_TOLERANCE', 'OSPREY_SVM_C_VALUES',
-                   'OSPREY_FDR_FILE_LANES',
+                   'OSPREY_FDR_FILE_LANES', 'OSPREY_READ_AHEAD', 'OSPREY_READ_THREADS',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
                    'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
                    'OSPREY_PROTEIN_COMPACT_QUALIFY',
@@ -1101,6 +1125,8 @@ function Invoke-OspreyDatasetRun {
     # Only when given: unset is Osprey's own default, and the variable was stripped above.
     if ($SvmCTolerance) { $env:OSPREY_SVM_C_TOLERANCE = $SvmCTolerance }
     if ($FdrFileLanes -gt 0) { $env:OSPREY_FDR_FILE_LANES = "$FdrFileLanes" }
+    if ($ReadAhead -ge 0) { $env:OSPREY_READ_AHEAD = "$ReadAhead" }
+    if ($ReadThreads -ge 0) { $env:OSPREY_READ_THREADS = "$ReadThreads" }
 
     $log = Join-Path $OutDir 'run.log'
     # NEVER truncate an existing run.log - rotate it to run-<stamp>.log first. A run.log is the
@@ -1128,6 +1154,7 @@ function Invoke-OspreyDatasetRun {
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' fdrlanes=$FdrFileLanes files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring task='$Task' mdiag=$mdiag trainexport=$([bool]$TrainingExport) perfstats=$(-not $NoPerfStats) " +
+     "spectracache='$SpectraCache' readahead=$ReadAhead readthreads=$ReadThreads " +
      "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
@@ -1156,7 +1183,7 @@ function Invoke-OspreyDatasetRun {
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' fdrlanes=$FdrFileLanes parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "qualify=$QualifyBy csel='$SvmCTolerance' cvals='$SvmCValues' fdrlanes=$FdrFileLanes parallelfiles=$ParallelFiles pfcache=$ParallelFilesCaching pfscore=$ParallelFilesScoring pfrescore=$ParallelFilesRescoring spectracache='$SpectraCache' readahead=$ReadAhead readthreads=$ReadThreads exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })
