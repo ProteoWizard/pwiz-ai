@@ -26,6 +26,8 @@ never load: the wizard cannot advance, and TestDiannSearch1_9_1 times out after 
       timeout before the fix; green: 8 s)
 - [x] Review: files added earlier keep their detection when another file is added mid-detection
       (`TestLibraryBuild` step, red then green); held result cleared after the join
+- [x] Second review: files that already failed detection are not re-detected (their error is never
+      cleared, and one could fail the batch); 6 other findings dropped with reasons
 - [x] `DiannSearchTest`: the score-type wait fails at once with the grid's `ScoreTypeError` text,
       and a timeout lists each file's score type, instead of a bare 360 s timeout
 
