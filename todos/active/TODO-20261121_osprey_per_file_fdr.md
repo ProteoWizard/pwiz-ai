@@ -480,6 +480,21 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
   PerFileScoring (max 156 s) - the per-file training reports nothing until done; none in the
   reduce. Logs: `<run>\run-20261122_191853.log` (PerFileScoring), `<run>\run.log` (FirstPassFDR);
   plots `ai/.tmp/sessions/20261122-perfile/perfviz/`.
+- 2aa1af98a0: the thread fix. b8044e78a1: the stub drops sequence, modified_sequence,
+  precursor_mz, protein_ids and file_name (the developer's call: the self-standing argument now
+  belongs to `OSPREY_PER_FILE_FDR_KEEP_PARQUET`, the diagnostic/dev parquet). Stub readers take
+  the peptide from the library (OSPREY_STUB_IDENTITY=1, the default; every FirstPassFDR reader
+  passes it); a stub read without the library throws. 3-file check identical (200,832; 80,026),
+  stub 201 MB vs 309 MB: per run 359 MB vs 2,184 MB = 6.1x.
+- KEPT for now: apex_rt and coelution_sum. `ConsensusRts` (FirstPassFDR's planning) reads both
+  (it skips `CoelutionSum <= 0`), so a missing column would silently empty the consensus.
+- Path to the design's ~10x (~218 MB/run): (A) drop the two run q-values from the score sidecar,
+  the reduce recomputes them anyway (~70 MB, 7.5x); (B) put the score in the stub parquet as a
+  compressed column and stop writing the binary per-run sidecar (~110 MB, ~8.9x; also removes the
+  duplicate apex_rt; changes the `.1st-pass.fdr_scores.bin` contract pass 2 and the relay lists
+  name, so it goes with step 4); (C) float32 for start/end/apex RT, area, snr (~70 MB more, ~12x
+  with B; changes values slightly - separate experiment). apex_rt and coelution_sum go once
+  planning reads them from the score data (fits B).
 - Follow-ups: training progress reporting (the gaps); stub columns the library or the score file
   already hold (sequence, modified_sequence, precursor_mz, protein_ids, apex_rt; coelution_sum
   once nothing dedups on it) - ~150 MB/run more; then step 4 (pass 2 on per-run models).
