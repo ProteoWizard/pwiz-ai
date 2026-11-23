@@ -519,4 +519,16 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
 - TeamCity Perf/Regression on pull/5070: build 4277220.
 - 82-file perf run (`-Task FirstPass`, default stub mode, auto 3 files): `runs\seaad-82files-libdecoy-r1.0-default-m1final`.
 
+- 22:27: the first 82-file `--task FirstPass` run was INVALID - FirstPass sets StopAfterStage5, which
+  made PerFileScoring load the library without fragment peaks (meant for FirstPassFDR-only workers):
+  0 calibration matches everywhere. Fixed 0eb27de6ea (omit only when PerFileScoring is not selected).
+- TeamCity Perf/Regression build 4277220 on 93c9423e9e: PASSED (default mode unchanged).
+- **82-file result** (`runs\seaad-82files-libdecoy-r1.0-default-m1final`, exe `_bin\perfile-m1-final2`
+  = 0eb27de6ea, one `--task FirstPass` process, auto 3 files): 98,280 at true FDP 1% (A4 exactly),
+  q 1% kept 97,433 (0.93%). PerFileScoring 14,541 s, FirstPassFDR 871 s, total 15,412 s vs master's
+  first pass 14,992 s (+2.8%). Disk 20.8 GB vs ~179 GB (8.6x). Peak private 66.3 GB, floor falling
+  (-347 MB/file). 9 log gaps >= 30 s (max 144 s), all training stalls early in PerFileScoring, plus
+  one ~110 s at FirstPassFDR start. Plot `ai/.tmp/sessions/20261122-perfile/perfviz/m1final-firstpass.png`.
+- PR #5070 title/body updated with these numbers; still draft (the developer marks it ready).
+
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261122_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
