@@ -58,7 +58,7 @@ param(
     [int]$ParallelFilesRescoring = 0,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                 'SecondPassFDR', 'ModelDiagnostics', 'TrainingExport')]
+                 'SecondPassFDR', 'ModelDiagnostics', 'TrainingExport', 'FirstPass')]
     [string]$Task,
     [switch]$LinkThroughTask,
     # Stage the link farm up to a boundary OTHER than the one -Task implies. The module has

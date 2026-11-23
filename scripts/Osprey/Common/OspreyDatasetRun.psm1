@@ -288,7 +288,7 @@ function Invoke-OspreyDatasetRun {
         # -LinkFrom this makes a single-phase re-measurement cost only that phase - e.g. Stage 5
         # at 163 files is ~75 min instead of the 18 h a full run takes.
         [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                     'SecondPassFDR', 'ModelDiagnostics', 'TrainingExport')]
+                     'SecondPassFDR', 'ModelDiagnostics', 'TrainingExport', 'FirstPass')]
         [string]$Task,
         # Link the stages up to AND INCLUDING -Task, instead of strictly before it.
         #
@@ -984,6 +984,21 @@ function Invoke-OspreyDatasetRun {
             foreach ($p in (Select-Declared $nodeTask 'input')) { if ($own -notcontains $p) { $wanted.Add($p) } }
             if ($LinkThroughTask) { foreach ($p in $own) { $wanted.Add($p) } }
             $through = if ($LinkThroughTask) { "inputs and outputs of $nodeTask" } else { "inputs of $nodeTask" }
+        } elseif ($upTo -eq 'FirstPass') {
+            # --task FirstPass (OSPREY_PER_FILE_FDR=file) iterates on the per-run first-pass models:
+            # link the Stages 1-4 checkpoint of each run - its calibration and its
+            # <stem>.features.parquet (written under OSPREY_PER_FILE_FDR_KEEP_PARQUET=1) - and never
+            # its scores parquet, so PerFileScoring trains every model again from the checkpoint
+            # and FirstPassFDR reduces them. The checkpoint is derived from the scores path, so it
+            # is linked whether or not this run sets the keep switch itself.
+            foreach ($p in (Select-Declared 'PerFileScoring' 'output')) {
+                if ($p.EndsWith('.scores.parquet')) {
+                    $wanted.Add($p.Substring(0, $p.Length - '.scores.parquet'.Length) + '.features.parquet')
+                } elseif (-not $p.EndsWith('.features.parquet')) {
+                    $wanted.Add($p)
+                }
+            }
+            $through = 'Stages 1-4 checkpoint (calibration and features) for FirstPass'
         } else {
             $b = [array]::IndexOf($PIPELINE, $upTo)
             if ($b -lt 0) { $b = $PIPELINE.Count }   # ModelDiagnostics / TrainingExport: the whole analysis
