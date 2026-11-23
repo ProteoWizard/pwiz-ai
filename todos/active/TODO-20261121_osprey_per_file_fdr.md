@@ -555,4 +555,15 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
   this PR (a stacked branch merged into #5070 before master). `Osprey-workflow.html` is being redrawn as the
   design-review document for the new file contract.
 
+- 2026-11-23: milestone A (pass 2 on per-run models) done on stacked local branch
+  `Skyline/work/20261123_osprey_per_file_pass2` (30107eec3a code, 9c0908537e docs; NOT pushed): per-run
+  `<stem>.1st-pass.model.json` (model + calibration map + protein-best floor), `protein_best` stub column,
+  moved rows rescored with the run's frozen model, reconciled stub ~12 MB/run. SEA-AD 3-file through pass 2:
+  first pass unchanged (200,832 / 80,026), pass 2 80,293 at true FDP 1% (p1 80,364), q 1% at FDP 0.92%.
+  Developer decisions: unit resolution defaults to pass-2 `transfer`; protein-compact likely RETIRED entirely
+  before #5070 merges (first merge without a Rust parity gate); DIA-NN TSVs stay undeclared derived reports
+  (talk to Mike - originally for the old Carafe contract); rename `first_pass_score` -> `score`; pass-2 run q
+  into the reconciled stub and retire `.2nd-pass.fdr_scores.bin`. Then milestone B (default + retire old mode +
+  goldens). Developer's 5th reason (expected): PerFileRescoring faster from less parquet I/O.
+
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261123_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
