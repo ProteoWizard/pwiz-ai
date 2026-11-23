@@ -531,4 +531,16 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
   one ~110 s at FirstPassFDR start. Plot `ai/.tmp/sessions/20261122-perfile/perfviz/m1final-firstpass.png`.
 - PR #5070 title/body updated with these numbers; still draft (the developer marks it ready).
 
-**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261122_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
+- Extra credit, direct mzML read under per-run models (stub parquet), 12 SEA-AD runs, auto 3 files, exe
+  `_binawread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_perfile` in pwiz-work1,
+  not pushed): PerFileScoring cache hit 2,253 s; `--spectra-cache on` with no cache (write then read back)
+  2,486 s (+10%); `--spectra-cache off` (read-ahead, no cache) 2,259 s (+0.3%). Results identical (85,620;
+  run-level sum 743,831). Peak private ~86 GB for `off` vs ~65 GB for the cache hit (read-ahead holds
+  spectra). Launcher `ai/.tmp/sessions/20261122-perfile/rawread/`, runs `runs\seaad-12files-*-rr-*`.
+- Morning decisions (developer): pass 2 is solved in this PR (stacked branch merged into #5070), and the PR
+  changes the default. Design agreed: per-run `<stem>.1st-pass.model.json` from PerFileScoring (model +
+  standardizer + calibration map + protein-best floor, model key); the protein-best column as a stub column;
+  the analysis-wide `<blib-stem>.1st-pass.model.json` goes away under the mode (pass 2 frozen scoring, the
+  FirstPassFDR fast-resume gate and the model-diagnostics Model tab move to per-run models).
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261123_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
