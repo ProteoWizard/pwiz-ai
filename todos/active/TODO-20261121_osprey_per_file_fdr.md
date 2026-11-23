@@ -499,4 +499,24 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
   already hold (sequence, modified_sequence, precursor_mz, protein_ids, apex_rt; coelution_sum
   once nothing dedups on it) - ~150 MB/run more; then step 4 (pass 2 on per-run models).
 
+## Night session 2026-11-22/23 (log: `ai/.tmp/night-session-budget-20261122.md`)
+
+- d01e193962: the stub carries each run's score and both run q-values (one scores file per run,
+  264 MB vs 2,184 MB baseline); score-file readers fall back to the stub.
+- 45620313a9: keep mode writes `<stem>.features.parquet` (full layout, feature key) beside the same
+  stub; PerFileScoring re-trains from a current checkpoint when only model settings change; no
+  `.bin` in the mode; `--task FirstPass` selector (PerFileScoring + FirstPassFDR). pwiz-ai 52e116a6:
+  `Run-SeaAd/Tdp43/Chs -Task FirstPass -LinkFrom` links only calibration + features.
+- Verified: 3-file keep run identical (200,832 / 80,026); `-Task FirstPass -LinkFrom` with
+  OSPREY_GBT_MAX_ITERATIONS=5 re-trained all 3 runs from checkpoints, run-level sum 199,776 = the
+  sweep's iterations<=5 point exactly, 318 s total.
+- cfae6ffb76: docs (00 In flight 5 + contract rows, 14, 20, Osprey-workflow.html 2.1) via sub-agent.
+- 93c9423e9e: /code-review medium (10 findings): fixed 7 - model key gains TrainSample + FDR
+  feature-mask terms; a run under the mode that goes past the first pass is refused at
+  PerFileScoring start (verified); stub fallback gated on the mode and fault-tolerant; uncalibrated
+  run logged; doc comment. Dropped 3: stacked-arm protein-best, file arm without protein boost
+  (study arms, HRAM default has it), duplicate run-q sort (~3 s/run).
+- TeamCity Perf/Regression on pull/5070: build 4277220.
+- 82-file perf run (`-Task FirstPass`, default stub mode, auto 3 files): `runs\seaad-82files-libdecoy-r1.0-default-m1final`.
+
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261122_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
