@@ -6,7 +6,7 @@
 - **Created**: 2026-11-23
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5071](https://github.com/ProteoWizard/pwiz/pull/5071)
 - **Related**: nightly failures of TestDiannSearch1_9_1 on BRENDANX-UW6 (10 in pass 2 since 2026-10-20,
   e.g. run 86929)
 
@@ -24,6 +24,8 @@ never load: the wizard cannot advance, and TestDiannSearch1_9_1 times out after 
 - [x] `BlibIrtTest`: constructs Import Peptide Search unshown, adds search results, waits for
       detection to finish, then shows it and requires the score types to load (red: 360 s
       timeout before the fix; green: 8 s)
+- [x] Review: files added earlier keep their detection when another file is added mid-detection
+      (`TestLibraryBuild` step, red then green); held result cleared after the join
 - [x] `DiannSearchTest`: the score-type wait fails at once with the grid's `ScoreTypeError` text,
       and a timeout lists each file's score type, instead of a bare 360 s timeout
 
