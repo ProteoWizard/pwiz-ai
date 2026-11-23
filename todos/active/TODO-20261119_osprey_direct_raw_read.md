@@ -400,3 +400,16 @@ snapshot `D:\test\osprey-runs\_bin\directread-7a710ea537`; 672/672 unit tests pa
   input 8.5 GB x 3.0 = 23.8 GiB/file vs 0.8 x ~41 GB free); over the mzML it would be 2 (5.5 GB x 3.0). The
   estimate scales with the INPUT's size, and a `.raw` is 1.55x its mzML here, so cache-off runs get fewer lanes
   than a cached mzML run would. Night chain probes auto, then runs explicit 3 (fallback 2).
+- Arm 1 DONE (2026-11-23 01:57): 6:51:35 vs master 7:20:18 (-6.5%). Scoring 15,582 vs 16,817 s (-7.3%);
+  rescoring 4,841 vs 4,679 s (+3.5% - one reader, hidden behind ~59 s/file compute; MACS2's 4.9x came from
+  8 lanes interleaving reads on RAID-5); FirstPassFDR 3,923 (3 lanes) vs 4,549 s (2 lanes, less free RAM -
+  not a #5067 effect). Peak private 44.4 vs 33.1 GB. Disk +183.8 vs +184.6 GB (baseline caches pre-existed).
+  OUTPUT IDENTICAL: fdrbench.pass1/pass2.tsv sha256 equal, 101,513 precursors, 90,123 peptides.
+- DEFECT found and fixed (pwiz-directread 7e2234234a, local): `--spectra-cache off` ended argument parsing,
+  so everything after it was ignored (arm 1 lost --perf-stats). Same bug on MASTER for `--no-prefilter`
+  (`--no-prefilter --threads 7` runs 32 threads). Cause: bool-assignment expression lambdas bind to
+  Func<..., bool> and return false; ParseArgs ignored Parse's false. Fix + guard + test; 656/0 tests and
+  inspection passed before a low-memory reap - full test run still owed. Master needs the --no-prefilter fix
+  too (separate PR or cherry-pick). Runner now passes --spectra-cache after --perf-stats.
+- pf3 arm (`-ParallelFiles 3`, raw, cache off) running since 02:05; 43.5 GB private at 02:25 with 4.2 GB
+  physical free - fits, barely. Results: `runs\seaad-raw-82files-libdecoy-r1.0-default-cacheoff-pf3`.

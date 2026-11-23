@@ -701,12 +701,14 @@ function Invoke-OspreyDatasetRun {
     if ($ProteinBest) { $cliArgs += @('--protein-best', $ProteinBest) }
     if ($ProteinBoost) { $cliArgs += @('--protein-boost', $ProteinBoost) }
     if ($FeatureSet) { $cliArgs += @('--feature-set', $FeatureSet) }
-    if ($SpectraCache) { $cliArgs += @('--spectra-cache', $SpectraCache) }
     # The [PATH] / [COUNT] / [STAGE-WALL] lines are the only route and count evidence a run
     # leaves (the READMEs' route checks, Get-MemoryReport.ps1, Measure-CoAssignmentScaling.py
     # read them), and they print only under --perf-stats. -NoPerfStats is for a run whose
     # purpose is to read the default log a user sees.
     if (-not $NoPerfStats) { $cliArgs += '--perf-stats' }
+    # AFTER --perf-stats: on the #5067 build (7a710ea537), '--spectra-cache off --perf-stats' logs no
+    # perf-stats line at all, while '--perf-stats --spectra-cache off' does (UW25, 2026-11-23).
+    if ($SpectraCache) { $cliArgs += @('--spectra-cache', $SpectraCache) }
 
     # Which TREE the binary came from matters as much as which flags ran. A multi-hour run
     # against whatever a colleague happens to have built in a shared worktree measures their
