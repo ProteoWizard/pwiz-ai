@@ -985,9 +985,9 @@ function Invoke-OspreyDatasetRun {
             if ($LinkThroughTask) { foreach ($p in $own) { $wanted.Add($p) } }
             $through = if ($LinkThroughTask) { "inputs and outputs of $nodeTask" } else { "inputs of $nodeTask" }
         } elseif ($upTo -eq 'FirstPass') {
-            # --task FirstPass (OSPREY_PER_FILE_FDR=file) iterates on the per-run first-pass models:
+            # --task FirstPass iterates on the per-run first-pass models:
             # link the Stages 1-4 checkpoint of each run - its calibration and its
-            # <stem>.features.parquet (written under OSPREY_PER_FILE_FDR_KEEP_PARQUET=1) - and never
+            # <stem>.features.parquet (written under --keep-scores-parquet) - and never
             # its scores parquet, so PerFileScoring trains every model again from the checkpoint
             # and FirstPassFDR reduces them. The checkpoint is derived from the scores path, so it
             # is linked whether or not this run sets the keep switch itself.
