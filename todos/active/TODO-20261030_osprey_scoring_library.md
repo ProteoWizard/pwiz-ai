@@ -598,3 +598,29 @@ Compared with the same DIA-NN 2.7 reports as October (`compare-view.ps1`):
 - Stage times are contended (the TDP-43 .raw download ran 04:21-05:50, then an 82-file SVM arm): PerFileScoring 6,665 s,
   FirstPassFDR 563 s, PerFileRescoring 232 s, SecondPassFDR 38 s.
 - Outputs: `D:\Users\brendanx\test\diann-vs-osprey\tdp43\cmp21-fp-pass1-every8-now`, `cmp21-mbr-pass2-every8-now`.
+
+### 2026-11-23 - TDP-43 at full scale (163 files): Osprey arm done, DIA-NN arm running
+
+Osprey master 925410c (shipped defaults, `--threads 72 --parallel-files-scoring 4 --parallel-files-rescoring 8` as the
+SEA-AD baseline, FDRBench both), library `target+decoy+entrapment-20260817`, the 163 caches on D:. Run
+`D:\Users\brendanx\test\osprey-runs\tdp43-plasma-ev\runs\tdp43-163files-libdecoy-r1.0-default`: 6 h 54 min, exit 0,
++274 GB on D:, 4,696 protein groups at 1%. From `SEA-AD/tools/pass1_fdp.py`:
+
+| view | q 1% kept | its true FDP | at true FDP 1% |
+|---|---|---|---|
+| pass 2, experiment | 69,549 | 0.11% | 79,819 |
+| pass 2, run | 93,908 | 5.2% | 78,532 |
+| pass 1, experiment | 69,675 | 0.11% | 74,364 |
+| pass 1, run | 96,294 | 6.1% | 78,961 |
+
+- The experiment-scope q is ~10x conservative here (FDP 0.11% at q 1%), the run scope ~5x anti-conservative. The
+  21-file every-8th run showed the same conservative experiment scope (FDP 0.24% at q 1%).
+- Trap hit first: 46 raw mtimes restored by Python `os.utime` with float seconds landed 1 ms below the cache's
+  `source_mtime`; Osprey truncates to ms, judged the caches stale and died at file 3 ("no reader for this instrument
+  vendor format"). Restore with `os.utime(path, ns=...)` or `[IO.File]::SetLastWriteTimeUtc`, and verify with the
+  truncating .NET conversion, not a rounded one.
+- DIA-NN 2.7.0 arm started 14:34, the SEA-AD 82-file flags (`--reanalyse`, `--qvalue 0.05`, 72 threads) on the same
+  163 raws, library re-predicted from the same Osprey library (2,782,820 peptides, 1,391,232 entrapment, 3,081,739
+  precursors, identical to SEA-AD's). Launcher `ai/.tmp/sessions/20261121-tdp43/Start-Tdp43Diann.ps1`, output
+  `D:\Users\brendanx\test\osprey-runs\tdp43-plasma-ev\diann\diann-search-163`. SEA-AD's 82 files took 8 h 6 min on
+  MACS2, so expect ~16 h.
