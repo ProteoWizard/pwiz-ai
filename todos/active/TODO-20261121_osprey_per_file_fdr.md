@@ -470,5 +470,18 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
   `-Resume`, `--diskstamp`. Baseline on this box (TODO-20261114_osprey_hram_defaults, master
   pfauto, run dir deleted): PerFileScoring 10,655 s, FirstPassFDR 4,337 s, 97,120 at true FDP 1%,
   disk 183 GB, peak private 51.5 GB. Read with `perfviz.py <run>/run.log` and `split_calibration.py`.
+- **82-file result (first pass only):** 98,280 at true FDP 1% and q 1% kept 97,433 (0.93%) -
+  exactly A4. PerFileScoring 14,561 s (vs 10,655, +3,906 s: ~82 x 148 s / 3 lanes of training;
+  extraction itself about unchanged, the stub write saves only ~3 s/file). FirstPassFDR 894 s
+  (vs 4,337, -79%; pass 1 186 s wall, no feature load). First pass total 15,455 s vs 14,992 s
+  (+3%). Disk 35.5 GB for 82 runs (stub 308 MB + own scores 158 MB per run) vs ~179 GB for the
+  baseline's first pass (full parquet 2,026 MB + scores 158 MB). Peak private 66.3 GB in
+  PerFileScoring (floor level, +38 MB/file), 37.8 GB in the reduce. Log gaps: 9 >= 30 s in
+  PerFileScoring (max 156 s) - the per-file training reports nothing until done; none in the
+  reduce. Logs: `<run>\run-20261122_191853.log` (PerFileScoring), `<run>\run.log` (FirstPassFDR);
+  plots `ai/.tmp/sessions/20261122-perfile/perfviz/`.
+- Follow-ups: training progress reporting (the gaps); stub columns the library or the score file
+  already hold (sequence, modified_sequence, precursor_mz, protein_ids, apex_rt; coelution_sum
+  once nothing dedups on it) - ~150 MB/run more; then step 4 (pass 2 on per-run models).
 
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261122_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
