@@ -383,3 +383,20 @@ extrapolation from these four arms, not a measurement), or writing caches after 
   46:10 on MACS2 (`ai/.tmp/sessions/20261119-rawread/regression-5067.log`).
 - Next: Brendan measures on UW25 (i9, 64 GB): `--spectra-cache off` with `OSPREY_READ_AHEAD` 1 vs 0 (and
   `OSPREY_READ_THREADS=1`). Windows are freed as the main search takes them; calibration holds the whole file.
+
+### 2026-11-22 - UW25 (i9-14900, 32 threads, 64 GB) measurements, in progress
+
+Timeline: `ai/.tmp/night-session-budget-20261122.md`; plan `ai/.tmp/sessions/20261122-uw25/PLAN.md`.
+Runner: `Run-SeaAd.ps1 -InputFormat raw -SpectraCache off [-ReadAhead N] [-ReadThreads N]` (pwiz-ai 63a88517).
+Exe: this branch with master merged LOCALLY for `--diskstamp` (#5066) and #5061 - 7a710ea537, not pushed -
+snapshot `D:\test\osprey-runs\_bin\directread-7a710ea537`; 672/672 unit tests pass.
+
+- Master baseline (c6f235a7c5), 82 mzML + caches, sequential: 7:20:18, private peak 33.1 GB, disk +184.6 GB;
+  PerFileScoring 4:40 / FirstPassFDR 1:16 / PerFileRescoring 1:18 / SecondPassFDR 0:06; 101,513 precursors
+  at 1% experiment FDR, 6,739 protein groups. `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-default`
+- Arm 1, 82 raw, `--spectra-cache off`, read-ahead defaults, sequential: running (started 19:05). Scoring ~4 min
+  ahead of the baseline at file 36; private memory oscillates ~30-40 GB (baseline 25-33), no rising floor.
+- Auto `--parallel-files` resolves to 1 file over SEA-AD `.raw` on 64 GB (FileParallelismResolver: largest
+  input 8.5 GB x 3.0 = 23.8 GiB/file vs 0.8 x ~41 GB free); over the mzML it would be 2 (5.5 GB x 3.0). The
+  estimate scales with the INPUT's size, and a `.raw` is 1.55x its mzML here, so cache-off runs get fewer lanes
+  than a cached mzML run would. Night chain probes auto, then runs explicit 3 (fallback 2).
