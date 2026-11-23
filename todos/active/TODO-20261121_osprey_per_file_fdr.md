@@ -532,7 +532,8 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
 - PR #5070 title/body updated with these numbers; still draft (the developer marks it ready).
 
 - Extra credit, direct mzML read under per-run models (stub parquet), 12 SEA-AD runs, auto 3 files, exe
-  `_binawread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_perfile` in pwiz-work1,
+  `_bin
+awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_perfile` in pwiz-work1,
   not pushed): PerFileScoring cache hit 2,253 s; `--spectra-cache on` with no cache (write then read back)
   2,486 s (+10%); `--spectra-cache off` (read-ahead, no cache) 2,259 s (+0.3%). Results identical (85,620;
   run-level sum 743,831). Peak private ~86 GB for `off` vs ~65 GB for the cache hit (read-ahead holds
@@ -542,5 +543,16 @@ Milestone 1 is the iteration workflow (C above), ahead of any default change. Th
   standardizer + calibration map + protein-best floor, model key); the protein-best column as a stub column;
   the analysis-wide `<blib-stem>.1st-pass.model.json` goes away under the mode (pass 2 frozen scoring, the
   FirstPassFDR fast-resume gate and the model-diagnostics Model tab move to per-run models).
+
+- **Developer decisions, 2026-11-23 morning:** per-run first-pass models become THE pipeline - the default,
+  for HRAM and unit resolution alike, and the old mode (FirstPassFDR trains one global model from every
+  run's full feature parquet) is RETIRED entirely: two workflows are too confusing for users and make the
+  code harder to read and test. Stellar is tested through the regression data only. The regression results
+  (goldens) are re-recorded. This is where C# Osprey leaves Rust osprey (maccoss/osprey) behind: the
+  rearchitecture is not worth porting, so cross-impl parity ends here for the first pass. Why: ~85-90% less
+  disk, the HPC map-reduce shape (training in the fan-out, a reduce join), more detections (98,280 vs
+  97,120 at true FDP 1%), and DIA-NN's field-accepted per-run model. Pass 2 on per-run models is solved in
+  this PR (a stacked branch merged into #5070 before master). `Osprey-workflow.html` is being redrawn as the
+  design-review document for the new file contract.
 
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261123_osprey_per_file_fdr.md` before starting work. Draft PR #5070; sprint order and agreed design (four file-to-file tasks, per-file vs join rule, two validity keys, FirstPass/SecondPass composites, map-reduce summaries) are in this TODO's design section.
