@@ -683,9 +683,50 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
 
 - #4997 merged as 62b9748240; #5070 retargeted to master and merged origin/master (4f0f54acbc; Osprey tree
   unchanged by the merge, verified). Gate 681/681; GitHub checks 16/16 incl. Linux.
-- **SEA-AD 82 sequential on BRENDANX-UW25 (i9, 64 GB), developer-run:** 7:38, 4% longer than master; peak memory
+- **SEA-AD 82 sequential on BRENDANX-UW25 (i9-14900, 32 threads, 64 GB), developer-run:** 7:38, 4% longer than master; peak memory
   36.7 GB vs master 33.1 GB. PerFileScoring's level does not grow with file count: expected to scale to the
-  446-run CHS cohort. Recorded in the PR description.
+  446-run CHS cohort. Recorded in the PR description. Full report (UW25 session, 2026-11-24):
+  - Setup: #5070 at 654c177acd (before the master merge) vs master c6f235a7c5, same day/box/settings: 82 mzML +
+    `.spectra.bin` caches on D: (HDD), `target+decoy+entrapment-20260817` (shuffle entrapment), libdecoy r1.0,
+    `--threads 30`, NO `--parallel-files`, `--model-diagnostics --fdrbench-pass both --perf-stats`, OS file cache
+    cleared before each. `Run-SeaAd.ps1` (`-Tag -pr5070` for the PR arm).
+  - Runs: `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-default{,-pr5070}` on UW25 (`run.log`,
+    `perfviz.png`, `out.model-diagnostics.html`).
+
+    | phase | master | #5070 | change |
+    |---|---|---|---|
+    | PerFileScoring | 16,817 s (4:40:17) | 22,982 s (6:23:02) | +36.7% |
+    | FirstPassFDR | 4,549 s (2 lanes) | 861 s (3 lanes) | -81% |
+    | PerFileRescoring | 4,679 s | 3,022 s | -35% |
+    | SecondPassFDR | 373 s | 643 s | +72% (blib 206 s) |
+    | total | 7:20:18 | 7:38 | +4% |
+    | private peak (phase) | 33.1 GB (FirstPassFDR) | 36.7 GB (PerFileScoring) | +3.6 GB |
+    | disk written | +184.6 GB | +25.0 GB | -86% |
+    | precursors / peptides / protein groups | 101,418 / 90,123 / 6,739 | 102,676 / 91,338 / 6,753 | +1.2 / +1.3 / +0.2% |
+
+  - Per file: scoring +65-70 s, almost all the run's own model (`First-pass per-file model ... 80.9s wall at 30
+    thread(s); 4,403,242 rows`, 89.5 s with the stub). Sequentially the training is not overlapped, so the
+    scoring cost (+1:43) is only ~85% won back by FirstPassFDR and rescoring (-1:30); UW8's -2.9% total came
+    from 3 lanes overlapping it.
+  - Memory per phase (private peak): scoring 36.7, FirstPassFDR 27.4, rescoring 18.6, SecondPassFDR 13.3 GB.
+    PerFileScoring floor LEVEL (18.4 -> 18.0 GB over files 1-47, -5 MB/file); master's floor falls too. So
+    PerFileScoring is now the memory-critical section, with ~27 GB headroom on 64 GB sequential. FirstPassFDR
+    dropped to a reduce (6.0 GB managed p10). Disk climbs linearly ~0.25 GB/file in scoring (21.7 GB at its end).
+  - Log: 5 gaps >= 30 s over the whole run (max 36 s, library load) vs master's 55 (per-file
+    "Scoring isolation windows").
+  - FDP (`tools/pass1_fdp.py`, both runs' model-diagnostics):
+
+    | view | master | #5070 |
+    |---|---|---|
+    | experiment pass 1 at 1% q: n / true FDP | 101,220 / 0.063% | 102,494 / 0.080% |
+    | experiment pass 1, count at true FDP 1% | 120,689 | 121,378 (+0.6%) |
+    | experiment pass 2, count at true FDP 1% | 121,820 | 123,596 (+1.5%) |
+    | run pass 1 / pass 2 true FDP at 1% q | 3.93% / 3.44% | 3.46% / 3.02% |
+
+    The gain holds at matched true FDP; experiment-level q stays very conservative in both; run-level q is
+    better calibrated but still over-reports (partly the shuffle entrapment, known ~1.6x FDP over-estimate).
+  - Confounds: FirstPassFDR lane count differed (2 vs 3, more free RAM on the PR run) - small against -81%.
+    SecondPassFDR's +4:30 was not investigated.
 - Ready for /pw-complete once TeamCity Perf/Regression 4279506 (01ca9eb887, same Osprey tree) passes.
 
 ## protein-compact retirement inventory
