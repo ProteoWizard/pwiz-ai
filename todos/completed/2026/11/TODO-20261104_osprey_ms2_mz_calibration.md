@@ -4,8 +4,9 @@
 - **Branch**: `Skyline/work/20261104_osprey_ms2_mz_calibration`
 - **Base**: `master`
 - **Created**: 2026-11-04
-- **Status**: In Progress
-- **PR**: #4997 (Brendan to review once the entrapment check is in)
+- **Status**: Completed
+- **PR**: [#4997](https://github.com/ProteoWizard/pwiz/pull/4997) (merged 2026-11-24)
+- **Module**: `osprey`
 
 ## Why
 
@@ -195,7 +196,7 @@ folder; searches in `D:\test\osprey-runs\stellar-2th\2th-centrix-s0{38,60}-{z,zx
 - [x] Two fresh-context code reviews; findings addressed (8c0577c89d, 83a6955d46).
 
 ## Follow-ups
-- [ ] Entrapment (FDRBench) check of the Stellar TR01-TR03 gains.
+- [x] Entrapment (FDRBench) check of the Stellar TR01-TR03 gains (2026-11-23, below).
 - [x] ppm curve as the default for ppm searches: ZT Scan 3 runs (with seed replicates) and Astral 3 runs, both
   with entrapment, 2026-11-09 (above): no gain on either. Dropped; the ppm path stays opt-in.
 - [ ] Calibration discovery itself matches within the uncorrected tolerance: a shift of -0.5
@@ -206,3 +207,23 @@ folder; searches in `D:\test\osprey-runs\stellar-2th\2th-centrix-s0{38,60}-{z,zx
   has-curve flag or the knots.
 - [ ] Port to Rust osprey, or keep `OSPREY_MS2_CAL_MEAN=1` for parity runs.
 - [ ] A regression dataset with a large MS2 offset (the 2026 Stellar runs).
+
+## Progress Log
+
+### 2026-11-24 - Merged
+
+PR #4997 merged as commit 62b9748240. Shipped: the unit-resolution m/z offset curve, applied at any
+offset (19520569b7), stored in each run's calibration.json; the opt-in ppm curve; the shifted-subset
+tests. Before the merge: master merged in (396df37223) with the three Stellar goldens re-recorded
+(+1.1 to +2.0%); TeamCity Linux failures of TestSubsetLibraryBuildTuned* fixed at the root - the test
+fine-tune at LR 1e-3 amplified Torch CPU-dispatch noise onto the run-q 1% cliff (a1a8f15e7d, production
+LR) and Osprey.Test now pins Torch to 1 thread and AVX2 kernels so tests are bit-identical per OS across
+CPUs (c3f08653fb). Entrapment check (master + #4997, regression StellarLibDecoy library, Panorama 2 Th
+TR01-03; `D:\test\osprey-runs\pr4997-2th\analysis\summary.md`): profile runs (-0.75 Th) pass-1
+precursors at combined entrapment FDP 1% curve 30,745 vs mean 12,262 (2.5x); centroid runs (-0.1 Th)
+33,174 vs 33,768 (-1.8%). TeamCity Perf/Regression 4278657: regression 48/0/1 (Astral verifier split,
+master's skip) but the build was marked failed on the per-branch test-count anchor (#374, 118 tests).
+Deferred: the remaining Follow-ups above; the PR description still described the pre-19520569b7 gate
+(corrections drafted in ai/.tmp, not applied). #5070 (per-run first-pass models), stacked on this
+branch, was retargeted to master at merge.
+
