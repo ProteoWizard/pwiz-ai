@@ -618,6 +618,9 @@ SEA-AD baseline, FDRBench both), library `target+decoy+entrapment-20260817`, the
   collapses: FDP 0.11% at q 1% is that collapse, not a 10x-conservative q. These counts are not comparable with the
   SEA-AD headline (96,654 vs DIA-NN 101,269), which was read on the size-weighted split library. A calibration and
   DIA-NN comparison at 163 files needs both arms on `target+decoy+entrapment-20260817-split-sized`.
+- The run-scope rows (FDP 5-6% at q 1%) are not a calibration failure: the run view pools per-run q over 163 runs, and
+  that union inflates with run count by construction. Per-run q is judged only against single-run FDP; the
+  experiment-wide q is the one that must hold as runs grow.
 - Trap hit first: 46 raw mtimes restored by Python `os.utime` with float seconds landed 1 ms below the cache's
   `source_mtime`; Osprey truncates to ms, judged the caches stale and died at file 3 ("no reader for this instrument
   vendor format"). Restore with `os.utime(path, ns=...)` or `[IO.File]::SetLastWriteTimeUtc`, and verify with the
