@@ -598,7 +598,7 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
   hurt Stellar). Standard entrapment understates FDP under protein boosting (developer), so compare A/B/G and
   C/D/E/F within groups. Developer chose F: **3bbdeba334** unit resolution = gbdt + protein-best + `default`
   feature set, legacy scoring settings.
-- **DIA-NN 2.7.0 on the regression Stellar library** (`D:	est\osprey-runs\diann-regression-stellarnalysis\summary.md`):
+- **DIA-NN 2.7.0 on the regression Stellar library** (`D:\test\osprey-runs\diann-regression-stellar\analysis\summary.md`):
   GenDecoyEntrap pass 1 at combined FDP 1%: DIA-NN 37,246 (accessions without `_pep` suffix), Osprey A 27,916,
   G 36,991, F 45,533. G (no boost) closes the gap; DIA-NN also responds to protein grouping (+2,137 from
   stripping the per-peptide suffix). 14.6 min at 16 threads.
