@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261118_agilent_ims_fewer_copies` (Quickee)
 - **Base**: `master`
 - **Created**: 2026-11-18
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `pwiz`
-- **PR**: [#5057](https://github.com/ProteoWizard/pwiz/pull/5057)
+- **PR**: [#5057](https://github.com/ProteoWizard/pwiz/pull/5057) (merged 2026-11-24)
 
 ## Objective
 
@@ -112,6 +112,26 @@ TestDriftTimePredictorTutorial, 4 interleaved reps, median: release 270 s, maste
   scoring coefficients within 0.15 after showing they differ by machine (the commit that recorded
   them fails here); root cause not found.
 
-## Remaining
+### 2026-11-23 to 2026-11-24 - Review and merge
 
-- Review and merge PR #5057.
+- Matt's review: the reader-to-Skyline buffer handoff became DetachableList<T> (growable array
+  with Detach/Attach, no copy). Renamed from DetachableCollection at his suggestion; dropped the
+  non-generic ICollection so CA1710 accepts the "List" suffix; gave Add the shape of List<T>.Add
+  after a micro-benchmark showed it 10% slower (06b08e4b30).
+- Re-ran the Skyline IMS tests (4 reps) and all 13 import sets (2 reps) on the final build: no cost
+  from the rename; TestDriftTimePredictorTutorial 215 s. Same-day drift vs the earlier recordings:
+  thermo-dda 12.9-13.3 s (release measured 10.5-11.2 s on an earlier day), sciex-zswath ~118 s
+  (recorded 102-103; release 151-153). Neither was isolated; an interleaved same-day A/B was not run.
+- waters-mse is bound by the MassLynx SDK: release reads on ~1 core, and five stack samples of the
+  branch all sat in native combineScan (lockmass-corrected scan read), same call path as C++.
+  Only untried lever: parallel per-function scan processors, if the SDK allows it.
+- One thermo-dda run hung in MemoryDocumentContainer.WaitForComplete (dump in
+  detachable/dda-hang.dmp); did not recur after a clean build.
+
+### 2026-11-24 - Merged
+
+PR #5057 merged as commit c022df2a4c. The pwiz-sharp readers now match or beat release 26.1.1 on
+every NativeVsMz5 perf test, TestDriftTimePredictorTutorial (270 s -> 218 s), and 11 of 13
+SkylineCmd import sets (about even on Thermo DDA and Waters MSe), with much lower peak memory.
+Deferred: no pwiz reference test for Bruker diaPASEF whole-frame output; no test turns on
+SortAndJitter; the thermo-dda/sciex-zswath drift question above. No follow-up issues filed.
