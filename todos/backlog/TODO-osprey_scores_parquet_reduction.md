@@ -63,6 +63,32 @@ row in all.
 4. **Diagnostics that read every row**: the FDRBench pass-1 TSV and the model-diagnostics report. They
    lose the below-floor values and change, but do not feed the blib.
 
+## Keeping every diagnostic exact without much disk (2026-11-24)
+
+Brendan: preserve all values for diagnostics, but without a big disk cost. Keeping `entry_id` and `score`
+for every row (for PEP) covers nearly all of it:
+
+- With every score kept, FirstPassFDR runs the full competition as today, so experiment q, PEP and protein
+  q are exact for every row. The L check in item 1 is then unnecessary: the floor decides only which rows
+  keep their other columns.
+- Run q is a function of the run's scores, decoy flags and peptide groups, so it can be recomputed rather
+  than stored. A test must show the recompute is bit-identical to PerFileScoring's.
+- The FDRBench pass-1 TSV reads score, run q, experiment q and library identity. The model-diagnostics
+  accumulator (`ModelDiagnosticsData.Accumulator.Add`) reads identity, the decoy flag, score and the run
+  and experiment q-values. All of these come back exactly.
+- The peak co-assignment panel (`PeakCoAssignmentSource`) also reads `apex_rt`.
+  - At run scope it admits targets at run q <= 1% and decoys past the run boundary, all above a -0.5
+    floor.
+  - At experiment scope it admits a target at experiment q <= 1% in every run, including runs where it
+    scored low. That is the same entry-run set as item 3.
+  - So a peak location kept for every row serves both the panel and pass 2: `apex_rt` (about 6 B/row) or,
+    if apex RT is the apex scan's RT, `scan_number` (about 2.7 B/row). Re-scoring in PerFileRescoring
+    (item 3b) would not serve the panel, which is built in FirstPassFDR.
+- Estimate per SEA-AD run with all diagnostics exact: about 33 MB (id, score) + 12-26 MB (peak location) +
+  about 8 MB (full rows above -0.5), so about 55-65 MB against 258-280 MB today.
+
+Open: is `apex_rt` the RT of `scan_number`'s spectrum, or interpolated?
+
 ## Size estimates (pyarrow and zstd rewrites of one stub; Parquet.Net writes the original 15% smaller)
 
 | Layout | Size |
