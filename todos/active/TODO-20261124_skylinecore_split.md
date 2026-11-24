@@ -106,9 +106,15 @@ Roslyn reports declaration-level errors only until those are clean, so each pass
   `typeof(ViewEditor)`, which moved - the #4587 silent-drop pattern); SkylineTester Forms tab
   DLL list; IconBuilder `common.manifest` output path.
 
-#### Pre-existing gaps noticed, NOT fixed (outside scope)
-- Installer lists satellites under `zh-CHS\`, build emits `zh-Hans\`; PanoramaClient's
-  satellites are not listed at all; zh-CHS list lacks CommonUtil/CommonBaseUI.
+#### Installer: nothing to do for new assemblies
+The .NET 10 installer is Inno Setup (`Executables/Installer/build.ps1` + `Setup.iss`): it
+stages the WHOLE Skyline build output (skipping only doc XMLs and non-Windows runtimes) and
+packages it recursively, so new DLLs and satellites ship automatically. The WiX
+`Product-template.wxs` / `FileList64-template.txt` are read only by the unused net472
+`SetupDeployProject` - dead, per Nick "we don't care about wix anymore". Edits to them in
+`60321a0c1a` reverted in `040c420294`. Deleting the WiX files is separate cleanup, not this branch.
+
+#### Other
 - `LocalizedResourcesTest` never covered pwiz.Common or PanoramaClient until now (now does, passes).
 
 ### Phase 1 - SkylineCore project
@@ -131,8 +137,8 @@ Roslyn reports declaration-level errors only until those are clean, so each pass
 - [ ] CodeInspection rule scoped by PATH to SkylineCore/** (the TFM does most of it)
 - [ ] Test projects reference SkylineCore; LocalizedResourcesTest/ResourcesTest sentinels;
       P/Invoke allowlist test reaches the new assembly
-- [ ] Installer file lists (Inno Setup `installer/`, any WiX templates) gain SkylineCore.dll
-      and its ja/zh-CHS satellites
+- [ ] Installer: none needed (Inno stages the whole output). Check only that build.ps1's
+      test-file guard does not trip on SkylineCore
 - [ ] Docs: build-and-test guide, skyline-development skill
 
 ### Phase 4 - verification
