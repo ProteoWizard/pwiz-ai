@@ -611,6 +611,41 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
   PepEstimator.Fit falls back to PEP 1.0 for every group alongside q = 0.
 - Night session log: `ai/.tmp/night-session-budget-20261123.md`.
 
+## Night session 2026-11-23/24 (log: `ai/.tmp/night-session-budget-20261123.md`)
+
+- **#5070 pushed** at 802261ce91 (d589a6b422.. : pass 2 on per-run models, transfer verifier, unit defaults
+  gbdt + protein-best + default features, tests off compact, Stellar goldens, out-of-process stub reader).
+  Title/body updated (draft from `ai/.tmp/sessions/20261123-night/pr5070-body.md`). Still a draft PR.
+- **TeamCity Perf/Regression pull/5070 build 4278781: SUCCESS.** The first attempt (4278646) failed before any
+  Osprey leg: `Regression/FdrSidecars.ps1` Add-Typed against net10 Osprey.IO and the agent's pwsh runs .NET 9
+  (CS1705); local pwsh 7.6/.NET 10 hid it. Fixed by 802261ce91 (`Regression/OspreyStubReader`, a net10 console
+  tool in Osprey.sln; byte-identical to the old reader on 48 stubs / 96 sidecars / 7 comparer pairs).
+- Local regression-parallel on the Stellar-defaults goldens: 49 PASS / 0 FAIL / 0 SKIP.
+- **SEA-AD 82 full pipeline** (`D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultfullperrun`,
+  snapshot `_bin\pr5070-a44bb448df`), vs master 4cc5a55baf pfauto (`ai/.tmp/sessions/20261117-5ada8293/pfauto-console.log`):
+  total 5:02:57 vs 5:11:52 (-2.9%); PerFileScoring 14,774 vs 10,656 s; FirstPassFDR 878 vs 4,337 s;
+  PerFileRescoring 2,141 vs 3,482 s; SecondPassFDR 383 vs 237 s; disk 24.9 vs 183 GB (-86%); peak private
+  66.4 vs 51.5 GB; true FDP 1% pass 2 98,244 vs 97,120 (pass 1 98,280, identical to m1final). Plots and text:
+  `ai/.tmp/sessions/20261123-night/seaad/` (pr5070.png, master.png, perfviz*.txt, split_calibration.txt).
+  Observation: PerFileScoring's first hour shows 5 log gaps of 121-178 s - each wave of 3 runs trains silently;
+  a training progress line would remove them (not changed: rising triage bar).
+- **#4997** (Mike): master merged + Stellar goldens re-recorded, pushed (19520569b7..55860fd6b6). Local
+  regression 48 PASS / 0 FAIL / 1 SKIP (Astral verifier split, master's own; #5070 fixes it). TeamCity 4278657:
+  regression 48/0/1, build FAILED only on "Number of tests 0 is 118 less than 118 in build #374" - a per-branch
+  test-count anchor from #4997's only earlier build on that config; #5070 passes the same condition. Needs a
+  TeamCity config look or a reason to dismiss. Real-data check (`D:\test\osprey-runs\pr4997-2th\analysis\summary.md`,
+  Panorama 2Th TR01-03, regression LibDecoy entrapment library, master+#4997 at old unit defaults): profile pass-1
+  @FDP 1% curve 30,745 vs mean 12,262 (2.5x); centroid curve 33,174 vs mean 33,768 (-1.8%). PR description is
+  stale (still says small offsets keep the mean; 19520569b7 applies the curve at any offset): proposed
+  corrections in `ai/.tmp/sessions/20261123-night/pr4997-description-corrections.md`.
+- **Prepared #5070 + #4997** on local branch `nightlywork/5070-with-4997` (beefe59b24 merge, 654c177acd goldens;
+  not pushed): conflicts only in SubsetPipelineTest(.ProteinBest).cs; #4997's TestProteinBestPipeline pin dropped
+  with #5070's deletion of that check; TestSubsetLibraryDecoysAndReports keeps only #5070's core-set pin (passes
+  under the curve). Gate 675/675; regression-parallel 49 PASS / 0 FAIL / 0 SKIP. Stellar goldens 43,302 -> 43,596,
+  40,491 -> 40,951, 41,612 -> 41,471. Arms with #4997: F LibDecoy 40,823/40,846 (0.17%), GenDecoyEntrap
+  41,363/41,303 (0.29%); A 27,222/27,259 (0.83%), 28,666/28,744 (1.32%). After #4997 squash-merges: merge master
+  into #5070 the same way (the squash has the same content as 55860fd6b6), re-record goldens, TeamCity.
+
 ## protein-compact retirement inventory
 
 Prepared 2026-11-23 on `Skyline/work/20261123_osprey_per_file_pass2` after 3bbdeba334 plus the
