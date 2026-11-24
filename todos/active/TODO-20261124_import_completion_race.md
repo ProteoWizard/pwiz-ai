@@ -6,7 +6,7 @@
 - **Created**: 2026-11-24
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5074](https://github.com/ProteoWizard/pwiz/pull/5074)
 
 ## Objective
 
@@ -43,7 +43,8 @@ finish within the race window more often.
       TestCommandLineNoJoin, ThermoFormatsTest, WatersMultiFileTest, TestWiffCommandLineImport,
       TestImportResultsCancel, TestImportResultsFilesRestore - all pass
 - [x] CodeInspection and Skyline tcinspect: clean
-- [ ] Commit, push, open PR
+- [x] Commit (f22dcdd8d9), push, open PR #5074
+- [ ] CI green, review, merge
 
 ## Notes
 
