@@ -646,6 +646,39 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
   41,363/41,303 (0.29%); A 27,222/27,259 (0.83%), 28,666/28,744 (1.32%). After #4997 squash-merges: merge master
   into #5070 the same way (the squash has the same content as 55860fd6b6), re-record goldens, TeamCity.
 
+## Session 2026-11-24 (day): stacked on #4997, Linux tests, per-run safeguard
+
+- **#5070 stacked on #4997**: PR base is now `Skyline/work/20261104_osprey_ms2_mz_calibration`; GitHub retargets to master
+  when #4997 merges. #5070 head 01ca9eb887 (merge 74cbb39c56 of #4997 c3f08653fb + 28cb46209f safeguard + 01ca9eb887
+  tests). TeamCity Perf/Regression pull/5070 build 4279506 queued.
+- **#4997 Linux failures** (TestSubsetLibraryBuildTuned x4 on TeamCity Linux, Windows passed): not a Linux bug. Test
+  fine-tune at LR 1e-3/no warmup amplified CPU-dispatch noise in Torch (iRT 7.253730122 TeamCity vs 7.253730010 WSL)
+  onto the run-q 1% cliff. Fixed on #4997: a1a8f15e7d (production LR), c3f08653fb (Osprey.Test TorchTestSettings: 1
+  thread, ATen/MKL_CBWR/oneDNN pinned to AVX2 via libc/CRT env before libtorch loads; bit-identical per OS across
+  CPUs and hostile envs; Windows vs Linux still differ - separate libtorch builds). Evidence
+  `ai/.tmp/sessions/20261124-pr4997linux/`, `ai/.tmp/sessions/20261124-pr4997det/`.
+- **Per-run models on tiny runs are worse** (`D:\test\ms2range-scratch\summary-pooled.txt`, summary-fallback.txt):
+  shifted 3-run Stellar subset (~110-150 detectable precursors/run), runs zeroed at run q 1% ((D+1)/T floor needs ~100
+  targets above the first decoy): pooled SVM/core 2/120; per-run SVM/core 19/120; per-run gbdt/best/default 20/120;
+  pooled gbdt/best/default 13/120 plus 8/45 whole experiments with no blib. Unshifted never zeroes under per-run.
+  MS2 calibration always recovers the shift (max error 0.077 Th).
+- **Safeguard 28cb46209f** (Percolator-style): per run, keep the out-of-fold model unless its best single FDR feature
+  passes strictly more targets at run q 1%; the choice is saved in `<stem>.1st-pass.model.json` (FallbackFeature) and
+  used by RunModelScorer in pass 2; key term `;runsafeguard=1`. Result: 20 -> 14/120 (default), 19 -> 8/120 (svm/core);
+  StellarLibDecoy regression unchanged, no regression run falls back (model ~35k vs best feature ~12k).
+- **Tests 01ca9eb887**: shifted-subset MS2 tests assert calibration first; count check is a 0.5x sanity floor
+  (subset tests are for coverage; modeling quality is regression.ps1's job, per the developer).
+- **Follow-up (open): the tiny-run floor.** Remaining zeroes are runs where the model AND every single feature pass 0;
+  pooled SVM passes ~130 there. Needs strength from other runs: e.g. a pooled model trained in FirstPassFDR used only
+  for runs whose own model and features all fail, or a prior/reference model. Measure on the same grid and on real
+  small runs (QC, blanks, short gradients) against DIA-NN.
+- **Follow-up (open): `.spectra.bin` cost.** Experiments: (1) assemble the scan set PerFileRescoring needs
+  (moved + gap-fill rows: SEA-AD 2.01M of 24.7M survivors, ~24.5k/run) and read only those, sequentially as Skyline
+  does - for HPC (raw on the rescoring node, no cache shipping) and local runs; (2) make the cache write cheaper
+  (async/compressed) so writing it is closer to free than the measured +10%.
+- Open on #4997: TeamCity Perf/Regression build 4278657 failed only the per-branch test-count anchor (#374 had 118
+  tests); PR description corrections in `ai/.tmp/sessions/20261123-night/pr4997-description-corrections.md`.
+
 ## protein-compact retirement inventory
 
 Prepared 2026-11-23 on `Skyline/work/20261123_osprey_per_file_pass2` after 3bbdeba334 plus the
