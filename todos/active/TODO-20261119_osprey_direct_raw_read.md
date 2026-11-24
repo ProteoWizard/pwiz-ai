@@ -413,3 +413,10 @@ snapshot `D:\test\osprey-runs\_bin\directread-7a710ea537`; 672/672 unit tests pa
   too (separate PR or cherry-pick). Runner now passes --spectra-cache after --perf-stats.
 - pf3 arm (`-ParallelFiles 3`, raw, cache off) running since 02:05; 43.5 GB private at 02:25 with 4.2 GB
   physical free - fits, barely. Results: `runs\seaad-raw-82files-libdecoy-r1.0-default-cacheoff-pf3`.
+- pf3 DONE (2026-11-23 08:42; `-ParallelFiles 3`, raw, cache off, otherwise = arm 1): 6:37 vs arm 1 6:51 vs
+  master 7:20. PerFileScoring 15,626 s vs 15,582 s - no gain from 3 lanes (a 15-min build overlapped it;
+  D: 43% busy at only ~26 MB/s, CPU 71%: no spare capacity on a 32-thread i9). PerFileRescoring 4,112 s vs
+  4,841 s (-15%, NOT the MACS2-style read contention predicted); FirstPassFDR 3,862 s; SecondPassFDR 220 s.
+  Peak private 57.3 GB (scoring) vs 44.4 GB sequential - close to the 64 GB ceiling. Output identical again
+  (same FDRBench sha256, 6,739 protein groups). Conclusion with Brendan: on a 64 GB i9, --parallel-files buys
+  little; auto choosing 1 over .raw is right here, though it gets there via the input-size estimate.
