@@ -160,6 +160,7 @@ def _get_wiki_page_metadata(
             "parent": parent_match.group(1) if parent_match else "",
             "pageVersionId": int(version_match.group(1)),
             "rendererType": db_renderer,  # From database, not HTML
+            "version": db_row.get("Version", "?"),  # The page version users see, not pageVersionId
             "attachments": attachment_names,
             "showAttachments": show_attachments_match.group(1) == "true" if show_attachments_match else True,
         }, session)
@@ -232,9 +233,13 @@ def save_wiki_page(
     status_code, result = _post_save_wiki(session, server, container_path, page_name, payload)
     if status_code != 200:
         raise Exception(f"HTTP {status_code}: {_save_error(result)}")
+    # Report the page's Version column (35, 36, ...). pageVersionId is an internal row id,
+    # and the saveWiki response does not include the new version, so read it back.
+    saved_row = _query_current_wiki_versions(server, container_path, "Name,Version", page_name=page_name, max_rows=1)
+    saved_rows = saved_row.get("rows") if saved_row else None
     return {
-        "old_version": metadata.get("pageVersionId", "?"),
-        "new_version": result.get("pageVersionId", "?"),
+        "old_version": metadata.get("version", "?"),
+        "new_version": saved_rows[0].get("Version", "?") if saved_rows else "?",
         "title": page_title,
         "url": _wiki_page_url(server, container_path, page_name),
     }
