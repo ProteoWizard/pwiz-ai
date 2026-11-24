@@ -679,6 +679,15 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
 - Open on #4997: TeamCity Perf/Regression build 4278657 failed only the per-branch test-count anchor (#374 had 118
   tests); PR description corrections in `ai/.tmp/sessions/20261123-night/pr4997-description-corrections.md`.
 
+## 2026-11-24 (afternoon): #4997 merged, sequential 64 GB run
+
+- #4997 merged as 62b9748240; #5070 retargeted to master and merged origin/master (4f0f54acbc; Osprey tree
+  unchanged by the merge, verified). Gate 681/681; GitHub checks 16/16 incl. Linux.
+- **SEA-AD 82 sequential on BRENDANX-UW25 (i9, 64 GB), developer-run:** 7:38, 4% longer than master; peak memory
+  36.7 GB vs master 33.1 GB. PerFileScoring's level does not grow with file count: expected to scale to the
+  446-run CHS cohort. Recorded in the PR description.
+- Ready for /pw-complete once TeamCity Perf/Regression 4279506 (01ca9eb887, same Osprey tree) passes.
+
 ## protein-compact retirement inventory
 
 Prepared 2026-11-23 on `Skyline/work/20261123_osprey_per_file_pass2` after 3bbdeba334 plus the
