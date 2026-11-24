@@ -581,3 +581,118 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
   is running (`ai/.tmp/agent-stellar-recipe-status.md`).
 
 **Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20261123b_osprey_per_file_fdr.md` before starting work.
+
+## Session 2026-11-23 (afternoon/evening): verifier, Stellar defaults, DIA-NN, #4997
+
+- **Transfer verifier** (8c0c60a115, cfa4055b78): OSPREY_PASS2_VERIFY_WORKER now works under the q-value transfer.
+  SecondPassFDR re-scores each run's rescored rows from `<stem>.features-reconciled.parquet` with the run model,
+  checks unmoved rows against the first-pass stub, re-runs the transfer and asserts score + run q bit-equal to the
+  reconciled stub. Needs `--keep-scores-parquet` (refused without). regression.ps1 straight legs add the flag;
+  the verifier-split SKIP is now PASS on Astral and StellarLibDecoy: regression 49 PASS / 0 FAIL / 0 SKIP.
+  Known gap: a row re-scored at exactly its first-pass peak is indistinguishable from an unmoved row in the files,
+  so either score is accepted for it (5 of ~5,000 re-scored rows on StellarLibDecoy).
+- **Stellar recipe** (`ai/.tmp/agent-stellar-recipe-status.md`, runs `D:\test\osprey-runs\stellar-recipe`):
+  arms A current / B gbdt / C +protein-best / D +HRAM scoring settings / E D+default features / F C+default
+  features / G gbdt+default features. Pass 2 LibDecoy / GenDecoyEntrap: A 27,171 (0.76%) / 28,782 (1.34%);
+  G 36,654 (0.76%) / 38,327 (1.41%); F 40,340 (0.15%) / 41,441 (0.36%); D and E lose (HRAM scoring settings
+  hurt Stellar). Standard entrapment understates FDP under protein boosting (developer), so compare A/B/G and
+  C/D/E/F within groups. Developer chose F: **3bbdeba334** unit resolution = gbdt + protein-best + `default`
+  feature set, legacy scoring settings.
+- **DIA-NN 2.7.0 on the regression Stellar library** (`D:	est\osprey-runs\diann-regression-stellarnalysis\summary.md`):
+  GenDecoyEntrap pass 1 at combined FDP 1%: DIA-NN 37,246 (accessions without `_pep` suffix), Osprey A 27,916,
+  G 36,991, F 45,533. G (no boost) closes the gap; DIA-NN also responds to protein grouping (+2,137 from
+  stripping the per-peptide suffix). 14.6 min at 16 threads.
+- **Tests off compact** (4b3eadc0a8): tests needing "not best" use `off`; LEGACY boost is `off`.
+  `--protein-boost compact` already behaves exactly as `off`. Inventory below.
+- **#4997** (Mike, MS2 m/z calibration): master merged in `C:\proj\pwiz-4997` (396df37223), gate 675/675. Two
+  judgment calls to review: TestProteinBestPipeline's pre-column digest and TestSubsetLibraryDecoysAndReports
+  run under OSPREY_MS2_CAL_MEAN=1 (curve changes them). Merge order agreed: #4997 first, then #5070 merges master.
+- Open product question: with zero decoy protein winners (tiny Stellar subset under the new defaults)
+  PepEstimator.Fit falls back to PEP 1.0 for every group alongside q = 0.
+- Night session log: `ai/.tmp/night-session-budget-20261123.md`.
+
+## protein-compact retirement inventory
+
+Prepared 2026-11-23 on `Skyline/work/20261123_osprey_per_file_pass2` after 3bbdeba334 plus the
+"off where only not-best is needed" commit 4b3eadc0a8. Line numbers are at that commit. Scope:
+`--protein-boost compact` AND `OSPREY_PASS2_QVALUE=protein-compact`, and everything that exists
+only to serve them.
+
+**Two facts that make this PR mostly deletion:**
+
+1. **`--protein-boost compact` is already the same as `off`.** `OspreyConfig.Pass2QValue` is
+   `Pass2QValueOverride ?? TRANSFER` (OspreyConfig.cs:260) - no boost selects protein-compact any
+   more - and every key/behavior reads only `ProteinBest` (`== best`). The one place the enum
+   NAME shows is the `Search settings:` log line (OspreyEnvironment.DescribeSearchSettings:801).
+   The `_protein_boost` help text ("{1} competes the precursors ... in the second pass") is
+   therefore stale today, not just retiring. The prep commit moved `ResolutionDefaults.LEGACY`
+   and the `OspreyConfig.ProteinBoost` initializer to `off`, and the three refusal messages that
+   advised `compact` to `off`, so after it nothing but the enum member, its help text and its
+   parse test name `compact`.
+2. **`OSPREY_PASS2_QVALUE=protein-compact` cannot complete a run.** Per-run first-pass models
+   refuse it: `PerFileScoringTask.Run` (336-344) before any scoring whenever PerFileRescoring is in
+   the pipeline, and `PerFileRescoreTask.CreatePass2Worker` (1282-1285). The only live code it
+   still reaches is FirstPassFDR's stratum build/write/compaction-gate clause under a
+   `--task FirstPassFDR` run, and SecondPassFDR's join is unreachable (`HasWorkerStamp` needs a
+   current-version `.2nd-pass.fdr_decoys.bin` nothing can write). So the stratified competition,
+   the competition decoys file and the stratum are dead in production; removing them cannot move
+   a transfer run's output EXCEPT through validity-key strings (below).
+
+**Validity-key traps (the critical ones - get these wrong and every cached cohort recomputes):**
+
+- `OspreyEnvironment.Pass2QValueValidityKeySuffix` (1716-1728) emits `;pass2=transfer` into
+  FirstPassFDR (FirstPassFdrTask.cs:539), PerFileRescoring (PerFileRescoreTask.cs:345) and
+  SecondPassFDR (SecondPassFdrTask.cs:312). KEEP the literal `;pass2=transfer` in all three (a
+  constant), even if `OSPREY_PASS2_QVALUE` and `Pass2QValue` are deleted. TaskValidityKeyTest
+  719 and 1072-1101 pin it.
+- `TransferReconciliationValidityKeySuffix` (1741-1748) is empty unless `Pass2TransferQ`. After
+  retirement `Pass2TransferQ` is always true: make it unconditional, same string
+  (`;reconset=output@{FdrLevel},{ExperimentFdr:R};recondecoys=0;pepfloor=reported`).
+- `Pass2StrataValidityKeySuffix` / `PASS2_STRATA_TERM` (1525-1526, 1793-1805; used at
+  PerFileRescoreTask.cs:348, SecondPassFdrTask.cs:315): empty under transfer, so DELETE with no
+  key change. TaskValidityKeyTest 1134-1180 (strata assertions) go with it.
+- `ProteinBestValidityKeySuffix` / `GbdtValidityKeySuffix` read only `ProteinBest`; removing the
+  enum member moves nothing. Do NOT change enum member ORDER for any other reason (nothing
+  serializes the int today, but `Enum.GetNames` order is the help text order).
+- `Stage6Planner` (160,182), `RunReconciliationPlanner` (89), `PerFileRescoreTask` (1984),
+  `Pass2FdrSidecar` (101) branch on `Pass2TransferQ`: keep the transfer arm, delete the else.
+  None of these keys.
+
+| Where | What | Action | Trap / dependency |
+|---|---|---|---|
+| Osprey.Core/OspreyConfig.cs 800-808 | `ProteinBoost.compact` member | delete | `--protein-boost compact` then fails `Enum.Parse`. Check what `OspreyArgument` does with a value outside `Values`: if it WARNS and keeps the default (other args do - OspreyCommandArgsTests ~208 "warn -> default unchanged"), a saved `--protein-boost compact` silently becomes `best` (the resolution default) where it meant `off`. Prefer a startup refusal naming `off`. |
+| Osprey.Core/OspreyConfig.cs 254-268 | `Pass2QValue`, `Pass2TransferQ`, `Pass2ProteinCompact` | delete `Pass2ProteinCompact`; `Pass2TransferQ` -> remove (always true) or keep as `true` for one PR | 20+ call sites; see key traps |
+| Osprey.Core/ResolutionDefaults.cs 37-39 | LEGACY boost | already `off` (prep commit) | none |
+| Osprey.Core/OspreyEnvironment.cs 1356-1372 | `ValidatePass2WithProteinBest` (best + protein-compact refusal) | delete; and its caller (grep) | SubsetPipelineTest.ProteinBest.cs 169-177 leg goes |
+| Osprey.Core/OspreyEnvironment.cs 1506-1600 | `PASS2_QVALUE_TRANSFER/PROTEIN_COMPACT`, `ENV_PASS2_QVALUE`, `Pass2QValueOverride/Setting/Unrecognized`, `NormalizePass2QValue`, `IsUnrecognizedPass2QValue` (1855-1876) | decide: (a) delete the variable entirely, or (b) keep it accepting only `transfer`. (a) is cleaner, and an old script's `OSPREY_PASS2_QVALUE=...` should then be REFUSED as an unknown OSPREY_* variable, as the retired `OSPREY_PROTEIN_BEST` is (SubsetPipelineTest.ProteinBest.cs ~315 `RETIRED_PROTEIN_BEST` leg) - verify with the same kind of leg | doc comment 1545-1546 is already stale ("follows --protein-boost: protein-compact under compact"). `DescribeSearchSettings` lists `ENV_PASS2_QVALUE` (787). Program.cs 648-657 unrecognized-value refusal names protein-compact. `[PATH] pass2-qvalue transfer` (Pass2FdrSidecar.cs:110, LogTag.ROUTE_PASS2_QVALUE) is asserted by SubsetPipelineTest.cs:1539 - keep the line or change the test |
+| Osprey.Core/OspreyEnvironment.cs 1601-1644 | `OSPREY_PASS2_VERIFY_WORKER` | keep (transfer uses it: `VerifyTransferFile`); delete the protein-compact paragraphs ("What it is and is not" describes `CompeteOneFile`) | Program.cs 1480 `VerifyWorkerError`: drop the `config.Pass2ProteinCompact ||` clause |
+| Osprey/OspreyCommandArgs.cs 455-476; OspreyCommandArgUsage.resx 196-198 `_protein_boost` | arg, DescriptionArgs {best, compact, off, hram, unit} | drop `compact`; RENUMBER the resx placeholders ({0} best, {1} off, {2} hram, {3} unit) and `DescriptionArgs` together | ja/zh-Hans resx have no `_protein_boost` (en fallback), so only en changes. `OspreyCommandArgsTests` help test is self-updating: it REWRITES Documentation/Help/{en,ja,zh-Hans}/CommandLine.html (line 148) on first run - commit the three regenerated files |
+| Osprey.Tasks/PerFileScoringTask.cs 336-344; PerFileRescoreTask.cs 1280-1304 `OwnModelsProteinCompactMessage` + resx `PerFileRescoreTask_OwnModelsProteinCompactMessage_...` (resx 1355; ja/zh) | per-run-model refusals | delete | SubsetPipelineTest.cs 1237-1247 leg (now boost-independent; delete whole). `ProteinBestMismatchMessage` (1306-1320) already names `off` only |
+| Osprey.Tasks/FirstPassFdrTask.cs 151, 164-168, 263-270, 1446-1530, 1771-1783, 1985-1993, 2023, 2057-2063, 2145, 2473+2550-2555 | `ProteinCompactStratum` publish, `_proteinCompactStratum`, stratum Output, `BuildProteinCompactStratum`/`BuildAndPublishProteinCompactStratum`, resume reload, gate clause `stratum.Contains` | delete; `ComputeFirstPassBaseIds` loses its `stratum` param | FirstPassFDR key comment 519-523 (stratum reason for `;pass2=`) - rewrite, KEEP the term. Gate clause is `stratum != null && ...` so transfer survivors are unchanged. 3 resx strings `FirstPassFdrTask_Build*ProteinCompactStratum_*` + Designer + ja/zh |
+| Osprey.Tasks/FirstPassModelIO.cs 42, 60-80 (`EXT_STRATUM`), 151-176 (`StratumDto`, `Sidecar.StratumBaseIds`), 194-200 (`StratumPathFor`), 251-275 (`LoadForAnalysis` pairing), 362-400 (`SaveStratum`), 420, 484-505 (`LoadStratum`) | `.1st-pass.stratum.json` | delete | FirstPassModelIoTest 164-200, 471-620 (`CompactionGateRefusals` stratum legs ~591-623), 752-800, `AssertLoadsWithoutStratum` 893 - trim, not delete (model I/O stays). Leftover `.1st-pass.stratum.json` files in old output dirs become inert junk (not a declared Output any more) - fine |
+| Osprey.Tasks/PipelineByproducts.cs 230-243 | `ProteinCompactStratum` byproduct | delete | FirstPassFdrTask.Publishes list (151); ByproductContextTest unaffected |
+| Osprey.Tasks/Pass2FdrSidecar.cs 127-132 (mode switch), 150-195 (`RequireWorkerAnswers` decoys clause), 212-219 (stratum reload in `EnsureFrozenFirstPassPublished`), 484-499 (`HasWorkerStamp` decoys clause), 600-650 `ReadWorkerContribution`, 728-~800 `Pass1ScalarSeeder` and 2176-2290 `ReadOneFilePass2Inputs` (only caller outside the competition is Pass2PerFileWorker.CompeteAndStamp 231 - compact-only; `LogSeedSummary` at worker 606 goes too), 1109-1140 `ComputePass2FrozenCompetition`, 1173-~1570 `ComputePass2TransferCompeteFull`, 2292-2320 `FileCompetitionFromRecords` | the frozen stratified competition | delete the competition; KEEP `ComputePass2TransferFold`, `WalkSurvivors`, `FoldAndPublishExperimentScope` and `Pass2ExperimentScope` (1084; transfer publishes it too, SecondPassFDR declares the experiment sidecar unconditionally, SecondPassFdrTask.cs 255-265) | RESOURCE NAMES LIE: `Pass2FdrSidecar_ComputePass2TransferCompeteFull_Collecting_...`, `..._Writing_experiment_level_q_values_...`, `..._Raised__0__of__1__...`, `..._Second_pass_experiment_level_q_values_could_not_be_written_...` are used by the TRANSFER path (`WalkSurvivors` 1907-1908, `FoldAndPublishExperimentScope` 1961-1962/2000/2015). Deleting "everything named TransferCompeteFull" breaks the build or, worse, translations. Keep them (renaming = resx x3 + Designer churn; optional) |
+| Osprey.Tasks/Pass2PerFileWorker.cs 60-66 doc, 73 `_stratumBaseIds`, 154-196 ctor (`scorer`, `transfer`, `stratumBaseIds` params), 198-218 `ComputeStampAndWrite` competition branch, 220-~300 `CompeteAndStamp` | per-file competition half | collapse to transfer only: ctor loses `transfer`/`stratumBaseIds` (and `scorer` if transfer never scores - PerFileRescoreTask.cs:1290 passes `null`), `writeAnswer`'s bestDecoy arg goes | `Pass2FileResult.Competition` |
+| Osprey.IO/Pass2CompetitionDecoys.cs (whole), ArtifactValidity.cs 63-64 | `.2nd-pass.fdr_decoys.bin` | delete | IOTest.TestPass2CompetitionDecoysArtifact (4032) delete; IOTest.TestArtifactStampEmbedding ~5026 trim; SecondPassFdrTask.Inputs 152-153 |
+| Osprey.FDR/StreamingFdr.cs 156-435 `ComputeFullPopulationPrecursorFdrStreaming`, 437-~500 `ComputeComplementExperimentQ`, ~600-660 `FileCompetition`, 663-~850 `CompeteOneFile`, 853-~930 `StreamedCompetitionState` | streaming stratified competition | delete | Only callers are Pass2FdrSidecar 1258/1517 and Pass2PerFileWorker 242. `ComputeStreamingCompetitionQvalues` (68) has NO caller at all already - verify and delete or leave; not compact's |
+| Osprey.FDR/PercolatorQValues.cs 676-~760 `ComputeStratifiedCompetitionQvalues` | resident reference implementation | delete (test-only) | FdrTest 4123/4211 use it as the oracle |
+| Osprey.FDR/ModelDiagnostics/ModelDiagnosticsData.CoAssignment.cs 110-123 (4 `*Stratum` props), 755-785 ctor param, 788-805 fields, 1153-1175 `SealCutoffs` split, 1357-1382 `ClearsExperimentBoundary`, 1492-1495; ModelDiagnosticsData.cs 928/989-992 `BuildPass2(stratumBaseIds)`; SecondPassFdrTask.cs 638-651, 827-836, 895-958 (`stratumBaseIds` params) | two-boundary co-assignment (#4573) | delete; `ClearsExperimentBoundary` -> `_experimentCutoff` | REPORT JSON loses `experimentCutoffInStratum/OffStratum/acceptedInStratum/OffStratum`. Regression/DiagnosticsGolden.ps1 191-197 adds 4 metrics x 2 passes; goldens `osprey-regression.data/{astral,stellar-libdecoy,stellar-gendecoy-entrap}/diagnostics.tsv` rows 30-33 and 52-55 (all NaN/0). Delete the Add-Metric lines AND the 8 rows per golden in the same commit, or the compare fails "metric missing from run" (DiagnosticsGolden.ps1:271). No re-record needed. The HTML template reads none of them. ModelDiagnosticsDataTest 560-660, 727, 1081-1112 (stratum split + streamed-vs-batch under a stratum) trim |
+| Osprey.FDR/FdrDiagnostics.cs 214-235 `WriteCutoffs` | `experimentInStratum`/`OffStratum`/`accepted*` rows in the cutoffs dump | delete the four rows + params | a cs_ cross-impl dump: check `ai/scripts/Osprey/Compare/*` and Regression/FdrSidecars.ps1 (1203) for readers of those keys first |
+| Osprey.IO/CarafeProteinIdNormalizer.cs 39-41, 179; Osprey.Scoring/PeakDataExtractor.cs 439; Osprey.IO/FdrScoresSidecar.cs 356; LibraryFragmentRelease.cs 44, 169-170; TrainingExportWriter.cs 53, 426-427; PercolatorEngine.cs 721; Calibrator.cs 230 | comments citing the stratum as motivation | reword (code stays: the normalizer also fixes picked-protein FDR) | IOTest 64-86 comment only |
+| Tests that exist only for protein-compact ("delete with the option") | FdrTest: TestStratifiedCompetitionQvalues 4123, TestStreamingStratifiedMatchesResident 4211, TestStreamedCompetitionStateMultiFile 4299, TestTwoStageCompetitionMatchesGlobalPass 4653, TestEqualMaximaKeepTheEarlierFile 4706, TestFirstObservationAtTheMaximumWinsWithinAFile 4731, TestStratifiedCompetitionCompetesComplementSeparately 4757, TestFileCompetitionRoundTripsThroughSidecarRecords 4920, TestPoolDecoyRecordDoesNotOverrideCompetitionDecoyBest 5051, TestStratifiedCompetitionGivesUnchangedOffStratumPeaksComplementQ 5082; TestSecondPassPeptideCompetition 3394 (uses `ComputeFullPopulationPrecursorFdrStreaming` at 3421 - check what else it covers); TestReservoirKeepsTheBestPeakWithinTheDrawnRun 4576 (one stratum ref at 4632 - trim); IOTest.TestPass2CompetitionDecoysArtifact; SubsetPipelineTest.cs 1237-1247; SubsetPipelineTest.ProteinBest.cs 169-177; TaskValidityKeyTest 1100-1180 strata block + 326 region; OspreyCommandArgsTests 223 (`compact` parses) -> becomes "compact is refused/unknown" | delete / trim | FdrTest 5011 `TestSidecarRecordSequenceMustMatchPoolOrder` uses `Pass2FdrSidecar.AssertRecordsMatchPoolSequence` - keep if that helper survives (pool-order check is always on, per OspreyEnvironment 1630) |
+| Tests already switched to `off` by the prep commit (keep) | SubsetPipelineTest.ProteinBest.cs 258, 286; TaskValidityKeyTest 98, 534-541; ProteinBestFeatureTest 259; Pass2FdrSidecarTest ~450-458; OspreyCommandArgsTests 216 | none | - |
+| docs/12-second-pass-fdr.md (41 hits) | protein-compact design + history | rewrite to transfer-only; move the "why a second-pass null is a problem" history to a short "removed" note | OspreyEnvironment/Program comments cite "docs/12-second-pass-fdr.md" sections - keep the anchors they cite or update them |
+| docs/00-pipeline-architecture.md 410-413, 900-902, 959-972, 1031, 1059-1060, 1428, 1564, 1573 ("Still to do: retiring protein-compact") | artifact table rows for stratum.json / fdr_decoys.bin, P12 note | delete rows; close the to-do | - |
+| docs/14-intermediate-files.md 44, 88, 739, 814; docs/07-fdr-control.md 528-533 (history - keep), 647 (`--protein-boost {best\|compact\|off}`); docs/20-command-line.md 533 (`OSPREY_PASS2_QVALUE` row, already stale: "overriding the one --protein-boost implies"); docs/21-user-facing-text.md 21 (glossary "stratum" term); docs/22-training-export.md 114-115; docs/DIVERGENCES.md 49-51; docs/README.md 47 (index line names transfer-compete + protein-compact); docs/protein-shuffled-entrapment.md (18 hits - research record, keep, add a "retired" line) | doc references | update | docs/25-diann-gap-settings.md 9-11 STALE NOW: says unit resolution keeps `--protein-boost compact` + svm; 3bbdeba334 made it gbdt + best - fix regardless |
+| Osprey-workflow.html 1350-1354 (FirstPassFDR out `.1st-pass.stratum.json`), 1414, 1892, 1913, 1946-1947, 2047-2057 (decision 6) | pipeline page | drop stratum output; mark decision 6 done | - |
+| regression.ps1 / regression.html / Regression/*.ps1 | no leg sets protein-compact or `--protein-boost compact` (grep clean); only DiagnosticsGolden.ps1 191-197 (above) and a FdrSidecars.ps1:1203 comment | as above | the "compaction"/"pre-compaction" hits everywhere are the first-pass compaction gate, NOT protein-compact - leave them (CodeInspectionTest 334 bans `\bcompaction\b` in user text only) |
+| ai/scripts (pwiz-ai, separate commit) | `Common/OspreyDatasetRun.psm1` 216-243 (`-Pass2Mode` ValidateSet incl. `protein-compact`, `transfer-compete`), 332-345 (`-ProteinBoost` ValidateSet incl. `compact`), 795 (`OSPREY_PROTEIN_COMPACT_QUALIFY`, no longer in C#), 936; Run-SeaAd/Run-Chs/Run-Tdp43/AstralEntrap/CohortAnalysis/Compare/Run-FdrBench/Benchmark/attach_entrapment.py | runners and analyses | drop the values from ValidateSets; analyses are history - leave | runner `-WhatIf` after the change |
+
+**Known edge, a product issue to decide (not a retirement task):** on the tiny Stellar subset,
+gbdt + protein-best leaves ZERO decoy protein-group winners, so `PepEstimator.Fit`
+(Osprey.ML/PepEstimator.cs 87-97, "Can't estimate PEP without both classes") returns PEP 1.0 for
+every protein group alongside q = 0. Under the old compact default exactly one decoy won, which
+is why `TestSubsetStraightThroughAndReruns` could assert a protein PEP < 1; 3bbdeba334 moved that
+assertion to `TestSubsetLibraryDecoysAndReports`. A real cohort is unlikely to hit it, but PEP 1.0
+with q 0 is self-contradictory output; decide whether the fallback should be PEP 0 (or q-derived)
+when there are targets and no decoys, or whether to log it.
