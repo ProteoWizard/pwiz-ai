@@ -613,8 +613,11 @@ SEA-AD baseline, FDRBench both), library `target+decoy+entrapment-20260817`, the
 | pass 1, experiment | 69,675 | 0.11% | 74,364 |
 | pass 1, run | 96,294 | 6.1% | 78,961 |
 
-- The experiment-scope q is ~10x conservative here (FDP 0.11% at q 1%), the run scope ~5x anti-conservative. The
-  21-file every-8th run showed the same conservative experiment scope (FDP 0.24% at q 1%).
+- **Own-protein FDP only - not an auditable reading.** The library is the unsplit one (all entrapment on its own
+  proteins) and protein-best is on in both passes (run.log line 17), so per the standing rule above the entrapment
+  collapses: FDP 0.11% at q 1% is that collapse, not a 10x-conservative q. These counts are not comparable with the
+  SEA-AD headline (96,654 vs DIA-NN 101,269), which was read on the size-weighted split library. A calibration and
+  DIA-NN comparison at 163 files needs both arms on `target+decoy+entrapment-20260817-split-sized`.
 - Trap hit first: 46 raw mtimes restored by Python `os.utime` with float seconds landed 1 ms below the cache's
   `source_mtime`; Osprey truncates to ms, judged the caches stale and died at file 3 ("no reader for this instrument
   vendor format"). Restore with `os.utime(path, ns=...)` or `[IO.File]::SetLastWriteTimeUtc`, and verify with the
