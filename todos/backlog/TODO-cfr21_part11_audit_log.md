@@ -1,7 +1,8 @@
 # 21 CFR Part 11 support for the Skyline audit log (LabKey-anchored)
 
 ## Branch Information
-- **Branch**: TBD (Skyline + targetedms, two PRs)
+- **Branch**: Skyline TBD; targetedms `fb_skyline-audit-anchoring` (local, from `develop`, 2026-11-24)
+- **Module**: `skyline`
 - **Base**: `master` (pwiz), `develop` (targetedms)
 - **Status**: Backlog
 - **GitHub Issue**: (pending)
@@ -61,9 +62,9 @@ targetedms (`labkeyEnlistment/server/modules/targetedms/.../parser/skyaudit`):
 
 ### Regulated document
 A document becomes regulated when it is bound to a LabKey folder that has
-the new "Part 11" integrity level (reuse/replace the unused `RSA` level).
-The binding (server URL, container path, document GUID, server public key
-fingerprint) is stored in the `.skyl`. Once bound:
+the new "Part 11" integrity level (replaces the unused `RSA` level).
+The binding (server URL, container path, document GUID) is stored in the
+`.skyl`. Once bound:
 - audit logging cannot be turned off;
 - the "undocumented change" path is a verification failure, not a prompt;
 - `DocumentGuid` changes are not allowed except by an explicit, signed
@@ -81,12 +82,22 @@ The server:
   (any branch is allowed - undo/redo creates branches - but it must attach);
 - stores it add-only (no update/delete permission for anyone, including site
   admins via the UI; DB-level grants documented for on-prem validation);
-- returns a **receipt** signed with the folder/server private key:
-  `{anchorId, entryHashes, serverUser, serverTime, sig}`.
+- returns a **receipt** `{anchorId, entryHashes, serverUser, serverTime}`.
 
-Skyline stores receipts in the `.skyl`. With the server's public key a
-receipt can be checked offline, so a reviewer can verify a document without
-a connection, and Skyline can tell anchored entries from unanchored ones.
+The add-only table is the record. Receipts are not signed: Skyline stores
+them in the `.skyl` only to show which entries are anchored and who/when the
+server recorded; trust comes from checking against the server on open.
+
+**Why no server signing key (decided 2026-11-24):** Part 11 does not require
+cryptographic signatures - its e-signatures are ID + password linked to the
+record by the system (11.70, 11.200), and a server table with no update or
+delete path satisfies the audit-trail requirement. A key would only add
+offline verification (reviewers inspect with server access anyway) and weak
+protection against a DB admin (the private key would be decrypted with a
+master key on the same server). Dropping it removes key storage, rotation,
+compromise handling and an `encryptionKey` requirement for on-prem sites.
+Leave an optional `signature` field in the receipt format so a server key or
+RFC 3161 timestamping can be added later if a validation team asks.
 
 ### Offline queue
 - When the server cannot be reached, the anchor goes to a pending queue in
@@ -102,12 +113,14 @@ a connection, and Skyline can tell anchored entries from unanchored ones.
 ### Verification on open
 For a regulated document:
 1. Verify the local chain (existing `VerifyHashValues`, now SHA-256).
-2. Verify every stored receipt against the server public key.
-3. If online, ask the server for the anchored heads for this GUID; the local
-   chain must contain the head the receipts say it last reached. A missing
-   head means rollback or a rebuilt chain -> hard failure.
-4. `.sky` / `.skyd` hashes must match the last entry's anchor (or a pending
+2. If online, ask the server for the anchored heads for this GUID; the local
+   chain must contain the latest anchored head and every anchored entry must
+   match the server's hashes. A missing head means rollback or a rebuilt
+   chain -> hard failure.
+3. `.sky` / `.skyd` hashes must match the last entry's anchor (or a pending
    one) - otherwise hard failure.
+4. Offline, only step 1 is possible (same as today); show the document as
+   "not verified with server" until the next online open.
 Failures open the document read-only with the reason, rather than refusing,
 so the user can still inspect it (open question - confirm with users).
 
@@ -119,7 +132,7 @@ so the user can still inspect it (open question - confirm with users).
   The credentials go to the server, never stored. API keys alone are not
   accepted for signing.
 - Server checks credentials, records `{entryHash being signed, user full
-  name, meaning, serverTime}`, returns a signed signature receipt.
+  name, meaning, serverTime}` in an add-only table, returns a receipt.
 - Skyline adds a signature entry (11.50: printed name, time, meaning) linked
   to the signed entry hash (11.70: signature bound to the record). The audit
   log grid and reports show signatures.
@@ -137,10 +150,11 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
 1. **Skyline format**: SHA-256 entry/root/document hashes behind a new
    `DocumentFormat`; `.skyd` hash; binding + receipts + pending queue in the
    `.skyl`; read old formats unchanged. Unit tests in `AuditLogListTest`.
-2. **targetedms**: anchor table + API (`anchorAuditLog`, `getAuditLogHeads`,
-   `getPublicKey`, `signAuditLogEntry`); key management per server; folder
-   integrity level "Part 11"; make full-upload verification check uploaded
-   history against anchors. Server tests.
+2. **targetedms** (branch `fb_skyline-audit-anchoring`): add-only anchor and
+   signature tables + API (`anchorAuditLog`, `getAuditLogHeads`,
+   `signAuditLogEntry`); folder integrity level "Part 11" (replaces the
+   unused `RSA` level); make full-upload verification check uploaded history
+   against anchors. Server tests.
 3. **Skyline anchoring**: client calls via `WebPanoramaClient`; bind dialog;
    save hook (shared by GUI, CLI and MCP save paths - see `DocumentWriter`
    convergence note in the skill); offline queue + retry; verification on
@@ -158,5 +172,9 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
 - SSO-only servers and signing.
 - CLI signing credentials.
 - Do raw data files need hashes too, or is `.skyd` enough for the record?
-- Key rotation for the server signing key, and which key verifies old
-  receipts.
+- DB-admin threat: on-prem DBAs can edit the anchor table. v1 answer is
+  documented DB permission restrictions in the validation package; stronger
+  answer, if asked for, is periodically publishing the table's chain head to
+  an RFC 3161 timestamp authority (outside witness).
+- Documents that outlive their server (decommissioned, or sent to another
+  organization): export the anchor records with the document?
