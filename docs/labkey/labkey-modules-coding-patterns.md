@@ -761,16 +761,17 @@ public @NotNull Set<Class<?>> getUnitTests()
 }
 ```
 
-Run unit tests in a browser:
+Run unit tests in a browser: open `http://localhost:8080/junit-begin.view` (site admin) and click the run
+link for a module or a test class. Unit and integration tests (`getIntegrationTests()`) are both listed.
 
-- **All of a module's unit tests:** `http://localhost:8080/junit-run.view?module=MyModule`
-  (the module name, e.g. `TargetedMS`, `PanoramaPublic` — not the lowercase controller name).
-- **A single test class:** `http://localhost:8080/junit-run.view?testCase=<fully.qualified.ClassName>`.
-  For an inner `TestCase` class, encode the `$` as `%24`. Example:
-  `http://localhost:8080/junit-run.view?testCase=org.labkey.targetedms.parser.speclib.ElibCache%24TestCase`
+**`junit-run.view` only accepts POST** (`JunitController.RunAction` is a `SimplePostViewAction`). Pasting a
+`junit-run.view?testCase=...` URL into the address bar returns "405 Method Not Allowed: GET"; go through
+`junit-begin.view`, whose links POST. Its parameters are `module=<ModuleName>` (e.g. `TargetedMS`, not the
+lowercase controller name) or `testCase=<fully.qualified.ClassName>` (encode an inner class's `$` as `%24`).
 
-The server must be running the freshly built classes — `deployModule` (or your usual redeploy) after code
-changes so newly added/registered `TestCase` classes are picked up before you hit the URL.
+The server must be running the freshly built classes. In dev mode the server restarts itself (Spring
+devtools) a few seconds after `deployModule` writes the module, so wait for that before running a test;
+no manual restart is needed.
 
 ### Running unit tests from the command line (Claude Code)
 
@@ -791,9 +792,10 @@ curl -s -L -b /tmp/cookies.txt -c /tmp/cookies.txt -X POST \
 ```
 A successful login returns `{"success": true, ...}`.
 
-**Step 2: Run the tests**
+**Step 2: Run the tests** (POST with the CSRF token; a GET returns 405)
 ```bash
-curl -s -L -b /tmp/cookies.txt \
+curl -s -L -b /tmp/cookies.txt -X POST \
+  -H "X-LABKEY-CSRF: $CSRF" \
   "http://localhost:8080/junit-run.view?module=MyModule" \
   | grep -iE 'SUCCESS|FAILURE|Tests:|Failures:|ComparisonFailure|AssertionError'
 ```

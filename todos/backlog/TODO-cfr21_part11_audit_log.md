@@ -166,6 +166,17 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
 6. **Validation package**: requirements traceability to Part 11 sections,
    IQ/OQ scripts, documented limits (offline window, DB admin access on-prem).
 
+## Progress
+
+- 2026-11-24 targetedms (`fb_skyline-audit-anchoring`, uncommitted): upgrade script
+  `targetedms-26.009-26.010.sql` adds `AuditLogAnchor` + `AuditLogAnchorEntry`, add-only via
+  `targetedms.prevent_anchor_change()` triggers (UPDATE/DELETE/TRUNCATE refused unless the transaction
+  ran `SET LOCAL targetedms.allow_anchor_purge = 'true'`). Schema XML, `TargetedMSSchema` constants,
+  `TargetedMSManager` getters. `AuditLogAnchorTest` (integration) passes 3/3 on the dev server.
+- Side effect to settle: a folder holding anchors cannot be deleted (FK to core.Containers); today
+  that surfaces as a raw DB error. Add a clear refusal in `TargetedMSListener` / delete UI.
+- Next: `anchorAuditLog` API.
+
 ## Open questions
 - Folder policy for the offline window (unlimited / max age / max entries).
 - Read-only open vs refuse on verification failure.
