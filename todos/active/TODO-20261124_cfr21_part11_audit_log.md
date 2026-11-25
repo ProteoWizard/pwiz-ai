@@ -207,8 +207,39 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
   `getAuditLogAnchor` also returns signatures. Signing requires InsertPermission. 24/24 tests;
   end-to-end flow (anchor, sign, re-auth, token replay 403, no-token 403) verified on the dev
   server with `ai/.tmp/sessions/20261124-cfr21/sign-e2e.sh`.
-- Next: link the history page from the document's page; clear folder-delete refusal; Skyline
-  client. The targetedms push was held until signing was done (Nick, 2026-11-24).
+- Server leftovers: link the history page from the document's page; clear folder-delete refusal.
+  Both branches stay local (Nick, 2026-11-24).
+- 2026-11-24 targetedms `db7da73a`: `anchorAuditLog` takes the whole chain from the start of
+  the log (no `parentEntryHash`); records only the suffix the server lacks. 23/23 tests.
+- 2026-11-24 Skyline `03cea1fbce` (local): `DataSettings.AuditLogPanoramaUri`
+  (`audit_log_panorama_uri`, `[Track]`, format 26.12 in `Skyline_Current.xsd`);
+  `Model/AuditLog/AuditLogPanoramaClient.cs` (Record / GetRecordedState; request built from the
+  `.skyl` as written; `clientTimeZoneOffset` in minutes) and `AuditLogPanoramaRecorder.cs`
+  (server from `Settings.Default.ServerList` by URI authority). Save hooks:
+  `SkylineFiles.RecordSaveOnPanorama` (reads `.skyl` on the UI thread, sends via
+  `ActionUtil.RunAsync`, failure -> MessageDlg) and `CommandLine.RecordSaveOnPanorama`
+  (synchronous, prints result). Verified live against the dev server with a temporary unit test
+  (deleted); CodeInspection, TestAuditLog*, TestDocumentFormat* pass. No committed test yet:
+  planned as one functional test with a fake client covering bind -> save -> open.
+- 2026-11-24 Skyline `5df9d4aa20` (local): open check. `AuditLogPanoramaRecorder.CheckDocument`
+  -> `AuditLogRecordStatus` {verified, newer_than_recorded, not_recorded, older_or_changed,
+  document_changed}; `SkylineFiles.CheckRecordedAuditLog` runs it in the background after
+  `OpenFile` and shows a MessageDlg for older_or_changed, document_changed, or a failed check.
+  Entry hashes exist only on entries read from a saved `.skyl` (in-memory entries after a save
+  have none), so the check is only meaningful on a freshly opened document.
+  `SkylineWindow.AuditLogRecorderFactory` is the test seam. `TestAuditLogPanorama` (functional,
+  reuses `AuditLogSavingTest.zip`, fake `IRequestHelper` server) covers record on save, retry,
+  verified, unreachable, older copy, changed file; passes -Loop 3 with CodeInspection.
+- Skyline `fc6d6f7ecf` (local): binding UI in the Audit Log window. "Record on Panorama..." opens
+  `PanoramaDirectoryPicker` over the saved servers (`AuditLogForm.FolderPickerFactory` is the test
+  seam), checks the folder via `getAuditLogAnchor` (refused unless Part 11), binds and turns on
+  audit logging (new GUID) if off. "Stop Recording on Panorama..." unbinds after confirmation
+  (decided 2026-11-25: unlinking allowed, confirmed, logged). Audit logging cannot be turned off
+  while bound. `SrmSettings.MakeSavable` drops the link so stored/saved settings never bind new
+  documents. Test binds/unbinds through the window; passes -Loop 3.
+- Follow-up: choosing a named saved settings set (Settings menu) replaces the whole DataSettings,
+  so on a bound document it silently drops the link and changes the document GUID (logged, but no
+  confirmation). Preserve the link/GUID there or confirm first.
 
 ## Skyline-side design (decided 2026-11-24, replaces the queue/receipts plan above)
 
