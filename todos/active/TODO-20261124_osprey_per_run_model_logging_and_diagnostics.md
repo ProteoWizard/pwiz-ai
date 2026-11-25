@@ -1,7 +1,16 @@
-# Per-run first-pass models: PerFileScoring logging gaps and a per-run Model tab
+# TODO-20261124_osprey_per_run_model_logging_and_diagnostics.md
 
-**Status**: Backlog. Written 2026-11-24, right after #5070 merged.
-**Module**: `osprey`
+Per-run first-pass models: PerFileScoring logging gaps and a per-run Model tab
+
+## Branch Information
+- **Branch**: `Skyline/work/20261124_osprey_per_run_model_logging`
+- **Base**: `master`
+- **Created**: 2026-11-24
+- **Status**: In Progress - part 1 (logging gaps) first
+- **Module**: `osprey`
+- **PR**: (pending)
+
+Written 2026-11-24, right after #5070 merged.
 **Related**: [#5070](https://github.com/ProteoWizard/pwiz/pull/5070) (merged as aa864c3d2e: per-run
 first-pass models trained in PerFileScoring), its TODO
 [TODO-20261121_osprey_per_file_fdr.md](../completed/2026/11/TODO-20261121_osprey_per_file_fdr.md).
