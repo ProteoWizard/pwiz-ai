@@ -237,9 +237,11 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
   (decided 2026-11-25: unlinking allowed, confirmed, logged). Audit logging cannot be turned off
   while bound. `SrmSettings.MakeSavable` drops the link so stored/saved settings never bind new
   documents. Test binds/unbinds through the window; passes -Loop 3.
-- Follow-up: choosing a named saved settings set (Settings menu) replaces the whole DataSettings,
-  so on a bound document it silently drops the link and changes the document GUID (logged, but no
-  confirmation). Preserve the link/GUID there or confirm first.
+- Skyline `f63f03b6a0` (local): choosing saved settings, Reset Default Settings and
+  `--settings-name` replaced the whole DataSettings, silently dropping a bound document's link
+  and GUID. `SrmSettings.KeepAuditLogPanoramaBinding` keeps folder, GUID and audit logging on all
+  three paths; `ResetInitialAuditLogEntry` skips bound documents (it would strip a log Panorama
+  already holds).
 
 ## Skyline-side design (decided 2026-11-24, replaces the queue/receipts plan above)
 
