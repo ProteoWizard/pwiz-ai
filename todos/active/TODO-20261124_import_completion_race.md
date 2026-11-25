@@ -36,7 +36,9 @@ finish within the race window more often.
 - [x] Failing test first: `UtilTest.FileLoadCompletionAccumulatorConcurrentCompleteTest`
       (4 threads released by a Barrier, 2000 iterations) - failed at iteration 25 before the fix
 - [x] Fix: queue the completion, then count; the last counter then knows every completion is
-      ahead of the end marker
+      ahead of the end marker (f22dcdd8d9)
+- [x] /code-review medium: replaced with the commit thread queuing the end marker itself once it
+      has consumed every completion, so loading-thread order no longer matters (271d94dc99)
 - [x] Test passes (2000 iterations, 1.4 s)
 - [x] thermo-dda soak, master vs fixed, 40 each: master 1 hang, fixed 0 (earlier master soak 3/29)
 - [x] Related tests: OptimalThreadCountTest, the ConsoleImport* same-name/make-unique tests,
@@ -57,3 +59,7 @@ finish within the race window more often.
 ### 2026-11-24 - Root cause, fix and verification
 
 - Root cause, failing test, fix and verification as above, all in one session.
+- /code-review medium on #5074: comments rewritten to describe the code as is; the stop moved
+  into ConsumeCompletion (DoneAdding once _consumedCount == _loadingCount), _completedCount
+  removed. Unit test 2000/2000, 12 related tests, CodeInspection and tcinspect clean. Soak 20
+  each: master 0, fixed 0 (race not hit); a longer soak follows.
