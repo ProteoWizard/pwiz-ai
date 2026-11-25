@@ -183,7 +183,17 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
   partial overlap refused; one folder per document GUID; per-document advisory lock).
   `clientTime` is a UTC instant; `serverTime` returned as UTC. 13/13 tests pass. JSON binding in
   the action is not covered by a test yet.
-- Next: "Part 11" folder setting gating anchors, then `getAuditLogHeads`.
+- 2026-11-24 (`859b9598`, local): audit integrity level 2 is now "21 CFR Part 11" (the old
+  `RSA` level was never implemented and behaved like level 1); only Part 11 folders accept
+  anchors. `getAuditLogAnchor.api?documentGUID=` returns the latest anchor (replaces the planned
+  `getAuditLogHeads`: since entry hashes chain, the open-time check only needs the latest head and
+  file hashes). Saves that add no entries (undo, undo+redo) record an anchor at a recorded entry
+  so the next open does not look like a rollback; a retry is a repeat of the latest save (same
+  head + file hashes). 20/20 tests pass.
+- Known limit: a stale retry arriving after a newer save looks like an undo-save (new anchor at
+  the older head). Skyline's queue must send anchors in order and drop confirmed ones.
+- Next: `signAuditLogEntry` (e-signatures), clear folder-delete refusal, Skyline client.
+  Hold the targetedms push until signing is done (Nick, 2026-11-24).
 
 ## Open questions
 - Folder policy for the offline window (unlimited / max age / max entries).
