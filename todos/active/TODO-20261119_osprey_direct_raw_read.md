@@ -2,9 +2,9 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261119_osprey_direct_raw_read` (worktree `D:\Users\brendanx\proj\pwiz-directread`)
-- **Base**: `master` (#4950 merged 2026-11-20; merged in as 2881dd85b5)
+- **Base**: `master` (merged in as bc391e44eb on 2026-11-25: #4997, #5057 vendor reader speed-up, #5070 per-run models)
 - **Created**: 2026-11-19
-- **Status**: PR #5067 open, narrowed to `--spectra-cache off` only (default unchanged); UW25 measurements next
+- **Status**: PR #5067 open; branch current with master (bc391e44eb, pushed 2026-11-25, gate 681/681). Re-testing on UW25: regression-parallel All, then SEA-AD raw `--spectra-cache off` vs a new master baseline
 - **PR**: [#5067](https://github.com/ProteoWizard/pwiz/pull/5067)
 - **Module**: `osprey`
 
@@ -420,3 +420,16 @@ snapshot `D:\test\osprey-runs\_bin\directread-7a710ea537`; 672/672 unit tests pa
   Peak private 57.3 GB (scoring) vs 44.4 GB sequential - close to the 64 GB ceiling. Output identical again
   (same FDRBench sha256, 6,739 protein groups). Conclusion with Brendan: on a 64 GB i9, --parallel-files buys
   little; auto choosing 1 over .raw is right here, though it gets there via the input-size estimate.
+
+### 2026-11-25 - updated to master, re-test started (UW25)
+
+- Merged origin/master as bc391e44eb (brings #4997, #5057 vendor-reader speed-up, #5070 per-run first-pass
+  models, #5064/#5068/#4996/#5074). Conflicts only where both sides added an argument beside each other
+  (`--spectra-cache` / `--keep-scores-parquet` in OspreyCommandArgs.cs and the three CommandLine.html); kept
+  both. Pushed with 7e2234234a (the parse fix). Gate: Debug build, 681/681 tests, inspection zero warnings.
+- Why re-test: #5057 changes `SpectrumList_Thermo.cs` / `MsDataFileImpl.cs`, the reader direct read drives
+  (its slow ~264 KB page-in pattern was MACS2's rescoring bottleneck, and pf3 showed D: 43% busy at ~26 MB/s);
+  #5070 changes what PerFileRescoring reads and costs. All direct-read numbers above predate both.
+- Plan: regression-parallel All (cache on by default, so goldens should hold) -> Release -VendorReader ->
+  SEA-AD 82 raw `--spectra-cache off` sequential -> SEA-AD 82 master mzML+cache sequential (the 11-24 #5070
+  run at 654c177acd is not current master: 28cb46209f added a best-single-feature safeguard after it).
