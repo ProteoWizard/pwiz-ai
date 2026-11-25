@@ -221,10 +221,23 @@ StringCollection x2, OpenDataSourceState (settable POCO). ~200 uses. Not doing i
 - [ ] Settings: one `pwiz.Skyline.Properties.Settings` type must stay one type so user.config
       keeps its section; move the UI-typed enums it persists into core rather than splitting it
 
-### Phase 2 - SkylineCmd
-- [ ] Reference SkylineCore, call CommandLine directly; drop the reflection loader and
-      UseWindowsForms; target net10.0
-- [ ] `--ui` and the `CMD<guid>` pipe mode stay in Skyline.exe
+### Phase 2 - SkylineCmd - DONE `536d3c39b8` (local)
+- [x] Reference SkylineCore, call CommandLine directly; drop the reflection loader and
+      UseWindowsForms; target net10.0 (runtimeconfig: Microsoft.NETCore.App only)
+- [x] SkylineCmd `--ui` removed (Nick: "get rid of the --ui argument"). Skyline.exe's own
+      `--ui` (CommandLineUI, used by DevTools/ImportPerf) and the `CMD<guid>` pipe mode stay.
+- [x] Core `CommandLineProgram`: InitializeProcess (shared with Program.Main) + Run
+- [x] A SkylineCore.dll missing beside SkylineCmd fails as Run is JIT-compiled; Run is kept out
+      of Main (NoInlining) so Main reports it. TestSkylineCmdInEmptyDirectory asserts that.
+- [x] Linux (WSL Ubuntu 24.04, runtime in ~/.dotnet via dotnet-install.sh): `--version`, and
+      open .sky + import 2 mzML + save + export report gives a report identical to Windows.
+      Fixed on the way (raw P/Invokes CA1416 does not see): IsRunningOnWine, GetTempFileName
+      (managed CreateTempFile), DirectSerializer direct I/O (managed path off Windows),
+      MemoryInfo (GC info), cache copy with progress, hard links (copy), 8.3 paths,
+      Downloads folder (OSVersion.Major >= 6 is true on Linux 6.x kernels).
+      Script: ai/.tmp/sessions/20261124-separateui/linux_import.sh
+- Not Linux-capable by nature: vendor method export (Advapi32 registry lookups),
+  FileLockingProcessFinder (rstrtmgr), vendor raw files.
 
 ### Phase 3 - guardrails and packaging (lessons from #4587)
 - [ ] CodeInspection rule scoped by PATH to SkylineCore/** (the TFM does most of it)
@@ -258,3 +271,7 @@ Not yet run: full suite, ja/zh languages.
 1b verified: Solution + TestTutorial + TestPerf + MSConvertGUI build; Test.dll 447, TestData.dll
 182, CodeInspection, 58 functional/tutorial tests (EditListDlg users + every touched test file)
 all pass. Logs: ai/.tmp/sessions/20261124-separateui/imm2*.log. Next: Phase 2.
+
+### 2026-11-24 - Phase 2 committed (`536d3c39b8`, local only)
+Solution builds; Test.dll 447, TestData.dll 182, CodeInspection, TestSkylineCmd(+InEmptyDirectory)
+pass. Linux run as in Phase 2. Next: Phase 3 (guardrails, docs) and Phase 4 (full suite, languages).
