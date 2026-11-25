@@ -1,10 +1,14 @@
 # 21 CFR Part 11 support for the Skyline audit log (LabKey-anchored)
 
 ## Branch Information
-- **Branch**: Skyline TBD; targetedms `fb_skyline-audit-anchoring` (local, from `develop`, 2026-11-24)
+- **Branch**: Skyline `Skyline/work/20261124_cfr21_part11_audit_log` (local); targetedms
+  `fb_skyline-audit-anchoring` (local, from `develop`)
 - **Module**: `skyline`
 - **Base**: `master` (pwiz), `develop` (targetedms)
-- **Status**: Backlog
+- **Created**: 2026-11-24
+- **Status**: In Progress (both branches local only, by Nick's choice)
+- **Related**: [TODO-20261116_language_independent_audit_logs.md](TODO-20261116_language_independent_audit_logs.md)
+  changes audit log entry text (not hashing); both edit `AuditLogEntry.cs`, so merge with care
 - **GitHub Issue**: (pending)
 - **Checkout**: `I:\git_i\sky_cfr21part11`
 
@@ -192,8 +196,44 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
   head + file hashes). 20/20 tests pass.
 - Known limit: a stale retry arriving after a newer save looks like an undo-save (new anchor at
   the older head). Skyline's queue must send anchors in order and drop confirmed ones.
-- Next: `signAuditLogEntry` (e-signatures), clear folder-delete refusal, Skyline client.
-  Hold the targetedms push until signing is done (Nick, 2026-11-24).
+- 2026-11-24 e-signatures (`8ce39450`, local). Decided: signing happens on Panorama, not in
+  Skyline, using LabKey's platform re-authentication (`AuthenticationManager.getAndClearReauthUser`;
+  password, SSO or second factor, whichever the user signed in with), so Skyline never handles
+  credentials; fixed meanings Authored/Reviewed/Approved. Add-only `AuditLogAnchorSignature`
+  (meaning, printed name snapshot, server time, signer; one per signer+meaning+state). Pages:
+  `auditLogAnchors.view?documentGUID=` (history + Sign links) -> `signAuditLogAnchor.view`
+  (confirm, choose meaning) -> re-auth -> `completeAuditLogSignature.view` (GET shows confirm,
+  POST consumes the single-use token and signs; LabKey forbids DB writes on GET).
+  `getAuditLogAnchor` also returns signatures. Signing requires InsertPermission. 24/24 tests;
+  end-to-end flow (anchor, sign, re-auth, token replay 403, no-token 403) verified on the dev
+  server with `ai/.tmp/sessions/20261124-cfr21/sign-e2e.sh`.
+- Next: link the history page from the document's page; clear folder-delete refusal; Skyline
+  client. The targetedms push was held until signing was done (Nick, 2026-11-24).
+
+## Skyline-side design (decided 2026-11-24, replaces the queue/receipts plan above)
+
+- **Stateless client.** Skyline keeps no anchor queue or receipts. After each successful save of
+  a bound document, a background task sends the local chain to `anchorAuditLog`; the server
+  records only the suffix it does not have. Offline saves lose nothing: the next save or open
+  sends whatever the server is missing. No `.skyl` format change for anchoring (older Skyline
+  rejects any unknown `.skyl` element, `AuditLogEntry.cs` ReadFromXmlTextReader).
+- **Open check** against `getAuditLogAnchor`: server head == local head and document hash
+  matches -> verified; server head earlier in the local chain -> verified to there, rest pending;
+  server head not in the local chain -> "older than the state recorded on <date> by <user>"
+  (restored copy, rebuilt log, or an undo saved offline - shown, not hidden); offline -> "not
+  verified with the server".
+- **Binding** is a new `[Track]` attribute on `DataSettings` in the `.sky` (server + folder), so
+  binding/unbinding is itself an audit log entry; older Skyline ignores the attribute.
+- **Hooks**: all saves converge on `SrmDocument.SerializeToFile` (`SrmDocument.cs`), which
+  returns the `.sky` SHA-1 hash; GUI `SkylineFiles.SaveDocument`, CLI `CommandLine.SaveDocument`,
+  MCP via the GUI path. Opens: `SkylineFiles.OpenFile` and `CommandLine.OpenSkyFile`, both into
+  `SrmDocument.ReadAuditLog`.
+- **HTTP**: saved `Server` list (Basic auth) and `IRequestHelper.Post(uri, json, msg)` in
+  `Shared/PanoramaClient`.
+- Server change needed: `anchorAuditLog` accepts the chain from its start.
+- Order: server full-chain change; DataSettings binding; anchor/read client; anchor after save
+  (GUI + CLI); check on open; "Record on Panorama..." in the Audit Log window. SHA-256 and
+  `.skyd` hashing after.
 
 ## Open questions
 - Folder policy for the offline window (unlimited / max age / max entries).
