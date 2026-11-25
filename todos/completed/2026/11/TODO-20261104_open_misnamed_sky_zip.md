@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261104_open_misnamed_sky_zip`
 - **Base**: `master`
 - **Created**: 2026-11-04
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none - from support board)
 - **Module**: `skyline`
-- **PR**: [#4996](https://github.com/ProteoWizard/pwiz/pull/4996)
+- **PR**: [#4996](https://github.com/ProteoWizard/pwiz/pull/4996) (merged 2026-11-24)
 
 ## Objective
 
@@ -48,3 +48,15 @@ a user attached a File > Share zip that arrived as `c18 .sky`. Opening it fails 
 ## Out of Scope
 
 - SkylineCmd `--in` does not open .sky.zip files under any name, so it is unchanged.
+
+## Progress Log
+
+### 2026-11-24 - Merged
+
+PR #4996 merged as commit c21d734. Skyline now recognizes a shared .sky.zip by its zip
+header regardless of extension and opens it as a shared file. The Open dialog and LoadFile
+both choose the opener through the new `OpenDocumentFilePath`, which also took over the
+sibling .sky lookup for a .skyd (ExplicitRTTest updated to match). The extraction folder
+drops a `.sky` extension and trailing spaces/periods, and skips a name already taken by a
+file. Nick's review moved the zip check out of `OpenFile` into `OpenDocumentFilePath`.
+Nothing deferred beyond the SkylineCmd `--in` item above; no follow-up issues filed.
