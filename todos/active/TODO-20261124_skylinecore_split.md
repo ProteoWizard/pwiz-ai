@@ -178,7 +178,7 @@ Phase 2 notes:
 - app.config (app-scoped settings: InstallUrl, ProductName...) is the exe's; SkylineCmd needs
   its own copy or equivalent once it stops loading Skyline.
 
-### Phase 1b - immutable settings lists (Nick, 2026-11-24) - in progress
+### Phase 1b - immutable settings lists (Nick, 2026-11-24) - DONE `de6b7eb330` (local)
 
 Request: the lists stored in Settings should be immutable; listen on Settings property changes,
 not list events; with immutable values Settings itself is thread-safe.
@@ -207,7 +207,8 @@ Done (builds: Solution, TestTutorial, TestPerf, MSConvertGUI):
 
 Not yet immutable (needed before Settings is actually thread-safe): UniqueList<GraphTypeSummary>
 x4 (with CollectionChanged hooks), List<string> x3+, SerializableDictionary x3, PersistedViews,
-StringCollection x2, OpenDataSourceState (settable POCO). ~200 uses; next pass.
+StringCollection x2, OpenDataSourceState (settable POCO). ~200 uses. Not doing it: Nick
+2026-11-24, "Don't worry about making other values thread safe."
 
 ### Phase 1 - original checklist
 - [ ] `pwiz_tools/Skyline/SkylineCore/SkylineCore.csproj`, RootNamespace `pwiz.Skyline`,
@@ -252,3 +253,8 @@ TestPublishToPanorama, TestRowActions, TestAlphabeticalReportEditor, TestDocumen
 TestEditablePivot, TestGroupComparisonPivotEditor, TestEditSpectrumFilter, TestAnnotations,
 ConsoleShareZipTest, ConsoleRemoveResultsTest. Logs: pwiz_tools/Skyline/bin/staging/Release/*.log.
 Not yet run: full suite, ja/zh languages.
+
+### 2026-11-24 - Phase 1 (`62b02cc88b`) and 1b (`de6b7eb330`) committed, local only
+1b verified: Solution + TestTutorial + TestPerf + MSConvertGUI build; Test.dll 447, TestData.dll
+182, CodeInspection, 58 functional/tutorial tests (EditListDlg users + every touched test file)
+all pass. Logs: ai/.tmp/sessions/20261124-separateui/imm2*.log. Next: Phase 2.
