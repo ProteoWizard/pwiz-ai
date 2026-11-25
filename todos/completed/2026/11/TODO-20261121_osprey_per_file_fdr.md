@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261122_osprey_per_file_fdr` (pushed to origin; was `nightlywork/20261121_osprey_per_file_fdr`)
 - **Base**: `master` (b3dcb52e07)
 - **Created**: 2026-11-21
-- **Status**: Experimental switch complete (A4 +1.2%, A5 +0.15% at 35% less training); draft PR text ready; next: milestone 1 (iteration workflow)
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: (pending - draft, experimental)
+- **PR**: [#5070](https://github.com/ProteoWizard/pwiz/pull/5070) (merged 2026-11-24)
 
 ## Goal
 
@@ -728,6 +728,25 @@ awread-perfile` = local merge of #5067 + #5070 (`nightlywork/20261122_rawread_pe
   - Confounds: FirstPassFDR lane count differed (2 vs 3, more free RAM on the PR run) - small against -81%.
     SecondPassFDR's +4:30 was not investigated.
 - Ready for /pw-complete once TeamCity Perf/Regression 4279506 (01ca9eb887, same Osprey tree) passes.
+
+## Progress Log
+
+### 2026-11-24 - Merged
+
+PR #5070 merged as commit aa864c3d2e. Shipped: per-run first-pass models trained in PerFileScoring
+(two-round gbdt with protein-best, out of fold, calibrated per run, Percolator-style best-feature
+safeguard), FirstPassFDR as a reduce, the q-value transfer as the only pass-2 path with the transfer
+verifier, stub scores parquets in place of the full parquets and .fdr_scores.bin sidecars
+(`--keep-scores-parquet` for the features checkpoint, `--task FirstPass` for iteration), unit-resolution
+defaults gbdt + protein-best + default feature set, the out-of-process regression stub reader, and
+re-recorded goldens (merged on top of #4997's MS2 offset curve). SEA-AD 82 files (3 at a time):
+98,244 vs 97,120 at true FDP 1%, 5:02:57 vs 5:11:52, 24.9 vs 183 GB; sequential on a 64 GB i9 (UW25):
+7:38 (+4%), 36.7 vs 33.1 GB peak. TeamCity Perf/Regression 4279506 and all 16 GitHub checks passed.
+Deferred to follow-ups (sections above): retiring protein-compact (inventory below), the tiny-run floor
+of per-run models (pooled/prior model for runs whose model and every feature fail), the PerFileRescoring
+scan-set read and cheaper .spectra.bin writes, a training progress line in PerFileScoring, the per-run
+Model tab drop-down in model diagnostics (Mike), and PepEstimator's PEP 1.0 fallback with zero decoy
+protein winners.
 
 ## protein-compact retirement inventory
 
