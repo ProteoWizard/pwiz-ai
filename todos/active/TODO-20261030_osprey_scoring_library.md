@@ -630,3 +630,35 @@ SEA-AD baseline, FDRBench both), library `target+decoy+entrapment-20260817`, the
   precursors, identical to SEA-AD's). Launcher `ai/.tmp/sessions/20261121-tdp43/Start-Tdp43Diann.ps1`, output
   `D:\Users\brendanx\test\osprey-runs\tdp43-plasma-ev\diann\diann-search-163`. SEA-AD's 82 files took 8 h 6 min on
   MACS2, so expect ~16 h.
+
+### 2026-11-25 - TDP-43 163 files, non-split: DIA-NN result; split arms and protein-free arms queued
+
+DIA-NN finished 11/24 07:05 after **16 h 31 min** (59,483 s, `diann\launcher.log`), against Osprey's 6 h 54 min.
+Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`, from `report.parquet` /
+`report-first-pass.parquet`; 70,331 matches DIA-NN's own "Target precursors at 1% global q-value":
+
+| | Osprey 925410c | DIA-NN 2.7.0 |
+|---|---|---|
+| final, experiment q 1%: kept (FDP) | 69,549 (0.11%) | 70,331 (0.78%) |
+| final at FDP 1% / at 0.11% | 79,819 / 69,549 | 72,231 / 56,543 |
+| first pass, experiment q 1% (FDP) | 69,675 (0.11%) | 70,679 (0.89%) |
+| per-run q 1% union (FDP) | 93,908 (5.2%) | 81,184 (2.3%) |
+| protein groups at 1% | 4,696 | 4,985 |
+
+- Not an auditable FDP comparison: on the unsplit library entrapment sits on its own proteins, which collapses
+  Osprey's FDP under protein-best and shifts DIA-NN's by a different amount. Counts at reported q are even.
+- Queued (Brendan, 11/25), all 163 or 82 files, Osprey head aa864c3d2e with auto lanes:
+  1. TDP-43 split-sized, Osprey then DIA-NN (`ai/.tmp/sessions/20261121-tdp43/Start-Tdp43SplitChain.ps1`, started
+     11:10; the non-split head run was stopped after 30 min, folder `...defaulthead-aa864c3d2e-stopped-nonsplit`).
+  2. SEA-AD with every peptide its own protein, Osprey and DIA-NN.
+  3. TDP-43 the same.
+  Goal: measure how much each tool gains from protein information ("protein boosting") against its plain
+  spectrum scoring. The original DIA-NN observation (-15% on Carafe's per-peptide `_pepNNNNN` accessions) was not a
+  fair test: Osprey's `CarafeProteinIdNormalizer` strips that suffix, so Osprey had protein groups and DIA-NN did not.
+  The protein-free library must therefore use per-peptide accessions Osprey does not regroup.
+- Coverage matrix (goal: split and protein-free for each dataset and tool):
+
+  | | SEA-AD split | SEA-AD protein-free | TDP-43 split | TDP-43 protein-free |
+  |---|---|---|---|---|
+  | Osprey | done (MACS2 11/25 head + pre; UW8 11/09) | to run | running | to run |
+  | DIA-NN | done on UW8 (9 h 49 min); MACS2 timed only unsplit | to run | queued | to run |

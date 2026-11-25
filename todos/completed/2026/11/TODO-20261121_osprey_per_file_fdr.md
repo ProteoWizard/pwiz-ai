@@ -807,8 +807,27 @@ seaad-82files-libdecoy-r1.0-default{pre5070-c21d734ce7-E,head-aa864c3d2e-E}`; ch
     the lane/thread split, so more lanes cannot hide the training: it is ~1,700 core-s of added work per file.
 - Levers are therefore the amount of work, not threading: fewer Percolator iterations (early stop), fewer trees or
   rows per model, or one round instead of two. Each moves results and needs an 82-file run with FDP checks.
-- In flight at 06:10: head with bare `--parallel-files` (auto lanes) at 72 threads, to confirm on the real pipeline
-  (`...-defaulthead-aa864c3d2e-auto-E`).
+- **Correction to the E: vs D: bullet above:** probably warm vs cold cache, not the drives. The D: run started with
+  a partial standby clear (72.9 GB left cached vs ~0 in the E: arms), its library parse took 27 s against 121-124 s
+  cold, and its per-file RT calibration was bimodal (first 4 files 87-103 s, then 20-30 s). Calibration pass 1 is
+  the first serial read of each 4.5 GB cache. Unconfirmed; a cold single-file run from each drive would settle it.
+- **Auto lanes beat the hand-tuned 4 x 18.** Head, bare `--parallel-files`, 72 threads, same E: setup
+  (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaulthead-aa864c3d2e-auto-E`):
+  auto chose 9 lanes x 8 threads (RAM allowed 20, capped by the 8-threads-per-file minimum) and 8 FDR lanes.
+
+  | stage | pre 4 x 18 | head 4 x 18 | head auto 9 x 8 |
+  |---|---|---|---|
+  | PerFileScoring | 7,679 | 11,621 | 10,341 |
+  | FirstPassFDR | 1,558 | 444 | 483 |
+  | PerFileRescoring | 1,327 | 1,018 | 804 |
+  | SecondPassFDR | 132 | 235 | 219 |
+  | total | 2:58 | 3:42 | **3:17** (+10.8% over pre) |
+
+  Scoring wall per file (per-file seconds / lanes), 4 x 18 vs 9 x 8: coelution 69.8 vs 67.7 s (a wash), model +
+  stub 48.1 vs 40.5 s, RT calibration 12.6 vs 6.5 s. So the synthetic benchmark's "lanes cannot hide training" holds
+  only for pure GBDT: in the pipeline 9 lanes train 16% better and overlap the serial cache reads of calibration.
+  97,691 library spectra, 6,774 protein groups (pre: 97,122 / 6,727). Other users' load < 0.5 core.
+  The `MIN_THREADS_PER_FILE` = 8 rule (tuned before #5070) still picks the better configuration on MACS2.
 
 ## protein-compact retirement inventory
 
