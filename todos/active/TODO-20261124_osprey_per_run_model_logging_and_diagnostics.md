@@ -6,7 +6,7 @@ Per-run first-pass models: PerFileScoring logging gaps and a per-run Model tab
 - **Branch**: `Skyline/work/20261124_osprey_per_run_model_logging`
 - **Base**: `master`
 - **Created**: 2026-11-24
-- **Status**: In Progress - part 1 (logging gaps) first
+- **Status**: In Progress - part 1 committed (3ae9253249), /code-review then PR; part 2 split out
 - **Module**: `osprey`
 - **PR**: (pending)
 
@@ -42,35 +42,47 @@ and `Osprey.Tasks/PerFileScoringTask.cs` (`TrainOwnModelFromEntries`, `ScoreWith
 shows no reporting gap over 30 s inside PerFileScoring; output unchanged (`regression-parallel.ps1 -Dataset All`
 49 PASS / 0 FAIL / 0 SKIP against the current goldens).
 
-## 2. Per-run Model tab in the `--model-diagnostics` HTML
+### Part 1 progress (2026-11-24)
 
-**What**: the Model tab showed the one experiment-wide first-pass model (feature weights / contributions).
-Since #5070 there is no experiment-wide model: `FirstPassFdrTask.ModelViewFromArtifacts`
-(`Osprey.Tasks/FirstPassFdrTask.cs` ~409) loads `FirstPassModelIO.LoadForAnalysis`, finds no analysis-wide
-`model.json`, returns null, and the tab shows only its explanatory note. Its feature shares also came from the
-per-run `.1st-pass.fdr_scores.bin` sidecars, which #5070 no longer writes.
+Committed as 3ae9253249 (built, 681/681 tests, inspection clean):
+- `Osprey.FDR/TrainingProgress.cs` (new): the per-run training's percent, step slices sized by
+  SEA-AD wall time (round 1 0-35, round-1 scoring + protein-best column 35-45, round 2 45-85,
+  out-of-fold scoring 85-93, safeguard 93-98, calibration 98-100). A fold's fraction is
+  iterations done / (done + fewest still to come under the patience rule), so each ~7 s
+  gbdt iteration moves the percent; the loops stop on convergence, so i / MaxIterations (30)
+  would barely move.
+- `PercolatorConfig.TrainingProgress` (internal, null except on the per-run model's own clone;
+  copied by `CloneForTrainOnly`). `PercolatorTrainer.TrainProgressReporter.ReportConvergence`
+  is called from both fold loops (SVM patience 2 is now `SVM_PATIENCE`);
+  `TrainWithScorePrefilter` opens round_1_scoring and round_2.
+- `PerFileFirstPassModel.TrainAndScore` runs under a `ProgressReporter` with a new heading
+  resource; single-round training now clones the shared config too, so it can carry progress.
+- `PerFileScoringTask`: segments now read 2, calibrate 6, score 60, features checkpoint 4,
+  own model 24, stub write 4; the resume-from-features path opens the model segment directly
+  through a new `MultiProgressReporter.FileScope.BeginSegment(int)` (CommonUtil; the
+  no-argument form now delegates to it, unchanged behavior).
+- `MultiProgressReporterTest.TestMultiProgressReporterWeightedSegments` extended: segment skip,
+  never-backward, fold-iteration mapping.
 
-**Want** (Mike asked for this): a drop-down of runs on the Model tab, showing each run's own model, the same
-way other per-file views in the report already use a run drop-down. Each run's model, calibration map and
-safeguard choice are in `<stem>.1st-pass.model.json` (`FirstPassModelIO.RunModelPathFor`); a run scored by its
-best single feature (the safeguard's fallback, `FallbackFeature` in that file) should say so rather than show
-a model. Worth an "all runs" summary too (e.g. the spread of each feature's contribution across runs), since
-per-run views of 446 runs are not browsable one by one.
+Verification in flight: 12-file SEA-AD `-Task PerFileScoring -ParallelFiles -1`, split-sized
+library, exe snapshot `D:\test\osprey-runs\_bin\perrunlog-wip`, out dir
+`D:\test\osprey-runs\sea-ad\runs\seaad-12files-libdecoy-r1.0-defaultperrunlog-20261124_*`.
+Then `regression-parallel.ps1 -Dataset All`.
 
-**Constraints**: the report is built by a reduce (FirstPassFDR / SecondPassFDR) from per-run artifacts, so the
-per-run model views must come from what each run already writes (doc 00's P3 corollaries and P16), streamed
-run by run, not by holding every run's model at once. Where the feature sums for contributions come from now
-that the sidecars are gone has to be settled: the stub parquet does not carry features; either PerFileScoring
-records each run's contribution summary in its model file, or the tab shows weights without shares.
-Code: `Osprey.FDR/ModelDiagnostics/ModelDiagnosticsData.ModelView.cs` (`ModelView.From`),
-`Osprey.Tasks/ModelDiagnostics/ModelDiagnosticsReport.cs`, `ModelDiagnosticsHtml.cs`,
-`model-diagnostics-template.html`, `PercolatorEngine.FirstPassContributionsFromShares`.
+**SEA-AD 12-file result** (`...defaultperrunlog-20261124_182802\run.log`, perfviz output in
+`ai/.tmp/sessions/20261124-perrun/perfviz-12.txt`): 0 gaps >= 30 s, max 29 s, median 6 s,
+PerFileScoring 38:25. The 29 s gap is calibration in wave 1 (`[1] 7% -> 8%`), not training.
+Largest gap inside training 26 s, in the last wave (2 files): round 2's last iteration plus
+out-of-fold scoring (~11 s, reports nothing inside `ScoreRowsWithModel`). Gap list from
+`ai/.tmp/sessions/20261124-perrun/gaps.py <log> 18`.
 
-**Done when**: the 3-file regression datasets with `--model-diagnostics` (StellarLibDecoy, StellarGenDecoyEntrap,
-Astral) show a working per-run Model tab; the diagnostics goldens in `osprey-regression.data/*/diagnostics.tsv`
-are unchanged or re-recorded with an explained diff; a SubsetPipelineTest asserts the report carries one model
-view per run (and the fallback note for a run that fell back).
+**Regression**: `regression-parallel.ps1 -Dataset All` 49 PASS / 0 FAIL / 0 SKIP in 49:44
+(lane logs `pwiz_tools/Osprey/TestResults/regression-lane-{Stellar,StellarGenDecoyEntrap}-20261124_190725.log`).
+Part 1 done-when met.
 
-## Suggested order
+## 2. Per-run Model tab - moved (2026-11-25)
 
-1 first (small, self-contained), then 2. Either can be its own PR.
+Split into its own branch and PR (Brendan, 2026-11-25), together with the scores-parquet reduction and
+the help-group move:
+[TODO-osprey_diagnostics_after_per_run_models.md](../backlog/TODO-osprey_diagnostics_after_per_run_models.md).
+This TODO is part 1 only, one commit (3ae9253249).
