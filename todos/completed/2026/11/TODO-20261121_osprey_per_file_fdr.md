@@ -748,6 +748,30 @@ scan-set read and cheaper .spectra.bin writes, a training progress line in PerFi
 Model tab drop-down in model diagnostics (Mike), and PepEstimator's PEP 1.0 fallback with zero decoy
 protein winners.
 
+### 2026-11-24 (night) - MACS2 A/B after merge: 14.9% slower, scoring +42%
+
+Master aa864c3d2e (`_bin\master-aa864c3d2e`) on MACS2 with the 11/20 cache arm's recipe (72 threads, scoring 4 /
+rescoring 8 files at once, split-sized library, no model diagnostics, OS file cache cleared first). One deviation:
+the caches were read from a D: copy (`D:\...\sea-ad\raw`), while the 11/20 arm read them in place from E:. The
+10/06 sweep had D: no slower than E: (318 vs 343 s on 8 files), so this favours the new run if anything. Box quiet
+(other users under 1 core; `ai/.tmp/sessions/20261121-tdp43/seaad-master-aa864c3d2e-load.log`). Run dir
+`D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultmaster-aa864c3d2e` (`run.log`).
+
+| Stage | 11/20 cache arm | aa864c3d2e | Change |
+|---|---|---|---|
+| PerFileScoring | 7,735 s / 66.4 GB | 10,983 s / 116.7 GB | +3,248 s (+42%) |
+| FirstPassFDR | 1,574 s | 435 s / 51.5 GB | -1,139 s |
+| PerFileRescoring | 1,373 s / 24.7 GB | 777 s / 23.8 GB | -596 s |
+| SecondPassFDR | 128 s | 228 s / 21.3 GB | +100 s |
+| Total | 10,811 s (3:00:11) | 12,423 s (3:27:03) | +1,612 s (+14.9%) |
+
+- Results match the PR's A4 exactly: 97,748 at experiment q 1% (was 97,191), 97,691 library spectra, 6,774 protein
+  groups. `split_calibration.py`: pass 1 98,280 at true FDP 1% (A0 97,120, +1.2%), q 1% kept 97,433 at FDP 0.93%.
+- Disk 24.9 GB written (about 183 GB before). Peak private memory 116.7 GB in PerFileScoring, up from 66.4 GB.
+- Moving training into PerFileScoring cost 3,248 s there and saved 1,139 s in FirstPassFDR; rescoring from the
+  stubs saved 596 s. On MACS2 the net is +27 min, against the PR's -9 min (5:02:57 vs 5:11:52) at 3 lanes / 30
+  threads on the 128 GB i9 (UW8). Not yet explained: why per-run training costs 4 lanes x 72 threads this much more.
+
 ## protein-compact retirement inventory
 
 Prepared 2026-11-23 on `Skyline/work/20261123_osprey_per_file_pass2` after 3bbdeba334 plus the
