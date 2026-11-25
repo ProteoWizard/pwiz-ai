@@ -247,6 +247,54 @@ StringCollection x2, OpenDataSourceState (settable POCO). ~200 uses. Not doing i
       test-file guard does not trip on SkylineCore
 - [ ] Docs: build-and-test guide, skyline-development skill
 
+### Phase 3 - guardrails - DONE `9cb5060f76` (local)
+- [x] Windows P/Invokes in the plain net10.0 assemblies are `[SupportedOSPlatform("windows")]`
+      (CommonUtil Advapi32/Gdi32/Kernel32/Shell32/Shlwapi, FileLockingProcessFinder, SkylineCore
+      Kernel32Unsafe + GetTempFileName + GlobalMemoryStatusEx), so CA1416 (an error locally)
+      flags any unguarded caller at build time. It found what Phase 2 found at run time, plus:
+      NaturalFilenameComparer (StrCmpLogicalW -> managed natural compare off Windows), vendor
+      method export lookups (off Windows = "not installed"), FileLockingProcessFinder, FastRead/
+      FastWrite (throw BulkReadException off Windows = managed path).
+- [x] `Kernel32.FormatExitCode`/`NtStatus` (pure managed) moved to `ProcessExitCode` so Kernel32
+      can be marked whole.
+- [x] `PlatformNeutralPInvokeTest`: every [DllImport] in SkylineCore, SkylineTool, pwiz.Common*,
+      PanoramaClient, ProteomeDb, ProteowizardWrapper, BiblioSpec* must be platform-marked.
+      Checked it fails when a mark is removed. Pwiz.* (pwiz-sharp/vendors) out of scope.
+- [x] A path-scoped CodeInspection rule for SkylineCore: not needed - the net10.0 TFM already
+      makes WinForms uncompilable there, and CA1416 + the test above cover Win32.
+- [x] Installer: build.ps1's test-file guard matches exact names, SkylineCore passes; the
+      bundled Windows Desktop runtime includes Microsoft.NETCore.App, which SkylineCmd needs.
+- [ ] Docs: land the draft below as ai/docs/architecture-skylinecore.md when the PR merges
+      (ai docs are shared by all branches; master does not have SkylineCore yet), and link it
+      from build-and-test-guide.md and the skyline-development skill.
+
+#### Draft: ai/docs/architecture-skylinecore.md
+> **SkylineCore and SkylineCmd.** Skyline is three assemblies. `SkylineCore.dll`
+> (pwiz_tools/Skyline/SkylineCore, plain `net10.0`) holds the model, CommandLine, Settings and
+> its lists, string resources and non-UI utilities. `Skyline(-daily).dll` (`net10.0-windows`)
+> holds every form, control and image, and references SkylineCore. `SkylineCmd.exe` (plain
+> `net10.0`) references only SkylineCore and runs on Linux and macOS.
+>
+> **Where code goes.** Anything SkylineCmd can reach goes in SkylineCore and must compile
+> without WinForms or System.Drawing. Core code reaches the UI only through
+> `ProgramContext.UI` (`IProgramUI`, null in SkylineCmd) and `ISkylineDocumentWindow`.
+> Namespaces did not change with the move, so a type's namespace does not say its assembly.
+>
+> **Windows-only calls.** CA1416 is active (as an error) in plain `net10.0` projects. Guard
+> Windows APIs with `OperatingSystem.IsWindows()` and give a managed path elsewhere. Mark every
+> P/Invoke `[SupportedOSPlatform("windows")]` - the analyzer cannot see an unmarked one, which
+> then fails only at run time on Linux; `PlatformNeutralPInvokeTest` enforces the mark.
+>
+> **Settings lists are immutable.** Change one by setting its Settings property:
+> `Settings.Default.StaticModList = Settings.Default.StaticModList.ChangeAdd(mod)`. Listen with
+> `Settings.Default.PropertyChanged`. List editors store into the property holding that list
+> type (`Settings.SetSettingsList`).
+>
+> **Running SkylineCmd on Linux (WSL).** Install the runtime without sudo:
+> `bash dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir ~/.dotnet`, then
+> `~/.dotnet/dotnet <bin>/SkylineCmd.dll --in=doc.sky ...` against the Windows build output.
+> Vendor raw files and vendor method export need Windows; mzML and the rest work.
+
 ### Phase 4 - verification
 - [ ] Build-Skyline.ps1 -VendorLicenses green, CodeInspection green
 - [ ] Full test pass (parallel)
@@ -275,3 +323,8 @@ all pass. Logs: ai/.tmp/sessions/20261124-separateui/imm2*.log. Next: Phase 2.
 ### 2026-11-24 - Phase 2 committed (`536d3c39b8`, local only)
 Solution builds; Test.dll 447, TestData.dll 182, CodeInspection, TestSkylineCmd(+InEmptyDirectory)
 pass. Linux run as in Phase 2. Next: Phase 3 (guardrails, docs) and Phase 4 (full suite, languages).
+
+### 2026-11-24 - Phase 3 committed (`9cb5060f76`, local only)
+Solution builds; Test.dll 448, TestData.dll 182, CodeInspection, PlatformNeutralPInvokeTest,
+SkylineCmd tests pass. Linux: fresh import (no .skyd) gives a report identical to Windows.
+Next: Phase 4 (full suite, ja/zh) and the docs draft at merge.
