@@ -4,7 +4,9 @@
 - **Checkout**: `I:\git_i\sky_separateui`
 - **Branch**: `Skyline/work/20261124_skylinecore_split` (from `origin/master` @ `62b9748240`)
 - **Created**: 2026-11-24
-- **Status**: In review - all phases done, PR opened 2026-11-25 (link below once created)
+- **Status**: In review - all phases done
+- **PR**: [#5078](https://github.com/ProteoWizard/pwiz/pull/5078) (opened 2026-11-25; diagrams in
+  nickshulman/pr-assets `pwiz/5078-skylinecore-split`)
 - **Module**: `skyline`
 - **Supersedes**: T2 and T6 of `ai/todos/backlog/TODO-ui_free_model_phase2.md`
 - **Template**: `ai/todos/completed/2026/08/TODO-20260818_commonutil_winforms_split.md`
