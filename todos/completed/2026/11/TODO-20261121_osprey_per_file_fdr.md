@@ -772,6 +772,44 @@ the caches were read from a D: copy (`D:\...\sea-ad\raw`), while the 11/20 arm r
   stubs saved 596 s. On MACS2 the net is +27 min, against the PR's -9 min (5:02:57 vs 5:11:52) at 3 lanes / 30
   threads on the 128 GB i9 (UW8). Not yet explained: why per-run training costs 4 lanes x 72 threads this much more.
 
+### 2026-11-25 (night) - Same-setup A/B on MACS2: +24.5% total, all of it per-run training
+
+The table above compares a D:-cache run against an E:-cache baseline. Re-run with both arms identical: caches read
+in place from E:, outputs on D:, 72 threads, scoring 4 / rescoring 8, split-sized library, no model diagnostics,
+standby cache cleared first, other users under 0.5 core (`seaad-*-E-load.log`). Pre = c21d734ce7 (#5070's parent,
+`_bin\pre5070-c21d734ce7`), head = aa864c3d2e. Run dirs `D:\Users\brendanx\test\osprey-runs\sea-ad\runs\
+seaad-82files-libdecoy-r1.0-default{pre5070-c21d734ce7-E,head-aa864c3d2e-E}`; chain
+`ai/.tmp/sessions/20261121-tdp43/Start-SeaAdAB-E.ps1`; timeline `ai/.tmp/night-session-budget-20261124.md`.
+
+| Stage | pre (c21d734ce7) | head (aa864c3d2e) | Change |
+|---|---|---|---|
+| PerFileScoring | 7,679 s / 65.7 GB | 11,621 s | +3,942 s (+51%) |
+| FirstPassFDR | 1,558 s / 66.2 GB | 444 s | -1,114 s |
+| PerFileRescoring | 1,327 s / 28.2 GB | 1,018 s | -309 s |
+| SecondPassFDR | 132 s | 235 s | +103 s |
+| Total | 10,695 s (2:58:16) | 13,318 s (3:42) | +2,623 s (+24.5%) |
+
+- Pre reproduces 11/20 (7,735 s scoring, 10,811 s total, 97,122 library spectra - identical count). Head reproduces
+  the D: run's results (97,691 library spectra, 6,774 protein groups).
+- Per file (`scoring_breakdown.py`): coelution 279.4 vs 278.9 s, RT calibration 50.3 vs 51.4 s - unchanged. The
+  per-run model + stub is 192.3 s/file (train 143.5, out-of-fold scoring 27.9); 192.3 x 82 / 4 lanes = 3,942 s,
+  the whole scoring delta. Fold utilisation 82%, 1-15 Percolator iterations per fold (mean 5.9), each a fresh
+  200-tree GBDT, over two rounds (300k then 200k rows): roughly 7,000 trees per file.
+- E: vs D: is a separate ~640 s of scoring wall, in both builds: head on D: had RT calibration 32.9 s/file and
+  coelution 269.1 s/file. So the earlier +3,248 s understated the training cost and the 14.9% understated the total.
+- Why the 30-thread run trained only 1.19x slower per file at 1.8x fewer threads: MACS2 is 2 x Xeon Gold 6354,
+  **36 physical cores**, 72 logical. 30 -> 72 threads is 30 -> 36 cores plus hyperthreads, about 1.2x of compute.
+  It is not a GBDT scaling defect. A synthetic benchmark (200k x 70, 100 trees, idle box; temporary
+  `Osprey.Test/GbtScalingBench.cs`, output `ai/.tmp/sessions/20261121-tdp43/gbt-bench.txt`) shows:
+  - one model: 16.0 s at 1 thread, 4.37 s at 6, 2.91 s at 18 (5.5x; ~13% serial fraction, Amdahl ceiling ~7.5x);
+  - 12 models concurrently (4 lanes x 3 folds): 8.30 s at 3 threads per fold (36 threads) and 8.31 s at 6 (72);
+    8 lanes x 3 folds x 3 = 2.03 s per lane, 9 x 3 x 2 = 2.26 s. Throughput saturates at the 36 cores whatever
+    the lane/thread split, so more lanes cannot hide the training: it is ~1,700 core-s of added work per file.
+- Levers are therefore the amount of work, not threading: fewer Percolator iterations (early stop), fewer trees or
+  rows per model, or one round instead of two. Each moves results and needs an 82-file run with FDP checks.
+- In flight at 06:10: head with bare `--parallel-files` (auto lanes) at 72 threads, to confirm on the real pipeline
+  (`...-defaulthead-aa864c3d2e-auto-E`).
+
 ## protein-compact retirement inventory
 
 Prepared 2026-11-23 on `Skyline/work/20261123_osprey_per_file_pass2` after 3bbdeba334 plus the
