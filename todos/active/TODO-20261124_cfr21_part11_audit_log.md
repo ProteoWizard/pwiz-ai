@@ -207,7 +207,18 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
   `getAuditLogAnchor` also returns signatures. Signing requires InsertPermission. 24/24 tests;
   end-to-end flow (anchor, sign, re-auth, token replay 403, no-token 403) verified on the dev
   server with `ai/.tmp/sessions/20261124-cfr21/sign-e2e.sh`.
-- Server leftovers: link the history page from the document's page; clear folder-delete refusal.
+- History link done in targetedms (local, after `fa5e00fa`): Document Summary
+  (`runSummaryView.jsp`) shows "Recorded States and Signatures" in Part 11 folders when the
+  document GUID has anchors. Compiles; not yet seen rendered (the dev server has no uploaded
+  Skyline document) - check it on the first real upload. (Folder-delete refusal done
+  in targetedms `fa5e00fa`: `AuditLogAnchorManager.checkFolderCanBeDeleted` from
+  `TargetedMSListener.containerDeleted`, BadRequestException before anything is deleted.)
+- Unlinking keeps the document GUID (decided 2026-11-25), so relinking continues the same record
+  and the server records the saves made while unlinked. The gap is only visible in the audit log.
+  Server follow-up: flag recorded states whose new entries include an unlink/relink of the
+  Panorama folder (`AuditLogPanoramaUri` change) on the history page, so the gap is visible there.
+  Needs the entry's change description sent with the chain (today only hashes), or Skyline
+  sending an explicit "recording resumed" marker with the first save after relinking.
   Both branches stay local (Nick, 2026-11-24).
 - 2026-11-24 targetedms `db7da73a`: `anchorAuditLog` takes the whole chain from the start of
   the log (no `parentEntryHash`); records only the suffix the server lacks. 23/23 tests.
@@ -242,6 +253,26 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
   and GUID. `SrmSettings.KeepAuditLogPanoramaBinding` keeps folder, GUID and audit logging on all
   three paths; `ResetInitialAuditLogEntry` skips bound documents (it would strip a log Panorama
   already holds).
+- Skyline `8c1d0bb840` (local): SHA-256. Format 26.12 (`DocumentFormat.SHA256_LOG_HASH`) hashes new
+  entries, the root and the document with SHA-256. Saved entries keep their SHA-1 hashes (told
+  apart by length, `AuditLogHashAlgorithm.IsSha256`), because Skyline rehashes the whole chain
+  on every save and the server holds the old hashes; SHA-1 history already anchored is safe
+  (forging it needs a second preimage, not a collision). Once an entry is SHA-256 every later one
+  is (no downgrade). Saving to an older format rehashes all with SHA-1. `HashingStream` computes
+  both; `FileHashes.Matching` picks the one the `.skyl` used on open. `TestAuditLogHashUpgrade`.
+- targetedms `21543536` (local): upload verification picks SHA-1/SHA-256 per entry by hash
+  length and for the root hash; rejects a SHA-1 entry after a SHA-256 one. Samples
+  `MethodEdit_v1_sha256.zip` (real mixed chain written by Skyline 26.12 from
+  `MethodEdit_v1_sequential`, user scrubbed to `SKYLINE-TEST\skyline`) and a tampered copy.
+  SkylineAuditLogManager 10/10, AuditLogAnchorTest 23/23, parser 2/2.
+- **Release coupling**: until a Panorama release has `21543536`, uploading a 26.12 document to a
+  folder with audit integrity level >= 1 fails root/entry hash verification (level 0 only warns).
+  The server change must ship before (or with) the Skyline release that writes 26.12.
+- Skyline `8fa0b267e6` (local): `.skyd` hash. `AuditLogPanoramaRecorder.RecordSave` hashes the
+  `.skyd` (SHA-256, full sharing) in the background; the GUI save now records after
+  `OptimizeCache` (CLI already did). Open check adds `results_changed` when the document matches
+  but the `.skyd` differs from the recorded hash. Known limit: a `.skyd` rewritten without a save
+  (import finishing after the save) looks changed until the next save.
 
 ## Skyline-side design (decided 2026-11-24, replaces the queue/receipts plan above)
 
