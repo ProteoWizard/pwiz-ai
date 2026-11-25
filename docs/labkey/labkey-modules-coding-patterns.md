@@ -790,7 +790,8 @@ curl -s -L -b /tmp/cookies.txt -c /tmp/cookies.txt -X POST \
   -H "X-LABKEY-CSRF: $CSRF" \
   -d '{"email":"user@example.com","password":"password"}'
 ```
-A successful login returns `{"success": true, ...}`.
+A successful login returns `{"success": true, "CSRF": "...", ...}`. Use that `CSRF` value (the session's
+token after login) in the `X-LABKEY-CSRF` header of the run request below. Verified 2026-11-24.
 
 **Step 2: Run the tests** (POST with the CSRF token; a GET returns 405)
 ```bash

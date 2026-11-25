@@ -175,7 +175,15 @@ server receipt). The LabKey user is the authoritative one for regulated docs.
   `TargetedMSManager` getters. `AuditLogAnchorTest` (integration) passes 3/3 on the dev server.
 - Side effect to settle: a folder holding anchors cannot be deleted (FK to core.Containers); today
   that surfaces as a raw DB error. Add a clear refusal in `TargetedMSListener` / delete UI.
-- Next: `anchorAuditLog` API.
+- Tables committed locally as `7eebea29`; do not push the targetedms branch until the API is in
+  (pushing starts LabKey TeamCity on the `fb_` branch).
+- 2026-11-24 `anchorAuditLog` API (`dc8b65d7`, local): `AuditLogAnchorManager` enforces the chain
+  rules (unbroken entries; first anchor starts the log; later anchors attach to a recorded entry;
+  branching from an earlier entry allowed; full repeat = retry returning the original receipt;
+  partial overlap refused; one folder per document GUID; per-document advisory lock).
+  `clientTime` is a UTC instant; `serverTime` returned as UTC. 13/13 tests pass. JSON binding in
+  the action is not covered by a test yet.
+- Next: "Part 11" folder setting gating anchors, then `getAuditLogHeads`.
 
 ## Open questions
 - Folder policy for the offline window (unlimited / max age / max entries).
