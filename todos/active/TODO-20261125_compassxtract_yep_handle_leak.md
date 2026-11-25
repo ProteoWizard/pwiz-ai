@@ -6,7 +6,7 @@
 - **Created**: 2026-11-25
 - **Status**: In Progress
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#5076](https://github.com/ProteoWizard/pwiz/pull/5076)
 
 ## Objective
 
@@ -32,8 +32,8 @@ Dispose". Find the cause and fix it.
 
 - [x] Release each spectrum, parameter collection and parameter after use (YEP, FID, MALDI source check)
 - [x] Full Bruker suite passes (17)
-- [ ] `/code-review` before opening the PR
-- [ ] Open the PR
+- [x] `/code-review` before opening the PR
+- [x] Open the PR
 
 ## Regression Test
 
@@ -49,3 +49,16 @@ Dispose". Find the cause and fix it.
 Diagnostic loop test (not committed) logged each cycle to `ai/.tmp/sessions/20261118-3e7798af/yep-diag-*.log`.
 Baseline logs `yep-diag-2.log`, `yep-diag-4-baseline-{1,2,3}.log`; fixed `yep-diag-3-release.log`,
 `yep-diag-5-final.log`. Soak data `bruker-soak/soak.csv`.
+
+### 2026-11-25 - Code review, suite soak, PR
+
+`/code-review medium`: fixed the forced-release race (FillSpectrum now under a lock), the OpenFid
+error-path release order, the exposed parameter collection (list is now IDisposable) and the Release
+comment; dropped the loop regression test (cost), a generic COM wrapper and the cache rebuild cost.
+
+Test host crashes (7 in the overnight soak, 1 in this one) are access violations inside CompassXtract's
+native DLLs (non-ASLR, base 0x180000000; three at 0x18000C861, others through junk pointers), all during
+the YEP test. Likely the finalizer thread releasing leftover COM objects; the fix removes those releases.
+
+Suite soak, master vs fix, alternating (`bruker-fix-soak/soak.csv`): master 2 handle failures, 1 crash
+in 150; fix 0 and 0 in 149 (round 30 excluded: built mid-edit). Opened #5076.
