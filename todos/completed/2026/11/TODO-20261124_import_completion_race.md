@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261124_import_completion_race` (cmdline)
 - **Base**: `master`
 - **Created**: 2026-11-24
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#5074](https://github.com/ProteoWizard/pwiz/pull/5074)
+- **PR**: [#5074](https://github.com/ProteoWizard/pwiz/pull/5074) (merged 2026-11-24)
 
 ## Objective
 
@@ -46,7 +46,8 @@ finish within the race window more often.
       TestImportResultsCancel, TestImportResultsFilesRestore - all pass
 - [x] CodeInspection and Skyline tcinspect: clean
 - [x] Commit (f22dcdd8d9), push, open PR #5074
-- [ ] CI green, review, merge
+- [x] Review, merge (CI's Skyline Windows build was red only from the Osprey tests master
+      broke at the time: TestBuildLibraryCarafeWizard, TestOspreySearchTuning)
 
 ## Notes
 
@@ -63,3 +64,9 @@ finish within the race window more often.
   into ConsumeCompletion (DoneAdding once _consumedCount == _loadingCount), _completedCount
   removed. Unit test 2000/2000, 12 related tests, CodeInspection and tcinspect clean. Soak 20
   each: master 0, fixed 0 (race not hit). Soak 150 each: master 6 hangs, fixed 0.
+
+### 2026-11-24 - Merged
+
+PR #5074 merged as commit fd2444a7b9. The commit thread now queues its own end marker once it has
+consumed every file's completion, so loading-thread order can no longer strand a completion and
+hang a multi-file import. Regression test UtilTest.FileLoadCompletionAccumulatorConcurrentCompleteTest.
