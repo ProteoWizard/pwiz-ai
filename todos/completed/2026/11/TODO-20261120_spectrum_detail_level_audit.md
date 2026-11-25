@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261119_thermo_detail_level` (took over Brendan's #5062; stacked on #5057)
 - **Base**: `Skyline/work/20261118_agilent_ims_fewer_copies` (#5057), then `master` once it merges
 - **Created**: 2026-11-20
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#5059](https://github.com/ProteoWizard/pwiz/issues/5059)
 - **Module**: `pwiz`
-- **PR**: [#5062](https://github.com/ProteoWizard/pwiz/pull/5062)
+- **PR**: [#5062](https://github.com/ProteoWizard/pwiz/pull/5062) (merged 2026-11-25)
 - **Related**: #5057 (open, `Skyline/work/20261118_agilent_ims_fewer_copies`) adds `GetSpectrum(int, DetailLevel)`
   for Agilent and Bruker, fixes the Waters IMS peak count, and adds the vendor-harness detail-level check this
   issue extends; #4921 (Sciex override)
@@ -136,3 +136,12 @@ and `SKYLINE_TEST_ARGS=test=...`; root build.bat fails here only on stale untrac
 pwiz_tools/{SeeMS,MSConvertGUI}/Properties/AssemblyInfo.cs from the old Boost.Build.
 
 Remaining: re-measure the Astral metadata pass (Brendan); #5057 must merge first.
+
+### 2026-11-25 - Merged
+
+PR #5062 merged as commit 511ab0a2af, after Matt's approval, as "pwiz: Fixed additional vendor data readers
+that were decoding peaks for metadata requests". It builds on #5057 (c022df2a4c): every pwiz-sharp vendor reader
+and spectrum-list wrapper now answers instant and fast metadata without peaks, a UV/DAD/PDA trace no longer
+raises its file's metadata detail level in `MsDataFileImpl`, and the vendor harness checks every spectrum at
+each lower level against a full read. Issue #5059 is closed. Deferred: re-measuring the Astral metadata pass
+on the merged code (Brendan's file; the 22 s -> 2.1 s figure is from his Thermo-only fix).
