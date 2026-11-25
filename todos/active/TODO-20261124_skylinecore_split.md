@@ -117,7 +117,99 @@ packages it recursively, so new DLLs and satellites ship automatically. The WiX
 #### Other
 - `LocalizedResourcesTest` never covered pwiz.Common or PanoramaClient until now (now does, passes).
 
-### Phase 1 - SkylineCore project
+### Phase 1 - SkylineCore project - DONE `62b02cc88b` (local)
+
+Solution, TestTutorial, TestPerf, SkylineTester all build. SkylineCore is plain net10.0 with
+CA1416 clean. Moved (git mv): Model/, ProtocolBuffers/ (+ .gitignore paths), CommandLine.cs,
+CommandArgs.cs, CommandArgUsage.*, SkylineResources.*, Properties/{Settings*, *List.cs,
+Resources.* (strings), PropertiesResources.*}, ~50 non-UI Util files.
+
+Design decisions taken (worth review):
+- **Resources**: core keeps public `pwiz.Skyline.Properties.Resources` (1117 strings, ~1290 refs
+  unchanged). The 148 images are `Properties/ImageResources` in the exe; ~360 refs rewritten
+  (`Resources.X` -> `ImageResources.X`). `DpiIcons` discovery also accepts
+  `*.Properties.ImageResources.resources`; `DpiUtil` and the icon tests use `ImageResources`.
+- **Settings lists**: core lists keep data/defaults/Title/Label/CopyItem. Their 31
+  EditItem/EditList/AcceptList overrides (+ ServerList's 4 dialog helpers) moved verbatim into
+  exe `Properties/SettingsListEditors.cs`: a registry by list type + extension methods of the
+  same names, so the ~75 callers did not change. `EditListDlg`/`SettingsListComboDriver` get
+  editors via `SettingsListEditors.GetItemEditor<T>(list)` (type tests `as IItemEditor<T>`
+  broke silently - caught by TestAccessServer etc.). `IItemEditor<T>` moved to exe
+  `Util/ListEditors.cs`; `IListEditor<T>` deleted (no users left).
+- **Program**: core `ProgramContext` holds what core needs (test flags, exit codes, Name, CLI
+  import options, TestExceptions, ReportException, ModeUI, RunLongOperation) + optional
+  `IProgramUI UI` that exe `Program.Init` installs (ModeUI, MainWindow, ActiveDocument,
+  ReportException -> dialog, RunLongOperation -> LongOperationRunner, UserLogin). Null in
+  SkylineCmd, as Program.MainWindow was. 189 refs renamed. TestRunnerLib's InvokeSkyline
+  reflects on Program then ProgramContext (it sets FunctionalTest/UseOriginalURLs by name).
+- **SkylineWindow from Model**: core `ISkylineDocumentWindow` (SkylineWindow implements;
+  `ShowCalibrationForm(bool singleBatch)`, `ZoomChromatogramToPeak`, explicit impls).
+  `SkylineDataSchema.SkylineWindow` is that interface; UI uses `GetSkylineWindow()` extension.
+  Static helpers moved: `SkylineViewFile.GetViewFile/EXT_VIEW`,
+  `AuditLogEntry.CreateDeleteNodesEntry`, `TransitionGroupDocNode.FindChromInfo`.
+- **Split mixed files**: LongWaitBroker.cs (ILongWaitBroker, ProgressWaitBroker,
+  ProgressUpdateEventArgs, IWebHelpers, new SilentLongWaitBroker), Server.cs, UiModes /
+  UiModeChoices, PeptideToMoleculeTextMapper / ModeUIHelpers.FormTextMapper (exe `Helpers`
+  partial renamed `ModeUIHelpers`: partial classes cannot span assemblies; 82 refs),
+  ExceptionUtilUI, FileSaver.CanSave(IWin32Window) extension, PanoramaShareVersions (CLI
+  Panorama version negotiation), BatchModifyInfo, GraphTypeSummary enum (persisted in
+  Settings; namespace kept), CarafeModelChoice -> Model/Lib/AlphaPeptDeep.
+- **ZedGraph out of Model**: dead `bootstrapCurves` param deleted; SampleType symbol table
+  moved to CalibrationGraphControl; Bruker scheduling points are `(double X, double Y)`.
+- **Annotations**: `ColorBrush` (name kept - .skyl audit logs refer to it) is a Color;
+  audit text identical (`RgbHexColor.GetHex`); UI `AnnotationBrushes` caches brushes.
+- **Report export**: RowFactories used BindingListSource (WinForms) for sorted/pivoted reports;
+  now `SynchronousQuery.GetReportResults` in Common (same query pipeline, calling thread).
+- **Windows-only APIs guarded** (CA1416): DPAPI throws off Windows; audit user =
+  `Environment.UserName` off Windows; portable settings ownership = not owned off Windows;
+  process-tree kill via `Process.Kill(true)` off Windows; Thermo/ProteinPilot/DIA-NN registry
+  lookups return "not installed". Windows behavior unchanged in all.
+- SkylineTool -> plain net10.0; pipe transport classes `[SupportedOSPlatform("windows")]`.
+- Version stamping shared via `SkylineAssemblyVersion.targets` (Install reads SkylineCore).
+- `InternalsVisibleTo` as attributes (`SkylineCore/Properties/InternalsVisibleTo.cs`):
+  GenerateAssemblyInfo=false silently disables `<InternalsVisibleTo>` items.
+
+Found, NOT fixed (pre-existing):
+- CodeInspection's `InspectMisplacedResources` has been a no-op since Skyline.csproj went
+  SDK-style: AssortResources reads `<Compile Include>` items and there are none. Repointed to
+  SkylineCore's Resources.resx so it still runs.
+
+Phase 2 notes:
+- app.config (app-scoped settings: InstallUrl, ProductName...) is the exe's; SkylineCmd needs
+  its own copy or equivalent once it stops loading Skyline.
+
+### Phase 1b - immutable settings lists (Nick, 2026-11-24) - in progress
+
+Request: the lists stored in Settings should be immutable; listen on Settings property changes,
+not list events; with immutable values Settings itself is thread-safe.
+
+Done (builds: Solution, TestTutorial, TestPerf, MSConvertGUI):
+- `XmlMappedList` immutable: read-only keyed list (`IReadOnlyMappedList` in CommonUtil, which
+  `MappedList` also implements), built only while reading XML / in `ChangeItemsWith` on a copy.
+  Deliberately NOT `IList<T>`: tried read-only IList with throwing mutators (as
+  System.Collections.Immutable does) and `ShareListDlg` compiled and threw at run time
+  (TestShareSettings). Read-only consumers take `IEnumerable`/arrays instead.
+- `XmlMappedListChanges`: `ChangeAdd/AddRange/Items/Insert/ItemAt/Remove/RemoveAt/RemoveKey/
+  Clear/Value/Replace/AddDefaults`, same semantics as the old mutators. Typed through
+  `ISelfTypedList<TList, TItem>`, which each concrete list class declares naming itself
+  (inferring TItem from the argument failed for subclass items, e.g. RCalcIrt).
+- `SettingsListNotifying` + `ListChanged` deleted; RTLinearRegressionGraphPane and ViewLibraryDlg
+  listen to `Settings.Default.PropertyChanged`. SearchToolList's lock workaround deleted.
+- Editing split from storage: drivers/EditListDlg edit a copy and store the result through
+  `Settings.SetSettingsList(list)` (property found by list type; `IsSettingsList` says whether
+  a driver's list came from Settings). Getter `EnsureDefault` returns a list, stored if changed.
+- ~300 mutation sites rewritten (script for `Settings.Default.X.Op(...)` statements, the rest
+  by hand). Aliasing bug found by PasteTest: `ImportDocumentXml` was given the stored mod lists
+  and added to them itself; its two list params are gone, it reads them after updating.
+  JsonToolServer.AddSettingsListItem reflected for `Add` (TestJsonToolServerSettings).
+- New `SettingsListPropertiesTest`: one property per list type; list classes name themselves;
+  setting each list property raises PropertyChanged under the property's name.
+
+Not yet immutable (needed before Settings is actually thread-safe): UniqueList<GraphTypeSummary>
+x4 (with CollectionChanged hooks), List<string> x3+, SerializableDictionary x3, PersistedViews,
+StringCollection x2, OpenDataSourceState (settable POCO). ~200 uses; next pass.
+
+### Phase 1 - original checklist
 - [ ] `pwiz_tools/Skyline/SkylineCore/SkylineCore.csproj`, RootNamespace `pwiz.Skyline`,
       embedded resources (mapping.xml, iRT .sky, KoinaConfig) and protobuf generation move with it
 - [ ] git mv Model/, CommandLine.cs, CommandArgs.cs (+usage resx), ProtocolBuffers, non-UI Util
