@@ -62,3 +62,16 @@ the YEP test. Likely the finalizer thread releasing leftover COM objects; the fi
 
 Suite soak, master vs fix, alternating (`bruker-fix-soak/soak.csv`): master 2 handle failures, 1 crash
 in 150; fix 0 and 0 in 149 (round 30 excluded: built mid-edit). Opened #5076.
+
+### 2026-11-25 - Second and third code reviews
+
+`/code-review high`: Dispose now takes the read lock (disposed check inside it); FID spectrum released
+before its collection. `/code-review max` (no mechanical bug found): FID open/release moved into a
+disposable `FidSpectrum`; corrected remarks on cpp's release (its `delete` is a no-op on an RCW) and on
+the undisposed path; parameter list documented as owning its collection. Dropped: reentrancy, Dispose
+without activation context, COM-typed parameter values, open-owner counter test, pre-existing COM
+overhead, single-line if. Follow-up not in this PR: no lock across separate readers, so a multi-file
+Skyline import still enters CompassXtract concurrently (predates the PR; worth a two-file soak).
+
+Found outside the diff and filed as #5079: CompassXtract index entries never set MsLevel, so vendor
+centroiding treats every YEP/FID spectrum as MS1.
