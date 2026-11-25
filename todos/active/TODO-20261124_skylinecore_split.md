@@ -4,8 +4,7 @@
 - **Checkout**: `I:\git_i\sky_separateui`
 - **Branch**: `Skyline/work/20261124_skylinecore_split` (from `origin/master` @ `62b9748240`)
 - **Created**: 2026-11-24
-- **Status**: In progress - Phase 0 (shared libs) committed locally as `60321a0c1a`, not pushed;
-  Phase 1 (SkylineCore) next
+- **Status**: In review - all phases done, PR opened 2026-11-25 (link below once created)
 - **Module**: `skyline`
 - **Supersedes**: T2 and T6 of `ai/todos/backlog/TODO-ui_free_model_phase2.md`
 - **Template**: `ai/todos/completed/2026/08/TODO-20260818_commonutil_winforms_split.md`
@@ -295,10 +294,36 @@ StringCollection x2, OpenDataSourceState (settable POCO). ~200 uses. Not doing i
 > `~/.dotnet/dotnet <bin>/SkylineCmd.dll --in=doc.sky ...` against the Windows build output.
 > Vendor raw files and vendor method export need Windows; mzML and the rest work.
 
-### Phase 4 - verification
-- [ ] Build-Skyline.ps1 -VendorLicenses green, CodeInspection green
-- [ ] Full test pass (parallel)
-- [ ] SkylineCmd runs a real import/export on Linux (container or WSL)
+### Phase 4 - verification - DONE
+- [x] Build-Skyline.ps1 -VendorLicenses green, CodeInspection green
+- [x] Full test pass: Test, TestData, TestTutorial in en/ja/zh and TestFunctional in en, all
+      green except two tests that fail inside Osprey.exe from TeamCity build 4279627 ("No
+      precursor passed the second pass"): TestOspreySearchTuning (fails the same on master,
+      `master_osprey.log`) and TestBuildLibraryCarafeWizard. TestLocalizedTutorialHtml hit a
+      one-off AccessViolation and passed on rerun. Logs: `ai/.tmp/sessions/20261124-separateui/full_*.log`,
+      `rerun4.log`. Not run: TestFunctional ja/zh, TestPerf, TestConnected (left to nightly).
+- [x] SkylineCmd runs a real import/export on Linux (WSL Ubuntu): mzML and Thermo .RAW
+      (ThermoQuant QC_03/QC_05) give reports identical to Windows SkylineCmd (`raw_linux.csv`,
+      `raw_win.csv`). Thermo works because its reader is managed CommonCore; publish needs
+      `-p:IAgreeToVendorLicenses=true` or the vendor DLLs are left out.
+
+Fixes found in Phase 4 and the pre-PR /code-review:
+- `c31d1f67ec` EditListDlg Import/Share cast to ICollection<T>, which the immutable lists are not
+  (TestDdaSearchSettingsPreset).
+- `be6286ad57` EditRTDlg dropped the list `SetInitializedValue` returns; RT/ion mobility editors
+  wrote back a list read before their modal dialog, losing nested edits; managed natural sort now
+  orders leading zeros as StrCmpLogicalW does (TestNaturalFilenameCompareMatchesWindows).
+- `20b389ecf5` SkylineCore was missing from Skyline.sln (built only as a reference, so VS hid it).
+
+### Follow-ups discussed, not in this PR (Nick, 2026-11-25: "not now")
+- Linux packaging: framework-dependent tar.gz works (`pack_linux.sh`); self-contained needs
+  `RuntimeIdentifiers` in Common.csproj and native staging for linux-x64. Launcher name `skyline`.
+- Linux-friendly arguments: the shared CommandLineGrammar already supports `--name value` and
+  variadic values (Osprey); `--import-file=*.raw` does not glob in bash.
+- Split the ~250 UI-only Settings properties into a UISettings class sharing the section
+  (`[SettingsGroupName]`).
+- Own the value serialization in PortableSettingsProvider (pin element names with annotations,
+  golden user.config test), then split each list class into data vs defaults/editor/selection.
 
 ## Progress Log
 
@@ -328,3 +353,8 @@ pass. Linux run as in Phase 2. Next: Phase 3 (guardrails, docs) and Phase 4 (ful
 Solution builds; Test.dll 448, TestData.dll 182, CodeInspection, PlatformNeutralPInvokeTest,
 SkylineCmd tests pass. Linux: fresh import (no .skyd) gives a report identical to Windows.
 Next: Phase 4 (full suite, ja/zh) and the docs draft at merge.
+
+### 2026-11-25 - Phase 4, master merge, review fixes, PR
+Merged origin/master (`96500ea1a7`). Full suites as in Phase 4; fixes `c31d1f67ec`,
+`be6286ad57`, `20b389ecf5`. Thermo .RAW verified on Linux. PR description diagrams in
+nickshulman/pr-assets.
