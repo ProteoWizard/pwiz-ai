@@ -662,3 +662,12 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   |---|---|---|---|---|
   | Osprey | done (MACS2 11/25 head + pre; UW8 11/09) | to run | running | to run |
   | DIA-NN | done on UW8 (9 h 49 min); MACS2 timed only unsplit | to run | queued | to run |
+- SEA-AD 82 split audit of the 11/25 MACS2 runs (`SEA-AD/tools/split_calibration.py`, split-sized lib), true
+  on-target FDP; pass 1 / pass 2 at FDP 1%: pre-#5070 c21d734ce7 97,120 / 97,082; head aa864c3d2e 98,280 / 98,244
+  (+1.2%), identical at 4 x 18 and auto 9 x 8. Reported q 1% honest in both (FDP 0.97% / 0.93%). Against DIA-NN's
+  101,269 (UW8, same split): **-3.0%**, down from -4.6% at the f90d19aaa6 headline.
+- Protein-free library built: `lib\astral\target+decoy+entrapment-20260817-single-peptide`
+  (`ai/scripts/Osprey/Library/Build-PerPeptideProteins.py` from the unsplit drop): 2,782,820 peptides, each its own
+  protein `sp|PP<n>|PP<n>_HUMAN` (entrapment `..._p_target`, 1,391,232), decoys `decoy_` + pair; no `_pepNNNNN`
+  token, so Osprey cannot regroup it. Not yet checked end to end: run 1 file and confirm the protein count in the
+  log before the 82/163-file arms. FDP for it must use r over all entrapment (no on-target/own halves).
