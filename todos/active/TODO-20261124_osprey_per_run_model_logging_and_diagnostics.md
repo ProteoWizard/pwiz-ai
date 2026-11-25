@@ -6,9 +6,9 @@ Per-run first-pass models: PerFileScoring logging gaps and a per-run Model tab
 - **Branch**: `Skyline/work/20261124_osprey_per_run_model_logging`
 - **Base**: `master`
 - **Created**: 2026-11-24
-- **Status**: In Progress - part 1 committed (3ae9253249), /code-review then PR; part 2 split out
+- **Status**: PR open (#5077): 3ae9253249 + review fixes 47417a9bd8; TeamCity Perf/Regression not yet run (ask first); part 2 split out
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#5077](https://github.com/ProteoWizard/pwiz/pull/5077)
 
 Written 2026-11-24, right after #5070 merged.
 **Related**: [#5070](https://github.com/ProteoWizard/pwiz/pull/5070) (merged as aa864c3d2e: per-run
@@ -79,6 +79,15 @@ out-of-fold scoring (~11 s, reports nothing inside `ScoreRowsWithModel`). Gap li
 **Regression**: `regression-parallel.ps1 -Dataset All` 49 PASS / 0 FAIL / 0 SKIP in 49:44
 (lane logs `pwiz_tools/Osprey/TestResults/regression-lane-{Stellar,StellarGenDecoyEntrap}-20261124_190725.log`).
 Part 1 done-when met.
+
+### Code review (/code-review medium, 2026-11-25)
+
+8 findings, no correctness bugs. Fixed in 47417a9bd8 (681/681, inspection clean): training reports
+only inside a --parallel-files file scope (sequential log unchanged, which also removed the
+heartbeat-shows-units finding); each fold reports done when it returns (early `break` stalled its
+share); `BeginSegment(int)` leaves the open segment alone for itself or an earlier one; two comments
+corrected. Dropped: one-round step layout jumps 35 -> 85 (only under OSPREY_GBT_PREFILTER_SIZE=0);
+hard-coded segment indices (declared beside the weights, with a comment).
 
 ## 2. Per-run Model tab - moved (2026-11-25)
 
