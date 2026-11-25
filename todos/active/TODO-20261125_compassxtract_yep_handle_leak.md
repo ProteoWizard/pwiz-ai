@@ -75,3 +75,10 @@ Skyline import still enters CompassXtract concurrently (predates the PR; worth a
 
 Found outside the diff and filed as #5079: CompassXtract index entries never set MsLevel, so vendor
 centroiding treats every YEP/FID spectrum as MS1.
+
+### 2026-11-25 - Two-file concurrent soak
+
+Follow-up from the max review (no lock across separate readers). Diagnostic test (not committed): two
+threads, separate readers, YEP and FID fixtures read and disposed together in a loop. On the #5076 code,
+30 processes x 200 cycles: 0 crashes, 0 exceptions, 0 held files (`cx-soak/concurrent-diag.log`). No
+evidence a process-wide CompassXtract lock is needed. Not run against master as a positive control.
