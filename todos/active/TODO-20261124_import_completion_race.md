@@ -62,4 +62,4 @@ finish within the race window more often.
 - /code-review medium on #5074: comments rewritten to describe the code as is; the stop moved
   into ConsumeCompletion (DoneAdding once _consumedCount == _loadingCount), _completedCount
   removed. Unit test 2000/2000, 12 related tests, CodeInspection and tcinspect clean. Soak 20
-  each: master 0, fixed 0 (race not hit); a longer soak follows.
+  each: master 0, fixed 0 (race not hit). Soak 150 each: master 6 hangs, fixed 0.
