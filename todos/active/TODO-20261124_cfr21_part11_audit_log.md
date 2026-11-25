@@ -144,6 +144,16 @@ so the user can still inspect it (open question - confirm with users).
   shows "changed since signed".
 - Open question: SSO/LDAP-only on-prem servers have no password LabKey can
   check - may need the LabKey re-authentication flow in an embedded browser.
+- **Done (2026-11-25, Skyline `2e5bbe1d5d`, targetedms `897f39ac`)**: signing
+  stays on Panorama. The Audit Log window shows the signatures on the latest
+  signed state ("Approved by X on date"), or "Changed since signed: ..." in
+  red once the document has any audit log entry after that state (even
+  unsaved). Skyline learns signatures on open, on every save (anchorAuditLog
+  now returns them) and when the Audit Log window opens. Opening a document
+  that changed since signing shows a message. Signatures are not written into
+  the .skyl and there is no grid/report column yet. Known edge: a save's
+  answer arriving after a reopen of the same document can show "changed"
+  until the next refresh.
 
 ### Identity
 Record both the Windows user (existing) and the LabKey user (new, from the
