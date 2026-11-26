@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20261125_compassxtract_yep_handle_leak`
 - **Base**: `master`
 - **Created**: 2026-11-25
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `pwiz`
-- **PR**: [#5076](https://github.com/ProteoWizard/pwiz/pull/5076)
+- **PR**: [#5076](https://github.com/ProteoWizard/pwiz/pull/5076) (merged 2026-11-26)
 
 ## Objective
 
@@ -92,3 +92,13 @@ the overnight crashes at 0x18000C861 were inside it too. Two dumps of the dialog
 (`testhost-55204-r6025.dmp`, `testhost-51076-r6025.dmp`) both show it on the .NET finalizer thread in
 native code, with neither test thread inside CompassXtract. The fix: 0 of 30. PR description updated
 with these numbers. On an interactive nightly agent the R6025 form would hang rather than crash.
+
+### 2026-11-26 - Merged
+
+PR #5076 merged as commit 7e2e1f0495, without a second human review (the change had
+been through three code-review passes and the soaks above). Shipped: CompassXtractData
+releases every CompassXtract object right after use, children before parent, which ends
+both the sticky `analysis.yep` handle and the finalizer-thread crashes in
+`CompassXtractMS.dll`; reads and Dispose are serialized. Follow-up found in review:
+#5079 (YEP/FID vendor centroiding treated every spectrum as MS1), fixed in #5081, which
+was stacked on this branch and retargeted to master after the merge.
