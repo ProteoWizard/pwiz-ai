@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#5079](https://github.com/ProteoWizard/pwiz/issues/5079)
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#5081](https://github.com/ProteoWizard/pwiz/pull/5081)
 
 ## Objective
 
@@ -30,8 +30,8 @@ instead (as the issue suggested) would mean a COM fetch per YEP spectrum, and op
 
 - [x] Regression test: vendor centroiding by ms level on `Sample_1-A,1_01_985.d`
 - [x] Fix: thread `msLevelsToCentroid` to the sources
-- [ ] /code-review
-- [ ] PR
+- [x] /code-review medium: 2 test fixes applied (skip on no-vendor builds; require spectra at both levels that tell centroid from profile), 6 dropped
+- [x] PR #5081 opened against #5076's branch
 
 ## Regression Test
 
