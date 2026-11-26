@@ -6,8 +6,9 @@ Remove the protein-compact second pass from Osprey
 - **Branch**: `Skyline/work/20261126_osprey_remove_protein_compact`
 - **Base**: `master`
 - **Created**: 2026-11-26
-- **Status**: In Progress - branch created in `C:\proj\pwiz` from 1134bd96e9; justification drafted below;
-  no code removed yet. Protein-best validation is MACS2's work, not this PR's.
+- **Status**: In Progress - code and docs removed (5230a7472e, b26d2a7871, pushed); unit gate and the
+  Stellar regression pass; `regression-parallel.ps1 -Dataset All` running (2026-11-26). Then /code-review,
+  PR, TeamCity. Protein-best validation is MACS2's work, not this PR's.
 - **Module**: `osprey`
 - **PR**: (pending)
 
@@ -33,9 +34,44 @@ validity-key terms (`Pass2StrataValidityKeySuffix`), tests (`FdrTest`, `FirstPas
 `ModelDiagnosticsDataTest`, `TaskValidityKeyTest`, the `protein-compact-refused` leg of `SubsetPipelineTest`),
 resources, and docs 00, 07, 12, 14, 20, `protein-shuffled-entrapment.md`, `Osprey-workflow.html`.
 
-To decide while removing: whether `--protein-boost compact` becomes a usage error or stays as a refused
-value for one release; whether retained decoys go in this PR or the stub PR (they change the reconciled
-stub's rows, so not byte-identical: likely the stub PR).
+## Progress (2026-11-26)
+
+5230a7472e (code, tests, resources, help pages) and b26d2a7871 (docs): 65 files, +489 / -5,818 against
+master. Largest: `Pass2FdrSidecar.cs` -1,280, `StreamingFdr.cs` -947, `FdrTest.cs` -842,
+`Pass2CompetitionDecoys.cs` deleted.
+- Unit gate: 669/669 (was 681; 12 tests covered only the removed competition), inspection clean. Log
+  `ai/.tmp/sessions/20261125-diag/pc-test2.log`.
+- `regression.ps1 -Dataset Stellar`: 5 of 5 legs pass against the committed goldens, 497.5 s. Log
+  `ai/.tmp/sessions/20261125-diag/pc-regression-stellar-20261126b.log`.
+- `-Dataset All` (the only run that checks the three `diagnostics.tsv` goldens): log
+  `ai/.tmp/sessions/20261125-diag/pc-regression-all-20261126.log`.
+
+Decisions made while removing:
+- `--protein-boost compact` is an invalid argument value; `OSPREY_PASS2_QVALUE=protein-compact` is an
+  unrecognized-value startup error. `OSPREY_PASS2_QVALUE` stays with `transfer` as its only value: the
+  `ai/scripts` runners set it from `-Pass2Mode`, and `;pass2=transfer` is in the validity keys.
+- Validity keys are byte-identical: the removed `;pass2strata=2` term was empty under transfer.
+- The four stratum fields of the co-assignment report data (`ExperimentCutoffInStratum`,
+  `ExperimentCutoffOffStratum`, `AcceptedInStratum`, `AcceptedOffStratum`) stay at their transfer values
+  (NaN, NaN, 0, 0): they are serialized today and pinned in all three `diagnostics.tsv` goldens.
+  **Open for Brendan**: drop them here (re-records four lines per pass in each golden) or later.
+- Retained decoys, decoy consensus and `FilePlanner`'s `reconcileDecoys` parameter are untouched; the
+  caller now passes `false`, its value under transfer. They change the reconciled stub's rows, so they go
+  with the stub PR.
+- Also removed, unread once the competition is gone: the `FirstPassPercolatorModel` byproduct,
+  `EnsureFrozenFirstPassPublished`, `Pass1ScalarSeeder`, `FdrScoresSidecar.ReadScalars`, 30 resource strings.
+- `SecondPassFDR` no longer reads gap-fill entry ids from `<stem>.reconciliation.json` (only the
+  competition fold used them); it still requires the file's stamp and declares it an input.
+- Kept: the transfer path that scores with an analysis-wide frozen model (`TransferOneFile`,
+  `FirstPassModelIO.LoadForAnalysis` / `Save`, ...). No production caller since #5070, but not
+  protein-compact code; `ModelViewFromArtifacts` still calls `LoadForAnalysis` until the per-run Model tab.
+
+Follow-ups outside this PR:
+- `ai/scripts` runners still offer `-Pass2Mode protein-compact` (`OspreyDatasetRun.psm1`, `Run-SeaAd.ps1`,
+  `Run-Chs.ps1`, `Run-CohortArms.ps1`); those arms have failed at startup since #5070.
+- The diagnostics branch changes adjacent rows of the help pages and `docs/20-command-line.md`: expect a
+  conflict, and regenerate the help pages by running the tests after merging.
+- `docs/12` and `DIVERGENCES.md` say the C# port has no protein-compact; the Rust tree was not checked.
 
 ## Justification
 
