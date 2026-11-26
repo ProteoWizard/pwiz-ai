@@ -661,7 +661,7 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   | | SEA-AD split | SEA-AD protein-free | TDP-43 split | TDP-43 protein-free |
   |---|---|---|---|---|
   | Osprey | done (MACS2 11/25 head + pre; UW8 11/09) | to run | done (7:22, 66,482 at FDP 1%) | to run |
-  | DIA-NN | done on UW8 (9 h 49 min); MACS2 timed only unsplit | to run | queued | to run |
+  | DIA-NN | done on UW8 (9 h 49 min); MACS2 timed only unsplit | to run | done (16:28, 68,443 at FDP 1%) | to run |
 - SEA-AD 82 split audit of the 11/25 MACS2 runs (`SEA-AD/tools/split_calibration.py`, split-sized lib), true
   on-target FDP; pass 1 / pass 2 at FDP 1%: pre-#5070 c21d734ce7 97,120 / 97,082; head aa864c3d2e 98,280 / 98,244
   (+1.2%), identical at 4 x 18 and auto 9 x 8. Reported q 1% honest in both (FDP 0.97% / 0.93%). Against DIA-NN's
