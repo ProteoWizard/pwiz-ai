@@ -433,3 +433,29 @@ snapshot `D:\test\osprey-runs\_bin\directread-7a710ea537`; 672/672 unit tests pa
 - Plan: regression-parallel All (cache on by default, so goldens should hold) -> Release -VendorReader ->
   SEA-AD 82 raw `--spectra-cache off` sequential -> SEA-AD 82 master mzML+cache sequential (the 11-24 #5070
   run at 654c177acd is not current master: 28cb46209f added a best-single-feature safeguard after it).
+- Re-test results (UW25, SEA-AD 82, sequential, exe bc391e44eb = #5067 + master incl. #5057, #5070). Regression-parallel
+  All 49/0/0 (1:01:58). Runs `D:\test\osprey-runs\sea-ad\runs\seaad-raw-82files-libdecoy-r1.0-default-cacheoff{,-ra0}-bc391e44eb`;
+  reference = #5070 run (654c177acd, mzML + caches), whose output is IDENTICAL to both (FDRBench sha256 2291af67.../046324bc...,
+  102,676 precursors, 6,753 protein groups), so it stands in for master.
+
+  | | #5070 mzML + cache | raw, cache off, read-ahead 1 | raw, cache off, read-ahead 0 |
+  |---|---|---|---|
+  | PerFileScoring | 22,982 s | 24,440 s (+6.3%) | 24,688 s (+7.4%) |
+  | FirstPassFDR | 861 s | 882 s | 861 s |
+  | PerFileRescoring | 3,022 s | 3,611 s (+19.5%) | 3,999 s (+32%) |
+  | SecondPassFDR | 643 s | 647 s | 647 s |
+  | total | 7:38 | 8:13 (+7.6%) | 8:23 (+9.8%) |
+  | private peak (PerFileScoring) | 36.7 GB | 57.8 GB | 51.6 GB |
+  | managed peak | 27.3 GB | 49.4 GB | 40.2 GB |
+  | log gaps >= 30 s | 5 | 68 | 29 |
+  | disk written | 25.0 GB | 25.0 GB | 25.0 GB |
+
+  - Since #5070, the direct read costs time (+7.6%) where before it SAVED it (-6.5% vs master on 11-22). #5057's reader
+    did not remove the read cost (not isolated).
+  - Memory: #5070 made PerFileScoring the memory-critical phase (per-run training), and cache-off holds the whole
+    file's spectra in that same phase (the cache path streams one window at a time). Whole-file residency is most of
+    the +21 GB (read-ahead 0 still peaks 51.6 GB, +15 GB over the cache path); read-ahead 1 adds ~6 GB private /
+    ~9 GB managed for ~10 min (and ~6.5 min of rescoring). 57.8 GB is ~6 GB short of 64 GB SEQUENTIALLY; cache off
+    under --parallel-files would not fit here.
+  - Disk: with #5070 a run writes ~25 GB either way; cache off now saves only the cache itself (SEA-AD ~371 GB on a
+    first run from .raw, per the MACS2 cold-start arm), not per-run intermediates.
