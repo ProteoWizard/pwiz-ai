@@ -660,7 +660,7 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
 
   | | SEA-AD split | SEA-AD protein-free | TDP-43 split | TDP-43 protein-free |
   |---|---|---|---|---|
-  | Osprey | done (MACS2 11/25 head + pre; UW8 11/09) | to run | running | to run |
+  | Osprey | done (MACS2 11/25 head + pre; UW8 11/09) | to run | done (7:22, 66,482 at FDP 1%) | to run |
   | DIA-NN | done on UW8 (9 h 49 min); MACS2 timed only unsplit | to run | queued | to run |
 - SEA-AD 82 split audit of the 11/25 MACS2 runs (`SEA-AD/tools/split_calibration.py`, split-sized lib), true
   on-target FDP; pass 1 / pass 2 at FDP 1%: pre-#5070 c21d734ce7 97,120 / 97,082; head aa864c3d2e 98,280 / 98,244
@@ -671,3 +671,21 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   protein `sp|PP<n>|PP<n>_HUMAN` (entrapment `..._p_target`, 1,391,232), decoys `decoy_` + pair; no `_pepNNNNN`
   token, so Osprey cannot regroup it. Not yet checked end to end: run 1 file and confirm the protein count in the
   log before the 82/163-file arms. FDP for it must use r over all entrapment (no on-target/own halves).
+
+### 2026-11-25 - TDP-43 163 files, split-sized: Osprey HEAD result
+
+- Osprey master aa864c3d2e, auto lanes (9), 72 threads, MACS2. Run dir
+  `D:\Users\brendanx\test\osprey-runs\tdp43-plasma-ev\runs\tdp43-163files-libdecoy-r1.0-defaultsplit-sized-head-aa864c3d2e-auto`.
+- Wall 7 h 22 min: PerFileScoring 22,349 s, FirstPassFDR 1,397 s, PerFileRescoring 2,391 s, SecondPassFDR 416 s.
+  Memory bounded (private troughs 55-65 GB, peaks 130-155 GB, one 170 GB first-round peak).
+- Split audit (`split_calibration.py`, true on-target FDP):
+
+  | | q 0.5%: kept (FDP) | q 1%: kept (FDP) | at FDP 0.5% | at FDP 1% |
+  |---|---|---|---|---|
+  | pass 1 | 63,712 (0.58%) | 67,013 (1.09%) | 63,017 | 66,482 |
+  | pass 2 | 63,581 (0.57%) | 66,908 (1.09%) | 62,880 | 66,380 |
+
+- Reported q is slightly optimistic here (1.09% at q 1%); SEA-AD split was 0.93%.
+- Not comparable with the non-split 69,549 (FDP 0.11%): that library hides entrapment on its own proteins.
+- 4,696 protein groups; 67,160 library spectra.
+- DIA-NN split started 18:42 (library predicted in 209 s), ~16.5 h, so ~11:15 on 11/26.
