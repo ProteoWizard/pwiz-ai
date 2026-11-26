@@ -37,21 +37,20 @@ To decide while removing: whether `--protein-boost compact` becomes a usage erro
 value for one release; whether retained decoys go in this PR or the stub PR (they change the reconciled
 stub's rows, so not byte-identical: likely the stub PR).
 
-## Justification (for Mike)
+## Justification
 
-Mike's warning (via Brendan, 2026-11-25): he and Bill Noble have seen introduced features let the model
-learn target from decoy without adding detection value; protein-best could be one.
+The concern to answer: a feature added to the model can let it learn target from decoy without adding
+detection value, and protein-best could be such a feature.
 
-**History (Brendan, 2026-11-26), for the PR text.**
-- Protein-compact was Mike's design for the protein boosting DIA-NN and Spectronaut do.
-- Brendan saw that classical FDRBench accounting (entrapment on its own proteins) could not see what such a
-  boost does to FDP as soon as he understood the mode, and insisted on a way to measure it BEFORE
-  implementing an alternative that also lets the model use protein information. The protein-shuffled audit
-  (#4993's `docs/protein-shuffled-entrapment.md`) and the #5011 split came first; protein-best (#4580) was
-  built against them.
-- Mike at first resisted #4993 for its effect on his algorithm: lower detection counts everywhere, single
-  peptide proteins most of all (2,114 -> 927 groups on one SEA-AD file under GBDT). Brendan merged it only
-  once #4950 showed promise for closing the detection gap with DIA-NN another way.
+**Order of events, for the PR text.**
+- Protein-compact was Osprey's first use of protein information, the kind of boost DIA-NN and Spectronaut
+  apply.
+- Classical FDRBench accounting (entrapment on its own proteins) cannot see what such a boost does to FDP,
+  so a way to measure it was built BEFORE an alternative that also lets the model use protein information:
+  the protein-shuffled audit (#4993's `docs/protein-shuffled-entrapment.md`) and the #5011 split came
+  first, and protein-best (#4580) was built against them.
+- #4993 lowered detection counts, single-peptide proteins most of all (2,114 -> 927 groups on one SEA-AD
+  file under GBDT). It merged once #4950 showed another way to close the detection gap with DIA-NN.
 - #4993 did not strengthen the boost: it made the complement compete against its own decoys, so the
   own-protein half fell (73 -> 11 hits, Arabidopsis split, 3 files) while the on-target half barely moved
   (219 -> 184). Quote the two halves separately; their ratio mixes boosting detected proteins with
@@ -81,11 +80,10 @@ TODO-20261106_carafe_entrapment_in_target_proteins (CE).
   (SL-phase1:215).
 - Cause: the stratum takes ~87% of high-scoring targets and ~15% of high-scoring decoys (SL-phase2:39).
   #4993 fixed the complement; the in-stratum excess stayed (1.4% SVM, 1.9% GBDT on the shuffled library).
-  Mike's own summary: "the targets and decoys are not treated consistently, which is why it is not
-  controlled" (DG:707).
+  In short, targets and decoys are not treated consistently, so the FDR is not controlled (DG:707).
 - Its 3-file results looked calibrated (0.90% / 0.77%, P2D); the error grows with run count.
 
-This claim alone justifies the removal: if protein-best failed Mike's test, the fallback would be
+This claim alone justifies the removal: if protein-best failed that test, the fallback would be
 `--protein-boost off` (the transfer alone), not protein-compact.
 
 **B. Protein-best does not have that defect. Supported by one kind of audit on one cohort.**
@@ -104,7 +102,7 @@ This claim alone justifies the removal: if protein-best failed Mike's test, the 
 
 1. **The negative control has no number on record.** `OSPREY_PROTEIN_BEST_SHUFFLE` (accessions permuted
    among peptides) is recorded only as "shuffle control flat" (SL:129): no dataset, ids or FDP. This is the
-   direct test of Mike's concern: a column that only teaches target from decoy keeps its gain when the
+   direct test of the concern: a column that only teaches target from decoy keeps its gain when the
    protein membership is scrambled; a column carrying protein evidence loses it.
 2. **Every on-target audit of protein-best used shuffle (anagram) entrapment on SEA-AD Astral.** Natural
    Arabidopsis split libraries exist (SL:74) and were searched only with protein-compact (CE:72-116).
