@@ -689,3 +689,30 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
 - Not comparable with the non-split 69,549 (FDP 0.11%): that library hides entrapment on its own proteins.
 - 4,696 protein groups; 67,160 library spectra.
 - DIA-NN split started 18:42 (library predicted in 209 s), ~16.5 h, so ~11:15 on 11/26.
+
+### 2026-11-26 - Random-protein library (protein assignments shuffled), both tools
+
+- Brendan: a companion to single-peptide proteins: start from standard entrapment and shuffle protein
+  assignments, so grouping is random. Split minus random = what true biological grouping adds; random minus
+  single-peptide = what grouping adds by chance (more attempts per protein at a detectable peptide). A
+  library-level shuffle applies to DIA-NN too, unlike `OSPREY_PROTEIN_BEST_SHUFFLE` (Osprey only, recorded
+  only as "flat").
+- Built by `ai/scripts/Osprey/Library/Build-ShuffledProteins.py` (seed 20261126) at
+  `D:\Users\brendanx\test\osprey-runs\lib\astral\target+decoy+entrapment-20260817-random-protein`: whole
+  protein lists permuted among the 2,782,820 forward peptides, accessions renamed neutrally (`sp|RP<n>|...`,
+  no `_p_target`), so entrapment is identified by sequence only (DIA-NN FDP must not use the suffix).
+  348 shuffle-entrapment sequences drawn from two targets had their lists merged. Log
+  `ai/.tmp/sessions/20261121-tdp43/build-random-protein.log`.
+- Assess with peptides-per-protein histograms (library peptides, not residues: attempts per protein)
+  (`ai/.tmp/sessions/20261121-tdp43/protein-size-histograms.log`):
+
+  | Library | Proteins | All peptides per protein, median | Target-holding proteins | Target peptides per protein, median | Entrapment on target proteins |
+  |---|---|---|---|---|---|
+  | standard | 41,274 | 51 | 20,637 | 51 | 0% |
+  | split-sized | 41,223 | 43 | 20,637 | 51 | 48.7% |
+  | random-protein | 41,274 | 51 (identical histogram) | 41,165 | 26 | 100% |
+  | single-peptide | 2,782,820 | 1 | 1,391,588 | 1 | 0% |
+
+  Random keeps attempts per protein exactly but halves the TARGET attempts per protein; split keeps target
+  attempts exactly but enlarges target proteins. Neither leaves both unchanged; read results with that.
+- split_calibration.py on it: `--n-target 1391588 --n-on 1390993` (manifest counts; check against the TSV).
