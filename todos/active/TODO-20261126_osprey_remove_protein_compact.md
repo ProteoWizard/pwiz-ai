@@ -7,7 +7,7 @@ Remove the protein-compact second pass from Osprey
 - **Base**: `master`
 - **Created**: 2026-11-26
 - **Status**: In Progress - branch created in `C:\proj\pwiz` from 1134bd96e9; justification drafted below;
-  no code removed yet. Two control runs proposed to Brendan (see "Gaps worth closing").
+  no code removed yet. Protein-best validation is MACS2's work, not this PR's.
 - **Module**: `osprey`
 - **PR**: (pending)
 
@@ -52,7 +52,16 @@ TODO-20261106_carafe_entrapment_in_target_proteins (CE).
   transfer with the same pass 1 (82 files, August, AB), 1.29% on the on-target split (82 files, November,
   SL:383; q 2% reads 2.55%, q 5% reads 6.26%), 1.29% on ZT Scan against 0.98% (DG:698), 1.29-1.59% on
   Astral HeLa with natural Arabidopsis entrapment against ~1.03% (DG:243).
-- Those are lower bounds: standard entrapment sits on its own proteins, which the stratum never admits
+- Which of those can see a protein boost (Brendan, 2026-11-26: without entrapment on target proteins the
+  number is understated even when it is above 1%):
+  - Entrapment on its own proteins, so UNDERSTATED: the July 1.51% and the August 1.16% (SEA-AD
+    libdecoy r1.0, before the #5011 split existed).
+  - Entrapment on target proteins: the November 1.29% (size-weighted split, on-target half); 3 SEA-AD files
+    on the same split 1.30-1.55% (SL:142-153); ZT Scan 1.29% and 1.48% (library re-filed so entrapment
+    shares its targets' proteins, DG:692); Astral HeLa 1.29-1.59% (natural Arabidopsis filed under the
+    targets' proteins, DG:243); natural Arabidopsis split on-target half 1.09-1.16% at 1 and 3 files, 1.29%
+    before #4993 (CE:72-116).
+- Standard entrapment sits on its own proteins, which the stratum never admits
   (P2D:292). A protein-shuffle audit moved entrapment on detected proteins from 37 to 291 at q 1%
   (SL-phase1:215).
 - Cause: the stratum takes ~87% of high-scoring targets and ~15% of high-scoring decoys (SL-phase2:39).
@@ -94,10 +103,8 @@ This claim alone justifies the removal: if protein-best failed Mike's test, the 
 6. Unexplained: pass 1 differs between the 1:1 split and unsplit Arabidopsis libraries (34,682 vs 33,978
    targets at q 1%, CE:119), though pass 1 then carried no protein information.
 
-Gaps 2-6 are about protein-best and do not bear on removing protein-compact. Gap 1 and gap 2 are cheap:
+Gaps 2-6 are about protein-best and do not bear on removing protein-compact.
 
-## Gaps worth closing (proposed, not started)
-
-- 3 SEA-AD files, #5011 size-weighted split library: `--protein-boost off`, `best`, and `best` with
-  `OSPREY_PROTEIN_BEST_SHUFFLE=1`; precursors at q 1% and at on-target FDP 1%, on-target and own-half FDP.
-- The same three arms on the natural Arabidopsis 1:1 split library (3 files).
+**Not run here (Brendan, 2026-11-26)**: MACS2 is testing protein-best beside DIA-NN on SEA-AD and TDP-43,
+focused on the validity and effect of protein boosting. The gaps above belong to that work; this PR
+runs no control arms and cites its results when they exist.
