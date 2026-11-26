@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20261119_osprey_direct_raw_read` (worktree `D:\Users\brendanx\proj\pwiz-directread`)
 - **Base**: `master` (merged in as bc391e44eb on 2026-11-25: #4997, #5057 vendor reader speed-up, #5070 per-run models)
 - **Created**: 2026-11-19
-- **Status**: PR #5067 open; branch current with master (bc391e44eb, pushed 2026-11-25, gate 681/681). Re-testing on UW25: regression-parallel All, then SEA-AD raw `--spectra-cache off` vs a new master baseline
+- **Status**: PR #5067 open at d1a6822195 (current with master incl. #5062, gate 681/681); read-ahead default now 0, help notes the memory cost; PR description updated 2026-11-26. Next: TeamCity Perf/Regression on pull/5067, review
 - **PR**: [#5067](https://github.com/ProteoWizard/pwiz/pull/5067)
 - **Module**: `osprey`
 
@@ -459,3 +459,8 @@ snapshot `D:\test\osprey-runs\_bin\directread-7a710ea537`; 672/672 unit tests pa
     under --parallel-files would not fit here.
   - Disk: with #5070 a run writes ~25 GB either way; cache off now saves only the cache itself (SEA-AD ~371 GB on a
     first run from .raw, per the MACS2 cold-start arm), not per-run intermediates.
+- 2026-11-26: changed `OSPREY_READ_AHEAD` default to 0 and added a memory note (no figures - Brendan: costs vary by
+  machine; let people seeking disk savings measure on their own systems) to the `--spectra-cache` help
+  (45878697fd); TestSubsetOptionVariants gains a read-ahead 0 leg. Merged Brendan's GitHub "Update branch"
+  (eb0dddb080: #5062 vendor readers, #5080) as d1a6822195; gate 681/681, inspection clean; pushed. The UW25
+  timings in the PR predate #5062.
