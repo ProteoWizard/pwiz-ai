@@ -137,6 +137,30 @@ FirstPassFDR, before any rescore, and `ConsensusRts` takes apex/start/end RT, sc
 `fragment_coelution_sum` from the decoy rows paired with a qualifying target (`ConsensusRts.cs` ~150-170),
 which mostly score below any floor.
 
+**Kept versus moved (Brendan's question, 2026-11-25).** The same run (pass 2 = transfer), each first-pass
+stub joined to its reconciled stub; "kept" = `apex_rt` bit-equal. Script
+`ai/.tmp/sessions/20261125-diag/kept_vs_moved.py`, output `kept_vs_moved.txt` beside it.
+
+| Reconciled rows (24,734,200; 537,676 gap-fill) | Kept at the first-pass peak | Moved (rescored) |
+|---|---|---|
+| targets, own-run score >= 0 | 4,324,623 | 192,540 |
+| targets, -0.5 to 0 | 1,655,097 | 186,475 |
+| targets, below -0.5 | 5,401,573 | 1,076,176 |
+| decoys, all scores (10.9M below -0.5) | 11,360,040 | 0 |
+
+- A moved row's first-pass start/end/coelution are replaced; the planner reads only its `apex_rt`, to
+  decide (`ReconciliationPlanner.SelectMoves` ~379-408). Only 17% of below-floor targets move.
+- Under transfer the planner already skips decoys (`RunReconciliationPlanner.cs` ~207,
+  `reconcileDecoys: !pass2Transfer`), yet compaction still keeps each paired decoy, so 46% of every
+  reconciled stub is decoy rows copied through unchanged. `ConsensusRts` still collects decoy detections,
+  whose only use is moving decoys. Not yet verified: whether a pass-2 reader (diagnostics, protein FDR,
+  FDRBench pass 2) uses the carried decoy rows.
+- protein-compact is already refused with per-run models (`PerFileRescoreTask.OwnModelsProteinCompactMessage`),
+  so removing it changes no result; it removes the reasons decoys are retained (the stratum clause, decoy
+  moves, decoy consensus, `.2nd-pass.fdr_decoys.bin`).
+- Targets only, the below-floor need is 6.5M rows (79k per run, 1.8% of rows): 5.4M kept, which could be
+  re-scored at their first-pass peak in PerFileRescoring if the stub keeps a peak location for the planner.
+
 **Open questions answered** (file:line in the survey, kept in this session's transcript):
 - Pass-2 transfer: no stored table. `Pass2FdrSidecar.TransferOneFileByScore` (~2461) builds the score-to-q
   table from EVERY stub row's score and stored run q (1000 equal-count bins, isotonic). It reads the tail,
