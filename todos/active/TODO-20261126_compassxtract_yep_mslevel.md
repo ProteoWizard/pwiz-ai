@@ -1,4 +1,4 @@
-# pwiz: Bruker YEP/FID spectra are all treated as MS1 when choosing vendor centroiding
+# pwiz: Fixed Bruker YEP/FID vendor peak picking ignoring the msLevel filter
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261126_compassxtract_yep_mslevel`
