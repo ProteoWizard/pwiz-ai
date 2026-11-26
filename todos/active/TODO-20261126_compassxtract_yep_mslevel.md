@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20261126_compassxtract_yep_mslevel`
-- **Base**: `Skyline/work/20261125_compassxtract_yep_handle_leak` (#5076); retarget to `master` once #5076 merges
+- **Base**: `master` (stacked on #5076 until it merged as 7e2e1f0495 on 2026-11-26)
 - **Created**: 2026-11-26
 - **Status**: In Progress
 - **GitHub Issue**: [#5079](https://github.com/ProteoWizard/pwiz/issues/5079)
