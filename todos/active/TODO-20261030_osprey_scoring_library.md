@@ -734,3 +734,22 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   own-protein entrapment: moving to the split library cost Osprey 17% and DIA-NN 5%. So Osprey's protein
   boost is larger than DIA-NN's and the standard library cannot see it. The single-peptide and random-protein
   arms (SEA-AD, queued 11/26) measure each tool's boost directly.
+
+### 2026-11-26 - SEA-AD 82 files, single-peptide library: Osprey result
+
+- Osprey master aa864c3d2e, auto lanes, 72 threads, MACS2, E: caches. Run dir
+  `D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultsingle-peptide-head-aa864c3d2e-auto`.
+  Wall 3 h 38 min (13,118 s). The re-download of the 21 SEA-AD raws (11:10-11:30, since moved to E:) overlapped
+  its library load and blib build.
+- 75,986 protein groups at 1% protein FDR: about one per detected peptide, so no regrouping.
+- FDP over ALL entrapment (no own/on-target halves here): assignment from
+  `ai/.tmp/sessions/20261121-tdp43/make_all_entrap_assign.py`, counts over the peptides the TSV holds,
+  `--n-target 1131671 --n-on 1131437` (r = 0.9998). Log `ai/.tmp/sessions/20261121-tdp43/audit-seaad-single-peptide-osprey.log`.
+
+  | | q 0.5%: kept (FDP) | q 1%: kept (FDP) | at FDP 0.5% | at FDP 1% |
+  |---|---|---|---|---|
+  | pass 1 | 79,148 (0.38%) | 85,896 (0.82%) | 82,032 | 87,622 |
+  | pass 2 | 79,107 (0.37%) | 85,880 (0.82%) | 82,085 | 87,607 |
+
+- Against Osprey on the split library (98,280 at on-target FDP 1%): -10.8%. Reported q is conservative
+  here (0.82% at q 1%). The DIA-NN single-peptide arm (started 15:22) gives the matching number for DIA-NN.
