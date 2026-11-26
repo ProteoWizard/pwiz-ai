@@ -716,3 +716,21 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   Random keeps attempts per protein exactly but halves the TARGET attempts per protein; split keeps target
   attempts exactly but enlarges target proteins. Neither leaves both unchanged; read results with that.
 - split_calibration.py on it: `--n-target 1391588 --n-on 1390993` (manifest counts; check against the TSV).
+
+### 2026-11-26 - TDP-43 163 files, split-sized: DIA-NN result and the comparison
+
+- DIA-NN 2.7.0, same split-sized library, MACS2: 59,282 s (16 h 28 min), finished 11:10. Report
+  `D:\Users\brendanx\test\osprey-runs\tdp43-plasma-ev\diann-split-sized\diann-search-163\report.parquet`.
+- Split audit (`split_calibration.py --diann`, true on-target FDP):
+
+  | | q 1%: kept (FDP) | at FDP 0.5% | at FDP 1% | Wall |
+  |---|---|---|---|---|
+  | Osprey aa864c3d2e, pass 2 | 66,908 (1.09%) | 62,880 | 66,380 | 7 h 22 min |
+  | DIA-NN 2.7.0 | 68,010 (0.91%) | 64,802 | 68,443 | 16 h 28 min |
+
+- Osprey is -3.0% at FDP 1% (-3.0% at 0.5%), the same gap as SEA-AD on the split library (98,280 vs 101,269),
+  in 45% of DIA-NN's wall time.
+- The non-split TDP-43 reading (Osprey 79,819 vs DIA-NN 72,231 at "FDP 1%", +10.5%) was an artifact of
+  own-protein entrapment: moving to the split library cost Osprey 17% and DIA-NN 5%. So Osprey's protein
+  boost is larger than DIA-NN's and the standard library cannot see it. The single-peptide and random-protein
+  arms (SEA-AD, queued 11/26) measure each tool's boost directly.
