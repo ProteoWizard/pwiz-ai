@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-11-25
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#5080](https://github.com/ProteoWizard/pwiz/pull/5080)
 - **Module**: `skyline`
 
 ## Problem
