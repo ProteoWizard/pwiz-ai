@@ -114,7 +114,77 @@ byte-stream-split keeps every bit (PEP unchanged) and halves it. Not yet measure
 - What is L at F = -0.5, -0.25 and 0 on SEA-AD and TDP-43? How many retained entry-run pairs fall below
   each F (the rescoring cost of option 3b)?
 
-## Plan
+## Findings (2026-11-25, code at a4fd8bf3f4; BRENDANX-UW8)
+
+Measured on `D:\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultfullperrun` (82 stubs,
+358,903,121 rows). Script `ai/.tmp/sessions/20261125-diag/stub_measure.py`; output `stub_measure.txt`
+(retained rows) and `stub_layouts.txt` (layout sizes) in the same folder.
+
+**A score floor does not cover the rows later stages need.** The retained set (`ComputeFirstPassBaseIds`,
+`FirstPassFdrTask.cs` ~2537) is every base id with a target at run peptide q <= 1% in ANY run, with its
+paired decoy: 174,040 base ids, 23,945,498 entry-run rows (6.7% of all rows; 12.7M targets, of which 5.6M
+pass in their own run, and 11.2M decoys).
+
+| Floor (own-run calibrated score) | Rows at or above | Retained rows below the floor |
+|---|---|---|
+| -1 | 50.84% | 4,428,903 (18.5% of retained) |
+| -0.5 | 3.04% | 17,106,247 (71.4%) |
+| -0.25 | 1.70% | 18,438,855 (77.0%) |
+| 0 | 1.27% | 19,411,902 (81.1%) |
+
+Re-scoring them in PerFileRescoring (option 3b) cannot stand in: the cross-run consensus is planned in
+FirstPassFDR, before any rescore, and `ConsensusRts` takes apex/start/end RT, score and
+`fragment_coelution_sum` from the decoy rows paired with a qualifying target (`ConsensusRts.cs` ~150-170),
+which mostly score below any floor.
+
+**Open questions answered** (file:line in the survey, kept in this session's transcript):
+- Pass-2 transfer: no stored table. `Pass2FdrSidecar.TransferOneFileByScore` (~2461) builds the score-to-q
+  table from EVERY stub row's score and stored run q (1000 equal-count bins, isotonic). It reads the tail,
+  but needs only what a run-q recompute gives back.
+- Blib per-run rows: yes, a run where the precursor did not pass still gets a row with its run q, start and
+  end RT (`BlibOutputWriter.WriteRetentionTimesFileMajor` ~415). Unmoved rows carry the first-pass stub's
+  values.
+- `apex_rt` is exactly the RT of `scan_number`'s spectrum (`CoelutionScorer.BuildFdrEntry` ~705); start/end
+  are RTs of real spectra of the same isolation window.
+- Parquet.Net (patched 6.1.0-osprey3, `pwiz_tools/Shared/Lib/Parquet`) writes BYTE_STREAM_SPLIT and
+  DELTA_BINARY_PACKED per column through `ParquetOptions.ColumnEncodingHints`
+  (`EncodingHint.ByteSplitStream` / `DeltaBinaryPacked`). Measured gain is small except on ids:
+  `entry_id` 2.8 -> 0.4 B/row (delta), `score` 7.4 -> 6.8 (split); split makes the q columns and
+  `protein_best` larger.
+- Run q: FirstPassFDR's score pass already discards the stored values and recomputes them
+  (`PercolatorEngine.cs` ~1611, ~1659); ten other readers use the stored columns. Recompute needs every
+  row's score in stub row order (ties go to the first row).
+- `bounds_area` and `bounds_snr` have no functional reader in the stub: copied into the reconciled stub and
+  compared by `OSPREY_PASS2_VERIFY_WORKER` only. The blib does not use them.
+- `protein_best` is one value per entry (what its protein siblings scored in round 1), read by
+  `RunModelScorer` for moved, gap-fill and CWT rows. Not derivable from `score`.
+- `ParquetScoreCache.ReadColumnByName` returns null for a column DECLARED nullable, so every reader today
+  treats a nullable column as absent; nulls below a floor need reader work, and there is no helper for a
+  nullable value-type column.
+- Readers also pin the row count and order (footer row count, `score_index` = stub row ordinal), which
+  keeping every row preserves.
+
+**Layout sizes** (first run, 4,403,242 rows; pyarrow zstd 3, 100k-row groups; Parquet.Net writes today's
+file at 279.8 MB):
+
+| Layout | MB | B/row |
+|---|---|---|
+| A today's columns | 300.0 | 68.1 |
+| C drop `bounds_*`, delta ids, split score | 222.1 | 50.4 |
+| D = C and drop the stored run q | 187.7 | 42.6 |
+| J id, score, scan, coelution sum, protein_best | 94.8 | 21.5 |
+| K id, score, scan, protein_best | 62.6 | 14.2 |
+| F D with peak columns null below -0.5 except retained rows | 48.7 | 11.1 |
+| I D with peak columns for retained rows only | 46.5 | 10.5 |
+| H id, score, scan | 41.9 | 9.5 |
+| G id, score | 31.7 | 7.2 |
+
+So the 55-65 MB estimate above holds only if the writer knew the retained set, which PerFileScoring cannot.
+Awaiting Brendan's choice between: (1) lossless trim, layout D, about two thirds of today; (2) a compact
+peak for every row (scan numbers in place of RTs, needing a per-run scan-to-RT table the join can read);
+(3) trimming the first-pass stub to layout I once the retained set exists.
+
+## Plan (as written 2026-11-24; step 3's floor is superseded by the findings above)
 
 1. From the 82 stubs of the SEA-AD #5070 run (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs\
    seaad-82files-libdecoy-r1.0-defaultpr5070` on MACS2), offline:

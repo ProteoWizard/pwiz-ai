@@ -6,7 +6,9 @@ Model diagnostics after per-run first-pass models, with a smaller stub
 - **Branch**: `Skyline/work/20261125_osprey_diagnostics_after_per_run_models`
 - **Base**: `master`
 - **Created**: 2026-11-25
-- **Status**: In Progress - started 2026-11-25 in `C:\proj\pwiz`; open questions being settled before code.
+- **Status**: In Progress - started 2026-11-25 in `C:\proj\pwiz`. Part 2 (help groups) done, a4fd8bf3f4.
+  Part 3: the score floor does not work (see Findings in the part-3 file); waiting on Brendan's choice of
+  layout. Part 1: waiting on the four open questions below.
   Overlap: [#5077](https://github.com/ProteoWizard/pwiz/pull/5077) (open, ready for human review) edits
   `PerFileScoringTask` progress segments, including the stub-write segment that part 3 changes; whichever
   merges second takes a `git merge origin/master`.
@@ -92,6 +94,13 @@ the fallback note.
 ## 2. Help groups
 
 As in Decisions. Done when `--help` lists the four arguments under Diagnostics & Info.
+
+**Done 2026-11-25**, a4fd8bf3f4 (681/681 tests, inspection clean; log
+`ai/.tmp/sessions/20261125-diag/build-help.log`): `OspreyCommandArgs.cs` groups, the three regenerated
+`Documentation/Help/<lang>/CommandLine.html` pages (`TestCommandLineHelpDocumentation` pins them), and
+`docs/20-command-line.md`. Side effect: `--help properties` reports the group, so the three fdrbench
+settings move to the Diagnostics & Info category of Skyline's Osprey settings grid
+(`OspreySettingsDescriptor.cs` ~130); no Skyline test names their category.
 
 ## 3. Smaller stub
 
