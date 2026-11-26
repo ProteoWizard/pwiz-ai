@@ -42,6 +42,21 @@ stub's rows, so not byte-identical: likely the stub PR).
 Mike's warning (via Brendan, 2026-11-25): he and Bill Noble have seen introduced features let the model
 learn target from decoy without adding detection value; protein-best could be one.
 
+**History (Brendan, 2026-11-26), for the PR text.**
+- Protein-compact was Mike's design for the protein boosting DIA-NN and Spectronaut do.
+- Brendan saw that classical FDRBench accounting (entrapment on its own proteins) could not see what such a
+  boost does to FDP as soon as he understood the mode, and insisted on a way to measure it BEFORE
+  implementing an alternative that also lets the model use protein information. The protein-shuffled audit
+  (#4993's `docs/protein-shuffled-entrapment.md`) and the #5011 split came first; protein-best (#4580) was
+  built against them.
+- Mike at first resisted #4993 for its effect on his algorithm: lower detection counts everywhere, single
+  peptide proteins most of all (2,114 -> 927 groups on one SEA-AD file under GBDT). Brendan merged it only
+  once #4950 showed promise for closing the detection gap with DIA-NN another way.
+- #4993 did not strengthen the boost: it made the complement compete against its own decoys, so the
+  own-protein half fell (73 -> 11 hits, Arabidopsis split, 3 files) while the on-target half barely moved
+  (219 -> 184). Quote the two halves separately; their ratio mixes boosting detected proteins with
+  suppressing the rest.
+
 Two separate claims, with different strength of evidence.
 
 **A. Protein-compact reports more false discoveries than its q-values claim. Well supported.**
