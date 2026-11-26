@@ -82,3 +82,13 @@ Follow-up from the max review (no lock across separate readers). Diagnostic test
 threads, separate readers, YEP and FID fixtures read and disposed together in a loop. On the #5076 code,
 30 processes x 200 cycles: 0 crashes, 0 exceptions, 0 held files (`cx-soak/concurrent-diag.log`). No
 evidence a process-wide CompassXtract lock is needed. Not run against master as a positive control.
+
+### 2026-11-25 - Concurrent soak on master (positive control)
+
+Same two-thread soak on master's code: 9 of 30 processes crashed, 17 held analysis.yep, 0 exceptions
+(`cx-soak/master-diag.log`). 8 crashes stopped on a modal "R6025 pure virtual function call" dialog,
+1 was an access violation at CompassXtractMS.dll+0x44B5. CompassXtractMS.dll loads at 0x180000000, so
+the overnight crashes at 0x18000C861 were inside it too. Two dumps of the dialog
+(`testhost-55204-r6025.dmp`, `testhost-51076-r6025.dmp`) both show it on the .NET finalizer thread in
+native code, with neither test thread inside CompassXtract. The fix: 0 of 30. PR description updated
+with these numbers. On an interactive nightly agent the R6025 form would hang rather than crash.
