@@ -93,5 +93,5 @@ hard-coded segment indices (declared beside the weights, with a comment).
 
 Split into its own branch and PR (Brendan, 2026-11-25), together with the scores-parquet reduction and
 the help-group move:
-[TODO-osprey_diagnostics_after_per_run_models.md](../backlog/TODO-osprey_diagnostics_after_per_run_models.md).
+[TODO-20261125_osprey_diagnostics_after_per_run_models.md](TODO-20261125_osprey_diagnostics_after_per_run_models.md).
 This TODO is part 1 only, one commit (3ae9253249).

@@ -1,12 +1,24 @@
-# Model diagnostics after per-run first-pass models, with a smaller stub
+# TODO-20261125_osprey_diagnostics_after_per_run_models.md
 
-**Status**: Backlog. Written 2026-11-25, split from
-[TODO-20261124_osprey_per_run_model_logging_and_diagnostics.md](../active/TODO-20261124_osprey_per_run_model_logging_and_diagnostics.md)
+Model diagnostics after per-run first-pass models, with a smaller stub
+
+## Branch Information
+- **Branch**: `Skyline/work/20261125_osprey_diagnostics_after_per_run_models`
+- **Base**: `master`
+- **Created**: 2026-11-25
+- **Status**: In Progress - started 2026-11-25 in `C:\proj\pwiz`; open questions being settled before code.
+  Overlap: [#5077](https://github.com/ProteoWizard/pwiz/pull/5077) (open, ready for human review) edits
+  `PerFileScoringTask` progress segments, including the stub-write segment that part 3 changes; whichever
+  merges second takes a `git merge origin/master`.
+- **Module**: `osprey`
+- **PR**: (pending)
+
+Written 2026-11-25, split from
+[TODO-20261124_osprey_per_run_model_logging_and_diagnostics.md](TODO-20261124_osprey_per_run_model_logging_and_diagnostics.md)
 (whose part 1, the PerFileScoring logging gaps, is its own quick PR). One branch from master, one PR.
-**Module**: `osprey`
 **Related**: #4950, [#5070](https://github.com/ProteoWizard/pwiz/pull/5070) (per-run first-pass models),
-[TODO-osprey_scores_parquet_reduction.md](TODO-osprey_scores_parquet_reduction.md) - folded into this work
-(Brendan, 2026-11-25): move it to active together with this one and treat it as part 3 below.
+[TODO-20261125_osprey_diagnostics_after_per_run_models-scores_parquet_reduction.md](TODO-20261125_osprey_diagnostics_after_per_run_models-scores_parquet_reduction.md) -
+folded into this work (Brendan, 2026-11-25) as part 3 below.
 
 Three changes that decide together what `--model-diagnostics` can show:
 
@@ -83,7 +95,7 @@ As in Decisions. Done when `--help` lists the four arguments under Diagnostics &
 
 ## 3. Smaller stub
 
-See [TODO-osprey_scores_parquet_reduction.md](TODO-osprey_scores_parquet_reduction.md). Its "keep every
+See [TODO-20261125_osprey_diagnostics_after_per_run_models-scores_parquet_reduction.md](TODO-20261125_osprey_diagnostics_after_per_run_models-scores_parquet_reduction.md). Its "keep every
 diagnostic exact" plan keeps `entry_id` + `score` for every row and a peak location for every row, which
 keeps the accumulator, FDRBench pass 1 and peak co-assignment exact; the stub then carries no features, so
 per-feature views come only from the features checkpoint (as decided above). Settle its open questions

@@ -1,8 +1,10 @@
 # Shrink the per-run .scores.parquet stub after per-run first-pass models
 
-**Status**: Backlog. Written 2026-11-24 on MACS2 (Brendan), while the SEA-AD and TDP-43 runs of
-[#5070](https://github.com/ProteoWizard/pwiz/pull/5070) were going. Starts after #5070 merges: it changes
-the stub #5070 introduces.
+**Status**: Active since 2026-11-25 as part 3 of
+[TODO-20261125_osprey_diagnostics_after_per_run_models.md](TODO-20261125_osprey_diagnostics_after_per_run_models.md)
+(same branch, same PR; branch and status live there). Written 2026-11-24 on MACS2 (Brendan), while the
+SEA-AD and TDP-43 runs of [#5070](https://github.com/ProteoWizard/pwiz/pull/5070) were going; #5070 merged
+2026-11-25 as aa864c3d2e.
 **Module**: `osprey`
 **Related**: #5070 (per-run first-pass models, which made `<stem>.scores.parquet` a stub),
 [TODO-20261030_osprey_scoring_library.md](../active/TODO-20261030_osprey_scoring_library.md)
