@@ -6,7 +6,7 @@
 - **Created**: 2026-11-26
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#5082](https://github.com/ProteoWizard/pwiz/pull/5082)
 - **Related**: TestNativeMessageBox intermittent on TeamCity bt209 (31 of 709 runs since #4799, on ~25
   PRs and master), e.g. build 4281937
 
@@ -37,3 +37,12 @@ Open dialog's combo 1148, then the Save Edit 1001) and shown complete, then brie
 file-name field again after showing. The exact transient TeamCity hits was not caught locally, even
 under CPU load; the test stands in for it by hiding the commit button, which is what
 `NativeFileDialog.IsOpenComplete` keys on.
+
+### 2026-11-26 - Code review and PR
+
+/code-review medium: 10 findings. Fixed: wait loop polls only native dialogs (no main-window Invoke
+per poll); IsAnyOpenWithId reuses FindDialogHandles (shown only, so a hidden leftover cannot stall a
+bad id) and a shared FormId helper; test hides the button 1 s and joins in finally. Dropped: other
+UI threads (native dialogs are main-thread only), GetOpenForms/DialogWatcher (report state, caller
+re-queries), monotonic Create via remembered hwnds (global state, hwnd reuse), Save->Open
+reclassification (combo swap only while hidden), test IDOK constant. Re-verified red/green; PR #5082.
