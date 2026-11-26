@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20261125_osprey_tuning_test_failures`
 - **Base**: `master`
 - **Created**: 2026-11-25
-- **Status**: In Progress
-- **PR**: [#5080](https://github.com/ProteoWizard/pwiz/pull/5080)
+- **Status**: Completed
+- **PR**: [#5080](https://github.com/ProteoWizard/pwiz/pull/5080) (merged 2026-11-25)
 - **Module**: `skyline`
 
 ## Problem
@@ -64,7 +64,7 @@ there show the curve even with the mean at matched width.
 ## Tests
 - [x] TestOspreySearchTuning, TestBuildLibraryCarafeWizard pass against master's Osprey
 - [x] CodeInspection
-- [ ] bt209 on the PR
+- [x] bt209 on the PR (build 4281112)
 
 ## Follow-ups (separate work)
 - [ ] Smart trigger: Osprey/CarafeSharp changes do not run bt209, though Skyline tests launch
@@ -74,3 +74,10 @@ there show the curve even with the mean at matched width.
 
 ### 2026-11-25 - Diagnosed and fixed
 Root cause and A/B above; both tests passing locally at 5% FDR.
+
+### 2026-11-25 - Merged
+
+PR #5080 merged as commit 1134bd96e9, with every check green including bt209. Both tests now
+search the Stellar subset at 5% FDR; Osprey and the curve default are unchanged. Not done here:
+the curve's cost on nearly calibrated unit-resolution data is for Mike (note drafted, see the "For Mike"
+section), and the smart-trigger follow-up is unfiled separate work.
