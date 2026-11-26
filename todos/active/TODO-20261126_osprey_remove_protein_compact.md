@@ -6,9 +6,9 @@ Remove the protein-compact second pass from Osprey
 - **Branch**: `Skyline/work/20261126_osprey_remove_protein_compact`
 - **Base**: `master`
 - **Created**: 2026-11-26
-- **Status**: In Progress - code and docs removed (5230a7472e, b26d2a7871, pushed); unit gate and the
-  Stellar regression pass; `regression-parallel.ps1 -Dataset All` running (2026-11-26). Then /code-review,
-  PR, TeamCity. Protein-best validation is MACS2's work, not this PR's.
+- **Status**: In Progress - code and docs removed (5230a7472e, b26d2a7871), review fixes 80a611d2ca, all
+  pushed; unit gate and `-Dataset All` regression pass; /code-review medium done. Next: PR description for
+  Brendan's approval, open the PR, then ask before TeamCity. Protein-best validation is MACS2's work, not this PR's.
 - **Module**: `osprey`
 - **PR**: (pending)
 
@@ -45,6 +45,31 @@ master. Largest: `Pass2FdrSidecar.cs` -1,280, `StreamingFdr.cs` -947, `FdrTest.c
   `ai/.tmp/sessions/20261125-diag/pc-regression-stellar-20261126b.log`.
 - `-Dataset All` (the only run that checks the three `diagnostics.tsv` goldens): log
   `ai/.tmp/sessions/20261125-diag/pc-regression-all-20261126.log`.
+
+- `regression-parallel.ps1 -Dataset All`: 49 PASS / 0 FAIL / 0 SKIP in 59:21, nothing re-recorded.
+
+### Code review (/code-review medium, 2026-11-26)
+
+9 findings, no correctness bug in the transfer path. Fixed in 80a611d2ca (669/669, inspection clean, log
+`ai/.tmp/sessions/20261125-diag/pc-review-fix.log`; Stellar regression rerun, log
+`pc-regression-stellar-review.log`):
+- `--task-files` answered before the unrecognized-mode abort, so a query under
+  `OSPREY_PASS2_QVALUE=protein-compact` listed the transfer's files with exit 0; it is now refused as the
+  run is, with a test leg in `TestProteinBestPipeline`.
+- Two set initializers in `Stage6Planner` that were always replaced.
+- Two comments describing removed behavior (`OSPREY_PASS2_VERIFY_WORKER` remarks, `CompactionGateRefusals`).
+
+Dropped, with the reason:
+- Dead transfer chain in `Pass2PerFileWorker` (`ComputeStampAndWrite` and what only it reaches) and the
+  analysis-wide model file code in `FirstPassModelIO`: without a production caller since #5070, not
+  because of this removal. A further deletion of about the same kind; offered to Brendan as a separate
+  cleanup. `ModelViewFromArtifacts` is rewritten by the per-run Model tab work.
+- `FilePlanner`'s `reconcileDecoys` parameter: goes with the stub PR, as decided.
+- `Pass2QValue` / `Pass2QValueOverride` now constant: kept with the variable, which the runners set.
+- The four constant stratum report fields: Brendan's open decision below.
+- `ai/scripts` drivers that pass the removed values by default (`Run-FdrBench.ps1` defaults
+  `-Pass2QValue protein-compact`; `Compare/Compare-EndToEnd-Crossimpl.ps1` passes `--protein-boost compact`
+  in its Rust recipe): need a decision on what the Rust-recipe comparison uses now, so not edited here.
 
 Decisions made while removing:
 - `--protein-boost compact` is an invalid argument value; `OSPREY_PASS2_QVALUE=protein-compact` is an
