@@ -6,7 +6,7 @@ Per-run first-pass models: PerFileScoring logging gaps and a per-run Model tab
 - **Branch**: `Skyline/work/20261124_osprey_per_run_model_logging`
 - **Base**: `master`
 - **Created**: 2026-11-24
-- **Status**: PR open (#5077): 3ae9253249 + review fixes 47417a9bd8; TeamCity Perf/Regression not yet run (ask first); part 2 split out
+- **Status**: PR open (#5077): 3ae9253249 + review fixes 47417a9bd8; TeamCity Perf/Regression build 4281110 SUCCESS (2026-11-25); ready for human review; part 2 split out
 - **Module**: `osprey`
 - **PR**: [#5077](https://github.com/ProteoWizard/pwiz/pull/5077)
 
