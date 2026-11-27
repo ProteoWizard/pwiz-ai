@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: (none - found while preparing test data for #5083)
 - **Module**: `pwiz`
-- **PR**: (pending)
+- **PR**: [#5085](https://github.com/ProteoWizard/pwiz/pull/5085)
 
 ## Objective
 
@@ -32,7 +32,7 @@ the port wrote mzML whose ion mobility array kept its full length (2,031,351 val
       * Non-parallel arrays dropped, incl. a malformed intensity array (fixed: left as is).
       * Mutation of spectra retained by in-memory inner lists - pre-existing, dropped.
       * "Comment misstates cpp" - reviewer misread cpp (it re-adds equal-length arrays); moot.
-- [ ] PR
+- [x] PR #5085 opened 2026-11-27
 
 ## Regression Test
 
