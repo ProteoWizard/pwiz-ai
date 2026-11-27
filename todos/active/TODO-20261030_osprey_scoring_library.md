@@ -906,3 +906,27 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   (unexpressed). Own placement adds proteins that hold no target peptides at all, which a real database does
   not contain, so it is the most favourable case for protein boosting. The 1:1 weighting of the two halves
   is set by the library design, not by data.
+
+### 2026-11-27 - DIA-NN 2.7.0 split into per-file jobs: exact, and little faster on one machine
+
+- Recipe (`ai/.tmp/sessions/20261121-tdp43/Run-DiannSplit.ps1`): pass 1 one process per file (predicted
+  library, shared `--temp`, no `--reanalyse`); merge 1 over all files with `--use-quant --gen-spec-lib
+  --out-lib` (cross-run step, writes the empirical library); pass 2 one process per file with that library
+  and a second `--temp`; merge 2 with `--use-quant --matrices` for the report. Same flags as the 82-file runs.
+- Test: 8 SEA-AD runs (every 10th, no pools), single-peptide predicted library, MACS2 otherwise idle
+  (`D:\Users\brendanx\test\diann-parallel\seaad-8files\`, split_equiv.py, split-equiv.log).
+- Equivalence: every split arm's report is **bit-identical** to the single command's: 664,612 rows, equal
+  Q.Value, Global.Q.Value, RT and Precursor.Quantity on every row; 75,771 precursors at Global.Q 1%, 76,587
+  at true FDP 1%. DIA-NN 2.7.0 output is also invariant to thread count (72, 36, 18, 9 per process).
+
+  | Arm (processes x threads) | Total | Pass 1 | Merge 1 | Pass 2 | Merge 2 |
+  |---|---|---|---|---|---|
+  | 1 x 72, single command | 36:11 | 27:06 (first pass) | ~1.5 (cross-run, library) | 5:33 | ~1.8 |
+  | 4 x 18 | 34:02 | 23:42 | 2:57 | 5:04 | 2:19 |
+  | 2 x 36 | 39:12 | 27:01 | 3:00 | 6:51 | 2:20 |
+  | 8 x 9 | 32:26 | 23:13 | 2:58 | 3:56 | 2:15 |
+
+- On one machine the gain is at most ~10% (8 x 9): DIA-NN already keeps the 72 logical processors busy, and
+  the two merges cost ~5 min against ~3.5 min for the single command's cross-run steps. The recipe's value
+  is spreading pass 1 and pass 2 over several machines: each per-file step then takes about one file's time,
+  and only the merges are serial.
