@@ -872,9 +872,11 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   - FDP estimator: split uses on-protein entrapment (n_on 565,555), controls all entrapment. Swapping them on
     the same report: DIA-NN single 97,060 (split estimator) vs 94,767; DIA-NN split 101,269 vs 101,153.
     The estimator accounts for up to ~2.4 points on the single report.
-  - Input and machine: the split arm (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82-uw8`) searched **mzML on
-    UW8 at 32 threads**; the control arms searched **Thermo .raw on MACS2 at 72 threads**. Library size is
-    the same (3,081,739 precursors).
+  - Run conditions: the split arm (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82-uw8`) searched mzML on UW8
+    at 32 threads; the control arms searched Thermo .raw on MACS2 at 72 threads; same DIA-NN 2.7.0, same
+    flags, same library size (3,081,739 precursors). mzML is a faithful rendering of the vendor data, so
+    neither input format nor machine is expected to move the result; a difference from either would point
+    to a code-path difference and would itself need tracking down.
   - The MACS2 .raw search with the standard library (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82`,
     entrapment in its own proteins) gives 107,394 (all-entrapment estimator), well above both.
   Hypothesis, not yet tested: DIA-NN applies protein evidence as a step after its base model, and that step
@@ -882,7 +884,9 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   bit-identical reports (a step fitted to uninformative grouping would still move scores slightly). Osprey's
   protein-compact is also a step after the base model; its single-peptide, random-protein and split-sized
   arms are queued (`ai/.tmp/sessions/20261121-tdp43/Start-SeaAdCompactChain.ps1`, behind the parallel
-  DIA-NN test). A DIA-NN split-sized search of .raw on MACS2 is needed before DIA-NN's boost can be quoted. Hypothesis to
-  test, not yet checked: grouping acts in DIA-NN through the empirical library filter at the reanalysis step
-  (protein q), which would leave random and single identical (every random protein holds a strong target;
-  a single-peptide protein's q is its precursor's) and help most when entrapment sits in its own proteins.
+  DIA-NN test). With input and machine not expected to matter, the split arm's
+  101,153 (all-entrapment estimator) vs 94,767 is DIA-NN's gain from real grouping (+6.7%), and the
+  standard library's 107,394 is consistent with a larger gain when entrapment sits in its own proteins. A
+  DIA-NN split-sized .raw search on MACS2 would confirm the split figure under identical conditions. An
+  alternative mechanism, also untested: protein-q filtering of the empirical library at the reanalysis step,
+  which would likewise leave random and single identical.
