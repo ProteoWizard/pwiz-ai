@@ -24,7 +24,15 @@ the port wrote mzML whose ion mobility array kept its full length (2,031,351 val
 - [x] Port the C++ behavior (green; all 207 Analysis.Tests pass)
 - [x] End-to-end: regenerated D:\bench\im-peak-picking\trim\VLSSIEQK_trim_fixed.mzML - arrays
       equal length, m/z sorted, Skyline import with IM 22.598 ms picks 20.52 min as the .d does
-- [ ] /code-review, PR
+- [x] /code-review medium - 6 findings, triaged:
+      * Re-sorting by m/z (fixed): SpectrumListBase.HasNonMzOrderingAxis / EnsureMzAscending
+        deliberately leave IM-axis spectra in mobility order; the C++ sort_together predates
+        that rule. Now keeps input order (also moots the unstable-sort finding).
+      * Integer arrays of m/z length not trimmed (fixed).
+      * Non-parallel arrays dropped, incl. a malformed intensity array (fixed: left as is).
+      * Mutation of spectra retained by in-memory inner lists - pre-existing, dropped.
+      * "Comment misstates cpp" - reviewer misread cpp (it re-adds equal-length arrays); moot.
+- [ ] PR
 
 ## Regression Test
 
