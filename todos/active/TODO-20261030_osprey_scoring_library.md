@@ -692,7 +692,7 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
 
 ### 2026-11-26 - Random-protein library (protein assignments shuffled), both tools
 
-- Brendan: a companion to single-peptide proteins: start from standard entrapment and shuffle protein
+- A companion to single-peptide proteins: start from standard entrapment and shuffle protein
   assignments, so grouping is random. Split minus random = what true biological grouping adds; random minus
   single-peptide = what grouping adds by chance (more attempts per protein at a detectable peptide). A
   library-level shuffle applies to DIA-NN too, unlike `OSPREY_PROTEIN_BEST_SHUFFLE` (Osprey only, recorded
@@ -827,7 +827,7 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   -14.4%, 50+ -9.7%; 1,003 precursors from proteins split found nothing in). Caveat from the histograms
   above: random halves the target peptides per protein (median 26 vs 51), so a random protein's best other
   peptide is often entrapment.
-- Reading the random arm (Brendan): random grouping keeps the protein size distribution but carries no
+- Reading the random arm: random grouping keeps the protein size distribution but carries no
   information, so a near-zero gain is the result an unbiased grouping score should give. A clear gain
   (e.g. +5%) would have meant the score favours grouped over ungrouped peptides regardless of content. One
   seed (20261126) cannot call +0.6% zero: the arms churn 2,200-2,700 precursors each way, and seed-to-seed
@@ -877,14 +877,12 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
     the same (3,081,739 precursors).
   - The MACS2 .raw search with the standard library (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82`,
     entrapment in its own proteins) gives 107,394 (all-entrapment estimator), well above both.
-  Working hypothesis (Brendan): DIA-NN's protein boost is an add-on model applied after base scoring, like
-  Osprey's protein-compact, which Mike designed from what he knew of DIA-NN to close the gap between the two
-  tools. The add-on does nothing in either the single-peptide or the random-protein library, which leaves
-  the base IDs unboosted. The bit-identical reports point the same way: an add-on fitted to random grouping
-  would still move scores slightly, so this one did not apply. Prediction: Osprey `--protein-boost compact`
-  also gives the same result in its single-peptide and random-protein arms (queued:
-  `ai/.tmp/sessions/20261121-tdp43/Start-SeaAdCompactChain.ps1`, behind the parallel DIA-NN test).
-  A DIA-NN split-sized search of .raw on MACS2 is needed before DIA-NN's boost can be quoted. Hypothesis to
+  Hypothesis, not yet tested: DIA-NN applies protein evidence as a step after its base model, and that step
+  makes no change in either the single-peptide or the random-protein library. Consistent with this:
+  bit-identical reports (a step fitted to uninformative grouping would still move scores slightly). Osprey's
+  protein-compact is also a step after the base model; its single-peptide, random-protein and split-sized
+  arms are queued (`ai/.tmp/sessions/20261121-tdp43/Start-SeaAdCompactChain.ps1`, behind the parallel
+  DIA-NN test). A DIA-NN split-sized search of .raw on MACS2 is needed before DIA-NN's boost can be quoted. Hypothesis to
   test, not yet checked: grouping acts in DIA-NN through the empirical library filter at the reanalysis step
   (protein q), which would leave random and single identical (every random protein holds a strong target;
   a single-peptide protein's q is its precursor's) and help most when entrapment sits in its own proteins.
