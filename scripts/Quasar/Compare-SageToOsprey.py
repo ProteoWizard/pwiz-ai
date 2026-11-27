@@ -2,13 +2,19 @@
 
 The positive control of the Quasar spec (Phase 1): Quasar's clusters, searched by Rust Sage,
 should re-find the peptides Osprey found, at the same retention times. Osprey's truth is its
-blib: precursors whose run q-value in this file is at or below the threshold, with their apex
-times. Only Osprey precursors whose m/z falls in an isolation window Quasar processed count.
+blib: precursors whose q-value in this run is at or below the threshold, with their apex times,
+from RetentionTimes (one row per precursor and run; OspreyRunScores and OspreyPeakBoundaries
+hold only each precursor's best run, a third of a run's detections on the Astral set). Only
+Osprey precursors whose m/z falls in an isolation window Quasar processed count.
 
 Standard library only (run with `python -I`):
 
-    python -I Compare-SageToOsprey.py --sage <results.sage.tsv> --blib <osprey.blib>
+    python -I Compare-SageToOsprey.py --sage <results.sage.tsv> [<more.sage.tsv> ...] --blib <osprey.blib>
         --quasar-mzml <run.quasar.mzML> [--q 0.01] [--out <prefix>]
+
+Several --sage files (for example the narrow-tolerance search of the precursor-candidate mzML and
+the wide-window search of every cluster) are each cut at --q on their own q-values and reported as
+a union; the union's FDR can be up to the sum of the separate ones.
 
 Writes <prefix>.matched.tsv (peptides both found, with both apex times) and
 <prefix>.sage-only.tsv when --out is given.
@@ -61,11 +67,11 @@ def read_osprey(blib_path, stem, windows, q):
     """Osprey precursors passing q in this run, inside the processed windows: sequence -> apex RT."""
     db = sqlite3.connect(f"file:{blib_path}?mode=ro", uri=True)
     rows = db.execute(
-        """select r.peptideSeq, r.precursorMZ, r.precursorCharge, s.RunQValue, b.ApexRT
-           from RefSpectra r
-           join OspreyRunScores s on s.RefSpectraID = r.id
-           join OspreyPeakBoundaries b on b.RefSpectraID = r.id and b.FileName = s.FileName
-           where s.FileName like ? and s.RunQValue <= ?""",
+        """select r.peptideSeq, r.precursorMZ, r.precursorCharge, t.score, t.retentionTime
+           from RetentionTimes t
+           join SpectrumSourceFiles f on f.id = t.SpectrumSourceID
+           join RefSpectra r on r.id = t.RefSpectraID
+           where f.fileName like ? and t.score <= ?""",
         (f"%{stem}%", q)).fetchall()
     truth = {}
     for sequence, mz, charge, _, apex in rows:
@@ -76,7 +82,7 @@ def read_osprey(blib_path, stem, windows, q):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--sage", required=True)
+    parser.add_argument("--sage", required=True, nargs="+")
     parser.add_argument("--blib", required=True)
     parser.add_argument("--quasar-mzml", required=True)
     parser.add_argument("--q", type=float, default=0.01)
@@ -90,7 +96,14 @@ def main():
     if not windows or not (stem or args.stem):
         sys.exit("no isolation windows or run id found in " + args.quasar_mzml)
     stem = args.stem or stem
-    targets, decoys = read_sage(args.sage, args.q, args.q_levels.split(","))
+    targets, decoys = [], 0
+    for path in args.sage:
+        file_targets, file_decoys = read_sage(path, args.q, args.q_levels.split(","))
+        if len(args.sage) > 1:
+            peptides = len({strip_mods(row["peptide"]) for row in file_targets})
+            print(f"{path}: {len(file_targets)} target PSMs, {file_decoys} decoy PSMs, {peptides} peptides")
+        targets += file_targets
+        decoys += file_decoys
     truth = read_osprey(args.blib, stem, windows, args.q)
 
     sage_best = {}

@@ -48,15 +48,17 @@ def read_clusters(path):
 
 
 def read_osprey(blib, stem, low, high, q):
+    """Osprey's precursors at q in this run, from RetentionTimes (one row per precursor and run);
+    OspreyRunScores and OspreyPeakBoundaries hold only each precursor's best run."""
     db = sqlite3.connect(f"file:{blib}?mode=ro", uri=True)
     rows = db.execute(
         """select r.id, r.peptideModSeq, r.precursorMZ, r.precursorCharge, r.numPeaks, p.peakMZ,
-                  b.StartRT, b.EndRT, b.ApexRT
-           from RefSpectra r
+                  t.startTime, t.endTime, t.retentionTime
+           from RetentionTimes t
+           join SpectrumSourceFiles f on f.id = t.SpectrumSourceID
+           join RefSpectra r on r.id = t.RefSpectraID
            join RefSpectraPeaks p on p.RefSpectraID = r.id
-           join OspreyRunScores s on s.RefSpectraID = r.id
-           join OspreyPeakBoundaries b on b.RefSpectraID = r.id and b.FileName = s.FileName
-           where s.FileName like ? and s.RunQValue <= ? and r.precursorMZ >= ? and r.precursorMZ < ?""",
+           where f.fileName like ? and t.score <= ? and r.precursorMZ >= ? and r.precursorMZ < ?""",
         (f"%{stem}%", q, low, high)).fetchall()
     return [{"id": r[0], "peptide": r[1], "mz": r[2], "charge": r[3],
              "fragments": decode(r[5], r[4], "d", 8), "start": r[6], "end": r[7], "apex": r[8]} for r in rows]
