@@ -33,7 +33,15 @@ instead of collapsing it.
 - [x] Locate John's 2018 data - \\BSPRATT-UW3\data\JohnF (84 GB), copied to D:\data\JohnF
 - [x] Extract 5ug_MouseLiverDigest_IM-MS.d (MS1-only run, 9.8 GB) from IM\Protein Digest Data.zip
       into D:\data\JohnF\IM\ (where the 2018 .sky files expect it)
-- [ ] Find the 48.8 min case (not in the pptx; maybe in another JohnF doc or email)
+- [x] Find the 48.8 min case: John's email "The Summum Bonum on Drift Time / CCS Annotation"
+      (2018-09-29). K.IMFVGGPNTR.K 2+ (546.2870; M, M+1, y6 601.3052+) in
+      5ug_MouseLiverDigest_AltFrame_IM-MS.d, after CCS Predictor on M/M+1 then adding one
+      fragment. Skyline picked ~50.1 min; M+1 has a large interference apex at 50.7, M peaks at
+      52.0; John expected the small co-eluting 48.8 min peak. His drift spectrum at 48.8 showed no
+      IM ambiguity. Peptide is in the full MouseLiverDigest_by_AutoMSMS*.sky docs, not the
+      3-precursor subset. He asked to search for a common drift apex over the RT window with the
+      high-energy offset off or small - i.e. bands must carry the fragment offset or tolerate it.
+- [ ] Second fixture: trim IMFVGGPNTR (546.287 / 547.2884 / 601.3052) from the AltFrame .d
 
 ## Test Data (John, Agilent DTIMS, 2018)
 
