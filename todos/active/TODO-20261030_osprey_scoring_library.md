@@ -753,3 +753,46 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
 
 - Against Osprey on the split library (98,280 at on-target FDP 1%): -10.8%. Reported q is conservative
   here (0.82% at q 1%). The DIA-NN single-peptide arm (started 15:22) gives the matching number for DIA-NN.
+
+### 2026-11-26 - SEA-AD 82 files, single-peptide library: DIA-NN result, each tool's protein boost
+
+- DIA-NN 2.7.0, single-peptide library, 82 raws from E:, same flags as the UW8 split arm (72 vs 32 threads):
+  25,389 s (7 h 03 min). Report `D:\Users\brendanx\test\diann-vs-osprey\seaad-single-peptide\diann-search-82\report.parquet`.
+  Audit (all entrapment, r 0.9998): q 1% kept 94,202 (FDP 0.93%); at FDP 0.5% 88,233, at FDP 1% 94,767.
+- The UW8 split report (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82-uw8\report.parquet`) reproduces 101,269.
+- Protein boost, true FDP 1%, SEA-AD 82 files:
+
+  | | split-sized lib | single-peptide lib | boost |
+  |---|---|---|---|
+  | Osprey aa864c3d2e (pass 2) | 98,244 | 87,607 | +12.1% (single = split -10.8%) |
+  | DIA-NN 2.7.0 | 101,269 | 94,767 | +6.9% (single = split -6.4%) |
+  | Osprey vs DIA-NN | -3.0% | **-7.6%** | |
+
+  Grouping hides about 60% of Osprey's scoring gap to DIA-NN. (Split FDP reads the on-target half,
+  single-peptide all entrapment; both true FDP.)
+- Which precursors grouping adds (`boost_anatomy.py`, k = split precursors found in the protein):
+
+  | k | 1 | 2 | 3-4 | 5-9 | 10-19 | 20-49 | 50+ |
+  |---|---|---|---|---|---|---|---|
+  | Osprey: lost without grouping | 11.6% | 12.9% | 14.6% | 16.4% | 13.9% | 11.8% | 10.1% |
+  | Osprey: net without grouping | +13.6% | -2.1% | -10.4% | -15.4% | -13.7% | -11.8% | -10.0% |
+  | DIA-NN: lost without grouping | 7.5% | 7.3% | 10.2% | 9.8% | 8.1% | 6.2% | 5.4% |
+  | DIA-NN: net without grouping | -1.4% | -4.0% | -8.3% | -9.2% | -7.8% | -6.0% | -5.2% |
+
+  Osprey's grouping penalizes single-hit proteins (their protein-best column reads the decoy-median floor),
+  and the single-peptide arm also gains 994 precursors from proteins the split arm found nothing in
+  (DIA-NN: 184). DIA-NN's single-hit proteins barely move. Every precursor lost sits just past the cut
+  (single-peptide q 0.01-0.1) in both tools.
+- Agreement (`split_calibration.py --agree --agree-global`, pass 2): Osprey split vs DIA-NN split 90.5% both;
+  Osprey single vs DIA-NN split 94.7%. Of the 10,629 precursors grouping adds to Osprey, 4,679 (44%) are not
+  identified by DIA-NN, against 9.5% of the whole split set. Osprey single vs DIA-NN single: 92.8% both,
+  6,340 Osprey-only, 13,494 DIA-NN-only.
+- The 13,433 DIA-NN-only precursors with no grouping (`diann_only_in_osprey.py`): 0.3% absent from Osprey's
+  pass-1 table, 52% just past Osprey's cut (q 0.01-0.05), 32% far down (q > 0.1). Per run (`rt_compare.py`,
+  8 runs, Osprey first-pass apex vs DIA-NN RT): DIA-NN-only run IDs are at a peak > 0.25 min away 24.0% of
+  the time, against 5.0% for precursors both find. So the no-grouping gap is mostly Osprey scoring the same
+  peak lower (~3/4), with a different peak choice in ~1/4.
+- Logs in `ai/.tmp/sessions/20261121-tdp43/`: audit-seaad-single-peptide-diann.log, anatomy-*-split-vs-single.log,
+  agree-*.log, diann-only-in-osprey-single.log, rt-compare-single.log; timeline in
+  `ai/.tmp/night-session-budget-20261126.md`.
+- Osprey random-protein started 22:25; DIA-NN random-protein follows.
