@@ -860,4 +860,24 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   DIA-NN-only precursors are slightly shorter (median 11 vs 12 residues) and lighter (median m/z 538 vs
   595), with the same charge mix (36.7% vs 35.7% 3+). That fits fewer, weaker fragments, but no class of
   peptide accounts for the gap.
-- DIA-NN random-protein started 01:56 (~7 h); labels by sequence via assign-random-protein-all.
+### 2026-11-27 - SEA-AD 82 files, random-protein library: DIA-NN result, and a confound in DIA-NN's split arm
+
+- `D:\Users\brendanx\test\diann-vs-osprey\seaad-random-protein\diann-search-82\report.parquet`, 01:56-08:29,
+  exit 0. True FDP 1% (all entrapment): **94,767**, the same set as single-peptide, and every one of the
+  7,719,851 report rows has the same Global.Q.Value and RT as the single-peptide report, though the run used
+  the random labels (`RP...`, 57,537 protein groups, 2.9% of rows shared). With these flags (`--pg-level 0
+  --reanalyse`) DIA-NN's precursor result does not depend on protein grouping in these two libraries.
+- So DIA-NN's "+6.9% protein boost" (split 101,269 vs single 94,767) needs another explanation. Differences
+  between the arms (estimator-swap.log):
+  - FDP estimator: split uses on-protein entrapment (n_on 565,555), controls all entrapment. Swapping them on
+    the same report: DIA-NN single 97,060 (split estimator) vs 94,767; DIA-NN split 101,269 vs 101,153.
+    The estimator accounts for up to ~2.4 points on the single report.
+  - Input and machine: the split arm (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82-uw8`) searched **mzML on
+    UW8 at 32 threads**; the control arms searched **Thermo .raw on MACS2 at 72 threads**. Library size is
+    the same (3,081,739 precursors).
+  - The MACS2 .raw search with the standard library (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82`,
+    entrapment in its own proteins) gives 107,394 (all-entrapment estimator), well above both.
+  A DIA-NN split-sized search of .raw on MACS2 is needed before DIA-NN's boost can be quoted. Hypothesis to
+  test, not yet checked: grouping acts in DIA-NN through the empirical library filter at the reanalysis step
+  (protein q), which would leave random and single identical (every random protein holds a strong target;
+  a single-peptide protein's q is its precursor's) and help most when entrapment sits in its own proteins.
