@@ -10,7 +10,7 @@ Remove the protein-compact second pass from Osprey
   pushed; unit gate and `-Dataset All` regression pass; /code-review medium done. Next: PR description for
   Brendan's approval, open the PR, then ask before TeamCity. Protein-best validation is MACS2's work, not this PR's.
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#5084](https://github.com/ProteoWizard/pwiz/pull/5084)
 
 Split out of [TODO-20261125_osprey_diagnostics_after_per_run_models.md](TODO-20261125_osprey_diagnostics_after_per_run_models.md)
 (Brendan, 2026-11-25): its own PR, ahead of the smaller stub. Removing the mode also removes the reasons
@@ -70,6 +70,15 @@ Dropped, with the reason:
 - `ai/scripts` drivers that pass the removed values by default (`Run-FdrBench.ps1` defaults
   `-Pass2QValue protein-compact`; `Compare/Compare-EndToEnd-Crossimpl.ps1` passes `--protein-boost compact`
   in its Rust recipe): need a decision on what the Rust-recipe comparison uses now, so not edited here.
+
+### Decisions (Brendan, 2026-11-27)
+
+- PR opened as #5084 with the approved description.
+- The four constant stratum report fields stay; the PR description explains them for review.
+- The second-pass code without a caller since #5070 is removed in further commits on this PR (in progress).
+- The Rust cross-implementation comparison was dropped with #5070. It should be documented as dropped, in
+  a clean-up pass of its own covering `ai/scripts/Osprey/Compare`, the skill and guide text that still
+  call it a gate, and the drivers that pass removed values. Not part of this PR.
 
 Decisions made while removing:
 - `--protein-boost compact` is an invalid argument value; `OSPREY_PASS2_QVALUE=protein-compact` is an
