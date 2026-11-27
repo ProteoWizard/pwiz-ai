@@ -795,4 +795,36 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
 - Logs in `ai/.tmp/sessions/20261121-tdp43/`: audit-seaad-single-peptide-diann.log, anatomy-*-split-vs-single.log,
   agree-*.log, diann-only-in-osprey-single.log, rt-compare-single.log; timeline in
   `ai/.tmp/night-session-budget-20261126.md`.
-- Osprey random-protein started 22:25; DIA-NN random-protein follows.
+- Cross-confirmation of each tool's grouping additions (`boost_confirmed.py`, boost-confirmed.log): of the
+  12,275 precursors Osprey's split arm finds and its single-peptide arm does not, DIA-NN split finds 58.9%
+  (DIA-NN single 46.5%), against 95.6% of Osprey's precursors found either way. Of DIA-NN's 7,137 additions,
+  Osprey split finds 49.1% (Osprey single 27.9%), against 91.2%. Additions near the threshold confirm poorly
+  in both directions; Osprey's are not worse confirmed than DIA-NN's.
+- What the DIA-NN-only precursors (single-peptide arms) are (`abundance_classes.py`, `rt_compare.py`): median
+  DIA-NN quantity at the 25th percentile of the shared set; DIA-NN identifies them in a median 26 of 82 runs
+  (shared 80; Osprey-only precursors appear in a median of 1 DIA-NN run). In DIA-NN's run-level IDs, Osprey's
+  run q <= 1% for 70.2% of shared and 9.7% of DIA-NN-only (<= 5%: 78.7% / 26.6%). The no-grouping gap is
+  per-run sensitivity on weak, sparse signal.
+
+### 2026-11-27 - SEA-AD 82 files, random-protein library: Osprey result
+
+- Run dir `D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultrandom-protein-head-aa864c3d2e-auto`,
+  22:25-01:56 (3 h 31 min), exit 0; 28,097 protein groups at 1% protein FDR.
+- FDRBench (all entrapment, `--n-target 1131671 --n-on 1131437`, assign-random-protein-all): pass 2
+  **88,125** at true FDP 1% (pass 1 88,139); q 1% keeps 86,245 at FDP 0.79%; at FDP 0.5% 82,773.
+
+  | Osprey, SEA-AD 82, true FDP 1% | Precursors | vs split |
+  |---|---|---|
+  | split-sized (biological grouping) | 98,244 | |
+  | random-protein (chance grouping) | 88,125 | -10.3% |
+  | single-peptide (no grouping) | 87,607 | -10.8% |
+
+  Chance grouping adds +0.6% (random minus single-peptide); biological grouping adds +11.5% over random.
+  Random and single-peptide share 85,447; each finds ~2,200-2,700 the other does not, and the split arm
+  finds 83.2% of each of those sets (98.5% of the shared set): threshold churn, not a systematic gain
+  (random_vs_single.py, random-vs-single-osprey.log). Anatomy split vs random
+  (anatomy-osprey-split-vs-random.log) has the same shape as split vs single (k=1 net +18.0%, 5-9 net
+  -14.4%, 50+ -9.7%; 1,003 precursors from proteins split found nothing in). Caveat from the histograms
+  above: random halves the target peptides per protein (median 26 vs 51), so a random protein's best other
+  peptide is often entrapment.
+- DIA-NN random-protein started 01:56 (~7 h); labels by sequence via assign-random-protein-all.
