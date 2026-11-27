@@ -95,6 +95,15 @@ evaluation scripts from the first Claude-drafted translation round. See
 | `AutoQC/Build-AutoQC.ps1` | Build and test AutoQC.sln |
 | `SkylineBatch/Build-SkylineBatch.ps1` | Build and test SkylineBatch.sln |
 
+### Quasar/
+
+| Script | Description |
+|--------|-------------|
+| `Quasar/Build-Quasar.ps1` | Build, test, and inspect Quasar.sln (`pwiz_tools/Quasar`, the spectrum-centric companion to Osprey) |
+| `Quasar/DatumGolden/` | Regenerate the datum reference values Quasar's EMG port is tested against |
+
+See [Quasar/README.md](Quasar/README.md).
+
 ## Common Workflows
 
 ### Before Committing LLM-Generated Code

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Prints datum's EMG outputs on the fixed inputs Quasar.Test/EmgTest.cs uses, so the expected
+    values in TestEmgMatchesDatum can be regenerated. Needs a maccoss/datum clone; by default the
+    one beside the ai/ folder (C:\Dev\datum when ai/ is C:\Dev\ai), or set the DatumRoot
+    property. The command line is in ai/scripts/Quasar/README.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <DatumRoot Condition="'$(DatumRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\datum</DatumRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(DatumRoot)\src\Datum.Core\Datum.Core.csproj" />
+  </ItemGroup>
+</Project>
