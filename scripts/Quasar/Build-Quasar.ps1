@@ -23,6 +23,9 @@
 .PARAMETER RunTests
     Run Quasar.Test after the build.
 
+.PARAMETER IAgreeToVendorLicenses
+    Build pwiz-sharp's real vendor readers so Quasar can read raw files (passed to build.ps1).
+
 .PARAMETER TestFilter
     A dotnet test filter, for example "FullyQualifiedName~EmgTest".
 
@@ -39,6 +42,7 @@ param(
     [string]$SourceRoot = $null,
     [ValidateSet('Debug','Release')] [string]$Configuration = 'Debug',
     [switch]$RunTests,
+    [switch]$IAgreeToVendorLicenses,
     [string]$TestFilter = '',
     [switch]$ShowTestOutput,
     [switch]$RunInspection
@@ -60,7 +64,11 @@ if (-not (Test-Path $buildScript)) {
 }
 
 Write-Host "Quasar checkout: $pwizRoot" -ForegroundColor Cyan
-pwsh -NoProfile -File $buildScript -Configuration $Configuration -NoTests
+$buildArgs = @('-NoProfile', '-File', $buildScript, '-Configuration', $Configuration, '-NoTests')
+if ($IAgreeToVendorLicenses) {
+    $buildArgs += '-IAgreeToVendorLicenses'
+}
+pwsh @buildArgs
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
@@ -80,6 +88,24 @@ if ($RunInspection) {
     $output = Join-Path $tmpDir "QuasarInspect-$checkoutName.xml"
     $slnPath = Join-Path $quasarRoot 'Quasar.sln'
     $dotSettings = Join-Path $quasarRoot 'Quasar.sln.DotSettings'
+
+    # inspectcode resolves a project outside the solution (Osprey.IO, ProteowizardWrapper,
+    # pwiz-sharp) through that project's OUTPUT assembly under bin\x64\<Configuration>. A solution
+    # build does not write there (out-of-solution references build AnyCPU), so build the test
+    # project, whose references reach every out-of-solution project, as a project build first,
+    # the same fix Build-Osprey.ps1 uses.
+    $testProj = Join-Path $quasarRoot 'Quasar.Test/Quasar.Test.csproj'
+    $prebuildArgs = @($testProj, '/restore', "/p:Configuration=$Configuration", '/p:Platform=x64',
+        '/p:NuGetAuditLevel=critical', '/nologo', '/verbosity:quiet')
+    if ($IAgreeToVendorLicenses) {
+        $prebuildArgs += '/p:IAgreeToVendorLicenses=true'
+    }
+    Write-Host "Building Quasar.Test.csproj (x64) so out-of-solution references exist where inspectcode resolves them" -ForegroundColor Cyan
+    & dotnet msbuild @prebuildArgs | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Pre-inspection build of $testProj failed with exit code $LASTEXITCODE" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
 
     Write-Host "Inspecting Quasar.sln (typically 1-3 minutes)..." -ForegroundColor Cyan
     $inspectStart = Get-Date

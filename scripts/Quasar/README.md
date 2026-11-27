@@ -7,6 +7,8 @@ Scripts for Quasar (`pwiz_tools/Quasar`), the spectrum-centric companion to Ospr
 | Script | What it does |
 |---|---|
 | `Build-Quasar.ps1` | Builds `Quasar.sln` through the in-repo `build.ps1`; `-RunTests` runs `Quasar.Test`, `-RunInspection` runs the ReSharper zero-warning gate on Quasar's own files. |
+| `Benchmark-Clusters.py` | The cluster benchmark (spec, Validation): for each Osprey precursor at q <= 0.01 in one isolation window, the Quasar cluster holding most of its library fragments; completeness, purity, member composition. `--traces` adds the fragments seen in any trace as the denominator. Reads a clusters TSV from the bench harness. |
+| `Compare-SageToOsprey.py` | The Phase 1 positive control: a Rust Sage search of Quasar's pseudo-spectrum mzML against Osprey's blib for the same run; peptides found by both, Sage-only, apex time differences. `--q-levels spectrum_q` for one window (peptide q has a floor at a few hundred PSMs). |
 | `DatumGolden/` | Prints datum's EMG outputs on the fixed inputs `EmgTest.TestEmgMatchesDatum` uses, so its expected values can be regenerated. Needs a `maccoss/datum` clone beside `ai/` (or `-p:DatumRoot=<path>`). |
 
 Regenerating the datum values:
@@ -18,7 +20,7 @@ dotnet run -c Release --project ./ai/scripts/Quasar/DatumGolden/DatumGolden.cspr
 ## Pre-commit gate
 
 ```powershell
-pwsh -File ./ai/scripts/Quasar/Build-Quasar.ps1 -SourceRoot C:/Dev/pwiz-quasar -RunTests -RunInspection
+pwsh -File ./ai/scripts/Quasar/Build-Quasar.ps1 -SourceRoot C:/Dev/pwiz-quasar -IAgreeToVendorLicenses -RunTests -RunInspection
 ```
 
 Always pass `-SourceRoot`: Quasar is developed in its own worktree (`C:\Dev\pwiz-quasar` on the
