@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20261119_osprey_direct_raw_read` (worktree `D:\Users\brendanx\proj\pwiz-directread`)
 - **Base**: `master` (merged in as bc391e44eb on 2026-11-25: #4997, #5057 vendor reader speed-up, #5070 per-run models)
 - **Created**: 2026-11-19
-- **Status**: PR #5067 open at d1a6822195 (current with master incl. #5062, gate 681/681); read-ahead default now 0, help notes the memory cost; PR description updated 2026-11-26. Next: TeamCity Perf/Regression on pull/5067, review
-- **PR**: [#5067](https://github.com/ProteoWizard/pwiz/pull/5067)
+- **Status**: Completed
+- **PR**: [#5067](https://github.com/ProteoWizard/pwiz/pull/5067) (merged 2026-11-26)
 - **Module**: `osprey`
 
 ## Goal
@@ -58,7 +58,7 @@ core-hours on CHS, ~4%).
 
 ## Measurements
 
-1. [ ] Harness on the vendor build against SEA-AD `.raw` + `.spectra.bin` on D: (21 + 4 raw files):
+1. [x] Harness on the vendor build against SEA-AD `.raw` + `.spectra.bin` on D: (21 + 4 raw files):
    - A: metadata pass time, and the detail level that yields the isolation window
    - B: full acquisition-order read (today's cache-miss path): wall, core-s, peak memory
    - C: window-by-window reads from A's index, one producer
@@ -69,7 +69,7 @@ core-hours on CHS, ~4%).
 2. [ ] Prototype a no-cache default; regression tests should pass without change. SEA-AD 82 at 9 x 8
    on MACS2 and sequential on UW8: wall, memory, disk vs cache-backed runs. Needs 39 more SEA-AD raw
    files on MACS2 (~230 GB download).
-3. [ ] After the cache: the scores parquets are the larger disk target (CHS ~510 GB per search).
+3. [x] (delivered by #5070: scores parquets became stubs, ~25 GB per SEA-AD run) After the cache: the scores parquets are the larger disk target (CHS ~510 GB per search).
 
 ## Progress Log
 
@@ -464,3 +464,15 @@ snapshot `D:\test\osprey-runs\_bin\directread-7a710ea537`; 672/672 unit tests pa
   (45878697fd); TestSubsetOptionVariants gains a read-ahead 0 leg. Merged Brendan's GitHub "Update branch"
   (eb0dddb080: #5062 vendor readers, #5080) as d1a6822195; gate 681/681, inspection clean; pushed. The UW25
   timings in the PR predate #5062.
+
+### 2026-11-26 - Merged
+
+PR #5067 merged as 05c33f5cfd (TeamCity Perf/Regression build #402 SUCCESS on d1a6822195; all 17 checks green).
+Shipped: `--spectra-cache on|off` (default on, unchanged), the read-ahead reader for uncached inputs with
+`OSPREY_READ_AHEAD` now defaulting to 0 and `OSPREY_READ_THREADS` 2, a help note that off needs more memory (no
+figures, by design), and the argument-parse fix (arguments after `--spectra-cache off` or `--no-prefilter` were
+ignored; `--no-prefilter` was broken on master too). Deferred: making a no-cache read the DEFAULT (plan item 2) -
+after #5070 the direct read costs time and holds a whole file's spectra during per-run training, so a default
+change would need window-at-a-time reads from `.raw`, the cache path's streaming model. A final SEA-AD re-run on
+d1a6822195 (shipped defaults, includes #5062) was in progress at merge:
+`D:\test\osprey-runs\sea-ad\runs\seaad-raw-82files-libdecoy-r1.0-default-cacheoff-d1a6822195` on UW25.

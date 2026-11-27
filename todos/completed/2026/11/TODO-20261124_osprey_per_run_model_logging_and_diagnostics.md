@@ -6,9 +6,9 @@ Per-run first-pass models: PerFileScoring logging gaps and a per-run Model tab
 - **Branch**: `Skyline/work/20261124_osprey_per_run_model_logging`
 - **Base**: `master`
 - **Created**: 2026-11-24
-- **Status**: PR open (#5077): 3ae9253249 + review fixes 47417a9bd8; TeamCity Perf/Regression build 4281110 SUCCESS (2026-11-25); ready for human review; part 2 split out
+- **Status**: Completed (part 2 continues in TODO-20261125_osprey_diagnostics_after_per_run_models.md)
 - **Module**: `osprey`
-- **PR**: [#5077](https://github.com/ProteoWizard/pwiz/pull/5077)
+- **PR**: [#5077](https://github.com/ProteoWizard/pwiz/pull/5077) (merged 2026-11-26)
 
 Written 2026-11-24, right after #5070 merged.
 **Related**: [#5070](https://github.com/ProteoWizard/pwiz/pull/5070) (merged as aa864c3d2e: per-run
@@ -95,3 +95,13 @@ Split into its own branch and PR (Brendan, 2026-11-25), together with the scores
 the help-group move:
 [TODO-20261125_osprey_diagnostics_after_per_run_models.md](TODO-20261125_osprey_diagnostics_after_per_run_models.md).
 This TODO is part 1 only, one commit (3ae9253249).
+
+### 2026-11-26 - Merged
+
+PR #5077 merged as b1757d1129, right after #5067 (merge onto the new master verified clean). Before merge, the
+"Skyline code inspection" check failed with 3 InvalidXmlDocComment warnings in
+`pwiz_tools/Shared/CommonUtil/SystemUtil/MultiProgressReporter.cs` (lines 69, 146, 243): the new
+`BeginSegment(int)` overload made `<see cref="BeginSegment"/>` ambiguous. Fixed in 179bb71b6c (the references
+name `BeginSegment()`), found by a local full Skyline inspection on UW25; all 18 checks then green. Shipped:
+progress reporting inside per-run first-pass training, and `FileScope.BeginSegment(int)`. Part 2 (diagnostics
+after per-run models) continues in its own TODO.
