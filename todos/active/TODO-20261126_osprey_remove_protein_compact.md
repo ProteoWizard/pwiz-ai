@@ -6,9 +6,10 @@ Remove the protein-compact second pass from Osprey
 - **Branch**: `Skyline/work/20261126_osprey_remove_protein_compact`
 - **Base**: `master`
 - **Created**: 2026-11-26
-- **Status**: In Progress - code and docs removed (5230a7472e, b26d2a7871), review fixes 80a611d2ca, all
-  pushed; unit gate and `-Dataset All` regression pass; /code-review medium done. Next: PR description for
-  Brendan's approval, open the PR, then ask before TeamCity. Protein-best validation is MACS2's work, not this PR's.
+- **Status**: PR open (#5084), head 9e505957ff: removal (5230a7472e, b26d2a7871), review fixes
+  (80a611d2ca), code without a caller since #5070 (7928617f26, 9e505957ff). 667/667 tests, inspection
+  clean, `-Dataset All` 49/49 on the head. Next: ask Brendan before TeamCity, then human review.
+  Protein-best validation is MACS2's work, not this PR's.
 - **Module**: `osprey`
 - **PR**: [#5084](https://github.com/ProteoWizard/pwiz/pull/5084)
 
@@ -79,6 +80,32 @@ Dropped, with the reason:
 - The Rust cross-implementation comparison was dropped with #5070. It should be documented as dropped, in
   a clean-up pass of its own covering `ai/scripts/Osprey/Compare`, the skill and guide text that still
   call it a gate, and the drivers that pass removed values. Not part of this PR.
+
+### Code without a caller since #5070 (2026-11-27)
+
+7928617f26 (code, tests, resources) and 9e505957ff (docs): 25 files, +177 / -1,595 against 80a611d2ca;
+the PR is now 69 files, +637 / -7,371 against master.
+- Unit gate 667/667 (two tests covered only deleted code), inspection clean: `ai/.tmp/sessions/20261125-diag/dead-test2.log`.
+- `regression-parallel.ps1 -Dataset All`: 49 PASS / 0 FAIL / 0 SKIP in 59:26:
+  `ai/.tmp/sessions/20261125-diag/dead-regression-all-20261127.log`.
+- Deleted: `Pass2PerFileWorker` down to `TransferInMemory`, `AddTally`, `LogSummary`;
+  `Pass2FdrSidecar.TransferOneFile` (scorer overload), `LoadProteinBestForRun`,
+  `AssertSidecarDescribesPool`, `MapFeaturesByScoreIndex`; `ProteinBestSidecar.cs`
+  (`<stem>.1st-pass.protein_best.bin`, which nothing writes); `FirstPassFdrTask.PersistFirstPassModel`;
+  `FirstPassModelIO.Save`, `Serialize`, `Load`, `LoadForAnalysis`, `PathFor`, `Sidecar`;
+  `FirstPassFdrTask.ModelViewFromArtifacts` (its call site passes null: it could only read a
+  `<blib-stem>.1st-pass.model.json` this build never writes; `featureCount 0` in the goldens is unchanged);
+  13 unreferenced resource strings.
+- Tests adapted: `FirstPassModelIoTest` and `FeatureAnalysisTest` save and load through the run model
+  form; `TestTransferOneFileScoresTreeModel` is `TestTransferByScoreWithTreeModel`.
+- Left, with the reason: the `captureModel` hook (five `FdrTest` tests read the trained model through it);
+  `ProteinBestRequest.PersistRun` (a test uses it); `PercolatorEngine.FirstPassContributionsFromShares` (no
+  production caller now; the per-run Model tab is expected to use it); `ModelDto.ExperimentAgg` (still
+  written, so run model files keep their bytes); `LoadReconciledFeaturesByScoreIndex`
+  (`OSPREY_PASS2_VERIFY_WORKER`); the "Today ..." design notes of `Osprey-workflow.html` and the history
+  passages of doc 00.
+- For the diagnostics branch: its survey says `ModelViewFromArtifacts` loads `LoadForAnalysis`; both are
+  gone here, so the per-run Model tab starts from `FirstPassModelIO.LoadRunModel`.
 
 Decisions made while removing:
 - `--protein-boost compact` is an invalid argument value; `OSPREY_PASS2_QVALUE=protein-compact` is an
