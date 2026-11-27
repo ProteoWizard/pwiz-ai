@@ -827,13 +827,18 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   -14.4%, 50+ -9.7%; 1,003 precursors from proteins split found nothing in). Caveat from the histograms
   above: random halves the target peptides per protein (median 26 vs 51), so a random protein's best other
   peptide is often entrapment.
-- Why random grouping does nothing for Osprey (`protein_best_dist.py`, protein-best-dist.log, first run's
-  first-pass targets): split-sized protein_best quartiles -6.0 / -1.3 / 6.6, correlation with the
-  precursor's own score 0.40; random-protein quartiles 5.0 / 9.0 / 10.2, correlation -0.003. With ~51
-  peptides per random protein, nearly every protein holds some strong peptide, so the column sits high for
-  every target and its paired decoy alike and carries no information: in effect constant, like
-  single-peptide. Biological grouping helps because the protein's other peptides track the precursor's own
-  detectability.
+- Reading the random arm (Brendan): random grouping keeps the protein size distribution but carries no
+  information, so a near-zero gain is the result an unbiased grouping score should give. A clear gain
+  (e.g. +5%) would have meant the score favours grouped over ungrouped peptides regardless of content. One
+  seed (20261126) cannot call +0.6% zero: the arms churn 2,200-2,700 precursors each way, and seed-to-seed
+  variance needs ~5 shuffles (Osprey ~3.5 h per seed, DIA-NN ~7 h), not yet queued.
+- protein_best under each grouping (`protein_best_dist.py`, protein-best-dist.log, first run's first-pass
+  targets): split-sized quartiles -6.0 / -1.3 / 6.6, correlation with the precursor's own score 0.40;
+  random-protein quartiles 5.0 / 9.0 / 10.2, correlation -0.003. Protein size is the same in both, so the
+  difference lies in where detectability sits: real proteins not expressed in this tissue hold only
+  undetected peptides (low protein_best), concentrating detectability in expressed proteins, while each
+  random protein mixes peptides from many real proteins and nearly always includes an expressed one (high
+  protein_best, unrelated to the precursor).
 - What Osprey's per-run sensitivity gap is made of (single-peptide arms; `feature_gap.py`,
   feature-gap-single.log; 8 runs; DIA-NN run IDs at Q.Value <= 1% where Osprey's apex is within 0.1 min,
   binned by within-run DIA-NN quantity decile; medians DIA-NN-only / both):
