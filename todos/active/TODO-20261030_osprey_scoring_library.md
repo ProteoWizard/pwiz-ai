@@ -890,3 +890,19 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   DIA-NN split-sized .raw search on MACS2 would confirm the split figure under identical conditions. An
   alternative mechanism, also untested: protein-q filtering of the empirical library at the reanalysis step,
   which would likewise leave random and single identical.
+- Split-sized FDP by entrapment half (`split_halves.py`, split-halves.log; shared = entrapment placed in target
+  proteins, 565,555; own = entrapment in entrapment-only proteins, 565,882; precursors kept at true FDP 1%):
+
+  | Arm | shared estimator | own estimator | both halves |
+  |---|---|---|---|
+  | Osprey protein-best, split-sized | 98,244 | 128,034 | 101,165 |
+  | DIA-NN, split-sized (UW8 mzML) | 101,269 | 107,010 | 101,153 |
+
+  The halves differ only in protein placement. Osprey's protein-best separates them strongly: entrapment in
+  proteins with no target evidence is suppressed far more than entrapment on target proteins. DIA-NN
+  separates them much less. Under the shared estimator Osprey is 3.0% behind DIA-NN; using both halves, the
+  two are equal. Which estimator reflects real false IDs depends on how often a false match lands on a
+  protein with no true evidence. Shared placement already includes target proteins with zero true evidence
+  (unexpressed). Own placement adds proteins that hold no target peptides at all, which a real database does
+  not contain, so it is the most favourable case for protein boosting. The 1:1 weighting of the two halves
+  is set by the library design, not by data.
