@@ -827,4 +827,29 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   -14.4%, 50+ -9.7%; 1,003 precursors from proteins split found nothing in). Caveat from the histograms
   above: random halves the target peptides per protein (median 26 vs 51), so a random protein's best other
   peptide is often entrapment.
+- Why random grouping does nothing for Osprey (`protein_best_dist.py`, protein-best-dist.log, first run's
+  first-pass targets): split-sized protein_best quartiles -6.0 / -1.3 / 6.6, correlation with the
+  precursor's own score 0.40; random-protein quartiles 5.0 / 9.0 / 10.2, correlation -0.003. With ~51
+  peptides per random protein, nearly every protein holds some strong peptide, so the column sits high for
+  every target and its paired decoy alike and carries no information: in effect constant, like
+  single-peptide. Biological grouping helps because the protein's other peptides track the precursor's own
+  detectability.
+- What Osprey's per-run sensitivity gap is made of (single-peptide arms; `feature_gap.py`,
+  feature-gap-single.log; 8 runs; DIA-NN run IDs at Q.Value <= 1% where Osprey's apex is within 0.1 min,
+  binned by within-run DIA-NN quantity decile; medians DIA-NN-only / both):
+
+  | Decile | n DIA-NN-only | Osprey fragment_coelution_sum | Osprey bounds_area | Osprey run q | DIA-NN Q.Value | DIA-NN Evidence | DIA-NN Ms1.Area |
+  |---|---|---|---|---|---|---|---|
+  | 0 | 4,821 | 2.6 / 3.3 | 16 / 15 | 0.39 / 0.13 | 0.0039 / 0.0009 | 1.51 / 1.49 | 0 / 0 |
+  | 3 | 3,316 | 4.1 / 7.5 | 38 / 46 | 0.11 / 0.002 | 0.0036 / 0.0003 | 2.05 / 2.35 | 2.2e5 / 1.9e5 |
+  | 5 | 2,483 | 5.2 / 11.6 | 60 / 86 | 0.062 / 0.0005 | 0.0035 / 0.0001 | 2.38 / 3.05 | 4.0e5 / 3.9e5 |
+  | 7 | 1,872 | 6.4 / 19.4 | 106 / 193 | 0.036 / 0.0002 | 0.0038 / 0.00005 | 2.98 / 4.18 | 1.0e6 / 1.0e6 |
+  | 9 | 474 | 9.5 / 44.8 | 300 / 1,503 | 0.022 / 0.00008 | 0.0025 / 0.00005 | 3.65 / 6.26 | 7.4e6 / 8.3e6 |
+
+  At equal DIA-NN quantity and equal MS1 area, the DIA-NN-only precursors have half or less of the
+  fragment coelution Osprey measures for shared ones, and DIA-NN rates them marginal too (run Q ~0.0035
+  against ~1e-4, lower Evidence). They are precursors whose MS2 evidence is weak relative to their
+  abundance. DIA-NN accepts them just inside 1% per run, and Osprey puts them at run q 2-40%. Next questions:
+  whether these are fragment-library mismatch or interference, and whether DIA-NN's quantity on them comes
+  from fewer fragments.
 - DIA-NN random-protein started 01:56 (~7 h); labels by sequence via assign-random-protein-all.
