@@ -58,6 +58,24 @@ instead of collapsing it.
   RP50-wide band at the right drift time is enough for the existing picker to separate the
   interferer. AVTEQGHELSNEER (18.42) and NVTELNEPLSNEER (44.97) pick the same peak either way.
 
+### Test data trimming (2026-11-27)
+
+* CCS conversion exists only in vendor readers (pwiz/data/msdata/IIonMobilityCcsConversion.cs:
+  Agilent, Bruker, Waters, Mobilion), never mzML. So band range = CCS trendline when the file
+  converts, else the file's observed IM range (fallback makes mzML test data possible).
+* msconvert --combineIonMobilitySpectra + scanTime [1020,1440] + mzWindow [450,455] gives a
+  15.9 MB mzML (D:\bench\im-peak-picking\trim\VLSSIEQK_trim.mzML) - BUT it is corrupt:
+  m/z and intensity arrays 13,618 long, raw ion mobility array 2,031,351 long.
+* Root cause: pwiz C# port regression. pwiz/analysis/SpectrumListMzWindow.cs trims only m/z and
+  intensity. The retired C++ SpectrumList_MZWindow (git show 6dd40d8c93^:pwiz/analysis/
+  spectrum_processing/SpectrumList_MZWindow.cpp) sort_together'ed and trimmed every array of
+  m/z length. Needs a pwiz-module fix (separate PR) before the trimmed test data is usable.
+* Unverified side note: every combined spectrum also carries a scan-level "ion mobility drift
+  time" (29.9298, constant). Stripping it did not change the result (array mismatch dominates);
+  check whether C++ msconvert wrote it too.
+* With the corrupt file: no-IM import picks 17.53 min (isotope dotp 0.99) because RT filter and
+  library were removed for the test doc; with IM 22.598 no peak at all.
+
 ## Acceptance
 
 - John's 2018 cases pick the right peak with the right IM value (20.5 min rather than
