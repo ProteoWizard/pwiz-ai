@@ -921,7 +921,7 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
 
   | Arm (processes x threads) | Total | Pass 1 | Merge 1 | Pass 2 | Merge 2 |
   |---|---|---|---|---|---|
-  | 1 x 72, single command | 36:11 | 27:06 (first pass) | ~1.5 (cross-run, library) | 5:33 | ~1.8 |
+  | 1 x 72, single command | 36:11 | 27:06 (first pass) | ~1.5 (cross-run, library) | 5:33 | ~2.1 |
   | 4 x 18 | 34:02 | 23:42 | 2:57 | 5:04 | 2:19 |
   | 2 x 36 | 39:12 | 27:01 | 3:00 | 6:51 | 2:20 |
   | 8 x 9 | 32:26 | 23:13 | 2:58 | 3:56 | 2:15 |
