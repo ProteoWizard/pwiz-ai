@@ -851,5 +851,8 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   against ~1e-4, lower Evidence). They are precursors whose MS2 evidence is weak relative to their
   abundance. DIA-NN accepts them just inside 1% per run, and Osprey puts them at run q 2-40%. Next questions:
   whether these are fragment-library mismatch or interference, and whether DIA-NN's quantity on them comes
-  from fewer fragments.
+  from fewer fragments. Sequence traits (`class_traits.py`, class-traits-single.log) barely differ: the
+  DIA-NN-only precursors are slightly shorter (median 11 vs 12 residues) and lighter (median m/z 538 vs
+  595), with the same charge mix (36.7% vs 35.7% 3+). That fits fewer, weaker fragments, but no class of
+  peptide accounts for the gap.
 - DIA-NN random-protein started 01:56 (~7 h); labels by sequence via assign-random-protein-all.
