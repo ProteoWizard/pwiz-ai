@@ -123,7 +123,7 @@ login yourname+claude@domain.com
 password <password>
 ```
 
-The `+claude` account must be a member of the "Agents" group on skyline.ms. See [exceptions.md](exceptions.md) for full authentication setup.
+The `+claude` account must be a member of the "Agents" group on skyline.ms. See [exceptions.md](exceptions.md) for full authentication setup. To use an API key instead of a password, set `login apikey` and put the key in `password` (see [setup.md](setup.md#labkey-api-credentials)).
 
 ## Technical Notes
 

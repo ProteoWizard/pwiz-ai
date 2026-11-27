@@ -59,7 +59,7 @@ Each developer uses a personal `+claude` account:
 - **Interns/others**: `yourname+claude@gmail.com`
 - **Group**: "Agents" on skyline.ms
 
-> **Important**: The `+claude` suffix only works with Gmail-backed email providers (@proteinms.net, @gmail.com). It will **not** work with @uw.edu or similar providers.
+> **Important**: The `+claude` suffix works with Google-backed email providers (@proteinms.net, @gmail.com, @uw.edu).
 
 Credentials are stored in `~/.netrc`:
 ```
@@ -67,6 +67,8 @@ machine skyline.ms
 login yourname+claude@domain.com
 password <password>
 ```
+
+To authenticate with an API key instead of a password, use `login apikey` and put the key in `password` - see [setup.md](setup.md#labkey-api-credentials).
 
 ## Tool Selection
 

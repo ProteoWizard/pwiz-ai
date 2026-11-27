@@ -75,7 +75,7 @@ Each developer uses a personal `+claude` account for MCP access:
 > - **Least privilege**: The Agents group has minimal permissions (read-only for most data)
 > - **Gmail trick**: Emails to `user+tag@gmail.com` go to `user@gmail.com`, so notifications still reach you
 >
-> **Important**: The `+claude` suffix only works with Gmail-backed email providers (@proteinms.net, @gmail.com). It will **not** work with @uw.edu or similar providers.
+> **Important**: The `+claude` suffix works with Google-backed email providers (@proteinms.net, @gmail.com, @uw.edu).
 
 Credentials are stored in the user's netrc file (not in the repository):
 - **Unix/macOS**: `~/.netrc`
@@ -144,6 +144,8 @@ password <password>
 ```
 
 > **Note**: Use your personal `+claude` account. Ask a team lead to add your account to the "Agents" group on skyline.ms.
+
+To authenticate with an API key instead of a password, use `login apikey` and put the key in `password` - see [setup.md](setup.md#labkey-api-credentials).
 
 ### Verify Setup
 

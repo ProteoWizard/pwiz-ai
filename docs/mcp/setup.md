@@ -182,7 +182,7 @@ The LabKey MCP server needs credentials for skyline.ms access.
 There needs to be a separate skyline.ms user account using a special "+claude" version of your current email address:
 - **Team members**: `yourname+claude@proteinms.net`
 - **Interns/others**: `yourname+claude@gmail.com`
-- The `+claude` suffix only works with Gmail-backed providers (not @uw.edu)
+- The `+claude` suffix works with any Google-backed address, including `@uw.edu` (e.g. `yourname+claude@uw.edu`)
 - **Ask an administrator** to create an account on skyline.ms for this "+claude" email and have them add it to the **Site:Agents** group
 
 > **Why?** Individual +claude skyline.ms accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
@@ -225,5 +225,15 @@ key dies with the browser session that created it. No MCP code change is needed;
 sends the netrc login and password as HTTP Basic auth, which LabKey accepts for `apikey`.
 Verified 2026-11-20 against both servers with `python ai/mcp/LabKeyMcp/test_connection.py`
 and the `labkey` MCP tools.
+
+Pairing a key with your email as the login fails with HTTP 401 ("The email address and password
+you entered did not match any accounts on file"). To confirm a key works without the MCP
+(read-only, prints the account it authenticates as):
+
+```powershell
+curl.exe -s --netrc https://panoramaweb.org/login-whoami.api
+```
+
+A good key returns `"success" : true` and the account's email; a bad one returns a 401.
 
 > **Deferring LabKey setup:** If you don't have a +claude account yet, use `-Skip netrc` when running `Verify-Environment.ps1`. The LabKey MCP server will still be registered but will have limited functionality until credentials are configured.

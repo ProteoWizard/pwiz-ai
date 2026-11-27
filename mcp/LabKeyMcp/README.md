@@ -17,7 +17,7 @@ Request a dedicated `+claude` account for MCP access:
 - **Interns/others**: `yourname+claude@gmail.com`
 - **Ask an administrator** to create an account on skyline.ms for this email and add it to the **Site:Agents** group
 
-> **Important**: The `+claude` suffix only works with Gmail-backed email providers (@proteinms.net, @gmail.com). It will **not** work with @uw.edu or similar providers.
+> **Important**: The `+claude` suffix works with Google-backed email providers (@proteinms.net, @gmail.com, @uw.edu).
 
 Create a netrc file with your credentials in the standard location:
 
@@ -30,6 +30,14 @@ machine skyline.ms
 login yourname+claude@domain.com
 password your-password
 ```
+
+To authenticate with an API key instead of a password, use the literal login `apikey` (not your email) and put the key in `password`:
+```
+machine panoramaweb.org
+login apikey
+password your-api-key
+```
+See [LabKey API Credentials](../../docs/mcp/setup.md#labkey-api-credentials) for details and a verification command.
 
 > **Why +claude accounts?** Individual accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
 
