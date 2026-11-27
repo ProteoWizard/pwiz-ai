@@ -49,6 +49,14 @@ def read_windows(mzml_path):
     return sorted(windows), (stem_match.group(1) if stem_match else None)
 
 
+def read_boundaries(mzml_path):
+    """Quasar's boundaries per spectrum id: (start_rt, end_rt) userParams, in minutes."""
+    text = Path(mzml_path).read_text(encoding="utf-8", errors="replace")
+    pattern = re.compile(r'<spectrum [^>]*id="([^"]+)"[^>]*>[\s\S]*?name="start_rt" value="([^"]+)"'
+                         r'[\s\S]*?name="end_rt" value="([^"]+)"')
+    return {m.group(1): (float(m.group(2)), float(m.group(3))) for m in pattern.finditer(text)}
+
+
 def read_sage(path, q, levels):
     """Target PSMs at or below q (spectrum and peptide level), and the decoy count at the same cut."""
     targets, decoys = [], 0
@@ -67,16 +75,17 @@ def read_osprey(blib_path, stem, windows, q):
     """Osprey precursors passing q in this run, inside the processed windows: sequence -> apex RT."""
     db = sqlite3.connect(f"file:{blib_path}?mode=ro", uri=True)
     rows = db.execute(
-        """select r.peptideSeq, r.precursorMZ, r.precursorCharge, t.score, t.retentionTime
+        """select r.peptideSeq, r.precursorMZ, r.precursorCharge, t.score, t.retentionTime,
+                  t.startTime, t.endTime
            from RetentionTimes t
            join SpectrumSourceFiles f on f.id = t.SpectrumSourceID
            join RefSpectra r on r.id = t.RefSpectraID
            where f.fileName like ? and t.score <= ?""",
         (f"%{stem}%", q)).fetchall()
     truth = {}
-    for sequence, mz, charge, _, apex in rows:
+    for sequence, mz, charge, _, apex, start, end in rows:
         if any(low <= mz < high for low, high in windows):
-            truth.setdefault(sequence, []).append((mz, charge, apex))
+            truth.setdefault(sequence, []).append((mz, charge, apex, start, end))
     return truth
 
 
@@ -113,11 +122,16 @@ def main():
             sage_best[sequence] = row
     matched = sorted(set(sage_best) & set(truth))
     sage_only = sorted(set(sage_best) - set(truth))
-    rt_diffs = []
+    boundaries = read_boundaries(args.quasar_mzml)
+    rt_diffs, start_diffs, end_diffs = [], [], []
     for sequence in matched:
         sage_rt = float(sage_best[sequence]["rt"])
-        osprey_rt = min((t[2] for t in truth[sequence]), key=lambda a: abs(a - sage_rt))
-        rt_diffs.append(abs(sage_rt - osprey_rt) * 60.0)
+        nearest = min(truth[sequence], key=lambda t: abs(t[2] - sage_rt))
+        rt_diffs.append(abs(sage_rt - nearest[2]) * 60.0)
+        bounds = boundaries.get(sage_best[sequence]["scannr"])
+        if bounds:
+            start_diffs.append((bounds[0] - nearest[3]) * 60.0)
+            end_diffs.append((bounds[1] - nearest[4]) * 60.0)
 
     print(f"run {stem}: {len(windows)} windows, m/z {windows[0][0]:.2f}-{windows[-1][1]:.2f}")
     print(f"Sage at q <= {args.q}: {len(targets)} target PSMs, {decoys} decoy PSMs, {len(sage_best)} peptides")
@@ -127,6 +141,12 @@ def main():
     if rt_diffs:
         print(f"Apex time difference, both found: median {statistics.median(rt_diffs):.1f} s, "
               f"90th percentile {sorted(rt_diffs)[int(0.9 * (len(rt_diffs) - 1))]:.1f} s")
+    if start_diffs:
+        def spread(values):
+            q = statistics.quantiles(values, n=4)
+            return f"median {statistics.median(values):+.1f} s (quartiles {q[0]:+.1f}, {q[2]:+.1f})"
+        print(f"Boundaries, Quasar minus Osprey: start {spread(start_diffs)}; end {spread(end_diffs)}; "
+              f"width difference median {statistics.median((e - s) for s, e in zip(start_diffs, end_diffs)):+.1f} s")
 
     if args.out:
         with open(args.out + ".matched.tsv", "w", encoding="utf-8") as handle:
