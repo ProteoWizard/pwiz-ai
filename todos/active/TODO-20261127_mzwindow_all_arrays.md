@@ -33,6 +33,13 @@ the port wrote mzML whose ion mobility array kept its full length (2,031,351 val
       * Mutation of spectra retained by in-memory inner lists - pre-existing, dropped.
       * "Comment misstates cpp" - reviewer misread cpp (it re-adds equal-length arrays); moot.
 - [x] PR #5085 opened 2026-11-27
+- [x] Second /code-review medium on #5085 (requested by Brian): 3 nits fixed in a6c565c1cb
+      (intensity out of step with m/z -> spectrum left untouched; early return when nothing is
+      dropped plus span-based compaction; test asserts on the returned spectrum's arrays),
+      2 pre-existing dropped (inner-list mutation, FullMetadata peak count). 207 tests pass;
+      regenerated mzML spectrumList is byte-identical to the Skyline-verified one.
+- [ ] Copilot review: none posted yet as of round 2; check before merge
+- [ ] TeamCity green, human review
 
 ## Regression Test
 
