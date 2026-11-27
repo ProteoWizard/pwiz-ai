@@ -41,7 +41,33 @@ instead of collapsing it.
       IM ambiguity. Peptide is in the full MouseLiverDigest_by_AutoMSMS*.sky docs, not the
       3-precursor subset. He asked to search for a common drift apex over the RT window with the
       high-energy offset off or small - i.e. bands must carry the fragment offset or tolerate it.
-- [ ] Second fixture: trim IMFVGGPNTR (546.287 / 547.2884 / 601.3052) from the AltFrame .d
+- [x] Second fixture: trim IMFVGGPNTR (546.287 / 547.2884 / 601.3052) from the AltFrame .d -
+      one mzWindow must span 545.5-602, so even at 47.5-53 min it is 176 MB
+      (D:\bench\im-peak-picking\trim\IMFVGGPNTR_trim2.mzML); perf-test data, not repo.
+      Doc: D:\bench\im-peak-picking\trim\IMFVGGPNTR_only.sky (no IM, no library, RT filter none).
+
+## Prototype status (2026-11-27, uncommitted in C:\Dev\PeakPickWithIM)
+
+* Setting: TransitionIonMobilityFiltering.SearchIonMobilityWhenUnknown (XML
+  search_ion_mobility_when_unknown, both 26.11/Current xsd, audit-log name); CanSearchIonMobility
+  requires a window width mode other than none.
+* Bands: SpectrumFilter.GetIonMobilitySearchBands - 10%..100% of the file's max IM, WidthAt()
+  wide, half overlap (117 bands at RP50 on John's 59.5 ms range); not FAIMS/SONAR. Needed
+  SpectraChromDataProvider.NeedMaxIonMobilityValue to fetch the max when searching.
+* Competition: ChromCacheBuilder.GetChromDataSets splits a precursor's chromatograms by band IM;
+  PeptideChromDataSets keeps extra bands aside (_ionMobilityBandSets), scores each band by
+  picking peaks on clones, keeps the winner before the normal pick. Ranking = best legacy
+  CombinedScore (placeholder). TEMPORARY Console.WriteLine diagnostics still in.
+* Test TestIonMobilitySearch (TestData, IonMobilitySearchTest.zip 2.9 MB): summed picks 17.53;
+  searched picks 19.30 (band 23.33 ms) - red.
+* FINDING: in MS1-only M/M+1 data with no RT constraint, the 22.4-23.8 ms bands hold three clean
+  features: 17.53/17.67 (idotp 0.98-0.99), 19.30 @ ~23.5 ms (idotp 0.97, shape 0.97) and
+  20.52 @ ~22.6 ms (idotp 0.97-0.997, shape 0.93-0.99). The 19.5 interferer drops to idotp
+  0.61 in the 22.4 band, so bands do remove the summed-IM interference, but nothing in M/M+1
+  alone says which clean feature is VLSSIEQK. The test doc stripped John's library (ID RT
+  20.1 from the AutoMSMS run) and ms2_ids +/-5 min filter; even with them, 19.30 is in range.
+  Fragments (AltFrame run) or an ID/predicted RT are what can decide. Needs Brian's call on
+  the test's premise and on band ranking.
 
 ## Test Data (John, Agilent DTIMS, 2018)
 
