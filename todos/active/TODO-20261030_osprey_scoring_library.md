@@ -877,6 +877,13 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
     the same (3,081,739 precursors).
   - The MACS2 .raw search with the standard library (`U:\data\MacCoss\Osprey\sea-ad\diann-search-82`,
     entrapment in its own proteins) gives 107,394 (all-entrapment estimator), well above both.
+  Working hypothesis (Brendan): DIA-NN's protein boost is an add-on model applied after base scoring, like
+  Osprey's protein-compact, which Mike designed from what he knew of DIA-NN to close the gap between the two
+  tools. The add-on does nothing in either the single-peptide or the random-protein library, which leaves
+  the base IDs unboosted. The bit-identical reports point the same way: an add-on fitted to random grouping
+  would still move scores slightly, so this one did not apply. Prediction: Osprey `--protein-boost compact`
+  also gives the same result in its single-peptide and random-protein arms (queued:
+  `ai/.tmp/sessions/20261121-tdp43/Start-SeaAdCompactChain.ps1`, behind the parallel DIA-NN test).
   A DIA-NN split-sized search of .raw on MACS2 is needed before DIA-NN's boost can be quoted. Hypothesis to
   test, not yet checked: grouping acts in DIA-NN through the empirical library filter at the reanalysis step
   (protein q), which would leave random and single identical (every random protein holds a strong target;
