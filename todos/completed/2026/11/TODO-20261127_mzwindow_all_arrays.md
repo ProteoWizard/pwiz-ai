@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20261127_mzwindow_all_arrays` (checkout `C:\Dev\cmdline`)
 - **Base**: `master`
 - **Created**: 2026-11-27
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none - found while preparing test data for #5083)
 - **Module**: `pwiz`
-- **PR**: [#5085](https://github.com/ProteoWizard/pwiz/pull/5085)
+- **PR**: [#5085](https://github.com/ProteoWizard/pwiz/pull/5085) (merged 2026-11-27)
 
 ## Objective
 
@@ -38,8 +38,8 @@ the port wrote mzML whose ion mobility array kept its full length (2,031,351 val
       dropped plus span-based compaction; test asserts on the returned spectrum's arrays),
       2 pre-existing dropped (inner-list mutation, FullMetadata peak count). 207 tests pass;
       regenerated mzML spectrumList is byte-identical to the Skyline-verified one.
-- [ ] Copilot review: none posted yet as of round 2; check before merge
-- [ ] TeamCity green, human review
+- [x] Copilot review: none posted on the PR; /code-review was the AI review
+- [x] TeamCity green, human review (Brian)
 
 ## Regression Test
 
@@ -61,3 +61,12 @@ the port wrote mzML whose ion mobility array kept its full length (2,031,351 val
 ### 2026-11-27
 
 Found while trimming test data for #5083 (TODO-20261127_im_peak_picking.md). Fixed and verified.
+
+### 2026-11-27 - Merged
+
+PR #5085 merged as commit 63087163d1. mzWindow now trims every binary and integer array of m/z
+length with m/z, keeps input peak order (IMS spectra stay in mobility order), and leaves arrays
+of other lengths and spectra with out-of-step intensities untouched. Considered and left as is:
+the sampled-noise arrays (MS:1002743-1002745) are not per-peak, so the same-length rule would
+trim them wrongly if their length happened to equal the peak count; no C# reader emits them,
+and the m/z sorter uses the same rule.
