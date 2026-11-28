@@ -1026,3 +1026,24 @@ log `ai/.tmp/sessions/20261121-tdp43/halves-fdp.log`; E(1 + 1/r)/(T + E), r = ha
   Osprey boost-off arm (0.60% / 0.65%) is a one-time check that the halves are exchangeable, not part of the
   standard. Own-protein-only entrapment (the unsplit design) reads a collapsed own half as a very safe estimate.
 - Still needed for its own reason: the split-sized DIA-NN search on `.raw` input (the UW8 mzML input confound).
+
+### 2026-11-28 - Protein-compact at 82 files, training matched to protein-best (c21d734ce7)
+
+Split-sized library, 82 files, `OSPREY_GBT_PREFILTER_SIZE=200000` (two-round, as protein-best), pfscore 4 /
+pfrescore 8, 3h21m. Run `seaad-82files-libdecoy-r1.0-defaultsplit-sized-compact-2round-pre5070-c21d734ce7-auto`
+(scores.parquet trimmed after audit); logs `ai/.tmp/sessions/20261121-tdp43/audit-seaad-split-sized-compact-2round-*`,
+`halves-fdp.log`.
+
+| Same binary, 82 files | True FDP 1%: shared / own / all | FDP at q 1%: all | shared half | own half |
+|---|---|---|---|---|
+| Compact, two-round | 90,589 / 99,837 / 91,183 | **1.16%** | **1.25%** | 0.50% |
+| Protein-best | 97,082 / 127,708 / 100,167 | 0.66% | 0.97% | 0.02% |
+
+- Compact finds 9.0% fewer (all-entrapment estimator) and 6.7% fewer on the shared half than protein-best, at
+  matched training. At 5 files it was 1.2% behind; the gap grows with run count.
+- Compact exceeds its bound at q 1% (1.16% overall, 1.25% on the shared half); at 5 files 0.97% / 1.32%. Its FDP
+  is not bounded as run count grows, as expected from its per-run 1% stratum.
+- Its own half is not collapsed (0.50%, own/shared 0.40, near DIA-NN's 0.56), but only because it boosts less
+  and calibrates worse, so it is not the model for a balanced protein-best.
+- The rest of this chain (single-peptide best, random-protein compact and best, single-peptide compact) was
+  stopped for the protein-best decoy experiments (next entry).
