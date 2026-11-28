@@ -961,3 +961,37 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   protein-best on a single-peptide library is equivalent to off. Protein-best on the split-sized library
   keeps 101,165 (+15.5% over off) and DIA-NN gains +6.7% (all-entrapment estimator). Off's two halves are
   nearly equal, as expected when no protein evidence is used.
+
+### 2026-11-27 - Protein-compact vs protein-best at 5 files, same code: training recipe isolated
+
+All arms: SEA-AD files 0001-0005, Osprey v26.1.1.328 (c21d734ce7, the last binary that runs compact), libdecoy
+r1.0, counts at true FDP 1% with all entrapment (`split_calibration.py --lib-dir assign-single-peptide-all`).
+Split halves from `split_halves.py`. Logs: `ai/.tmp/sessions/20261121-tdp43/audit-trial5-*.log`.
+
+**Confound found and removed.** `--protein-boost best` also switches the first pass to two-round training (round 2 on
+the top 200,000 rows, `PrefilterSizeFor`); compact and off train one round. On the single-peptide library the
+protein-best column is a per-run constant (siblings exclude the candidate's own peptide; no sibling gives the decoy
+median floor), so any gain there is the recipe. One round vs two: 66,479 vs 74,544 pass 1 on identical inputs. The
+compact arms were rerun with `OSPREY_GBT_PREFILTER_SIZE=200000` (round 2 confirmed by the `prefilter candidates` log
+line), so only the boost mode differs.
+
+| Library | Compact, two-round | Protein-best | Compact FDP at q 1% | Best FDP at q 1% |
+|---|---|---|---|---|
+| Single-peptide (no grouping) | 74,453 | 74,501 | 0.73% | 0.69% |
+| Random-protein (no signal) | 73,752 | 74,575 | **1.09%** | 0.73% |
+| Split-sized | 82,483 | 83,486 | 0.97% | 0.64% |
+| Split-sized, shared / own half | 79,970 / 141,452 | 81,065 / 103,451 | | |
+
+- Both nulls hold for protein-best (random +0.1% over single-peptide, calibration unchanged). Compact on random groups
+  loses 1.0% under its own pass 1 (74,497) and exceeds its FDR bound at q 1% even at 5 files.
+- Gain from grouping on the split library: compact +10.7% over its pass 1, protein-best +12.1% over single-peptide.
+  Compact is 1.2% behind at matched training, and its FDP at q 1% is already 0.97%.
+- Compact's own-protein estimator is 1.77x its shared one (protein-best 1.27x): it suppresses entrapment on
+  target-free proteins far harder, so an unsplit entrapment design would flatter it most.
+- Earlier one-round compact arms (same day) differ only by the recipe: split 74,655, single-peptide 66,566,
+  random-protein 65,898 (FDP 0.75 / 0.74 / 0.89% at q 1%). Not comparable to protein-best.
+- Single-peptide off on aa864c3d2e at 82 files (the inert-compact arm, 17:44) gives 87,829, identical to the
+  split-sized off arm's both-halves count: with no protein boost the result does not depend on protein labels.
+
+Queued: the same five arms at 82 files (`chain-seaad-pre5070-compact.log`, started 22:30), compact two-round, each arm
+audited then its `*.scores.parquet` deleted (~154 GB per arm on this binary).
