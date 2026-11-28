@@ -931,7 +931,16 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   is spreading pass 1 and pass 2 over several machines: each per-file step then takes about one file's time,
   and only the merges are serial.
 
-### 2026-11-27 - Osprey `--protein-boost compact`, split-sized library: no gain over no grouping
+### 2026-11-27 - Osprey with no protein evidence (`--protein-boost compact`, inert since #5070), split-sized library
+
+- **Correction: this arm is protein boost off, not protein-compact.** At aa864c3d2e (#5070) `ProteinBoost.compact`
+  is read only by `OspreyConfig.ProteinBest` (false), and the pass-2 q-value is the transfer regardless
+  (`Pass2QValue`); the protein-compact competition is reachable only through `OSPREY_PASS2_QVALUE`, which
+  `PerFileScoringTask` refuses because each run now trains its own model. Removal is #5084
+  (TODO-20261126_osprey_remove_protein_compact.md). Earlier protein-compact measurements, from before the
+  per-run models: ZT Scan +52% at matched FDP 0.5% over transfer, with q 1% reading FDP 1.29-1.48%
+  (TODO-20261028_osprey_diann_fdr_gap.md); Astral regression files +7.8% over transfer at q 1%
+  (TODO-20261114_osprey_hram_defaults.md). The rows below read "compact" as "off".
 
 - Run: master aa864c3d2e, 82 files, split-sized library, auto lanes, 72 threads, 3 h 14 min, exit 0
   (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultsplit-sized-compact-head-aa864c3d2e-auto`;
@@ -943,8 +952,8 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   | Osprey protein-best | 98,244 | 128,034 | 101,165 |
   | DIA-NN 2.7.0 | 101,269 | 107,010 | 101,153 |
 
-- With both halves, compact keeps 87,829 against 87,607 for protein-best on the single-peptide library
-  (+0.3%), while protein-best on the split-sized library keeps 101,165 (+15.5%) and DIA-NN gains +6.7%
-  (all-entrapment estimator). Compact's two halves are nearly equal, so it does not favour entrapment on
-  proteins that hold targets; it also adds almost no sensitivity. The single-peptide compact arm (running)
-  gives compact's own no-grouping baseline.
+- With both halves, protein boost off keeps 87,829 on the split-sized library against 87,607 for protein-best
+  on the single-peptide library (+0.3%): with no protein feature, protein grouping has no effect, and
+  protein-best on a single-peptide library is equivalent to off. Protein-best on the split-sized library
+  keeps 101,165 (+15.5% over off) and DIA-NN gains +6.7% (all-entrapment estimator). Off's two halves are
+  nearly equal, as expected when no protein evidence is used.
