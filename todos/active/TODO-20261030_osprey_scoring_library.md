@@ -1019,8 +1019,10 @@ log `ai/.tmp/sessions/20261121-tdp43/halves-fdp.log`; E(1 + 1/r)/(T + E), r = ha
 - DIA-NN boosts (+6.7%) yet keeps own-protein FDP at 0.44% and the shared half conservative (0.78% at q 1%,
   1.59% at q 2%).
 - Compact exceeds the bound on shared entrapment at 5 files (1.32% at q 1%).
-- Proposed standard report: both halves' FDP at the tool's q, beside the same tool with the boost off. A
-  well-behaved boost keeps the shared half within the bound and does not collapse the own half far below its
-  no-boost level. A collapse is invisible to own-protein-only entrapment, which reads it as a very safe estimate.
-- Missing: DIA-NN without protein boost on the split-sized library (the reference row for its own half); pair it
-  with the outstanding `.raw` split-sized DIA-NN search.
+- Proposed standard report, black-box (library constructions only, no tool switch): both halves' FDP at the
+  tool's own q. The halves are the same kind of peptide randomly divided between placements, so with no protein
+  boost their FDPs agree by design and own/shared = 1 for any tool. The departure from 1 is the boost's asymmetry:
+  Osprey protein-best 0.03, DIA-NN 0.56 (82 files, q 1%). Each half is also checked against the bound. The
+  Osprey boost-off arm (0.60% / 0.65%) is a one-time check that the halves are exchangeable, not part of the
+  standard. Own-protein-only entrapment (the unsplit design) reads a collapsed own half as a very safe estimate.
+- Still needed for its own reason: the split-sized DIA-NN search on `.raw` input (the UW8 mzML input confound).
