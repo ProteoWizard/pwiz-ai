@@ -184,6 +184,22 @@ run and a clean one are indistinguishable under a no-failures test.
 tell "still running" from "died silently". Poll the driver PID as well and report "gone
 with no verdict" when it disappears, or silence reads as progress.
 
+**Use `ai/scripts/Wait-Run.ps1` rather than a hand-written `until grep` loop.** It makes the
+process the trigger and the log the classifier: it returns `DONE` (exited, marker present),
+`DIED` (exited, no marker), or `CHECK` at the predicted time with the latest progress line.
+It identifies the process by ID and start time, since Windows reuses IDs. The failure it
+prevents: a chain waited ~50 minutes for "Osprey exited" in a console log whose redirect
+belonged to a parent the session had stopped; the arm had finished cleanly, the line could
+never be written, and the developer found the stall by asking (2026-11-27). A marker the
+session writes itself is also a trap: two watchers keyed on `STOP` fired on the session's
+own `STOPPED` notes. Match an exact marker (`STOP:`).
+
+**Check at the prediction, then re-predict.** Every wait gets a predicted duration stated
+before it is armed. At that time, look: done, dead, or still running. If still running,
+estimate the remaining time from the progress line and arm the next check at that
+estimate. A padded deadline (1.5x) wastes its padding every time the run is stuck; a 1x
+check costs one look when the prediction was slightly short.
+
 **Read Osprey progress from the last `file NN/NN:` line, never from a tailed `%`.** Many
 phases emit a percentage, so whatever `%` a `tail` happens to catch cannot be attributed
 to a phase and says nothing about how far the run is. Grep for the per-file counter
@@ -199,9 +215,9 @@ Re-scoring file 66/86: EXP25033_2025us0062bX63_A
 that is *producing* a result (an overnight cohort). It is wrong while you are *iterating*:
 waiting on the success event costs the full failure duration every time the fix does not
 work, and a change meant to make something fast has already answered the question once it
-is slow. State the predicted time before launching, set a hard cutoff at roughly 1.5x it,
-poll on a fixed cadence (about every two minutes) in between, and kill at the cutoff. The
-prediction is the timeout; do not watch the slow path finish.
+is slow. State the predicted time before launching, check at it, and kill if the progress
+line shows the slow path rather than re-predicting. The prediction is the timeout; do not
+watch the slow path finish.
 
 ## Do not edit a script while it runs
 
