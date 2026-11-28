@@ -68,6 +68,22 @@ instead of collapsing it.
   20.1 from the AutoMSMS run) and ms2_ids +/-5 min filter; even with them, 19.30 is in range.
   Fragments (AltFrame run) or an ID/predicted RT are what can decide. Needs Brian's call on
   the test's premise and on band ranking.
+* Brian 2026-11-27: use AltFrame data, both peptides. Perf test PerfIonMobilitySearchTest
+  (TestPerf), data PerfIonMobilitySearch.zip (167 MB; local copy in c:\Skyline T&est ^Data\
+  Perftests until uploaded to panoramaweb perftests): VLSSIEQK_AltFrame (17-21.5 min, m/z
+  451.5-692, -z --32) and IMFVGGPNTR_AltFrame (47.5-53 min, 545.5-602), hand-written expanded
+  XML docs (John's compact AltFrame doc embeds results in transition_data and can't be stripped
+  without the original raw path). Shared helper TestUtil/IonMobilitySearchTestUtil.cs.
+  TestData TestIonMobilitySearch now checks only: IM recorded and isotope dot product >= 0.95.
+* Band ranking changed from CombinedScore to idotp x shape (precursor-product cross shape,
+  else isotope shape) + 0.001 x CombinedScore tie-break. Results: IMFVGGPNTR summed 48.82 (summed
+  is NOT wrong in this run - John's miss came from re-import with the drift time learned from the
+  summed pick), searched 48.82 @ 25.6 ms (correct; with CombinedScore ranking it was 49.25 @ 27.7);
+  VLSSIEQK summed 17.92, searched 19.25 @ 23.47 ms (idotp 0.974, cross shape 0.859) vs 20.39 @ 23.0
+  (0.997, 0.788). No ground truth for VLSSIEQK in the AltFrame run (20.52 is the MS1-only run;
+  John's AltFrame doc recorded 19.45, itself a summed pick). Asked Brian.
+* Follow-up: the final pick inside the winning band is the normal CombinedScore pick, which can
+  differ from the peak that won the band - consider seeding it with the winning peak.
 
 ## Test Data (John, Agilent DTIMS, 2018)
 
