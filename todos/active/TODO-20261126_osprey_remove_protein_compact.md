@@ -218,3 +218,15 @@ Gaps 2-6 are about protein-best and do not bear on removing protein-compact.
 **Not run here (Brendan, 2026-11-26)**: MACS2 is testing protein-best beside DIA-NN on SEA-AD and TDP-43,
 focused on the validity and effect of protein boosting. The gaps above belong to that work; this PR
 runs no control arms and cites its results when they exist.
+
+### 2026-11-27 - Defect on master that this PR closes: `--protein-boost compact` accepted and run as off
+
+- On master since #5070 (aa864c3d2e), `--protein-boost compact` parses, is logged as "protein boost
+  compact" in the search settings, and runs to completion as `off`: `ProteinBoost.compact` is read only by
+  `OspreyConfig.ProteinBest`, and `Pass2QValue` no longer maps it to the protein-compact competition. The
+  refusal in `PerFileScoringTask` fires only for `OSPREY_PASS2_QVALUE=protein-compact`.
+- Cost: a 3 h 14 min 82-file SEA-AD run on MACS2 (split-sized library, 2026-11-27) produced a protein-boost
+  off result labelled compact (TODO-20261030_osprey_scoring_library.md).
+- This branch removes `compact` from the `ProteinBoost` enum, so the value fails argument parsing. Still
+  accepting it: `ai/scripts/Osprey/SEA-AD/Run-SeaAd.ps1` (`-ProteinBoost` ValidateSet and help text) and
+  the drivers listed under the code review above.
