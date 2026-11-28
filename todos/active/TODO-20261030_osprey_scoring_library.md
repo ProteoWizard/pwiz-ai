@@ -995,3 +995,32 @@ line), so only the boost mode differs.
 
 Queued: the same five arms at 82 files (`chain-seaad-pre5070-compact.log`, started 22:30), compact two-round, each arm
 audited then its `*.scores.parquet` deleted (~154 GB per arm on this binary).
+
+### 2026-11-27 - Calibration by entrapment half: each half's FDP at the tool's own q
+
+Counts kept at true FDP 1% understate the halves' difference (protein-best 128,034 own vs 98,244 shared, 1.30x).
+The calibration measure is each half's estimated FDP among what the tool reports at its own q (`halves_fdp.py`,
+log `ai/.tmp/sessions/20261121-tdp43/halves-fdp.log`; E(1 + 1/r)/(T + E), r = half size / target count):
+
+| Arm, split-sized library | Files | Shared FDP at q 1% | Own FDP at q 1% | Shared FDP at q 2% |
+|---|---|---|---|---|
+| Osprey protein-best, aa864c3d2e | 82 | 0.93% | 0.03% | 2.07% |
+| Osprey protein-best, c21d734ce7 | 82 | 0.97% | 0.02% | 2.18% |
+| DIA-NN 2.7.0 (UW8 mzML arm, see the 2026-11-27 confound note) | 82 | 0.78% | 0.44% | 1.59% |
+| Osprey boost off, aa864c3d2e | 82 | 0.60% | 0.65% | 1.41% |
+| Osprey protein-best, c21d734ce7 | 5 | 0.91% | 0.05% | 1.88% |
+| Osprey compact two-round, c21d734ce7 | 5 | 1.32% | 0.13% | 2.51% |
+
+- With no boost the halves agree, so the asymmetry is the boost alone.
+- Protein-best drives own-protein entrapment to ~0.03% (about 1/20 of its no-boost level) while the shared half sits
+  near the bound. Mechanism in the code: a decoy reads its paired target's protein-best value
+  (`ProteinBestFeature`), so decoys model a false peptide on a protein with true evidence (shared placement) and
+  never a protein whose siblings are all false (own placement).
+- DIA-NN boosts (+6.7%) yet keeps own-protein FDP at 0.44% and the shared half conservative (0.78% at q 1%,
+  1.59% at q 2%).
+- Compact exceeds the bound on shared entrapment at 5 files (1.32% at q 1%).
+- Proposed standard report: both halves' FDP at the tool's q, beside the same tool with the boost off. A
+  well-behaved boost keeps the shared half within the bound and does not collapse the own half far below its
+  no-boost level. A collapse is invisible to own-protein-only entrapment, which reads it as a very safe estimate.
+- Missing: DIA-NN without protein boost on the split-sized library (the reference row for its own half); pair it
+  with the outstanding `.raw` split-sized DIA-NN search.
