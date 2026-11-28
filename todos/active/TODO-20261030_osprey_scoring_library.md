@@ -937,11 +937,14 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   is read only by `OspreyConfig.ProteinBest` (false), and the pass-2 q-value is the transfer regardless
   (`Pass2QValue`); the protein-compact competition is reachable only through `OSPREY_PASS2_QVALUE`, which
   `PerFileScoringTask` refuses because each run now trains its own model. Removal is #5084
-  (TODO-20261126_osprey_remove_protein_compact.md). The only split-placement audit of protein-compact
-  is 3 SEA-AD files with 1:1 Arabidopsis entrapment, before #5070: pass 2 compact 51,384 targets against
-  41,221 in pass 1, FDP 1.10% on target proteins and 0.07% on own proteins at q 1%
-  (TODO-20261106_carafe_entrapment_in_target_proteins.md). No 82-file measurement exists; the pre-#5070
-  chain (`chain-seaad-pre5070-compact.log`) makes it. The rows below read "compact" as "off".
+  (TODO-20261126_osprey_remove_protein_compact.md). Protein-compact at 82 SEA-AD files, before #5070, is
+  anti-conservative and its FDP grows with run count (its stratum is the union of per-run q 1% peptides):
+  s82-off above (split library, on-target FDP, PB off) pass 2 at q 1% reads FDP 1.29% (q 5% -> 6.26%) and
+  finds 90,328 at FDP 1% against 89,086 for pass 1 (+1.4%); TODO-20260804_osprey_pass2_ab_and_library_production.md
+  pass-2 FDP 1.156% vs transfer 0.770% from identical Stages 1-4; TODO-20260727_osprey_pass2_fdr_default.md
+  FDP 0.90% at 3 files vs 1.51% at 82, and fewer IDs than pass 1 at 82. The 3-file split audit
+  (TODO-20261106_carafe_entrapment_in_target_proteins.md) is the favourable case. The rows below read
+  "compact" as "off".
 
 - Run: master aa864c3d2e, 82 files, split-sized library, auto lanes, 72 threads, 3 h 14 min, exit 0
   (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultsplit-sized-compact-head-aa864c3d2e-auto`;
