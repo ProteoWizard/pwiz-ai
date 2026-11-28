@@ -937,10 +937,11 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   is read only by `OspreyConfig.ProteinBest` (false), and the pass-2 q-value is the transfer regardless
   (`Pass2QValue`); the protein-compact competition is reachable only through `OSPREY_PASS2_QVALUE`, which
   `PerFileScoringTask` refuses because each run now trains its own model. Removal is #5084
-  (TODO-20261126_osprey_remove_protein_compact.md). Earlier protein-compact measurements, from before the
-  per-run models: ZT Scan +52% at matched FDP 0.5% over transfer, with q 1% reading FDP 1.29-1.48%
-  (TODO-20261028_osprey_diann_fdr_gap.md); Astral regression files +7.8% over transfer at q 1%
-  (TODO-20261114_osprey_hram_defaults.md). The rows below read "compact" as "off".
+  (TODO-20261126_osprey_remove_protein_compact.md). The only split-placement audit of protein-compact
+  is 3 SEA-AD files with 1:1 Arabidopsis entrapment, before #5070: pass 2 compact 51,384 targets against
+  41,221 in pass 1, FDP 1.10% on target proteins and 0.07% on own proteins at q 1%
+  (TODO-20261106_carafe_entrapment_in_target_proteins.md). No 82-file measurement exists; the pre-#5070
+  chain (`chain-seaad-pre5070-compact.log`) makes it. The rows below read "compact" as "off".
 
 - Run: master aa864c3d2e, 82 files, split-sized library, auto lanes, 72 threads, 3 h 14 min, exit 0
   (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultsplit-sized-compact-head-aa864c3d2e-auto`;
