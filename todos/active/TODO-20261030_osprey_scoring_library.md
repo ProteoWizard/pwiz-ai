@@ -930,3 +930,21 @@ Combined entrapment FDP 2E/(T+E), entrapment = every protein carries `_p_target`
   the two merges cost ~5 min against ~3.5 min for the single command's cross-run steps. The recipe's value
   is spreading pass 1 and pass 2 over several machines: each per-file step then takes about one file's time,
   and only the merges are serial.
+
+### 2026-11-27 - Osprey `--protein-boost compact`, split-sized library: no gain over no grouping
+
+- Run: master aa864c3d2e, 82 files, split-sized library, auto lanes, 72 threads, 3 h 14 min, exit 0
+  (`D:\Users\brendanx\test\osprey-runs\sea-ad\runs\seaad-82files-libdecoy-r1.0-defaultsplit-sized-compact-head-aa864c3d2e-auto`;
+  split_halves.py, `ai/.tmp/sessions/20261121-tdp43/audit-seaad-split-sized-compact.log`).
+
+  | Arm (split-sized library) | Shared estimator | Own estimator | Both halves |
+  |---|---|---|---|
+  | Osprey compact | 90,333 | 90,056 | 87,829 |
+  | Osprey protein-best | 98,244 | 128,034 | 101,165 |
+  | DIA-NN 2.7.0 | 101,269 | 107,010 | 101,153 |
+
+- With both halves, compact keeps 87,829 against 87,607 for protein-best on the single-peptide library
+  (+0.3%), while protein-best on the split-sized library keeps 101,165 (+15.5%) and DIA-NN gains +6.7%
+  (all-entrapment estimator). Compact's two halves are nearly equal, so it does not favour entrapment on
+  proteins that hold targets; it also adds almost no sensitivity. The single-peptide compact arm (running)
+  gives compact's own no-grouping baseline.
